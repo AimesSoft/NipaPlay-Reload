@@ -73,7 +73,7 @@ jobs:
       # Cache CocoaPods (for iOS/macOS)
       - name: Cache Pod
         if: matrix.cache_pod_key != null
-        uses: actions/cache@v3
+        uses: actions/cache@v2
         with:
           key: ${{ matrix.cache_pod_key }}
           path: ${{ matrix.cache_pod_path }}
