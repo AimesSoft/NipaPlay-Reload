@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_null_comparison
+
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/theme_helper.dart';
@@ -28,10 +30,26 @@ class _DarkSettingsState extends State<DarkSettings> {
 
   // 从存储中加载设置
   Future<void> _loadSettings() async {
-    modeSwitch = await SettingsStorage.loadBool('modeSwitch');
-    isDarkModeValue = await SettingsStorage.loadBool('isDarkModeValue');
-    setState(() {}); // 确保 UI 更新
-    _applySettings(); // 根据加载的设置应用主题
+    // 加载 modeSwitch 并检查是否为空或 null
+    bool? loadedModeSwitch = await SettingsStorage.loadBool('modeSwitch');
+    if (loadedModeSwitch != null) {
+      modeSwitch = loadedModeSwitch;
+    }
+
+    // 加载 isDarkModeValue 并检查是否为空或 null
+    bool? loadedIsDarkModeValue =
+        await SettingsStorage.loadBool('isDarkModeValue');
+    if (loadedIsDarkModeValue != null) {
+      isDarkModeValue = loadedIsDarkModeValue;
+    }
+
+    // 刷新 UI
+    if (mounted) {
+      setState(() {});
+    }
+
+    // 根据加载的设置应用主题
+    _applySettings();
   }
 
   // 应用加载的设置
@@ -51,69 +69,72 @@ class _DarkSettingsState extends State<DarkSettings> {
     await SettingsStorage.saveBool('isDarkModeValue', isDarkModeValue);
   }
 
-@override
-Widget build(BuildContext context) {
-  isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        "明暗设置",
-        style: getTitleTextStyle(context),
-      ),
-      RoundedContainer(  // 使用 RoundedContainer 包裹按钮行
-        child: Row(
-          children: [
-            // 日间模式按钮
-            RoundedButton(
-              text: "日间模式",
-              isSelected: modeSwitch == false && isDarkModeValue == false,
-              onPressed: () {
-                setState(() {
-                  context.read<ThemeProvider>().toggleDarkMode('day', context);
-                  modeSwitch = false;
-                  isDarkModeValue = false;
-                  _saveSettings();
-                });
-              },
-            ),
-            const SizedBox(width: 10),
-
-            // 夜间模式按钮
-            RoundedButton(
-              text: "夜间模式",
-              isSelected: modeSwitch == false && isDarkModeValue == true,
-              onPressed: () {
-                setState(() {
-                  context
-                      .read<ThemeProvider>()
-                      .toggleDarkMode('night', context);
-                  modeSwitch = false;
-                  isDarkModeValue = true;
-                  _saveSettings();
-                });
-              },
-            ),
-            const SizedBox(width: 10),
-
-            // 跟随系统按钮
-            RoundedButton(
-              text: "跟随系统",
-              isSelected: modeSwitch == true,
-              onPressed: () {
-                setState(() {
-                  modeSwitch = true;
-                  bool isDarkModeAuto = isDarkMode(context);
-                  context.read<ThemeProvider>().toggleDarkMode(
-                      isDarkModeAuto ? 'night' : 'day', context);
-                  _saveSettings();
-                });
-              },
-            ),
-          ],
+  @override
+  Widget build(BuildContext context) {
+    isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "明暗设置",
+          style: getTitleTextStyle(context),
         ),
-      ),
-    ],
-  );
-}
+        RoundedContainer(
+          // 使用 RoundedContainer 包裹按钮行
+          child: Row(
+            children: [
+              // 日间模式按钮
+              RoundedButton(
+                text: "日间模式",
+                isSelected: modeSwitch == true && isDarkModeValue == false,
+                onPressed: () {
+                  setState(() {
+                    context
+                        .read<ThemeProvider>()
+                        .toggleDarkMode('day', context);
+                    modeSwitch = true;
+                    isDarkModeValue = false;
+                    _saveSettings();
+                  });
+                },
+              ),
+              const SizedBox(width: 10),
+
+              // 夜间模式按钮
+              RoundedButton(
+                text: "夜间模式",
+                isSelected: modeSwitch == true && isDarkModeValue == true,
+                onPressed: () {
+                  setState(() {
+                    context
+                        .read<ThemeProvider>()
+                        .toggleDarkMode('night', context);
+                    modeSwitch = true;
+                    isDarkModeValue = true;
+                    _saveSettings();
+                  });
+                },
+              ),
+              const SizedBox(width: 10),
+
+              // 跟随系统按钮
+              RoundedButton(
+                text: "跟随系统",
+                isSelected: modeSwitch == false,
+                onPressed: () {
+                  setState(() {
+                    modeSwitch = false;
+                    bool isDarkModeAuto = isDarkMode(context);
+                    context.read<ThemeProvider>().toggleDarkMode(
+                        isDarkModeAuto ? 'night' : 'day', context);
+                    _saveSettings();
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 // 获取当前主题状态
 bool getCurrentThemeMode(BuildContext context, bool modeSwitch) {
   context.watch<ThemeProvider>().isDarkMode;
-  if (modeSwitch == false) {
+  if (modeSwitch == true) {
     isDarkModeValue = context.watch<ThemeProvider>().isDarkMode;
   } else {
     isDarkModeValue = isDarkMode(context);  // 假设你有这个方法获取系统模式

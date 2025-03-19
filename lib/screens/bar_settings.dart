@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_null_comparison
+
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/settings_service.dart';
 import 'package:nipaplay/utils/globals.dart';
@@ -26,8 +28,15 @@ class _BarSettingsState extends State<BarSettings> {
 
   // 从存储中加载设置
   Future<void> _loadSettings() async {
-    sidebarBlurEffect = await SettingsStorage.loadBool('sidebarBlurEffect');
-    if (mounted) { // 添加 mounted 检查
+    // 加载 sidebarBlurEffect 并检查是否为空或 null
+    bool? loadedSidebarBlurEffect =
+        await SettingsStorage.loadBool('sidebarBlurEffect');
+    if (loadedSidebarBlurEffect != null) {
+      sidebarBlurEffect = loadedSidebarBlurEffect;
+    }
+
+    if (mounted) {
+      // 添加 mounted 检查
       setState(() {}); // 确保 UI 更新
     }
   }
@@ -50,10 +59,10 @@ class _BarSettingsState extends State<BarSettings> {
         RoundedContainer(
           child: SidebarToggle(
             title: '光晕动画',
-            value: sidebarBlurEffect,
+            value: !sidebarBlurEffect,
             onChanged: (bool value) {
               setState(() {
-                sidebarBlurEffect = value;
+                sidebarBlurEffect = !value;
                 _saveSettings(); // 你的保存设置逻辑
                 themeProvider.updateDraw(); // 更新主题
               });

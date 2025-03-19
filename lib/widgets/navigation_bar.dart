@@ -92,7 +92,7 @@ Widget build(BuildContext context) {
     child: Stack(
       children: [
         // 依据 sidebarBlurEffect 判断是否添加 FluidBackgroundWidget
-        if (sidebarBlurEffect)
+        if (!sidebarBlurEffect)
           FluidBackgroundWidget(
             child: Align(
               alignment: const Alignment(-1, 0.0), // 使内容始终位于容器的左侧
