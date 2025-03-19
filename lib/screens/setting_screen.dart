@@ -74,98 +74,117 @@ class _SettingScreenState extends State<SettingScreen> {
 
     return Container(
       color: getBackgroundColor(), // 使用新封装的颜色方法
-      padding: const EdgeInsets.only(left: 10, right: 20),
-      child: Column(
-        children: [
-          // 使用 Container 包裹 Stack 确保 Stack 有明确的尺寸
-          SizedBox(
-            height: titleBarHeight, // 给 Stack 一个固定高度
-            child: Stack(
-              children: [
-                // 只有在非Web平台时执行这些代码
-                if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: Platform.isMacOS ? 0 : 100,
-                    child: GestureDetector(
-                      onDoubleTap: _toggleWindowSize,
-                      child: Container(
-                        height: titleBarHeight,
-                        color: Colors.transparent,
-                        child: Align(
-                          alignment: Alignment.center,
-                          child: AnimatedOpacity(
-                            opacity: scrollOffset == 0.0 ? 0.0 : 1.0, // 滚动距离为0时透明度为0
-                            duration: Duration(milliseconds: 150), // 动画持续时间
-                            child: Text(
-                              "设置",
-                              style: getBarTitleTextStyle(context),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(backImage),
+            fit: BoxFit.cover,
+             opacity: 0.5,
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.only(left: 10, right: 20),
+          child: Column(
+            children: [
+              // 使用 Container 包裹 Stack 确保 Stack 有明确的尺寸
+              SizedBox(
+                height: titleBarHeight, // 给 Stack 一个固定高度
+                child: Stack(
+                  children: [
+                    // 只有在非Web平台时执行这些代码
+                    if (!kIsWeb &&
+                        (Platform.isWindows ||
+                            Platform.isLinux ||
+                            Platform.isMacOS))
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: Platform.isMacOS ? 0 : 100,
+                        child: GestureDetector(
+                          onDoubleTap: _toggleWindowSize,
+                          child: Container(
+                            height: titleBarHeight,
+                            color: Colors.transparent,
+                            child: Align(
+                              alignment: Alignment.center,
+                              child: AnimatedOpacity(
+                                opacity: scrollOffset == 0.0
+                                    ? 0.0
+                                    : 1.0, // 滚动距离为0时透明度为0
+                                duration: Duration(milliseconds: 150), // 动画持续时间
+                                child: Text(
+                                  "设置",
+                                  style: getBarTitleTextStyle(context),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                // 只有在非Web平台时执行这些代码
-                if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: titleBarHeight,
-                      color: Colors.transparent,
-                      child: WindowControlButtons(
-                        isMaximized: isMaximized,
-                        isDarkMode: isDarkModeValue,
-                        onMinimize: _minimizeWindow,
-                        onMaximizeRestore: _toggleWindowSize,
-                        onClose: _closeWindow,
+                    // 只有在非Web平台时执行这些代码
+                    if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          height: titleBarHeight,
+                          color: Colors.transparent,
+                          child: WindowControlButtons(
+                            isMaximized: isMaximized,
+                            isDarkMode: isDarkModeValue,
+                            onMinimize: _minimizeWindow,
+                            onMaximizeRestore: _toggleWindowSize,
+                            onClose: _closeWindow,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (scrollNotification) {
-                if (scrollNotification is ScrollUpdateNotification) {
-                  setState(() {
-                    scrollOffset = scrollNotification.metrics.pixels; // 更新滚动偏移量
-                  });
-                }
-                return true;
-              },
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "设置",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 30,
-                        color: textColor,
-                      ),
-                    ),
-                    SubOptionDivider(isLast: true), // 第一个分割线不需要右边距
-                    AccountSettings(settingsService: widget.settingsService),
-                    SubOptionDivider(), // 后续分割线右边距增加50
-                    BackgroundSettings(settingsService: widget.settingsService),
-                    SubOptionDivider(), // 后续分割线右边距增加50
-                    ColorSettings(),
-                    SubOptionDivider(), // 后续分割线右边距增加50
-                    DarkSettings(settingsService: widget.settingsService),
-                    SubOptionDivider(), // 后续分割线右边距增加50
-                    BarSettings(settingsService: widget.settingsService),
                   ],
                 ),
               ),
-            ),
+              Expanded(
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (scrollNotification) {
+                    if (scrollNotification is ScrollUpdateNotification) {
+                      setState(() {
+                        scrollOffset =
+                            scrollNotification.metrics.pixels; // 更新滚动偏移量
+                      });
+                    }
+                    return true;
+                  },
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "设置",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 30,
+                            color: textColor,
+                          ),
+                        ),
+                        SubOptionDivider(isLast: true), // 第一个分割线不需要右边距
+                        AccountSettings(
+                            settingsService: widget.settingsService),
+                        SubOptionDivider(), // 后续分割线右边距增加50
+                        BackgroundSettings(
+                            settingsService: widget.settingsService),
+                        SubOptionDivider(), // 后续分割线右边距增加50
+                        ColorSettings(),
+                        SubOptionDivider(), // 后续分割线右边距增加50
+                        DarkSettings(settingsService: widget.settingsService),
+                        SubOptionDivider(), // 后续分割线右边距增加50
+                        BarSettings(settingsService: widget.settingsService),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

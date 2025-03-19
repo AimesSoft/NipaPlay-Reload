@@ -41,6 +41,7 @@ dependencies:
   dynamic_theme_nullsafe: ^1.0.5
   provider: ^6.1.2
   fluid_background: ^1.0.2
+  file_picker: ^9.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -73,6 +74,8 @@ flutter:
     - assets/unmaxbutton.png
     - assets/unmaxbuttonLight.png
     - assets/logo.png
+    - assets/backgirl.png
+    - assets/backempty.png
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
