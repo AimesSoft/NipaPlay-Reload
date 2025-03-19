@@ -44,7 +44,7 @@ jobs:
             cache_pod_path: macos/Pods
             cache_pod_restore_keys_hash_file: macos/Podfile.lock
             artifact_name: release-macOS
-            artifact_path: /Users/runner/work/FnipaPlay/FnipaPlay/*.dmg
+            artifact_path: /Users/runner/work/NipaPlay/NipaPlay/*.dmg
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
@@ -111,9 +111,9 @@ jobs:
         run: |
           flutter build apk --release --split-per-abi
           cd build/app/outputs/apk/release
-          mv app-arm64-v8a-release.apk FnipaPlay-${{ steps.get_version.outputs.version }}-arm64-v8a.apk
-          mv app-armeabi-v7a-release.apk FnipaPlay-${{ steps.get_version.outputs.version }}-armeabi-v7a.apk
-          mv app-x86_64-release.apk FnipaPlay-${{ steps.get_version.outputs.version }}-x86_64.apk
+          mv app-arm64-v8a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-arm64-v8a.apk
+          mv app-armeabi-v7a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-armeabi-v7a.apk
+          mv app-x86_64-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-x86_64.apk
       
       # Build iOS .ipa
       - name: Build iOS
@@ -127,7 +127,7 @@ jobs:
           cd build
           mkdir -p Payload
           mv ios/iphoneos/*.app Payload
-          zip -9 FnipaPlay_${{ steps.get_version.outputs.version }}.ipa -r Payload
+          zip -9 NipaPlay_${{ steps.get_version.outputs.version }}.ipa -r Payload
       
       # Build macOS .dmg
       - name: Build macOS
@@ -143,12 +143,12 @@ jobs:
         if: matrix.target == 'Windows'
         run: |
           flutter build windows --release
-          $DestDir = "build\windows\FnipaPlay_${{ steps.get_version.outputs.version }}"
+          $DestDir = "build\windows\NipaPlay_${{ steps.get_version.outputs.version }}"
           $SrcDir = "build\windows\x64\runner\Release"
           New-Item -Path $DestDir -ItemType Directory
           Copy-Item $SrcDir\* -Recurse $DestDir
           Copy-Item -Filter *.dll -Path windows\* -Destination $DestDir -Force
-          Compress-Archive $DestDir build\windows\FnipaPlay_${{ steps.get_version.outputs.version }}_Windows.zip
+          Compress-Archive $DestDir build\windows\NipaPlay_${{ steps.get_version.outputs.version }}_Windows.zip
       
       # Build Linux .deb
       - name: Build Linux
@@ -163,18 +163,18 @@ jobs:
           flutter build linux --release
           
           # Create Debian package
-          mkdir -p build/linux/FnipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
-          cd build/linux/FnipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
-          mkdir -p opt/fnipaplay
+          mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
+          cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
+          mkdir -p opt/nipaplay
           mkdir -p usr/share/applications
           mkdir -p usr/share/icons/hicolor/512x512/apps
-          cp -r ../x64/release/bundle/* opt/fnipaplay
+          cp -r ../x64/release/bundle/* opt/nipaplay
           cp -r ../../../assets/linux/DEBIAN .
           chmod 0755 DEBIAN/postinst
           chmod 0755 DEBIAN/postrm
           cat > DEBIAN/control <<EOF
           Maintainer: madoka773 <valigarmanda55@gmail.com>
-          Package: Fnipaplay
+          Package: NipaPlay
           Version: ${{ steps.get_version.outputs.version }}
           Section: x11
           Priority: optional
@@ -182,11 +182,11 @@ jobs:
           Essential: no
           Installed-Size: 34648
           Description: A cross platform danmaku video player.
-          Homepage: https://github.com/MCDFsteve/FnipaPlay
+          Homepage: https://github.com/MCDFsteve/NipaPlay
           Depends: ffmpeg, libass9
           EOF
-          cp ../../../assets/linux/io.github.MCDFsteve.FnipaPlay.desktop usr/share/applications
-          cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.FnipaPlay.png
+          cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay.desktop usr/share/applications
+          cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay.png
           cd ..
           dpkg-deb --build --root-owner-group FnipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
       
