@@ -190,12 +190,25 @@ jobs:
           cd ..
           dpkg-deb --build --root-owner-group NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
       
+      # Create .tar.xz package for Linux
+      - name: Build Linux .tar.xz
+        if: matrix.target == 'Linux'
+        run: |
+          mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64-tar
+          cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64-tar
+          mkdir -p opt/nipaplay
+          cp -r ../../x64/release/bundle/* opt/nipaplay
+          cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay-Reload.desktop opt/nipaplay
+          cp ../../../assets/images/logo512.png opt/nipaplay
+          tar -caf NipaPlay-${{ steps.get_version.outputs.version }}-Linux.tar.xz opt
+          cd ..
+      
       # Upload Artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          path: ${{ matrix.artifact_path }},build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64-tar/NipaPlay-${{ steps.get_version.outputs.version }}-Linux.tar.xz
 
   Publish:
     if: startsWith(github.ref, 'refs/tags/')
@@ -205,23 +218,37 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
+      - name: Get version and changelog
+        id: version_and_changelog
+        run: |
+          # 获取当前的版本号
+          VERSION=${{ steps.get_version.outputs.version }}
+          # 获取最近的提交信息（自动获取简短的提交日志）
+          CHANGELOG=$(git log -1 --pretty=%B)
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "CHANGELOG=${CHANGELOG}" >> $GITHUB_ENV
+
       - name: Make tmp dir
         run: mkdir /tmp/artifacts
-      
+
       - name: Download all Artifacts
         uses: actions/download-artifact@v4
         with:
           path: /tmp/artifacts
-      
+
       - name: List all Artifacts
         run: ls -R /tmp/artifacts
-      
+
       - name: Upload to release
         uses: ncipollo/release-action@v4
         with:
-          tag: ${{ github.ref_name }}
+          tag: ${{ env.VERSION }}
+          release_name: ${{ env.VERSION }}  # 使用版本号作为 release 名称
+          body: |
+            ### 版本更新日志
+            ${{ env.CHANGELOG }}
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux/*.deb
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux/*.deb,/tmp/artifacts/release-Linux/*.tar.xz
           artifactErrorsFailBuild: true
           replacesArtifacts: true
