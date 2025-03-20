@@ -231,7 +231,7 @@ jobs:
         run: ls -R /tmp/artifacts
 
       - name: Upload to release
-        uses: ncipollo/release-action@v4
+        uses: ncipollo/release-action@v1
         with:
           tag: ${{ env.VERSION }}
           release_name: ${{ env.VERSION }}
