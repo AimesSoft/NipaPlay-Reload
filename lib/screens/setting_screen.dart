@@ -1,13 +1,14 @@
 // ignore_for_file: prefer_const_constructors
 
 import 'dart:io';
-import 'package:flutter/foundation.dart'; // 导入这个包来使用kIsWeb
+import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/screens/bar_settings.dart';
 import 'package:nipaplay/services/settings_service.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/theme_helper.dart';
-import 'package:nipaplay/utils/theme_colors.dart'; // 导入新的颜色管理文件
+import 'package:nipaplay/utils/theme_colors.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:nipaplay/widgets/menu_button.dart';
 import 'package:window_manager/window_manager.dart';
@@ -19,7 +20,7 @@ import 'theme_settings.dart';
 const double titleBarHeight = 30.0;
 
 class SubOptionDivider extends StatelessWidget {
-  final bool isLast; // 是否是最后一个分割线，用于决定是否增加右边距
+  final bool isLast;
 
   const SubOptionDivider({super.key, this.isLast = false});
 
@@ -28,7 +29,7 @@ class SubOptionDivider extends StatelessWidget {
     return Divider(
       thickness: 0.38,
       color: getLineColor(),
-      endIndent: isLast ? 0 : 50, // 控制右边距（如果不是最后一个分割线，则增加右边距）
+      endIndent: isLast ? 0 : 50,
     );
   }
 }
@@ -39,13 +40,12 @@ class SettingScreen extends StatefulWidget {
   SettingScreen({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _SettingScreenState createState() => _SettingScreenState();
 }
 
 class _SettingScreenState extends State<SettingScreen> {
   bool isMaximized = false;
-  double scrollOffset = 0.0; // 用于存储滚动偏移量
+  double scrollOffset = 0.0;
 
   void _toggleWindowSize() async {
     if (isMaximized) {
@@ -72,7 +72,7 @@ class _SettingScreenState extends State<SettingScreen> {
     Color textColor = isDarkModeValue ? Colors.white : Colors.black;
 
     return Container(
-      color: getBackgroundColor(), // 使用新封装的颜色方法
+      color: getBackgroundColor(),
       child: DecoratedBox(
         decoration: BoxDecoration(
           image: DecorationImage(
@@ -81,73 +81,29 @@ class _SettingScreenState extends State<SettingScreen> {
             opacity: 0.5,
           ),
         ),
-        child: Container(
-          padding: const EdgeInsets.only(left: 10, right: 20),
-          child: Column(
-            children: [
-              SizedBox(
-                height: titleBarHeight, // 给 Stack 一个固定高度
-                child: Stack(
-                  children: [
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: !kIsWeb &&Platform.isMacOS ? 0 : 100,
-                      child: GestureDetector(
-                        onDoubleTap: (kIsWeb || !Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)
-                            ? null
-                            : _toggleWindowSize,
-                        child: Container(
-                          height: titleBarHeight,
-                          color: Colors.transparent,
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: AnimatedOpacity(
-                              opacity: scrollOffset == 0.0 ? 0.0 : 1.0, // 滚动距离为0时透明度为0
-                              duration: Duration(milliseconds: 150), // 动画持续时间
-                              child: Text(
-                                "设置",
-                                style: getBarTitleTextStyle(context),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: Container(
-                          height: titleBarHeight,
-                          color: Colors.transparent,
-                          child: WindowControlButtons(
-                            isMaximized: isMaximized,
-                            isDarkMode: isDarkModeValue,
-                            onMinimize: _minimizeWindow,
-                            onMaximizeRestore: _toggleWindowSize,
-                            onClose: _closeWindow,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (scrollNotification) {
-                    if (scrollNotification is ScrollUpdateNotification) {
-                      setState(() {
-                        scrollOffset = scrollNotification.metrics.pixels; // 更新滚动偏移量
-                      });
-                    }
-                    return true;
-                  },
-                  child: SingleChildScrollView(
+        child: Stack(
+          children: [
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (scrollNotification) {
+                  if (scrollNotification is ScrollUpdateNotification) {
+                    setState(() {
+                      scrollOffset = scrollNotification.metrics.pixels;
+                    });
+                  }
+                  return true;
+                },
+                child: SingleChildScrollView(
+                  child: Container(
+                    padding: const EdgeInsets.only(left: 10, right: 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        SizedBox(height: titleBarHeight),
                         Text(
                           "设置",
                           style: TextStyle(
@@ -156,23 +112,97 @@ class _SettingScreenState extends State<SettingScreen> {
                             color: textColor,
                           ),
                         ),
-                        SubOptionDivider(isLast: true), // 第一个分割线不需要右边距
+                        SubOptionDivider(isLast: true),
                         AccountSettings(settingsService: widget.settingsService),
-                        SubOptionDivider(), // 后续分割线右边距增加50
+                        SubOptionDivider(),
                         BackgroundSettings(settingsService: widget.settingsService),
-                        SubOptionDivider(), // 后续分割线右边距增加50
+                        SubOptionDivider(),
                         ColorSettings(),
-                        SubOptionDivider(), // 后续分割线右边距增加50
+                        SubOptionDivider(),
                         DarkSettings(settingsService: widget.settingsService),
-                        SubOptionDivider(), // 后续分割线右边距增加50
+                        SubOptionDivider(),
                         BarSettings(settingsService: widget.settingsService),
                       ],
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+            Column(
+              children: [
+                SizedBox(
+                  height: titleBarHeight,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ClipRect(
+                          child: AnimatedOpacity(
+                            opacity: scrollOffset == 0.0 ? 0.0 : 1.0,
+                            duration: Duration(milliseconds: 200),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: getLineColor().withOpacity(0.2),
+                                      width: 0.4,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned( // 恢复点击事件
+                        top: 0,
+                        left: 0,
+                        right: !kIsWeb && (Platform.isWindows ||Platform.isLinux)? 100 : 0,
+                        child: GestureDetector(
+                          onDoubleTap: (kIsWeb || !Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)
+                              ? null
+                              : _toggleWindowSize,
+                          child: Container(
+                            height: titleBarHeight,
+                            color: Colors.transparent,
+                            child: Align(
+                              alignment: Alignment.center,
+                              child: AnimatedOpacity(
+                                opacity: scrollOffset == 0.0 ? 0.0 : 1.0,
+                                duration: Duration(milliseconds: 200),
+                                child: Text(
+                                  "设置",
+                                  style: getBarTitleTextStyle(context),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            height: titleBarHeight,
+                            color: Colors.transparent,
+                            child: WindowControlButtons(
+                              isMaximized: isMaximized,
+                              isDarkMode: isDarkModeValue,
+                              onMinimize: _minimizeWindow,
+                              onMaximizeRestore: _toggleWindowSize,
+                              onClose: _closeWindow,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

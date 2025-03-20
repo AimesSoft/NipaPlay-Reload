@@ -7,33 +7,36 @@ import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:nipaplay/widgets/fluid_background_widget.dart';
 import 'package:nipaplay/widgets/image_assets.dart';
 import 'package:nipaplay/widgets/icon_button_with_background.dart'; // 导入新的 IconButtonWithBackground
-
+import 'package:nipaplay/widgets/sidebar_content.dart';
 import 'dart:io'; // 用于平台判断
 
 const double titleSize = 45.0; // 标题大小
 double sizedboxTitle = 5.0; // 标题距离顶部距离
-
+double sidebarWidth = !kIsWeb&&(Platform.isIOS || Platform.isAndroid) ? 100 : 70.0; // 初始宽度
+double buttonXpos = !kIsWeb&&(Platform.isIOS || Platform.isAndroid) ? 42 : 11.0;
+// ignore: non_constant_identifier_names
+double ConstsidebarWidth = !kIsWeb&&(Platform.isIOS || Platform.isAndroid)  ? 100 : 70.0;
+double barSize = kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) || !kIsWeb&&(Platform.isIOS || Platform.isAndroid) ? 10.0 : 2.0; 
 class _NavigationBarState extends State<NavigationBar> {
-  double sidebarWidth = 70.0; // 初始宽度
-
   // 更新宽度的方法
   void _updateWidth(DragUpdateDetails details) {
     setState(() {
       // 限制宽度在70到200之间
-      sidebarWidth = (sidebarWidth + details.primaryDelta!).clamp(70.0, 200.0);
+      sidebarWidth = (sidebarWidth + details.primaryDelta!)
+          .clamp(ConstsidebarWidth, 200.0);
     });
   }
 
   // 根据宽度计算透明度
   double _getTextOpacity() {
-    return (sidebarWidth - 70) / 130; // 宽度从70到200，透明度从0到1
+    return (sidebarWidth - ConstsidebarWidth) / 130; // 宽度从70到200，透明度从0到1
   }
 
   // 简化文本和按钮的创建
   Widget _buildRow(String text, String imagePath, bool isImage) {
     return Row(
       children: [
-        const Padding(padding: EdgeInsets.only(left: 11.0)),
+        Padding(padding: EdgeInsets.only(left: buttonXpos)),
         isImage
             ? Image.asset(
                 imagePath,
@@ -58,90 +61,78 @@ class _NavigationBarState extends State<NavigationBar> {
       ],
     );
   }
-@override
-Widget build(BuildContext context) {
-  bool isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
 
-  // 根据操作系统调整标题的间距
-  if (!kIsWeb) {
-    if (Platform.isMacOS) {
-      sizedboxTitle = 30.0; // macOS 下的间距
+  @override
+  Widget build(BuildContext context) {
+    bool isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
+
+    // 根据操作系统调整标题的间距
+    if (!kIsWeb) {
+      if (Platform.isMacOS) {
+        sizedboxTitle = 30.0; // macOS 下的间距
+      } else if (Platform.isIOS) {
+        sizedboxTitle = 10.0; // iOS 下的间距
+      } else {
+        sizedboxTitle = 5.0; // 非 macOS（如 Windows 或 Linux）下的间距
+      }
     } else {
-      sizedboxTitle = 5.0; // 非 macOS（如 Windows 或 Linux）下的间距
+      sizedboxTitle = 5.0; // Web平台下的间距设置
     }
-  } else {
-    sizedboxTitle = 5.0; // Web平台下的间距设置
-  }
 
-  // 根据亮暗模式选择不同的标题图片
-  String titleImagePath = isDarkModeValue
-      ? ImageAssets.title.replaceFirst('.png', 'Light.png')
-      : ImageAssets.title;
+    // 根据亮暗模式选择不同的标题图片
+    String titleImagePath = isDarkModeValue
+        ? ImageAssets.title.replaceFirst('.png', 'Light.png')
+        : ImageAssets.title;
 
-  return Container(
-    width: sidebarWidth, // 使用动态宽度
-    decoration: BoxDecoration(
-      color: getBarColor(),
-      border: Border(
-        right: BorderSide(
-          color: isDarkModeValue ? Colors.black : getBarLineColor(),
-          width: 1.0,
+    return Container(
+      width: sidebarWidth, // 使用动态宽度
+      decoration: BoxDecoration(
+        color: getBarColor(),
+        border: Border(
+          right: BorderSide(
+            color: isDarkModeValue ? Colors.black : getBarLineColor(),
+            width: 1.0,
+          ),
         ),
       ),
-    ),
-    child: Stack(
-      children: [
-        // 依据 sidebarBlurEffect 判断是否添加 FluidBackgroundWidget
-        if (!sidebarBlurEffect)
-          FluidBackgroundWidget(
-            child: Align(
-              alignment: const Alignment(-1, 0.0), // 使内容始终位于容器的左侧
-              child: Column(
-                children: [
-                  SizedBox(height: sizedboxTitle), // 使用动态间距
-                  _buildRow('NipaPlay', titleImagePath, true), // NipaPlay 显示图片
-                  const SizedBox(height: 10),
-                  _buildRow('视频播放', ImageAssets.playVideo, false), // 视频播放按钮
-                  const SizedBox(height: 10),
-                  _buildRow('媒体库', ImageAssets.videoHistory, false), // 媒体库按钮
-                ],
-              ),
-            ),
-          )
-        else
-          Align(
-            alignment: const Alignment(-1, 0.0), // 使内容始终位于容器的左侧
-            child: Column(
-              children: [
-                SizedBox(height: sizedboxTitle), // 使用动态间距
-                _buildRow('NipaPlay', titleImagePath, true), // NipaPlay 显示图片
-                const SizedBox(height: 10),
-                _buildRow('视频播放', ImageAssets.playVideo, false), // 视频播放按钮
-                const SizedBox(height: 10),
-                _buildRow('媒体库', ImageAssets.videoHistory, false), // 媒体库按钮
-              ],
-            ),
-          ),
-        // 在侧边栏的右边添加拖动区域
-        Positioned(
-          right: 0,
-          top: 0,
-          bottom: 0,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.resizeColumn,
-            child: GestureDetector(
-              onHorizontalDragUpdate: _updateWidth,
-              child: Container(
-                width: 5,
-                color: Colors.transparent, // 透明颜色，显示拖动区域
+      child: Stack(
+        children: [
+          // 依据 sidebarBlurEffect 判断是否添加 FluidBackgroundWidget
+          if (!sidebarBlurEffect)
+            FluidBackgroundWidget(
+                child: SidebarContent(
+                    sizedboxTitle: sizedboxTitle,
+                    titleSize: titleSize,
+                    titleImagePath: titleImagePath,
+                    buildRow: _buildRow,
+                    isDarkModeValue: isDarkModeValue))
+          else
+            SidebarContent(
+                sizedboxTitle: sizedboxTitle,
+                titleSize: titleSize,
+                titleImagePath: titleImagePath,
+                buildRow: _buildRow,
+                isDarkModeValue: isDarkModeValue),
+          // 在侧边栏的右边添加拖动区域
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                onHorizontalDragUpdate: _updateWidth,
+                child: Container(
+                  width: barSize,
+                  color: Colors.transparent, // 透明颜色，显示拖动区域
+                ),
               ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 }
 
 class NavigationBar extends StatefulWidget {

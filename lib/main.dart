@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/theme_helper.dart';
 import 'package:provider/provider.dart';
@@ -16,7 +17,21 @@ const double windowHeight = 600.0;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+  // 强制横屏，仅在 iOS、Android 或 Web 移动端
+  if (!kIsWeb) {
+    if (Platform.isIOS || Platform.isAndroid) {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeRight,
+        DeviceOrientation.landscapeLeft,
+      ]);
+    }
+  } else if (kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android)) {
+    // 强制Web平台上的移动端横屏
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+  }
   // 判断是否为Web平台
   if (!kIsWeb) {
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
