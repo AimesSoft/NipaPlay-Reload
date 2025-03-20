@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=FnipaPlay
+Comment=A cross platform danmaku video player.
+Comment[zh_CN]=一款跨平台本地弹幕视频播放器。
+Exec=fnipaplay
+Icon=io.github.MCDFsteve.FnipaPlay
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Video;
