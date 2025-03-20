@@ -2,7 +2,6 @@
 
 import 'dart:io';
 import 'package:flutter/foundation.dart'; // 导入这个包来使用kIsWeb
-
 import 'package:flutter/material.dart';
 import 'package:nipaplay/screens/bar_settings.dart';
 import 'package:nipaplay/services/settings_service.dart';
@@ -79,49 +78,42 @@ class _SettingScreenState extends State<SettingScreen> {
           image: DecorationImage(
             image: AssetImage(backImage),
             fit: BoxFit.cover,
-             opacity: 0.5,
+            opacity: 0.5,
           ),
         ),
         child: Container(
           padding: const EdgeInsets.only(left: 10, right: 20),
           child: Column(
             children: [
-              // 使用 Container 包裹 Stack 确保 Stack 有明确的尺寸
               SizedBox(
                 height: titleBarHeight, // 给 Stack 一个固定高度
                 child: Stack(
                   children: [
-                    // 只有在非Web平台时执行这些代码
-                    if (!kIsWeb &&
-                        (Platform.isWindows ||
-                            Platform.isLinux ||
-                            Platform.isMacOS))
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: Platform.isMacOS ? 0 : 100,
-                        child: GestureDetector(
-                          onDoubleTap: _toggleWindowSize,
-                          child: Container(
-                            height: titleBarHeight,
-                            color: Colors.transparent,
-                            child: Align(
-                              alignment: Alignment.center,
-                              child: AnimatedOpacity(
-                                opacity: scrollOffset == 0.0
-                                    ? 0.0
-                                    : 1.0, // 滚动距离为0时透明度为0
-                                duration: Duration(milliseconds: 150), // 动画持续时间
-                                child: Text(
-                                  "设置",
-                                  style: getBarTitleTextStyle(context),
-                                ),
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: !kIsWeb &&Platform.isMacOS ? 0 : 100,
+                      child: GestureDetector(
+                        onDoubleTap: (kIsWeb || !Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)
+                            ? null
+                            : _toggleWindowSize,
+                        child: Container(
+                          height: titleBarHeight,
+                          color: Colors.transparent,
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: AnimatedOpacity(
+                              opacity: scrollOffset == 0.0 ? 0.0 : 1.0, // 滚动距离为0时透明度为0
+                              duration: Duration(milliseconds: 150), // 动画持续时间
+                              child: Text(
+                                "设置",
+                                style: getBarTitleTextStyle(context),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    // 只有在非Web平台时执行这些代码
+                    ),
                     if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
                       Positioned(
                         top: 0,
@@ -147,8 +139,7 @@ class _SettingScreenState extends State<SettingScreen> {
                   onNotification: (scrollNotification) {
                     if (scrollNotification is ScrollUpdateNotification) {
                       setState(() {
-                        scrollOffset =
-                            scrollNotification.metrics.pixels; // 更新滚动偏移量
+                        scrollOffset = scrollNotification.metrics.pixels; // 更新滚动偏移量
                       });
                     }
                     return true;
@@ -166,11 +157,9 @@ class _SettingScreenState extends State<SettingScreen> {
                           ),
                         ),
                         SubOptionDivider(isLast: true), // 第一个分割线不需要右边距
-                        AccountSettings(
-                            settingsService: widget.settingsService),
+                        AccountSettings(settingsService: widget.settingsService),
                         SubOptionDivider(), // 后续分割线右边距增加50
-                        BackgroundSettings(
-                            settingsService: widget.settingsService),
+                        BackgroundSettings(settingsService: widget.settingsService),
                         SubOptionDivider(), // 后续分割线右边距增加50
                         ColorSettings(),
                         SubOptionDivider(), // 后续分割线右边距增加50
