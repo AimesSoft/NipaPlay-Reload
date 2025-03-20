@@ -215,7 +215,7 @@ jobs:
         run: mkdir /tmp/artifacts
       
       - name: Download all Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: /tmp/artifacts
       
