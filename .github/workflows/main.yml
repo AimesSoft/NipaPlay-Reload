@@ -169,7 +169,7 @@ jobs:
           mkdir -p usr/share/applications
           mkdir -p usr/share/icons/hicolor/512x512/apps
           cp -r ../x64/release/bundle/* opt/nipaplay
-          cp ../../../assets/linux/DEBIAN .
+          cp -r ../../../assets/linux/DEBIAN .
           chmod 0755 DEBIAN/postinst
           chmod 0755 DEBIAN/postrm
           cat > DEBIAN/control <<EOF
