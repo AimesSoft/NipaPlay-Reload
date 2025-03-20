@@ -150,26 +150,26 @@ jobs:
           Copy-Item -Filter *.dll -Path windows\* -Destination $DestDir -Force
           Compress-Archive $DestDir build\windows\NipaPlay_${{ steps.get_version.outputs.version }}_Windows.zip
       
-      # Build Linux .deb
-      - name: Build Linux
+      # Build Linux .deb and .tar.xz
+      - name: Build Linux .deb and .tar.xz
         if: matrix.target == 'Linux'
         run: |
-          # Install mpv and dependencies
+          # 安装 mpv 和其他依赖
           sudo apt-get update -y
           sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev
           
-          # Build Flutter for Linux
+          # 构建 Flutter for Linux
           flutter config --enable-linux-desktop
           flutter build linux --release
           
-          # Create Debian package
+          # 创建 .deb 包
           mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
           cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
           mkdir -p opt/nipaplay
           mkdir -p usr/share/applications
           mkdir -p usr/share/icons/hicolor/512x512/apps
           cp -r ../x64/release/bundle/* opt/nipaplay
-          cp -r ../../../assets/linux/DEBIAN .
+          cp ../../../assets/linux/DEBIAN .
           chmod 0755 DEBIAN/postinst
           chmod 0755 DEBIAN/postrm
           cat > DEBIAN/control <<EOF
@@ -189,11 +189,8 @@ jobs:
           cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
           cd ..
           dpkg-deb --build --root-owner-group NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
-      
-      # Create .tar.xz package for Linux
-      - name: Build Linux .tar.xz
-        if: matrix.target == 'Linux'
-        run: |
+          
+          # 创建 .tar.xz 包
           mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64-tar
           cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64-tar
           mkdir -p opt/nipaplay
@@ -222,9 +219,7 @@ jobs:
       - name: Get version and changelog
         id: version_and_changelog
         run: |
-          # 获取当前的版本号
           VERSION=${{ steps.get_version.outputs.version }}
-          # 获取最近的提交信息（自动获取简短的提交日志）
           CHANGELOG=$(git log -1 --pretty=%B)
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
           echo "CHANGELOG=${CHANGELOG}" >> $GITHUB_ENV
@@ -244,7 +239,7 @@ jobs:
         uses: ncipollo/release-action@v4
         with:
           tag: ${{ env.VERSION }}
-          release_name: ${{ env.VERSION }}  # 使用版本号作为 release 名称
+          release_name: ${{ env.VERSION }}
           body: |
             ### 版本更新日志
             ${{ env.CHANGELOG }}
