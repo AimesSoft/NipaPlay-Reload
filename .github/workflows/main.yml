@@ -209,35 +209,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get version and changelog
-        id: version_and_changelog
-        run: |
-          VERSION=${{ steps.get_version.outputs.version }}
-          CHANGELOG=$(git log -1 --pretty=%B)
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "CHANGELOG=${CHANGELOG}" >> $GITHUB_ENV
-
+        uses: actions/checkout@v3
+      
       - name: Make tmp dir
         run: mkdir /tmp/artifacts
-
+      
       - name: Download all Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           path: /tmp/artifacts
-
+      
       - name: List all Artifacts
         run: ls -R /tmp/artifacts
-
+      
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ env.VERSION }}
-          release_name: ${{ env.VERSION }}
-          body: |
-            ### 版本更新日志
-            ${{ env.CHANGELOG }}
+          tag: ${{ github.ref_name }}
           allowUpdates: true
           artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux/*.deb
           artifactErrorsFailBuild: true
