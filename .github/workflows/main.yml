@@ -185,7 +185,7 @@ jobs:
           Homepage: https://github.com/MCDFsteve/NipaPlay-Reload
           Depends: ffmpeg, libass9
           EOF
-          cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay.desktop usr/share/applications
+          cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay-Reload.desktop usr/share/applications
           cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
           cd ..
           dpkg-deb --build --root-owner-group NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
