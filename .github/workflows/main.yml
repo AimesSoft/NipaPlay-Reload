@@ -150,8 +150,8 @@ jobs:
           Copy-Item -Filter *.dll -Path windows\* -Destination $DestDir -Force
           Compress-Archive $DestDir build\windows\NipaPlay_${{ steps.get_version.outputs.version }}_Windows.zip
       
-      # Build Linux .deb and .tar.xz
-      - name: Build Linux .deb and .tar.xz
+      # Build Linux .deb
+      - name: Build Linux .deb
         if: matrix.target == 'Linux'
         run: |
           # 安装 mpv 和其他依赖
@@ -195,22 +195,12 @@ jobs:
           cd ..
           dpkg-deb --build --root-owner-group NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
           
-          # 创建 .tar.xz 包
-          mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64-tar
-          cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64-tar
-          mkdir -p opt/nipaplay
-          cp -r ../../x64/release/bundle/* opt/nipaplay
-          cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay-Reload.desktop opt/nipaplay
-          cp ../../../assets/images/logo512.png opt/nipaplay
-          tar -caf NipaPlay-${{ steps.get_version.outputs.version }}-Linux.tar.xz opt
-          cd ..
-      
       # Upload Artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }},build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64-tar/NipaPlay-${{ steps.get_version.outputs.version }}-Linux.tar.xz
+          path: ${{ matrix.artifact_path }}
 
   Publish:
     if: startsWith(github.ref, 'refs/tags/')
@@ -249,6 +239,6 @@ jobs:
             ### 版本更新日志
             ${{ env.CHANGELOG }}
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux/*.deb,/tmp/artifacts/release-Linux/*.tar.xz
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux/*.deb
           artifactErrorsFailBuild: true
           replacesArtifacts: true
