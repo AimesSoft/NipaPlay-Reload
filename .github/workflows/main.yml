@@ -162,6 +162,11 @@ jobs:
           flutter config --enable-linux-desktop
           flutter build linux --release
           
+          # 检查构建产物目录
+          echo "Listing build output:"
+          ls build/linux/x64/release/
+          ls build/linux/x64/release/bundle/
+          
           # 创建 .deb 包
           mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
           cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-amd64
