@@ -12,24 +12,24 @@ import 'dart:io'; // 用于平台判断
 
 const double titleSize = 45.0; // 标题大小
 double sizedboxTitle = 5.0; // 标题距离顶部距离
-double sidebarWidth = !kIsWeb&&(Platform.isIOS || Platform.isAndroid) ? 100 : 70.0; // 初始宽度
-double buttonXpos = !kIsWeb&&(Platform.isIOS || Platform.isAndroid) ? 42 : 11.0;
-// ignore: non_constant_identifier_names
-double ConstsidebarWidth = !kIsWeb&&(Platform.isIOS || Platform.isAndroid)  ? 100 : 70.0;
-double barSize = kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) || !kIsWeb&&(Platform.isIOS || Platform.isAndroid) ? 10.0 : 2.0; 
+double sidebarWidth = isMobile ? 100.0 : 70.0;
+double buttonXpos = isMobile ? 42.0 : 11.0;
+double constSidebarWidth = isMobile ? 100.0 : 70.0;
+double barSize = isMobile ? 10.0 : 2.0;
+double barTextWidth = isMobile ? 100.0 : 130.0;
 class _NavigationBarState extends State<NavigationBar> {
   // 更新宽度的方法
   void _updateWidth(DragUpdateDetails details) {
     setState(() {
       // 限制宽度在70到200之间
       sidebarWidth = (sidebarWidth + details.primaryDelta!)
-          .clamp(ConstsidebarWidth, 200.0);
+          .clamp(constSidebarWidth, 200.0);
     });
   }
 
   // 根据宽度计算透明度
   double _getTextOpacity() {
-    return (sidebarWidth - ConstsidebarWidth) / 130; // 宽度从70到200，透明度从0到1
+    return (sidebarWidth - constSidebarWidth) / barTextWidth; // 宽度从70到200，透明度从0到1
   }
 
   // 简化文本和按钮的创建

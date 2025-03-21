@@ -55,7 +55,7 @@ class _DarkSettingsState extends State<DarkSettings> {
   // 应用加载的设置
   void _applySettings() {
     final themeProvider = context.read<ThemeProvider>();
-    if (modeSwitch) {
+    if (!modeSwitch) {
       bool isDarkModeAuto = isDarkMode(context);
       themeProvider.toggleDarkMode(isDarkModeAuto ? 'night' : 'day', context);
     } else {

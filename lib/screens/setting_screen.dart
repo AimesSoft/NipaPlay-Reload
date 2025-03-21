@@ -40,6 +40,7 @@ class SettingScreen extends StatefulWidget {
   SettingScreen({super.key});
 
   @override
+  // ignore: library_private_types_in_public_api
   _SettingScreenState createState() => _SettingScreenState();
 }
 
@@ -66,6 +67,13 @@ class _SettingScreenState extends State<SettingScreen> {
     await windowManager.close();
   }
 
+  ImageProvider getImageProvider(String imagePath) {
+  if (imagePath.contains('assets')|| kIsWeb) {
+    return AssetImage(imagePath);
+  } else {
+    return FileImage(File(imagePath));
+  }
+}
   @override
   Widget build(BuildContext context) {
     bool isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
@@ -76,7 +84,7 @@ class _SettingScreenState extends State<SettingScreen> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           image: DecorationImage(
-            image: AssetImage(backImage),
+            image:getImageProvider(backImage),
             fit: BoxFit.cover,
             opacity: 0.5,
           ),
@@ -105,7 +113,7 @@ class _SettingScreenState extends State<SettingScreen> {
                       children: [
                         SizedBox(height: titleBarHeight),
                         Text(
-                          "设置",
+                          settingTitle,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 30,
@@ -113,9 +121,11 @@ class _SettingScreenState extends State<SettingScreen> {
                           ),
                         ),
                         SubOptionDivider(isLast: true),
-                        AccountSettings(settingsService: widget.settingsService),
+                        AccountSettings(
+                            settingsService: widget.settingsService),
                         SubOptionDivider(),
-                        BackgroundSettings(settingsService: widget.settingsService),
+                        BackgroundSettings(
+                            settingsService: widget.settingsService),
                         SubOptionDivider(),
                         ColorSettings(),
                         SubOptionDivider(),
@@ -155,14 +165,23 @@ class _SettingScreenState extends State<SettingScreen> {
                           ),
                         ),
                       ),
-                      Positioned( // 恢复点击事件
+                      Positioned(
+                        // 恢复点击事件
                         top: 0,
                         left: 0,
-                        right: !kIsWeb && (Platform.isWindows ||Platform.isLinux)? 100 : 0,
+                        right:
+                            winLinDesktop
+                                ? 100
+                                : 0,
                         child: GestureDetector(
-                          onDoubleTap: (kIsWeb || !Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)
+                          onDoubleTap: (noMenuButton)
                               ? null
                               : _toggleWindowSize,
+                          onPanStart: (details) async {
+                            if (winLinDesktop) {
+                              await windowManager.startDragging();
+                            }
+                          },
                           child: Container(
                             height: titleBarHeight,
                             color: Colors.transparent,
@@ -172,7 +191,7 @@ class _SettingScreenState extends State<SettingScreen> {
                                 opacity: scrollOffset == 0.0 ? 0.0 : 1.0,
                                 duration: Duration(milliseconds: 200),
                                 child: Text(
-                                  "设置",
+                                  settingTitle,
                                   style: getBarTitleTextStyle(context),
                                 ),
                               ),
@@ -180,12 +199,12 @@ class _SettingScreenState extends State<SettingScreen> {
                           ),
                         ),
                       ),
-                      if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
+                      if (winLinDesktop)
                         Positioned(
                           top: 0,
-                          left: 0,
                           right: 0,
                           child: Container(
+                            width: 100,
                             height: titleBarHeight,
                             color: Colors.transparent,
                             child: WindowControlButtons(
