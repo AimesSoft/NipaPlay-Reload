@@ -1,6 +1,8 @@
 // ignore_for_file: prefer_const_constructors
 
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/screens/bar_settings.dart';
@@ -68,11 +70,13 @@ class _SettingScreenState extends State<SettingScreen> {
 
   ImageProvider getImageProvider(String imagePath) {
   try {
-    final uri = Uri.parse(imagePath);
-    if (uri.scheme == 'http' || uri.scheme == 'https') {
+    if (imagePath.contains('http')) {
       return NetworkImage(imagePath); // URL 图像
     } else if (imagePath.contains('assets')) {
       return AssetImage(imagePath); // 本地 assets 图像
+    } else if (imagePath.startsWith('data:image')) {
+      // Check if imagePath is a base64 encoded image string
+      return MemoryImage(_base64ToImage(imagePath)); // base64 图像
     } else {
       return FileImage(File(imagePath)); // 本地文件图像
     }
@@ -84,6 +88,12 @@ class _SettingScreenState extends State<SettingScreen> {
       return FileImage(File(imagePath));
     }
   }
+}
+
+Uint8List _base64ToImage(String base64String) {
+  // Extract the base64 part from the string if it's a data URI.
+  final base64Data = base64String.split(',').last; 
+  return base64Decode(base64Data); // Convert base64 to Uint8List
 }
   @override
   Widget build(BuildContext context) {

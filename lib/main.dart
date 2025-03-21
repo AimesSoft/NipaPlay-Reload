@@ -13,14 +13,8 @@ const double windowHeight = 600.0;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 强制横屏，仅在 iOS、Android 或 Web 移动端
-  if (isMobile) {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeRight,
-      DeviceOrientation.landscapeLeft,
-    ]);
-  }
-  // 判断是否为Web平台
+
+  // 判断是否为桌面平台
   if (isDesktop) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
@@ -58,6 +52,22 @@ class NipaPlayApp extends StatefulWidget {
 
 class _NipaPlayAppState extends State<NipaPlayApp> {
   @override
+  void initState() {
+    super.initState();
+    _setOrientation();
+  }
+
+  Future<void> _setOrientation() async {
+    if (isMobile) {
+      // 在原生 iOS 和 Android 上，强制横屏
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeRight,
+        DeviceOrientation.landscapeLeft,
+      ]);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
     return CupertinoApp(
@@ -69,10 +79,10 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
       ),
       home: const Scaffold(
         body: Stack(
-          children: [
-            HomeScreen(),
-          ],
-        ),
+                children: [
+                  HomeScreen(),
+                ],
+              ),
       ),
     );
   }
