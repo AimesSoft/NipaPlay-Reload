@@ -17,18 +17,13 @@ import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
-// 条件导入：仅在 Web 平台上导入 dart:html
-// ignore: deprecated_member_use, avoid_web_libraries_in_flutter
-import 'dart:html' as html show File, FileReader;
 
-// 在其他平台上，使用空实现
 class BackgroundSettings extends StatefulWidget {
   final SettingsService settingsService;
 
   const BackgroundSettings({super.key, required this.settingsService});
 
   @override
-  // ignore: library_private_types_in_public_api
   _BackgroundSettingsState createState() => _BackgroundSettingsState();
 }
 
@@ -75,59 +70,32 @@ class _BackgroundSettingsState extends State<BackgroundSettings> {
       if (filePath != null) {
         try {
           if (kIsWeb) {
-            print(
-                'BackgroundSettings _selectCustomBackgroundImage Web platform detected');
-            // Web 平台：使用 FileReader 读取文件内容
-            final file = html.File(result.files.single.bytes as List<Object>, result.files.single.name);
-            final reader = html.FileReader();
+            // Web 平台：上传 Base64 数据到服务器
+            final fileBytes = await File(filePath).readAsBytes();
+            final base64Image = base64Encode(fileBytes);
+            final uuid = const Uuid().v4(); // 生成 UUID
 
-            reader.readAsArrayBuffer(file);
+            // 将 Base64 数据和 UUID 发送到服务器
+            final response = await http.post(
+              Uri.parse('http://nipaplay.aimes-soft.com/upload_image.php'), // 使用您的服务器 URL
+              body: {'image': base64Image, 'uuid': uuid},
+            );
 
-            reader.onLoad.listen((event) {
-              final Uint8List fileBytes = reader.result as Uint8List;
-              final base64Image = base64Encode(fileBytes);
-              final uuid = const Uuid().v4(); // 生成 UUID
-
-              print(
-                  'BackgroundSettings _selectCustomBackgroundImage base64Image generated, uuid: $uuid');
-              // 将 Base64 数据和 UUID 发送到服务器
-              http.post(
-                Uri.parse('http://nipaplay.aimes-soft.com/upload_image.php'), // 使用您的服务器 URL
-                body: {'image': base64Image, 'uuid': uuid},
-              ).then((response) {
-                print(
-                    'BackgroundSettings _selectCustomBackgroundImage server response: ${response.statusCode}');
-                if (response.statusCode == 200) {
-                  setState(() {
-                    backImageNumber = 2;
-                    backImage = 'http://nipaplay.aimes-soft.com/images/$uuid'; // 设置为服务器图像 URL
-                    widget.settingsService.setBackgroundImage(backImage); // 设置背景图路径
-                    _saveSettings(); // 保存设置
-                    context.read<ThemeProvider>().updateDraw(); // 更新主题或重新绘制UI
-                    print(
-                        'BackgroundSettings _selectCustomBackgroundImage setState called, backImage: $backImage');
-                  });
-                } else {
-                  // 处理上传错误
-                  if (kDebugMode) {
-                    print(
-                        'BackgroundSettings _selectCustomBackgroundImage Error uploading image: ${response.statusCode}');
-                  }
-                }
-              }).catchError((error, stackTrace) {
-                if(kDebugMode){
-                  print("BackgroundSettings _selectCustomBackgroundImage http error: $error");
-                  print("BackgroundSettings _selectCustomBackgroundImage StackTrace: $stackTrace");
-                }
+            if (response.statusCode == 200) {
+              setState(() {
+                backImageNumber = 2;
+                backImage = 'http://nipaplay.aimes-soft.com/images/$uuid'; // 设置为服务器图像 URL
+                widget.settingsService.setBackgroundImage(backImage); // 设置背景图路径
+                _saveSettings(); // 保存设置
+                context.read<ThemeProvider>().updateDraw(); // 更新主题或重新绘制UI
               });
-            });
-
-            reader.onError.listen((event) {
+            } else {
+              // 处理上传错误
               if (kDebugMode) {
-                print('BackgroundSettings _selectCustomBackgroundImage FileReader error: $event');
+                print('Error uploading image: ${response.statusCode}');
               }
-            });
-          }  else {
+            }
+          } else {
             // 原生平台：复制文件到应用目录
             final appDirectory = await getApplicationDocumentsDirectory();
             final newFilePath =

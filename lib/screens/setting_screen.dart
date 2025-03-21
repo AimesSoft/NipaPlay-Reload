@@ -2,7 +2,6 @@
 
 import 'dart:io';
 import 'dart:ui';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/screens/bar_settings.dart';
 import 'package:nipaplay/services/settings_service.dart';
@@ -68,10 +67,22 @@ class _SettingScreenState extends State<SettingScreen> {
   }
 
   ImageProvider getImageProvider(String imagePath) {
-  if (imagePath.contains('assets')|| kIsWeb) {
-    return AssetImage(imagePath);
-  } else {
-    return FileImage(File(imagePath));
+  try {
+    final uri = Uri.parse(imagePath);
+    if (uri.scheme == 'http' || uri.scheme == 'https') {
+      return NetworkImage(imagePath); // URL 图像
+    } else if (imagePath.contains('assets')) {
+      return AssetImage(imagePath); // 本地 assets 图像
+    } else {
+      return FileImage(File(imagePath)); // 本地文件图像
+    }
+  } catch (e) {
+    // 如果解析 URI 失败，则可能是本地 assets 或文件路径
+    if (imagePath.contains('assets')) {
+      return AssetImage(imagePath);
+    } else {
+      return FileImage(File(imagePath));
+    }
   }
 }
   @override
