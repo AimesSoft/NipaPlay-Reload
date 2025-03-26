@@ -23,24 +23,7 @@ class _BarSettingsState extends State<BarSettings> {
   @override
   void initState() {
     super.initState();
-    _loadSettings(); // 加载保存的设置
   }
-
-  // 从存储中加载设置
-  Future<void> _loadSettings() async {
-    // 加载 sidebarBlurEffect 并检查是否为空或 null
-    bool? loadedSidebarBlurEffect =
-        await SettingsStorage.loadBool('sidebarBlurEffect');
-    if (loadedSidebarBlurEffect != null) {
-      sidebarBlurEffect = loadedSidebarBlurEffect;
-    }
-
-    if (mounted) {
-      // 添加 mounted 检查
-      setState(() {}); // 确保 UI 更新
-    }
-  }
-
   // 保存设置
   Future<void> _saveSettings() async {
     await SettingsStorage.saveBool('sidebarBlurEffect', sidebarBlurEffect);

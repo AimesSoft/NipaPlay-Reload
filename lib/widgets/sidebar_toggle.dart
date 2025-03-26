@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/theme_colors.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
-import 'package:flutter/services.dart'; // 导入 MouseCursor
+// 导入 MouseCursor
 
 class SidebarToggle extends StatefulWidget { // 修改为 StatefulWidget
   final String title;
@@ -46,6 +46,7 @@ class _SidebarToggleState extends State<SidebarToggle> {
                   color: widget.value ? getWBColor() : getSwitchCloseColor(),
                   boxShadow: [
                     BoxShadow(
+                      // ignore: deprecated_member_use
                       color: Colors.black.withOpacity(0.15),
                       blurRadius: 6.0,
                       spreadRadius: 2.0,

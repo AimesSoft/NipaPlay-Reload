@@ -52,14 +52,6 @@ class _ColorSettingsState extends State<ColorSettings> {
     colorOptions = {
       for (var color in rightColors) computeLeftColorHex(color): color,
     };
-    _loadColor();
-  }
-
-  // 从存储中加载主色调颜色，默认值使用 Colors.grey 对应的左侧颜色
-  Future<void> _loadColor() async {
-    String storedColor = await SettingsStorage.loadString("baseLightColor",
-        defaultValue: computeLeftColorHex(Colors.grey));
-    baseLightColor = storedColor;
   }
 
   // 保存颜色到存储

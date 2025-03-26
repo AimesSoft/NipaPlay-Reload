@@ -15,6 +15,7 @@ String backUp = backEmpty;
 String backImage = backGirl;
 int backImageNumber = 0;
 double mobileThreshold = 550;
+double barPageNumber = 0;
 //////全局变量/////
 ///
 //////设备类型判断/////
@@ -25,6 +26,23 @@ bool get isMobile {
     // 排除平板设备，通常平板设备的宽度大于 600
     return screenWidth < mobileThreshold;
 }
+bool get isPhone {
+  //移动平台
+  if (!kIsWeb) {
+    return Platform.isIOS || Platform.isAndroid;
+  }else{
+    return false;
+  }
+}
+bool get isTouch {
+  //移动平台
+  if (kIsWeb) {
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android;
+  } else {
+    return Platform.isIOS || Platform.isAndroid;
+  }
+}
 bool get noMenuButton {
   //没有三大键的设备
   return kIsWeb ||
@@ -32,7 +50,7 @@ bool get noMenuButton {
 }
 bool get winLinDesktop {
   //windows和linux桌面平台
-  return !kIsWeb && (Platform.isWindows || Platform.isLinux);
+  return !kIsWeb && (Platform.isWindows || Platform.isLinux );
 }
 bool get isDesktop {
   //windows和linux和macOS桌面平台
@@ -42,4 +60,6 @@ bool get isDesktop {
 ///
 //////文本//////
 String settingTitle = "设置";
+String playVideoTitle = "播放视频";
+String libraryTitle = "媒体库";
 //////文本//////

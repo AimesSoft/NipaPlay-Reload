@@ -2,6 +2,7 @@
 class ImageAssets {
   static const String playVideo = 'assets/playVideo.png';
   static const String videoHistory = 'assets/videoHistory.png';
+  static const String settings = 'assets/settings.png';
   static const String minButton = 'assets/minbutton.png';
   static const String closeButton = 'assets/closebutton.png';
   static const String maxButton = 'assets/maxbutton.png';

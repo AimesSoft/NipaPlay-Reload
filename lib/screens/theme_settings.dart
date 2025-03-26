@@ -25,42 +25,6 @@ class _DarkSettingsState extends State<DarkSettings> {
   @override
   void initState() {
     super.initState();
-    _loadSettings(); // 加载保存的设置
-  }
-
-  // 从存储中加载设置
-  Future<void> _loadSettings() async {
-    // 加载 modeSwitch 并检查是否为空或 null
-    bool? loadedModeSwitch = await SettingsStorage.loadBool('modeSwitch');
-    if (loadedModeSwitch != null) {
-      modeSwitch = loadedModeSwitch;
-    }
-
-    // 加载 isDarkModeValue 并检查是否为空或 null
-    bool? loadedIsDarkModeValue =
-        await SettingsStorage.loadBool('isDarkModeValue');
-    if (loadedIsDarkModeValue != null) {
-      isDarkModeValue = loadedIsDarkModeValue;
-    }
-
-    // 刷新 UI
-    if (mounted) {
-      setState(() {});
-    }
-
-    // 根据加载的设置应用主题
-    _applySettings();
-  }
-
-  // 应用加载的设置
-  void _applySettings() {
-    final themeProvider = context.read<ThemeProvider>();
-    if (!modeSwitch) {
-      bool isDarkModeAuto = isDarkMode(context);
-      themeProvider.toggleDarkMode(isDarkModeAuto ? 'night' : 'day', context);
-    } else {
-      themeProvider.toggleDarkMode(isDarkModeValue ? 'night' : 'day', context);
-    }
   }
 
   // 保存设置

@@ -30,24 +30,8 @@ class _BackgroundSettingsState extends State<BackgroundSettings> {
   @override
   void initState() {
     super.initState();
-    _loadSettings();
   }
 
-  Future<void> _loadSettings() async {
-    String? loadedBackImage = await SettingsStorage.loadString('backImage');
-    if (loadedBackImage != null && loadedBackImage.isNotEmpty) {
-      backImage = loadedBackImage;
-    }
-
-    int? loadedBackImageNumber =
-        await SettingsStorage.loadInt('backImageNumber');
-    if (loadedBackImageNumber != null) {
-      backImageNumber = loadedBackImageNumber;
-    }
-    if (mounted) {
-      setState(() {});
-    }
-  }
 
   Future<void> _saveSettings() async {
     await SettingsStorage.saveString('backImage', backImage);

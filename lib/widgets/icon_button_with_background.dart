@@ -3,18 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/theme_helper.dart'; // 引入必要的工具类
 
-double iconSize = isMobile ?25:23.0; // 定义统一的图标大小
 const double borderRadius = 7.0; // 圆角半径
 const double borderSize = 47.0; // 按钮大小
 
 class IconButtonWithBackground extends StatefulWidget {
   final String imagePath; // 本地图片路径
   final VoidCallback onPressed;
+  final bool isSelected; // 传递按钮是否被选中的状态
 
   const IconButtonWithBackground({
     super.key,
     required this.imagePath,
-    required this.onPressed,
+    required this.onPressed, 
+    required this.isSelected, // 传递 isSelected 状态
   });
 
   @override
@@ -45,12 +46,14 @@ class _IconButtonWithBackgroundState extends State<IconButtonWithBackground>
   Widget build(BuildContext context) {
     bool isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
     String imagePathToDisplay = widget.imagePath;
+
+    // 判断暗黑模式下按下和选中时的图片变化
     if (isDarkModeValue) {
-      imagePathToDisplay = _isPressed
+      imagePathToDisplay = widget.isSelected || _isPressed
           ? widget.imagePath
           : widget.imagePath.replaceFirst('.png', 'Light.png');
     } else {
-      imagePathToDisplay = _isPressed
+      imagePathToDisplay = widget.isSelected || _isPressed
           ? widget.imagePath.replaceFirst('.png', 'Light.png')
           : widget.imagePath;
     }
@@ -97,9 +100,11 @@ class _IconButtonWithBackgroundState extends State<IconButtonWithBackground>
             width: borderSize,
             height: borderSize,
             decoration: BoxDecoration(
-              color: _isPressed
+              color: widget.isSelected // 判断按钮是否被选中
                   ? (isDarkModeValue ? Colors.white : Colors.black)
-                  : Colors.transparent,
+                  : (_isPressed
+                      ? (isDarkModeValue ? Colors.white : Colors.black)
+                      : Colors.transparent),
               borderRadius: BorderRadius.circular(borderRadius),
             ),
             child: Center(
@@ -116,8 +121,8 @@ class _IconButtonWithBackgroundState extends State<IconButtonWithBackground>
                       child: Image.asset(
                         imagePathToDisplay,
                         key: ValueKey<bool>(_isPressed),
-                        width: iconSize,
-                        height: iconSize,
+                        width: isMobile ? 25 : 23.0,
+                        height: isMobile ? 25 : 23.0,
                         fit: BoxFit.contain,
                       ),
                     ),

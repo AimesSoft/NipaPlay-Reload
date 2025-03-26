@@ -1,39 +1,17 @@
-// ignore_for_file: prefer_const_constructors
-
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/screens/account_settings.dart';
+import 'package:nipaplay/screens/background_settings.dart';
 import 'package:nipaplay/screens/bar_settings.dart';
-import 'package:nipaplay/services/settings_service.dart';
+import 'package:nipaplay/screens/color_settings.dart';
+import 'package:nipaplay/screens/theme_settings.dart';
 import 'package:nipaplay/utils/globals.dart';
-import 'package:nipaplay/utils/theme_helper.dart';
-import 'package:nipaplay/utils/theme_colors.dart';
+import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:nipaplay/utils/theme_provider.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
-import 'package:nipaplay/widgets/menu_button.dart';
-import 'package:window_manager/window_manager.dart';
-import 'account_settings.dart';
-import 'background_settings.dart';
-import 'color_settings.dart';
-import 'theme_settings.dart';
-
-double titleBarHeight = isMobile ? 55 :30.0;
-
-class SubOptionDivider extends StatelessWidget {
-  final bool isLast;
-
-  const SubOptionDivider({super.key, this.isLast = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Divider(
-      thickness: 0.38,
-      color: getLineColor(),
-      endIndent: isLast ? 0 : 50,
-    );
-  }
-}
+import 'package:nipaplay/widgets/page_ui.dart';
+import 'package:nipaplay/services/settings_service.dart';
+import 'package:nipaplay/utils/theme_helper.dart';
+import 'package:provider/provider.dart';
 
 class SettingScreen extends StatefulWidget {
   final SettingsService settingsService = SettingsService();
@@ -46,207 +24,122 @@ class SettingScreen extends StatefulWidget {
 }
 
 class _SettingScreenState extends State<SettingScreen> {
-  bool isMaximized = false;
-  double scrollOffset = 0.0;
-
-  void _toggleWindowSize() async {
-    if (isMaximized) {
-      await windowManager.unmaximize();
-    } else {
-      await windowManager.maximize();
-    }
-    setState(() {
-      isMaximized = !isMaximized;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
   }
 
-  void _minimizeWindow() async {
-    await windowManager.minimize();
+  Future<void> _loadSettings() async {
+  // 加载 sidebarBlurEffect，并检查是否为空或 null
+  sidebarBlurEffect = await SettingsStorage.loadBool('sidebarBlurEffect');
+
+  // 加载背景图片，并检查是否为空
+  String? loadedBackImage = await SettingsStorage.loadString('backImage');
+  if (loadedBackImage.isNotEmpty) {
+    backImage = loadedBackImage;
   }
 
-  void _closeWindow() async {
-    await windowManager.close();
+  // 加载背景图片编号
+  backImageNumber = await SettingsStorage.loadInt('backImageNumber');
+
+  // 加载基础颜色，并应用默认值
+  baseLightColor = await SettingsStorage.loadString(
+    "baseLightColor",
+    defaultValue: computeLeftColorHex(Colors.grey),
+  );
+
+  // 加载 modeSwitch
+  modeSwitch = await SettingsStorage.loadBool('modeSwitch');
+
+  // 加载是否启用暗黑模式的值
+  isDarkModeValue = await SettingsStorage.loadBool('isDarkModeValue');
+
+  // 刷新 UI（确保 UI 更新只在 widget 被挂载时进行）
+  if (mounted) {
+    setState(() {});
   }
 
-  ImageProvider getImageProvider(String imagePath) {
-  try {
-    if (imagePath.contains('http')) {
-      return NetworkImage(imagePath); // URL 图像
-    } else if (imagePath.contains('assets')) {
-      return AssetImage(imagePath); // 本地 assets 图像
-    } else if (imagePath.startsWith('data:image')) {
-      // Check if imagePath is a base64 encoded image string
-      return MemoryImage(_base64ToImage(imagePath)); // base64 图像
-    } else {
-      return FileImage(File(imagePath)); // 本地文件图像
-    }
-  } catch (e) {
-    // 如果解析 URI 失败，则可能是本地 assets 或文件路径
-    if (imagePath.contains('assets')) {
-      return AssetImage(imagePath);
-    } else {
-      return FileImage(File(imagePath));
-    }
-  }
+  // 根据加载的设置应用主题
+  _applySettings();
 }
 
-Uint8List _base64ToImage(String base64String) {
-  // Extract the base64 part from the string if it's a data URI.
-  final base64Data = base64String.split(',').last; 
-  return base64Decode(base64Data); // Convert base64 to Uint8List
-}
+  // 应用加载的设置
+  void _applySettings() {
+    final themeProvider = context.read<ThemeProvider>();
+    if (!modeSwitch) {
+      bool isDarkModeAuto = isDarkMode(context);
+      themeProvider.toggleDarkMode(isDarkModeAuto ? 'night' : 'day', context);
+    } else {
+      themeProvider.toggleDarkMode(isDarkModeValue ? 'night' : 'day', context);
+    }
+  }
+
+  // 根据 barPageNumber 显示对应的页面内容
+  String _getPageContent() {
+    switch (barPageNumber) {
+      case 0:
+        return playVideoTitle; // 显示播放视频页面
+      case 1:
+        return libraryTitle; // 显示媒体库页面
+      case 2:
+        return settingTitle; // 显示设置页面
+      default:
+        return settingTitle; // 默认显示播放视频页面
+    }
+  }
+
+  // 获取 settingsWidgets 根据 barPageNumber 的值动态传入不同的内容
+  List<Widget> _getSettingsWidgets() {
+    switch (barPageNumber) {
+      case 0: // 播放视频页面
+        return [
+          const SubOptionDivider(isLast: true),
+          Center(
+            child: Text(
+              "这里什么都没有...",
+              textAlign: TextAlign.center,
+              style: getTitleTextStyle(context),
+            ),
+          ),
+        ];
+      case 1: // 媒体库页面
+        return [
+          const SubOptionDivider(isLast: true),
+          Center(
+            child: Text(
+              "这里什么都没有...",
+              textAlign: TextAlign.center,
+              style: getTitleTextStyle(context),
+            ),
+          ),
+        ];
+      case 2: // 设置页面
+        return [
+          const SubOptionDivider(isLast: true),
+          AccountSettings(settingsService: widget.settingsService),
+          const SubOptionDivider(),
+          BackgroundSettings(settingsService: widget.settingsService),
+          const SubOptionDivider(),
+          const ColorSettings(),
+          const SubOptionDivider(),
+          DarkSettings(settingsService: widget.settingsService),
+          if (!isMobile) ...[
+            const SubOptionDivider(),
+            BarSettings(settingsService: widget.settingsService),
+          ],
+        ];
+      default:
+        return [];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    bool isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
-    Color textColor = isDarkModeValue ? Colors.white : Colors.black;
-
-    return Container(
-      color: getBackgroundColor(),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image:getImageProvider(backImage),
-            fit: BoxFit.cover,
-            opacity: 0.5,
-          ),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: NotificationListener<ScrollNotification>(
-                onNotification: (scrollNotification) {
-                  if (scrollNotification is ScrollUpdateNotification) {
-                    setState(() {
-                      scrollOffset = scrollNotification.metrics.pixels;
-                    });
-                  }
-                  return true;
-                },
-                child: SingleChildScrollView(
-                  child: Container(
-                    padding: const EdgeInsets.only(left: 10, right: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(height: titleBarHeight),
-                        Text(
-                          settingTitle,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 30,
-                            color: textColor,
-                          ),
-                        ),
-                        SubOptionDivider(isLast: true),
-                        AccountSettings(
-                            settingsService: widget.settingsService),
-                        SubOptionDivider(),
-                        BackgroundSettings(
-                            settingsService: widget.settingsService),
-                        SubOptionDivider(),
-                        ColorSettings(),
-                        SubOptionDivider(),
-                        DarkSettings(settingsService: widget.settingsService),
-                        if (!isMobile)...[
-                        SubOptionDivider(),
-                        BarSettings(settingsService: widget.settingsService),
-                      ],],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Column(
-              children: [
-                SizedBox(
-                  height: titleBarHeight,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: ClipRect(
-                          child: AnimatedOpacity(
-                            opacity: scrollOffset == 0.0 ? 0.0 : 1.0,
-                            duration: Duration(milliseconds: 200),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      // ignore: deprecated_member_use
-                                      color: getLineColor().withOpacity(0.2),
-                                      width: 0.4,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        // 恢复点击事件
-                        top: 0,
-                        left: 0,
-                        right:
-                            winLinDesktop
-                                ? 100
-                                : 0,
-                        child: GestureDetector(
-                          onDoubleTap: (noMenuButton)
-                              ? null
-                              : _toggleWindowSize,
-                          onPanStart: (details) async {
-                            if (winLinDesktop) {
-                              await windowManager.startDragging();
-                            }
-                          },
-                          child: Container(
-                            height: titleBarHeight,
-                            color: Colors.transparent,
-                            child: Align(
-                              alignment: isMobile ? Alignment.bottomCenter : Alignment.center,
-                              child: AnimatedOpacity(
-                                opacity: scrollOffset == 0.0 ? 0.0 : 1.0,
-                                duration: Duration(milliseconds: 200),
-                                child: Text(
-                                  settingTitle,
-                                  style: getBarTitleTextStyle(context),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (winLinDesktop)
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: Container(
-                            width: 100,
-                            height: titleBarHeight,
-                            color: Colors.transparent,
-                            child: WindowControlButtons(
-                              isMaximized: isMaximized,
-                              isDarkMode: isDarkModeValue,
-                              onMinimize: _minimizeWindow,
-                              onMaximizeRestore: _toggleWindowSize,
-                              onClose: _closeWindow,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    getCurrentThemeMode(context, modeSwitch);
+    return PageUI(
+      settingTitle: _getPageContent(),
+      settingsWidgets: _getSettingsWidgets(), // 动态传入控件列表
     );
   }
 }
