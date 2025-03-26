@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/theme_helper.dart'; // 引入必要的工具类
 
-const double iconSize = 23.0; // 定义统一的图标大小
+double iconSize = isMobile ?25:23.0; // 定义统一的图标大小
 const double borderRadius = 7.0; // 圆角半径
 const double borderSize = 47.0; // 按钮大小
 

@@ -59,3 +59,17 @@ TextStyle getToggleTextStyle(BuildContext context) {
     color: textColor, // 根据主题模式设置字体颜色
   );
 }
+TextStyle getIconTextStyle(BuildContext context) {
+  // 获取当前主题模式（夜间模式或日间模式）
+  isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
+  
+  // 根据主题模式决定字体颜色
+  Color textColor = isDarkModeValue ? const Color.fromARGB(255, 219, 219, 219) : const Color.fromARGB(255, 54, 54, 54);
+
+  // 返回相应的 TextStyle
+  return TextStyle(
+    fontWeight: FontWeight.w600, // 设置加粗
+    fontSize: 10, // 设置字体大小
+    color: textColor, // 根据主题模式设置字体颜色
+  );
+}

@@ -7,12 +7,18 @@ class RoundedButton extends StatefulWidget {
   final String text;
   final VoidCallback onPressed;
   final bool isSelected;  // 新增 isSelected 参数，用来表示按钮是否被选中
+  final double? fontSize;  // 可选参数 fontSize
+  final double? verticalPadding;  // 可选参数 verticalPadding
+  final double? horizontalPadding;  // 可选参数 horizontalPadding
 
   const RoundedButton({
     super.key,
     required this.text,
     required this.onPressed,
     this.isSelected = false, // 默认值为 false，表示按钮未选中
+    this.fontSize = 14.0,    // 默认字体大小为 14.0
+    this.verticalPadding = 3.0,  // 默认上下内边距为 3.0
+    this.horizontalPadding = 10.0, // 默认左右内边距为 10.0
   });
 
   @override
@@ -45,9 +51,10 @@ class _RoundedButtonState extends State<RoundedButton> {
 
     // 始终显示阴影
     BoxShadow boxShadow = BoxShadow(
+      // ignore: deprecated_member_use
       color: Colors.black.withOpacity(0.15), // 阴影颜色
       blurRadius: 6.0, // 模糊半径
-      spreadRadius:2.0,
+      spreadRadius: 2.0,
     );
 
     // 设置边框：悬浮、按下和选中时都不显示描边
@@ -91,8 +98,10 @@ class _RoundedButtonState extends State<RoundedButton> {
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200), // 按钮颜色过渡动画时间
-            padding: const EdgeInsets.symmetric(
-                vertical: 3.0, horizontal: 10.0), // 文字上下内边距
+            padding: EdgeInsets.symmetric(
+              vertical: widget.verticalPadding ?? 3.0,  // 使用传入的 verticalPadding 或默认 3.0
+              horizontal: widget.horizontalPadding ?? 10.0, // 使用传入的 horizontalPadding 或默认 10.0
+            ), // 文字上下内边距
             decoration: BoxDecoration(
               color: buttonColor,
               borderRadius: BorderRadius.circular(7),
@@ -103,7 +112,7 @@ class _RoundedButtonState extends State<RoundedButton> {
               child: Text(
                 widget.text,
                 style: TextStyle(
-                  fontSize: 14.0, // 字体大小
+                  fontSize: widget.fontSize ?? 14.0, // 使用传入的 fontSize 或默认 14.0
                   color: textColor, // 动态设置文字颜色
                   fontWeight: FontWeight.normal, // 不加粗
                 ),

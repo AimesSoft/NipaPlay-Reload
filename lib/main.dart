@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/utils/theme_colors.dart';
 import 'package:nipaplay/utils/theme_helper.dart';
 import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
@@ -54,35 +55,21 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
   @override
   void initState() {
     super.initState();
-    _setOrientation();
-  }
-
-  Future<void> _setOrientation() async {
-    if (isMobile) {
-      // 在原生 iOS 和 Android 上，强制横屏
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeRight,
-        DeviceOrientation.landscapeLeft,
-      ]);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
-    return CupertinoApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'NipaPlay',
-      theme: CupertinoThemeData(
-        primaryColor: isDarkModeValue ? Colors.white : Colors.black,
-        brightness: isDarkModeValue ? Brightness.dark : Brightness.light,
-      ),
+      darkTheme: isDarkModeValue?ThemeData.from(colorScheme: ColorScheme.dark(primary: getInputColor())):ThemeData.from(colorScheme: ColorScheme.light(primary: getInputColor())),
       home: const Scaffold(
         body: Stack(
-                children: [
-                  HomeScreen(),
-                ],
-              ),
+          children: [
+            HomeScreen(),
+          ],
+        ),
       ),
     );
   }

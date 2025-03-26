@@ -102,7 +102,17 @@ Color getButtonColor() {
   // 降低饱和度使按钮更灰暗
   return _adjustSaturation(adjustedColor, 0.3); // 降低按钮的饱和度，改为0.8
 }
-
+Color getInputColor() {
+  Color baseColor = _hexToColor(baseLightColor); // 使用传入的基础亮色
+  Color adjustedColor;
+  if (isDarkModeValue) {
+    adjustedColor = _calculateBrightness(baseColor, 0.7); 
+  } else {
+    adjustedColor = _calculateBrightness(baseColor, 0.5); 
+  }
+  // 降低饱和度使按钮更灰暗r
+  return _adjustSaturation(adjustedColor, 0.4); // 降低按钮的饱和度，改为0.8
+}
 // 封装返回按钮描边颜色的方法
 Color getButtonLineColor() {
   Color baseColor = _hexToColor(baseLightColor); // 使用传入的基础亮色

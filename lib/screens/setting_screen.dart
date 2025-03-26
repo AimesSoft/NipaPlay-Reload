@@ -18,7 +18,7 @@ import 'background_settings.dart';
 import 'color_settings.dart';
 import 'theme_settings.dart';
 
-const double titleBarHeight = 30.0;
+double titleBarHeight = isMobile ? 55 :30.0;
 
 class SubOptionDivider extends StatelessWidget {
   final bool isLast;
@@ -151,9 +151,10 @@ Uint8List _base64ToImage(String base64String) {
                         ColorSettings(),
                         SubOptionDivider(),
                         DarkSettings(settingsService: widget.settingsService),
+                        if (!isMobile)...[
                         SubOptionDivider(),
                         BarSettings(settingsService: widget.settingsService),
-                      ],
+                      ],],
                     ),
                   ),
                 ),
@@ -176,6 +177,7 @@ Uint8List _base64ToImage(String base64String) {
                                 decoration: BoxDecoration(
                                   border: Border(
                                     bottom: BorderSide(
+                                      // ignore: deprecated_member_use
                                       color: getLineColor().withOpacity(0.2),
                                       width: 0.4,
                                     ),
@@ -207,7 +209,7 @@ Uint8List _base64ToImage(String base64String) {
                             height: titleBarHeight,
                             color: Colors.transparent,
                             child: Align(
-                              alignment: Alignment.center,
+                              alignment: isMobile ? Alignment.bottomCenter : Alignment.center,
                               child: AnimatedOpacity(
                                 opacity: scrollOffset == 0.0 ? 0.0 : 1.0,
                                 duration: Duration(milliseconds: 200),
