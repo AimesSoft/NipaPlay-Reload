@@ -2,11 +2,10 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'package:nipaplay/widgets/warn_window.dart';
-import 'package:path/path.dart' as p;
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show Uint8List, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/services/settings_service.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
@@ -14,6 +13,8 @@ import 'package:nipaplay/utils/theme_provider.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:nipaplay/widgets/rounded_button.dart';
 import 'package:nipaplay/widgets/rounded_container.dart';
+import 'package:nipaplay/widgets/warn_window.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -38,59 +39,84 @@ class _BackgroundSettingsState extends State<BackgroundSettings> {
     await SettingsStorage.saveInt('backImageNumber', backImageNumber);
   }
 
+  /// 主入口：根据平台选择图片选择方式
   Future<void> _selectCustomBackgroundImage() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-    );
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      // 移动端使用 image_picker
+      await _selectFromGallery();
+    } else {
+      // Web 或 桌面使用 file_picker
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+      );
 
-    if (result != null && result.files.isNotEmpty) {
-      final file = result.files.single;
-      if (file.bytes != null || file.path != null) {
-        if (kIsWeb) {
-          // 检查文件大小（单位：字节），如果超过 5MB（5 * 1024 * 1024 字节），则提示警告
-          final fileSize = file.bytes?.length ?? 0;
-          if (fileSize > 5 * 1024 * 1024) {
-            // 超过5MB时弹出警告框
-            showAlertDialog(
-              // ignore: use_build_context_synchronously
-              context,
-              '文件大小超过5MB，无法上传，请选择更小的文件。',
-            );
-            return; // 终止后续操作
-          }
-          final bytes = file.bytes;
-          if (bytes != null) {
-            final base64String = base64Encode(Uint8List.fromList(bytes));
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+
+        if (file.bytes != null || file.path != null) {
+          if (kIsWeb) {
+            final fileSize = file.bytes?.length ?? 0;
+            if (fileSize > 5 * 1024 * 1024) {
+              showAlertDialog(
+                context,
+                '文件大小超过5MB，无法上传，请选择更小的文件。',
+              );
+              return;
+            }
+            final bytes = file.bytes;
+            if (bytes != null) {
+              final base64String = base64Encode(Uint8List.fromList(bytes));
+              setState(() {
+                backImageNumber = 2;
+                backImage = 'data:image/jpeg;base64,$base64String';
+                widget.settingsService.setBackgroundImage(backImage);
+                _saveSettings();
+                context.read<ThemeProvider>().updateDraw();
+              });
+            }
+          } else {
+            final filePath = file.path!;
+            final appDirectory = await getApplicationDocumentsDirectory();
+            final newFilePath = p.join(
+                appDirectory.path, 'background.${filePath.split('.').last}');
+            final newFile = await File(filePath).copy(newFilePath);
             setState(() {
               backImageNumber = 2;
-              backImage = 'data:image/jpeg;base64,$base64String';
-              widget.settingsService.setBackgroundImage(backImage);
+              backImage = newFile.path;
+              widget.settingsService.setBackgroundImage(newFile.path);
               _saveSettings();
               context.read<ThemeProvider>().updateDraw();
             });
           }
-        } else {
-          final filePath = file.path!;
-          final appDirectory = await getApplicationDocumentsDirectory();
-          final newFilePath = p.join(
-              appDirectory.path, 'background.${filePath.split('.').last}');
-
-          final newFile = await File(filePath).copy(newFilePath);
-
-          setState(() {
-            backImageNumber = 2;
-            backImage = newFile.path;
-            widget.settingsService.setBackgroundImage(newFile.path);
-            _saveSettings();
-            context.read<ThemeProvider>().updateDraw();
-          });
         }
+      } else {
+        if (kDebugMode) print('No file selected');
       }
+    }
+  }
+
+  /// 移动端专用，从相册选择图片
+  Future<void> _selectFromGallery() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedFile =
+        await picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      final File file = File(pickedFile.path);
+      final appDirectory = await getApplicationDocumentsDirectory();
+      final newFilePath = p.join(
+          appDirectory.path, 'background.${pickedFile.path.split('.').last}');
+      final newFile = await file.copy(newFilePath);
+      setState(() {
+        backImageNumber = 2;
+        backImage = newFile.path;
+        widget.settingsService.setBackgroundImage(newFile.path);
+        _saveSettings();
+        context.read<ThemeProvider>().updateDraw();
+      });
     } else {
-      if (kDebugMode) {
-        print('No file selected');
-      }
+      if (kDebugMode) print('No image selected from gallery');
     }
   }
 
@@ -132,14 +158,11 @@ class _BackgroundSettingsState extends State<BackgroundSettings> {
                   });
                 },
               ),
-              // 使用方括号将两个 Widget 放在一起
               const SizedBox(width: 10),
               RoundedButton(
                 text: "自定义",
                 isSelected: backImageNumber == 2,
-                onPressed: () {
-                  _selectCustomBackgroundImage();
-                },
+                onPressed: _selectCustomBackgroundImage,
               ),
             ],
           ),
