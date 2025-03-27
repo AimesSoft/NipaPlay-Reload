@@ -27,7 +27,7 @@ TextStyle getBarTitleTextStyle(BuildContext context) {
   // 返回相应的 TextStyle
   return TextStyle(
     fontWeight: FontWeight.bold, // 设置加粗
-    fontSize: 15, // 设置字体大小
+    fontSize: 20, // 设置字体大小
     color: textColor, // 根据主题模式设置字体颜色
   );
 }
@@ -70,6 +70,16 @@ TextStyle getIconTextStyle(BuildContext context) {
   return TextStyle(
     fontWeight: FontWeight.w600, // 设置加粗
     fontSize: 10, // 设置字体大小
+    color: textColor, // 根据主题模式设置字体颜色
+  );
+}
+TextStyle getVersionTextStyle(BuildContext context) {
+  Color textColor =  const Color.fromARGB(255, 131, 131, 131);
+
+  // 返回相应的 TextStyle
+  return TextStyle(
+    fontWeight: FontWeight.normal, // 设置加粗
+    fontSize: 13, // 设置字体大小
     color: textColor, // 根据主题模式设置字体颜色
   );
 }

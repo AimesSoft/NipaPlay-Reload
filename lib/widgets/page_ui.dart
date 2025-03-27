@@ -188,7 +188,7 @@ class _PageUIState extends State<PageUI> {
                                 duration: const Duration(milliseconds: 200),
                                 child: Text(
                                   widget.settingTitle,
-                                  style: getBarTitleTextStyle(context),
+                                  style: getTitleTextStyle(context),
                                 ),
                               ),
                             ),

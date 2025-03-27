@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:nipaplay/widgets/image_assets.dart';
 
 class SidebarContent extends StatelessWidget {
   final double sizedboxTitle;
   final double titleSize;
   final String titleImagePath;
-  final Function(String, String, bool,double) buildRow;
+  final Function(String, String, bool, double) buildRow;
   final bool isDarkModeValue;
 
   const SidebarContent({
@@ -23,13 +24,20 @@ class SidebarContent extends StatelessWidget {
     // 图标和文字项列表
     List<Widget> rowItems = [
       if (!isMobile) SizedBox(height: sizedboxTitle),
-      if (!isMobile) buildRow('NipaPlay', titleImagePath, true,10), // 在非移动设备上显示 NipaPlay
-      if (!isMobile)const SizedBox(height:10),
-      buildRow('视频播放', ImageAssets.playVideo, false,0), // 视频播放按钮
-      if (!isMobile)const SizedBox(height:10),
-      buildRow('媒体库', ImageAssets.videoHistory, false,1), // 媒体库按钮
-      if (!isMobile)const SizedBox(height:10),
-      buildRow('设置', ImageAssets.settings, false,2), // 设置按钮
+      if (!isMobile)
+        buildRow('NipaPlay', titleImagePath, true, 10), // 在非移动设备上显示 NipaPlay
+      if (!isMobile) const SizedBox(height: 10),
+      buildRow('视频播放', ImageAssets.playVideo, false, 0), // 视频播放按钮
+      if (!isMobile) const SizedBox(height: 10),
+      buildRow('媒体库', ImageAssets.videoHistory, false, 1), // 媒体库按钮
+      if (!isMobile) const SizedBox(height: 10),
+      buildRow('设置', ImageAssets.settings, false, 2), // 设置按钮
+      if (!isMobile) const Spacer(),
+      if (!isMobile)
+        Text(
+          "v$Appversion    ",
+          style: getVersionTextStyle(context),
+        )
     ];
 
     return Align(

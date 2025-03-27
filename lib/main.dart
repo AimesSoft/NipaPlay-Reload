@@ -1,9 +1,7 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:nipaplay/utils/globals.dart';
-import 'package:nipaplay/utils/theme_colors.dart';
 import 'package:nipaplay/utils/theme_helper.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
 import 'package:window_manager/window_manager.dart';
@@ -50,11 +48,18 @@ class NipaPlayApp extends StatefulWidget {
   // ignore: library_private_types_in_public_api
   _NipaPlayAppState createState() => _NipaPlayAppState();
 }
-
 class _NipaPlayAppState extends State<NipaPlayApp> {
+  Future<void> _initPackageInfo() async {
+  final info = await PackageInfo.fromPlatform();
+  // 确保在正确的线程中访问UI
+  setState(() {
+    Appversion = info.version;
+  });
+}
   @override
   void initState() {
     super.initState();
+    _initPackageInfo();
   }
 
   @override
@@ -63,7 +68,10 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'NipaPlay',
-      darkTheme: isDarkModeValue?ThemeData.from(colorScheme: ColorScheme.dark(primary: getInputColor())):ThemeData.from(colorScheme: ColorScheme.light(primary: getInputColor())),
+      theme: ThemeData(
+        primaryColor: isDarkModeValue ? Colors.white : Colors.black,
+        brightness: isDarkModeValue ? Brightness.dark : Brightness.light,
+      ),
       home: const Scaffold(
         body: Stack(
           children: [

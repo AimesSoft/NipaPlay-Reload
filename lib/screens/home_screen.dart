@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/screens/setting_screen.dart';
+import 'package:nipaplay/screens/main_screen.dart';
 import 'package:nipaplay/widgets/navigation_bar.dart'as navigation_bar_widgets;
 // 假设 globals.dart 中定义了 barPageNumber
 
@@ -22,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: isMobileScreen
           ? Stack(
               children: [
-                SettingScreen(),  // 这会根据 barPageNumber 显示对应的页面
+                MainScreen(),  // 这会根据 barPageNumber 显示对应的页面
                 const Positioned(
                   bottom: 0,
                   left: 0,
@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : Row(
               children: [
                 const navigation_bar_widgets.NavigationBar(),
-                Expanded(child: SettingScreen()),  // 根据 barPageNumber 动态显示内容
+                Expanded(child: MainScreen()),  // 根据 barPageNumber 动态显示内容
               ],
             ),
     );

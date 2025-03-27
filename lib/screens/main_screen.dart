@@ -13,17 +13,17 @@ import 'package:nipaplay/services/settings_service.dart';
 import 'package:nipaplay/utils/theme_helper.dart';
 import 'package:provider/provider.dart';
 
-class SettingScreen extends StatefulWidget {
+class MainScreen extends StatefulWidget {
   final SettingsService settingsService = SettingsService();
 
-  SettingScreen({super.key});
+  MainScreen({super.key});
 
   @override
   // ignore: library_private_types_in_public_api
-  _SettingScreenState createState() => _SettingScreenState();
+  _MainScreenState createState() => _MainScreenState();
 }
 
-class _SettingScreenState extends State<SettingScreen> {
+class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();

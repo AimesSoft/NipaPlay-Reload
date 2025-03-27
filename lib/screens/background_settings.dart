@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'package:nipaplay/widgets/warn_window.dart';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -32,7 +33,6 @@ class _BackgroundSettingsState extends State<BackgroundSettings> {
     super.initState();
   }
 
-
   Future<void> _saveSettings() async {
     await SettingsStorage.saveString('backImage', backImage);
     await SettingsStorage.saveInt('backImageNumber', backImageNumber);
@@ -41,13 +41,24 @@ class _BackgroundSettingsState extends State<BackgroundSettings> {
   Future<void> _selectCustomBackgroundImage() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['jpg','jpeg' ,'png', 'webp'],
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
     );
 
     if (result != null && result.files.isNotEmpty) {
       final file = result.files.single;
       if (file.bytes != null || file.path != null) {
         if (kIsWeb) {
+          // 检查文件大小（单位：字节），如果超过 5MB（5 * 1024 * 1024 字节），则提示警告
+          final fileSize = file.bytes?.length ?? 0;
+          if (fileSize > 5 * 1024 * 1024) {
+            // 超过5MB时弹出警告框
+            showAlertDialog(
+              // ignore: use_build_context_synchronously
+              context,
+              '文件大小超过5MB，无法上传，请选择更小的文件。',
+            );
+            return; // 终止后续操作
+          }
           final bytes = file.bytes;
           if (bytes != null) {
             final base64String = base64Encode(Uint8List.fromList(bytes));

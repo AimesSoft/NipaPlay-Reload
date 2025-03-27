@@ -16,6 +16,8 @@ String backImage = backGirl;
 int backImageNumber = 0;
 double mobileThreshold = 550;
 double barPageNumber = 0;
+// ignore: non_constant_identifier_names
+String Appversion = "1.0.0";
 //////全局变量/////
 ///
 //////设备类型判断/////
@@ -60,6 +62,6 @@ bool get isDesktop {
 ///
 //////文本//////
 String settingTitle = "设置";
-String playVideoTitle = "播放视频";
+String playVideoTitle = "视频播放";
 String libraryTitle = "媒体库";
 //////文本//////

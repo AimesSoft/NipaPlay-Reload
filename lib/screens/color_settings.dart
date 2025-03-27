@@ -35,6 +35,7 @@ class _ColorSettingsState extends State<ColorSettings> {
     const Color.fromARGB(255, 0, 255, 255), // 青色
     const Color.fromARGB(255, 34, 193, 34), // 绿色
     const Color.fromARGB(255, 255, 255, 0), // 黄色
+    const Color.fromARGB(255, 255, 106, 0), // 橙色
     const Color.fromARGB(255, 255, 0, 0), // 红色
     const Color.fromARGB(255, 255, 105, 180), // 粉色
     const Color.fromARGB(255, 75, 0, 130), // 紫色

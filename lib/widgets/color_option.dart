@@ -71,6 +71,7 @@ class _ColorOptionState extends State<ColorOption> {
               width: 30, // 正方形的宽度
               height: 30, // 正方形的高度
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: widget.isPressed ? widget.color.withOpacity(0.8) : _currentColor,
                 borderRadius: BorderRadius.circular(7.0), // 圆角半径
                 border: Border.all(
@@ -81,6 +82,7 @@ class _ColorOptionState extends State<ColorOption> {
                 ),
                 boxShadow: [
                   BoxShadow(
+                    // ignore: deprecated_member_use
                     color: Colors.black.withOpacity(0.15),
                     blurRadius: 6,
                     spreadRadius: 2,
