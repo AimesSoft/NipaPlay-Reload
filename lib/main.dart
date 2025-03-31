@@ -1,84 +1,156 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/pages/empty_page.dart';
+import 'package:nipaplay/pages/tab_labels.dart';
+import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart';
-import 'package:nipaplay/utils/theme_helper.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:provider/provider.dart';
-import 'screens/home_screen.dart';
+import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/widgets/custom_scaffold.dart';
+import 'package:nipaplay/widgets/menu_button.dart';
 import 'package:window_manager/window_manager.dart';
-import 'utils/theme_provider.dart'; // 导入获取亮暗模式的文件
-
-const double windowWidth = 1167.0;
-const double windowHeight = 600.0;
+import 'package:provider/provider.dart';
+import 'pages/anime_page.dart';
+import 'pages/settings_page.dart';
+import 'utils/settings_storage.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 判断是否为桌面平台
   if (isDesktop) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
-      center: true,
-      backgroundColor: Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden,
       title: "NipaPlay",
     );
     windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setSize(const Size(windowWidth, windowHeight));
-      await windowManager
-          .setMinimumSize(const Size(windowWidth / 2, windowHeight / 2));
+      await windowManager.setMinimumSize(const Size(600, 400));
+      await windowManager.maximize();
       await windowManager.show();
-      await windowManager.setHasShadow(true);
-      await windowManager.setAlignment(Alignment.center);
     });
   }
 
+  String savedThemeMode =
+      await SettingsStorage.loadString('themeMode', defaultValue: 'system');
+  ThemeMode initialThemeMode;
+  switch (savedThemeMode) {
+    case 'light':
+      initialThemeMode = ThemeMode.light;
+      break;
+    case 'dark':
+      initialThemeMode = ThemeMode.dark;
+      break;
+    default:
+      initialThemeMode = ThemeMode.system;
+  }
+
+  blurPower =
+      await SettingsStorage.loadDouble('blurPower', defaultValue: 25.0); // 读取 blurPower，默认值为 15.0
   runApp(
     ChangeNotifierProvider(
-      create: (context) => ThemeProvider(),
+      create: (context) => ThemeNotifier(
+        initialThemeMode: initialThemeMode, initialBlurPower: blurPower
+      ),
       child: const NipaPlayApp(),
     ),
   );
 }
 
-class NipaPlayApp extends StatefulWidget {
+class NipaPlayApp extends StatelessWidget {
   const NipaPlayApp({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
-  _NipaPlayAppState createState() => _NipaPlayAppState();
+  Widget build(BuildContext context) {
+    return Consumer<ThemeNotifier>(
+      builder: (context, themeNotifier, child) {
+        return MaterialApp(
+          title: 'NipaPlay',
+          debugShowCheckedModeBanner: false,
+          color: Colors.transparent,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeNotifier.themeMode,
+          home: MainPage(),
+        );
+      },
+    );
+  }
 }
-class _NipaPlayAppState extends State<NipaPlayApp> {
-  Future<void> _initPackageInfo() async {
-  final info = await PackageInfo.fromPlatform();
-  // 确保在正确的线程中访问UI
-  setState(() {
-    Appversion = info.version;
-  });
-}
+
+class MainPage extends StatefulWidget {
+  final List<Widget> pages = [
+    const EmptyPage(),
+    AnimePage(),
+    const EmptyPage(),
+    const SettingsPage(),
+  ];
+
+  MainPage({super.key});
+
   @override
-  void initState() {
-    super.initState();
-    _initPackageInfo();
+  // ignore: library_private_types_in_public_api
+  _MainPageState createState() => _MainPageState();
+}
+
+class _MainPageState extends State<MainPage> {
+  bool isMaximized = false;
+
+  void _toggleWindowSize() async {
+    if (isMaximized) {
+      await windowManager.unmaximize();
+    } else {
+      await windowManager.maximize();
+    }
+    setState(() {
+      isMaximized = !isMaximized;
+    });
+  }
+
+  void _minimizeWindow() async {
+    await windowManager.minimize();
+  }
+
+  void _closeWindow() async {
+    await windowManager.close();
   }
 
   @override
   Widget build(BuildContext context) {
-    isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'NipaPlay',
-      theme: ThemeData(
-        primaryColor: isDarkModeValue ? Colors.white : Colors.black,
-        brightness: isDarkModeValue ? Brightness.dark : Brightness.light,
-      ),
-      home: const Scaffold(
-        body: Stack(
-          children: [
-            HomeScreen(),
-          ],
+    return Stack(
+      children: [
+        CustomScaffold(
+            pages: widget.pages, tabPage: createTabLabels(), pageIsHome: true),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: winLinDesktop ? 100 : 0,
+          child: SizedBox(
+            height: 30,
+            child: GestureDetector(
+              onDoubleTap: _toggleWindowSize,
+              onPanStart: (details) async {
+                if (winLinDesktop) {
+                  await windowManager.startDragging();
+                }
+              },
+            ),
+          ),
         ),
-      ),
+        if (winLinDesktop)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Container(
+              width: 100,
+              height: isPhone && isMobile ? 55 : 30,
+              color: Colors.transparent,
+              child: WindowControlButtons(
+                isMaximized: isMaximized,
+                onMinimize: _minimizeWindow,
+                onMaximizeRestore: _toggleWindowSize,
+                onClose: _closeWindow,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

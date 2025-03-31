@@ -4,18 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 //////全局变量/////
-int globalVariable = 10;
-bool modeSwitch = false;
-bool isDarkModeValue = false;
-String baseLightColor = "#FFFFFF"; // 亮色基础颜色
-bool sidebarBlurEffect = false;
-String backGirl = "assets/backgirl.png";
-String backEmpty = "assets/backempty.png";
-String backUp = backEmpty;
-String backImage = backGirl;
-int backImageNumber = 0;
 double mobileThreshold = 550;
-double barPageNumber = 0;
+double blurPower = 25;
 // ignore: non_constant_identifier_names
 String Appversion = "1.0.0";
 //////全局变量/////
@@ -52,7 +42,7 @@ bool get noMenuButton {
 }
 bool get winLinDesktop {
   //windows和linux桌面平台
-  return !kIsWeb && (Platform.isWindows || Platform.isLinux );
+  return !kIsWeb && (Platform.isWindows || Platform.isLinux);
 }
 bool get isDesktop {
   //windows和linux和macOS桌面平台

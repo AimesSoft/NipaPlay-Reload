@@ -30,4 +30,14 @@ class SettingsStorage {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(key) ?? defaultValue;
   }
+
+  static Future<void> saveDouble(String key, double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(key, value);
+  }
+
+  static Future<double> loadDouble(String key, {double defaultValue = 25.0}) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(key) ?? defaultValue;
+  }
 }

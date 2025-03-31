@@ -1,7 +1,5 @@
 // ignore: file_names
 import 'package:flutter/material.dart';
-import 'package:nipaplay/utils/globals.dart';
-import 'package:nipaplay/utils/theme_helper.dart';
 import 'package:nipaplay/widgets/image_assets.dart';
 // 导入 system_theme.dart
 
@@ -30,21 +28,13 @@ class _WindowControlButtonState extends State<WindowControlButton> {
 
   @override
   Widget build(BuildContext context) {
-    isDarkModeValue = getCurrentThemeMode(context, modeSwitch);
     String imagePathToDisplay;
 
     // 根据日间模式和悬浮状态切换图片
-    if (isDarkModeValue) {
       imagePathToDisplay = _isPressed
           ? widget.imagePath // 按下时仍显示普通图片
           : widget.imagePath.replaceFirst(
               '.png', ImageAssets.lightSuffix); // 默认显示带 Light 后缀的图片
-    } else {
-      imagePathToDisplay = _isPressed
-          ? widget.imagePath
-              .replaceFirst('.png', ImageAssets.lightSuffix) // 按下时带 Light 后缀的图片
-          : widget.imagePath; // 默认显示普通图片
-    }
 
     // 悬浮时反转图标
     if (_isHovered && widget.imagePath != ImageAssets.closeButton) {
@@ -60,9 +50,9 @@ class _WindowControlButtonState extends State<WindowControlButton> {
             .replaceFirst('.png', ImageAssets.lightSuffix); // 永远显示 Light 后缀
       } else {
         backgroundColor =
-            isDarkModeValue ? Colors.white : Colors.black; // 根据模式切换背景色
+            Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black; // 根据模式切换背景色
         // 悬浮时切换为 Light 图标（除了关闭按钮）
-        if (isDarkModeValue) {
+        if (Theme.of(context).brightness == Brightness.dark) {
           imagePathToDisplay =
               imagePathToDisplay.replaceFirst(ImageAssets.lightSuffix, '.png');
         } else {
@@ -98,7 +88,6 @@ class _WindowControlButtonState extends State<WindowControlButton> {
 
 class WindowControlButtons extends StatelessWidget {
   final bool isMaximized;
-  final bool isDarkMode;
   final VoidCallback onMinimize;
   final VoidCallback onMaximizeRestore;
   final VoidCallback onClose;
@@ -106,7 +95,6 @@ class WindowControlButtons extends StatelessWidget {
   const WindowControlButtons({
     super.key,
     required this.isMaximized,
-    required this.isDarkMode,
     required this.onMinimize,
     required this.onMaximizeRestore,
     required this.onClose,

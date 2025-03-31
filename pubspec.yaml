@@ -42,6 +42,7 @@ dependencies:
   kmbal_ionicons: ^1.0.0
   package_info_plus: ^8.3.0
   image_picker: ^1.1.2
+  glassmorphism: ^3.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -78,6 +79,11 @@ flutter:
     - assets/backempty.png
     - assets/settings.png
     - assets/settingsLight.png
+    - assets/images/recent1.png
+    - assets/images/recent2.png
+    - assets/images/anime1.png
+    - assets/images/anime2.png
+    - assets/images/main_image.png
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
