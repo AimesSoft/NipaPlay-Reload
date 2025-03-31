@@ -8,6 +8,8 @@ double mobileThreshold = 550;
 double blurPower = 25;
 // ignore: non_constant_identifier_names
 String Appversion = "1.0.0";
+String backgroundImageMode = "关闭"; // 添加背景图像模式变量
+String customBackgroundPath = 'assets/backempty.png'; // 添加自定义背景图片路径变量
 //////全局变量/////
 ///
 //////设备类型判断/////

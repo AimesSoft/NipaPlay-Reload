@@ -13,6 +13,8 @@ class AnimePage extends StatelessWidget {
     'assets/images/anime2.png',
   ];
 
+  AnimePage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(

@@ -160,16 +160,26 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
 
     final size = renderBox.size;
     final position = renderBox.localToGlobal(Offset.zero);
-
-    final top = position.dy + size.height + 5; // Position below the trigger
+    final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
-    // Calculate right based on trigger's position and width
-    final right = screenWidth - position.dx - size.width;
-    // Ensure right has a minimum margin from the screen edge
-    final safeRight = (right < 10.0) ? 10.0 : right;
-    // Calculate potential left position if needed for width constraint
-    final left = position.dx;
 
+    // 计算下拉菜单的初始位置
+    double top = position.dy + size.height + 5;
+    double maxHeight = screenHeight * 0.7; // 最大高度为屏幕高度的70%
+    
+    // 检查下拉菜单是否会超出屏幕底部
+    double estimatedHeight = widget.items.length * 50.0; // 估算每个项目的高度
+    if (top + estimatedHeight > screenHeight) {
+      // 如果会超出底部，则向上调整位置
+      top = screenHeight - estimatedHeight - 10; // 留出10像素的边距
+    }
+
+    // 确保top不会小于0
+    top = top.clamp(0.0, screenHeight - 100.0); // 确保至少留出100像素的高度
+
+    final right = screenWidth - position.dx - size.width;
+    final safeRight = (right < 10.0) ? 10.0 : right;
+    final left = position.dx;
 
     final Color borderColor = Theme.of(context).brightness == Brightness.light
         ? const Color.fromARGB(255, 201, 201, 201)
@@ -177,52 +187,42 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
 
     _overlayEntry = OverlayEntry(
       builder: (context) {
-        // Use a Stack to layer the background tap detector and the dropdown menu
         return Stack(
           children: [
-            // 1. Full screen GestureDetector to detect taps outside the dropdown
             Positioned.fill(
               child: GestureDetector(
-                onTap: _closeDropdown, // Call close function when tapped
-                behavior: HitTestBehavior.opaque, // Catch taps even on transparent areas
-                child: Container(color: Colors.transparent), // Transparent background
+                onTap: _closeDropdown,
+                behavior: HitTestBehavior.opaque,
+                child: Container(color: Colors.transparent),
               ),
             ),
-            // 2. The actual dropdown menu, positioned correctly
             AnimatedBuilder(
               animation: _animationController,
               builder: (context, child) {
                 return Positioned(
                   top: top,
-                  right: safeRight, // Use calculated safe right position
-                  // Optional: Add left constraint if you want to prevent overflow
-                  // left: left, // Uncomment if needed, might need adjustments with right
+                  right: safeRight,
                   child: FadeTransition(
                     opacity: _fadeAnimation,
                     child: ScaleTransition(
                       scale: _scaleAnimation,
-                      alignment: Alignment.topRight, // Scale from top-right
-                      // Important: Wrap the actual dropdown content in a GestureDetector
-                      // to PREVENT taps inside the dropdown from propagating to the
-                      // background GestureDetector.
+                      alignment: Alignment.topRight,
                       child: GestureDetector(
-                        onTap: () {}, // Absorb taps within the dropdown bounds
-                        child: child!, // The actual dropdown content
+                        onTap: () {},
+                        child: child!,
                       ),
                     ),
                   ),
                 );
               },
-              // The dropdown content itself (passed as child to AnimatedBuilder)
               child: Material(
                 color: Colors.transparent,
                 child: Container(
-                  // Constrain width: Use max width based on trigger or screen width
                   constraints: BoxConstraints(
-                    maxWidth: screenWidth - left - safeRight > 100 // Ensure some minimum width
-                              ? screenWidth - left - safeRight // Available width
-                              : size.width * 1.5, // Fallback or desired max (adjust multiplier)
-                    // maxHeight: MediaQuery.of(context).size.height * 0.5, // Optional max height
+                    maxWidth: screenWidth - left - safeRight > 100
+                              ? screenWidth - left - safeRight
+                              : size.width * 1.5,
+                    maxHeight: screenHeight - top - 10, // 动态计算最大高度
                   ),
                   decoration: BoxDecoration(
                     border: Border.all(color: borderColor, width: 0.5),
@@ -242,17 +242,45 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                     borderRadius: BorderRadius.circular(10),
                     child: BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: SingleChildScrollView( // Use SingleChildScrollView if items might overflow
-                         // Important: Set shrinkWrap to true for Column inside SingleChildScrollView
-                        // child: IntrinsicWidth( // Optional: Makes column width fit largest child
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start, // Align text left
-                            children: widget.items
-                                .map((item) => _buildMenuItem(item))
-                                .toList(),
-                          ),
-                        // ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        itemCount: widget.items.length,
+                        itemBuilder: (context, index) {
+                          final item = widget.items[index];
+                          return InkWell(
+                            onTap: () {
+                              setState(() {
+                                _currentSelectedValue = item.value;
+                              });
+                              widget.onItemSelected(item.value);
+                              _closeDropdown();
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: item.value == _currentSelectedValue
+                                    ? Colors.white.withOpacity(0.1)
+                                    : Colors.transparent,
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: Colors.white.withOpacity(0.1),
+                                    width: 0.5,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                item.title,
+                                style: getTitleTextStyle(context),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),

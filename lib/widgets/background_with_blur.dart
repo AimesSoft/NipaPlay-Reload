@@ -3,7 +3,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
-import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'dart:io';
 // 导入 glassmorphism 插件
 
 class BackgroundWithBlur extends StatefulWidget {
@@ -23,15 +24,12 @@ class _BackgroundWithBlurState extends State<BackgroundWithBlur> {
       children: [
         // 背景图像
         Positioned.fill(
-          child: Image.asset(
-            'assets/images/main_image.png', // 确保图片路径正确
-            fit: BoxFit.cover,
-          ),
+          child: _buildBackgroundImage(),
         ),
         // 使用 GlassmorphicContainer 实现毛玻璃效果
         Positioned.fill(
           child: GlassmorphicContainer(
-            blur: blurPower, // 模糊效果的强度
+            blur: globals.blurPower, // 模糊效果的强度
             alignment: Alignment.center,
             borderRadius: 0, // 圆角半径
             border: 0, // 边框宽度
@@ -58,6 +56,43 @@ class _BackgroundWithBlurState extends State<BackgroundWithBlur> {
         ),
         widget.child,
       ],
+    );
+  }
+
+  Widget _buildBackgroundImage() {
+    if (globals.backgroundImageMode == '关闭') {
+      return Image.asset(
+        'assets/backempty.png',
+        fit: BoxFit.cover,
+      );
+    } else if (globals.backgroundImageMode == '看板娘') {
+      return Image.asset(
+        'assets/images/main_image.png',
+        fit: BoxFit.cover,
+      );
+    } else if (globals.backgroundImageMode == '自定义') {
+      final file = File(globals.customBackgroundPath);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Image.asset(
+              'assets/backempty.png',
+              fit: BoxFit.cover,
+            );
+          },
+        );
+      } else {
+        return Image.asset(
+          'assets/backempty.png',
+          fit: BoxFit.cover,
+        );
+      }
+    }
+    return Image.asset(
+      'assets/backempty.png',
+      fit: BoxFit.cover,
     );
   }
 }
