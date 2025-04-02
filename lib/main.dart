@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/pages/empty_page.dart';
+import 'package:fvp/fvp.dart' as fvp;
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -10,10 +10,20 @@ import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/play_video_page.dart';
+import 'pages/new_series_page.dart';
 import 'utils/settings_storage.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'services/bangumi_service.dart';
+import 'package:nipaplay/utils/keyboard_shortcuts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 注册 FVP
+  fvp.registerWith(options: {
+  });
+
   if (globals.isDesktop) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
@@ -27,6 +37,9 @@ void main() async {
       await windowManager.show();
     });
   }
+
+  // 加载快捷键设置
+  await KeyboardShortcuts.loadShortcuts();
 
   String savedThemeMode =
       await SettingsStorage.loadString('themeMode', defaultValue: 'system');
@@ -43,25 +56,33 @@ void main() async {
   }
 
   // 加载模糊度
-  final double blurPower = await SettingsStorage.loadDouble('blurPower') ?? 25.0;
+  final double blurPower = await SettingsStorage.loadDouble('blurPower');
   globals.blurPower = blurPower;
 
   // 加载背景图像模式
-  final String backgroundImageMode = await SettingsStorage.loadString('backgroundImageMode') ?? "看板娘";
+  final String backgroundImageMode = await SettingsStorage.loadString('backgroundImageMode');
   globals.backgroundImageMode = backgroundImageMode;
 
   // 加载自定义背景图片路径
-  final String customBackgroundPath = await SettingsStorage.loadString('customBackgroundPath') ?? 'assets/images/main_image.png';
+  final String customBackgroundPath = await SettingsStorage.loadString('customBackgroundPath');
   globals.customBackgroundPath = customBackgroundPath;
 
+  // 初始化 BangumiService
+  await BangumiService.instance.initialize();
+
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => ThemeNotifier(
-        initialThemeMode: initialThemeMode, 
-        initialBlurPower: blurPower,
-        initialBackgroundImageMode: backgroundImageMode,
-        initialCustomBackgroundPath: customBackgroundPath,
-      ),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => VideoPlayerState()),
+        ChangeNotifierProvider(
+          create: (context) => ThemeNotifier(
+            initialThemeMode: initialThemeMode, 
+            initialBlurPower: blurPower,
+            initialBackgroundImageMode: backgroundImageMode,
+            initialCustomBackgroundPath: customBackgroundPath,
+          ),
+        ),
+      ],
       child: const NipaPlayApp(),
     ),
   );
@@ -90,9 +111,9 @@ class NipaPlayApp extends StatelessWidget {
 
 class MainPage extends StatefulWidget {
   final List<Widget> pages = [
-    const EmptyPage(),
+    const PlayVideoPage(),
     AnimePage(),
-    const EmptyPage(),
+    const NewSeriesPage(),
     const SettingsPage(),
   ];
 
@@ -127,43 +148,47 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        CustomScaffold(
-            pages: widget.pages, tabPage: createTabLabels(), pageIsHome: true),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: globals.winLinDesktop ? 100 : 0,
-          child: SizedBox(
-            height: 30,
-            child: GestureDetector(
-              onDoubleTap: _toggleWindowSize,
-              onPanStart: (details) async {
-                if (globals.winLinDesktop) {
-                  await windowManager.startDragging();
-                }
-              },
-            ),
-          ),
-        ),
-        if (globals.winLinDesktop)
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Container(
-              width: 100,
-              height: globals.isPhone && globals.isMobile ? 55 : 30,
-              color: Colors.transparent,
-              child: WindowControlButtons(
-                isMaximized: isMaximized,
-                onMinimize: _minimizeWindow,
-                onMaximizeRestore: _toggleWindowSize,
-                onClose: _closeWindow,
+    return Consumer<VideoPlayerState>(
+      builder: (context, videoState, child) {
+        return Stack(
+          children: [
+            CustomScaffold(
+                pages: widget.pages, tabPage: createTabLabels(), pageIsHome: true),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: globals.winLinDesktop ? 100 : 0,
+              child: SizedBox(
+                height: 30,
+                child: GestureDetector(
+                  onDoubleTap: _toggleWindowSize,
+                  onPanStart: (details) async {
+                    if (globals.winLinDesktop) {
+                      await windowManager.startDragging();
+                    }
+                  },
+                ),
               ),
             ),
-          ),
-      ],
+            if (globals.winLinDesktop && videoState.shouldShowAppBar())
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Container(
+                  width: 100,
+                  height: globals.isPhone && globals.isMobile ? 55 : 30,
+                  color: Colors.transparent,
+                  child: WindowControlButtons(
+                    isMaximized: isMaximized,
+                    onMinimize: _minimizeWindow,
+                    onMaximizeRestore: _toggleWindowSize,
+                    onClose: _closeWindow,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

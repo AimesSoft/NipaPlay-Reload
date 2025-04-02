@@ -2,11 +2,13 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/pages/settings/theme_mode_page.dart'; // 导入 ThemeModePage
+import 'package:nipaplay/pages/settings/general_page.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/widgets/responsive_container.dart'; // 导入响应式容器
 import 'package:nipaplay/pages/settings/about_page.dart'; // 导入 AboutPage
-import 'package:nipaplay/utils/globals.dart'; // 导入包含 isDesktop 的全局变量文件
+import 'package:nipaplay/utils/globals.dart' as globals; // 导入包含 isDesktop 的全局变量文件
+import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -26,7 +28,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     // 可以在这里为桌面端设置一个默认显示的页面
-    if (isDesktop) {
+    if (globals.isDesktop) {
       currentPage = const AboutPage(); // 例如默认显示 AboutPage
     }
   }
@@ -45,7 +47,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     final List<Widget> pages = [pageToShow];
-    if (isDesktop) {
+    if (globals.isDesktop) {
       // 桌面端：更新状态，改变右侧面板内容
       setState(() {
         currentPage = pageToShow;
@@ -89,6 +91,33 @@ class _SettingsPageState extends State<SettingsPage> {
             },
           ),
           ListTile(
+            title: const Text("通用",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(
+                  const GeneralPage(),
+                  "通用设置"
+                  );
+            },
+          ),
+          if (!globals.isPhone)
+            ListTile(
+              title: const Text("快捷键",
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+              trailing: const Icon(Ionicons.chevron_forward_outline,
+                  color: Colors.white),
+              onTap: () {
+                _handleItemTap(
+                    const ShortcutsSettingsPage(),
+                    "快捷键设置"
+                    );
+              },
+            ),
+          ListTile(
             title: const Text("播放",
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
@@ -97,7 +126,7 @@ class _SettingsPageState extends State<SettingsPage> {
             onTap: () {
               // 假设有一个 PlaybackSettingsPage
               // _handleItemTap(const PlaybackSettingsPage(), "播放设置");               // 如果没有对应页面，桌面端可以不做任何事，移动端也可以不做或提示
-              if (!isDesktop) {
+              if (!globals.isDesktop) {
                 ScaffoldMessenger.of(context)
                     .showSnackBar(const SnackBar(content: Text("播放设置页面暂未实现")));
               }
