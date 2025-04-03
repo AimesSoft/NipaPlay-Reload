@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:async';
 import 'keyboard_shortcuts.dart';
 import 'globals.dart' as globals;
+import 'dart:convert';
 
 enum PlayerStatus {
   idle,        // 空闲状态
@@ -20,7 +21,7 @@ enum PlayerStatus {
 }
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
-  final Player player = Player();
+  Player player = Player();
   BuildContext? _context;
   PlayerStatus _status = PlayerStatus.idle;
   bool _showControls = true;
@@ -39,6 +40,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final FocusNode _focusNode = FocusNode();
   static const String _lastVideoKey = 'last_video_path';
   static const String _lastPositionKey = 'last_video_position';
+  static const String _videoPositionsKey = 'video_positions';
+  static int _textureIdCounter = 0;
 
   VideoPlayerState() {
     _initialize();
@@ -59,26 +62,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   FocusNode get focusNode => _focusNode;
 
   Future<void> _initialize() async {
-    print('\n=== 初始化 VideoPlayerState ===');
+    if (globals.isPhone) {
+      await _setPortrait();
+    }
     _startPositionUpdateTimer();
     _setupWindowManagerListener();
     _focusNode.requestFocus();
     KeyboardShortcuts.loadShortcuts();
     await _loadLastVideo();
-    print('=== VideoPlayerState 初始化完成 ===\n');
   }
 
   Future<void> _loadLastVideo() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastVideoPath = prefs.getString(_lastVideoKey);
-    final lastPosition = prefs.getInt(_lastPositionKey) ?? 0;
-
-    if (lastVideoPath != null) {
-      await initializePlayer(lastVideoPath);
-      if (lastPosition > 0) {
-        seekTo(Duration(milliseconds: lastPosition));
-      }
-    }
+    // 不再自动加载上次视频，让用户手动选择
+    return;
   }
 
   Future<void> _saveLastVideo() async {
@@ -87,29 +83,105 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await prefs.setInt(_lastPositionKey, _position.inMilliseconds);
   }
 
+  // 保存视频播放位置
+  Future<void> _saveVideoPosition(String path, int position) async {
+    final prefs = await SharedPreferences.getInstance();
+    final positions = prefs.getString(_videoPositionsKey) ?? '{}';
+    final Map<String, dynamic> positionMap = Map<String, dynamic>.from(json.decode(positions));
+    positionMap[path] = position;
+    await prefs.setString(_videoPositionsKey, json.encode(positionMap));
+  }
+
+  // 获取视频播放位置
+  Future<int> _getVideoPosition(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    final positions = prefs.getString(_videoPositionsKey) ?? '{}';
+    final Map<String, dynamic> positionMap = Map<String, dynamic>.from(json.decode(positions));
+    return positionMap[path] ?? 0;
+  }
+
+  // 设置横屏
+  Future<void> _setLandscape() async {
+    if (!globals.isPhone) return;
+    // 先设置支持的方向
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitUp,
+    ]);
+    // 等待一小段时间
+    await Future.delayed(const Duration(milliseconds: 100));
+    // 再设置当前方向
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _isFullscreen = true;
+    notifyListeners();
+  }
+
+  // 设置竖屏
+  Future<void> _setPortrait() async {
+    if (!globals.isPhone) return;
+    // 先设置支持的方向
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitUp,
+    ]);
+    // 等待一小段时间
+    await Future.delayed(const Duration(milliseconds: 100));
+    // 再设置当前方向
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _isFullscreen = false;
+    notifyListeners();
+  }
+
   Future<void> initializePlayer(String path) async {
     try {
-      print('=== 开始初始化视频播放器 ===');
-      print('视频路径: $path');
-      
       _setStatus(PlayerStatus.loading);
       _error = null;
       
-      // 重置播放器
-      await resetPlayer();
+      // 完全重置播放器
+      if (player.state != PlaybackState.stopped) {
+        player.state = PlaybackState.stopped;
+      }
+      // 释放旧纹理
+      if (player.textureId.value != null) {
+        player.textureId.value = null;
+      }
+      // 等待纹理完全释放
+      await Future.delayed(const Duration(milliseconds: 500));
+      // 重置播放器状态
+      player.media = '';
+      await Future.delayed(const Duration(milliseconds: 100));
+      _currentVideoPath = null;
+      _position = Duration.zero;
+      _duration = Duration.zero;
+      _progress = 0.0;
+      _error = null;
+      _setStatus(PlayerStatus.idle);
+      
+      // 在手机平台上强制横屏
+      if (globals.isPhone) {
+        await _setLandscape();
+      }
+      
+      // 获取上次播放位置
+      final lastPosition = await _getVideoPosition(path);
       
       // 设置媒体源
-      print('设置播放器媒体源...');
       player.media = path;
       
       // 准备播放器
-      print('准备播放器...');
       player.prepare();
       
       // 获取视频纹理
-      print('获取视频纹理...');
       final textureId = await player.updateTexture();
-      print('获取到的纹理ID: $textureId');
       
       if (textureId == null) {
         throw Exception('无法获取视频纹理');
@@ -118,45 +190,52 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 更新状态
       _currentVideoPath = path;
       _duration = Duration(milliseconds: player.mediaInfo.duration);
-      _position = Duration.zero;
-      _progress = 0.0;
+      
+      // 如果有上次的播放位置，恢复播放位置
+      if (lastPosition > 0) {
+        // 先设置播放位置
+        player.seek(position: lastPosition);
+        // 等待一小段时间确保位置设置完成
+        await Future.delayed(const Duration(milliseconds: 100));
+        // 更新状态
+        _position = Duration(milliseconds: lastPosition);
+        _progress = lastPosition / _duration.inMilliseconds;
+      } else {
+        _position = Duration.zero;
+        _progress = 0.0;
+        player.seek(position: 0);
+      }
+      
       _setStatus(PlayerStatus.ready);
       
       // 开始播放
       player.state = PlaybackState.playing;
       _setStatus(PlayerStatus.playing);
       
-      // 保存状态
-      await _saveLastVideo();
-      
-      print('=== 视频播放器初始化完成 ===');
     } catch (e, stackTrace) {
-      print('\n=== 初始化视频播放器时出错 ===');
-      print('错误信息: $e');
-      print('错误堆栈: $stackTrace');
-      print('=== 错误信息结束 ===\n');
       _error = '初始化视频播放器时出错: $e';
       _setStatus(PlayerStatus.error);
     }
   }
 
   Future<void> resetPlayer() async {
-    try {
-      print('重置播放器状态...');
+    if (player.state != PlaybackState.stopped) {
       player.state = PlaybackState.stopped;
-      player.media = '';
-      if (player.textureId.value != null) {
-        player.textureId.value = null;
-      }
-      _currentVideoPath = null;
-      _duration = Duration.zero;
-      _position = Duration.zero;
-      _progress = 0.0;
-      _error = null;
-      _setStatus(PlayerStatus.idle);
-    } catch (e) {
-      print('重置播放器时出错: $e');
-      throw e;
+    }
+    // 释放纹理
+    if (player.textureId.value != null) {
+      player.textureId.value = null;
+    }
+    _currentVideoPath = null;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+    _progress = 0.0;
+    _error = null;
+    _setStatus(PlayerStatus.idle);
+    
+    // 在手机平台上恢复竖屏
+    if (globals.isPhone) {
+      await _setPortrait();
     }
   }
 
@@ -258,6 +337,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _duration = Duration(milliseconds: player.mediaInfo.duration);
         if (_duration.inMilliseconds > 0) {
           _progress = _position.inMilliseconds / _duration.inMilliseconds;
+          // 保存当前播放位置
+          _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
         }
         notifyListeners();
       }
@@ -265,9 +346,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   bool shouldShowAppBar() {
-    if (_isFullscreen) return false;
-    if (globals.isPhone) return !hasVideo;
-    return true;
+    if (globals.isPhone) {
+      return !hasVideo || !_isFullscreen;
+    }
+    return !_isFullscreen;
   }
 
   @override
@@ -296,7 +378,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void onWindowEvent(String eventName) {
     if (eventName == 'enter-full-screen' || eventName == 'leave-full-screen') {
       windowManager.isFullScreen().then((isFullscreen) {
-        print('窗口管理器检测到全屏状态变化: $isFullscreen');
         if (isFullscreen != _isFullscreen) {
           _isFullscreen = isFullscreen;
           notifyListeners();
@@ -308,7 +389,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void onWindowEnterFullScreen() {
     windowManager.isFullScreen().then((isFullscreen) {
-      print('窗口进入全屏: $isFullscreen');
       if (isFullscreen != _isFullscreen) {
         _isFullscreen = isFullscreen;
         notifyListeners();
@@ -319,7 +399,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void onWindowLeaveFullScreen() {
     windowManager.isFullScreen().then((isFullscreen) {
-      print('窗口退出全屏: $isFullscreen');
       if (!isFullscreen && _isFullscreen) {
         _isFullscreen = false;
         notifyListeners();
@@ -372,124 +451,52 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 处理键盘事件
   void handleKeyEvent(RawKeyEvent event) {
     if (event is RawKeyDownEvent) {
-      print('\n=== 键盘事件 ===');
-      print('按键: ${event.logicalKey}');
-      print('按键名称: ${event.logicalKey.keyLabel}');
-      print('按键ID: ${event.logicalKey.keyId}');
-      print('是否有视频: $hasVideo');
-      
       // 每次按键事件时重新获取最新的快捷键绑定
       final playPauseKey = KeyboardShortcuts.getKeyBinding('play_pause');
       final fullscreenKey = KeyboardShortcuts.getKeyBinding('fullscreen');
       final rewindKey = KeyboardShortcuts.getKeyBinding('rewind');
       final forwardKey = KeyboardShortcuts.getKeyBinding('forward');
       
-      print('当前快捷键绑定:');
-      print('播放/暂停: $playPauseKey');
-      print('全屏: $fullscreenKey');
-      print('快退: $rewindKey');
-      print('快进: $forwardKey');
-      
-      // 检查按键是否匹配任何快捷键
-      print('按键匹配检查:');
-      print('是否匹配播放/暂停: ${event.logicalKey == playPauseKey}');
-      print('是否匹配全屏: ${event.logicalKey == fullscreenKey}');
-      print('是否匹配快退: ${event.logicalKey == rewindKey}');
-      print('是否匹配快进: ${event.logicalKey == forwardKey}');
-      
       // 只处理已配置的快捷键
       if (event.logicalKey == playPauseKey) {
-        print('播放/暂停键按下');
         if (hasVideo) {
-          print('有视频，切换播放状态');
           togglePlayPause();
-        } else {
-          print('没有视频，忽略按键');
         }
       } else if (event.logicalKey == fullscreenKey) {
-        print('全屏键按下');
         if (hasVideo) {
-          print('有视频，切换全屏状态');
           toggleFullscreen();
         }
       } else if (event.logicalKey == rewindKey) {
-        print('快退键按下');
-        print('当前视频位置: ${_position.inSeconds}秒');
         if (hasVideo) {
-          print('有视频，快退10秒');
           final newPosition = _position - const Duration(seconds: 10);
-          print('新位置: ${newPosition.inSeconds}秒');
           seekTo(newPosition);
         }
       } else if (event.logicalKey == forwardKey) {
-        print('快进键按下');
-        print('当前视频位置: ${_position.inSeconds}秒');
         if (hasVideo) {
-          print('有视频，快进10秒');
           final newPosition = _position + const Duration(seconds: 10);
-          print('新位置: ${newPosition.inSeconds}秒');
           seekTo(newPosition);
         }
-      } else {
-        print('未处理的按键: ${event.logicalKey}');
-        print('按键ID: ${event.logicalKey.keyId}');
       }
-      print('=== 键盘事件处理完成 ===\n');
     }
   }
 
-  // 切换全屏状态
+  // 切换全屏状态（仅用于桌面平台）
   Future<void> toggleFullscreen() async {
-    print('\n=== 手动切换全屏状态 ===');
-    print('当前全屏状态: $_isFullscreen');
+    if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
     
-    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-      // 桌面系统使用 window_manager
-      print('桌面系统，使用 window_manager');
-      if (!_isFullscreen) {
-        print('设置全屏...');
-        await windowManager.setFullScreen(true);
-        _isFullscreen = true;
-      } else {
-        print('退出全屏...');
-        await windowManager.setFullScreen(false);
-        _isFullscreen = false;
-        // 确保返回到主页面
-        if (_context != null) {
-          Navigator.of(_context!).popUntil((route) => route.isFirst);
-        }
-      }
-    } else if (Platform.isAndroid || Platform.isIOS) {
-      // 移动系统使用 orientation
-      print('移动系统，使用 orientation');
-      if (!_isFullscreen) {
-        print('设置横屏...');
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
-        // 隐藏状态栏和导航栏
-        print('隐藏状态栏和导航栏...');
-        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-        _isFullscreen = true;
-      } else {
-        print('设置竖屏...');
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-        ]);
-        // 显示状态栏和导航栏
-        print('显示状态栏和导航栏...');
-        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-        _isFullscreen = false;
-        // 确保返回到主页面
-        if (_context != null) {
-          Navigator.of(_context!).popUntil((route) => route.isFirst);
-        }
+    if (!_isFullscreen) {
+      await windowManager.setFullScreen(true);
+      _isFullscreen = true;
+    } else {
+      await windowManager.setFullScreen(false);
+      _isFullscreen = false;
+      // 确保返回到主页面
+      if (_context != null) {
+        Navigator.of(_context!).popUntil((route) => route.isFirst);
       }
     }
     
     notifyListeners();
-    print('=== 全屏状态切换完成 ===\n');
   }
 
   // 设置上下文
