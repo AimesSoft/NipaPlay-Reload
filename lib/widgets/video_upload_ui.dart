@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'dart:ui';
 import '../utils/video_player_state.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -112,7 +114,22 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
                               onTapDown: (_) => setState(() => _isPressed = true),
                               onTapUp: (_) => setState(() => _isPressed = false),
                               onTapCancel: () => setState(() => _isPressed = false),
-                              onTap: () => context.read<VideoPlayerState>().pickVideo(),
+                              onTap: () async {
+                                try {
+                                  FilePickerResult? result = await FilePicker.platform.pickFiles(
+                                    type: FileType.custom,
+                                    allowedExtensions: ['mp4', 'mkv'],
+                                    allowMultiple: false,
+                                  );
+
+                                  if (result != null) {
+                                    final file = File(result.files.single.path!);
+                                    await context.read<VideoPlayerState>().initializePlayer(file.path);
+                                  }
+                                } catch (e) {
+                                  print('选择视频时出错: $e');
+                                }
+                              },
                               splashColor: Colors.white.withOpacity(0.2),
                               highlightColor: Colors.white.withOpacity(0.1),
                             ),

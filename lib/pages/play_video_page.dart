@@ -7,6 +7,7 @@ import 'package:fvp/mdk.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import '../widgets/tooltip_bubble.dart';
 import '../utils/globals.dart' as globals;
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 class PlayVideoPage extends StatefulWidget {
   const PlayVideoPage({super.key});
@@ -20,43 +21,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _isBackButtonPressed = false;
 
   @override
-  void initState() {
-    super.initState();
-    if (globals.isPhone) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-      ]);
-    }
-  }
-
-  @override
-  void dispose() {
-    if (globals.isPhone) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-      ]);
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        // 监听视频状态变化
-        if (globals.isPhone) {
-          if (videoState.hasVideo) {
-            SystemChrome.setPreferredOrientations([
-              DeviceOrientation.landscapeLeft,
-              DeviceOrientation.landscapeRight,
-            ]);
-          } else {
-            SystemChrome.setPreferredOrientations([
-              DeviceOrientation.portraitUp,
-            ]);
-          }
-        }
-
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
@@ -103,16 +70,10 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                     onTapCancel: () => setState(() => _isBackButtonPressed = false),
                                     onTap: () async {
                                       try {
-                                        videoState.setLoading(true);
-                                        videoState.setError(null);
-                                        videoState.setPlaying(false);
-                                        videoState.player.state = PlaybackState.stopped;
-                                        videoState.player.media = '';
-                                        videoState.setHasVideo(false);
+                                        // 重置播放器状态
+                                        await videoState.resetPlayer();
                                       } catch (e) {
                                         print('重置播放器时出错: $e');
-                                      } finally {
-                                        videoState.setLoading(false);
                                       }
                                     },
                                     child: GlassmorphicContainer(
@@ -145,7 +106,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                           duration: const Duration(milliseconds: 100),
                                           scale: _isBackButtonPressed ? 0.9 : 1.0,
                                           child: const Icon(
-                                            Icons.arrow_back_rounded,
+                                            Ionicons.chevron_back_outline,
                                             color: Colors.white,
                                             size: 28,
                                           ),

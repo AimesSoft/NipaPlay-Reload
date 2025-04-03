@@ -31,7 +31,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
           return const VideoUploadUI();
         }
 
-        if (videoState.isLoading) {
+        if (videoState.status == PlayerStatus.loading) {
           return const Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,

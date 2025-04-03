@@ -9,171 +9,72 @@ import 'dart:async';
 import 'keyboard_shortcuts.dart';
 import 'globals.dart' as globals;
 
+enum PlayerStatus {
+  idle,        // 空闲状态
+  loading,     // 加载中
+  ready,       // 准备就绪
+  playing,     // 播放中
+  paused,      // 暂停
+  error,       // 错误
+  disposed     // 已释放
+}
+
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final Player player = Player();
-  BuildContext? _context;  // 添加BuildContext
-  bool _isPlaying = false;
-  bool _showControls = true;  // 默认显示控制栏
-  bool _isFullscreen = false;  // 添加全屏状态
+  BuildContext? _context;
+  PlayerStatus _status = PlayerStatus.idle;
+  bool _showControls = true;
+  bool _isFullscreen = false;
   double _progress = 0.0;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   String? _error;
   double _aspectRatio = 16 / 9;
-  bool _isLoading = false;
-  bool _hasVideo = false;
-  String? _lastVideoPath;
+  String? _currentVideoPath;
+  Timer? _positionUpdateTimer;
+  Timer? _hideControlsTimer;
+  Timer? _hideMouseTimer;
+  bool _isControlsHovered = false;
+  bool _isSeeking = false;
+  final FocusNode _focusNode = FocusNode();
   static const String _lastVideoKey = 'last_video_path';
   static const String _lastPositionKey = 'last_video_position';
-  Timer? _positionUpdateTimer;
-  Timer? _hideControlsTimer;  // 添加控制栏隐藏计时器
-  Timer? _hideMouseTimer;  // 添加鼠标隐藏计时器
-  bool _isControlsHovered = false;
-  bool _isSeeking = false;  // 添加一个标志来跟踪是否正在拖动
-  final FocusNode _focusNode = FocusNode();
-  FocusNode get focusNode => _focusNode;
 
   VideoPlayerState() {
-    print('\n=== 初始化 VideoPlayerState ===');
-    _startPositionUpdateTimer();
-    _setupWindowManagerListener();  // 重新启用窗口管理器监听器
-    setHasVideo(false);
-    setPlaying(false);
-    setShowControls(true);
-    _loadLastVideo();  // 加载上次播放的视频
-    _focusNode.requestFocus();  // 请求焦点
-    KeyboardShortcuts.loadShortcuts();  // 加载快捷键设置
-    print('=== VideoPlayerState 初始化完成 ===\n');
+    _initialize();
   }
 
-  bool get isPlaying => _isPlaying;
+  // Getters
+  PlayerStatus get status => _status;
   bool get showControls => _showControls;
-  bool get isFullscreen => _isFullscreen;  // 添加全屏状态getter
+  bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
   Duration get duration => _duration;
   Duration get position => _position;
   String? get error => _error;
   double get aspectRatio => _aspectRatio;
-  bool get isLoading => _isLoading;
-  bool get hasVideo => _hasVideo;
+  bool get hasVideo => _status == PlayerStatus.ready || 
+                      _status == PlayerStatus.playing || 
+                      _status == PlayerStatus.paused;
+  FocusNode get focusNode => _focusNode;
 
-  // 设置控件是否被悬停
-  void setControlsHovered(bool value) {
-    _isControlsHovered = value;
-    if (value) {
-      _hideControlsTimer?.cancel();
-      _hideMouseTimer?.cancel();
-      setShowControls(true);
-    } else {
-      resetHideControlsTimer();
-    }
-  }
-
-  // 重置鼠标隐藏计时器
-  void resetHideMouseTimer() {
-    _hideMouseTimer?.cancel();
-    if (_hasVideo && !_isControlsHovered && !globals.isPhone) {
-      _hideMouseTimer = Timer(const Duration(milliseconds: 1500), () {
-        setShowControls(false);
-      });
-    }
-  }
-
-  // 重置控制栏隐藏计时器
-  void resetHideControlsTimer() {
-    _hideControlsTimer?.cancel();
-    setShowControls(true);
-    if (_hasVideo && !_isControlsHovered && !globals.isPhone) {
-      _hideControlsTimer = Timer(const Duration(milliseconds: 1500), () {
-        setShowControls(false);
-      });
-    }
-  }
-
-  // 处理鼠标移动
-  void handleMouseMove(Offset position) {
-    if (!_isControlsHovered && !globals.isPhone) {
-      resetHideControlsTimer();
-      resetHideMouseTimer();
-    }
-  }
-
-  // 切换控制栏显示状态
-  void toggleControls() {
-    setShowControls(!_showControls);
-    if (_showControls && _hasVideo && !_isControlsHovered && !globals.isPhone) {
-      resetHideControlsTimer();
-    }
-  }
-
-  void setPlaying(bool value) {
-    _isPlaying = value;
-    if (value) {
-      resetHideControlsTimer();
-    }
-    notifyListeners();
-  }
-
-  void setShowControls(bool value) {
-    _showControls = value;
-    notifyListeners();
-  }
-
-  void setProgress(double value) {
-    _progress = value;
-    notifyListeners();
-  }
-
-  void setDuration(Duration value) {
-    _duration = value;
-    notifyListeners();
-  }
-
-  void setPosition(Duration value) {
-    _position = value;
-    _saveLastVideo();  // 保存最后播放位置
-    notifyListeners();
-  }
-
-  void setError(String? value) {
-    _error = value;
-    notifyListeners();
-  }
-
-  void setAspectRatio(double value) {
-    _aspectRatio = value;
-    notifyListeners();
-  }
-
-  void setLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
-  }
-
-  void setHasVideo(bool value) {
-    _hasVideo = value;
-    notifyListeners();
-  }
-
-  void _startPositionUpdateTimer() {
-    _positionUpdateTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      if (!_isSeeking) {  // 只在非拖动状态下更新位置
-        setPosition(Duration(milliseconds: player.position));
-        setDuration(Duration(milliseconds: player.mediaInfo.duration));
-        if (_duration.inMilliseconds > 0) {
-          setProgress(_position.inMilliseconds / _duration.inMilliseconds);
-        }
-      }
-    });
+  Future<void> _initialize() async {
+    print('\n=== 初始化 VideoPlayerState ===');
+    _startPositionUpdateTimer();
+    _setupWindowManagerListener();
+    _focusNode.requestFocus();
+    KeyboardShortcuts.loadShortcuts();
+    await _loadLastVideo();
+    print('=== VideoPlayerState 初始化完成 ===\n');
   }
 
   Future<void> _loadLastVideo() async {
     final prefs = await SharedPreferences.getInstance();
-    _lastVideoPath = prefs.getString(_lastVideoKey);
+    final lastVideoPath = prefs.getString(_lastVideoKey);
     final lastPosition = prefs.getInt(_lastPositionKey) ?? 0;
 
-    if (_lastVideoPath != null) {
-      await initializePlayer(_lastVideoPath!);
+    if (lastVideoPath != null) {
+      await initializePlayer(lastVideoPath);
       if (lastPosition > 0) {
         seekTo(Duration(milliseconds: lastPosition));
       }
@@ -182,7 +83,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Future<void> _saveLastVideo() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastVideoKey, _lastVideoPath ?? '');
+    await prefs.setString(_lastVideoKey, _currentVideoPath ?? '');
     await prefs.setInt(_lastPositionKey, _position.inMilliseconds);
   }
 
@@ -191,19 +92,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       print('=== 开始初始化视频播放器 ===');
       print('视频路径: $path');
       
-      setLoading(true);
-      setError(null);
-      setHasVideo(false);
+      _setStatus(PlayerStatus.loading);
+      _error = null;
       
-      // 重置播放器状态
-      try {
-        print('重置播放器状态...');
-        player.state = PlaybackState.stopped;
-        player.media = '';
-      } catch (e) {
-        print('重置播放器状态时出错: $e');
-      }
+      // 重置播放器
+      await resetPlayer();
       
+      // 设置媒体源
       print('设置播放器媒体源...');
       player.media = path;
       
@@ -220,17 +115,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         throw Exception('无法获取视频纹理');
       }
       
-      // 设置视频状态
-      setHasVideo(true);
-      setDuration(Duration(milliseconds: player.mediaInfo.duration));
-      setPosition(Duration.zero);
-      setProgress(0.0);
-      setPlaying(true);
-      player.state = PlaybackState.playing;
-      setLoading(false);
+      // 更新状态
+      _currentVideoPath = path;
+      _duration = Duration(milliseconds: player.mediaInfo.duration);
+      _position = Duration.zero;
+      _progress = 0.0;
+      _setStatus(PlayerStatus.ready);
       
-      // 保存最后播放的视频路径
-      _lastVideoPath = path;
+      // 开始播放
+      player.state = PlaybackState.playing;
+      _setStatus(PlayerStatus.playing);
+      
+      // 保存状态
       await _saveLastVideo();
       
       print('=== 视频播放器初始化完成 ===');
@@ -239,103 +135,154 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       print('错误信息: $e');
       print('错误堆栈: $stackTrace');
       print('=== 错误信息结束 ===\n');
-      setError('初始化视频播放器时出错: $e');
-      setLoading(false);
-      setHasVideo(false);
+      _error = '初始化视频播放器时出错: $e';
+      _setStatus(PlayerStatus.error);
     }
   }
 
-  void togglePlayPause() {
-    if (!_hasVideo) {
-      print('没有视频可播放');
-      return;
+  Future<void> resetPlayer() async {
+    try {
+      print('重置播放器状态...');
+      player.state = PlaybackState.stopped;
+      player.media = '';
+      if (player.textureId.value != null) {
+        player.textureId.value = null;
+      }
+      _currentVideoPath = null;
+      _duration = Duration.zero;
+      _position = Duration.zero;
+      _progress = 0.0;
+      _error = null;
+      _setStatus(PlayerStatus.idle);
+    } catch (e) {
+      print('重置播放器时出错: $e');
+      throw e;
     }
+  }
+
+  void _setStatus(PlayerStatus status) {
+    _status = status;
+    notifyListeners();
+  }
+
+  void togglePlayPause() {
+    if (!hasVideo) return;
 
     try {
-      print('=== 切换播放状态 ===');
-      print('当前状态: ${player.state}');
-      
-      if (player.state == PlaybackState.playing) {
-        print('暂停播放...');
+      if (_status == PlayerStatus.playing) {
         player.state = PlaybackState.paused;
-        setPlaying(false);
+        _setStatus(PlayerStatus.paused);
       } else {
-        print('开始播放...');
         player.state = PlaybackState.playing;
-        setPlaying(true);
+        _setStatus(PlayerStatus.playing);
       }
-      
-      print('新状态: ${player.state}');
-      print('=== 播放状态切换完成 ===');
     } catch (e) {
-      print('播放控制时出错: $e');
-      setError('播放控制时出错: $e');
+      _error = '播放控制时出错: $e';
+      _setStatus(PlayerStatus.error);
     }
   }
 
   void seekTo(Duration position) {
-    if (_hasVideo) {
-      try {
-        _isSeeking = true;  // 开始拖动
-        player.seek(position: position.inMilliseconds);
-        setPosition(position);
-        if (_duration.inMilliseconds > 0) {
-          setProgress(position.inMilliseconds / _duration.inMilliseconds);
-        }
-        // 延迟重置拖动状态，确保位置更新完成
-        Future.delayed(const Duration(milliseconds: 100), () {
-          _isSeeking = false;
-        });
-      } catch (e) {
-        setError('跳转时出错: $e');
-        _isSeeking = false;  // 确保出错时也重置状态
+    if (!hasVideo) return;
+
+    try {
+      _isSeeking = true;
+      player.seek(position: position.inMilliseconds);
+      _position = position;
+      if (_duration.inMilliseconds > 0) {
+        _progress = position.inMilliseconds / _duration.inMilliseconds;
       }
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _isSeeking = false;
+      });
+      notifyListeners();
+    } catch (e) {
+      _error = '跳转时出错: $e';
+      _setStatus(PlayerStatus.error);
     }
   }
 
-  Future<void> pickVideo() async {
-    try {
-      print('\n=== 开始选择视频 ===');
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp4', 'mkv'],
-        allowMultiple: false,
-      );
-
-      if (result != null) {
-        print('用户选择了文件: ${result.files.single.name}');
-        print('文件路径: ${result.files.single.path}');
-        final file = File(result.files.single.path!);
-        print('文件是否存在: ${await file.exists()}');
-        print('文件大小: ${await file.length()} bytes');
-        
-        // 检查是否是上次播放的视频
-        if (file.path == _lastVideoPath) {
-          print('检测到是上次播放的视频，恢复播放位置');
-          final prefs = await SharedPreferences.getInstance();
-          final lastPosition = prefs.getInt(_lastPositionKey) ?? 0;
-          await initializePlayer(file.path);
-          if (lastPosition > 0) {
-            seekTo(Duration(milliseconds: lastPosition));
-            // 自动开始播放
-            player.state = PlaybackState.playing;
-            setPlaying(true);
-          }
-        } else {
-          print('新视频，从头开始播放');
-          await initializePlayer(file.path);
-        }
-      } else {
-        print('用户取消了文件选择');
-      }
-      print('=== 视频选择过程结束 ===\n');
-    } catch (e, stackTrace) {
-      print('\n=== 选择视频时出错 ===');
-      print('错误信息: $e');
-      print('错误堆栈: $stackTrace');
-      print('=== 错误信息结束 ===\n');
-      setError('选择视频时出错: $e');
+  void setControlsHovered(bool value) {
+    _isControlsHovered = value;
+    if (value) {
+      _hideControlsTimer?.cancel();
+      _hideMouseTimer?.cancel();
+      setShowControls(true);
+    } else {
+      resetHideControlsTimer();
     }
+  }
+
+  void resetHideMouseTimer() {
+    _hideMouseTimer?.cancel();
+    if (hasVideo && !_isControlsHovered && !globals.isPhone) {
+      _hideMouseTimer = Timer(const Duration(milliseconds: 1500), () {
+        setShowControls(false);
+      });
+    }
+  }
+
+  void resetHideControlsTimer() {
+    _hideControlsTimer?.cancel();
+    setShowControls(true);
+    if (hasVideo && !_isControlsHovered && !globals.isPhone) {
+      _hideControlsTimer = Timer(const Duration(milliseconds: 1500), () {
+        setShowControls(false);
+      });
+    }
+  }
+
+  void handleMouseMove(Offset position) {
+    if (!_isControlsHovered && !globals.isPhone) {
+      resetHideControlsTimer();
+      resetHideMouseTimer();
+    }
+  }
+
+  void toggleControls() {
+    setShowControls(!_showControls);
+    if (_showControls && hasVideo && !_isControlsHovered && !globals.isPhone) {
+      resetHideControlsTimer();
+    }
+  }
+
+  void setShowControls(bool value) {
+    _showControls = value;
+    notifyListeners();
+  }
+
+  void _startPositionUpdateTimer() {
+    _positionUpdateTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      if (!_isSeeking && hasVideo) {
+        _position = Duration(milliseconds: player.position);
+        _duration = Duration(milliseconds: player.mediaInfo.duration);
+        if (_duration.inMilliseconds > 0) {
+          _progress = _position.inMilliseconds / _duration.inMilliseconds;
+        }
+        notifyListeners();
+      }
+    });
+  }
+
+  bool shouldShowAppBar() {
+    if (_isFullscreen) return false;
+    if (globals.isPhone) return !hasVideo;
+    return true;
+  }
+
+  @override
+  void dispose() {
+    _positionUpdateTimer?.cancel();
+    _hideControlsTimer?.cancel();
+    _hideMouseTimer?.cancel();
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      windowManager.removeListener(this);
+    }
+    _focusNode.dispose();
+    _saveLastVideo();
+    player.dispose();
+    _setStatus(PlayerStatus.disposed);
+    super.dispose();
   }
 
   // 设置窗口管理器监听器
@@ -429,7 +376,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       print('按键: ${event.logicalKey}');
       print('按键名称: ${event.logicalKey.keyLabel}');
       print('按键ID: ${event.logicalKey.keyId}');
-      print('是否有视频: $_hasVideo');
+      print('是否有视频: $hasVideo');
       
       // 每次按键事件时重新获取最新的快捷键绑定
       final playPauseKey = KeyboardShortcuts.getKeyBinding('play_pause');
@@ -453,7 +400,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 只处理已配置的快捷键
       if (event.logicalKey == playPauseKey) {
         print('播放/暂停键按下');
-        if (_hasVideo) {
+        if (hasVideo) {
           print('有视频，切换播放状态');
           togglePlayPause();
         } else {
@@ -461,14 +408,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       } else if (event.logicalKey == fullscreenKey) {
         print('全屏键按下');
-        if (_hasVideo) {
+        if (hasVideo) {
           print('有视频，切换全屏状态');
           toggleFullscreen();
         }
       } else if (event.logicalKey == rewindKey) {
         print('快退键按下');
         print('当前视频位置: ${_position.inSeconds}秒');
-        if (_hasVideo) {
+        if (hasVideo) {
           print('有视频，快退10秒');
           final newPosition = _position - const Duration(seconds: 10);
           print('新位置: ${newPosition.inSeconds}秒');
@@ -477,7 +424,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       } else if (event.logicalKey == forwardKey) {
         print('快进键按下');
         print('当前视频位置: ${_position.inSeconds}秒');
-        if (_hasVideo) {
+        if (hasVideo) {
           print('有视频，快进10秒');
           final newPosition = _position + const Duration(seconds: 10);
           print('新位置: ${newPosition.inSeconds}秒');
@@ -548,30 +495,5 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 设置上下文
   void setContext(BuildContext context) {
     _context = context;
-  }
-
-  // 添加一个方法来检查是否需要显示AppBar
-  bool shouldShowAppBar() {
-    if (_isFullscreen) {
-      return false;
-    }
-    if (globals.isPhone) {
-      return !_hasVideo;
-    }
-    return true;
-  }
-
-  @override
-  void dispose() {
-    _positionUpdateTimer?.cancel();
-    _hideControlsTimer?.cancel();
-    _hideMouseTimer?.cancel();  // 取消鼠标隐藏计时器
-    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-      windowManager.removeListener(this);  // 移除窗口管理器监听器
-    }
-    _focusNode.dispose();  // 清理焦点节点
-    _saveLastVideo();  // 保存最后播放位置
-    player.dispose();
-    super.dispose();
   }
 } 

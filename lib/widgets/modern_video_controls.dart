@@ -6,6 +6,7 @@ import '../utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
 import 'video_progress_bar.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 class ModernVideoControls extends StatefulWidget {
   const ModernVideoControls({super.key});
@@ -202,13 +203,22 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       
                                       // 播放/暂停按钮
                                       _buildControlButton(
-                                        icon: Icon(
-                                          videoState.isPlaying 
-                                            ? Icons.pause_rounded 
-                                            : Icons.play_arrow_rounded,
-                                          key: ValueKey<bool>(videoState.isPlaying),
-                                          color: Colors.white,
-                                          size: globals.isPhone ? 48 : 36,
+                                        icon: AnimatedSwitcher(
+                                          duration: const Duration(milliseconds: 200),
+                                          transitionBuilder: (child, animation) {
+                                            return ScaleTransition(
+                                              scale: animation,
+                                              child: child,
+                                            );
+                                          },
+                                          child: Icon(
+                                            videoState.status == PlayerStatus.playing 
+                                                ? Ionicons.pause
+                                                : Ionicons.play,
+                                            key: ValueKey<bool>(videoState.status == PlayerStatus.playing),
+                                            color: Colors.white,
+                                            size: globals.isPhone ? 48 : 36,
+                                          ),
                                         ),
                                         onTap: () => videoState.togglePlayPause(),
                                         isPressed: _isPlayPressed,
@@ -216,7 +226,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         onHover: (value) => setState(() => _isPlayHovered = value),
                                         onPressed: (value) => setState(() => _isPlayPressed = value),
                                         tooltip: KeyboardShortcuts.formatActionWithShortcut(
-                                          videoState.isPlaying ? '暂停' : '播放',
+                                          videoState.status == PlayerStatus.playing ? '暂停' : '播放',
                                           KeyboardShortcuts.getShortcutText('play_pause')
                                         ),
                                         useAnimatedSwitcher: true,
