@@ -124,7 +124,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
             focusNode: videoState.focusNode,
             onKey: (event) {
               print('RawKeyboardListener 收到按键事件: ${event.logicalKey}');
-              videoState.handleKeyEvent(event);
+              KeyboardShortcuts.handleKeyEvent(event);
             },
             child: GestureDetector(
               onTap: () {
@@ -138,7 +138,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                     alignment: Alignment.bottomCenter,
                     child: Padding(
                       padding: EdgeInsets.only(
-                        bottom: 80.0,
+                        bottom: 20.0,
                         left: globals.isPhone ? 20 : 100,
                         right: globals.isPhone ? 20 : 100,
                       ),

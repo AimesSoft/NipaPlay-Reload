@@ -3,6 +3,7 @@ library globals;
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 //////全局变量/////
 double mobileThreshold = 550;
 double blurPower = 25;

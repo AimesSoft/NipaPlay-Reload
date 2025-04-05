@@ -1,22 +1,70 @@
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'dart:ui';
+import 'package:window_manager/window_manager.dart';
+import 'dart:io';
+import '../utils/globals.dart' as globals;
 
 class KeyboardShortcuts {
   static const String _shortcutsKey = 'keyboard_shortcuts';
-  static Map<String, String> _shortcuts = {
-    'play_pause': '空格',
-    'fullscreen': 'Enter',
-    'rewind': '←',
-    'forward': '→',
-  };
+  static const int _debounceTime = 200; // 防抖时间，单位毫秒
+  static final Map<String, int> _lastTriggerTime = {}; // 记录每个按键的最后触发时间
+  static final Map<String, LogicalKeyboardKey> _keyBindings = {};
+  static final Map<String, String> _shortcuts = {};
+  static final Map<String, Function> _actionHandlers = {};
 
-  static Map<String, LogicalKeyboardKey> _keyBindings = {
-    'play_pause': LogicalKeyboardKey.space,
-    'fullscreen': LogicalKeyboardKey.enter,
-    'rewind': LogicalKeyboardKey.arrowLeft,
-    'forward': LogicalKeyboardKey.arrowRight,
-  };
+  // 初始化默认快捷键
+  static void initialize() {
+    _shortcuts.addAll({
+      'play_pause': '空格',
+      'fullscreen': 'Enter',
+      'rewind': '←',
+      'forward': '→',
+    });
+    _updateKeyBindings();
+  }
+
+  // 注册动作处理器
+  static void registerActionHandler(String action, Function handler) {
+    _actionHandlers[action] = handler;
+  }
+
+  // 处理键盘事件
+  static KeyEventResult handleKeyEvent(RawKeyEvent event) {
+    if (event is! RawKeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    // 检查每个动作的快捷键
+    for (final entry in _keyBindings.entries) {
+      final action = entry.key;
+      final key = entry.value;
+
+      if (event.logicalKey == key && _shouldTrigger(action)) {
+        final handler = _actionHandlers[action];
+        if (handler != null) {
+          handler();
+          return KeyEventResult.handled;
+        }
+      }
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  static bool _shouldTrigger(String action) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastTime = _lastTriggerTime[action] ?? 0;
+    
+    if (now - lastTime < _debounceTime) {
+      return false;
+    }
+    
+    _lastTriggerTime[action] = now;
+    return true;
+  }
 
   static Future<void> loadShortcuts() async {
     final prefs = await SharedPreferences.getInstance();
@@ -24,11 +72,17 @@ class KeyboardShortcuts {
     if (savedShortcuts != null) {
       try {
         final Map<String, dynamic> decoded = json.decode(savedShortcuts);
-        _shortcuts = Map<String, String>.from(decoded);
+        _shortcuts.clear();
+        _shortcuts.addAll(Map<String, String>.from(decoded));
         _updateKeyBindings();
       } catch (e) {
         print('Error loading shortcuts: $e');
+        // 如果加载失败，使用默认快捷键
+        initialize();
       }
+    } else {
+      // 如果没有保存的快捷键，使用默认值
+      initialize();
     }
   }
 
@@ -38,12 +92,10 @@ class KeyboardShortcuts {
   }
 
   static void _updateKeyBindings() {
-    _keyBindings = {
-      'play_pause': _getKeyFromString(_shortcuts['play_pause'] ?? '空格'),
-      'fullscreen': _getKeyFromString(_shortcuts['fullscreen'] ?? 'Enter'),
-      'rewind': _getKeyFromString(_shortcuts['rewind'] ?? '←'),
-      'forward': _getKeyFromString(_shortcuts['forward'] ?? '→'),
-    };
+    _keyBindings.clear();
+    for (final entry in _shortcuts.entries) {
+      _keyBindings[entry.key] = _getKeyFromString(entry.value);
+    }
   }
 
   static LogicalKeyboardKey _getKeyFromString(String keyString) {
@@ -81,28 +133,15 @@ class KeyboardShortcuts {
     return _shortcuts[action] ?? '';
   }
 
-  static LogicalKeyboardKey getKeyBinding(String action) {
-    _keyBindings[action] = _getKeyFromString(_shortcuts[action] ?? '');
-    return _keyBindings[action] ?? LogicalKeyboardKey.space;
+  static Future<void> setShortcut(String action, String shortcut) async {
+    _shortcuts[action] = shortcut;
+    _keyBindings[action] = _getKeyFromString(shortcut);
+    await saveShortcuts();
   }
+
+  static Map<String, String> get allShortcuts => Map.unmodifiable(_shortcuts);
 
   static String formatActionWithShortcut(String action, String shortcut) {
     return '$action ($shortcut)';
   }
-
-  static Future<void> setShortcut(String action, String shortcut) async {
-    print('\n=== 设置快捷键 ===');
-    print('动作: $action');
-    print('新快捷键: $shortcut');
-    
-    _shortcuts[action] = shortcut;
-    
-    _keyBindings[action] = _getKeyFromString(shortcut);
-    print('更新后的按键绑定: ${_keyBindings[action]}');
-    
-    await saveShortcuts();
-    print('=== 快捷键设置完成 ===\n');
-  }
-
-  static Map<String, String> get allShortcuts => Map.unmodifiable(_shortcuts);
 } 

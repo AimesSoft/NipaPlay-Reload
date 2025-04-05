@@ -8,12 +8,12 @@ class BlurDialog extends StatelessWidget {
   final bool barrierDismissible;
 
   const BlurDialog({
-    Key? key,
+    super.key,
     required this.title,
     required this.content,
     required this.actions,
     this.barrierDismissible = true,
-  }) : super(key: key);
+  });
 
   static Future<T?> show<T>({
     required BuildContext context,

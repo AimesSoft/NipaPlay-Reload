@@ -448,38 +448,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void onWindowUnmaximize() {}
 
-  // 处理键盘事件
-  void handleKeyEvent(RawKeyEvent event) {
-    if (event is RawKeyDownEvent) {
-      // 每次按键事件时重新获取最新的快捷键绑定
-      final playPauseKey = KeyboardShortcuts.getKeyBinding('play_pause');
-      final fullscreenKey = KeyboardShortcuts.getKeyBinding('fullscreen');
-      final rewindKey = KeyboardShortcuts.getKeyBinding('rewind');
-      final forwardKey = KeyboardShortcuts.getKeyBinding('forward');
-      
-      // 只处理已配置的快捷键
-      if (event.logicalKey == playPauseKey) {
-        if (hasVideo) {
-          togglePlayPause();
-        }
-      } else if (event.logicalKey == fullscreenKey) {
-        if (hasVideo) {
-          toggleFullscreen();
-        }
-      } else if (event.logicalKey == rewindKey) {
-        if (hasVideo) {
-          final newPosition = _position - const Duration(seconds: 10);
-          seekTo(newPosition);
-        }
-      } else if (event.logicalKey == forwardKey) {
-        if (hasVideo) {
-          final newPosition = _position + const Duration(seconds: 10);
-          seekTo(newPosition);
-        }
-      }
-    }
-  }
-
   // 切换全屏状态（仅用于桌面平台）
   Future<void> toggleFullscreen() async {
     if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;

@@ -55,6 +55,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
+      # Update version number
+      - name: Update version number
+        run: |
+          # 读取当前版本号
+          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)
+          echo "Current version: $CURRENT_VERSION"
+          
+          # 分割版本号
+          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+          
+          # 增加补丁版本号
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          echo "New version: $NEW_VERSION"
+          
+          # 更新 pubspec.yaml
+          sed -i "s/^version: .*/version: $NEW_VERSION/" pubspec.yaml
+          
+          # 提交更改
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          git add pubspec.yaml
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git push
+      
       # Setup Android keystore (for Android)
       - name: Setup Android keystore
         if: matrix.target == 'Android'
@@ -203,7 +231,6 @@ jobs:
           path: ${{ matrix.artifact_path }}
 
   Publish:
-    if: startsWith(github.ref, 'refs/tags/')
     name: Publish
     needs: Build
     runs-on: ubuntu-latest
@@ -222,10 +249,34 @@ jobs:
       - name: List all Artifacts
         run: ls -R /tmp/artifacts
       
+      - name: Get commit message
+        id: commit_message
+        run: |
+          echo "message=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+      
+      - name: Get commit range
+        id: commit_range
+        run: |
+          echo "range=$(git log --pretty=format:"- %s" -n 10)" >> $GITHUB_OUTPUT
+      
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
+          name: Release v${{ needs.Build.outputs.version }}
+          body: |
+            ## 版本 v${{ needs.Build.outputs.version }}
+            
+            ### 主要更新
+            ${{ steps.commit_message.outputs.message }}
+            
+            ### 最近更新内容
+            ${{ steps.commit_range.outputs.range }}
+            
+            ### 构建信息
+            - 构建时间: ${{ github.event.head_commit.timestamp }}
+            - 提交: ${{ github.sha }}
+            - 分支: ${{ github.ref_name }}
           allowUpdates: true
           artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux/*.deb
           artifactErrorsFailBuild: true

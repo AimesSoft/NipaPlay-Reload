@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import '../utils/keyboard_shortcuts.dart';
 import '../utils/theme_utils.dart';
 import '../widgets/blur_dropdown.dart';
+import '../widgets/blur_dialog.dart';
 
 class ShortcutsSettingsPage extends StatefulWidget {
   const ShortcutsSettingsPage({super.key});
@@ -31,6 +33,27 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'rewind': GlobalKey(),
     'forward': GlobalKey(),
   };
+
+  Future<void> _showRestartDialog() async {
+    final result = await BlurDialog.show(
+      context: context,
+      title: '需要重启',
+      content: '快捷键设置已更改，需要重启应用才能生效。',
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop(true);
+            exit(0);
+          },
+          child: const Text('确定'),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +85,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                 if (shortcut != null) {
                   await KeyboardShortcuts.setShortcut(action, shortcut);
                   setState(() {});
+                  _showRestartDialog();
                 }
               },
             ),

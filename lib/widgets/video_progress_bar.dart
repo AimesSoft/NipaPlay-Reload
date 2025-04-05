@@ -31,6 +31,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
   final GlobalKey _sliderKey = GlobalKey();
   Duration? _localHoverTime;
   bool _isHovering = false;
+  bool _isThumbHovered = false;
   OverlayEntry? _overlayEntry;
   DateTime? _lastSeekTime;
 
@@ -127,6 +128,16 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
           );
           
           final progressRect = Rect.fromLTWH(0, 0, width, sliderBox.size.height);
+          final thumbRect = Rect.fromLTWH(
+            (widget.videoState.progress * width) - 8,
+            16,
+            16,
+            16
+          );
+          
+          setState(() {
+            _isThumbHovered = thumbRect.contains(localPosition);
+          });
           
           if (localPosition.dx >= progressRect.left && 
               localPosition.dx <= progressRect.right &&
@@ -149,6 +160,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
       onExit: (_) {
         setState(() {
           _isHovering = false;
+          _isThumbHovered = false;
           _localHoverTime = null;
         });
       },
@@ -223,20 +235,22 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                       ),
                       // 滑块
                       Positioned(
-                        left: (widget.videoState.progress * constraints.maxWidth) - 6,
-                        top: 16,
+                        left: (widget.videoState.progress * constraints.maxWidth) - (_isThumbHovered || widget.isDragging ? 8 : 6),
+                        top: 22 - (_isThumbHovered || widget.isDragging ? 8 : 6),
                         child: MouseRegion(
                           cursor: SystemMouseCursors.click,
-                          child: Container(
-                            width: 12,
-                            height: 12,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutBack,
+                            width: _isThumbHovered || widget.isDragging ? 16 : 12,
+                            height: _isThumbHovered || widget.isDragging ? 16 : 12,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 4,
+                                  blurRadius: _isThumbHovered || widget.isDragging ? 6 : 4,
                                   offset: const Offset(0, 2),
                                 ),
                               ],
@@ -293,20 +307,22 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                         ),
                         // 滑块
                         Positioned(
-                          left: (widget.videoState.progress * constraints.maxWidth) - 6,
-                          top: 16,
+                          left: (widget.videoState.progress * constraints.maxWidth) - (_isThumbHovered || widget.isDragging ? 8 : 6),
+                          top: 22 - (_isThumbHovered || widget.isDragging ? 8 : 6),
                           child: MouseRegion(
                             cursor: SystemMouseCursors.click,
-                            child: Container(
-                              width: 12,
-                              height: 12,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutBack,
+                              width: _isThumbHovered || widget.isDragging ? 16 : 12,
+                              height: _isThumbHovered || widget.isDragging ? 16 : 12,
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withOpacity(0.2),
-                                    blurRadius: 4,
+                                    blurRadius: _isThumbHovered || widget.isDragging ? 6 : 4,
                                     offset: const Offset(0, 2),
                                   ),
                                 ],

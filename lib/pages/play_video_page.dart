@@ -8,6 +8,7 @@ import 'package:glassmorphism/glassmorphism.dart';
 import '../widgets/tooltip_bubble.dart';
 import '../utils/globals.dart' as globals;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import '../widgets/vertical_indicator.dart';
 
 class PlayVideoPage extends StatefulWidget {
   const PlayVideoPage({super.key});
@@ -40,6 +41,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       aspectRatio: 16 / 9,
                       child: child!,
                     ),
+                  ),
+                  Consumer<VideoPlayerState>(
+                    builder: (context, videoState, _) {
+                      return VerticalIndicator(videoState: videoState);
+                    },
                   ),
                   if (videoState.hasVideo)
                     AnimatedOpacity(
