@@ -54,17 +54,21 @@ jobs:
       # Checkout branch
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
       
       # Update version number
       - name: Update version number
         shell: bash
         run: |
           # 配置 Git
-          git config --global user.name 'GitHub Actions'
-          git config --global user.email 'actions@github.com'
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
           # 确保与远程仓库同步
-          git pull origin ${GITHUB_REF#refs/heads/} --rebase
+          git fetch origin ${GITHUB_REF#refs/heads/}
+          git reset --hard origin/${GITHUB_REF#refs/heads/}
           
           # 读取当前版本号
           CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)
@@ -93,7 +97,9 @@ jobs:
           # 提交并推送更改
           git add pubspec.yaml
           git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          
+          # 使用force push确保更新成功
+          git push --force-with-lease origin HEAD:${GITHUB_REF#refs/heads/}
       
       # Setup Android keystore (for Android)
       - name: Setup Android keystore
