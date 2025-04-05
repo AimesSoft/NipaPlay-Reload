@@ -57,16 +57,16 @@ jobs:
       
       # Update version number
       - name: Update version number
+        shell: bash
         run: |
           # 读取当前版本号
           CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)
           echo "Current version: $CURRENT_VERSION"
           
           # 分割版本号
-          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
-          MAJOR=${VERSION_PARTS[0]}
-          MINOR=${VERSION_PARTS[1]}
-          PATCH=${VERSION_PARTS[2]}
+          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
           
           # 增加补丁版本号
           NEW_PATCH=$((PATCH + 1))
@@ -74,7 +74,14 @@ jobs:
           echo "New version: $NEW_VERSION"
           
           # 更新 pubspec.yaml
-          sed -i "s/^version: .*/version: $NEW_VERSION/" pubspec.yaml
+          case "$(uname -s)" in
+            Darwin*)    # macOS
+              sed -i '' "s/^version: .*$/version: $NEW_VERSION/" pubspec.yaml
+              ;;
+            *)          # Linux, Windows
+              sed -i "s/^version: .*$/version: $NEW_VERSION/" pubspec.yaml
+              ;;
+          esac
           
           # 提交更改
           git config --global user.name 'GitHub Actions'
