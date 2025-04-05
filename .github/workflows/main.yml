@@ -58,48 +58,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
       
-      # Update version number
-      - name: Update version number
-        shell: bash
+      # Get app version
+      - name: Get app version
+        id: get_version
         run: |
-          # 配置 Git
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          # 确保与远程仓库同步
-          git fetch origin ${GITHUB_REF#refs/heads/}
-          git reset --hard origin/${GITHUB_REF#refs/heads/}
-          
-          # 读取当前版本号
-          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)
-          echo "Current version: $CURRENT_VERSION"
-          
-          # 分割版本号
-          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
-          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
-          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
-          
-          # 增加补丁版本号
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
-          echo "New version: $NEW_VERSION"
-          
-          # 更新 pubspec.yaml
-          case "$(uname -s)" in
-            Darwin*)    # macOS
-              sed -i '' "s/^version: .*$/version: $NEW_VERSION/" pubspec.yaml
-              ;;
-            *)          # Linux, Windows
-              sed -i "s/^version: .*$/version: $NEW_VERSION/" pubspec.yaml
-              ;;
-          esac
-          
-          # 提交并推送更改
-          git add pubspec.yaml
-          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          
-          # 使用force push确保更新成功
-          git push --force-with-lease origin HEAD:${GITHUB_REF#refs/heads/}
+          echo "::set-output name=version::$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)"
       
       # Setup Android keystore (for Android)
       - name: Setup Android keystore
@@ -144,12 +107,6 @@ jobs:
         run: |
           git config --global core.longpaths true
           flutter pub get
-      
-      # Get app version
-      - name: Get app version
-        id: get_version
-        run: |
-          echo "::set-output name=version::$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)"
       
       # Build Android .apk
       - name: Build Android
@@ -299,3 +256,45 @@ jobs:
           artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux/*.deb
           artifactErrorsFailBuild: true
           replacesArtifacts: true
+
+  # Add new job for version update
+  UpdateVersion:
+    needs: [Build, Publish]
+    if: github.ref == 'refs/heads/main' && success()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Update version
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          # Get latest code
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          
+          # Read and update version
+          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)
+          echo "Current version: $CURRENT_VERSION"
+          
+          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+          
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          echo "New version: $NEW_VERSION"
+          
+          # Update pubspec.yaml
+          sed -i "s/^version: .*$/version: $NEW_VERSION/" pubspec.yaml
+          
+          # Commit and push changes
+          git add pubspec.yaml
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git push origin main
