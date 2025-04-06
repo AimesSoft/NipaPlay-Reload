@@ -78,20 +78,20 @@ class _BackgroundWithBlurState extends State<BackgroundWithBlur> {
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             return Image.asset(
-              'assets/backempty.png',
+              'assets/main_image.png',
               fit: BoxFit.cover,
             );
           },
         );
       } else {
         return Image.asset(
-          'assets/backempty.png',
+          'assets/main_image.png',
           fit: BoxFit.cover,
         );
       }
     }
     return Image.asset(
-      'assets/backempty.png',
+      'assets/main_image.png',
       fit: BoxFit.cover,
     );
   }

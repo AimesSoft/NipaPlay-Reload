@@ -12,7 +12,7 @@ class ThemeNotifier with ChangeNotifier {
   ThemeNotifier({
     ThemeMode initialThemeMode = ThemeMode.system,
     required double initialBlurPower,
-    String initialBackgroundImageMode = "关闭",
+    String initialBackgroundImageMode = "看板娘",
     String initialCustomBackgroundPath = 'assets/backempty.png',
   })  : _themeMode = initialThemeMode,
         _blurPower = initialBlurPower,

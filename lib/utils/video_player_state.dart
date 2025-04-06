@@ -35,6 +35,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Timer? _positionUpdateTimer;
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
+  Timer? _autoHideTimer;
   bool _isControlsHovered = false;
   bool _isSeeking = false;
   final FocusNode _focusNode = FocusNode();
@@ -281,14 +282,27 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
+  void resetAutoHideTimer() {
+    _autoHideTimer?.cancel();
+    if (hasVideo && _showControls && !_isControlsHovered) {
+      _autoHideTimer = Timer(const Duration(seconds: 5), () {
+        if (!_isControlsHovered) {
+          setShowControls(false);
+        }
+      });
+    }
+  }
+
   void setControlsHovered(bool value) {
     _isControlsHovered = value;
     if (value) {
       _hideControlsTimer?.cancel();
       _hideMouseTimer?.cancel();
+      _autoHideTimer?.cancel();
       setShowControls(true);
     } else {
       resetHideControlsTimer();
+      resetAutoHideTimer();
     }
   }
 
@@ -320,13 +334,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void toggleControls() {
     setShowControls(!_showControls);
-    if (_showControls && hasVideo && !_isControlsHovered && !globals.isPhone) {
+    if (_showControls && hasVideo && !_isControlsHovered) {
       resetHideControlsTimer();
+      resetAutoHideTimer();
     }
   }
 
   void setShowControls(bool value) {
     _showControls = value;
+    if (value) {
+      resetAutoHideTimer();
+    } else {
+      _autoHideTimer?.cancel();
+    }
     notifyListeners();
   }
 
@@ -357,6 +377,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _positionUpdateTimer?.cancel();
     _hideControlsTimer?.cancel();
     _hideMouseTimer?.cancel();
+    _autoHideTimer?.cancel();
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       windowManager.removeListener(this);
     }

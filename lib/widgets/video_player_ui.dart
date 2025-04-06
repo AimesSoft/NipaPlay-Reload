@@ -126,6 +126,12 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                         }
                       }
                     },
+                    onTapDown: (_) {
+                      // 触摸屏幕时重置自动隐藏定时器
+                      if (videoState.hasVideo && videoState.showControls) {
+                        videoState.resetAutoHideTimer();
+                      }
+                    },
                     child: MouseRegion(
                       onHover: (event) => videoState.handleMouseMove(event.position),
                       cursor: videoState.showControls ? SystemMouseCursors.basic : SystemMouseCursors.none,
