@@ -227,16 +227,12 @@ jobs:
       - name: Get commit message
         id: commit_message
         run: |
-          echo "message<<EOF" >> $GITHUB_OUTPUT
-          git log -1 --pretty=%B >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "::set-output name=message::$(git log -1 --pretty=%B)"
       
       - name: Get commit range
         id: commit_range
         run: |
-          echo "range<<EOF2" >> $GITHUB_OUTPUT
-          git log --pretty=format:"- %s" -n 10 >> $GITHUB_OUTPUT
-          echo "EOF2" >> $GITHUB_OUTPUT
+          echo "::set-output name=range::$(git log --pretty=format:'- %s' -n 10)"
       
       - name: Upload to release
         uses: ncipollo/release-action@v1
