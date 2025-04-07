@@ -8,11 +8,11 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final Widget Function(BuildContext, Object)? errorBuilder;
 
   const CachedNetworkImageWidget({
-    Key? key,
+    super.key,
     required this.imageUrl,
     this.fit = BoxFit.cover,
     this.errorBuilder,
-  }) : super(key: key);
+  });
 
   @override
   State<CachedNetworkImageWidget> createState() => _CachedNetworkImageWidgetState();
@@ -32,8 +32,15 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     return FutureBuilder<ui.Image>(
       future: _imageFuture,
       builder: (context, snapshot) {
-        if (snapshot.hasError && widget.errorBuilder != null) {
-          return widget.errorBuilder!(context, snapshot.error!);
+        if (snapshot.hasError) {
+          print('图片加载错误: ${snapshot.error}');
+          if (widget.errorBuilder != null) {
+            return widget.errorBuilder!(context, snapshot.error!);
+          }
+          return Image.asset(
+            'assets/backempty.png',
+            fit: widget.fit,
+          );
         }
 
         if (snapshot.hasData) {

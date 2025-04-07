@@ -41,18 +41,24 @@ class BangumiService {
             'Content-Type': 'application/json; charset=utf-8',
             'User-Agent': 'NipaPlay/1.0',
           },
-        );
-        return response;
+        ).timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200) {
+          return response;
+        } else {
+          throw Exception('HTTP请求失败: ${response.statusCode}');
+        }
       } catch (e) {
         retryCount++;
+        print('请求失败 (尝试 $retryCount/$maxRetries): $e');
         if (retryCount == maxRetries) {
-          rethrow;
+          throw Exception('请求失败，已达到最大重试次数: $e');
         }
-        // 等待一段时间后重试
-        await Future.delayed(Duration(seconds: retryCount));
+        // 等待一段时间后重试，使用指数退避
+        await Future.delayed(Duration(seconds: retryCount * 2));
       }
     }
-    throw Exception('Failed after $maxRetries retries');
+    throw Exception('请求失败，未知错误');
   }
 
   Future<void> _preloadData() async {
@@ -63,7 +69,7 @@ class BangumiService {
       print('预加载 ${animes.length} 个番剧的图片');
       
       // 预加载所有图片
-      ImageCacheManager.instance.preloadImages(
+      await ImageCacheManager.instance.preloadImages(
         animes.map((anime) => anime.imageUrl).toList(),
       );
     } catch (e) {

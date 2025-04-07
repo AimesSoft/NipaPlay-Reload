@@ -52,11 +52,15 @@ class ImageCacheManager {
     }
   }
 
-  void preloadImages(List<String> urls) {
+  Future<void> preloadImages(List<String> urls) async {
     for (final url in urls) {
-      // ignore: body_might_complete_normally_catch_error
-      loadImage(url).catchError((e) {
-      });
+      try {
+        await loadImage(url);
+      } catch (e) {
+        print('预加载图片失败: $e');
+        // 继续处理下一个图片
+        continue;
+      }
     }
   }
 
