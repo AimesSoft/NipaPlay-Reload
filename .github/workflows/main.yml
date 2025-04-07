@@ -237,7 +237,7 @@ jobs:
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ github.ref_name }}
+          tag: v${{ needs.Build.outputs.version }}
           name: Release v${{ needs.Build.outputs.version }}
           body: |
             ## 版本 v${{ needs.Build.outputs.version }}
