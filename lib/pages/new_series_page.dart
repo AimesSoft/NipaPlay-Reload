@@ -5,6 +5,8 @@ import '../models/bangumi_model.dart';
 import '../utils/image_cache_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/loading_placeholder.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:glassmorphism/glassmorphism.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -18,6 +20,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   List<BangumiAnime> _animes = [];
   bool _isLoading = true;
   String? _error;
+  bool _isReversed = false; // 添加排序状态变量
 
   // 添加星期几的映射
   static const Map<int, String> _weekdays = {
@@ -28,6 +31,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     4: '周四',
     5: '周五',
     6: '周六',
+    7: '周日', // 添加周日（7）的映射
     -1: '未知', // 添加未知类别
   };
 
@@ -94,7 +98,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       anime.airWeekday == null || 
       anime.airWeekday == -1 || 
       anime.airWeekday! < 0 || 
-      anime.airWeekday! > 6
+      anime.airWeekday! > 7
     ).toList();
     
     if (unknownAnimes.isNotEmpty) {
@@ -106,8 +110,10 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       if (anime.airWeekday != null && 
           anime.airWeekday != -1 && 
           anime.airWeekday! >= 0 && 
-          anime.airWeekday! <= 6) {
-        grouped.putIfAbsent(anime.airWeekday!, () => []).add(anime);
+          anime.airWeekday! <= 7) {
+        // 将 7 转换为 0，保持一致性
+        final weekday = anime.airWeekday == 7 ? 0 : anime.airWeekday!;
+        grouped.putIfAbsent(weekday, () => []).add(anime);
       }
     }
     
@@ -165,7 +171,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     final knownWeekdays = groupedAnimes.keys.where((day) => day != -1).toList();
     final unknownWeekdays = groupedAnimes.keys.where((day) => day == -1).toList();
     
-    // 只对已知更新时间的番剧进行排序
+    // 对已知更新时间的番剧进行排序
     knownWeekdays.sort((a, b) {
       final today = DateTime.now().weekday % 7; // 获取今天的星期（0-6）
       
@@ -176,49 +182,99 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       // 计算与今天的距离
       final distA = (a - today + 7) % 7;
       final distB = (b - today + 7) % 7;
-      return distA.compareTo(distB);
+      return _isReversed ? distB.compareTo(distA) : distA.compareTo(distB);
     });
-    
 
-    return RefreshIndicator(
-      onRefresh: _loadAnimes,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // 常规更新部分
-          ...knownWeekdays.map((weekday) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: _loadAnimes,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  _weekdays[weekday] ?? '未知',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+              // 常规更新部分
+              ...knownWeekdays.map((weekday) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      _weekdays[weekday] ?? '未知',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  _buildAnimeSection(groupedAnimes[weekday]!),
+                ],
+              )),
+              // 未知更新时间的部分 - 始终显示在最底部
+              if (unknownWeekdays.isNotEmpty) ...[
+                const SizedBox(height: 32),
+                const Divider(),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    '更新时间未定',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                _buildAnimeSection(groupedAnimes[-1]!),
+              ],
+            ],
+          ),
+        ),
+        // 添加悬浮按钮
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: GlassmorphicContainer(
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            blur: 10,
+            alignment: Alignment.center,
+            border: 1,
+            linearGradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFFffffff).withOpacity(0.1),
+                const Color(0xFFFFFFFF).withOpacity(0.05),
+              ],
+            ),
+            borderGradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFFffffff).withOpacity(0.5),
+                const Color((0xFFFFFFFF)).withOpacity(0.5),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(28),
+                onTap: () {
+                  setState(() {
+                    _isReversed = !_isReversed;
+                  });
+                },
+                child: Center(
+                  child: Icon(
+                    _isReversed ? Ionicons.chevron_up_outline : Ionicons.chevron_down_outline,
+                    color: Colors.white,
+                    size: 24,
                   ),
                 ),
               ),
-              _buildAnimeSection(groupedAnimes[weekday]!),
-            ],
-          )),
-          // 未知更新时间的部分 - 始终显示在最底部
-          if (unknownWeekdays.isNotEmpty) ...[
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                '更新时间未定',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
             ),
-            _buildAnimeSection(groupedAnimes[-1]!),
-          ],
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 
