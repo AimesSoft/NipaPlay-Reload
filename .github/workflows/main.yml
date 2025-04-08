@@ -1,12 +1,12 @@
-name: Build & Release
+name: Build and Release
 
 # Trigger on push to master branch or with a tag
 on:
   push:
-    branches:
-      - '**'
-    tags:
-      - '0.*'
+    branches: [ main ]
+    tags: [ '0.*' ]
+  pull_request:
+    branches: [ main ]
 
 # If previous workflow is still running, we push again, we will cancel the previous workflow
 concurrency:
@@ -14,51 +14,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  Build:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get version
+        id: get_version
+        run: echo "version=$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
+
+  build:
+    needs: get-version
     strategy:
       fail-fast: false
       matrix:
+        target: [Windows, Linux, macOS]
         include:
-          - target: Android
-            os: ubuntu-latest
-            artifact_name: release-Android
-            artifact_path: build/app/outputs/apk/release/*.apk
           - target: Windows
             os: windows-latest
             arch: x64
-            artifact_name: release-Windows-x64
-            artifact_path: build/windows/*x64.zip
-          - target: Windows
-            os: windows-arm64
-            arch: arm64
-            artifact_name: release-Windows-arm64
-            artifact_path: build/windows/*arm64.zip
           - target: Linux
             os: ubuntu-latest
-            arch: amd64
-            artifact_name: release-Linux-amd64
-            artifact_path: build/linux/*amd64.deb
-          - target: Linux
-            os: ubuntu-latest
-            arch: arm64
-            artifact_name: release-Linux-arm64
-            artifact_path: build/linux/*arm64.deb
-          - target: iOS
-            os: macos-latest
-            cache_pod_key: ios-pods
-            cache_pod_path: ios/Pods
-            cache_pod_restore_keys_hash_file: ios/Podfile.lock
-            artifact_name: release-iOS
-            artifact_path: build/**/*.ipa
+            arch: x64
           - target: macOS
             os: macos-latest
-            cache_pod_key: macos-pods
-            cache_pod_path: macos/Pods
-            cache_pod_restore_keys_hash_file: macos/Podfile.lock
-            artifact_name: release-macOS
-            artifact_path: ./*.dmg
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
+            arch: x64
+          - target: macOS
+            os: macos-latest
+            arch: arm64
     runs-on: ${{ matrix.os }}
     env:
       FLUTTER_VERSION: 3.29.2
@@ -85,11 +69,10 @@ jobs:
       
       # Setup Flutter
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2.12.0
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
-          cache: true
+          architecture: ${{ matrix.arch }}
       
       # Cache CocoaPods (for iOS/macOS)
       - name: Cache Pod
@@ -152,7 +135,13 @@ jobs:
           pod update
           cd ..
           chmod +x dmg.sh
-          ./dmg.sh
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            ./dmg.sh
+          else
+            # Build for x86_64
+            flutter build macos --release --target-platform darwin-x64
+            ./dmg.sh
+          fi
       
       # Set up Docker Buildx
       - name: Setup Docker for macOS
@@ -192,8 +181,8 @@ jobs:
           platforms: arm64
 
       # Build Windows .zip
-      - name: Build Windows x64
-        if: matrix.target == 'Windows' && matrix.arch == 'x64'
+      - name: Build Windows
+        if: matrix.target == 'Windows'
         shell: pwsh
         run: |
           flutter config --enable-windows-desktop
@@ -209,118 +198,6 @@ jobs:
           Set-Location build/windows
           Compress-Archive -Path "NipaPlay_${version}_Windows_x64" -DestinationPath "NipaPlay_${version}_Windows_x64.zip" -Force
 
-      - name: Build Windows ARM64
-        if: matrix.target == 'Windows' && matrix.arch == 'arm64'
-        shell: bash
-        run: |
-          echo "Setting up Windows ARM64 build environment..."
-          
-          # Install QEMU and dependencies
-          brew install qemu aria2 unzip
-          
-          # Create working directory
-          mkdir -p win-arm64
-          cd win-arm64
-          
-          # Create a base Windows ARM64 image
-          qemu-img create -f vhdx windows11-arm64.vhdx 64G
-          
-          # Create UEFI vars file
-          dd if=/dev/zero of=QEMU_VARS.fd bs=1M count=64
-          
-          # Download UEFI firmware
-          wget https://github.com/tianocore/edk2/releases/download/edk2-stable202402/QEMU_EFI.fd -O QEMU_EFI.fd
-          
-          # Create an answer file for Windows setup
-          cat > autounattend.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <unattend xmlns="urn:schemas-microsoft-com:unattend">
-            <settings pass="windowsPE">
-              <component name="Microsoft-Windows-Setup">
-                <WindowsDeploymentServices>
-                  <Login>
-                    <Credentials>
-                      <Username>builder</Username>
-                      <Password>BuildPassword123!</Password>
-                    </Credentials>
-                  </Login>
-                </WindowsDeploymentServices>
-              </component>
-            </settings>
-          </unattend>
-          EOF
-          
-          # Start QEMU with Windows ARM64
-          qemu-system-aarch64 \
-            -name "windows-arm64-build" \
-            -machine virt \
-            -accel hvf \
-            -cpu cortex-a72 \
-            -smp 4 \
-            -m 8G \
-            -bios QEMU_EFI.fd \
-            -drive if=pflash,format=raw,file=QEMU_VARS.fd \
-            -device virtio-gpu-pci \
-            -device qemu-xhci \
-            -device usb-kbd \
-            -device usb-tablet \
-            -drive if=virtio,file=windows11-arm64.vhdx,format=vhdx \
-            -device virtio-net-pci,netdev=net0 \
-            -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::3389-:3389,smb=/tmp/qemu-share \
-            -monitor telnet:127.0.0.1:55555,server,nowait \
-            -display none \
-            -daemonize
-          
-          echo "Waiting for VM to boot..."
-          sleep 60
-          
-          # Create shared directory
-          mkdir -p /tmp/qemu-share
-          cp -r ../* /tmp/qemu-share/
-          
-          # Wait for VM to be ready
-          echo "Waiting for VM to be ready..."
-          until nc -z localhost 2222; do
-            echo "Waiting for SSH port..."
-            sleep 10
-          done
-          
-          # Setup Windows environment via SSH
-          sshpass -p "BuildPassword123!" ssh -o StrictHostKeyChecking=no -p 2222 builder@localhost "
-            echo 'Setting up build environment...' &&
-            
-            # Map network drive
-            net use Z: \\10.0.2.4\qemu &&
-            
-            # Install Flutter
-            cd /d Z:\ &&
-            git clone https://github.com/flutter/flutter.git &&
-            setx PATH '%PATH%;Z:\flutter\bin' &&
-            
-            # Configure Flutter
-            flutter config --enable-windows-desktop &&
-            flutter doctor &&
-            
-            # Build project
-            flutter build windows --release
-          "
-          
-          # Copy build artifacts back
-          mkdir -p ../build/windows
-          cp -r /tmp/qemu-share/build/windows/* ../build/windows/
-          
-          # Package artifacts
-          cd ../build/windows
-          version="${{ steps.get_version.outputs.version }}"
-          mkdir -p "NipaPlay_${version}_Windows_arm64"
-          cp -r runner/Release/* "NipaPlay_${version}_Windows_arm64/"
-          zip -r "NipaPlay_${version}_Windows_arm64.zip" "NipaPlay_${version}_Windows_arm64"
-          
-          # Cleanup
-          rm -rf /tmp/qemu-share
-          cd ../../win-arm64
-          echo "system_powerdown" | nc localhost 55555
-      
       # Build Linux .deb
       - name: Build Linux .deb
         if: matrix.target == 'Linux'
@@ -383,12 +260,12 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: ${{ matrix.target }}-${{ matrix.arch }}
+          path: ${{ matrix.target }}-${{ matrix.arch }}
 
   Publish:
     name: Publish
-    needs: Build
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -418,10 +295,10 @@ jobs:
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
-          tag: v${{ needs.Build.outputs.version }}
-          name: Release v${{ needs.Build.outputs.version }}
+          tag: v${{ needs.build.outputs.version }}
+          name: Release v${{ needs.build.outputs.version }}
           body: |
-            ## 版本 v${{ needs.Build.outputs.version }}
+            ## 版本 v${{ needs.build.outputs.version }}
             
             ### 主要更新
             ${{ steps.commit_message.outputs.message }}
@@ -440,7 +317,7 @@ jobs:
 
   # Add new job for version update
   UpdateVersion:
-    needs: [Build, Publish]
+    needs: [build, Publish]
     if: github.ref == 'refs/heads/main' && success()
     runs-on: ubuntu-latest
     steps:
