@@ -1,1 +1,11 @@
- 
+Package: NipaPlay
+Version: VERSION_PLACEHOLDER
+Section: x11
+Priority: optional
+Architecture: ARCH_PLACEHOLDER
+Essential: no
+Installed-Size: 34648
+Maintainer: madoka773 <valigarmanda55@gmail.com>
+Description: A cross platform danmaku video player.
+Homepage: https://github.com/MCDFsteve/NipaPlay-Reload
+Depends: ffmpeg, libass9
