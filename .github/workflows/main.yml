@@ -50,7 +50,7 @@ jobs:
             cache_pod_path: macos/Pods
             cache_pod_restore_keys_hash_file: macos/Podfile.lock
             artifact_name: release-macOS
-            artifact_path: ./*.dmg
+            artifact_path: NipaPlay-macOS-Universal.zip
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
@@ -143,11 +143,11 @@ jobs:
         if: matrix.target == 'macOS'
         run: |
           flutter build macos --release
-          cd build/macos/Build/Products/Release
-          mv nipaplay.app NipaPlay.app
-          zip -r NipaPlay-macOS-Universal.zip NipaPlay.app
-          mv NipaPlay-macOS-Universal.zip ../../../../../
-          cd ../../../../../
+          cd macos
+          pod update
+          cd ..
+          chmod +x dmg.sh
+          ./dmg.sh
       
       # Build Windows .zip
       - name: Build Windows
