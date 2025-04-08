@@ -158,9 +158,21 @@ jobs:
       - name: Setup Docker for macOS
         if: runner.os == 'macOS' && (matrix.target == 'Linux' && matrix.arch == 'arm64') || (matrix.target == 'Windows' && matrix.arch == 'arm64')
         run: |
-          brew install docker docker-compose
+          # Install Docker and Colima
+          brew install docker docker-compose colima
+          
+          # Configure Docker plugins
+          mkdir -p ~/.docker
+          echo '{"cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]}' > ~/.docker/config.json
+          
+          # Start Colima with ARM64 support
           colima start --arch aarch64 --memory 8
+          
+          # Configure Docker socket
           sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
+          
+          # Verify Docker is running
+          docker info
 
       - name: Set up Docker Buildx
         if: (matrix.target == 'Linux' && matrix.arch == 'arm64') || (matrix.target == 'Windows' && matrix.arch == 'arm64')
