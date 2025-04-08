@@ -50,7 +50,7 @@ jobs:
             cache_pod_path: macos/Pods
             cache_pod_restore_keys_hash_file: macos/Podfile.lock
             artifact_name: release-macOS
-            artifact_path: NipaPlay-macOS-Universal.zip
+            artifact_path: ./*.dmg
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
@@ -146,8 +146,11 @@ jobs:
           cd macos
           pod update
           cd ..
+          brew install create-dmg imagemagick
           chmod +x dmg.sh
           ./dmg.sh
+          mkdir -p /tmp/artifacts/release-macOS
+          mv NipaPlay_*.dmg /tmp/artifacts/release-macOS/
       
       # Build Windows .zip
       - name: Build Windows
