@@ -158,6 +158,11 @@ jobs:
       - name: Set up Docker Buildx
         if: (matrix.target == 'Linux' && matrix.arch == 'arm64') || (matrix.target == 'Windows' && matrix.arch == 'arm64')
         uses: docker/setup-buildx-action@v3
+        with:
+          platforms: windows/arm64
+          driver-opts: |
+            image=moby/buildkit:master
+            network=host
 
       # Set up QEMU
       - name: Set up QEMU
@@ -178,11 +183,11 @@ jobs:
             # Switch to Windows containers
             & 'C:\Program Files\Docker\Docker\DockerCli.exe' -SwitchDaemon
             
-            # Build Docker image
-            docker build --isolation=hyperv -t flutter-windows-arm64-builder -f Dockerfile.windows.arm64 .
+            # Build Docker image with platform specification
+            docker buildx build --platform windows/arm64 --isolation=hyperv --load -t flutter-windows-arm64-builder -f Dockerfile.windows.arm64 .
             
-            # Run the build in Docker
-            docker run --isolation=hyperv --rm `
+            # Run the build in Docker with platform specification
+            docker run --platform windows/arm64 --isolation=hyperv --rm `
               -v ${PWD}:C:\app `
               flutter-windows-arm64-builder `
               powershell -Command {

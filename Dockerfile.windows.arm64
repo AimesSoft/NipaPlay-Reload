@@ -1,5 +1,5 @@
 # Use Windows Server Core as base image
-FROM mcr.microsoft.com/windows/servercore:ltsc2022
+FROM mcr.microsoft.com/windows/servercore:ltsc2022-arm64
 
 # Set PowerShell as default shell
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
@@ -12,8 +12,8 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
 # Install Git
 RUN choco install -y git
 
-# Install Visual Studio Build Tools
-RUN choco install -y visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Component.Windows10SDK.19041 --add Microsoft.VisualStudio.Component.VC.Tools.ARM64"
+# Install Visual Studio Build Tools with ARM64 support
+RUN choco install -y visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Component.Windows10SDK.19041 --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.VC.Redist.ARM64"
 
 # Install Flutter SDK
 ENV FLUTTER_VERSION=3.29.2
@@ -28,7 +28,8 @@ RUN $env:PATH = "C:\flutter\bin;$env:PATH"; \
 # Enable Windows Desktop support and precache
 RUN $env:PATH = "C:\flutter\bin;$env:PATH"; \
     flutter config --enable-windows-desktop; \
-    flutter precache
+    flutter doctor --verbose; \
+    flutter precache --windows
 
 # Set working directory
 WORKDIR C:\app 
