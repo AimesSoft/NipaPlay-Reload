@@ -32,11 +32,6 @@ jobs:
             arch: amd64
             artifact_name: release-Linux-amd64
             artifact_path: build/linux/*amd64.deb
-          - target: Linux
-            os: ubuntu-latest
-            arch: arm64
-            artifact_name: release-Linux-arm64
-            artifact_path: build/linux/*arm64.deb
           - target: iOS
             os: macos-latest
             cache_pod_key: ios-pods
@@ -50,7 +45,7 @@ jobs:
             cache_pod_path: macos/Pods
             cache_pod_restore_keys_hash_file: macos/Podfile.lock
             artifact_name: release-macOS
-            artifact_path: ./*.dmg
+            artifact_path: NipaPlay_*.dmg
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
@@ -149,8 +144,6 @@ jobs:
           brew install create-dmg imagemagick
           chmod +x dmg.sh
           ./dmg.sh
-          mkdir -p /tmp/artifacts/release-macOS
-          mv NipaPlay_*.dmg /tmp/artifacts/release-macOS/
       
       # Build Windows .zip
       - name: Build Windows
@@ -174,95 +167,42 @@ jobs:
           Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
           Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_$($arch).zip" -Force
       
-      # Set up Docker Buildx
-      - name: Set up Docker Buildx
-        if: matrix.target == 'Linux' && matrix.arch == 'arm64'
-        uses: docker/setup-buildx-action@v3
-
-      # Set up QEMU
-      - name: Set up QEMU
-        if: matrix.target == 'Linux' && matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       # Build Linux .deb
       - name: Build Linux .deb
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
         run: |
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            chmod +x build-arm64.sh
-            
-            # Enable Docker experimental features for buildx
-            echo '{"experimental": true}' | sudo tee /etc/docker/daemon.json
-            sudo service docker restart
-            
-            # Set up QEMU and buildx for ARM64
-            docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-            docker buildx create --use
-            
-            # Build and load Docker image with retry mechanism
-            for i in {1..3}; do
-              if docker buildx build --platform linux/arm64 --load -t flutter-linux-arm64-builder -f Dockerfile.arm64 .; then
-                break
-              fi
-              if [ $i -eq 3 ]; then
-                echo "Failed to build Docker image after 3 attempts"
-                exit 1
-              fi
-              echo "Retrying Docker build in 5 seconds..."
-              sleep 5
-            done
-            
-            # Run the build with retry mechanism
-            for i in {1..3}; do
-              if docker run --rm -v $(pwd):/app \
-                --platform linux/arm64 \
-                flutter-linux-arm64-builder \
-                /app/build-arm64.sh; then
-                break
-              fi
-              if [ $i -eq 3 ]; then
-                echo "Failed to build application after 3 attempts"
-                exit 1
-              fi
-              echo "Retrying build in 5 seconds..."
-              sleep 5
-            done
-          else
-            # AMD64 build remains unchanged
-            sudo apt-get update -y
-            sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev
-            
-            flutter config --enable-linux-desktop
-            flutter build linux --release
-            
-            mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
-            cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
-            mkdir -p opt/nipaplay usr/share/applications usr/share/icons/hicolor/512x512/apps
-            cp -r ../x64/release/bundle/* opt/nipaplay
-            mkdir -p DEBIAN
-            chmod 0755 DEBIAN
-            
-            sed -e "s/VERSION_PLACEHOLDER/${{ steps.get_version.outputs.version }}/g" \
-                -e "s/ARCH_PLACEHOLDER/amd64/g" \
-                ../../../assets/linux/DEBIAN/control.template > DEBIAN/control
-            
-            if [ -f ../../../assets/linux/DEBIAN/postinst ]; then
-              cp ../../../assets/linux/DEBIAN/postinst DEBIAN/
-              chmod 0755 DEBIAN/postinst
-            fi
-            if [ -f ../../../assets/linux/DEBIAN/postrm ]; then
-              cp ../../../assets/linux/DEBIAN/postrm DEBIAN/
-              chmod 0755 DEBIAN/postrm
-            fi
-            
-            cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay-Reload.desktop usr/share/applications
-            cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
-            cd ..
-            dpkg-deb --build --root-owner-group NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
+          # AMD64 build
+          sudo apt-get update -y
+          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev
+          
+          flutter config --enable-linux-desktop
+          flutter build linux --release
+          
+          mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
+          cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
+          mkdir -p opt/nipaplay usr/share/applications usr/share/icons/hicolor/512x512/apps
+          cp -r ../x64/release/bundle/* opt/nipaplay
+          mkdir -p DEBIAN
+          chmod 0755 DEBIAN
+          
+          sed -e "s/VERSION_PLACEHOLDER/${{ steps.get_version.outputs.version }}/g" \
+              -e "s/ARCH_PLACEHOLDER/amd64/g" \
+              ../../../assets/linux/DEBIAN/control.template > DEBIAN/control
+          
+          if [ -f ../../../assets/linux/DEBIAN/postinst ]; then
+            cp ../../../assets/linux/DEBIAN/postinst DEBIAN/
+            chmod 0755 DEBIAN/postinst
           fi
+          if [ -f ../../../assets/linux/DEBIAN/postrm ]; then
+            cp ../../../assets/linux/DEBIAN/postrm DEBIAN/
+            chmod 0755 DEBIAN/postrm
+          fi
+          
+          cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay-Reload.desktop usr/share/applications
+          cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
+          cd ..
+          dpkg-deb --build --root-owner-group NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
       
       # Upload Artifacts
       - name: Upload Artifacts
@@ -319,7 +259,7 @@ jobs:
             - 提交: ${{ github.sha }}
             - 分支: ${{ github.ref_name }}
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-arm64/*.deb
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb
           artifactErrorsFailBuild: true
           replacesArtifacts: true
 
