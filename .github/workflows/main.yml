@@ -29,7 +29,7 @@ jobs:
             artifact_name: release-Windows-x64
             artifact_path: build/windows/*x64.zip
           - target: Windows
-            os: windows-latest
+            os: windows-arm64
             arch: arm64
             artifact_name: release-Windows-arm64
             artifact_path: build/windows/*arm64.zip
@@ -176,47 +176,18 @@ jobs:
         if: matrix.target == 'Windows'
         shell: pwsh
         run: |
-          if ("${{ matrix.arch }}" -eq "arm64") {
-            # Enable Windows containers
-            $ErrorActionPreference = 'Stop'
-            
-            # Switch to Windows containers
-            & 'C:\Program Files\Docker\Docker\DockerCli.exe' -SwitchDaemon
-            
-            # Build Docker image with platform specification
-            docker buildx build --platform windows/arm64 --isolation=hyperv --load -t flutter-windows-arm64-builder -f Dockerfile.windows.arm64 .
-            
-            # Run the build in Docker with platform specification
-            docker run --platform windows/arm64 --isolation=hyperv --rm `
-              -v ${PWD}:C:\app `
-              flutter-windows-arm64-builder `
-              powershell -Command {
-                cd C:\app
-                flutter config --enable-windows-desktop
-                flutter build windows --release
-                
-                $version = "${{ steps.get_version.outputs.version }}"
-                $DestDir = "build\windows\NipaPlay_${version}_Windows_arm64"
-                $SrcDir = "build\windows\x64\runner\Release"
-                
-                New-Item -Path $DestDir -ItemType Directory -Force
-                Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
-                Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
-                Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_arm64.zip" -Force
-              }
-          } else {
-            flutter config --enable-windows-desktop
-            flutter build windows --release
-            
-            $version = "${{ steps.get_version.outputs.version }}"
-            $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
-            $SrcDir = "build\windows\x64\runner\Release"
-            
-            New-Item -Path $DestDir -ItemType Directory -Force
-            Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
-            Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
-            Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_x64.zip" -Force
-          }
+          flutter config --enable-windows-desktop
+          flutter build windows --release
+          
+          $version = "${{ steps.get_version.outputs.version }}"
+          $arch = "${{ matrix.arch }}"
+          $DestDir = "build\windows\NipaPlay_${version}_Windows_${arch}"
+          $SrcDir = "build\windows\x64\runner\Release"
+          
+          New-Item -Path $DestDir -ItemType Directory -Force
+          Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
+          Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
+          Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_${arch}.zip" -Force
       
       # Build Linux .deb
       - name: Build Linux .deb
