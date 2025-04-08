@@ -185,51 +185,26 @@ jobs:
       # Build Linux .deb
       - name: Build Linux .deb
         if: matrix.target == 'Linux'
+        shell: /usr/bin/bash -e {0}
         run: |
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             chmod +x build-arm64.sh
-            
-            # Build Docker image
             docker buildx build --platform linux/arm64 -t flutter-linux-arm64-builder -f Dockerfile.arm64 .
-            
-            # Run the build
-            docker run --rm -v $(pwd):/app \
-              --platform linux/arm64 \
-              flutter-linux-arm64-builder \
-              /app/build-arm64.sh
+            docker run --rm -v $(pwd):/app --platform linux/arm64 flutter-linux-arm64-builder /app/build-arm64.sh
           else
-            # AMD64 build remains unchanged
             sudo apt-get update -y
             sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev
-            
             flutter config --enable-linux-desktop
             flutter build linux --release
-            
             mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
             cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
-            mkdir -p opt/nipaplay
-            mkdir -p usr/share/applications
-            mkdir -p usr/share/icons/hicolor/512x512/apps
-            
+            mkdir -p opt/nipaplay usr/share/applications usr/share/icons/hicolor/512x512/apps
             cp -r ../x64/release/bundle/* opt/nipaplay
             cp -r ../../../assets/linux/DEBIAN .
-            chmod 0755 DEBIAN/postinst
-            chmod 0755 DEBIAN/postrm
-            
-            cat > DEBIAN/control << EOF
-            Package: NipaPlay
-            Version: ${{ steps.get_version.outputs.version }}
-            Section: x11
-            Priority: optional
-            Architecture: amd64
-            Essential: no
-            Installed-Size: 34648
-            Maintainer: madoka773 <valigarmanda55@gmail.com>
-            Description: A cross platform danmaku video player.
-            Homepage: https://github.com/MCDFsteve/NipaPlay-Reload
-            Depends: ffmpeg, libass9
-            EOF
-            
+            chmod 0755 DEBIAN/postinst DEBIAN/postrm
+            sed -e "s/VERSION_PLACEHOLDER/${{ steps.get_version.outputs.version }}/g" \
+                -e "s/ARCH_PLACEHOLDER/amd64/g" \
+                ../../../assets/linux/DEBIAN/control.template > DEBIAN/control
             cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay-Reload.desktop usr/share/applications
             cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
             cd ..
