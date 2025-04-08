@@ -213,7 +213,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       player.state = PlaybackState.playing;
       _setStatus(PlayerStatus.playing);
       
-    } catch (e, stackTrace) {
+    } catch (e) {
       _error = '初始化视频播放器时出错: $e';
       _setStatus(PlayerStatus.error);
     }

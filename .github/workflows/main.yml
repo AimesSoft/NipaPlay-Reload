@@ -145,8 +145,8 @@ jobs:
           cd macos
           pod update
           cd ..
-          sh dmg.sh
-          mv NipaPlay_${{ steps.get_version.outputs.version }}.dmg NipaPlay_${{ steps.get_version.outputs.version }}_macOS_arm64.dmg
+          chmod +x dmg.sh
+          ./dmg.sh
       
       # Build Windows .zip
       - name: Build Windows

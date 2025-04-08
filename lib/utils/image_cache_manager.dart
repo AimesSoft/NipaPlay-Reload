@@ -57,7 +57,7 @@ class ImageCacheManager {
       try {
         await loadImage(url);
       } catch (e) {
-        print('预加载图片失败: $e');
+        //print('预加载图片失败: $e');
         // 继续处理下一个图片
         continue;
       }
