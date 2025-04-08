@@ -25,8 +25,14 @@ jobs:
             artifact_path: build/app/outputs/apk/release/*.apk
           - target: Windows
             os: windows-latest
-            artifact_name: release-Windows
-            artifact_path: build/windows/*.zip
+            arch: x64
+            artifact_name: release-Windows-x64
+            artifact_path: build/windows/*x64.zip
+          - target: Windows
+            os: windows-latest
+            arch: arm64
+            artifact_name: release-Windows-arm64
+            artifact_path: build/windows/*arm64.zip
           - target: Linux
             os: ubuntu-latest
             arch: amd64
@@ -153,7 +159,14 @@ jobs:
         if: matrix.target == 'Windows'
         shell: pwsh
         run: |
-          flutter build windows --release
+          if ("${{ matrix.arch }}" -eq "arm64") {
+            flutter config --enable-windows-desktop --enable-windows-uwp
+            flutter build windows --release --target-platform=windows-arm64
+          } else {
+            flutter config --enable-windows-desktop
+            flutter build windows --release
+          }
+          
           $arch = "${{ matrix.arch }}"
           $version = "${{ steps.get_version.outputs.version }}"
           
