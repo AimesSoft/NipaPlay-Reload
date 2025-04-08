@@ -159,29 +159,28 @@ jobs:
         if: matrix.target == 'Windows'
         shell: pwsh
         run: |
+          flutter config --enable-windows-desktop
+          
           if ("${{ matrix.arch }}" -eq "arm64") {
-            flutter config --enable-windows-desktop --enable-windows-uwp
-            flutter build windows --release --target-platform=windows-arm64
+            flutter build windows --release --no-sound-null-safety --target-platform=windows-arm64
           } else {
-            flutter config --enable-windows-desktop
             flutter build windows --release
           }
           
-          $arch = "${{ matrix.arch }}"
           $version = "${{ steps.get_version.outputs.version }}"
+          $arch = "${{ matrix.arch }}"
+          $DestDir = "build\windows\NipaPlay_${version}_Windows_$arch"
           
           if ($arch -eq "arm64") {
-            $DestDir = "build\windows\NipaPlay_${version}_Windows_arm64"
-            $SrcDir = "build\windows\arm64\runner\Release"
+            $SrcDir = "build\windows\runner\Release"
           } else {
-            $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
             $SrcDir = "build\windows\x64\runner\Release"
           }
           
           New-Item -Path $DestDir -ItemType Directory -Force
           Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
           Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
-          Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_$($arch).zip" -Force
+          Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_$arch.zip" -Force
       
       # Set up Docker Buildx
       - name: Set up Docker Buildx
