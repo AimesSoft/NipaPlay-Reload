@@ -1,12 +1,12 @@
-name: Build and Release
+name: Build & Release
 
 # Trigger on push to master branch or with a tag
 on:
   push:
-    branches: [ main ]
-    tags: [ '0.*' ]
-  pull_request:
-    branches: [ main ]
+    branches:
+      - '**'
+    tags:
+      - '0.*'
 
 # If previous workflow is still running, we push again, we will cancel the previous workflow
 concurrency:
@@ -14,35 +14,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  get-version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get version
-        id: get_version
-        run: echo "version=$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
-
-  build:
-    needs: get-version
+  Build:
     strategy:
       fail-fast: false
       matrix:
-        target: [Windows, Linux, macOS]
         include:
+          - target: Android
+            os: ubuntu-latest
+            artifact_name: release-Android
+            artifact_path: build/app/outputs/apk/release/*.apk
           - target: Windows
             os: windows-latest
-            arch: x64
+            artifact_name: release-Windows
+            artifact_path: build/windows/*.zip
           - target: Linux
             os: ubuntu-latest
-            arch: x64
-          - target: macOS
+            arch: amd64
+            artifact_name: release-Linux-amd64
+            artifact_path: build/linux/*amd64.deb
+          - target: Linux
+            os: ubuntu-latest
+            arch: arm64
+            artifact_name: release-Linux-arm64
+            artifact_path: build/linux/*arm64.deb
+          - target: iOS
             os: macos-latest
-            arch: x64
+            cache_pod_key: ios-pods
+            cache_pod_path: ios/Pods
+            cache_pod_restore_keys_hash_file: ios/Podfile.lock
+            artifact_name: release-iOS
+            artifact_path: build/**/*.ipa
           - target: macOS
             os: macos-latest
             arch: arm64
+            cache_pod_key: macos-pods
+            cache_pod_path: macos/Pods
+            cache_pod_restore_keys_hash_file: macos/Podfile.lock
+            artifact_name: release-macOS-arm64
+            artifact_path: build/macos/*arm64.dmg
+          - target: macOS
+            os: macos-latest
+            arch: x86_64
+            cache_pod_key: macos-pods
+            cache_pod_path: macos/Pods
+            cache_pod_restore_keys_hash_file: macos/Podfile.lock
+            artifact_name: release-macOS-x86_64
+            artifact_path: build/macos/*x86_64.dmg
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
     env:
       FLUTTER_VERSION: 3.29.2
@@ -69,10 +88,11 @@ jobs:
       
       # Setup Flutter
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@v2.12.0
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
-          architecture: ${{ matrix.arch }}
+          cache: true
       
       # Cache CocoaPods (for iOS/macOS)
       - name: Cache Pod
@@ -134,69 +154,63 @@ jobs:
           cd macos
           pod update
           cd ..
-          chmod +x dmg.sh
+          
+          # Set architecture-specific build flags
           if [ "${{ matrix.arch }}" = "arm64" ]; then
-            ./dmg.sh
+            export FLUTTER_MACOS_ARCH="arm64"
+            ARCH_SUFFIX="arm64"
           else
-            # Build for x86_64
-            flutter build macos --release --target-platform darwin-x64
-            ./dmg.sh
+            export FLUTTER_MACOS_ARCH="x86_64"
+            ARCH_SUFFIX="x86_64"
           fi
+          
+          # Build for specific architecture
+          flutter build macos --release --arch $FLUTTER_MACOS_ARCH
+          
+          # Create DMG with architecture-specific name
+          VERSION="${{ steps.get_version.outputs.version }}"
+          DMG_NAME="NipaPlay_${VERSION}_macOS_${ARCH_SUFFIX}.dmg"
+          
+          chmod +x dmg.sh
+          ./dmg.sh "$DMG_NAME"
+          
+          # Move the DMG to the correct location
+          mkdir -p build/macos
+          mv "$DMG_NAME" build/macos/
       
-      # Set up Docker Buildx
-      - name: Setup Docker for macOS
-        if: runner.os == 'macOS' && (matrix.target == 'Linux' && matrix.arch == 'arm64') || (matrix.target == 'Windows' && matrix.arch == 'arm64')
-        run: |
-          # Install Docker and Colima
-          brew install docker docker-compose colima
-          
-          # Configure Docker plugins
-          mkdir -p ~/.docker
-          echo '{"cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]}' > ~/.docker/config.json
-          
-          # Start Colima with ARM64 support
-          colima start --arch aarch64 --memory 8
-          
-          # Configure Docker socket
-          sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
-          
-          # Verify Docker is running
-          docker info
-
-      - name: Set up Docker Buildx
-        if: (matrix.target == 'Linux' && matrix.arch == 'arm64') || (matrix.target == 'Windows' && matrix.arch == 'arm64')
-        uses: docker/setup-buildx-action@v3
-        with:
-          platforms: windows/arm64
-          driver-opts: |
-            image=moby/buildkit:master
-            network=host
-          driver: docker-container
-
-      # Set up QEMU
-      - name: Set up QEMU
-        if: (matrix.target == 'Linux' && matrix.arch == 'arm64') || (matrix.target == 'Windows' && matrix.arch == 'arm64')
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       # Build Windows .zip
       - name: Build Windows
         if: matrix.target == 'Windows'
         shell: pwsh
         run: |
-          flutter config --enable-windows-desktop
           flutter build windows --release
-          
+          $arch = "${{ matrix.arch }}"
           $version = "${{ steps.get_version.outputs.version }}"
-          $buildDir = "build/windows/NipaPlay_${version}_Windows_x64"
-          New-Item -ItemType Directory -Force -Path $buildDir
           
-          Copy-Item -Path "build/windows/x64/runner/Release/*" -Destination $buildDir -Recurse
-          Copy-Item -Path "windows/*.dll" -Destination $buildDir -ErrorAction SilentlyContinue
+          if ($arch -eq "arm64") {
+            $DestDir = "build\windows\NipaPlay_${version}_Windows_arm64"
+            $SrcDir = "build\windows\arm64\runner\Release"
+          } else {
+            $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
+            $SrcDir = "build\windows\x64\runner\Release"
+          }
           
-          Set-Location build/windows
-          Compress-Archive -Path "NipaPlay_${version}_Windows_x64" -DestinationPath "NipaPlay_${version}_Windows_x64.zip" -Force
+          New-Item -Path $DestDir -ItemType Directory -Force
+          Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
+          Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
+          Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_$($arch).zip" -Force
+      
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        if: matrix.target == 'Linux' && matrix.arch == 'arm64'
+        uses: docker/setup-buildx-action@v3
+
+      # Set up QEMU
+      - name: Set up QEMU
+        if: matrix.target == 'Linux' && matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       # Build Linux .deb
       - name: Build Linux .deb
@@ -260,12 +274,12 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}-${{ matrix.arch }}
-          path: ${{ matrix.target }}-${{ matrix.arch }}
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
 
   Publish:
     name: Publish
-    needs: build
+    needs: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -295,10 +309,10 @@ jobs:
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
-          tag: v${{ needs.build.outputs.version }}
-          name: Release v${{ needs.build.outputs.version }}
+          tag: v${{ needs.Build.outputs.version }}
+          name: Release v${{ needs.Build.outputs.version }}
           body: |
-            ## 版本 v${{ needs.build.outputs.version }}
+            ## 版本 v${{ needs.Build.outputs.version }}
             
             ### 主要更新
             ${{ steps.commit_message.outputs.message }}
@@ -311,13 +325,13 @@ jobs:
             - 提交: ${{ github.sha }}
             - 分支: ${{ github.ref_name }}
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-arm64/*.deb
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS-arm64/*.dmg,/tmp/artifacts/release-macOS-x86_64/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-arm64/*.deb
           artifactErrorsFailBuild: true
           replacesArtifacts: true
 
   # Add new job for version update
   UpdateVersion:
-    needs: [build, Publish]
+    needs: [Build, Publish]
     if: github.ref == 'refs/heads/main' && success()
     runs-on: ubuntu-latest
     steps:
