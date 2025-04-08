@@ -155,6 +155,13 @@ jobs:
           ./dmg.sh
       
       # Set up Docker Buildx
+      - name: Setup Docker for macOS
+        if: runner.os == 'macOS' && (matrix.target == 'Linux' && matrix.arch == 'arm64') || (matrix.target == 'Windows' && matrix.arch == 'arm64')
+        run: |
+          brew install docker docker-compose
+          colima start --arch aarch64 --memory 8
+          sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
+
       - name: Set up Docker Buildx
         if: (matrix.target == 'Linux' && matrix.arch == 'arm64') || (matrix.target == 'Windows' && matrix.arch == 'arm64')
         uses: docker/setup-buildx-action@v3
@@ -163,6 +170,7 @@ jobs:
           driver-opts: |
             image=moby/buildkit:master
             network=host
+          driver: docker-container
 
       # Set up QEMU
       - name: Set up QEMU
