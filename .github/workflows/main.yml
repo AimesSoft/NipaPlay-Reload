@@ -189,22 +189,51 @@ jobs:
         run: |
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             chmod +x build-arm64.sh
-            docker buildx build --platform linux/arm64 -t flutter-linux-arm64-builder -f Dockerfile.arm64 .
-            docker run --rm -v $(pwd):/app --platform linux/arm64 flutter-linux-arm64-builder /app/build-arm64.sh
+            
+            # Enable Docker experimental features for buildx
+            echo '{"experimental": true}' | sudo tee /etc/docker/daemon.json
+            sudo service docker restart
+            
+            # Set up QEMU and buildx for ARM64
+            docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+            docker buildx create --use
+            
+            # Build and load Docker image
+            docker buildx build --platform linux/arm64 --load -t flutter-linux-arm64-builder -f Dockerfile.arm64 .
+            
+            # Run the build
+            docker run --rm -v $(pwd):/app \
+              --platform linux/arm64 \
+              flutter-linux-arm64-builder \
+              /app/build-arm64.sh
           else
+            # AMD64 build remains unchanged
             sudo apt-get update -y
             sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev
+            
             flutter config --enable-linux-desktop
             flutter build linux --release
+            
             mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
             cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
             mkdir -p opt/nipaplay usr/share/applications usr/share/icons/hicolor/512x512/apps
             cp -r ../x64/release/bundle/* opt/nipaplay
-            cp -r ../../../assets/linux/DEBIAN .
-            chmod 0755 DEBIAN/postinst DEBIAN/postrm
+            mkdir -p DEBIAN
+            chmod 0755 DEBIAN
+            
             sed -e "s/VERSION_PLACEHOLDER/${{ steps.get_version.outputs.version }}/g" \
                 -e "s/ARCH_PLACEHOLDER/amd64/g" \
                 ../../../assets/linux/DEBIAN/control.template > DEBIAN/control
+            
+            if [ -f ../../../assets/linux/DEBIAN/postinst ]; then
+              cp ../../../assets/linux/DEBIAN/postinst DEBIAN/
+              chmod 0755 DEBIAN/postinst
+            fi
+            if [ -f ../../../assets/linux/DEBIAN/postrm ]; then
+              cp ../../../assets/linux/DEBIAN/postrm DEBIAN/
+              chmod 0755 DEBIAN/postrm
+            fi
+            
             cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay-Reload.desktop usr/share/applications
             cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
             cd ..
