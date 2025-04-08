@@ -1,0 +1,35 @@
+# Use Windows Server Core as base image
+FROM --platform=windows/arm64 mcr.microsoft.com/windows/servercore:ltsc2022
+
+# Install Chocolatey
+RUN powershell -Command \
+    Set-ExecutionPolicy Bypass -Scope Process -Force; \
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; \
+    iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+
+# Install Git
+RUN choco install -y git
+
+# Install Visual Studio Build Tools
+RUN choco install -y visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Component.Windows10SDK.19041"
+
+# Install Flutter SDK
+ENV FLUTTER_VERSION=3.29.2
+RUN powershell -Command \
+    Invoke-WebRequest -Uri "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_${env:FLUTTER_VERSION}-stable.zip" -OutFile flutter.zip; \
+    Expand-Archive flutter.zip -DestinationPath C:\; \
+    Remove-Item flutter.zip
+
+# Add Flutter to PATH
+ENV PATH="C:\flutter\bin;${PATH}"
+
+# Enable Windows Desktop support
+RUN flutter config --enable-windows-desktop
+
+# Pre-download Flutter artifacts
+RUN flutter precache
+
+# Set working directory
+WORKDIR /app
+
+# The actual build command will be provided when running the container 
