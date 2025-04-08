@@ -29,7 +29,7 @@ jobs:
             artifact_name: release-Windows-x64
             artifact_path: build/windows/*x64.zip
           - target: Windows
-            os: macos-latest
+            os: windows-arm64
             arch: arm64
             artifact_name: release-Windows-arm64
             artifact_path: build/windows/*arm64.zip
@@ -194,90 +194,131 @@ jobs:
       # Build Windows .zip
       - name: Build Windows
         if: matrix.target == 'Windows'
-        shell: bash
+        shell: ${{ matrix.arch == 'arm64' && 'bash' || 'pwsh' }}
         run: |
           if [ "${{ matrix.arch }}" = "arm64" ]; then
-            # Install QEMU and dependencies
-            brew install qemu uutils-coreutils wget
+            echo "Setting up Windows ARM64 build environment..."
             
-            # Download Windows ARM64 VHDX
+            # Install QEMU and dependencies
+            brew install qemu aria2 unzip
+            
+            # Create working directory
             mkdir -p win-arm64
             cd win-arm64
-            wget https://www.microsoft.com/en-us/software-download/windowsinsiderpreviewARM64 -O win-arm64.vhdx
+            
+            # Create a base Windows ARM64 image
+            qemu-img create -f vhdx windows11-arm64.vhdx 64G
             
             # Create UEFI vars file
-            dd if=/dev/zero of=flash0.img bs=1M count=64
-            dd if=/dev/zero of=flash1.img bs=1M count=64
+            dd if=/dev/zero of=QEMU_VARS.fd bs=1M count=64
             
-            # Start Windows ARM64 VM with HVF acceleration
+            # Download UEFI firmware
+            wget https://github.com/tianocore/edk2/releases/download/edk2-stable202402/QEMU_EFI.fd -O QEMU_EFI.fd
+            
+            # Create an answer file for Windows setup
+            cat > autounattend.xml << 'EOF'
+            <?xml version="1.0" encoding="utf-8"?>
+            <unattend xmlns="urn:schemas-microsoft-com:unattend">
+              <settings pass="windowsPE">
+                <component name="Microsoft-Windows-Setup">
+                  <WindowsDeploymentServices>
+                    <Login>
+                      <Credentials>
+                        <Username>builder</Username>
+                        <Password>BuildPassword123!</Password>
+                      </Credentials>
+                    </Login>
+                  </WindowsDeploymentServices>
+                </component>
+              </settings>
+            </unattend>
+            EOF
+            
+            # Start QEMU with Windows ARM64
             qemu-system-aarch64 \
               -name "windows-arm64-build" \
-              -machine virt,highmem=off \
+              -machine virt \
               -accel hvf \
-              -cpu host \
+              -cpu cortex-a72 \
               -smp 4 \
               -m 8G \
-              -device ramfb \
+              -bios QEMU_EFI.fd \
+              -drive if=pflash,format=raw,file=QEMU_VARS.fd \
+              -device virtio-gpu-pci \
               -device qemu-xhci \
               -device usb-kbd \
               -device usb-tablet \
-              -drive if=pflash,format=raw,file=flash0.img \
-              -drive if=pflash,format=raw,file=flash1.img \
-              -drive if=virtio,file=win-arm64.vhdx,format=vhdx \
+              -drive if=virtio,file=windows11-arm64.vhdx,format=vhdx \
               -device virtio-net-pci,netdev=net0 \
-              -netdev user,id=net0 \
-              -device virtio-gpu-pci \
-              -device usb-storage,drive=install \
-              -drive if=none,id=install,format=raw,file=win-arm64.vhdx \
-              -device virtio-rng-pci \
+              -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::3389-:3389,smb=/tmp/qemu-share \
               -monitor telnet:127.0.0.1:55555,server,nowait \
               -display none \
               -daemonize
             
-            # Wait for VM to boot
             echo "Waiting for VM to boot..."
-            sleep 180
+            sleep 60
             
-            # Setup build environment in VM via PowerShell remoting
-            echo "Setting up build environment..."
-            pwsh -Command {
-              $securePassword = ConvertTo-SecureString "BuildPassword123!" -AsPlainText -Force
-              $cred = New-Object System.Management.Automation.PSCredential ("BuildUser", $securePassword)
-              
-              # Copy project files
-              $session = New-PSSession -ComputerName localhost -Credential $cred
-              Copy-Item -Path ./* -Destination C:\build -ToSession $session -Recurse
-              
-              # Install Flutter and build
-              Invoke-Command -Session $session -ScriptBlock {
-                Set-Location C:\build
-                # Install Flutter
-                git clone https://github.com/flutter/flutter.git
-                $env:Path += ";C:\build\flutter\bin"
-                flutter config --enable-windows-desktop
-                flutter doctor
-                flutter build windows --release
-              }
-              
-              # Copy build artifacts back
-              Copy-Item -Path "C:\build\build\windows\*arm64.zip" -Destination "build\windows\" -FromSession $session
-            }
+            # Create shared directory
+            mkdir -p /tmp/qemu-share
+            cp -r ../* /tmp/qemu-share/
             
-            # Shutdown VM
-            echo "Shutting down VM..."
+            # Wait for VM to be ready
+            echo "Waiting for VM to be ready..."
+            until nc -z localhost 2222; do
+              echo "Waiting for SSH port..."
+              sleep 10
+            done
+            
+            # Setup Windows environment via SSH
+            sshpass -p "BuildPassword123!" ssh -o StrictHostKeyChecking=no -p 2222 builder@localhost "
+              echo 'Setting up build environment...' &&
+              
+              # Map network drive
+              net use Z: \\10.0.2.4\qemu &&
+              
+              # Install Flutter
+              cd /d Z:\ &&
+              git clone https://github.com/flutter/flutter.git &&
+              setx PATH '%PATH%;Z:\flutter\bin' &&
+              
+              # Configure Flutter
+              flutter config --enable-windows-desktop &&
+              flutter doctor &&
+              
+              # Build project
+              flutter build windows --release
+            "
+            
+            # Copy build artifacts back
+            mkdir -p ../build/windows
+            cp -r /tmp/qemu-share/build/windows/* ../build/windows/
+            
+            # Package artifacts
+            cd ../build/windows
+            version="${{ steps.get_version.outputs.version }}"
+            mkdir -p "NipaPlay_${version}_Windows_arm64"
+            cp -r runner/Release/* "NipaPlay_${version}_Windows_arm64/"
+            zip -r "NipaPlay_${version}_Windows_arm64.zip" "NipaPlay_${version}_Windows_arm64"
+            
+            # Cleanup
+            rm -rf /tmp/qemu-share
+            cd ../../win-arm64
             echo "system_powerdown" | nc localhost 55555
             
-            cd ..
           else
+            # Windows x64 build using PowerShell
             flutter config --enable-windows-desktop
             flutter build windows --release
             
-            version="${{ steps.get_version.outputs.version }}"
-            mkdir -p "build/windows/NipaPlay_${version}_Windows_x64"
-            cp -r build/windows/x64/runner/Release/* "build/windows/NipaPlay_${version}_Windows_x64/"
-            cp windows/*.dll "build/windows/NipaPlay_${version}_Windows_x64/" || true
-            cd build/windows
-            zip -r "NipaPlay_${version}_Windows_x64.zip" "NipaPlay_${version}_Windows_x64"
+            $version = "${{ steps.get_version.outputs.version }}"
+            $buildDir = "build/windows/NipaPlay_${version}_Windows_x64"
+            New-Item -ItemType Directory -Force -Path $buildDir
+            
+            Copy-Item -Path "build/windows/x64/runner/Release/*" -Destination $buildDir -Recurse
+            Copy-Item -Path "windows/*.dll" -Destination $buildDir -ErrorAction SilentlyContinue
+            
+            Set-Location build/windows
+            Compress-Archive -Path "NipaPlay_${version}_Windows_x64" -DestinationPath "NipaPlay_${version}_Windows_x64.zip" -Force
           fi
       
       # Build Linux .deb
