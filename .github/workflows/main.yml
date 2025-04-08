@@ -157,15 +157,14 @@ jobs:
           
           # Set architecture-specific build flags
           if [ "${{ matrix.arch }}" = "arm64" ]; then
-            export FLUTTER_MACOS_ARCH="arm64"
             ARCH_SUFFIX="arm64"
+            flutter config --enable-macos-desktop
+            flutter build macos --release --no-universal
           else
-            export FLUTTER_MACOS_ARCH="x86_64"
             ARCH_SUFFIX="x86_64"
+            flutter config --enable-macos-desktop
+            flutter build macos --release --no-universal --target-platform=darwin-x64
           fi
-          
-          # Build for specific architecture
-          flutter build macos --release --arch $FLUTTER_MACOS_ARCH
           
           # Create DMG with architecture-specific name
           VERSION="${{ steps.get_version.outputs.version }}"
