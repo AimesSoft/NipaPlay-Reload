@@ -1,0 +1,26 @@
+FROM arm64v8/ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    git curl unzip xz-utils zip \
+    clang cmake ninja-build pkg-config \
+    libgtk-3-dev liblzma-dev libstdc++-12-dev \
+    libmpv-dev mpv \
+    libglu1-mesa libegl1-mesa \
+    libgl1-mesa-dev xorg-dev \
+    libass-dev libasound2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Flutter
+RUN git clone https://github.com/flutter/flutter.git -b stable /flutter
+ENV PATH="/flutter/bin:$PATH"
+
+# Configure Flutter
+RUN flutter config --no-analytics && \
+    flutter config --enable-linux-desktop && \
+    flutter doctor
+
+WORKDIR /app 
