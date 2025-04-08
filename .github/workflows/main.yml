@@ -46,20 +46,11 @@ jobs:
             artifact_path: build/**/*.ipa
           - target: macOS
             os: macos-latest
-            arch: arm64
             cache_pod_key: macos-pods
             cache_pod_path: macos/Pods
             cache_pod_restore_keys_hash_file: macos/Podfile.lock
-            artifact_name: release-macOS-arm64
-            artifact_path: build/macos/*arm64.dmg
-          - target: macOS
-            os: macos-latest
-            arch: x86_64
-            cache_pod_key: macos-pods
-            cache_pod_path: macos/Pods
-            cache_pod_restore_keys_hash_file: macos/Podfile.lock
-            artifact_name: release-macOS-x86_64
-            artifact_path: build/macos/*x86_64.dmg
+            artifact_name: release-macOS
+            artifact_path: ./*.dmg
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
@@ -151,31 +142,12 @@ jobs:
       - name: Build macOS
         if: matrix.target == 'macOS'
         run: |
-          cd macos
-          pod update
-          cd ..
-          
-          # Set architecture-specific build flags
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            ARCH_SUFFIX="arm64"
-            flutter config --enable-macos-desktop
-            flutter build macos --release --no-universal
-          else
-            ARCH_SUFFIX="x86_64"
-            flutter config --enable-macos-desktop
-            flutter build macos --release --no-universal --target-platform=darwin-x64
-          fi
-          
-          # Create DMG with architecture-specific name
-          VERSION="${{ steps.get_version.outputs.version }}"
-          DMG_NAME="NipaPlay_${VERSION}_macOS_${ARCH_SUFFIX}.dmg"
-          
-          chmod +x dmg.sh
-          ./dmg.sh "$DMG_NAME"
-          
-          # Move the DMG to the correct location
-          mkdir -p build/macos
-          mv "$DMG_NAME" build/macos/
+          flutter build macos --release
+          cd build/macos/Build/Products/Release
+          mv nipaplay.app NipaPlay.app
+          zip -r NipaPlay-macOS-Universal.zip NipaPlay.app
+          mv NipaPlay-macOS-Universal.zip ../../../../../
+          cd ../../../../../
       
       # Build Windows .zip
       - name: Build Windows
@@ -324,7 +296,7 @@ jobs:
             - 提交: ${{ github.sha }}
             - 分支: ${{ github.ref_name }}
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS-arm64/*.dmg,/tmp/artifacts/release-macOS-x86_64/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-arm64/*.deb
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-arm64/*.deb
           artifactErrorsFailBuild: true
           replacesArtifacts: true
 
