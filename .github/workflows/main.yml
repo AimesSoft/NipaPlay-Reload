@@ -172,34 +172,32 @@ jobs:
         shell: pwsh
         run: |
           if ("${{ matrix.arch }}" -eq "arm64") {
-            # Enable Docker experimental features for buildx
-            echo '{"experimental": true}' | sudo tee /etc/docker/daemon.json
-            sudo service docker restart
+            # Enable Windows containers
+            $ErrorActionPreference = 'Stop'
             
-            # Set up QEMU and buildx for ARM64
-            docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-            docker buildx create --use
+            # Switch to Windows containers
+            & 'C:\Program Files\Docker\Docker\DockerCli.exe' -SwitchDaemon
             
-            # Build and load Docker image for Windows ARM64
-            docker buildx build --platform windows/arm64 --load -t flutter-windows-arm64-builder -f Dockerfile.windows.arm64 .
+            # Build Docker image
+            docker build --isolation=hyperv -t flutter-windows-arm64-builder -f Dockerfile.windows.arm64 .
             
             # Run the build in Docker
-            docker run --rm -v ${PWD}:/app `
-              --platform windows/arm64 `
+            docker run --isolation=hyperv --rm `
+              -v ${PWD}:C:\app `
               flutter-windows-arm64-builder `
               powershell -Command {
-                cd /app
+                cd C:\app
                 flutter config --enable-windows-desktop
                 flutter build windows --release
                 
                 $version = "${{ steps.get_version.outputs.version }}"
-                $DestDir = "build/windows/NipaPlay_${version}_Windows_arm64"
-                $SrcDir = "build/windows/arm64/runner/Release"
+                $DestDir = "build\windows\NipaPlay_${version}_Windows_arm64"
+                $SrcDir = "build\windows\x64\runner\Release"
                 
                 New-Item -Path $DestDir -ItemType Directory -Force
-                Copy-Item -Path "$SrcDir/*" -Destination $DestDir -Recurse -Force
-                Copy-Item -Path "windows/*.dll" -Destination $DestDir -Force
-                Compress-Archive -Path $DestDir -DestinationPath "build/windows/NipaPlay_${version}_Windows_arm64.zip" -Force
+                Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
+                Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
+                Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_arm64.zip" -Force
               }
           } else {
             flutter config --enable-windows-desktop
