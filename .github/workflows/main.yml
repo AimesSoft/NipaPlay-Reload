@@ -199,14 +199,34 @@ jobs:
             docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
             docker buildx create --use
             
-            # Build and load Docker image
-            docker buildx build --platform linux/arm64 --load -t flutter-linux-arm64-builder -f Dockerfile.arm64 .
+            # Build and load Docker image with retry mechanism
+            for i in {1..3}; do
+              if docker buildx build --platform linux/arm64 --load -t flutter-linux-arm64-builder -f Dockerfile.arm64 .; then
+                break
+              fi
+              if [ $i -eq 3 ]; then
+                echo "Failed to build Docker image after 3 attempts"
+                exit 1
+              fi
+              echo "Retrying Docker build in 5 seconds..."
+              sleep 5
+            done
             
-            # Run the build
-            docker run --rm -v $(pwd):/app \
-              --platform linux/arm64 \
-              flutter-linux-arm64-builder \
-              /app/build-arm64.sh
+            # Run the build with retry mechanism
+            for i in {1..3}; do
+              if docker run --rm -v $(pwd):/app \
+                --platform linux/arm64 \
+                flutter-linux-arm64-builder \
+                /app/build-arm64.sh; then
+                break
+              fi
+              if [ $i -eq 3 ]; then
+                echo "Failed to build application after 3 attempts"
+                exit 1
+              fi
+              echo "Retrying build in 5 seconds..."
+              sleep 5
+            done
           else
             # AMD64 build remains unchanged
             sudo apt-get update -y

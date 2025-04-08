@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libglu1-mesa libegl1-mesa \
     libgl1-mesa-dev xorg-dev \
     libass-dev libasound2-dev \
+    wget build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Flutter
@@ -22,5 +23,15 @@ ENV PATH="/flutter/bin:$PATH"
 RUN flutter config --no-analytics && \
     flutter config --enable-linux-desktop && \
     flutter doctor
+
+# Set up mdk-sdk
+RUN mkdir -p /opt/mdk-sdk && \
+    cd /opt/mdk-sdk && \
+    wget https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-linux.tar.xz && \
+    tar xf mdk-sdk-linux.tar.xz && \
+    rm mdk-sdk-linux.tar.xz
+
+ENV MDK_SDK_PATH=/opt/mdk-sdk
+ENV PATH="/opt/mdk-sdk/bin:$PATH"
 
 WORKDIR /app
