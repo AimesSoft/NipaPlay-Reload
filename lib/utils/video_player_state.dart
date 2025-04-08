@@ -9,10 +9,12 @@ import 'dart:async';
 import 'keyboard_shortcuts.dart';
 import 'globals.dart' as globals;
 import 'dart:convert';
+import '../services/dandanplay_service.dart';
 
 enum PlayerStatus {
   idle,        // 空闲状态
   loading,     // 加载中
+  recognizing, // 识别中
   ready,       // 准备就绪
   playing,     // 播放中
   paused,      // 暂停
@@ -24,6 +26,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Player player = Player();
   BuildContext? _context;
   PlayerStatus _status = PlayerStatus.idle;
+  List<String> _statusMessages = [];  // 修改为列表存储多个状态消息
   bool _showControls = true;
   bool _isFullscreen = false;
   double _progress = 0.0;
@@ -43,6 +46,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const String _lastPositionKey = 'last_video_position';
   static const String _videoPositionsKey = 'video_positions';
   static int _textureIdCounter = 0;
+  Duration? _lastSeekPosition;  // 添加这个字段来记录最后一次seek的位置
+  List<Map<String, dynamic>> _danmakuList = [];
 
   VideoPlayerState() {
     _initialize();
@@ -50,6 +55,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // Getters
   PlayerStatus get status => _status;
+  List<String> get statusMessages => _statusMessages;
   bool get showControls => _showControls;
   bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
@@ -61,6 +67,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                       _status == PlayerStatus.playing || 
                       _status == PlayerStatus.paused;
   FocusNode get focusNode => _focusNode;
+  List<Map<String, dynamic>> get danmakuList => _danmakuList;
 
   Future<void> _initialize() async {
     if (globals.isPhone) {
@@ -144,7 +151,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Future<void> initializePlayer(String path) async {
     try {
-      _setStatus(PlayerStatus.loading);
+      // 加载保存的token
+      await DandanplayService.loadToken();
+      
+      _setStatus(PlayerStatus.loading, message: '正在初始化播放器...');
       _error = null;
       
       // 完全重置播放器
@@ -171,6 +181,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (globals.isPhone) {
         await _setLandscape();
       }
+
+      // 使用新的视频识别和弹幕加载逻辑
+      await _recognizeVideo(path);
+      
+      // 设置回加载状态
+      _setStatus(PlayerStatus.loading, message: '正在加载视频...');
       
       // 获取上次播放位置
       final lastPosition = await _getVideoPosition(path);
@@ -207,41 +223,57 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         player.seek(position: 0);
       }
       
-      _setStatus(PlayerStatus.ready);
+      _setStatus(PlayerStatus.ready, message: '准备就绪');
       
       // 开始播放
       player.state = PlaybackState.playing;
-      _setStatus(PlayerStatus.playing);
+      _setStatus(PlayerStatus.playing, message: '正在播放');
       
     } catch (e) {
       _error = '初始化视频播放器时出错: $e';
-      _setStatus(PlayerStatus.error);
+      _setStatus(PlayerStatus.error, message: '加载失败: $e');
     }
   }
 
   Future<void> resetPlayer() async {
-    if (player.state != PlaybackState.stopped) {
-      player.state = PlaybackState.stopped;
-    }
-    // 释放纹理
-    if (player.textureId.value != null) {
-      player.textureId.value = null;
-    }
-    _currentVideoPath = null;
-    _position = Duration.zero;
-    _duration = Duration.zero;
-    _progress = 0.0;
-    _error = null;
-    _setStatus(PlayerStatus.idle);
-    
-    // 在手机平台上恢复竖屏
-    if (globals.isPhone) {
-      await _setPortrait();
+    try {
+      // 先停止播放
+      if (player.state != PlaybackState.stopped) {
+        player.state = PlaybackState.stopped;
+      }
+      
+      // 等待一小段时间确保播放器完全停止
+      await Future.delayed(const Duration(milliseconds: 50));
+      
+      // 释放纹理
+      if (player.textureId.value != null) {
+        player.textureId.value = null;
+      }
+      
+      // 等待一小段时间确保纹理完全释放
+      await Future.delayed(const Duration(milliseconds: 50));
+      
+      // 重置状态
+      _currentVideoPath = null;
+      _position = Duration.zero;
+      _duration = Duration.zero;
+      _progress = 0.0;
+      _error = null;
+      _setStatus(PlayerStatus.idle);
+      
+      // 在手机平台上恢复竖屏
+      if (globals.isPhone) {
+        await _setPortrait();
+      }
+    } catch (e) {
+      print('重置播放器时出错: $e');
+      rethrow;
     }
   }
 
-  void _setStatus(PlayerStatus status) {
+  void _setStatus(PlayerStatus status, {String message = ''}) {
     _status = status;
+    _updateStatusMessages([message]);
     notifyListeners();
   }
 
@@ -267,18 +299,42 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     try {
       _isSeeking = true;
-      player.seek(position: position.inMilliseconds);
-      _position = position;
-      if (_duration.inMilliseconds > 0) {
-        _progress = position.inMilliseconds / _duration.inMilliseconds;
+      bool wasPlayingBeforeSeek = _status == PlayerStatus.playing;  // 记录当前播放状态
+      
+      // 确保位置在有效范围内（0 到视频总时长）
+      Duration clampedPosition = Duration(milliseconds: 
+        position.inMilliseconds.clamp(0, _duration.inMilliseconds)
+      );
+      
+      // 如果是暂停状态，先恢复播放
+      if (_status == PlayerStatus.paused) {
+        player.state = PlaybackState.playing;
+        _setStatus(PlayerStatus.playing);
       }
+
+      // 立即更新UI状态
+      _position = clampedPosition;
+      if (_duration.inMilliseconds > 0) {
+        _progress = clampedPosition.inMilliseconds / _duration.inMilliseconds;
+      }
+      notifyListeners();
+
+      // 更新播放器位置
+      player.seek(position: clampedPosition.inMilliseconds);
+
+      // 延迟结束seeking状态，并在需要时恢复暂停
       Future.delayed(const Duration(milliseconds: 100), () {
         _isSeeking = false;
+        // 如果之前是暂停状态，恢复暂停
+        if (!wasPlayingBeforeSeek && _status == PlayerStatus.playing) {
+          player.state = PlaybackState.paused;
+          _setStatus(PlayerStatus.paused);
+        }
       });
-      notifyListeners();
     } catch (e) {
       _error = '跳转时出错: $e';
       _setStatus(PlayerStatus.error);
+      _isSeeking = false;
     }
   }
 
@@ -353,14 +409,27 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void _startPositionUpdateTimer() {
     _positionUpdateTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
       if (!_isSeeking && hasVideo) {
-        _position = Duration(milliseconds: player.position);
-        _duration = Duration(milliseconds: player.mediaInfo.duration);
-        if (_duration.inMilliseconds > 0) {
-          _progress = _position.inMilliseconds / _duration.inMilliseconds;
-          // 保存当前播放位置
-          _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+        if (_status == PlayerStatus.playing) {
+          // 播放状态：从播放器获取位置
+          _position = Duration(milliseconds: player.position);
+          _duration = Duration(milliseconds: player.mediaInfo.duration);
+          if (_duration.inMilliseconds > 0) {
+            _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            // 保存当前播放位置
+            _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+          }
+          _lastSeekPosition = null;  // 清除最后seek位置
+          notifyListeners();
+        } else if (_status == PlayerStatus.paused && _lastSeekPosition != null) {
+          // 暂停状态：使用最后一次seek的位置
+          _position = _lastSeekPosition!;
+          if (_duration.inMilliseconds > 0) {
+            _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            // 保存当前播放位置
+            _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+          }
+          notifyListeners();
         }
-        notifyListeners();
       }
     });
   }
@@ -491,5 +560,67 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 设置上下文
   void setContext(BuildContext context) {
     _context = context;
+  }
+
+  // 更新状态消息的方法
+  void _updateStatusMessages(List<String> messages) {
+    _statusMessages = messages;
+    notifyListeners();
+  }
+
+  // 添加单个状态消息的方法
+  void _addStatusMessage(String message) {
+    _statusMessages.add(message);
+    notifyListeners();
+  }
+
+  // 清除所有状态消息的方法
+  void _clearStatusMessages() {
+    _statusMessages.clear();
+    notifyListeners();
+  }
+
+  Future<void> _recognizeVideo(String videoPath) async {
+    try {
+      _setStatus(PlayerStatus.recognizing, message: '正在识别视频...');
+      
+      final videoInfo = await DandanplayService.getVideoInfo(videoPath);
+      
+      if (videoInfo['isMatched'] == true) {
+        _setStatus(PlayerStatus.recognizing, message: '视频识别成功，正在加载弹幕...');
+        
+        if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
+          final match = videoInfo['matches'][0];
+          if (match['episodeId'] != null) {
+            try {
+              final danmakuData = await DandanplayService.getDanmaku(videoPath, match['episodeId'].toString());
+              if (danmakuData['comments'] != null) {
+                final comments = danmakuData['comments'] as List;
+                _danmakuList = List<Map<String, dynamic>>.from(comments);
+                notifyListeners();
+              }
+              _setStatus(PlayerStatus.ready, message: '弹幕加载完成');
+            } catch (e) {
+              print('弹幕加载错误: $e');
+              _setStatus(PlayerStatus.error, message: '弹幕加载失败: $e');
+            }
+          }
+        }
+      } else {
+        throw Exception('无法识别该视频');
+      }
+    } catch (e) {
+      print('视频识别错误: $e');
+      _setError('视频识别失败: $e');
+    }
+  }
+
+  // 设置错误状态
+  void _setError(String error) {
+    _error = error;
+    _status = PlayerStatus.error;
+    _clearStatusMessages();
+    _addStatusMessage(error);
+    notifyListeners();
   }
 } 

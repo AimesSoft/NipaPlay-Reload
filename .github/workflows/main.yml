@@ -27,6 +27,7 @@ jobs:
             os: windows-latest
             artifact_name: release-Windows
             artifact_path: build/windows/*.zip
+            arch: x64
           - target: Linux
             os: ubuntu-latest
             arch: amd64
@@ -45,7 +46,7 @@ jobs:
             cache_pod_path: macos/Pods
             cache_pod_restore_keys_hash_file: macos/Podfile.lock
             artifact_name: release-macOS
-            artifact_path: NipaPlay_*.dmg
+            artifact_path: NipaPlay_*_macOS_Universal.dmg
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
@@ -165,7 +166,7 @@ jobs:
           New-Item -Path $DestDir -ItemType Directory -Force
           Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
           Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
-          Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_$($arch).zip" -Force
+          Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_x64.zip" -Force
       
       # Build Linux .deb
       - name: Build Linux .deb

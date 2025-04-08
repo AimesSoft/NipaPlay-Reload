@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
 import 'video_progress_bar.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'bounce_hover_scale.dart';
 
 class ModernVideoControls extends StatefulWidget {
   const ModernVideoControls({super.key});
@@ -27,6 +28,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isSettingsHovered = false;
   bool _isFullscreenHovered = false;
   bool _isDragging = false;
+  bool? _wasPlayingBeforeDrag;
+  bool _playStateChangedByDrag = false;
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -93,9 +96,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
           onTapUp: (_) => onPressed(false),
           onTapCancel: () => onPressed(false),
           onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            transform: Matrix4.identity()..scale(isPressed ? 0.9 : 1.0),
+          child: BounceHoverScale(
+            isHovered: isHovered,
+            isPressed: isPressed,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 200),
               opacity: isHovered ? 1.0 : 0.6,
@@ -145,23 +148,22 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                       child: MouseRegion(
                         onEnter: (_) => videoState.setControlsHovered(true),
                         onExit: (_) => videoState.setControlsHovered(false),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(15),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                                spreadRadius: 0,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(15),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(15),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                    spreadRadius: 0,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(15),
-                            clipBehavior: Clip.hardEdge,
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
                               child: Container(
                                 height: 60,
                                 decoration: BoxDecoration(
@@ -265,6 +267,22 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           isDragging: _isDragging,
                                           onPositionUpdate: (position) {},
                                           onDraggingStateChange: (isDragging) {
+                                            if (isDragging) {
+                                              // 开始拖动时，保存当前的播放状态
+                                              _wasPlayingBeforeDrag = videoState.status == PlayerStatus.playing;
+                                              // 如果是暂停状态，开始拖动时恢复播放
+                                              if (videoState.status == PlayerStatus.paused) {
+                                                _playStateChangedByDrag = true;
+                                                videoState.togglePlayPause();
+                                              }
+                                            } else {
+                                              // 拖动结束时，只有当是因为拖动而改变的播放状态时才恢复
+                                              if (_playStateChangedByDrag) {
+                                                videoState.togglePlayPause();
+                                                _playStateChangedByDrag = false;
+                                              }
+                                              _wasPlayingBeforeDrag = null;
+                                            }
                                             setState(() {
                                               _isDragging = isDragging;
                                             });
@@ -273,18 +291,27 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         ),
                                       ),
                                       
-                                      const SizedBox(width: 20),
+                                      const SizedBox(width: 6),
                                       
                                       // 时间显示
-                                      Text(
-                                        '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
+                                      DefaultTextStyle(
                                         style: const TextStyle(
-                                          color: Colors.white,
+                                          color: Colors.white60,
                                           fontSize: 14,
+                                          fontWeight: FontWeight.normal,
+                                          height: 1.0,
+                                          textBaseline: TextBaseline.alphabetic,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        child: SizedBox(
+                                          width: 140,
+                                          child: Text(
+                                            '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
+                                          ),
                                         ),
                                       ),
                                       
-                                      const SizedBox(width: 20),
+                                      //const SizedBox(width: 0),
                                       
                                       // 设置按钮
                                       _buildControlButton(

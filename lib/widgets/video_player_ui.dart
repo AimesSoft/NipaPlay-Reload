@@ -10,6 +10,9 @@ import 'vertical_indicator.dart';
 import 'dart:ui';
 import 'dart:io' show Platform;
 import '../utils/globals.dart' as globals;
+import 'loading_overlay.dart';
+import 'danmaku_overlay.dart';
+import 'video_controls_overlay.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -74,24 +77,15 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
         final textureId = videoState.player.textureId.value;
 
         if (!videoState.hasVideo) {
-          return const VideoUploadUI();
-        }
-
-        if (videoState.status == PlayerStatus.loading) {
-          return const Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(
-                  color: Colors.white,
+          return Stack(
+            children: [
+              const VideoUploadUI(),
+              if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
+                LoadingOverlay(
+                  messages: videoState.statusMessages,
+                  backgroundOpacity: 0.5,
                 ),
-                SizedBox(height: 16),
-                Text(
-                  '加载中...',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
+            ],
           );
         }
 
@@ -105,65 +99,66 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
         }
 
         if (textureId != null) {
-          return FocusScope(
-            node: FocusScopeNode(),
-            child: Focus(
-              focusNode: _focusNode,
-              autofocus: true,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // 视频纹理
-                  GestureDetector(
-                    onTap: () {
-                      if (Platform.isAndroid || Platform.isIOS) {
-                        // 触摸屏设备：切换控制栏显示/隐藏
-                        videoState.toggleControls();
-                      } else {
-                        // 鼠标点击：切换播放/暂停
-                        if (videoState.hasVideo) {
-                          videoState.togglePlayPause();
-                        }
-                      }
-                    },
-                    onTapDown: (_) {
-                      // 触摸屏幕时重置自动隐藏定时器
-                      if (videoState.hasVideo && videoState.showControls) {
-                        videoState.resetAutoHideTimer();
-                      }
-                    },
-                    child: MouseRegion(
-                      onHover: (event) => videoState.handleMouseMove(event.position),
-                      cursor: videoState.showControls ? SystemMouseCursors.basic : SystemMouseCursors.none,
-                      child: Stack(
-                        children: [
-                          AspectRatio(
-                            aspectRatio: videoState.aspectRatio,
-                            child: Texture(textureId: textureId),
+          return Stack(
+            children: [
+              FocusScope(
+                node: FocusScopeNode(),
+                child: Focus(
+                  focusNode: _focusNode,
+                  autofocus: true,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // 视频纹理
+                      GestureDetector(
+                        onTap: () {
+                          if (Platform.isAndroid || Platform.isIOS) {
+                            // 触摸屏设备：切换控制栏显示/隐藏
+                            videoState.toggleControls();
+                          } else {
+                            // 鼠标点击：切换播放/暂停
+                            if (videoState.hasVideo) {
+                              videoState.togglePlayPause();
+                            }
+                          }
+                        },
+                        onTapDown: (_) {
+                          // 触摸屏幕时重置自动隐藏定时器
+                          if (videoState.hasVideo && videoState.showControls) {
+                            videoState.resetAutoHideTimer();
+                          }
+                        },
+                        child: MouseRegion(
+                          onHover: (event) => videoState.handleMouseMove(event.position),
+                          cursor: videoState.showControls ? SystemMouseCursors.basic : SystemMouseCursors.none,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: videoState.aspectRatio,
+                              child: Texture(textureId: textureId),
+                            ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+
+                      // 弹幕层
+                      if (videoState.hasVideo)
+                        DanmakuOverlay(
+                          isPlaying: videoState.status == PlayerStatus.playing,
+                          currentPosition: videoState.position.inMilliseconds,
+                          danmakuList: videoState.danmakuList,
+                        ),
+                      
+                      // 垂直指示器
+                      if (videoState.hasVideo)
+                        VerticalIndicator(videoState: videoState),
+                    ],
                   ),
-                  
-                  // 现代风格控制栏
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 150),
-                      opacity: videoState.showControls ? 1.0 : 0.0,
-                      child: AnimatedSlide(
-                        duration: const Duration(milliseconds: 150),
-                        offset: Offset(0, videoState.showControls ? 0 : 0.1),
-                        child: const ModernVideoControls(),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+
+              // 控制栏 Overlay
+              const VideoControlsOverlay(),
+            ],
           );
         }
 

@@ -9,6 +9,7 @@ import 'package:nipaplay/widgets/responsive_container.dart'; // 导入响应式�
 import 'package:nipaplay/pages/settings/about_page.dart'; // 导入 AboutPage
 import 'package:nipaplay/utils/globals.dart' as globals; // 导入包含 isDesktop 的全局变量文件
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
+import 'package:nipaplay/pages/settings/account_page.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -74,6 +75,19 @@ class _SettingsPageState extends State<SettingsPage> {
       // child 是 ListView，始终显示
       child: ListView(
         children: [
+          ListTile(
+            title: const Text("账号",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(
+                  const AccountPage(),
+                  "账号设置"
+                  );
+            },
+          ),
           ListTile(
             title: const Text("外观",
                 style: TextStyle(

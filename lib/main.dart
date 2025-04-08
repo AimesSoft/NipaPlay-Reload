@@ -16,6 +16,7 @@ import 'utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
 import 'package:nipaplay/utils/keyboard_shortcuts.dart';
+import 'services/dandanplay_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,9 @@ void main() async {
   // 注册 FVP
   fvp.registerWith(options: {
   });
+
+  // 初始化弹弹play服务
+  await DandanplayService.initialize();
 
   if (globals.isDesktop) {
     await windowManager.ensureInitialized();

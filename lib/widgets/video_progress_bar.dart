@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/video_player_state.dart';
-import '../utils/keyboard_shortcuts.dart';
 import 'tooltip_bubble.dart';
-import 'dart:async';
 import 'dart:ui';
 
 class VideoProgressBar extends StatefulWidget {
