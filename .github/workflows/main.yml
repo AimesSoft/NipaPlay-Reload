@@ -192,134 +192,134 @@ jobs:
           platforms: arm64
 
       # Build Windows .zip
-      - name: Build Windows
-        if: matrix.target == 'Windows'
-        shell: ${{ matrix.arch == 'arm64' && 'bash' || 'pwsh' }}
+      - name: Build Windows x64
+        if: matrix.target == 'Windows' && matrix.arch == 'x64'
+        shell: pwsh
         run: |
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            echo "Setting up Windows ARM64 build environment..."
+          flutter config --enable-windows-desktop
+          flutter build windows --release
+          
+          $version = "${{ steps.get_version.outputs.version }}"
+          $buildDir = "build/windows/NipaPlay_${version}_Windows_x64"
+          New-Item -ItemType Directory -Force -Path $buildDir
+          
+          Copy-Item -Path "build/windows/x64/runner/Release/*" -Destination $buildDir -Recurse
+          Copy-Item -Path "windows/*.dll" -Destination $buildDir -ErrorAction SilentlyContinue
+          
+          Set-Location build/windows
+          Compress-Archive -Path "NipaPlay_${version}_Windows_x64" -DestinationPath "NipaPlay_${version}_Windows_x64.zip" -Force
+
+      - name: Build Windows ARM64
+        if: matrix.target == 'Windows' && matrix.arch == 'arm64'
+        shell: bash
+        run: |
+          echo "Setting up Windows ARM64 build environment..."
+          
+          # Install QEMU and dependencies
+          brew install qemu aria2 unzip
+          
+          # Create working directory
+          mkdir -p win-arm64
+          cd win-arm64
+          
+          # Create a base Windows ARM64 image
+          qemu-img create -f vhdx windows11-arm64.vhdx 64G
+          
+          # Create UEFI vars file
+          dd if=/dev/zero of=QEMU_VARS.fd bs=1M count=64
+          
+          # Download UEFI firmware
+          wget https://github.com/tianocore/edk2/releases/download/edk2-stable202402/QEMU_EFI.fd -O QEMU_EFI.fd
+          
+          # Create an answer file for Windows setup
+          cat > autounattend.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <unattend xmlns="urn:schemas-microsoft-com:unattend">
+            <settings pass="windowsPE">
+              <component name="Microsoft-Windows-Setup">
+                <WindowsDeploymentServices>
+                  <Login>
+                    <Credentials>
+                      <Username>builder</Username>
+                      <Password>BuildPassword123!</Password>
+                    </Credentials>
+                  </Login>
+                </WindowsDeploymentServices>
+              </component>
+            </settings>
+          </unattend>
+          EOF
+          
+          # Start QEMU with Windows ARM64
+          qemu-system-aarch64 \
+            -name "windows-arm64-build" \
+            -machine virt \
+            -accel hvf \
+            -cpu cortex-a72 \
+            -smp 4 \
+            -m 8G \
+            -bios QEMU_EFI.fd \
+            -drive if=pflash,format=raw,file=QEMU_VARS.fd \
+            -device virtio-gpu-pci \
+            -device qemu-xhci \
+            -device usb-kbd \
+            -device usb-tablet \
+            -drive if=virtio,file=windows11-arm64.vhdx,format=vhdx \
+            -device virtio-net-pci,netdev=net0 \
+            -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::3389-:3389,smb=/tmp/qemu-share \
+            -monitor telnet:127.0.0.1:55555,server,nowait \
+            -display none \
+            -daemonize
+          
+          echo "Waiting for VM to boot..."
+          sleep 60
+          
+          # Create shared directory
+          mkdir -p /tmp/qemu-share
+          cp -r ../* /tmp/qemu-share/
+          
+          # Wait for VM to be ready
+          echo "Waiting for VM to be ready..."
+          until nc -z localhost 2222; do
+            echo "Waiting for SSH port..."
+            sleep 10
+          done
+          
+          # Setup Windows environment via SSH
+          sshpass -p "BuildPassword123!" ssh -o StrictHostKeyChecking=no -p 2222 builder@localhost "
+            echo 'Setting up build environment...' &&
             
-            # Install QEMU and dependencies
-            brew install qemu aria2 unzip
+            # Map network drive
+            net use Z: \\10.0.2.4\qemu &&
             
-            # Create working directory
-            mkdir -p win-arm64
-            cd win-arm64
+            # Install Flutter
+            cd /d Z:\ &&
+            git clone https://github.com/flutter/flutter.git &&
+            setx PATH '%PATH%;Z:\flutter\bin' &&
             
-            # Create a base Windows ARM64 image
-            qemu-img create -f vhdx windows11-arm64.vhdx 64G
+            # Configure Flutter
+            flutter config --enable-windows-desktop &&
+            flutter doctor &&
             
-            # Create UEFI vars file
-            dd if=/dev/zero of=QEMU_VARS.fd bs=1M count=64
-            
-            # Download UEFI firmware
-            wget https://github.com/tianocore/edk2/releases/download/edk2-stable202402/QEMU_EFI.fd -O QEMU_EFI.fd
-            
-            # Create an answer file for Windows setup
-            cat > autounattend.xml << 'EOF'
-            <?xml version="1.0" encoding="utf-8"?>
-            <unattend xmlns="urn:schemas-microsoft-com:unattend">
-              <settings pass="windowsPE">
-                <component name="Microsoft-Windows-Setup">
-                  <WindowsDeploymentServices>
-                    <Login>
-                      <Credentials>
-                        <Username>builder</Username>
-                        <Password>BuildPassword123!</Password>
-                      </Credentials>
-                    </Login>
-                  </WindowsDeploymentServices>
-                </component>
-              </settings>
-            </unattend>
-            EOF
-            
-            # Start QEMU with Windows ARM64
-            qemu-system-aarch64 \
-              -name "windows-arm64-build" \
-              -machine virt \
-              -accel hvf \
-              -cpu cortex-a72 \
-              -smp 4 \
-              -m 8G \
-              -bios QEMU_EFI.fd \
-              -drive if=pflash,format=raw,file=QEMU_VARS.fd \
-              -device virtio-gpu-pci \
-              -device qemu-xhci \
-              -device usb-kbd \
-              -device usb-tablet \
-              -drive if=virtio,file=windows11-arm64.vhdx,format=vhdx \
-              -device virtio-net-pci,netdev=net0 \
-              -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::3389-:3389,smb=/tmp/qemu-share \
-              -monitor telnet:127.0.0.1:55555,server,nowait \
-              -display none \
-              -daemonize
-            
-            echo "Waiting for VM to boot..."
-            sleep 60
-            
-            # Create shared directory
-            mkdir -p /tmp/qemu-share
-            cp -r ../* /tmp/qemu-share/
-            
-            # Wait for VM to be ready
-            echo "Waiting for VM to be ready..."
-            until nc -z localhost 2222; do
-              echo "Waiting for SSH port..."
-              sleep 10
-            done
-            
-            # Setup Windows environment via SSH
-            sshpass -p "BuildPassword123!" ssh -o StrictHostKeyChecking=no -p 2222 builder@localhost "
-              echo 'Setting up build environment...' &&
-              
-              # Map network drive
-              net use Z: \\10.0.2.4\qemu &&
-              
-              # Install Flutter
-              cd /d Z:\ &&
-              git clone https://github.com/flutter/flutter.git &&
-              setx PATH '%PATH%;Z:\flutter\bin' &&
-              
-              # Configure Flutter
-              flutter config --enable-windows-desktop &&
-              flutter doctor &&
-              
-              # Build project
-              flutter build windows --release
-            "
-            
-            # Copy build artifacts back
-            mkdir -p ../build/windows
-            cp -r /tmp/qemu-share/build/windows/* ../build/windows/
-            
-            # Package artifacts
-            cd ../build/windows
-            version="${{ steps.get_version.outputs.version }}"
-            mkdir -p "NipaPlay_${version}_Windows_arm64"
-            cp -r runner/Release/* "NipaPlay_${version}_Windows_arm64/"
-            zip -r "NipaPlay_${version}_Windows_arm64.zip" "NipaPlay_${version}_Windows_arm64"
-            
-            # Cleanup
-            rm -rf /tmp/qemu-share
-            cd ../../win-arm64
-            echo "system_powerdown" | nc localhost 55555
-            
-          else
-            # Windows x64 build using PowerShell
-            flutter config --enable-windows-desktop
+            # Build project
             flutter build windows --release
-            
-            $version = "${{ steps.get_version.outputs.version }}"
-            $buildDir = "build/windows/NipaPlay_${version}_Windows_x64"
-            New-Item -ItemType Directory -Force -Path $buildDir
-            
-            Copy-Item -Path "build/windows/x64/runner/Release/*" -Destination $buildDir -Recurse
-            Copy-Item -Path "windows/*.dll" -Destination $buildDir -ErrorAction SilentlyContinue
-            
-            Set-Location build/windows
-            Compress-Archive -Path "NipaPlay_${version}_Windows_x64" -DestinationPath "NipaPlay_${version}_Windows_x64.zip" -Force
-          fi
+          "
+          
+          # Copy build artifacts back
+          mkdir -p ../build/windows
+          cp -r /tmp/qemu-share/build/windows/* ../build/windows/
+          
+          # Package artifacts
+          cd ../build/windows
+          version="${{ steps.get_version.outputs.version }}"
+          mkdir -p "NipaPlay_${version}_Windows_arm64"
+          cp -r runner/Release/* "NipaPlay_${version}_Windows_arm64/"
+          zip -r "NipaPlay_${version}_Windows_arm64.zip" "NipaPlay_${version}_Windows_arm64"
+          
+          # Cleanup
+          rm -rf /tmp/qemu-share
+          cd ../../win-arm64
+          echo "system_powerdown" | nc localhost 55555
       
       # Build Linux .deb
       - name: Build Linux .deb
