@@ -37,14 +37,18 @@ create-dmg \
   --icon "Applications" 600 185 \
   --background "${temp_dir}/.background/background.png" \
   --no-internet-enable \
-  "build/${dmg_name}" \
+  "${dmg_name}" \
   "${temp_dir}"
 
-# Clean up
-rm -rf "${temp_dir}"
-
-# 确保 DMG 文件存在
-if [ ! -f "build/${dmg_name}" ]; then
+# Move the DMG to the expected directory
+if [ -f "${dmg_name}" ]; then
+  mkdir -p /tmp/artifacts/release-macOS
+  mv "${dmg_name}" "/tmp/artifacts/release-macOS/${dmg_name}"
+  echo "DMG file created successfully at /tmp/artifacts/release-macOS/${dmg_name}"
+else
   echo "Error: DMG file was not created"
   exit 1
 fi
+
+# Clean up
+rm -rf "${temp_dir}"
