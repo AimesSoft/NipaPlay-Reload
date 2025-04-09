@@ -13,12 +13,10 @@ cp -R "build/macos/Build/Products/Release/NipaPlay.app" "${temp_dir}/"
 # Create a symbolic link to Applications
 ln -s /Applications "${temp_dir}/Applications"
 
-# Create the background image with arrow
+# Create a simple background image
 convert -size 800x450 xc:transparent \
-  -fill none -stroke '#666666' -strokewidth 3 \
-  -draw "path 'M 350,225 L 450,225 L 440,215 M 450,225 L 440,235'" \
-  -stroke-dasharray 5,5 \
-  -font Arial -pointsize 13 -fill '#666666' \
+  -fill '#666666' \
+  -font Arial -pointsize 13 \
   -draw "text 250,200 'NipaPlay' text 460,200 'Applications'" \
   "${temp_dir}/.background/background.png"
 
