@@ -145,6 +145,7 @@ jobs:
           brew install create-dmg imagemagick
           chmod +x dmg.sh
           ./dmg.sh
+          ls -la *.dmg
       
       # Build Windows .zip
       - name: Build Windows
@@ -239,7 +240,8 @@ jobs:
       - name: Get commit range
         id: commit_range
         run: |
-          echo "::set-output name=range::$(git log --pretty=format:'- %s' -n 10)"
+          # 获取最近10次提交的标题，排除自动版本更新的提交
+          echo "::set-output name=range::$(git log --pretty=format:'- %s' -n 10 | grep -v 'chore: bump version')"
       
       - name: Upload to release
         uses: ncipollo/release-action@v1
@@ -249,11 +251,8 @@ jobs:
           body: |
             ## 版本 v${{ needs.Build.outputs.version }}
             
-            ### 主要更新
+            ### 更新内容
             ${{ steps.commit_message.outputs.message }}
-            
-            ### 最近更新内容
-            ${{ steps.commit_range.outputs.range }}
             
             ### 构建信息
             - 构建时间: ${{ github.event.head_commit.timestamp }}

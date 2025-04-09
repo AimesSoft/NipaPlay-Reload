@@ -32,7 +32,7 @@ create-dmg \
   --icon "Applications" 600 185 \
   --background "${temp_dir}/.background/background.png" \
   --no-internet-enable \
-  "${dmg_name}" \
+  "build/${dmg_name}" \
   "${temp_dir}"
 
 # Clean up
