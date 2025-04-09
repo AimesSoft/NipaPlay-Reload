@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../utils/danmaku_cache_manager.dart';
+import 'danmaku_cache_manager.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";

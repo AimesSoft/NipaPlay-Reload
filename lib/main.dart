@@ -17,7 +17,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
 import 'package:nipaplay/utils/keyboard_shortcuts.dart';
 import 'services/dandanplay_service.dart';
-import 'package:nipaplay/utils/danmaku_cache_manager.dart';
+import 'package:nipaplay/services/danmaku_cache_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
