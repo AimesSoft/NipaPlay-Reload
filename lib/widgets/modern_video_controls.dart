@@ -8,6 +8,8 @@ import 'tooltip_bubble.dart';
 import 'video_progress_bar.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'bounce_hover_scale.dart';
+import 'video_settings_menu.dart';
+import 'dart:async';
 
 class ModernVideoControls extends StatefulWidget {
   const ModernVideoControls({super.key});
@@ -30,6 +32,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isDragging = false;
   bool? _wasPlayingBeforeDrag;
   bool _playStateChangedByDrag = false;
+  OverlayEntry? _settingsOverlay;
+  Timer? _doubleTapTimer;
+  int _tapCount = 0;
+  static const _doubleTapTimeout = Duration(milliseconds: 300);
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -110,6 +116,56 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     );
   }
 
+  void _showSettingsMenu(BuildContext context) {
+    _settingsOverlay?.remove();
+    
+    _settingsOverlay = OverlayEntry(
+      builder: (context) => VideoSettingsMenu(
+        onClose: () {
+          _settingsOverlay?.remove();
+          _settingsOverlay = null;
+        },
+      ),
+    );
+
+    Overlay.of(context).insert(_settingsOverlay!);
+  }
+
+  @override
+  void dispose() {
+    _settingsOverlay?.remove();
+    _doubleTapTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    
+    if (!globals.isPhone) {
+      print('点击视频播放器，请求焦点');
+      videoState.focusNode.requestFocus();
+      return;
+    }
+
+    _tapCount++;
+    if (_tapCount == 1) {
+      // 第一次点击，启动计时器
+      _doubleTapTimer?.cancel();
+      _doubleTapTimer = Timer(_doubleTapTimeout, () {
+        if (_tapCount == 1) {
+          // 如果计时器结束时只有一次点击，执行单击操作
+          videoState.toggleControls();
+        }
+        _tapCount = 0;
+      });
+    } else if (_tapCount == 2) {
+      // 第二次点击，取消计时器并执行双击操作
+      _doubleTapTimer?.cancel();
+      videoState.togglePlayPause();
+      _tapCount = 0;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
@@ -130,10 +186,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
               KeyboardShortcuts.handleKeyEvent(event);
             },
             child: GestureDetector(
-              onTap: () {
-                print('点击视频播放器，请求焦点');
-                videoState.focusNode.requestFocus();
-              },
+              behavior: HitTestBehavior.opaque,
+              onTap: _handleTap,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -141,7 +195,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                     alignment: Alignment.bottomCenter,
                     child: Padding(
                       padding: EdgeInsets.only(
-                        bottom: 20.0,
+                        bottom: videoState.controlBarHeight,
                         left: globals.isPhone ? 20 : 100,
                         right: globals.isPhone ? 20 : 100,
                       ),
@@ -322,7 +376,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           size: globals.isPhone ? 36 : 28,
                                         ),
                                         onTap: () {
-                                          // TODO: 实现设置菜单
+                                          _showSettingsMenu(context);
                                         },
                                         isPressed: _isSettingsPressed,
                                         isHovered: _isSettingsHovered,

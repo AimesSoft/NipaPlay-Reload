@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/painting.dart';
+import '../utils/danmaku_cache_manager.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -160,19 +161,55 @@ class DandanplayService {
   static Future<String> _a() async {
     if (_appSecret != null) return _appSecret!;
 
-    final response = await http.post(
-      Uri.parse('https://nipaplay.aimes-soft.com/nipaplay.php'),
-      headers: {'Content-Type': 'application/json'},
-      body: '{}',
-    );
+    // 定义服务器列表，主服务器在前，备用服务器在后
+    final servers = [
+      'nipaplay.aimes-soft.com',
+      'key.aimes-soft.com'
+    ];
+    
+    // 设置较短的超时时间，以便快速失败并尝试备用服务器
+    const timeout = Duration(seconds: 10);
+    Exception? lastException;
+    
+    // 尝试每个服务器
+    for (final server in servers) {
+      try {
+        print('尝试从服务器 $server 获取appSecret');
+        
+        final client = http.Client();
+        final response = await client.post(
+          Uri.parse('https://$server/nipaplay.php'),
+          headers: {'Content-Type': 'application/json'},
+          body: '{}',
+        ).timeout(timeout);
+        
+        client.close();
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      _appSecret = _b(data['encryptedAppSecret']);
-      return _appSecret!;
-    } else {
-      throw Exception('获取appSecret失败');
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['encryptedAppSecret'] != null) {
+            _appSecret = _b(data['encryptedAppSecret']);
+            print('成功从 $server 获取appSecret');
+            return _appSecret!;
+          } else {
+            throw Exception('从 $server 获取appSecret失败：响应中没有encryptedAppSecret');
+          }
+        } else {
+          throw Exception('从 $server 获取appSecret失败：HTTP ${response.statusCode}');
+        }
+      } on TimeoutException {
+        print('从 $server 获取appSecret超时，尝试下一个服务器');
+        lastException = TimeoutException('从 $server 获取appSecret超时');
+        // 继续尝试下一个服务器
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        print('从 $server 获取appSecret失败: $e，尝试下一个服务器');
+        // 继续尝试下一个服务器
+      }
     }
+    
+    // 如果所有服务器都失败，抛出最后一个异常
+    throw lastException ?? Exception('获取appSecret失败：所有服务器均不可用');
   }
 
   static String _b(String a) {
@@ -274,9 +311,11 @@ class DandanplayService {
         // 检查缓存中是否有 episodeId
         if (cachedInfo['matches'] != null && cachedInfo['matches'].isNotEmpty) {
           final match = cachedInfo['matches'][0];
-          if (match['episodeId'] != null) {
+          if (match['episodeId'] != null && match['animeId'] != null) {
             try {
-              final danmakuData = await getDanmaku(videoPath, match['episodeId'].toString());
+              final episodeId = match['episodeId'].toString();
+              final animeId = match['animeId'] as int;
+              final danmakuData = await getDanmaku(episodeId, animeId);
               // 直接使用弹幕数据，不添加额外的 danmaku 字段
               cachedInfo['comments'] = danmakuData['comments'];
             } catch (e) {
@@ -332,9 +371,11 @@ class DandanplayService {
           // 获取弹幕信息
           if (data['matches'] != null && data['matches'].isNotEmpty) {
             final match = data['matches'][0];
-            if (match['episodeId'] != null) {
+            if (match['episodeId'] != null && match['animeId'] != null) {
               try {
-                final danmakuData = await getDanmaku(videoPath, match['episodeId'].toString());
+                final episodeId = match['episodeId'].toString();
+                final animeId = match['animeId'] as int;
+                final danmakuData = await getDanmaku(episodeId, animeId);
                 // 直接使用弹幕数据，不添加额外的 danmaku 字段
                 data['comments'] = danmakuData['comments'];
               } catch (e) {
@@ -363,12 +404,26 @@ class DandanplayService {
     return md5.convert(bytes).toString();
   }
 
-  static Future<Map<String, dynamic>> getDanmaku(String videoPath, String episodeId) async {
+  static Future<Map<String, dynamic>> getDanmaku(String episodeId, int animeId) async {
     try {
+      print('开始获取弹幕: episodeId=$episodeId, animeId=$animeId');
+      
+      // 先检查缓存
+      final cachedDanmaku = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
+      if (cachedDanmaku != null) {
+        print('从缓存加载弹幕成功: $episodeId, 数量: ${cachedDanmaku.length}');
+        return {
+          'comments': cachedDanmaku,
+          'fromCache': true,
+          'count': cachedDanmaku.length
+        };
+      }
+      
+      print('缓存未命中，从网络加载弹幕');
       final appSecret = await _a();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/comment/$episodeId';
-
+      
       final response = await http.get(
         Uri.parse('https://api.dandanplay.net$apiPath?withRelated=true&chConvert=1'),
         headers: {
@@ -382,7 +437,6 @@ class DandanplayService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        //print('弹幕API响应: $data');
         if (data['comments'] != null) {
           final comments = data['comments'] as List;
           final formattedComments = comments.map((comment) {
@@ -406,7 +460,18 @@ class DandanplayService {
               'color': colorValue,
             };
           }).toList();
-          return {'comments': formattedComments};
+
+          print('从网络加载弹幕成功: $episodeId, 数量: ${formattedComments.length}');
+          
+          // 异步保存到缓存
+          DanmakuCacheManager.saveDanmakuToCache(episodeId, animeId, formattedComments)
+              .then((_) => print('弹幕已保存到缓存: $episodeId'));
+          
+          return {
+            'comments': formattedComments,
+            'fromCache': false,
+            'count': formattedComments.length
+          };
         } else {
           throw Exception('该视频暂无弹幕');
         }
@@ -415,8 +480,8 @@ class DandanplayService {
         throw Exception('获取弹幕失败: $errorMessage');
       }
     } catch (e) {
-      print('获取弹幕错误: $e');
-      throw Exception('获取弹幕失败: ${e.toString()}');
+      print('获取弹幕时出错: $e');
+      rethrow;
     }
   }
 } 

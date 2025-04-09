@@ -119,6 +119,42 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     if (!_running || !mounted) {
       return;
     }
+    
+    // 检查是否已存在相同内容的弹幕
+    bool isDuplicate = false;
+    
+    // 检查滚动弹幕中是否有重复
+    if (content.type == DanmakuItemType.scroll) {
+      isDuplicate = _scrollDanmakuItems.any((item) => 
+          item.content.text == content.text && 
+          item.content.type == content.type &&
+          item.content.color.value == content.color.value &&
+          (_tick - item.creationTime < 200)); // 200毫秒内视为重复
+    }
+    
+    // 检查顶部弹幕中是否有重复
+    if (content.type == DanmakuItemType.top) {
+      isDuplicate = _topDanmakuItems.any((item) => 
+          item.content.text == content.text && 
+          item.content.type == content.type &&
+          item.content.color.value == content.color.value &&
+          (_tick - item.creationTime < 200));
+    }
+    
+    // 检查底部弹幕中是否有重复
+    if (content.type == DanmakuItemType.bottom) {
+      isDuplicate = _bottomDanmakuItems.any((item) => 
+          item.content.text == content.text && 
+          item.content.type == content.type &&
+          item.content.color.value == content.color.value &&
+          (_tick - item.creationTime < 200));
+    }
+    
+    // 如果是重复弹幕，直接返回
+    if (isDuplicate) {
+      return;
+    }
+    
     // 在这里提前创建 Paragraph 缓存防止卡顿
     final textPainter = TextPainter(
       text: TextSpan(
@@ -131,7 +167,6 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         Utils.generateParagraph(content, danmakuWidth, _option.fontSize);
 
     ui.Paragraph? strokeParagraph;
-
 
     int idx = 1;
     for (double yPosition in _trackYPositions) {
@@ -303,12 +338,28 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
   /// 清空弹幕
   void clearDanmakus() {
+    // 停止滚动弹幕动画
+    if (_animationController.isAnimating) {
+      _animationController.stop();
+    }
+    
+    // 停止静态弹幕动画
+    if (_staticAnimationController.isAnimating) {
+      _staticAnimationController.stop();
+    }
+    
+    // 清空所有弹幕列表
     setState(() {
       _scrollDanmakuItems.clear();
       _topDanmakuItems.clear();
       _bottomDanmakuItems.clear();
     });
-    _animationController.stop();
+    
+    // 强制重绘
+    setState(() {
+      _staticAnimationController.value = 0;
+      _animationController.value = 0;
+    });
   }
 
   /// 确定滚动弹幕是否可以添加

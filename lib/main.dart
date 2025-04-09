@@ -17,6 +17,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
 import 'package:nipaplay/utils/keyboard_shortcuts.dart';
 import 'services/dandanplay_service.dart';
+import 'package:nipaplay/utils/danmaku_cache_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +45,9 @@ void main() async {
 
   // 加载快捷键设置
   await KeyboardShortcuts.loadShortcuts();
+
+  // 清理过期的弹幕缓存
+  await DanmakuCacheManager.clearExpiredCache();
 
   String savedThemeMode =
       await SettingsStorage.loadString('themeMode', defaultValue: 'system');

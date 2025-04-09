@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:dandanplay_service/dandanplay_service.dart';
+import '../services/dandanplay_service.dart';
 
 class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
   // ... (existing code)
   @override
   _LoginPageState createState() => _LoginPageState();

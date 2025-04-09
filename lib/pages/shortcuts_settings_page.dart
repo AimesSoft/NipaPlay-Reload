@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../utils/keyboard_shortcuts.dart';
-import '../utils/theme_utils.dart';
 import '../widgets/blur_dropdown.dart';
 import '../widgets/blur_dialog.dart';
 
@@ -18,6 +17,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'fullscreen': '全屏',
     'rewind': '快退',
     'forward': '快进',
+    'toggle_danmaku': '显示/隐藏弹幕',
   };
 
   final Map<String, List<String>> _availableShortcuts = {
@@ -25,6 +25,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'fullscreen': ['Enter', 'F', 'D'],
     'rewind': ['←', 'J', '4'],
     'forward': ['→', 'L', '6'],
+    'toggle_danmaku': ['D', 'T', 'B'],
   };
 
   final Map<String, GlobalKey> _dropdownKeys = {
@@ -32,6 +33,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'fullscreen': GlobalKey(),
     'rewind': GlobalKey(),
     'forward': GlobalKey(),
+    'toggle_danmaku': GlobalKey(),
   };
 
   Future<void> _showRestartDialog() async {
@@ -82,12 +84,10 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                 );
               }).toList(),
               onItemSelected: (shortcut) async {
-                if (shortcut != null) {
-                  await KeyboardShortcuts.setShortcut(action, shortcut);
-                  setState(() {});
-                  _showRestartDialog();
-                }
-              },
+                await KeyboardShortcuts.setShortcut(action, shortcut);
+                setState(() {});
+                _showRestartDialog();
+                            },
             ),
           );
         },

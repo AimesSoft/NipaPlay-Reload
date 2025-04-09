@@ -2,10 +2,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'dart:ui';
-import 'package:window_manager/window_manager.dart';
-import 'dart:io';
-import '../utils/globals.dart' as globals;
 
 class KeyboardShortcuts {
   static const String _shortcutsKey = 'keyboard_shortcuts';
@@ -22,6 +18,7 @@ class KeyboardShortcuts {
       'fullscreen': 'Enter',
       'rewind': '←',
       'forward': '→',
+      'toggle_danmaku': 'D',
     });
     _updateKeyBindings();
   }

@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/bangumi_model.dart';
 import '../utils/image_cache_manager.dart';
-import 'dart:io';
 
 class BangumiService {
   static final BangumiService instance = BangumiService._();
@@ -34,28 +34,44 @@ class BangumiService {
     int retryCount = 0;
     while (retryCount < maxRetries) {
       try {
-        final response = await _client.get(
+        print('🌐 发起请求(尝试 ${retryCount+1}/$maxRetries): $url');
+        
+        final client = http.Client();
+        final response = await client.get(
           Uri.parse(url),
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json; charset=utf-8',
             'User-Agent': 'NipaPlay/1.0',
           },
-        ).timeout(const Duration(seconds: 10));
+        ).timeout(
+          // 随着重试次数增加超时时间
+          Duration(seconds: 5 + retryCount * 3),
+          onTimeout: () {
+            client.close();
+            throw TimeoutException('请求超时');
+          }
+        );
+        
+        client.close();
 
         if (response.statusCode == 200) {
+          print('✅ 请求成功: $url');
           return response;
         } else {
+          print('⚠️ HTTP请求失败: ${response.statusCode}');
           throw Exception('HTTP请求失败: ${response.statusCode}');
         }
       } catch (e) {
         retryCount++;
-        print('请求失败 (尝试 $retryCount/$maxRetries): $e');
+        print('❌ 请求失败 (尝试 $retryCount/$maxRetries): $e');
         if (retryCount == maxRetries) {
           throw Exception('请求失败，已达到最大重试次数: $e');
         }
-        // 等待一段时间后重试，使用指数退避
-        await Future.delayed(Duration(seconds: retryCount * 2));
+        // 使用指数退避策略，等待时间逐渐增加
+        final waitSeconds = retryCount * 2;
+        print('⏳ 等待 $waitSeconds 秒后重试...');
+        await Future.delayed(Duration(seconds: waitSeconds));
       }
     }
     throw Exception('请求失败，未知错误');

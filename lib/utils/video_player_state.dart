@@ -10,6 +10,8 @@ import 'keyboard_shortcuts.dart';
 import 'globals.dart' as globals;
 import 'dart:convert';
 import '../services/dandanplay_service.dart';
+import 'media_info_helper.dart';
+import '../services/danmaku_cache_manager.dart';
 
 enum PlayerStatus {
   idle,        // 空闲状态
@@ -33,7 +35,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   String? _error;
-  double _aspectRatio = 16 / 9;
+  final double _aspectRatio = 16 / 9;
   String? _currentVideoPath;
   Timer? _positionUpdateTimer;
   Timer? _hideControlsTimer;
@@ -45,9 +47,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const String _lastVideoKey = 'last_video_path';
   static const String _lastPositionKey = 'last_video_position';
   static const String _videoPositionsKey = 'video_positions';
-  static int _textureIdCounter = 0;
+  static final int _textureIdCounter = 0;
   Duration? _lastSeekPosition;  // 添加这个字段来记录最后一次seek的位置
   List<Map<String, dynamic>> _danmakuList = [];
+  static const String _controlBarHeightKey = 'control_bar_height';
+  double _controlBarHeight = 20.0;  // 默认高度
+  static const String _danmakuOpacityKey = 'danmaku_opacity';
+  double _danmakuOpacity = 1.0;  // 默认透明度
+  static const String _danmakuVisibleKey = 'danmaku_visible';
+  bool _danmakuVisible = true;  // 默认显示弹幕
+  dynamic danmakuController;  // 添加弹幕控制器属性
 
   VideoPlayerState() {
     _initialize();
@@ -68,6 +77,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                       _status == PlayerStatus.paused;
   FocusNode get focusNode => _focusNode;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
+  double get controlBarHeight => _controlBarHeight;
+  double get danmakuOpacity => _danmakuOpacity;
+  bool get danmakuVisible => _danmakuVisible;
 
   Future<void> _initialize() async {
     if (globals.isPhone) {
@@ -78,6 +90,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _focusNode.requestFocus();
     KeyboardShortcuts.loadShortcuts();
     await _loadLastVideo();
+    await _loadControlBarHeight();  // 加载保存的控制栏高度
+    await _loadDanmakuOpacity();    // 加载保存的弹幕透明度
+    await _loadDanmakuVisible();    // 加载弹幕可见性
   }
 
   Future<void> _loadLastVideo() async {
@@ -177,13 +192,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _error = null;
       _setStatus(PlayerStatus.idle);
       
-      // 在手机平台上强制横屏
-      if (globals.isPhone) {
-        await _setLandscape();
+      // 尝试识别视频和加载弹幕，但不阻断视频播放
+      try {
+        await _recognizeVideo(path);
+      } catch (e) {
+        print('视频识别或弹幕加载失败，继续播放: $e');
+        // 设置空弹幕列表，确保播放不受影响
+        _danmakuList = [];
+        _addStatusMessage('无法连接服务器，跳过加载弹幕');
       }
-
-      // 使用新的视频识别和弹幕加载逻辑
-      await _recognizeVideo(path);
       
       // 设置回加载状态
       _setStatus(PlayerStatus.loading, message: '正在加载视频...');
@@ -200,8 +217,35 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 获取视频纹理
       final textureId = await player.updateTexture();
       
-      if (textureId == null) {
-        throw Exception('无法获取视频纹理');
+      // 分析并打印媒体信息，特别是字幕轨道
+      MediaInfoHelper.analyzeMediaInfo(player.mediaInfo);
+      
+      // 优先选择包含sm或中文相关的字幕轨道
+      if (player.mediaInfo?.subtitle != null) {
+        final subtitles = player.mediaInfo!.subtitle!;
+        int? preferredSubtitleIndex;
+        
+        // 首先尝试查找包含sm或中文相关的字幕
+        for (var i = 0; i < subtitles.length; i++) {
+          final track = subtitles[i];
+          final fullString = track.toString().toLowerCase();
+          
+          // 检查标题中是否包含sm或中文相关关键词
+          if (fullString.contains('sm') || 
+              fullString.contains('zh') || 
+              fullString.contains('chi') || 
+              fullString.contains('中文') || 
+              fullString.contains('简体') || 
+              fullString.contains('繁体')) {
+            preferredSubtitleIndex = i;
+            break;
+          }
+        }
+        
+        // 如果找到了优先的字幕轨道，就激活它
+        if (preferredSubtitleIndex != null) {
+          player.activeSubtitleTracks = [preferredSubtitleIndex];
+        }
       }
       
       // 更新状态
@@ -224,6 +268,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
       
       _setStatus(PlayerStatus.ready, message: '准备就绪');
+      
+      // 在手机平台上，只有在视频真正开始播放时才切换到横屏
+      if (globals.isPhone) {
+        await _setLandscape();
+      }
       
       // 开始播放
       player.state = PlaybackState.playing;
@@ -271,9 +320,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
-  void _setStatus(PlayerStatus status, {String message = ''}) {
+  void _setStatus(PlayerStatus status, {String? message}) {
     _status = status;
-    _updateStatusMessages([message]);
+    if (message != null) {
+      _statusMessages = [message];
+    } else {
+      _statusMessages = [];
+    }
     notifyListeners();
   }
 
@@ -584,34 +637,67 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       _setStatus(PlayerStatus.recognizing, message: '正在识别视频...');
       
-      final videoInfo = await DandanplayService.getVideoInfo(videoPath);
-      
-      if (videoInfo['isMatched'] == true) {
-        _setStatus(PlayerStatus.recognizing, message: '视频识别成功，正在加载弹幕...');
+      // 使用超时处理网络请求
+      try {
+        final videoInfo = await DandanplayService.getVideoInfo(videoPath)
+            .timeout(const Duration(seconds: 15), onTimeout: () {
+          throw TimeoutException('连接服务器超时');
+        });
         
-        if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
-          final match = videoInfo['matches'][0];
-          if (match['episodeId'] != null) {
-            try {
-              final danmakuData = await DandanplayService.getDanmaku(videoPath, match['episodeId'].toString());
-              if (danmakuData['comments'] != null) {
-                final comments = danmakuData['comments'] as List;
-                _danmakuList = List<Map<String, dynamic>>.from(comments);
+        if (videoInfo['isMatched'] == true) {
+          _setStatus(PlayerStatus.recognizing, message: '视频识别成功，正在加载弹幕...');
+          
+          if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
+            final match = videoInfo['matches'][0];
+            if (match['episodeId'] != null && match['animeId'] != null) {
+              try {
+                _setStatus(PlayerStatus.recognizing, message: '正在加载弹幕...');
+                final episodeId = match['episodeId'].toString();
+                final animeId = match['animeId'] as int;
+                
+                // 从缓存加载弹幕
+                final cachedDanmaku = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
+                if (cachedDanmaku != null) {
+                  _setStatus(PlayerStatus.recognizing, message: '正在从缓存加载弹幕...');
+                  _danmakuList = List<Map<String, dynamic>>.from(cachedDanmaku);
+                  notifyListeners();
+                  _setStatus(PlayerStatus.ready, message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
+                  return;
+                }
+                
+                // 从网络加载弹幕
+                final danmakuData = await DandanplayService.getDanmaku(episodeId, animeId)
+                  .timeout(const Duration(seconds: 15), onTimeout: () {
+                    throw TimeoutException('加载弹幕超时');
+                  });
+                  
+                _danmakuList = List<Map<String, dynamic>>.from(danmakuData['comments']);
                 notifyListeners();
+                _setStatus(PlayerStatus.ready, message: '弹幕加载完成 (${danmakuData['count']}条)');
+              } catch (e) {
+                print('弹幕加载错误: $e');
+                // 弹幕加载错误不影响视频播放
+                _danmakuList = [];
+                _setStatus(PlayerStatus.ready, message: '弹幕加载失败，跳过');
               }
-              _setStatus(PlayerStatus.ready, message: '弹幕加载完成');
-            } catch (e) {
-              print('弹幕加载错误: $e');
-              _setStatus(PlayerStatus.error, message: '弹幕加载失败: $e');
             }
           }
+        } else {
+          // 视频未匹配但仍继续播放
+          _danmakuList = [];
+          _setStatus(PlayerStatus.ready, message: '未匹配到视频信息，跳过弹幕');
         }
-      } else {
-        throw Exception('无法识别该视频');
+      } catch (e) {
+        // 处理网络错误等
+        print('视频识别网络错误: $e');
+        _danmakuList = [];
+        _setStatus(PlayerStatus.ready, message: '无法连接服务器，跳过加载弹幕');
+        // 不抛出异常，允许视频继续播放
       }
     } catch (e) {
-      print('视频识别错误: $e');
-      _setError('视频识别失败: $e');
+      // 这里只处理真正阻碍视频播放的严重错误
+      print('严重错误: $e');
+      rethrow; // 重新抛出异常，让initializePlayer捕获处理
     }
   }
 
@@ -622,5 +708,74 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _clearStatusMessages();
     _addStatusMessage(error);
     notifyListeners();
+  }
+
+  // 加载控制栏高度
+  Future<void> _loadControlBarHeight() async {
+    final prefs = await SharedPreferences.getInstance();
+    _controlBarHeight = prefs.getDouble(_controlBarHeightKey) ?? 20.0;
+    notifyListeners();
+  }
+
+  // 保存控制栏高度
+  Future<void> setControlBarHeight(double height) async {
+    _controlBarHeight = height;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_controlBarHeightKey, height);
+    notifyListeners();
+  }
+
+  // 加载弹幕透明度
+  Future<void> _loadDanmakuOpacity() async {
+    final prefs = await SharedPreferences.getInstance();
+    _danmakuOpacity = prefs.getDouble(_danmakuOpacityKey) ?? 1.0;
+    notifyListeners();
+  }
+
+  // 保存弹幕透明度
+  Future<void> setDanmakuOpacity(double opacity) async {
+    _danmakuOpacity = opacity;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_danmakuOpacityKey, opacity);
+    notifyListeners();
+  }
+
+  // 加载弹幕可见性
+  Future<void> _loadDanmakuVisible() async {
+    final prefs = await SharedPreferences.getInstance();
+    _danmakuVisible = prefs.getBool(_danmakuVisibleKey) ?? true;
+    notifyListeners();
+  }
+
+  // 切换弹幕可见性
+  Future<void> toggleDanmakuVisible() async {
+    _danmakuVisible = !_danmakuVisible;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_danmakuVisibleKey, _danmakuVisible);
+    notifyListeners();
+  }
+
+  Future<void> loadDanmaku(String episodeId, String animeIdStr) async {
+    try {
+      _setStatus(PlayerStatus.recognizing, message: '正在加载弹幕...');
+      
+      // 从缓存加载弹幕
+      final cachedDanmaku = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
+      if (cachedDanmaku != null) {
+        _setStatus(PlayerStatus.recognizing, message: '正在从缓存加载弹幕...');
+        danmakuController?.loadDanmaku(cachedDanmaku);
+        _setStatus(PlayerStatus.playing, message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
+        return;
+      }
+      
+      // 从网络加载弹幕
+      final animeId = int.tryParse(animeIdStr) ?? 0;
+      final danmakuData = await DandanplayService.getDanmaku(episodeId, animeId);
+      danmakuController?.loadDanmaku(danmakuData['comments']);
+      _setStatus(PlayerStatus.playing, message: '弹幕加载完成 (${danmakuData['count']}条)');
+    } catch (e) {
+      print('加载弹幕失败: $e');
+      _setStatus(PlayerStatus.playing, message: '弹幕加载失败');
+    }
   }
 } 

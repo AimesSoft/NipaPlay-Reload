@@ -15,10 +15,14 @@ double getStrokeOffset() {
 class Utils {
   // 根据文字颜色判断使用的描边颜色
   static Color getShadowColor(Color textColor) {
-    // 如果文字是黑色，使用白色描边
-    if (textColor == Colors.black || textColor.value == const Color.fromARGB(255, 0, 0, 0).value) {
+    // 计算颜色的亮度
+    final luminance = textColor.computeLuminance();
+    
+    // 如果亮度低于0.2，认为是接近黑色，使用白色描边
+    if (luminance < 0.1) {
       return Colors.white;
     }
+    
     // 否则使用黑色描边
     return Colors.black;
   }

@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:nipaplay/widgets/video_player_widget.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
-import 'package:fvp/mdk.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import '../widgets/tooltip_bubble.dart';
-import '../utils/globals.dart' as globals;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import '../widgets/vertical_indicator.dart';
 import '../services/dandanplay_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/danmaku_overlay.dart';
-import 'dart:ui';
+import '../utils/globals.dart' as globals;
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -48,18 +44,20 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       // 获取视频信息
       final videoInfo = await DandanplayService.getVideoInfo(widget.videoPath!);
       
-      if (videoInfo['isMatched'] == true) {
+      if (videoInfo['isMatched'] == true && videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
+        final match = videoInfo['matches'][0];
         setState(() {
           _animeTitle = videoInfo['animeTitle'];
           _episodeTitle = videoInfo['episodeTitle'];
-          _episodeId = videoInfo['episodeId'].toString();
+          _episodeId = match['episodeId'].toString();
         });
 
         // 获取弹幕
-        if (_episodeId != null) {
+        if (_episodeId != null && match['animeId'] != null) {
+          final animeId = match['animeId'] as int;
           final danmakuInfo = await DandanplayService.getDanmaku(
-            widget.videoPath!,
             _episodeId!,
+            animeId,
           );
 
           if (mounted) {
@@ -162,7 +160,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     },
                   ),
                 ],
-                if (videoState.hasVideo)
+                if (videoState.hasVideo && !(globals.isDesktop && videoState.isFullscreen))
                   AnimatedOpacity(
                     duration: const Duration(milliseconds: 200),
                     opacity: videoState.showControls ? 1.0 : 0.0,
