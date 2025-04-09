@@ -143,6 +143,9 @@ jobs:
           # 设置 CocoaPods 环境为简体中文
           export LANG=zh_CN.UTF-8
           export LC_ALL=zh_CN.UTF-8
+          # 设置 CocoaPods 镜像源
+          pod repo remove trunk
+          pod repo add trunk https://mirrors.tuna.tsinghua.edu.cn/git/CocoaPods/Specs.git
           # 清理并重新安装 pods
           rm -rf Pods Podfile.lock
           pod cache clean --all
