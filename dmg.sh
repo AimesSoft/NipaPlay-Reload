@@ -42,8 +42,14 @@ create-dmg \
   --icon "Applications" 600 185 \
   --background "${temp_dir}/.background/background.png" \
   --no-internet-enable \
-  "${dmg_name}" \
+  "build/${dmg_name}" \
   "${temp_dir}"
 
 # Clean up
 rm -rf "${temp_dir}"
+
+# 确保 DMG 文件存在
+if [ ! -f "build/${dmg_name}" ]; then
+  echo "Error: DMG file was not created"
+  exit 1
+fi
