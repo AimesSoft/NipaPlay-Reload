@@ -40,15 +40,14 @@ create-dmg \
   "${dmg_name}" \
   "${temp_dir}"
 
-# Move the DMG to the expected directory
-if [ -f "${dmg_name}" ]; then
-  mkdir -p /tmp/artifacts/release-macOS
-  mv "${dmg_name}" "/tmp/artifacts/release-macOS/${dmg_name}"
-  echo "DMG file created successfully at /tmp/artifacts/release-macOS/${dmg_name}"
-else
-  echo "Error: DMG file was not created"
+# Clean up
+rm -rf "${temp_dir}"
+
+# Verify DMG file exists
+if [ ! -f "${dmg_name}" ]; then
+  echo "Error: DMG file was not created at ${dmg_name}"
   exit 1
 fi
 
-# Clean up
-rm -rf "${temp_dir}"
+echo "DMG file created successfully: ${dmg_name}"
+ls -la "${dmg_name}"
