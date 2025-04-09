@@ -140,7 +140,13 @@ jobs:
         run: |
           flutter build macos --release
           cd macos
-          pod update
+          # 设置 CocoaPods 环境为简体中文
+          export LANG=zh_CN.UTF-8
+          export LC_ALL=zh_CN.UTF-8
+          # 清理并重新安装 pods
+          rm -rf Pods Podfile.lock
+          pod cache clean --all
+          pod install
           cd ..
           brew install create-dmg imagemagick
           chmod +x dmg.sh
