@@ -18,7 +18,14 @@ convert -size 800x450 xc:white \
   -font Arial -pointsize 13 -fill '#666666' \
   -draw "text 250,200 'NipaPlay' text 460,200 'Applications'" \
   -font Arial -pointsize 100 -fill '#333333' \
-  -draw "text 400,225 '>'"
+  -draw "text 400,225 '>'" \
+  "${temp_dir}/.background/background.png"
+
+# Verify background image was created
+if [ ! -f "${temp_dir}/.background/background.png" ]; then
+  echo "Error: Background image was not created"
+  exit 1
+fi
 
 # Create the DMG
 create-dmg \
