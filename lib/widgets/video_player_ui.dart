@@ -144,6 +144,11 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 videoState.togglePlayPause();
                               }
                             },
+                            onDoubleTap: () {
+                              if (videoState.hasVideo) {
+                                videoState.toggleFullscreen();
+                              }
+                            },
                             onTapDown: (_) {
                               if (videoState.hasVideo && videoState.showControls) {
                                 videoState.resetAutoHideTimer();

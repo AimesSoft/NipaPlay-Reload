@@ -38,7 +38,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
   Timer? _danmakuTimer;
   int? _lastPosition;
   final int _timeWindow = 1000; // 时间窗口大小（毫秒）
-  final int _updateInterval = 50; // 更新间隔（毫秒）
+  final int _updateInterval = 0; // 更新间隔（毫秒）
   int _lastWindowStart = 0; // 记录上一个时间窗口的起始时间
 
   @override

@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/loading_placeholder.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import '../widgets/cached_network_image_widget.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -15,12 +16,19 @@ class NewSeriesPage extends StatefulWidget {
   State<NewSeriesPage> createState() => _NewSeriesPageState();
 }
 
-class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveClientMixin {
+class _NewSeriesPageState extends State<NewSeriesPage> {
   final BangumiService _bangumiService = BangumiService.instance;
   List<BangumiAnime> _animes = [];
   bool _isLoading = true;
   String? _error;
-  bool _isReversed = false; // 添加排序状态变量
+  bool _isReversed = false;
+
+  // 切换排序方向
+  void _toggleSort() {
+    setState(() {
+      _isReversed = !_isReversed;
+    });
+  }
 
   // 添加星期几的映射
   static const Map<int, String> _weekdays = {
@@ -35,34 +43,36 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     -1: '未知', // 添加未知类别
   };
 
-  // 将 1-7 的星期转换为 0-6
-
-  @override
-  bool get wantKeepAlive => true; // 保持页面状态
-
   @override
   void initState() {
     super.initState();
-    print('NewSeriesPage 初始化');
+    //print('NewSeriesPage 初始化');
     _loadAnimes();
+  }
+
+  @override
+  void dispose() {
+    // 释放所有图片资源
+    for (var anime in _animes) {
+      ImageCacheManager.instance.releaseImage(anime.imageUrl);
+    }
+    super.dispose();
   }
 
   Future<void> _loadAnimes() async {
     try {
-      print('开始加载番剧数据');
+      //print('开始加载番剧数据');
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
-      print('调用 BangumiService.getCalendar()');
-      final animes = await _bangumiService.getCalendar();
-      print('获取到 ${animes.length} 个番剧');
+      // 加载数据
+      await _bangumiService.loadData();
 
-      // 预加载所有图片
-      ImageCacheManager.instance.preloadImages(
-        animes.map((anime) => anime.imageUrl).toList(),
-      );
+      //print('调用 BangumiService.getCalendar()');
+      final animes = await _bangumiService.getCalendar();
+      //print('获取到 ${animes.length} 个番剧');
 
       if (mounted) {
         setState(() {
@@ -70,9 +80,9 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           _isLoading = false;
         });
       }
-      print('番剧数据加载完成');
+      //print('番剧数据加载完成');
     } catch (e) {
-      print('加载番剧数据时出错: $e');
+      //print('加载番剧数据时出错: $e');
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -117,7 +127,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       }
     }
     
-    print('分组结果: ${grouped.keys.toList()}');
+    //print('分组结果: ${grouped.keys.toList()}');
     return grouped;
   }
 
@@ -126,14 +136,14 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 160,
-        childAspectRatio: 7/10,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
+        maxCrossAxisExtent: 150,
+        childAspectRatio: 7/12,
+        crossAxisSpacing: 20,
+        mainAxisSpacing: 0,
       ),
       itemCount: animes.length,
-      addAutomaticKeepAlives: true,
-      addRepaintBoundaries: true,
+      addAutomaticKeepAlives: false,
+      addRepaintBoundaries: false,
       itemBuilder: (context, index) {
         final anime = animes[index];
         return _buildAnimeCard(context, anime);
@@ -143,8 +153,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-    print('NewSeriesPage build - isLoading: $_isLoading, hasError: ${_error != null}, animeCount: ${_animes.length}');
+    //print('NewSeriesPage build - isLoading: $_isLoading, hasError: ${_error != null}, animeCount: ${_animes.length}');
     
     if (_isLoading && _animes.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -189,41 +198,42 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       children: [
         RefreshIndicator(
           onRefresh: _loadAnimes,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // 常规更新部分
-              ...knownWeekdays.map((weekday) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      _weekdays[weekday] ?? '未知',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+          child: CustomScrollView(
+            slivers: [
+              SliverList(
+                delegate: SliverChildListDelegate([
+                  ...knownWeekdays.map((weekday) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          _weekdays[weekday] ?? '未知',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      _buildAnimeSection(groupedAnimes[weekday]!),
+                    ],
+                  )),
+                  if (unknownWeekdays.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        '更新时间未定',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                  _buildAnimeSection(groupedAnimes[weekday]!),
-                ],
-              )),
-              // 未知更新时间的部分 - 始终显示在最底部
-              if (unknownWeekdays.isNotEmpty) ...[
-                const SizedBox(height: 32),
-                const Divider(),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    '更新时间未定',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                _buildAnimeSection(groupedAnimes[-1]!),
-              ],
+                    _buildAnimeSection(groupedAnimes[-1]!),
+                  ],
+                ]),
+              ),
             ],
           ),
         ),
@@ -258,11 +268,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(28),
-                onTap: () {
-                  setState(() {
-                    _isReversed = !_isReversed;
-                  });
-                },
+                onTap: _toggleSort,
                 child: Center(
                   child: Icon(
                     _isReversed ? Ionicons.chevron_up_outline : Ionicons.chevron_down_outline,
@@ -283,57 +289,63 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: () => _showAnimeDetail(anime),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Card(
-                elevation: 2,
-                color: Colors.transparent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
+        child: Container(
+          height: 250,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            color: Colors.transparent,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 7/10,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: SizedBox(
-                    width: 160,
-                    height: 228, // 160 * 10/7 ≈ 228
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: CachedNetworkImage(
-                            imageUrl: anime.imageUrl,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => const LoadingPlaceholder(
-                              width: 160,
-                              height: 228,
+                  child: CachedNetworkImageWidget(
+                    imageUrl: anime.imageUrl,
+                    fit: BoxFit.cover,
+                    shouldRelease: true,
+                    errorBuilder: (context, error) {
+                      //print('图片加载失败: ${anime.nameCn}, URL: ${anime.imageUrl}');
+                      return Container(
+                        color: Colors.grey[800],
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.white54),
+                            const SizedBox(height: 8),
+                            Text(
+                              '加载失败\n${anime.nameCn}',
+                              style: const TextStyle(color: Colors.white54, fontSize: 12),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            errorWidget: (context, url, error) {
-                              return Image.asset(
-                                'assets/backempty.png',
-                                fit: BoxFit.cover,
-                              );
-                            },
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              anime.nameCn,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontSize: 12,
-                height: 1.2,
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  anime.nameCn,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontSize: 12,
+                    height: 1.2,
+                    color: Colors.white,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -348,16 +360,16 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       if (parts.length == 3) {
         return '${parts[0]}年${parts[1]}月${parts[2]}日';
       }
-      print('日期格式不正确: $dateStr');
+      //print('日期格式不正确: $dateStr');
       return dateStr;
     } catch (e) {
-      print('格式化日期出错: $e');
+      //print('格式化日期出错: $e');
       return dateStr;
     }
   }
 
   Future<void> _showAnimeDetail(BangumiAnime anime) async {
-    print('显示番剧详情 - ID: ${anime.id}');
+    //print('显示番剧详情 - ID: ${anime.id}');
     showDialog(
       context: context,
       builder: (context) => FutureBuilder<BangumiAnime>(
@@ -368,7 +380,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           }
 
           if (snapshot.hasError) {
-            print('加载详情出错: ${snapshot.error}');
+            //print('加载详情出错: ${snapshot.error}');
             return AlertDialog(
               title: const Text('错误'),
               content: Text('加载失败: ${snapshot.error}'),
@@ -427,16 +439,13 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
                                 width: 120,
                                 height: 120 * 10 / 7,
                                 color: Colors.transparent,
-                                child: CachedNetworkImage(
-                                  imageUrl: detailedAnime.imageUrl,
+                                child: CachedNetworkImageWidget(
+                                  imageUrl: anime.imageUrl,
                                   width: 120,
                                   height: 120 * 10 / 7,
                                   fit: BoxFit.cover,
-                                  placeholder: (context, url) => const LoadingPlaceholder(
-                                    width: 120,
-                                    height: 120 * 10 / 7,
-                                  ),
-                                  errorWidget: (context, url, error) => Container(
+                                  shouldRelease: true,
+                                  errorBuilder: (context, error) => Container(
                                     color: Colors.transparent,
                                     child: const Icon(Icons.error, color: Colors.white54),
                                   ),

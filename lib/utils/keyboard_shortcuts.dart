@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 
 class KeyboardShortcuts {
   static const String _shortcutsKey = 'keyboard_shortcuts';
-  static const int _debounceTime = 200; // 防抖时间，单位毫秒
-  static final Map<String, int> _lastTriggerTime = {}; // 记录每个按键的最后触发时间
+  static const int _debounceTime = 300; // 增加防抖时间到300毫秒
+  static final Map<String, int> _lastTriggerTime = {};
+  static final Map<String, bool> _isProcessing = {}; // 添加处理状态标记
   static final Map<String, LogicalKeyboardKey> _keyBindings = {};
   static final Map<String, String> _shortcuts = {};
   static final Map<String, Function> _actionHandlers = {};
@@ -55,11 +56,23 @@ class KeyboardShortcuts {
     final now = DateTime.now().millisecondsSinceEpoch;
     final lastTime = _lastTriggerTime[action] ?? 0;
     
+    // 检查是否正在处理中
+    if (_isProcessing[action] == true) {
+      return false;
+    }
+    
     if (now - lastTime < _debounceTime) {
       return false;
     }
     
     _lastTriggerTime[action] = now;
+    _isProcessing[action] = true;
+    
+    // 设置一个定时器来重置处理状态
+    Future.delayed(Duration(milliseconds: _debounceTime), () {
+      _isProcessing[action] = false;
+    });
+    
     return true;
   }
 
@@ -73,7 +86,7 @@ class KeyboardShortcuts {
         _shortcuts.addAll(Map<String, String>.from(decoded));
         _updateKeyBindings();
       } catch (e) {
-        print('Error loading shortcuts: $e');
+        //print('Error loading shortcuts: $e');
         // 如果加载失败，使用默认快捷键
         initialize();
       }

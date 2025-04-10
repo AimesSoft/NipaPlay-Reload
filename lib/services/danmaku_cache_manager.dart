@@ -17,10 +17,10 @@ class DanmakuCacheManager {
 
   static Future<bool> isCacheValid(String episodeId) async {
     try {
-      print('检查缓存有效性: $episodeId');
+      //print('检查缓存有效性: $episodeId');
       // 首先检查内存缓存
       if (_memoryCache.containsKey(episodeId)) {
-        print('找到内存缓存');
+        //print('找到内存缓存');
         final cacheData = _memoryCache[episodeId]!;
         final timestamp = cacheData['timestamp'] as int;
         final animeId = cacheData['animeId'] as int;
@@ -32,17 +32,17 @@ class DanmakuCacheManager {
             : _newAnimeCacheDuration;
 
         final isValid = now.difference(cacheTime) < cacheDuration;
-        print('内存缓存${isValid ? '有效' : '已过期'}');
+        //print('内存缓存${isValid ? '有效' : '已过期'}');
         return isValid;
       }
 
       final file = File(await _getCacheFilePath(episodeId));
       if (!await file.exists()) {
-        print('缓存文件不存在');
+        //print('缓存文件不存在');
         return false;
       }
 
-      print('找到文件缓存');
+      //print('找到文件缓存');
       final jsonData = json.decode(await file.readAsString());
       final timestamp = jsonData['timestamp'] as int;
       final animeId = jsonData['animeId'] as int;
@@ -55,14 +55,14 @@ class DanmakuCacheManager {
 
       final isValid = now.difference(cacheTime) < cacheDuration;
       if (isValid) {
-        print('文件缓存有效，保存到内存缓存');
+        //print('文件缓存有效，保存到内存缓存');
         _memoryCache[episodeId] = jsonData;
       } else {
-        print('文件缓存已过期');
+        //print('文件缓存已过期');
       }
       return isValid;
     } catch (e) {
-      print('检查缓存有效性时出错: $e');
+      //print('检查缓存有效性时出错: $e');
       return false;
     }
   }
@@ -86,16 +86,16 @@ class DanmakuCacheManager {
       final file = File(await _getCacheFilePath(episodeId));
       await file.writeAsString(json.encode(jsonData));
     } catch (e) {
-      print('保存弹幕缓存失败: $e');
+      //print('保存弹幕缓存失败: $e');
     }
   }
 
   static Future<List<dynamic>?> getDanmakuFromCache(String episodeId) async {
     try {
-      print('尝试从缓存获取弹幕: $episodeId');
+      //print('尝试从缓存获取弹幕: $episodeId');
       // 首先检查内存缓存
       if (_memoryCache.containsKey(episodeId)) {
-        print('从内存缓存获取弹幕');
+        //print('从内存缓存获取弹幕');
         final cacheData = _memoryCache[episodeId]!;
         final timestamp = cacheData['timestamp'] as int;
         final animeId = cacheData['animeId'] as int;
@@ -108,27 +108,27 @@ class DanmakuCacheManager {
 
         if (now.difference(cacheTime) < cacheDuration) {
           final comments = cacheData['comments'] as List<dynamic>;
-          print('内存缓存有效，返回 ${comments.length} 条弹幕');
+          //print('内存缓存有效，返回 ${comments.length} 条弹幕');
           return comments;
         } else {
-          print('内存缓存已过期，移除');
+          //print('内存缓存已过期，移除');
           _memoryCache.remove(episodeId);
         }
       }
 
       if (!await isCacheValid(episodeId)) {
-        print('缓存无效');
+        //print('缓存无效');
         return null;
       }
 
-      print('从文件缓存获取弹幕');
+      //print('从文件缓存获取弹幕');
       final file = File(await _getCacheFilePath(episodeId));
       final jsonData = json.decode(await file.readAsString());
       final comments = jsonData['comments'] as List<dynamic>;
-      print('返回 ${comments.length} 条弹幕');
+      //print('返回 ${comments.length} 条弹幕');
       return comments;
     } catch (e) {
-      print('从缓存获取弹幕时出错: $e');
+      //print('从缓存获取弹幕时出错: $e');
       return null;
     }
   }
@@ -177,7 +177,7 @@ class DanmakuCacheManager {
         }
       }
     } catch (e) {
-      print('清理过期缓存失败: $e');
+      //print('清理过期缓存失败: $e');
     }
   }
 } 

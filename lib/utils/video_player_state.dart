@@ -196,7 +196,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       try {
         await _recognizeVideo(path);
       } catch (e) {
-        print('视频识别或弹幕加载失败，继续播放: $e');
+        //print('视频识别或弹幕加载失败，继续播放: $e');
         // 设置空弹幕列表，确保播放不受影响
         _danmakuList = [];
         _addStatusMessage('无法连接服务器，跳过加载弹幕');
@@ -276,7 +276,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       
       // 开始播放
       player.state = PlaybackState.playing;
-      _setStatus(PlayerStatus.playing, message: '正在播放');
+      
+      // 等待一小段时间确保播放器真正开始播放
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // 检查播放器实际状态
+      if (player.state == PlaybackState.playing) {
+        _setStatus(PlayerStatus.playing, message: '正在播放');
+      } else {
+        // 如果播放器没有真正开始播放，设置为暂停状态
+        player.state = PlaybackState.paused;
+        _setStatus(PlayerStatus.paused, message: '已暂停');
+      }
       
     } catch (e) {
       _error = '初始化视频播放器时出错: $e';
@@ -315,7 +326,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         await _setPortrait();
       }
     } catch (e) {
-      print('重置播放器时出错: $e');
+      //print('重置播放器时出错: $e');
       rethrow;
     }
   }
@@ -470,6 +481,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
             // 保存当前播放位置
             _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+            
+            // 检查是否播放结束
+            if (_position.inMilliseconds >= _duration.inMilliseconds - 100) {
+              player.state = PlaybackState.paused;
+              _setStatus(PlayerStatus.paused, message: '播放结束');
+              _position = _duration; // 确保位置不会超过视频长度
+              _progress = 1.0;
+              notifyListeners();
+            }
           }
           _lastSeekPosition = null;  // 清除最后seek位置
           notifyListeners();
@@ -675,7 +695,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 notifyListeners();
                 _setStatus(PlayerStatus.ready, message: '弹幕加载完成 (${danmakuData['count']}条)');
               } catch (e) {
-                print('弹幕加载错误: $e');
+                //print('弹幕加载错误: $e');
                 // 弹幕加载错误不影响视频播放
                 _danmakuList = [];
                 _setStatus(PlayerStatus.ready, message: '弹幕加载失败，跳过');
@@ -689,14 +709,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       } catch (e) {
         // 处理网络错误等
-        print('视频识别网络错误: $e');
+        //print('视频识别网络错误: $e');
         _danmakuList = [];
         _setStatus(PlayerStatus.ready, message: '无法连接服务器，跳过加载弹幕');
         // 不抛出异常，允许视频继续播放
       }
     } catch (e) {
       // 这里只处理真正阻碍视频播放的严重错误
-      print('严重错误: $e');
+      //print('严重错误: $e');
       rethrow; // 重新抛出异常，让initializePlayer捕获处理
     }
   }
@@ -774,7 +794,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       danmakuController?.loadDanmaku(danmakuData['comments']);
       _setStatus(PlayerStatus.playing, message: '弹幕加载完成 (${danmakuData['count']}条)');
     } catch (e) {
-      print('加载弹幕失败: $e');
+      //print('加载弹幕失败: $e');
       _setStatus(PlayerStatus.playing, message: '弹幕加载失败');
     }
   }

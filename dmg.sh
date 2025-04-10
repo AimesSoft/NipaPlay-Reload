@@ -15,8 +15,6 @@ ln -s /Applications "${temp_dir}/Applications"
 
 # Create the background image with arrow
 convert -size 800x450 xc:white \
-  -font Arial -pointsize 13 -fill '#666666' \
-  -draw "text 250,200 'NipaPlay' text 460,200 'Applications'" \
   -font Arial -pointsize 100 -fill '#333333' \
   -draw "text 400,225 '>'" \
   "${temp_dir}/.background/background.png"

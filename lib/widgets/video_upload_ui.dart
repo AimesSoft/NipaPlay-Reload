@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
-import 'dart:ui';
 import '../utils/video_player_state.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
@@ -127,7 +126,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
                                     await context.read<VideoPlayerState>().initializePlayer(file.path);
                                   }
                                 } catch (e) {
-                                  print('选择视频时出错: $e');
+                                  //print('选择视频时出错: $e');
                                 }
                               },
                               splashColor: Colors.white.withOpacity(0.2),

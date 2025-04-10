@@ -10,6 +10,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
 import 'dart:async';
+import 'package:flutter/services.dart';
 
 class ModernVideoControls extends StatefulWidget {
   const ModernVideoControls({super.key});
@@ -142,7 +143,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     
     if (!globals.isPhone) {
-      print('点击视频播放器，请求焦点');
+      //print('点击视频播放器，请求焦点');
       videoState.focusNode.requestFocus();
       return;
     }
@@ -182,8 +183,15 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
           child: RawKeyboardListener(
             focusNode: videoState.focusNode,
             onKey: (event) {
-              print('RawKeyboardListener 收到按键事件: ${event.logicalKey}');
-              KeyboardShortcuts.handleKeyEvent(event);
+              if (event is! RawKeyDownEvent) {
+                return;
+              }
+              //print('RawKeyboardListener 收到按键事件: ${event.logicalKey}');
+              // 消费事件，防止事件继续传播
+              final result = KeyboardShortcuts.handleKeyEvent(event);
+              if (result == KeyEventResult.handled) {
+                return;
+              }
             },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,

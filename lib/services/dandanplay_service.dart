@@ -98,15 +98,15 @@ class DandanplayService {
             _token = data['token'];
             await saveToken(_token!);
             await prefs.setInt(_lastTokenRenewKey, currentTime);
-            print('Token已成功刷新');
+            //print('Token已成功刷新');
           } else {
-            print('Token刷新失败: ${data['errorMessage']}');
+            //print('Token刷新失败: ${data['errorMessage']}');
           }
         } else {
-          print('Token刷新请求失败: ${response.statusCode}');
+          //print('Token刷新请求失败: ${response.statusCode}');
         }
       } catch (e) {
-        print('Token刷新时发生错误: $e');
+        //print('Token刷新时发生错误: $e');
       }
     }
   }
@@ -132,12 +132,12 @@ class DandanplayService {
     final cache = prefs.getString(_videoCacheKey);
     if (cache != null) {
       final Map<String, dynamic> cacheMap = json.decode(cache);
-      print('缓存数据: ${json.encode(cacheMap)}');
-      print('查找哈希: $fileHash');
-      print('缓存中是否有该哈希: ${cacheMap.containsKey(fileHash)}');
+      //print('缓存数据: ${json.encode(cacheMap)}');
+      //print('查找哈希: $fileHash');
+      //print('缓存中是否有该哈希: ${cacheMap.containsKey(fileHash)}');
       if (cacheMap.containsKey(fileHash)) {
         final videoInfo = cacheMap[fileHash];
-        print('视频信息: ${json.encode(videoInfo)}');
+        //print('视频信息: ${json.encode(videoInfo)}');
         return videoInfo;
       }
     }
@@ -174,7 +174,7 @@ class DandanplayService {
     // 尝试每个服务器
     for (final server in servers) {
       try {
-        print('尝试从服务器 $server 获取appSecret');
+        //print('尝试从服务器 $server 获取appSecret');
         
         final client = http.Client();
         final response = await client.post(
@@ -189,7 +189,7 @@ class DandanplayService {
           final data = json.decode(response.body);
           if (data['encryptedAppSecret'] != null) {
             _appSecret = _b(data['encryptedAppSecret']);
-            print('成功从 $server 获取appSecret');
+            //print('成功从 $server 获取appSecret');
             return _appSecret!;
           } else {
             throw Exception('从 $server 获取appSecret失败：响应中没有encryptedAppSecret');
@@ -198,12 +198,12 @@ class DandanplayService {
           throw Exception('从 $server 获取appSecret失败：HTTP ${response.statusCode}');
         }
       } on TimeoutException {
-        print('从 $server 获取appSecret超时，尝试下一个服务器');
+        //print('从 $server 获取appSecret超时，尝试下一个服务器');
         lastException = TimeoutException('从 $server 获取appSecret超时');
         // 继续尝试下一个服务器
       } catch (e) {
         lastException = e is Exception ? e : Exception(e.toString());
-        print('从 $server 获取appSecret失败: $e，尝试下一个服务器');
+        //print('从 $server 获取appSecret失败: $e，尝试下一个服务器');
         // 继续尝试下一个服务器
       }
     }
@@ -319,7 +319,7 @@ class DandanplayService {
               // 直接使用弹幕数据，不添加额外的 danmaku 字段
               cachedInfo['comments'] = danmakuData['comments'];
             } catch (e) {
-              print('弹幕加载失败: $e');
+              //print('弹幕加载失败: $e');
             }
           }
         }
@@ -327,11 +327,11 @@ class DandanplayService {
         return cachedInfo;
       }
 
-      print('发送匹配请求:');
-      print('文件名: $fileName');
-      print('文件大小: $fileSize');
-      print('文件哈希: $fileHash');
-      print('Token: $_token');
+      //print('发送匹配请求:');
+      //print('文件名: $fileName');
+      //print('文件大小: $fileSize');
+      //print('文件哈希: $fileHash');
+      //print('Token: $_token');
 
       // 检查是否登录
       final prefs = await SharedPreferences.getInstance();
@@ -356,13 +356,13 @@ class DandanplayService {
         }),
       );
 
-      print('API响应状态码: ${response.statusCode}');
-      print('API响应头: ${response.headers}');
-      print('API响应体: ${response.body}');
+      //print('API响应状态码: ${response.statusCode}');
+      //print('API响应头: ${response.headers}');
+      //print('API响应体: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('解析后的数据: $data');
+        //print('解析后的数据: $data');
         
         if (data['isMatched'] == true) {
           // 保存到缓存
@@ -379,7 +379,7 @@ class DandanplayService {
                 // 直接使用弹幕数据，不添加额外的 danmaku 字段
                 data['comments'] = danmakuData['comments'];
               } catch (e) {
-                print('获取弹幕失败: $e');
+                //print('获取弹幕失败: $e');
               }
             }
           }
@@ -393,7 +393,7 @@ class DandanplayService {
         throw Exception('获取视频信息失败: $errorMessage');
       }
     } catch (e) {
-      print('获取视频信息时发生错误: $e');
+      //print('获取视频信息时发生错误: $e');
       throw Exception('获取视频信息失败: ${e.toString()}');
     }
   }
@@ -406,12 +406,12 @@ class DandanplayService {
 
   static Future<Map<String, dynamic>> getDanmaku(String episodeId, int animeId) async {
     try {
-      print('开始获取弹幕: episodeId=$episodeId, animeId=$animeId');
+      //print('开始获取弹幕: episodeId=$episodeId, animeId=$animeId');
       
       // 先检查缓存
       final cachedDanmaku = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
       if (cachedDanmaku != null) {
-        print('从缓存加载弹幕成功: $episodeId, 数量: ${cachedDanmaku.length}');
+        //print('从缓存加载弹幕成功: $episodeId, 数量: ${cachedDanmaku.length}');
         return {
           'comments': cachedDanmaku,
           'fromCache': true,
@@ -419,7 +419,7 @@ class DandanplayService {
         };
       }
       
-      print('缓存未命中，从网络加载弹幕');
+      //print('缓存未命中，从网络加载弹幕');
       final appSecret = await _a();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/comment/$episodeId';
@@ -461,10 +461,11 @@ class DandanplayService {
             };
           }).toList();
 
-          print('从网络加载弹幕成功: $episodeId, 数量: ${formattedComments.length}');
+          //print('从网络加载弹幕成功: $episodeId, 数量: ${formattedComments.length}');
           
           // 异步保存到缓存
           DanmakuCacheManager.saveDanmakuToCache(episodeId, animeId, formattedComments)
+              // ignore: avoid_print
               .then((_) => print('弹幕已保存到缓存: $episodeId'));
           
           return {
@@ -480,7 +481,7 @@ class DandanplayService {
         throw Exception('获取弹幕失败: $errorMessage');
       }
     } catch (e) {
-      print('获取弹幕时出错: $e');
+      //print('获取弹幕时出错: $e');
       rethrow;
     }
   }

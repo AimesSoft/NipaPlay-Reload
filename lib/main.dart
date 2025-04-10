@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -18,82 +19,90 @@ import 'services/bangumi_service.dart';
 import 'package:nipaplay/utils/keyboard_shortcuts.dart';
 import 'services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/utils/keyboard_mappings.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 注册 FVP
   fvp.registerWith(options: {
+   'global': {
+        'log': 'off', // off, error, warning, info, debug, all(default)
+      }
   });
 
-  // 初始化弹弹play服务
-  await DandanplayService.initialize();
+  // 并行执行初始化操作
+  await Future.wait([
+    // 初始化弹弹play服务
+    DandanplayService.initialize(),
+    
+    // 加载设置
+    Future.wait([
+      SettingsStorage.loadString('themeMode', defaultValue: 'system'),
+      SettingsStorage.loadDouble('blurPower'),
+      SettingsStorage.loadString('backgroundImageMode'),
+      SettingsStorage.loadString('customBackgroundPath'),
+    ]).then((results) {
+      globals.blurPower = results[1] as double;
+      globals.backgroundImageMode = results[2] as String;
+      globals.customBackgroundPath = results[3] as String;
+      return results[0] as String;
+    }),
+    
+    // 加载快捷键设置
+    KeyboardShortcuts.loadShortcuts(),
+    
+    // 清理过期的弹幕缓存
+    DanmakuCacheManager.clearExpiredCache(),
+    
+    // 初始化 BangumiService
+    BangumiService.instance.initialize(),
+  ]).then((results) {
+    // 处理主题模式设置
+    String savedThemeMode = results[1] as String;
+    ThemeMode initialThemeMode;
+    switch (savedThemeMode) {
+      case 'light':
+        initialThemeMode = ThemeMode.light;
+        break;
+      case 'dark':
+        initialThemeMode = ThemeMode.dark;
+        break;
+      default:
+        initialThemeMode = ThemeMode.system;
+    }
 
-  if (globals.isDesktop) {
-    await windowManager.ensureInitialized();
-    WindowOptions windowOptions = const WindowOptions(
-      skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.hidden,
-      title: "NipaPlay",
-    );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setMinimumSize(const Size(600, 400));
-      await windowManager.maximize();
-      await windowManager.show();
-    });
-  }
+    if (globals.isDesktop) {
+      windowManager.ensureInitialized();
+      WindowOptions windowOptions = const WindowOptions(
+        skipTaskbar: false,
+        titleBarStyle: TitleBarStyle.hidden,
+        title: "NipaPlay",
+      );
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.setMinimumSize(const Size(600, 400));
+        await windowManager.maximize();
+        await windowManager.show();
+      });
+    }
 
-  // 加载快捷键设置
-  await KeyboardShortcuts.loadShortcuts();
-
-  // 清理过期的弹幕缓存
-  await DanmakuCacheManager.clearExpiredCache();
-
-  String savedThemeMode =
-      await SettingsStorage.loadString('themeMode', defaultValue: 'system');
-  ThemeMode initialThemeMode;
-  switch (savedThemeMode) {
-    case 'light':
-      initialThemeMode = ThemeMode.light;
-      break;
-    case 'dark':
-      initialThemeMode = ThemeMode.dark;
-      break;
-    default:
-      initialThemeMode = ThemeMode.system;
-  }
-
-  // 加载模糊度
-  final double blurPower = await SettingsStorage.loadDouble('blurPower');
-  globals.blurPower = blurPower;
-
-  // 加载背景图像模式
-  final String backgroundImageMode = await SettingsStorage.loadString('backgroundImageMode');
-  globals.backgroundImageMode = backgroundImageMode;
-
-  // 加载自定义背景图片路径
-  final String customBackgroundPath = await SettingsStorage.loadString('customBackgroundPath');
-  globals.customBackgroundPath = customBackgroundPath;
-
-  // 初始化 BangumiService
-  await BangumiService.instance.initialize();
-
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => VideoPlayerState()),
-        ChangeNotifierProvider(
-          create: (context) => ThemeNotifier(
-            initialThemeMode: initialThemeMode, 
-            initialBlurPower: blurPower,
-            initialBackgroundImageMode: backgroundImageMode,
-            initialCustomBackgroundPath: customBackgroundPath,
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => VideoPlayerState()),
+          ChangeNotifierProvider(
+            create: (context) => ThemeNotifier(
+              initialThemeMode: initialThemeMode, 
+              initialBlurPower: globals.blurPower,
+              initialBackgroundImageMode: globals.backgroundImageMode,
+              initialCustomBackgroundPath: globals.customBackgroundPath,
+            ),
           ),
-        ),
-      ],
-      child: const NipaPlayApp(),
-    ),
-  );
+        ],
+        child: const NipaPlayApp(),
+      ),
+    );
+  });
 }
 
 class NipaPlayApp extends StatelessWidget {
@@ -103,14 +112,27 @@ class NipaPlayApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ThemeNotifier>(
       builder: (context, themeNotifier, child) {
-        return MaterialApp(
-          title: 'NipaPlay',
-          debugShowCheckedModeBanner: false,
-          color: Colors.transparent,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: themeNotifier.themeMode,
-          home: MainPage(),
+        return Shortcuts(
+          shortcuts: KeyboardMappings.allMappings,
+          child: Actions(
+            actions: {
+              VoidCallbackIntent: CallbackAction(
+                onInvoke: (Intent intent) {
+                  //print('全局键盘事件被捕获');
+                  return null;
+                },
+              ),
+            },
+            child: MaterialApp(
+              title: 'NipaPlay',
+              debugShowCheckedModeBanner: false,
+              color: Colors.transparent,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeNotifier.themeMode,
+              home: MainPage(),
+            ),
+          ),
         );
       },
     );
@@ -156,47 +178,60 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
-        return Stack(
-          children: [
-            CustomScaffold(
-                pages: widget.pages, tabPage: createTabLabels(), pageIsHome: true),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: globals.winLinDesktop ? 100 : 0,
-              child: SizedBox(
-                height: 30,
-                child: GestureDetector(
-                  onDoubleTap: _toggleWindowSize,
-                  onPanStart: (details) async {
-                    if (globals.winLinDesktop) {
-                      await windowManager.startDragging();
-                    }
-                  },
-                ),
-              ),
+    return Stack(
+      children: [
+        // 使用 Selector 只监听需要的状态
+        Selector<VideoPlayerState, bool>(
+          selector: (context, videoState) => videoState.shouldShowAppBar(),
+          builder: (context, shouldShowAppBar, child) {
+            return CustomScaffold(
+              pages: widget.pages,
+              tabPage: createTabLabels(),
+              pageIsHome: true,
+            );
+          },
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: globals.winLinDesktop ? 100 : 0,
+          child: SizedBox(
+            height: 30,
+            child: GestureDetector(
+              onDoubleTap: _toggleWindowSize,
+              onPanStart: (details) async {
+                if (globals.winLinDesktop) {
+                  await windowManager.startDragging();
+                }
+              },
             ),
-            if (globals.winLinDesktop && videoState.shouldShowAppBar())
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  width: 100,
-                  height: globals.isPhone && globals.isMobile ? 55 : 30,
-                  color: Colors.transparent,
-                  child: WindowControlButtons(
-                    isMaximized: isMaximized,
-                    onMinimize: _minimizeWindow,
-                    onMaximizeRestore: _toggleWindowSize,
-                    onClose: _closeWindow,
-                  ),
+          ),
+        ),
+        // 使用 Selector 只监听需要的状态
+        Selector<VideoPlayerState, bool>(
+          selector: (context, videoState) => videoState.shouldShowAppBar(),
+          builder: (context, shouldShowAppBar, child) {
+            if (!globals.winLinDesktop || !shouldShowAppBar) {
+              return const SizedBox.shrink();
+            }
+            return Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                width: 100,
+                height: globals.isPhone && globals.isMobile ? 55 : 30,
+                color: Colors.transparent,
+                child: WindowControlButtons(
+                  isMaximized: isMaximized,
+                  onMinimize: _minimizeWindow,
+                  onMaximizeRestore: _toggleWindowSize,
+                  onClose: _closeWindow,
                 ),
               ),
-          ],
-        );
-      },
+            );
+          },
+        ),
+      ],
     );
   }
 }
