@@ -27,8 +27,8 @@
 </div>
 
 <div align="center" style="margin: 10px 0;">
-  <img src="https://img.shields.io/badge/版本-v1.0.0?style=for-the-badge&color=ff69b4&label=版本" alt="版本">
-  <img src="https://img.shields.io/badge/下载量-1000?style=for-the-badge&color=ff6b6b&label=下载量" alt="下载量">
+  <img src="https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=flat-square&color=ff69b4&label=版本" alt="版本">
+  <img src="https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=flat-square&color=ff6b6b&label=下载量" alt="下载量">
 </div>
 
 <div align="center" style="margin: 10px 0;">
