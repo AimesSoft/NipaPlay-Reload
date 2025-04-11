@@ -227,7 +227,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
 
         return Material(
           type: MaterialType.transparency,
-          child: Container(
+          child: SizedBox(
             width: MediaQuery.of(context).size.width,
             height: MediaQuery.of(context).size.height,
             child: Stack(
@@ -292,9 +292,9 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                                       ),
                                     ),
                                   ),
-                                  child: Row(
+                                  child: const Row(
                                     children: [
-                                      const Text(
+                                      Text(
                                         '设置',
                                         style: TextStyle(
                                           color: Colors.white,
@@ -302,7 +302,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                      const Spacer(),
+                                      Spacer(),
                                     ],
                                   ),
                                 ),

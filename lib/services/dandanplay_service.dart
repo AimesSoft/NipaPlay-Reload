@@ -161,6 +161,14 @@ class DandanplayService {
   static Future<String> _a() async {
     if (_appSecret != null) return _appSecret!;
 
+    // 尝试从 SharedPreferences 获取 appSecret
+    final prefs = await SharedPreferences.getInstance();
+    final savedAppSecret = prefs.getString('dandanplay_app_secret');
+    if (savedAppSecret != null) {
+      _appSecret = savedAppSecret;
+      return _appSecret!;
+    }
+
     // 定义服务器列表，主服务器在前，备用服务器在后
     final servers = [
       'nipaplay.aimes-soft.com',
@@ -189,6 +197,8 @@ class DandanplayService {
           final data = json.decode(response.body);
           if (data['encryptedAppSecret'] != null) {
             _appSecret = _b(data['encryptedAppSecret']);
+            // 保存到 SharedPreferences
+            await prefs.setString('dandanplay_app_secret', _appSecret!);
             //print('成功从 $server 获取appSecret');
             return _appSecret!;
           } else {

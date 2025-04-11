@@ -25,14 +25,14 @@ class BaseSettingsMenu extends StatelessWidget {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final backgroundColor = isDarkMode 
+        final backgroundColor = isDarkMode
             ? const Color.fromARGB(255, 130, 130, 130).withOpacity(0.5)
             : const Color.fromARGB(255, 193, 193, 193).withOpacity(0.5);
         final borderColor = Colors.white.withOpacity(0.5);
 
         return Material(
           type: MaterialType.transparency,
-          child: Container(
+          child: SizedBox(
             width: MediaQuery.of(context).size.width,
             height: MediaQuery.of(context).size.height,
             child: Stack(
@@ -43,8 +43,8 @@ class BaseSettingsMenu extends StatelessWidget {
                   child: Container(
                     width: width,
                     constraints: BoxConstraints(
-                      maxHeight: globals.isPhone 
-                          ? MediaQuery.of(context).size.height - 120 
+                      maxHeight: globals.isPhone
+                          ? MediaQuery.of(context).size.height - 120
                           : MediaQuery.of(context).size.height - 200,
                     ),
                     child: MouseRegion(
@@ -73,7 +73,9 @@ class BaseSettingsMenu extends StatelessWidget {
                             ),
                             child: ConstrainedBox(
                               constraints: BoxConstraints(
-                                maxHeight: MediaQuery.of(context).size.height - 200,
+                                maxHeight: globals.isPhone
+                                    ? MediaQuery.of(context).size.height - 120
+                                    : MediaQuery.of(context).size.height - 200,
                               ),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -128,4 +130,4 @@ class BaseSettingsMenu extends StatelessWidget {
       },
     );
   }
-} 
+}

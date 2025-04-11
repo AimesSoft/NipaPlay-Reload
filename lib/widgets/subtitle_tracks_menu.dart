@@ -65,8 +65,8 @@ class SubtitleTracksMenu extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (videoState.player.mediaInfo?.subtitle != null)
-                ...videoState.player.mediaInfo!.subtitle!.asMap().entries.map((entry) {
+              if (videoState.player.mediaInfo.subtitle != null)
+                ...videoState.player.mediaInfo.subtitle!.asMap().entries.map((entry) {
                   final index = entry.key;
                   final track = entry.value;
                   final isActive = videoState.player.activeSubtitleTracks.contains(index);

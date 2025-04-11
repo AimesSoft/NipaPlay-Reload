@@ -11,7 +11,7 @@ class AppTheme {
       onPrimary: Colors.white, // 在主要颜色上的文本和图标颜色，确保对比度。
       secondary: Colors.grey[300]!, // 辅助颜色，用于应用中不那么突出的元素，如背景、分割线等。
       onSecondary: Colors.black, // 在辅助颜色上的文本和图标颜色，确保对比度。
-      surface: Colors.white, // 表面颜色，用于卡片、对话框等表面元素。
+      surface: Colors.black, // 表面颜色，用于卡片、对话框等表面元素。
       onSurface: Colors.white, // 在表面颜色上的文本和图标颜色，确保对比度。
       error: Colors.red, // 错误颜色，用于显示错误信息。
       onError: Colors.white, // 在错误颜色上的文本和图标颜色，确保对比度。
@@ -26,7 +26,7 @@ class AppTheme {
       onPrimary: Colors.white, // 在主要颜色上的文本和图标颜色，确保对比度。
       secondary: Colors.grey[300]!, // 辅助颜色，深色模式下使用灰色。
       onSecondary: Colors.white, // 在辅助颜色上的文本和图标颜色，确保对比度。
-      surface: Colors.white, // 表面颜色，深色模式下使用白色。
+      surface: Colors.black, // 表面颜色，深色模式下使用黑色。
       onSurface: Colors.white, // 在表面颜色上的文本和图标颜色，确保对比度。
       error: Colors.red, // 错误颜色，用于显示错误信息。
       onError: Colors.white, // 在错误颜色上的文本和图标颜色，确保对比度。

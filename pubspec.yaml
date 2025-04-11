@@ -71,12 +71,6 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   assets:
-    - assets/playVideo.png
-    - assets/playVideoLight.png
-    - assets/videoHistory.png
-    - assets/videoHistoryLight.png
-    - assets/title.png
-    - assets/titleLight.png
     - assets/minbutton.png
     - assets/minbuttonLight.png
     - assets/closebutton.png
@@ -86,14 +80,7 @@ flutter:
     - assets/unmaxbutton.png
     - assets/unmaxbuttonLight.png
     - assets/logo.png
-    - assets/backgirl.png
     - assets/backempty.png
-    - assets/settings.png
-    - assets/settingsLight.png
-    - assets/images/recent1.png
-    - assets/images/recent2.png
-    - assets/images/anime1.png
-    - assets/images/anime2.png
     - assets/images/main_image.png
     - assets/subfont.ttf
   # The following line ensures that the Material Icons font is

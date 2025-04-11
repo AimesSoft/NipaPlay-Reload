@@ -9,6 +9,8 @@ import 'dart:io' show Platform;
 import 'loading_overlay.dart';
 import 'danmaku_overlay.dart';
 import 'video_controls_overlay.dart';
+import 'dart:async';
+import 'package:flutter/services.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -20,16 +22,33 @@ class VideoPlayerUI extends StatefulWidget {
 class _VideoPlayerUIState extends State<VideoPlayerUI> {
   final FocusNode _focusNode = FocusNode();
   final bool _isIndicatorHovered = false;
+  Timer? _doubleTapTimer;
+  int _tapCount = 0;
+  static const _doubleTapTimeout = Duration(milliseconds: 200);
+  bool _isProcessingTap = false;
+
+  double getFontSize() {
+    if (globals.isPhone) {
+      return 20.0;
+    } else {
+      return 30.0;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _focusNode.onKey = _handleKeyEvent;
-    _registerKeyboardShortcuts();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _registerKeyboardShortcuts();
+    });
   }
 
   void _registerKeyboardShortcuts() {
+    if (!mounted) return;
+    
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (videoState == null) return;
     
     KeyboardShortcuts.registerActionHandler('play_pause', () {
       if (videoState.hasVideo) {
@@ -60,14 +79,72 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     });
   }
 
+  void _handleTap() {
+    if (_isProcessingTap) return;
+    
+    _tapCount++;
+    if (_tapCount == 1) {
+      // 启动双击检测定时器
+      _doubleTapTimer?.cancel();
+      _doubleTapTimer = Timer(_doubleTapTimeout, () {
+        if (_tapCount == 1) {
+          // 如果定时器结束时还是1次点击，则执行单点操作
+          _handleSingleTap();
+        }
+        _tapCount = 0;
+      });
+    } else if (_tapCount == 2) {
+      // 处理双击
+      _doubleTapTimer?.cancel();
+      _tapCount = 0;
+      _handleDoubleTap();
+    }
+  }
+
+  void _handleSingleTap() {
+    _isProcessingTap = true;
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (videoState.hasVideo) {
+      if (globals.isPhone) {
+        videoState.toggleControls();
+      } else {
+        videoState.togglePlayPause();
+      }
+    }
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _isProcessingTap = false;
+    });
+  }
+
+  void _handleDoubleTap() {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (videoState.hasVideo) {
+      if (globals.isPhone) {
+        videoState.togglePlayPause();
+      } else {
+        videoState.toggleFullscreen();
+      }
+    }
+  }
+
   @override
   void dispose() {
     _focusNode.dispose();
+    _doubleTapTimer?.cancel();
     super.dispose();
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, RawKeyEvent event) {
-    return KeyboardShortcuts.handleKeyEvent(event);
+    if (event is! RawKeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final result = KeyboardShortcuts.handleKeyEvent(event);
+    if (result == KeyEventResult.handled) {
+      return result;
+    }
+
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -106,8 +183,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                 child: globals.isPhone
                   ? GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => videoState.toggleControls(),
-                      onDoubleTap: () => videoState.togglePlayPause(),
+                      onTap: _handleTap,
                       child: Stack(
                         children: [
                           // 视频纹理
@@ -134,21 +210,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                   : Focus(
                       focusNode: _focusNode,
                       autofocus: true,
+                      canRequestFocus: true,
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
                           // 视频纹理
                           GestureDetector(
-                            onTap: () {
-                              if (videoState.hasVideo) {
-                                videoState.togglePlayPause();
-                              }
-                            },
-                            onDoubleTap: () {
-                              if (videoState.hasVideo) {
-                                videoState.toggleFullscreen();
-                              }
-                            },
+                            onTap: _handleTap,
                             onTapDown: (_) {
                               if (videoState.hasVideo && videoState.showControls) {
                                 videoState.resetAutoHideTimer();
@@ -168,10 +236,21 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
 
                           // 弹幕层
                           if (videoState.hasVideo)
-                            DanmakuOverlay(
-                              isPlaying: videoState.status == PlayerStatus.playing,
-                              currentPosition: videoState.position.inMilliseconds,
-                              danmakuList: videoState.danmakuList,
+                            Consumer<VideoPlayerState>(
+                              builder: (context, videoState, _) {
+                                if (!videoState.danmakuVisible) {
+                                  return const SizedBox.shrink();
+                                }
+                                return DanmakuOverlay(
+                                  danmakuList: videoState.danmakuList,
+                                  currentPosition: videoState.position.inMilliseconds.toDouble(),
+                                  videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+                                  isPlaying: videoState.status == PlayerStatus.playing,
+                                  fontSize: getFontSize(),
+                                  isVisible: videoState.danmakuVisible,
+                                  opacity: videoState.mappedDanmakuOpacity,
+                                );
+                              },
                             ),
                           
                           // 加载中遮罩

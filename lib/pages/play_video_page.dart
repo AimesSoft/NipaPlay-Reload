@@ -86,6 +86,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
+  double getFontSize() {
+    if (globals.isPhone) {
+      return 20.0;
+    } else {
+      return 30.0;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
@@ -146,10 +154,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                   Positioned.fill(
                     child: Consumer<VideoPlayerState>(
                       builder: (context, videoState, _) {
+                        if (!videoState.danmakuVisible) {
+                          return const SizedBox.shrink();
+                        }
                         return DanmakuOverlay(
                           danmakuList: videoState.danmakuList,
+                          currentPosition: videoState.position.inMilliseconds.toDouble(),
+                          videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
                           isPlaying: videoState.status == PlayerStatus.playing,
-                          currentPosition: videoState.position.inMilliseconds,
+                          fontSize: getFontSize(),
+                          isVisible: videoState.danmakuVisible,
+                          opacity: videoState.mappedDanmakuOpacity,
                         );
                       },
                     ),

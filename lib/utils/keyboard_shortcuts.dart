@@ -35,7 +35,16 @@ class KeyboardShortcuts {
       return KeyEventResult.ignored;
     }
 
-    // 检查每个动作的快捷键
+    // 对于ESC键特殊处理，不使用防抖
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      final handler = _actionHandlers['fullscreen'];
+      if (handler != null) {
+        handler();
+        return KeyEventResult.handled;
+      }
+    }
+
+    // 其他按键的正常处理逻辑
     for (final entry in _keyBindings.entries) {
       final action = entry.key;
       final key = entry.value;
@@ -86,7 +95,7 @@ class KeyboardShortcuts {
         _shortcuts.addAll(Map<String, String>.from(decoded));
         _updateKeyBindings();
       } catch (e) {
-        //print('Error loading shortcuts: $e');
+        print('Error loading shortcuts: $e');
         // 如果加载失败，使用默认快捷键
         initialize();
       }
@@ -130,6 +139,12 @@ class KeyboardShortcuts {
         return LogicalKeyboardKey.keyJ;
       case 'L':
         return LogicalKeyboardKey.keyL;
+      case 'S':
+        return LogicalKeyboardKey.keyS;
+      case 'T':
+        return LogicalKeyboardKey.keyT;
+      case 'B':
+        return LogicalKeyboardKey.keyB;
       case '4':
         return LogicalKeyboardKey.digit4;
       case '6':
@@ -153,5 +168,10 @@ class KeyboardShortcuts {
 
   static String formatActionWithShortcut(String action, String shortcut) {
     return '$action ($shortcut)';
+  }
+
+  static Future<bool> hasSavedShortcuts() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.containsKey(_shortcutsKey);
   }
 } 

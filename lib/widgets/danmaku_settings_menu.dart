@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
-import 'tooltip_bubble.dart';
 import 'custom_slider.dart';
 import 'base_settings_menu.dart';
 
@@ -31,6 +29,29 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // 弹幕开关
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '显示弹幕',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Switch(
+                      value: videoState.danmakuVisible,
+                      onChanged: (value) {
+                        videoState.setDanmakuVisible(value);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              // 弹幕透明度
               Container(
                 padding: const EdgeInsets.all(16),
                 child: CustomSlider(

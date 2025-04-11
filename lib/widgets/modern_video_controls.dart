@@ -37,6 +37,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   Timer? _doubleTapTimer;
   int _tapCount = 0;
   static const _doubleTapTimeout = Duration(milliseconds: 300);
+  bool _isProcessingTap = false;
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -140,30 +141,40 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   }
 
   void _handleTap() {
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (_isProcessingTap) return;
     
-    if (!globals.isPhone) {
-      //print('点击视频播放器，请求焦点');
-      videoState.focusNode.requestFocus();
-      return;
-    }
-
     _tapCount++;
     if (_tapCount == 1) {
-      // 第一次点击，启动计时器
+      // 立即处理单次点击
+      _handleSingleTap();
+      // 启动双击检测定时器
       _doubleTapTimer?.cancel();
       _doubleTapTimer = Timer(_doubleTapTimeout, () {
-        if (_tapCount == 1) {
-          // 如果计时器结束时只有一次点击，执行单击操作
-          videoState.toggleControls();
-        }
         _tapCount = 0;
       });
     } else if (_tapCount == 2) {
-      // 第二次点击，取消计时器并执行双击操作
+      // 处理双击
       _doubleTapTimer?.cancel();
-      videoState.togglePlayPause();
       _tapCount = 0;
+      _handleDoubleTap();
+    }
+  }
+
+  void _handleSingleTap() {
+    _isProcessingTap = true;
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (videoState.hasVideo) {
+      videoState.togglePlayPause();
+    }
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _isProcessingTap = false;
+    });
+  }
+
+  void _handleDoubleTap() {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (videoState.hasVideo) {
+      videoState.toggleFullscreen();
     }
   }
 

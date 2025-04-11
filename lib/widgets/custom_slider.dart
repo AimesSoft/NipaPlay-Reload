@@ -121,16 +121,8 @@ class _CustomSliderState extends State<CustomSlider> with SingleTickerProviderSt
       final width = sliderBox.size.width;
       final progress = (localPosition.dx / width).clamp(0.0, 1.0);
       
-      // 将值调整为最接近的档位
-      final List<double> steps = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
-      double closest = steps[0];
-      for (double step in steps) {
-        if ((progress - step).abs() < (progress - closest).abs()) {
-          closest = step;
-        }
-      }
-      
-      widget.onChanged(closest);
+      // 直接使用计算出的进度值，不再限制为固定档位
+      widget.onChanged(progress);
     }
   }
 

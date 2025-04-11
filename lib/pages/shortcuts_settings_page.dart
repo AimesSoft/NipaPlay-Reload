@@ -22,7 +22,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
 
   final Map<String, List<String>> _availableShortcuts = {
     'play_pause': ['空格', 'P', 'K'],
-    'fullscreen': ['Enter', 'F', 'D'],
+    'fullscreen': ['Enter', 'F', 'S'],
     'rewind': ['←', 'J', '4'],
     'forward': ['→', 'L', '6'],
     'toggle_danmaku': ['D', 'T', 'B'],

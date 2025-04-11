@@ -20,6 +20,7 @@ import 'package:nipaplay/utils/keyboard_shortcuts.dart';
 import 'services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/utils/keyboard_mappings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,8 +50,14 @@ void main() async {
       return results[0] as String;
     }),
     
-    // 加载快捷键设置
-    KeyboardShortcuts.loadShortcuts(),
+    // 加载并保存默认快捷键设置
+    Future(() async {
+      await KeyboardShortcuts.loadShortcuts();
+      // 如果没有保存的快捷键，保存默认值
+      if (!await KeyboardShortcuts.hasSavedShortcuts()) {
+        await KeyboardShortcuts.saveShortcuts();
+      }
+    }),
     
     // 清理过期的弹幕缓存
     DanmakuCacheManager.clearExpiredCache(),
