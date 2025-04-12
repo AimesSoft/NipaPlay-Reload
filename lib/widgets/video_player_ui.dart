@@ -139,7 +139,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
       return KeyEventResult.ignored;
     }
 
-    final result = KeyboardShortcuts.handleKeyEvent(event);
+    final result = KeyboardShortcuts.handleKeyEvent(event, context);
     if (result == KeyEventResult.handled) {
       return result;
     }

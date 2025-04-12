@@ -90,6 +90,7 @@ void main() async {
         await windowManager.setMinimumSize(const Size(600, 400));
         await windowManager.maximize();
         await windowManager.show();
+        await windowManager.focus();
       });
     }
 

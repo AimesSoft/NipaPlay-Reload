@@ -16,6 +16,10 @@ class DandanplayService {
   static bool _isLoggedIn = false;
   static String? _userName;
   static String? _screenName;
+  static const List<String> _servers = [
+    'https://nipaplay.aimes-soft.com',
+    'https://key.aimes-soft.com'
+  ];
 
   static bool get isLoggedIn => _isLoggedIn;
   static String? get userName => _userName;
@@ -76,7 +80,7 @@ class DandanplayService {
     // 如果距离上次刷新超过21天，则刷新Token
     if (currentTime - lastRenewTime >= _tokenRenewInterval) {
       try {
-        final appSecret = await _a();
+        final appSecret = await getAppSecret();
         final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
 
         final response = await http.post(
@@ -158,7 +162,8 @@ class DandanplayService {
     await prefs.setString(_videoCacheKey, json.encode(cacheMap));
   }
 
-  static Future<String> _a() async {
+  // 获取appSecret
+  static Future<String> getAppSecret() async {
     if (_appSecret != null) return _appSecret!;
 
     // 尝试从 SharedPreferences 获取 appSecret
@@ -169,56 +174,38 @@ class DandanplayService {
       return _appSecret!;
     }
 
-    // 定义服务器列表，主服务器在前，备用服务器在后
-    final servers = [
-      'nipaplay.aimes-soft.com',
-      'key.aimes-soft.com'
-    ];
-    
-    // 设置较短的超时时间，以便快速失败并尝试备用服务器
-    const timeout = Duration(seconds: 10);
+    // 从服务器列表获取 appSecret
     Exception? lastException;
-    
-    // 尝试每个服务器
-    for (final server in servers) {
+    for (final server in _servers) {
       try {
         //print('尝试从服务器 $server 获取appSecret');
-        
-        final client = http.Client();
-        final response = await client.post(
-          Uri.parse('https://$server/nipaplay.php'),
-          headers: {'Content-Type': 'application/json'},
-          body: '{}',
-        ).timeout(timeout);
-        
-        client.close();
+        final response = await http.get(
+          Uri.parse('$server/appSecret'),
+          headers: {
+            'User-Agent': 'dandanplay/1.0.0',
+            'Accept': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
           if (data['encryptedAppSecret'] != null) {
             _appSecret = _b(data['encryptedAppSecret']);
-            // 保存到 SharedPreferences
             await prefs.setString('dandanplay_app_secret', _appSecret!);
             //print('成功从 $server 获取appSecret');
             return _appSecret!;
-          } else {
-            throw Exception('从 $server 获取appSecret失败：响应中没有encryptedAppSecret');
           }
-        } else {
-          throw Exception('从 $server 获取appSecret失败：HTTP ${response.statusCode}');
+          throw Exception('从 $server 获取appSecret失败：响应中没有encryptedAppSecret');
         }
+        throw Exception('从 $server 获取appSecret失败：HTTP ${response.statusCode}');
       } on TimeoutException {
         //print('从 $server 获取appSecret超时，尝试下一个服务器');
         lastException = TimeoutException('从 $server 获取appSecret超时');
-        // 继续尝试下一个服务器
       } catch (e) {
-        lastException = e is Exception ? e : Exception(e.toString());
         //print('从 $server 获取appSecret失败: $e，尝试下一个服务器');
-        // 继续尝试下一个服务器
+        lastException = e as Exception;
       }
     }
-    
-    // 如果所有服务器都失败，抛出最后一个异常
     throw lastException ?? Exception('获取appSecret失败：所有服务器均不可用');
   }
 
@@ -263,7 +250,7 @@ class DandanplayService {
 
   static Future<Map<String, dynamic>> login(String username, String password) async {
     try {
-      final appSecret = await _a();
+      final appSecret = await getAppSecret();
       final now = DateTime.now();
       final utcNow = now.toUtc();
       final timestamp = (utcNow.millisecondsSinceEpoch / 1000).round();
@@ -308,7 +295,7 @@ class DandanplayService {
 
   static Future<Map<String, dynamic>> getVideoInfo(String videoPath) async {
     try {
-      final appSecret = await _a();
+      final appSecret = await getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final file = File(videoPath);
       final fileName = file.path.split('/').last;
@@ -430,7 +417,7 @@ class DandanplayService {
       }
       
       //print('缓存未命中，从网络加载弹幕');
-      final appSecret = await _a();
+      final appSecret = await getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/comment/$episodeId';
       

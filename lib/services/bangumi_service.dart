@@ -15,6 +15,7 @@ class BangumiService {
 
   final Map<String, BangumiAnime> _cache = {};
   final Map<int, BangumiAnime> _detailsCache = {};
+  final Map<int, DateTime> _detailsCacheTime = {};
   bool _isInitialized = false;
   List<BangumiAnime>? _preloadedAnimes;
   late http.Client _client;
@@ -245,8 +246,15 @@ class BangumiService {
     try {
       // 检查详情缓存
       if (_detailsCache.containsKey(id)) {
-        //print('从缓存获取番剧 $id 的详情');
-        return _detailsCache[id]!;
+        final cacheTime = _detailsCacheTime[id];
+        if (cacheTime != null && DateTime.now().difference(cacheTime) < _cacheDuration) {
+          //print('从缓存获取番剧 $id 的详情');
+          return _detailsCache[id]!;
+        } else {
+          // 缓存过期，清除
+          _detailsCache.remove(id);
+          _detailsCacheTime.remove(id);
+        }
       }
 
       //print('开始获取番剧 $id 的详情');
@@ -261,9 +269,6 @@ class BangumiService {
       }
 
       final jsonData = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-      //print('获取到的原始数据:');
-      //print('- air_date: ${jsonData['air_date']}');
-      //print('- date: ${jsonData['date']}');
       
       if (jsonData['infobox'] != null) {
         //print('\n制作信息:');
@@ -277,6 +282,7 @@ class BangumiService {
       final anime = BangumiAnime.fromJson(jsonData);
       // 保存到详情缓存
       _detailsCache[id] = anime;
+      _detailsCacheTime[id] = DateTime.now();
       
       //print('\n解析后的番剧对象:');
       //print('- 标题: ${anime.nameCn}');

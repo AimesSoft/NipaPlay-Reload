@@ -8,6 +8,12 @@ import '../widgets/loading_placeholder.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import '../widgets/cached_network_image_widget.dart';
+import '../widgets/custom_refresh_indicator.dart';
+import '../widgets/translation_button.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../services/dandanplay_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -22,6 +28,10 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
   bool _isLoading = true;
   String? _error;
   bool _isReversed = false;
+  Map<int, String> _translatedSummaries = {};
+  static const String _translationCacheKey = 'bangumi_translation_cache';
+  static const Duration _translationCacheDuration = Duration(days: 7);
+  bool _isShowingTranslation = false;
 
   // 切换排序方向
   void _toggleSort() {
@@ -48,6 +58,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
     super.initState();
     //print('NewSeriesPage 初始化');
     _loadAnimes();
+    _loadTranslationCache();
   }
 
   @override
@@ -89,6 +100,68 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadTranslationCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? cachedString = prefs.getString(_translationCacheKey);
+      
+      if (cachedString != null) {
+        print('找到翻译缓存数据');
+        final data = json.decode(cachedString);
+        final timestamp = data['timestamp'] as int;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        
+        print('缓存时间戳: $timestamp');
+        print('当前时间戳: $now');
+        print('时间差: ${now - timestamp}ms');
+        print('缓存有效期: ${_translationCacheDuration.inMilliseconds}ms');
+        
+        // 检查缓存是否过期
+        if (now - timestamp <= _translationCacheDuration.inMilliseconds) {
+          final translations = Map<String, String>.from(data['translations']);
+          // 将字符串键转换回整数
+          final Map<int, String> parsedTranslations = {};
+          translations.forEach((key, value) {
+            parsedTranslations[int.parse(key)] = value;
+          });
+          print('从缓存加载翻译，共 ${parsedTranslations.length} 条');
+          setState(() {
+            _translatedSummaries = parsedTranslations;
+          });
+        } else {
+          print('翻译缓存已过期，清除缓存');
+          await prefs.remove(_translationCacheKey);
+        }
+      } else {
+        print('未找到翻译缓存');
+      }
+    } catch (e) {
+      print('加载翻译缓存失败: $e');
+    }
+  }
+
+  Future<void> _saveTranslationCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // 确保所有值都是可序列化的字符串
+      final Map<String, String> serializableTranslations = {};
+      _translatedSummaries.forEach((key, value) {
+        serializableTranslations[key.toString()] = value;
+      });
+      
+      final data = {
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'translations': serializableTranslations,
+      };
+      final jsonString = json.encode(data);
+      await prefs.setString(_translationCacheKey, jsonString);
+      print('保存翻译到缓存，共 ${_translatedSummaries.length} 条');
+      print('缓存数据大小: ${jsonString.length} 字节');
+    } catch (e) {
+      print('保存翻译缓存失败: $e');
     }
   }
 
@@ -196,8 +269,12 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
 
     return Stack(
       children: [
-        RefreshIndicator(
+        CustomRefreshIndicator(
           onRefresh: _loadAnimes,
+          color: Colors.white,
+          strokeWidth: 3.0,
+          blur: 20.0,
+          opacity: 0.8,
           child: CustomScrollView(
             slivers: [
               SliverList(
@@ -368,8 +445,34 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
     }
   }
 
+  Future<String?> _translateSummary(String text) async {
+    try {
+      final appSecret = await DandanplayService.getAppSecret();
+      print('开始请求翻译...');
+      final response = await http.post(
+        Uri.parse('https://nipaplay.aimes-soft.com/tran.php'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'appSecret': appSecret,
+          'text': text,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print('翻译请求成功');
+        return response.body;
+      }
+      print('翻译请求失败，状态码: ${response.statusCode}');
+      return null;
+    } catch (e) {
+      print('翻译请求异常: $e');
+      return null;
+    }
+  }
+
   Future<void> _showAnimeDetail(BangumiAnime anime) async {
-    //print('显示番剧详情 - ID: ${anime.id}');
     showDialog(
       context: context,
       builder: (context) => FutureBuilder<BangumiAnime>(
@@ -380,7 +483,6 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
           }
 
           if (snapshot.hasError) {
-            //print('加载详情出错: ${snapshot.error}');
             return AlertDialog(
               title: const Text('错误'),
               content: Text('加载失败: ${snapshot.error}'),
@@ -394,213 +496,242 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
           }
 
           final detailedAnime = snapshot.data!;
-          // 使用列表页传入的 airWeekday
           final airWeekday = anime.airWeekday;
-          return BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              child: Container(
-                width: 600,
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 130, 130, 130).withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Theme.of(context).brightness == Brightness.light
-                        ? const Color.fromARGB(255, 201, 201, 201)
-                        : const Color.fromARGB(255, 130, 130, 130),
-                    width: 0.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 5,
-                      spreadRadius: 1,
-                      offset: const Offset(1, 1),
+          
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Dialog(
+                  backgroundColor: Colors.transparent,
+                  child: Container(
+                    width: 600,
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.8,
                     ),
-                  ],
-                ),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(255, 130, 130, 130).withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? const Color.fromARGB(255, 201, 201, 201)
+                            : const Color.fromARGB(255, 130, 130, 130),
+                        width: 0.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 5,
+                          spreadRadius: 1,
+                          offset: const Offset(1, 1),
+                        ),
+                      ],
+                    ),
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                width: 120,
-                                height: 120 * 10 / 7,
-                                color: Colors.transparent,
-                                child: CachedNetworkImageWidget(
-                                  imageUrl: anime.imageUrl,
-                                  width: 120,
-                                  height: 120 * 10 / 7,
-                                  fit: BoxFit.cover,
-                                  shouldRelease: true,
-                                  errorBuilder: (context, error) => Container(
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    width: 120,
+                                    height: 120 * 10 / 7,
                                     color: Colors.transparent,
-                                    child: const Icon(Icons.error, color: Colors.white54),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    detailedAnime.nameCn,
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontSize: 16,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  if (detailedAnime.name != detailedAnime.nameCn)
-                                    Text(
-                                      detailedAnime.name,
-                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        fontSize: 14,
-                                        color: Colors.white70,
+                                    child: CachedNetworkImageWidget(
+                                      imageUrl: anime.imageUrl,
+                                      width: 120,
+                                      height: 120 * 10 / 7,
+                                      fit: BoxFit.cover,
+                                      shouldRelease: true,
+                                      errorBuilder: (context, error) => Container(
+                                        color: Colors.transparent,
+                                        child: const Icon(Icons.error, color: Colors.white54),
                                       ),
                                     ),
-                                  const SizedBox(height: 4),
-                                  if (detailedAnime.rating != null)
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.star, color: Colors.amber, size: 16),
-                                        const SizedBox(width: 4),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        detailedAnime.nameCn,
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          fontSize: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      if (detailedAnime.name != detailedAnime.nameCn)
                                         Text(
-                                          detailedAnime.rating!.toStringAsFixed(1),
+                                          detailedAnime.name,
                                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                             fontSize: 14,
-                                            color: Colors.white,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      const SizedBox(height: 4),
+                                      if (detailedAnime.rating != null)
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.star, color: Colors.amber, size: 16),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              detailedAnime.rating!.toStringAsFixed(1),
+                                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                fontSize: 14,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      const SizedBox(height: 4),
+                                      if (detailedAnime.airDate != null && detailedAnime.airDate!.isNotEmpty) ...[
+                                        Text(
+                                          '放送日期: ${_formatDate(detailedAnime.airDate)}${airWeekday != null ? ' (${_weekdays[airWeekday]})' : ''}',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            fontSize: 12,
+                                            color: Colors.white70,
                                           ),
                                         ),
                                       ],
+                                      if (detailedAnime.totalEpisodes != null) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '话数: ${detailedAnime.totalEpisodes}话',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            fontSize: 12,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      ],
+                                      if (detailedAnime.originalWork != null) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '原作: ${detailedAnime.originalWork}',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            fontSize: 12,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      ],
+                                      if (detailedAnime.director != null) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '导演: ${detailedAnime.director}',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            fontSize: 12,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      ],
+                                      if (detailedAnime.studio != null) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '制作公司: ${detailedAnime.studio}',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            fontSize: 12,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (detailedAnime.summary != null) ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Text(
+                                    '简介:',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
                                     ),
-                                  const SizedBox(height: 4),
-                                  if (detailedAnime.airDate != null && detailedAnime.airDate!.isNotEmpty) ...[
-                                    Text(
-                                      '放送日期: ${_formatDate(detailedAnime.airDate)}${airWeekday != null ? ' (${_weekdays[airWeekday]})' : ''}',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        fontSize: 12,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                  ],
-                                  if (detailedAnime.totalEpisodes != null) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '话数: ${detailedAnime.totalEpisodes}话',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        fontSize: 12,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                  ],
-                                  if (detailedAnime.originalWork != null) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '原作: ${detailedAnime.originalWork}',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        fontSize: 12,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                  ],
-                                  if (detailedAnime.director != null) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '导演: ${detailedAnime.director}',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        fontSize: 12,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                  ],
-                                  if (detailedAnime.studio != null) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '制作公司: ${detailedAnime.studio}',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        fontSize: 12,
-                                        color: Colors.white70,
-                                      ),
+                                  ),
+                                  if (detailedAnime.summary!.contains('の')) ...[
+                                    const SizedBox(width: 8),
+                                    TranslationButton(
+                                      animeId: detailedAnime.id,
+                                      summary: detailedAnime.summary!,
+                                      translatedSummaries: _translatedSummaries,
+                                      onTranslationUpdated: (updatedTranslations) {
+                                        setDialogState(() {
+                                          _translatedSummaries = updatedTranslations;
+                                          _saveTranslationCache();
+                                        });
+                                      },
+                                      isShowingTranslation: _isShowingTranslation,
+                                      onTranslationStateChanged: (isShowing) {
+                                        setDialogState(() {
+                                          _isShowingTranslation = isShowing;
+                                        });
+                                      },
                                     ),
                                   ],
                                 ],
                               ),
-                            ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _translatedSummaries.containsKey(detailedAnime.id) && _isShowingTranslation
+                                    ? _translatedSummaries[detailedAnime.id]!
+                                    : detailedAnime.summary!,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                            if (detailedAnime.tags?.isNotEmpty == true) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                '标签:',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: detailedAnime.tags!
+                                    .map((tag) => Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        tag,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ))
+                                    .toList(),
+                              ),
+                            ],
                           ],
                         ),
-                        if (detailedAnime.summary != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            '简介:',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            detailedAnime.summary!,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontSize: 13,
-                              height: 1.5,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ],
-                        if (detailedAnime.tags?.isNotEmpty == true) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            '标签:',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: detailedAnime.tags!
-                                .map((tag) => Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    tag,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ))
-                                .toList(),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           );
         },
       ),

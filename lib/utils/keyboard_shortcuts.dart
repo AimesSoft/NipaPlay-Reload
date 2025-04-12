@@ -2,6 +2,9 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'video_player_state.dart';
+import 'fullscreen_handler.dart';
 
 class KeyboardShortcuts {
   static const String _shortcutsKey = 'keyboard_shortcuts';
@@ -30,18 +33,15 @@ class KeyboardShortcuts {
   }
 
   // 处理键盘事件
-  static KeyEventResult handleKeyEvent(RawKeyEvent event) {
+  static KeyEventResult handleKeyEvent(RawKeyEvent event, BuildContext context) {
     if (event is! RawKeyDownEvent) {
       return KeyEventResult.ignored;
     }
 
-    // 对于ESC键特殊处理，不使用防抖
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      final handler = _actionHandlers['fullscreen'];
-      if (handler != null) {
-        handler();
-        return KeyEventResult.handled;
-      }
+    // 先处理全屏相关的按键
+    final fullscreenResult = FullscreenHandler.handleFullscreenKey(event, context);
+    if (fullscreenResult == KeyEventResult.handled) {
+      return fullscreenResult;
     }
 
     // 其他按键的正常处理逻辑
