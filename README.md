@@ -27,11 +27,6 @@
 </div>
 
 <div align="center" style="margin: 10px 0;">
-  <img src="https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=for-the-badge&color=ff69b4&label=最新版本" alt="最新版本">
-  <img src="https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=for-the-badge&color=ff6b6b&label=总下载量" alt="总下载量">
-</div>
-
-<div align="center" style="margin: 10px 0;">
   <img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart">
 </div>
 
