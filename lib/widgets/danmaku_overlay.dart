@@ -11,7 +11,7 @@ class DanmakuOverlay extends StatefulWidget {
   final double opacity;
 
   const DanmakuOverlay({
-    Key? key,
+    super.key,
     required this.danmakuList,
     required this.currentPosition,
     required this.videoDuration,
@@ -19,7 +19,7 @@ class DanmakuOverlay extends StatefulWidget {
     required this.fontSize,
     required this.isVisible,
     required this.opacity,
-  }) : super(key: key);
+  });
 
   @override
   State<DanmakuOverlay> createState() => _DanmakuOverlayState();

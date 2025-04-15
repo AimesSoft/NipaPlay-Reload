@@ -12,7 +12,7 @@ class SingleDanmaku extends StatefulWidget {
   final double opacity;
 
   const SingleDanmaku({
-    Key? key,
+    super.key,
     required this.content,
     required this.videoDuration,
     required this.currentTime,
@@ -21,7 +21,7 @@ class SingleDanmaku extends StatefulWidget {
     required this.isVisible,
     required this.yPosition,
     this.opacity = 1.0,
-  }) : super(key: key);
+  });
 
   @override
   State<SingleDanmaku> createState() => _SingleDanmakuState();
@@ -33,6 +33,7 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
   bool _initialized = false;
   bool _isPaused = false;
   double _pauseTime = 0.0;
+  Size _previousScreenSize = Size.zero; // 添加屏幕尺寸记录
 
   @override
   void initState() {
@@ -106,12 +107,14 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
         } else {
           // 弹幕正在滚动
           if (_isPaused) {
-            // 视频暂停时保持当前位置
-            _xPosition = screenWidth - ((_pauseTime - widget.danmakuTime) / 10) * (screenWidth + danmakuWidth);
+            // 视频暂停时，根据暂停时间计算位置，同时考虑屏幕宽度变化带来的影响
+            // 固定使用暂停时间而不使用当前时间，确保停留在暂停时的相对位置
+            final timeFraction = (_pauseTime - widget.danmakuTime) / 10;
+            // 根据当前屏幕宽度重新计算绝对位置
+            _xPosition = screenWidth - timeFraction * (screenWidth + danmakuWidth);
           } else {
             // 正常滚动
             _xPosition = screenWidth - (timeDiff / 10) * (screenWidth + danmakuWidth);
-            //print(widget.content.text+":$_xPosition");
           }
           
           // 只在弹幕进入屏幕时显示
@@ -149,10 +152,26 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
         }
         break;
     }
+    
+    // 确保状态更新
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // 获取当前屏幕尺寸
+    final currentScreenSize = MediaQuery.of(context).size;
+    
+    // 检测屏幕尺寸是否发生变化
+    if (currentScreenSize != _previousScreenSize) {
+      // 屏幕尺寸发生变化，重新计算弹幕位置
+      _previousScreenSize = currentScreenSize;
+      // 立即执行重新计算，不要使用微任务
+      _calculatePosition();
+    }
+
     if (!widget.isVisible) {
       return const SizedBox.shrink();
     }

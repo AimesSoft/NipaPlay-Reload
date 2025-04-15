@@ -51,6 +51,28 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+              // 弹幕堆叠开关
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '弹幕堆叠',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Switch(
+                      value: videoState.danmakuStacking,
+                      onChanged: (value) {
+                        videoState.setDanmakuStacking(value);
+                      },
+                    ),
+                  ],
+                ),
+              ),
               // 合并相同弹幕开关
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

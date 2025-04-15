@@ -50,6 +50,7 @@ dependencies:
   url_launcher: ^6.3.1
   kmbal_ionicons: ^1.0.0
   image: ^4.5.4
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

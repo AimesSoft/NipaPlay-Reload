@@ -58,6 +58,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _danmakuVisible = true;  // 默认显示弹幕
   static const String _mergeDanmakuKey = 'merge_danmaku';
   bool _mergeDanmaku = false;  // 默认不合并弹幕
+  static const String _danmakuStackingKey = 'danmaku_stacking';
+  bool _danmakuStacking = true;  // 默认启用弹幕堆叠
   dynamic danmakuController;  // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
   bool _isFullscreenTransitioning = false;
@@ -97,12 +99,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get hasVideo => _status == PlayerStatus.ready || 
                       _status == PlayerStatus.playing || 
                       _status == PlayerStatus.paused;
+  bool get isPaused => _status == PlayerStatus.paused;
   FocusNode get focusNode => _focusNode;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   double get controlBarHeight => _controlBarHeight;
   double get danmakuOpacity => _danmakuOpacity;
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;
+  bool get danmakuStacking => _danmakuStacking;
   Duration get videoDuration => _videoDuration;
 
   Future<void> _initialize() async {
@@ -118,6 +122,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await _loadDanmakuOpacity();    // 加载保存的弹幕透明度
     await _loadDanmakuVisible();    // 加载弹幕可见性
     await _loadMergeDanmaku();      // 加载弹幕合并设置
+    await _loadDanmakuStacking();   // 加载弹幕堆叠设置
   }
 
   Future<void> _loadLastVideo() async {
@@ -871,6 +876,28 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 切换弹幕合并状态
   void toggleMergeDanmaku() {
     setMergeDanmaku(!_mergeDanmaku);
+  }
+
+  // 加载弹幕堆叠设置
+  Future<void> _loadDanmakuStacking() async {
+    final prefs = await SharedPreferences.getInstance();
+    _danmakuStacking = prefs.getBool(_danmakuStackingKey) ?? true;
+    notifyListeners();
+  }
+
+  // 设置弹幕堆叠
+  Future<void> setDanmakuStacking(bool stacking) async {
+    if (_danmakuStacking != stacking) {
+      _danmakuStacking = stacking;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_danmakuStackingKey, stacking);
+      notifyListeners();
+    }
+  }
+
+  // 切换弹幕堆叠状态
+  void toggleDanmakuStacking() {
+    setDanmakuStacking(!_danmakuStacking);
   }
 
   void loadDanmaku(String episodeId, String animeIdStr) async {
