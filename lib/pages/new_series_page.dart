@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/bangumi_service.dart';
 import '../models/bangumi_model.dart';
@@ -72,18 +73,19 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
 
   Future<void> _loadAnimes() async {
     try {
-      //print('开始加载番剧数据');
+      print('开始加载番剧数据');
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
       // 加载数据
+      print('调用 BangumiService.loadData()');
       await _bangumiService.loadData();
 
-      //print('调用 BangumiService.getCalendar()');
+      print('调用 BangumiService.getCalendar()');
       final animes = await _bangumiService.getCalendar();
-      //print('获取到 ${animes.length} 个番剧');
+      print('获取到 ${animes.length} 个番剧');
 
       if (mounted) {
         setState(() {
@@ -91,12 +93,23 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
           _isLoading = false;
         });
       }
-      //print('番剧数据加载完成');
+      print('番剧数据加载完成');
     } catch (e) {
-      //print('加载番剧数据时出错: $e');
+      print('加载番剧数据时出错: $e');
+      String errorMsg = e.toString();
+      if (e is TimeoutException) {
+        errorMsg = '网络请求超时，请检查网络连接后重试';
+      } else if (errorMsg.contains('SocketException')) {
+        errorMsg = '网络连接失败，请检查网络设置';
+      } else if (errorMsg.contains('HttpException')) {
+        errorMsg = '服务器无法连接，请稍后重试';
+      } else if (errorMsg.contains('FormatException')) {
+        errorMsg = '服务器返回数据格式错误';
+      }
+      
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = errorMsg;
           _isLoading = false;
         });
       }

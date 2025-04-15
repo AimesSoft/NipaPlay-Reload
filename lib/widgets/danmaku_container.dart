@@ -4,6 +4,7 @@ import 'single_danmaku.dart';
 import 'dart:math';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
+import '../utils/globals.dart' as globals;
 
 class DanmakuContainer extends StatefulWidget {
   final List<Map<String, dynamic>> danmakuList;
@@ -29,7 +30,7 @@ class DanmakuContainer extends StatefulWidget {
 
 class _DanmakuContainerState extends State<DanmakuContainer> {
   final double _danmakuHeight = 25.0; // 弹幕高度
-  final double _verticalSpacing = 20.0; // 上下间距
+  late final double _verticalSpacing; // 上下间距
   final double _horizontalSpacing = 20.0; // 左右间距
   
   // 为每种类型的弹幕创建独立的轨道系统
@@ -72,6 +73,9 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   @override
   void initState() {
     super.initState();
+    // 根据设备类型设置垂直间距
+    _verticalSpacing = globals.isPhone ? 10.0 : 20.0;
+    
     // 初始化时获取画布大小
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {
