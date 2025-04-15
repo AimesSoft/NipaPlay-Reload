@@ -84,7 +84,7 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
       text: TextSpan(
         text: widget.content.text,
         style: TextStyle(
-          fontSize: widget.fontSize,
+          fontSize: widget.fontSize * widget.content.fontSizeMultiplier,
           color: widget.content.color,
         ),
       ),
@@ -162,77 +162,111 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
     final luminance = (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
     // 如果亮度小于0.1，说明是深色，使用白色描边；否则使用黑色描边
     final strokeColor = luminance < 0.1 ? Colors.white : Colors.black;
+    
+    // 应用字体大小倍率
+    final adjustedFontSize = widget.fontSize * widget.content.fontSizeMultiplier;
+
+    // 检查是否有计数文本
+    final hasCountText = widget.content.countText != null;
+    
+    // 创建阴影列表
+    final shadowList = [
+      // 八个方向的描边
+      Shadow(
+        offset: const Offset(-1, -1),
+        blurRadius: 0,
+        color: strokeColor,
+      ),
+      Shadow(
+        offset: const Offset(1, -1),
+        blurRadius: 0,
+        color: strokeColor,
+      ),
+      Shadow(
+        offset: const Offset(1, 1),
+        blurRadius: 0,
+        color: strokeColor,
+      ),
+      Shadow(
+        offset: const Offset(-1, 1),
+        blurRadius: 0,
+        color: strokeColor,
+      ),
+      Shadow(
+        offset: const Offset(0, -1),
+        blurRadius: 0,
+        color: strokeColor,
+      ),
+      Shadow(
+        offset: const Offset(0, 1),
+        blurRadius: 0,
+        color: strokeColor,
+      ),
+      Shadow(
+        offset: const Offset(-1, 0),
+        blurRadius: 0,
+        color: strokeColor,
+      ),
+      Shadow(
+        offset: const Offset(1, 0),
+        blurRadius: 0,
+        color: strokeColor,
+      ),
+    ];
 
     return Positioned(
       left: _xPosition,
       top: widget.yPosition,
       child: Opacity(
         opacity: _opacity,
-        child: Stack(
-          children: [
-            // 描边
-            Text(
-              widget.content.text,
-              style: TextStyle(
-                fontSize: widget.fontSize,
-                color: strokeColor,
-                fontWeight: FontWeight.normal,
-                shadows: [
-                  // 八个方向的描边
-                  Shadow(
-                    offset: const Offset(-1, -1),
-                    blurRadius: 0,
-                    color: strokeColor,
+        child: hasCountText 
+          ? RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: widget.content.text,
+                    style: TextStyle(
+                      fontSize: adjustedFontSize,
+                      color: widget.content.color,
+                      fontWeight: FontWeight.normal,
+                      shadows: shadowList,
+                    ),
                   ),
-                  Shadow(
-                    offset: const Offset(1, -1),
-                    blurRadius: 0,
-                    color: strokeColor,
-                  ),
-                  Shadow(
-                    offset: const Offset(1, 1),
-                    blurRadius: 0,
-                    color: strokeColor,
-                  ),
-                  Shadow(
-                    offset: const Offset(-1, 1),
-                    blurRadius: 0,
-                    color: strokeColor,
-                  ),
-                  Shadow(
-                    offset: const Offset(0, -1),
-                    blurRadius: 0,
-                    color: strokeColor,
-                  ),
-                  Shadow(
-                    offset: const Offset(0, 1),
-                    blurRadius: 0,
-                    color: strokeColor,
-                  ),
-                  Shadow(
-                    offset: const Offset(-1, 0),
-                    blurRadius: 0,
-                    color: strokeColor,
-                  ),
-                  Shadow(
-                    offset: const Offset(1, 0),
-                    blurRadius: 0,
-                    color: strokeColor,
+                  TextSpan(
+                    text: widget.content.countText,
+                    style: TextStyle(
+                      fontSize: 25.0, // 固定大小字体
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold, 
+                      shadows: shadowList, // 继承相同的描边效果
+                    ),
                   ),
                 ],
               ),
+            )
+          : Stack(
+              children: [
+                // 描边
+                Text(
+                  widget.content.text,
+                  style: TextStyle(
+                    fontSize: adjustedFontSize,
+                    color: strokeColor,
+                    fontWeight: FontWeight.normal,
+                    shadows: shadowList,
+                  ),
+                ),
+                // 实际文本
+                Text(
+                  widget.content.text,
+                  style: TextStyle(
+                    fontSize: adjustedFontSize,
+                    color: widget.content.color,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ],
             ),
-            // 实际文本
-            Text(
-              widget.content.text,
-              style: TextStyle(
-                fontSize: widget.fontSize,
-                color: widget.content.color,
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

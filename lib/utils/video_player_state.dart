@@ -56,6 +56,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _danmakuOpacity = 1.0;  // 默认透明度
   static const String _danmakuVisibleKey = 'danmaku_visible';
   bool _danmakuVisible = true;  // 默认显示弹幕
+  static const String _mergeDanmakuKey = 'merge_danmaku';
+  bool _mergeDanmaku = true;  // 默认合并弹幕
   dynamic danmakuController;  // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
   bool _isFullscreenTransitioning = false;
@@ -100,6 +102,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get controlBarHeight => _controlBarHeight;
   double get danmakuOpacity => _danmakuOpacity;
   bool get danmakuVisible => _danmakuVisible;
+  bool get mergeDanmaku => _mergeDanmaku;
   Duration get videoDuration => _videoDuration;
 
   Future<void> _initialize() async {
@@ -114,6 +117,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await _loadControlBarHeight();  // 加载保存的控制栏高度
     await _loadDanmakuOpacity();    // 加载保存的弹幕透明度
     await _loadDanmakuVisible();    // 加载弹幕可见性
+    await _loadMergeDanmaku();      // 加载弹幕合并设置
   }
 
   Future<void> _loadLastVideo() async {
@@ -845,6 +849,28 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void toggleDanmakuVisible() {
     setDanmakuVisible(!_danmakuVisible);
+  }
+
+  // 加载弹幕合并设置
+  Future<void> _loadMergeDanmaku() async {
+    final prefs = await SharedPreferences.getInstance();
+    _mergeDanmaku = prefs.getBool(_mergeDanmakuKey) ?? true;
+    notifyListeners();
+  }
+
+  // 设置弹幕合并
+  Future<void> setMergeDanmaku(bool merge) async {
+    if (_mergeDanmaku != merge) {
+      _mergeDanmaku = merge;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_mergeDanmakuKey, merge);
+      notifyListeners();
+    }
+  }
+
+  // 切换弹幕合并状态
+  void toggleMergeDanmaku() {
+    setMergeDanmaku(!_mergeDanmaku);
   }
 
   void loadDanmaku(String episodeId, String animeIdStr) async {

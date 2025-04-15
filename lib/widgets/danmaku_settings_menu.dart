@@ -51,6 +51,28 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+              // 合并相同弹幕开关
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '合并相同弹幕',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Switch(
+                      value: videoState.mergeDanmaku,
+                      onChanged: (value) {
+                        videoState.setMergeDanmaku(value);
+                      },
+                    ),
+                  ],
+                ),
+              ),
               // 弹幕透明度
               Container(
                 padding: const EdgeInsets.all(16),

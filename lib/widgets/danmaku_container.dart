@@ -29,8 +29,8 @@ class DanmakuContainer extends StatefulWidget {
 
 class _DanmakuContainerState extends State<DanmakuContainer> {
   final double _danmakuHeight = 25.0; // 弹幕高度
-  final double _verticalSpacing = 10.0; // 上下间距
-  final double _horizontalSpacing = 5.0; // 左右间距
+  final double _verticalSpacing = 20.0; // 上下间距
+  final double _horizontalSpacing = 20.0; // 左右间距
   
   // 为每种类型的弹幕创建独立的轨道系统
   final Map<String, List<Map<String, dynamic>>> _trackDanmaku = {
@@ -54,6 +54,20 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   
   // 存储当前画布大小
   Size _currentSize = Size.zero;
+  
+  // 存储已处理过的弹幕信息，用于合并判断
+  final Map<String, Map<String, dynamic>> _processedDanmaku = {};
+  
+  // 存储按时间排序的弹幕列表，用于预测未来45秒内的弹幕
+  List<Map<String, dynamic>> _sortedDanmakuList = [];
+  
+  // 计算合并弹幕的字体大小倍率
+  double _calcMergedFontSizeMultiplier(int mergeCount) {
+    // 按照数量计算放大倍率，例如15条是1.5倍
+    double multiplier = 1.0 + (mergeCount / 10.0);
+    // 限制最大倍率避免过大
+    return multiplier.clamp(1.0, 2.0);
+  }
 
   @override
   void initState() {
@@ -64,6 +78,101 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         _currentSize = MediaQuery.of(context).size;
       });
     });
+    
+    // 初始化时对弹幕列表进行预处理和排序
+    _preprocessDanmakuList();
+  }
+  
+  // 对弹幕列表进行预处理和排序
+  void _preprocessDanmakuList() {
+    if (widget.danmakuList.isEmpty) return;
+    
+    // 复制一份弹幕列表以避免修改原数据
+    _sortedDanmakuList = List<Map<String, dynamic>>.from(widget.danmakuList);
+    
+    // 按时间排序
+    _sortedDanmakuList.sort((a, b) => 
+      (a['time'] as double).compareTo(b['time'] as double));
+      
+    // 预计算所有弹幕的状态
+    _precomputeDanmakuStates();
+  }
+  
+  // 预计算所有弹幕的显示状态
+  void _precomputeDanmakuStates() {
+    // 用于跟踪已处理的内容组
+    Map<String, double> contentFirstTime = {};
+    
+    // 使用滑动窗口法处理弹幕
+    for (int i = 0; i < _sortedDanmakuList.length; i++) {
+      final current = _sortedDanmakuList[i];
+      final content = current['content'] as String;
+      final time = current['time'] as double;
+      
+      // 弹幕唯一标识
+      final danmakuKey = '$content-$time';
+      
+      // 检查此内容是否已经有了第一个出现时间
+      if (contentFirstTime.containsKey(content)) {
+        final firstTime = contentFirstTime[content]!;
+        // 如果当前弹幕在第一次出现后的45秒内，标记为隐藏
+        if (time - firstTime <= 45.0) {
+          _processedDanmaku[danmakuKey] = {
+            ...current,
+            'hidden': true,
+            'belongsToGroup': content
+          };
+          continue;
+        } else {
+          // 超过45秒窗口，这是一个新的组的开始
+          contentFirstTime[content] = time;
+        }
+      } else {
+        // 第一次出现此内容
+        contentFirstTime[content] = time;
+      }
+      
+      // 计算这个内容在未来45秒内出现的次数
+      int futureCount = 1; // 至少包括自己
+      for (int j = i + 1; j < _sortedDanmakuList.length; j++) {
+        final future = _sortedDanmakuList[j];
+        final futureContent = future['content'] as String;
+        final futureTime = future['time'] as double;
+        
+        if (futureContent == content && futureTime - time <= 45.0) {
+          futureCount++;
+        }
+        
+        // 如果已经超过45秒窗口，停止计数
+        if (futureTime - time > 45.0) {
+          break;
+        }
+      }
+      
+      // 如果有多次出现，标记为合并状态
+      if (futureCount > 1) {
+        _processedDanmaku[danmakuKey] = {
+          ...current,
+          'merged': true,
+          'mergeCount': futureCount,
+          'isFirstInGroup': true,
+          'groupContent': content
+        };
+      } else {
+        // 只出现一次，保持原样
+        _processedDanmaku[danmakuKey] = current;
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(DanmakuContainer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // 如果弹幕列表变化，重新预处理
+    if (widget.danmakuList != oldWidget.danmakuList) {
+      _preprocessDanmakuList();
+    }
   }
 
   // 重新计算所有弹幕位置
@@ -111,6 +220,12 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     final existingWidth = existingDanmaku['width'] as double? ?? screenWidth * 0.2;
     final newWidth = newDanmaku['width'] as double? ?? screenWidth * 0.2;
     
+    // 获取弹幕的放大状态
+    final existingIsMerged = existingDanmaku['isMerged'] as bool? ?? false;
+    final newIsMerged = newDanmaku['isMerged'] as bool? ?? false;
+    final existingMergeCount = existingIsMerged ? (existingDanmaku['mergeCount'] as int? ?? 1) : 1;
+    final newMergeCount = newIsMerged ? (newDanmaku['mergeCount'] as int? ?? 1) : 1;
+    
     // 计算现有弹幕的当前位置
     final existingElapsed = currentTime - existingTime;
     final existingPosition = screenWidth - (existingElapsed / 10) * (screenWidth + existingWidth);
@@ -123,8 +238,13 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     final newLeft = newPosition;
     final newRight = newPosition + newWidth;
     
-    // 减小安全距离，让弹幕更密集
-    final safetyMargin = screenWidth * 0.02; // 从5%减小到2%的安全距离
+    // 减小安全距离，让弹幕更密集，但考虑放大弹幕需要更多空间
+    double safetyMargin = screenWidth * 0.02; // 标准弹幕的安全距离
+    if (existingIsMerged || newIsMerged) {
+      // 根据合并数量调整安全距离
+      final maxCount = max(existingMergeCount, newMergeCount);
+      safetyMargin = screenWidth * (0.02 + (maxCount / 100.0)); // 动态调整安全距离
+    }
     
     // 记录弹幕的边界坐标
     existingDanmaku['left'] = existingLeft;
@@ -156,10 +276,14 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       return aLeft.compareTo(bLeft);
     });
     
-    // 计算重叠情况
+    // 计算重叠情况，同时考虑放大弹幕
     for (int i = 0; i < visibleDanmaku.length; i++) {
       final current = visibleDanmaku[i];
-      totalWidth += current['width'] as double;
+      final isMerged = current['isMerged'] as bool? ?? false;
+      // 放大弹幕占用更多空间
+      final mergeCount = isMerged ? (current['mergeCount'] as int? ?? 1) : 1;
+      final widthMultiplier = isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0;
+      totalWidth += (current['width'] as double) * widthMultiplier;
       
       // 检查与后续弹幕的重叠
       for (int j = i + 1; j < visibleDanmaku.length; j++) {
@@ -178,7 +302,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     
     // 考虑重叠情况，调整轨道密度判断
     final adjustedWidth = totalWidth - maxOverlap;
-    final safetyFactor = 0.9; // 从80%增加到90%，让轨道更容易被判定为满
+    final safetyFactor = 0.7; // 从80%增加到90%，让轨道更容易被判定为满
     
     return adjustedWidth > _currentSize.width * safetyFactor;
   }
@@ -214,7 +338,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     return visibleDanmaku.isNotEmpty;
   }
 
-  double _getYPosition(String type, String content, double time) {
+  double _getYPosition(String type, String content, double time, bool isMerged, [int mergeCount = 1]) {
     final screenHeight = _currentSize.height;
     final screenWidth = _currentSize.width;
     final danmakuKey = '$type-$content-$time';
@@ -224,17 +348,23 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       return _danmakuYPositions[danmakuKey]!;
     }
     
+    // 确保mergeCount不为null
+    mergeCount = mergeCount > 0 ? mergeCount : 1;
+    
     // 从 VideoPlayerState 获取轨道信息
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.danmakuTrackInfo.containsKey(danmakuKey)) {
       final trackInfo = videoState.danmakuTrackInfo[danmakuKey]!;
       final track = trackInfo['track'] as int;
-      final trackHeight = _danmakuHeight + _verticalSpacing;
+      
+      // 考虑合并状态调整轨道高度
+      final adjustedDanmakuHeight = isMerged ? _danmakuHeight * _calcMergedFontSizeMultiplier(mergeCount) : _danmakuHeight;
+      final trackHeight = adjustedDanmakuHeight + _verticalSpacing;
       
       // 根据类型计算Y轴位置
       double yPosition;
       if (type == 'bottom') {
-        yPosition = screenHeight - (track + 1) * trackHeight - _danmakuHeight - _verticalSpacing;
+        yPosition = screenHeight - (track + 1) * trackHeight - adjustedDanmakuHeight - _verticalSpacing;
       } else {
         yPosition = track * trackHeight + _verticalSpacing;
       }
@@ -245,18 +375,20 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         'time': time,
         'track': track,
         'width': trackInfo['width'] as double,
+        'isMerged': isMerged,
       });
       
       _danmakuYPositions[danmakuKey] = yPosition;
       return yPosition;
     }
     
-    // 计算弹幕宽度
+    // 计算弹幕宽度和高度
+    final fontSize = isMerged ? widget.fontSize * _calcMergedFontSizeMultiplier(mergeCount) : widget.fontSize;
     final textPainter = TextPainter(
       text: TextSpan(
         text: content,
         style: TextStyle(
-          fontSize: widget.fontSize,
+          fontSize: fontSize,
           color: Colors.white,
         ),
       ),
@@ -271,8 +403,9 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     });
     
     // 计算可用轨道数，考虑弹幕高度和间距
-    final trackHeight = _danmakuHeight + _verticalSpacing;
-    final maxTracks = ((screenHeight - _danmakuHeight - _verticalSpacing) / trackHeight).floor();
+    final adjustedDanmakuHeight = isMerged ? _danmakuHeight * _calcMergedFontSizeMultiplier(mergeCount) : _danmakuHeight;
+    final trackHeight = adjustedDanmakuHeight + _verticalSpacing;
+    final maxTracks = ((screenHeight - adjustedDanmakuHeight - _verticalSpacing) / trackHeight).floor();
     
     // 根据弹幕类型分配轨道
     if (type == 'scroll') {
@@ -289,12 +422,32 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         final track = (initialTrack + i) % halfTracks;
         final trackDanmaku = _trackDanmaku['scroll']!.where((d) => d['track'] == track).toList();
         
+        // 检查轨道中是否有合并弹幕占用多行
+        bool hasMergedDanmaku = false;
+        for (var danmaku in trackDanmaku) {
+          if (danmaku['isMerged'] == true) {
+            final danmakuTime = danmaku['time'] as double;
+            final danmakuMergeCount = danmaku['mergeCount'] as int? ?? 1;
+            // 只考虑时间上重叠的部分，且只有当合并数较大时才避开
+            if (widget.currentTime - danmakuTime <= 10 && widget.currentTime - danmakuTime >= 0 && danmakuMergeCount > 5) {
+              hasMergedDanmaku = true;
+              break;
+            }
+          }
+        }
+        
+        // 如果当前轨道被合并弹幕占用，并且当前弹幕也是合并弹幕，尝试下一个轨道
+        if (hasMergedDanmaku && isMerged && mergeCount > 5) {
+          continue;
+        }
+        
         if (trackDanmaku.isEmpty) {
           _trackDanmaku['scroll']!.add({
             'content': content,
             'time': time,
             'track': track,
             'width': danmakuWidth,
+            'isMerged': isMerged,
           });
           final yPosition = track * trackHeight + _verticalSpacing;
           _danmakuYPositions[danmakuKey] = yPosition;
@@ -303,6 +456,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             videoState.updateDanmakuTrackInfo(danmakuKey, {
               'track': track,
               'width': danmakuWidth,
+              'isMerged': isMerged,
             });
           });
           return yPosition;
@@ -315,6 +469,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             if (_willCollide(danmaku, {
               'time': time,
               'width': danmakuWidth,
+              'isMerged': isMerged,
+              'mergeCount': mergeCount,
             }, widget.currentTime)) {
               hasCollision = true;
               break;
@@ -327,6 +483,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               'time': time,
               'track': track,
               'width': danmakuWidth,
+              'isMerged': isMerged,
+              'mergeCount': mergeCount,
             });
             final yPosition = track * trackHeight + _verticalSpacing;
             _danmakuYPositions[danmakuKey] = yPosition;
@@ -335,6 +493,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               videoState.updateDanmakuTrackInfo(danmakuKey, {
                 'track': track,
                 'width': danmakuWidth,
+                'isMerged': isMerged,
+                'mergeCount': mergeCount,
               });
             });
             return yPosition;
@@ -353,6 +513,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             'time': time,
             'track': track,
             'width': danmakuWidth,
+            'isMerged': isMerged,
           });
           final yPosition = track * trackHeight + _verticalSpacing;
           _danmakuYPositions[danmakuKey] = yPosition;
@@ -361,6 +522,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             videoState.updateDanmakuTrackInfo(danmakuKey, {
               'track': track,
               'width': danmakuWidth,
+              'isMerged': isMerged,
             });
           });
           return yPosition;
@@ -373,6 +535,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             if (_willCollide(danmaku, {
               'time': time,
               'width': danmakuWidth,
+              'isMerged': isMerged,
+              'mergeCount': mergeCount,
             }, widget.currentTime)) {
               hasCollision = true;
               break;
@@ -385,6 +549,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               'time': time,
               'track': track,
               'width': danmakuWidth,
+              'isMerged': isMerged,
+              'mergeCount': mergeCount,
             });
             final yPosition = track * trackHeight + _verticalSpacing;
             _danmakuYPositions[danmakuKey] = yPosition;
@@ -393,6 +559,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               videoState.updateDanmakuTrackInfo(danmakuKey, {
                 'track': track,
                 'width': danmakuWidth,
+                'isMerged': isMerged,
+                'mergeCount': mergeCount,
               });
             });
             return yPosition;
@@ -431,6 +599,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         'time': time,
         'track': bestTrack,
         'width': danmakuWidth,
+        'isMerged': isMerged,
+        'mergeCount': mergeCount,
       });
       final yPosition = bestTrack * trackHeight + _verticalSpacing;
       _danmakuYPositions[danmakuKey] = yPosition;
@@ -439,6 +609,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         videoState.updateDanmakuTrackInfo(danmakuKey, {
           'track': bestTrack,
           'width': danmakuWidth,
+          'isMerged': isMerged,
+          'mergeCount': mergeCount,
         });
       });
       return yPosition;
@@ -456,6 +628,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             'time': time,
             'track': track,
             'width': danmakuWidth,
+            'isMerged': isMerged,
           });
           final yPosition = track * trackHeight + _verticalSpacing;
           _danmakuYPositions[danmakuKey] = yPosition;
@@ -464,6 +637,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             videoState.updateDanmakuTrackInfo(danmakuKey, {
               'track': track,
               'width': danmakuWidth,
+              'isMerged': isMerged,
             });
           });
           return yPosition;
@@ -476,6 +650,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             if (_willOverlap(danmaku, {
               'time': time,
               'width': danmakuWidth,
+              'isMerged': isMerged,
+              'mergeCount': mergeCount,
             }, widget.currentTime)) {
               hasOverlap = true;
               break;
@@ -488,6 +664,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               'time': time,
               'track': track,
               'width': danmakuWidth,
+              'isMerged': isMerged,
+              'mergeCount': mergeCount,
             });
             final yPosition = track * trackHeight + _verticalSpacing;
             _danmakuYPositions[danmakuKey] = yPosition;
@@ -496,6 +674,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               videoState.updateDanmakuTrackInfo(danmakuKey, {
                 'track': track,
                 'width': danmakuWidth,
+                'isMerged': isMerged,
+                'mergeCount': mergeCount,
               });
             });
             return yPosition;
@@ -520,6 +700,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         'time': time,
         'track': bestTrack,
         'width': danmakuWidth,
+        'isMerged': isMerged,
+        'mergeCount': mergeCount,
       });
       final yPosition = bestTrack * trackHeight + _verticalSpacing;
       _danmakuYPositions[danmakuKey] = yPosition;
@@ -528,6 +710,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         videoState.updateDanmakuTrackInfo(danmakuKey, {
           'track': bestTrack,
           'width': danmakuWidth,
+          'isMerged': isMerged,
+          'mergeCount': mergeCount,
         });
       });
       return yPosition;
@@ -546,15 +730,17 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             'time': time,
             'track': track,
             'width': danmakuWidth,
+            'isMerged': isMerged,
           });
-          // 修改Y轴位置计算，从底部开始计算
-          final yPosition = screenHeight - (track + 1) * trackHeight - _danmakuHeight;
+          // 修改Y轴位置计算，从底部开始计算，并考虑合并状态下的高度
+          final yPosition = screenHeight - (track + 1) * trackHeight - adjustedDanmakuHeight;
           _danmakuYPositions[danmakuKey] = yPosition;
           // 延迟更新状态
           WidgetsBinding.instance.addPostFrameCallback((_) {
             videoState.updateDanmakuTrackInfo(danmakuKey, {
               'track': track,
               'width': danmakuWidth,
+              'isMerged': isMerged,
             });
           });
           return yPosition;
@@ -567,6 +753,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             if (_willOverlap(danmaku, {
               'time': time,
               'width': danmakuWidth,
+              'isMerged': isMerged,
+              'mergeCount': mergeCount,
             }, widget.currentTime)) {
               hasOverlap = true;
               break;
@@ -579,15 +767,18 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               'time': time,
               'track': track,
               'width': danmakuWidth,
+              'isMerged': isMerged,
+              'mergeCount': mergeCount,
             });
-            // 修改Y轴位置计算，从底部开始计算
-            final yPosition = screenHeight - (track + 1) * trackHeight - _danmakuHeight;
+            // 修改Y轴位置计算，从底部开始计算，并考虑合并状态下的高度
+            final yPosition = screenHeight - (track + 1) * trackHeight - adjustedDanmakuHeight;
             _danmakuYPositions[danmakuKey] = yPosition;
             // 延迟更新状态
             WidgetsBinding.instance.addPostFrameCallback((_) {
               videoState.updateDanmakuTrackInfo(danmakuKey, {
                 'track': track,
                 'width': danmakuWidth,
+                'isMerged': isMerged,
               });
             });
             return yPosition;
@@ -613,15 +804,18 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         'time': time,
         'track': bestTrack,
         'width': danmakuWidth,
+        'isMerged': isMerged,
+        'mergeCount': mergeCount,
       });
-      // 修改Y轴位置计算，从底部开始计算
-      final yPosition = screenHeight - (bestTrack + 1) * trackHeight - _danmakuHeight;
+      // 修改Y轴位置计算，从底部开始计算，并考虑合并状态下的高度
+      final yPosition = screenHeight - (bestTrack + 1) * trackHeight - adjustedDanmakuHeight;
       _danmakuYPositions[danmakuKey] = yPosition;
       // 延迟更新状态
       WidgetsBinding.instance.addPostFrameCallback((_) {
         videoState.updateDanmakuTrackInfo(danmakuKey, {
           'track': bestTrack,
           'width': danmakuWidth,
+          'isMerged': isMerged,
         });
       });
       return yPosition;
@@ -642,6 +836,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
           _resize(newSize);
         }
         
+        // 获取VideoPlayerState，用于检查是否开启合并弹幕功能
+        final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+        // 使用getter检测是否存在mergeDanmaku
+        final mergeDanmaku = videoState.danmakuVisible && (videoState.mergeDanmaku ?? false);
+        
         // 按类型分组弹幕
         final Map<String, List<Map<String, dynamic>>> groupedDanmaku = {
           'scroll': [],
@@ -649,13 +848,55 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
           'bottom': [],
         };
 
+        // 记录当前已显示的内容，确保同一内容在同一时间只显示一次
+        final Set<String> displayedContents = {};
+
         // 过滤并分组弹幕
         for (var danmaku in widget.danmakuList) {
           final time = danmaku['time'] as double;
           final timeDiff = widget.currentTime - time;
-          if (timeDiff >= 0 && timeDiff <= 10) {
+          
+          // 修改可见性判断，确保放大弹幕完全离开屏幕才消失
+          // 根据弹幕类型和是否合并计算不同的可见时间
+          double visibleDuration = 10.0; // 默认10秒
+          bool isMerged = false;
+          
+          // 检查是否是合并弹幕
+          final content = danmaku['content'] as String;
+          final danmakuKey = '$content-$time';
+          if (mergeDanmaku && _processedDanmaku.containsKey(danmakuKey)) {
+            final processed = _processedDanmaku[danmakuKey]!;
+            isMerged = processed['merged'] == true;
+            
+            // 如果是合并弹幕，增加可见时间以确保完全离开屏幕
+            if (isMerged) {
+              // 放大弹幕需要更长的时间才能完全滚出屏幕
+              visibleDuration = 15.0; // 增加到15秒
+            }
+          }
+          
+          if (timeDiff >= 0 && timeDiff <= visibleDuration) {
             final type = danmaku['type'] as String;
-            groupedDanmaku[type]!.add(danmaku);
+            
+            // 处理合并弹幕逻辑
+            var processedDanmaku = danmaku;
+            if (mergeDanmaku) {
+              // 如果这个弹幕已经处理过，使用缓存的结果
+              if (_processedDanmaku.containsKey(danmakuKey)) {
+                processedDanmaku = _processedDanmaku[danmakuKey]!;
+                
+                // 如果这个内容在当前屏幕已经显示过，强制隐藏
+                if (displayedContents.contains(content) && 
+                    !processedDanmaku.containsKey('isFirstInGroup')) {
+                  processedDanmaku = {...processedDanmaku, 'hidden': true};
+                } else if (!processedDanmaku.containsKey('hidden')) {
+                  // 如果这个内容没有被隐藏，标记为已显示
+                  displayedContents.add(content);
+                }
+              }
+            }
+            
+            groupedDanmaku[type]!.add(processedDanmaku);
           }
         }
 
@@ -664,9 +905,16 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
           children: [
             // 滚动弹幕（最底层）
             ...groupedDanmaku['scroll']!.map((danmaku) {
+              // 如果弹幕被标记为隐藏，不显示
+              if (danmaku['hidden'] == true) {
+                return const SizedBox.shrink();
+              }
+              
               final time = danmaku['time'] as double;
               final content = danmaku['content'] as String;
               final colorStr = danmaku['color'] as String;
+              final isMerged = danmaku['merged'] == true;
+              final mergeCount = isMerged ? (danmaku['mergeCount'] as int? ?? 1) : 1;
               
               final colorValues = colorStr.replaceAll('rgb(', '').replaceAll(')', '').split(',').map((s) => int.parse(s)).toList();
               final color = Color.fromARGB(255, colorValues[0], colorValues[1], colorValues[2]);
@@ -675,9 +923,12 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
                 content,
                 type: DanmakuItemType.scroll,
                 color: color,
+                fontSizeMultiplier: isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0,
+                countText: isMerged ? 'x$mergeCount' : null,
               );
               
-              final yPosition = _getYPosition('scroll', content, time);
+              // 计算Y位置时考虑合并状态
+              final yPosition = _getYPosition('scroll', content, time, isMerged, mergeCount);
               
               return SingleDanmaku(
                 content: danmakuItem,
@@ -693,9 +944,16 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             
             // 底部弹幕（中间层）
             ...groupedDanmaku['bottom']!.map((danmaku) {
+              // 如果弹幕被标记为隐藏，不显示
+              if (danmaku['hidden'] == true) {
+                return const SizedBox.shrink();
+              }
+              
               final time = danmaku['time'] as double;
               final content = danmaku['content'] as String;
               final colorStr = danmaku['color'] as String;
+              final isMerged = danmaku['merged'] == true;
+              final mergeCount = isMerged ? (danmaku['mergeCount'] as int? ?? 1) : 1;
               
               final colorValues = colorStr.replaceAll('rgb(', '').replaceAll(')', '').split(',').map((s) => int.parse(s)).toList();
               final color = Color.fromARGB(255, colorValues[0], colorValues[1], colorValues[2]);
@@ -704,9 +962,12 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
                 content,
                 type: DanmakuItemType.bottom,
                 color: color,
+                fontSizeMultiplier: isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0,
+                countText: isMerged ? 'x$mergeCount' : null,
               );
               
-              final yPosition = _getYPosition('bottom', content, time);
+              // 计算Y位置时考虑合并状态
+              final yPosition = _getYPosition('bottom', content, time, isMerged, mergeCount);
               
               return SingleDanmaku(
                 content: danmakuItem,
@@ -722,9 +983,16 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             
             // 顶部弹幕（最上层）
             ...groupedDanmaku['top']!.map((danmaku) {
+              // 如果弹幕被标记为隐藏，不显示
+              if (danmaku['hidden'] == true) {
+                return const SizedBox.shrink();
+              }
+              
               final time = danmaku['time'] as double;
               final content = danmaku['content'] as String;
               final colorStr = danmaku['color'] as String;
+              final isMerged = danmaku['merged'] == true;
+              final mergeCount = isMerged ? (danmaku['mergeCount'] as int? ?? 1) : 1;
               
               final colorValues = colorStr.replaceAll('rgb(', '').replaceAll(')', '').split(',').map((s) => int.parse(s)).toList();
               final color = Color.fromARGB(255, colorValues[0], colorValues[1], colorValues[2]);
@@ -733,9 +1001,12 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
                 content,
                 type: DanmakuItemType.top,
                 color: color,
+                fontSizeMultiplier: isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0,
+                countText: isMerged ? 'x$mergeCount' : null,
               );
               
-              final yPosition = _getYPosition('top', content, time);
+              // 计算Y位置时考虑合并状态
+              final yPosition = _getYPosition('top', content, time, isMerged, mergeCount);
               
               return SingleDanmaku(
                 content: danmakuItem,
@@ -752,5 +1023,32 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         );
       },
     );
+  }
+
+  // 计算在未来45秒内出现的相同内容弹幕的数量
+  int _countFutureSimilarDanmaku(String content, double startTime) {
+    // 查找45秒时间窗口内的相同内容弹幕
+    final endTime = startTime + 45.0;
+    int count = 0;
+    
+    for (var danmaku in _sortedDanmakuList) {
+      final time = danmaku['time'] as double;
+      if (time >= startTime && time <= endTime) {
+        if (danmaku['content'] == content) {
+          count++;
+        }
+      }
+      if (time > endTime) {
+        // 由于列表已排序，超过结束时间后可以直接退出循环
+        break;
+      }
+    }
+    
+    return count;
+  }
+  
+  // 这个方法已经不需要了，由_precomputeDanmakuStates替代
+  bool _isSimilarDanmakuFirstOccurrence(String content, double time) {
+    return true;
   }
 } 
