@@ -37,6 +37,18 @@ class KeyboardShortcuts {
     if (event is! RawKeyDownEvent) {
       return KeyEventResult.ignored;
     }
+    
+    // 检查当前是否有文本输入焦点
+    final currentFocus = FocusManager.instance.primaryFocus;
+    if (currentFocus != null) {
+      final currentWidget = currentFocus.context?.widget;
+      // 如果当前焦点是文本输入相关的组件，不拦截键盘事件
+      if (currentWidget is TextField || 
+          currentWidget is TextFormField || 
+          currentWidget is EditableText) {
+        return KeyEventResult.ignored;
+      }
+    }
 
     // 先处理全屏相关的按键
     final fullscreenResult = FullscreenHandler.handleFullscreenKey(event, context);

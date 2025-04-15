@@ -120,27 +120,15 @@ class NipaPlayApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ThemeNotifier>(
       builder: (context, themeNotifier, child) {
-        return Shortcuts(
-          shortcuts: KeyboardMappings.allMappings,
-          child: Actions(
-            actions: {
-              VoidCallbackIntent: CallbackAction(
-                onInvoke: (Intent intent) {
-                  //print('全局键盘事件被捕获');
-                  return null;
-                },
-              ),
-            },
-            child: MaterialApp(
-              title: 'NipaPlay',
-              debugShowCheckedModeBanner: false,
-              color: Colors.transparent,
-              theme: AppTheme.lightTheme,
-              darkTheme: AppTheme.darkTheme,
-              themeMode: themeNotifier.themeMode,
-              home: MainPage(),
-            ),
-          ),
+        // 移除全局键盘快捷键注册，避免干扰文本输入
+        return MaterialApp(
+          title: 'NipaPlay',
+          debugShowCheckedModeBanner: false,
+          color: Colors.transparent,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeNotifier.themeMode,
+          home: MainPage(),
         );
       },
     );
