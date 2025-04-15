@@ -18,7 +18,7 @@ class DandanplayService {
   static String? _screenName;
   static const List<String> _servers = [
     'https://nipaplay.aimes-soft.com',
-    'https://key.aimes-soft.com'
+    'https://kurisu.aimes-soft.com'
   ];
 
   static bool get isLoggedIn => _isLoggedIn;
