@@ -32,6 +32,25 @@
 
 > NipaPlay使用Flutter的再次重写，一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。
 
+## 📸 应用截图
+
+<div align="center">
+  <p><strong>主界面</strong></p>
+  <img src="others/主界面.png" width="80%" alt="主界面">
+  
+  <p><strong>新番更新界面</strong></p>
+  <img src="others/新番更新界面.png" width="80%" alt="新番更新界面">
+  
+  <p><strong>新番详情界面</strong></p>
+  <img src="others/新番详情界面.png" width="80%" alt="新番详情界面">
+  
+  <p><strong>播放界面</strong></p>
+  <img src="others/播放界面.png" width="80%" alt="播放界面">
+  
+  <p><strong>播放界面UI展示</strong></p>
+  <img src="others/播放界面-UI展示.png" width="80%" alt="播放界面UI展示">
+</div>
+
 ## ✨ 已实现功能
 
 - 🎬 **视频播放**
@@ -41,6 +60,7 @@
     - 弹幕记忆运动轨迹
     - 时间轴跳转时弹幕位置同步
     - 弹幕轨道管理系统
+    - 合并弹幕显示
   - 字幕支持
     - 支持 ASS、SRT 格式字幕
     - 支持内嵌字幕和外挂字幕
@@ -55,6 +75,7 @@
   - 新番时间表展示
   - 按星期分类显示
   - 番剧详情查看
+    - 日文简介支持翻译成中文（ChatGPT4omini）
   - 图片缓存管理
 
 - ⚙️ **设置中心**

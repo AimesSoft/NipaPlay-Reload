@@ -57,7 +57,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const String _danmakuVisibleKey = 'danmaku_visible';
   bool _danmakuVisible = true;  // 默认显示弹幕
   static const String _mergeDanmakuKey = 'merge_danmaku';
-  bool _mergeDanmaku = true;  // 默认合并弹幕
+  bool _mergeDanmaku = false;  // 默认不合并弹幕
   dynamic danmakuController;  // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
   bool _isFullscreenTransitioning = false;
@@ -854,7 +854,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 加载弹幕合并设置
   Future<void> _loadMergeDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
-    _mergeDanmaku = prefs.getBool(_mergeDanmakuKey) ?? true;
+    _mergeDanmaku = prefs.getBool(_mergeDanmakuKey) ?? false;
     notifyListeners();
   }
 
