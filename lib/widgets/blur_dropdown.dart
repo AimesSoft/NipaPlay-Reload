@@ -320,7 +320,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       }
     }).catchError((error) {
        // Handle potential errors during animation reversal if needed
-       //print("Error closing dropdown animation: $error");
+       ////print("Error closing dropdown animation: $error");
        // Still try to remove overlay and update state in case of error
        _removeOverlay();
         if (mounted) {

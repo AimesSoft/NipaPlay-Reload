@@ -2,8 +2,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'video_player_state.dart';
 import 'fullscreen_handler.dart';
 
 class KeyboardShortcuts {
@@ -90,7 +88,7 @@ class KeyboardShortcuts {
     _isProcessing[action] = true;
     
     // 设置一个定时器来重置处理状态
-    Future.delayed(Duration(milliseconds: _debounceTime), () {
+    Future.delayed(const Duration(milliseconds: _debounceTime), () {
       _isProcessing[action] = false;
     });
     
@@ -107,7 +105,7 @@ class KeyboardShortcuts {
         _shortcuts.addAll(Map<String, String>.from(decoded));
         _updateKeyBindings();
       } catch (e) {
-        print('Error loading shortcuts: $e');
+        //print('Error loading shortcuts: $e');
         // 如果加载失败，使用默认快捷键
         initialize();
       }

@@ -5,7 +5,6 @@ import 'dart:ui';
 import 'dart:io';
 import 'dart:async';
 import '../services/dandanplay_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import '../widgets/blur_snackbar.dart';
 
@@ -45,7 +44,7 @@ class _TranslationButtonState extends State<TranslationButton> {
       });
       
       final appSecret = await DandanplayService.getAppSecret();
-      print('开始请求翻译...');
+      //print('开始请求翻译...');
       
       final response = await http.post(
         Uri.parse('https://nipaplay.aimes-soft.com/tran.php'),
@@ -64,20 +63,20 @@ class _TranslationButtonState extends State<TranslationButton> {
       );
 
       if (response.statusCode == 200) {
-        print('翻译请求成功');
+        //print('翻译请求成功');
         return response.body;
       }
-      print('翻译请求失败，状态码: ${response.statusCode}');
+      //print('翻译请求失败，状态码: ${response.statusCode}');
       throw Exception('翻译请求失败，状态码: ${response.statusCode}');
     } on TimeoutException {
-      final error = '翻译请求超时，请检查网络连接';
+      const error = '翻译请求超时，请检查网络连接';
       setState(() {
         _errorMessage = error;
       });
       _showErrorSnackBar(error);
       return null;
     } on SocketException {
-      final error = '网络连接失败，请检查网络设置';
+      const error = '网络连接失败，请检查网络设置';
       setState(() {
         _errorMessage = error;
       });
@@ -131,17 +130,17 @@ class _TranslationButtonState extends State<TranslationButton> {
             child: InkWell(
               onTap: _isTranslating ? null : () async {
                 if (!widget.translatedSummaries.containsKey(widget.animeId)) {
-                  print('未找到缓存翻译，开始请求翻译...');
+                  //print('未找到缓存翻译，开始请求翻译...');
                   final translation = await _translateSummary(widget.summary);
                   if (translation != null) {
-                    print('翻译成功，更新状态');
+                    //print('翻译成功，更新状态');
                     final updatedTranslations = Map<int, String>.from(widget.translatedSummaries);
                     updatedTranslations[widget.animeId] = translation;
                     widget.onTranslationUpdated(updatedTranslations);
                     widget.onTranslationStateChanged(true);
                   }
                 } else {
-                  print('使用缓存翻译');
+                  //print('使用缓存翻译');
                   widget.onTranslationStateChanged(!widget.isShowingTranslation);
                 }
               },
@@ -152,7 +151,7 @@ class _TranslationButtonState extends State<TranslationButton> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (_isTranslating)
-                      SizedBox(
+                      const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
@@ -167,7 +166,7 @@ class _TranslationButtonState extends State<TranslationButton> {
                         color: Colors.red[300],
                       )
                     else
-                      Icon(
+                      const Icon(
                         Ionicons.language,
                         size: 16,
                         color: Colors.white,

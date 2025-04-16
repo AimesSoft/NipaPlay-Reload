@@ -90,7 +90,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   }
 
   double _getBubbleWidth() {
-    final textStyle = const TextStyle(
+    const textStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w500,
     );
@@ -144,7 +144,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   }
 
   Widget _buildBubble(double width) {
-    final textStyle = const TextStyle(
+    const textStyle = TextStyle(
       color: Colors.white,
       fontSize: 12,
       fontWeight: FontWeight.w500,

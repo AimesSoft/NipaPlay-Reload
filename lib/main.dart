@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fvp/fvp.dart' as fvp;
@@ -21,9 +22,15 @@ import 'services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/utils/keyboard_mappings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'models/watch_history_model.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 创建应用所需的临时目录，解决macOS沙盒模式下的目录访问问题
+  await _ensureTemporaryDirectoryExists();
 
   // 注册 FVP
   fvp.registerWith(options: {
@@ -33,12 +40,12 @@ void main() async {
   });
 
   // 并行执行初始化操作
-  await Future.wait([
+  await Future.wait(<Future<dynamic>>[
     // 初始化弹弹play服务
     DandanplayService.initialize(),
     
     // 加载设置
-    Future.wait([
+    Future.wait(<Future<dynamic>>[
       SettingsStorage.loadString('themeMode', defaultValue: 'system'),
       SettingsStorage.loadDouble('blurPower'),
       SettingsStorage.loadString('backgroundImageMode'),
@@ -64,6 +71,9 @@ void main() async {
     
     // 初始化 BangumiService
     BangumiService.instance.initialize(),
+    
+    // 初始化观看记录管理器
+    WatchHistoryManager.initialize(),
   ]).then((results) {
     // 处理主题模式设置
     String savedThemeMode = results[1] as String;
@@ -113,6 +123,30 @@ void main() async {
   });
 }
 
+// 确保临时目录存在
+Future<void> _ensureTemporaryDirectoryExists() async {
+  try {
+    // 获取应用文档目录
+    final docsDir = await getApplicationDocumentsDirectory();
+    final appDir = Directory(path.join(docsDir.path));
+    
+    // 创建tmp目录路径
+    final tmpDir = Directory(path.join(appDir.path, 'tmp'));
+    
+    // 确保tmp目录存在
+    if (!tmpDir.existsSync()) {
+      //print('创建应用临时目录: ${tmpDir.path}');
+      tmpDir.createSync(recursive: true);
+    }
+    
+    // 输出目录信息用于调试
+    //print('应用文档目录: ${appDir.path}');
+    //print('应用临时目录: ${tmpDir.path}');
+  } catch (e) {
+    //print('创建临时目录失败: $e');
+  }
+}
+
 class NipaPlayApp extends StatelessWidget {
   const NipaPlayApp({super.key});
 
@@ -138,7 +172,7 @@ class NipaPlayApp extends StatelessWidget {
 class MainPage extends StatefulWidget {
   final List<Widget> pages = [
     const PlayVideoPage(),
-    AnimePage(),
+    const AnimePage(),
     const NewSeriesPage(),
     const SettingsPage(),
   ];

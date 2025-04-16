@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import '../services/bangumi_service.dart';
 import '../models/bangumi_model.dart';
 import '../utils/image_cache_manager.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../widgets/loading_placeholder.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import '../widgets/cached_network_image_widget.dart';
@@ -57,7 +55,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
   @override
   void initState() {
     super.initState();
-    //print('NewSeriesPage 初始化');
+    ////print('NewSeriesPage 初始化');
     _loadAnimes();
     _loadTranslationCache();
   }
@@ -73,19 +71,19 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
 
   Future<void> _loadAnimes() async {
     try {
-      print('开始加载番剧数据');
+      //print('开始加载番剧数据');
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
       // 加载数据
-      print('调用 BangumiService.loadData()');
+      //print('调用 BangumiService.loadData()');
       await _bangumiService.loadData();
 
-      print('调用 BangumiService.getCalendar()');
+      //print('调用 BangumiService.getCalendar()');
       final animes = await _bangumiService.getCalendar();
-      print('获取到 ${animes.length} 个番剧');
+      //print('获取到 ${animes.length} 个番剧');
 
       if (mounted) {
         setState(() {
@@ -93,9 +91,9 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
           _isLoading = false;
         });
       }
-      print('番剧数据加载完成');
+      //print('番剧数据加载完成');
     } catch (e) {
-      print('加载番剧数据时出错: $e');
+      //print('加载番剧数据时出错: $e');
       String errorMsg = e.toString();
       if (e is TimeoutException) {
         errorMsg = '网络请求超时，请检查网络连接后重试';
@@ -122,15 +120,15 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
       final String? cachedString = prefs.getString(_translationCacheKey);
       
       if (cachedString != null) {
-        print('找到翻译缓存数据');
+        //print('找到翻译缓存数据');
         final data = json.decode(cachedString);
         final timestamp = data['timestamp'] as int;
         final now = DateTime.now().millisecondsSinceEpoch;
         
-        print('缓存时间戳: $timestamp');
-        print('当前时间戳: $now');
-        print('时间差: ${now - timestamp}ms');
-        print('缓存有效期: ${_translationCacheDuration.inMilliseconds}ms');
+        //print('缓存时间戳: $timestamp');
+        //print('当前时间戳: $now');
+        //print('时间差: ${now - timestamp}ms');
+        //print('缓存有效期: ${_translationCacheDuration.inMilliseconds}ms');
         
         // 检查缓存是否过期
         if (now - timestamp <= _translationCacheDuration.inMilliseconds) {
@@ -140,19 +138,19 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
           translations.forEach((key, value) {
             parsedTranslations[int.parse(key)] = value;
           });
-          print('从缓存加载翻译，共 ${parsedTranslations.length} 条');
+          //print('从缓存加载翻译，共 ${parsedTranslations.length} 条');
           setState(() {
             _translatedSummaries = parsedTranslations;
           });
         } else {
-          print('翻译缓存已过期，清除缓存');
+          //print('翻译缓存已过期，清除缓存');
           await prefs.remove(_translationCacheKey);
         }
       } else {
-        print('未找到翻译缓存');
+        //print('未找到翻译缓存');
       }
     } catch (e) {
-      print('加载翻译缓存失败: $e');
+      //print('加载翻译缓存失败: $e');
     }
   }
 
@@ -171,10 +169,10 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
       };
       final jsonString = json.encode(data);
       await prefs.setString(_translationCacheKey, jsonString);
-      print('保存翻译到缓存，共 ${_translatedSummaries.length} 条');
-      print('缓存数据大小: ${jsonString.length} 字节');
+      //print('保存翻译到缓存，共 ${_translatedSummaries.length} 条');
+      //print('缓存数据大小: ${jsonString.length} 字节');
     } catch (e) {
-      print('保存翻译缓存失败: $e');
+      //print('保存翻译缓存失败: $e');
     }
   }
 
@@ -213,7 +211,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
       }
     }
     
-    //print('分组结果: ${grouped.keys.toList()}');
+    ////print('分组结果: ${grouped.keys.toList()}');
     return grouped;
   }
 
@@ -239,7 +237,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
 
   @override
   Widget build(BuildContext context) {
-    //print('NewSeriesPage build - isLoading: $_isLoading, hasError: ${_error != null}, animeCount: ${_animes.length}');
+    ////print('NewSeriesPage build - isLoading: $_isLoading, hasError: ${_error != null}, animeCount: ${_animes.length}');
     
     if (_isLoading && _animes.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -397,7 +395,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
                     fit: BoxFit.cover,
                     shouldRelease: true,
                     errorBuilder: (context, error) {
-                      //print('图片加载失败: ${anime.nameCn}, URL: ${anime.imageUrl}');
+                      ////print('图片加载失败: ${anime.nameCn}, URL: ${anime.imageUrl}');
                       return Container(
                         color: Colors.grey[800],
                         child: Column(
@@ -450,10 +448,10 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
       if (parts.length == 3) {
         return '${parts[0]}年${parts[1]}月${parts[2]}日';
       }
-      //print('日期格式不正确: $dateStr');
+      ////print('日期格式不正确: $dateStr');
       return dateStr;
     } catch (e) {
-      //print('格式化日期出错: $e');
+      ////print('格式化日期出错: $e');
       return dateStr;
     }
   }
@@ -461,7 +459,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
   Future<String?> _translateSummary(String text) async {
     try {
       final appSecret = await DandanplayService.getAppSecret();
-      print('开始请求翻译...');
+      //print('开始请求翻译...');
       final response = await http.post(
         Uri.parse('https://nipaplay.aimes-soft.com/tran.php'),
         headers: {
@@ -474,13 +472,13 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
       );
 
       if (response.statusCode == 200) {
-        print('翻译请求成功');
+        //print('翻译请求成功');
         return response.body;
       }
-      print('翻译请求失败，状态码: ${response.statusCode}');
+      //print('翻译请求失败，状态码: ${response.statusCode}');
       return null;
     } catch (e) {
-      print('翻译请求异常: $e');
+      //print('翻译请求异常: $e');
       return null;
     }
   }

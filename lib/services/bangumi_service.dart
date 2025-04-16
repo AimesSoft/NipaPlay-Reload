@@ -33,25 +33,25 @@ class BangumiService {
 
   Future<void> loadData() async {
     try {
-      //print('开始加载番剧数据');
+      ////print('开始加载番剧数据');
       final animes = await getCalendar();
       _preloadedAnimes = animes;
-      //print('加载 ${animes.length} 个番剧的图片');
+      ////print('加载 ${animes.length} 个番剧的图片');
       
       // 分批预加载图片
-      final batchSize = 10;
+      const batchSize = 10;
       for (var i = 0; i < animes.length; i += batchSize) {
         final end = (i + batchSize < animes.length) ? i + batchSize : animes.length;
         final batch = animes.sublist(i, end);
         await ImageCacheManager.instance.preloadImages(
           batch.map((anime) => anime.imageUrl).toList(),
         ).catchError((e) {
-          //print('预加载图片时出错: $e');
+          ////print('预加载图片时出错: $e');
           return Future.value(); // 返回一个完成的 Future
         });
       }
     } catch (e) {
-      //print('加载数据时出错: $e');
+      ////print('加载数据时出错: $e');
       rethrow;
     }
   }
@@ -95,7 +95,7 @@ class BangumiService {
     int retryCount = 0;
     while (retryCount < item.maxRetries) {
       try {
-        print('🌐 发起请求(尝试 ${retryCount+1}/${item.maxRetries}): ${item.url}');
+        //print('🌐 发起请求(尝试 ${retryCount+1}/${item.maxRetries}): ${item.url}');
         
         final response = await _client.get(
           Uri.parse(item.url),
@@ -107,34 +107,34 @@ class BangumiService {
         ).timeout(
           Duration(seconds: 15 + retryCount * 5),
           onTimeout: () {
-            print('⏱️ 请求超时: ${item.url}');
+            //print('⏱️ 请求超时: ${item.url}');
             throw TimeoutException('请求超时');
           }
         );
         
-        print('📊 HTTP状态: ${response.statusCode}, 内容长度: ${response.bodyBytes.length}');
+        //print('📊 HTTP状态: ${response.statusCode}, 内容长度: ${response.bodyBytes.length}');
         
         if (response.statusCode == 200) {
-          print('✅ 请求成功: ${item.url}');
+          //print('✅ 请求成功: ${item.url}');
           item.completer.complete(response);
           return;
         } else {
-          print('⚠️ HTTP请求失败: ${response.statusCode}, URL: ${item.url}');
+          //print('⚠️ HTTP请求失败: ${response.statusCode}, URL: ${item.url}');
           if (response.bodyBytes.length < 1000) {
-            print('📄 响应内容: ${utf8.decode(response.bodyBytes)}');
+            //print('📄 响应内容: ${utf8.decode(response.bodyBytes)}');
           }
           throw Exception('HTTP请求失败: ${response.statusCode}');
         }
       } catch (e) {
         retryCount++;
-        print('❌ 请求失败 (尝试 $retryCount/${item.maxRetries}): $e');
+        //print('❌ 请求失败 (尝试 $retryCount/${item.maxRetries}): $e');
         if (retryCount == item.maxRetries) {
-          print('🛑 达到最大重试次数，放弃请求: ${item.url}');
+          //print('🛑 达到最大重试次数，放弃请求: ${item.url}');
           item.completer.completeError(Exception('请求失败，已达到最大重试次数: $e'));
           return;
         }
         final waitSeconds = retryCount * 2;
-        print('⏳ 等待 $waitSeconds 秒后重试...');
+        //print('⏳ 等待 $waitSeconds 秒后重试...');
         await Future.delayed(Duration(seconds: waitSeconds));
       }
     }
@@ -143,47 +143,47 @@ class BangumiService {
   Future<List<BangumiAnime>> getCalendar({bool forceRefresh = false}) async {
     // 如果有预加载的数据且不强制刷新，直接返回
     if (!forceRefresh && _preloadedAnimes != null) {
-      print('使用预加载的数据');
+      //print('使用预加载的数据');
       return _preloadedAnimes!;
     }
 
     if (!forceRefresh) {
       // 尝试从内存缓存加载
       if (_cache.isNotEmpty) {
-        print('从内存缓存加载数据');
+        //print('从内存缓存加载数据');
         return _cache.values.toList();
       }
 
       // 尝试从本地存储加载
       final cachedData = await _loadFromCache();
       if (cachedData != null) {
-        print('从本地存储加载数据');
+        //print('从本地存储加载数据');
         return cachedData;
       }
     }
 
-    print('从 API 获取新番列表数据: $_baseUrl');
+    //print('从 API 获取新番列表数据: $_baseUrl');
     try {
-      print('调用_makeRequest获取日历数据...');
+      //print('调用_makeRequest获取日历数据...');
       final response = await _makeRequest(_baseUrl);
 
-      print('处理API响应...');
+      //print('处理API响应...');
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
-        print('解析到 ${data.length} 天的数据');
+        //print('解析到 ${data.length} 天的数据');
         final List<BangumiAnime> animes = [];
 
         for (var item in data) {
           if (item['items'] != null) {
             final weekdayItems = item['items'] as List;
-            print('- 星期${item['weekday'] ?? '?'}: ${weekdayItems.length}个番剧');
+            //print('- 星期${item['weekday'] ?? '?'}: ${weekdayItems.length}个番剧');
             for (var animeData in weekdayItems) {
               try {
                 final anime = BangumiAnime.fromCalendarItem(animeData);
                 _cache[anime.id.toString()] = anime;
                 animes.add(anime);
               } catch (e) {
-                print('跳过无效的番剧数据: $e');
+                //print('跳过无效的番剧数据: $e');
                 continue;
               }
             }
@@ -192,14 +192,14 @@ class BangumiService {
 
         // 保存到本地存储
         await _saveToCache(animes);
-        print('成功获取并缓存 ${animes.length} 个番剧');
+        //print('成功获取并缓存 ${animes.length} 个番剧');
         return animes;
       } else {
-        print('获取日历数据失败: HTTP ${response.statusCode}');
+        //print('获取日历数据失败: HTTP ${response.statusCode}');
         throw Exception('Failed to load calendar: ${response.statusCode}');
       }
     } catch (e) {
-      print('获取日历数据时出错: $e');
+      //print('获取日历数据时出错: $e');
       rethrow;
     }
   }
@@ -212,9 +212,9 @@ class BangumiService {
         'animes': animes.map((a) => a.toJson()).toList(),
       };
       await prefs.setString(_cacheKey, json.encode(data));
-      //print('数据已保存到本地存储');
+      ////print('数据已保存到本地存储');
     } catch (e) {
-      //print('保存到本地存储时出错: $e');
+      ////print('保存到本地存储时出错: $e');
     }
   }
 
@@ -240,17 +240,17 @@ class BangumiService {
             _cache[anime.id.toString()] = anime;
           }
           
-          //print('从本地存储加载了 ${animes.length} 个番剧');
+          ////print('从本地存储加载了 ${animes.length} 个番剧');
           return animes;
         } else {
-          //print('缓存已过期');
+          ////print('缓存已过期');
           return null;
         }
       }
-      //print('没有找到缓存数据');
+      ////print('没有找到缓存数据');
       return null;
     } catch (e) {
-      //print('加载缓存数据时出错: $e');
+      ////print('加载缓存数据时出错: $e');
       return null;
     }
   }
@@ -261,7 +261,7 @@ class BangumiService {
       if (_detailsCache.containsKey(id)) {
         final cacheTime = _detailsCacheTime[id];
         if (cacheTime != null && DateTime.now().difference(cacheTime) < _cacheDuration) {
-          //print('从缓存获取番剧 $id 的详情');
+          ////print('从缓存获取番剧 $id 的详情');
           return _detailsCache[id]!;
         } else {
           // 缓存过期，清除
@@ -270,7 +270,7 @@ class BangumiService {
         }
       }
 
-      //print('开始获取番剧 $id 的详情');
+      ////print('开始获取番剧 $id 的详情');
       final response = await _makeRequest('$_animeUrl$id');
 
       if (response.statusCode == 404) {
@@ -284,26 +284,26 @@ class BangumiService {
       final jsonData = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       
       if (jsonData['infobox'] != null) {
-        //print('\n制作信息:');
+        ////print('\n制作信息:');
         for (var item in jsonData['infobox']) {
-          //print('${item['key']}: ${item['value']}');
+          ////print('${item['key']}: ${item['value']}');
         }
       }
       
-      //print('\n完整的番剧详情数据: $jsonData');
+      ////print('\n完整的番剧详情数据: $jsonData');
 
       final anime = BangumiAnime.fromJson(jsonData);
       // 保存到详情缓存
       _detailsCache[id] = anime;
       _detailsCacheTime[id] = DateTime.now();
       
-      //print('\n解析后的番剧对象:');
-      //print('- 标题: ${anime.nameCn}');
-      //print('- 播放日期: ${anime.airDate}');
-      //print('- 制作公司: ${anime.studio}');
+      ////print('\n解析后的番剧对象:');
+      ////print('- 标题: ${anime.nameCn}');
+      ////print('- 播放日期: ${anime.airDate}');
+      ////print('- 制作公司: ${anime.studio}');
       return anime;
     } catch (e) {
-      //print('获取番剧详情时出错: $e');
+      ////print('获取番剧详情时出错: $e');
       rethrow;
     }
   }

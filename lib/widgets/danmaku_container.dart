@@ -1284,7 +1284,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     
     // 创建单个弹幕，传递视频的暂停状态
     return SingleDanmaku(
-      key: ValueKey('$type-$content-$time'),
+      key: ValueKey('$type-$content-$time-${UniqueKey().toString()}'),
       content: danmakuItem,
       videoDuration: widget.videoDuration,
       currentTime: widget.currentTime,
@@ -1332,7 +1332,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     
     // 为溢出弹幕创建一个带有特殊标记的key
     return SingleDanmaku(
-      key: ValueKey(overflowKey),
+      key: ValueKey('$overflowKey-${UniqueKey().toString()}'),
       content: danmakuItem,
       videoDuration: widget.videoDuration,
       currentTime: widget.currentTime,

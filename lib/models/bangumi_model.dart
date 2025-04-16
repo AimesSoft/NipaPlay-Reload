@@ -60,7 +60,7 @@ class BangumiAnime {
 
   // 用于详情页的完整构造方法
   factory BangumiAnime.fromJson(Map<String, dynamic> json) {
-    //print('开始解析番剧数据');
+    ////print('开始解析番剧数据');
     final String? imageUrl = json['images']?['large'];
     if (imageUrl == null || imageUrl.isEmpty) {
       throw Exception('Missing or empty image URL');
@@ -71,17 +71,17 @@ class BangumiAnime {
     if (airDate == null || airDate.isEmpty) {
       airDate = json['date'] as String?; // 尝试使用 date 字段作为备选
     }
-    //print('解析到的播放日期: $airDate');
+    ////print('解析到的播放日期: $airDate');
 
     // 处理 infobox 数据
     String? originalWork;
     String? director;
     String? studio;
     if (json['infobox'] != null) {
-      //print('处理制作信息:');
+      ////print('处理制作信息:');
       for (var item in json['infobox']) {
         if (item['key'] != null && item['value'] != null) {
-          //print('检查字段: ${item['key']} = ${item['value']}');
+          ////print('检查字段: ${item['key']} = ${item['value']}');
           switch (item['key']) {
             case '原作':
               originalWork = item['value'] as String;
@@ -97,10 +97,10 @@ class BangumiAnime {
           }
         }
       }
-      //print('解析结果:');
-      //print('- 原作: $originalWork');
-      //print('- 导演: $director');
-      //print('- 制作公司: $studio');
+      ////print('解析结果:');
+      ////print('- 原作: $originalWork');
+      ////print('- 导演: $director');
+      ////print('- 制作公司: $studio');
     }
 
     // 处理标签数据
@@ -130,7 +130,7 @@ class BangumiAnime {
       director: director,
       studio: studio,
     );
-    //print('创建的番剧对象: ${anime.toJson()}');
+    ////print('创建的番剧对象: ${anime.toJson()}');
     return anime;
   }
 

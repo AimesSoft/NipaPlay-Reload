@@ -5,7 +5,6 @@ import '../utils/keyboard_shortcuts.dart';
 import '../utils/globals.dart' as globals;
 import 'video_upload_ui.dart';
 import 'vertical_indicator.dart';
-import 'dart:io' show Platform;
 import 'loading_overlay.dart';
 import 'danmaku_overlay.dart';
 import 'video_controls_overlay.dart';
@@ -48,7 +47,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     if (!mounted) return;
     
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    if (videoState == null) return;
     
     KeyboardShortcuts.registerActionHandler('play_pause', () {
       if (videoState.hasVideo) {
@@ -167,15 +165,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
         }
 
         if (videoState.error != null) {
-          return Center(
-            child: Text(
-              videoState.error!,
-              style: const TextStyle(color: Colors.red),
-            ),
-          );
+          return const SizedBox.shrink();
         }
 
-        if (textureId != null) {
+        if (textureId != null && textureId > 0) {
           return Stack(
             children: [
               FocusScope(
@@ -186,11 +179,16 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                       onTap: _handleTap,
                       child: Stack(
                         children: [
-                          // 视频纹理
+                          // 视频纹理 - 使用RepaintBoundary包装纹理以优化性能
                           Center(
-                            child: AspectRatio(
-                              aspectRatio: videoState.aspectRatio,
-                              child: Texture(textureId: textureId),
+                            child: RepaintBoundary(
+                              child: AspectRatio(
+                                aspectRatio: videoState.aspectRatio,
+                                child: Texture(
+                                  textureId: textureId,
+                                  filterQuality: FilterQuality.medium,
+                                ),
+                              ),
                             ),
                           ),
                           
@@ -214,7 +212,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          // 视频纹理
+                          // 视频纹理 - 使用RepaintBoundary和LayoutBuilder来确保正确布局
                           GestureDetector(
                             onTap: _handleTap,
                             onTapDown: (_) {
@@ -226,31 +224,39 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                               onHover: (event) => videoState.handleMouseMove(event.position),
                               cursor: videoState.showControls ? SystemMouseCursors.basic : SystemMouseCursors.none,
                               child: Center(
-                                child: AspectRatio(
-                                  aspectRatio: videoState.aspectRatio,
-                                  child: Texture(textureId: textureId),
+                                child: RepaintBoundary(
+                                  child: AspectRatio(
+                                    aspectRatio: videoState.aspectRatio,
+                                    child: Texture(
+                                      textureId: textureId,
+                                      filterQuality: FilterQuality.medium,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
 
-                          // 弹幕层
+                          // 弹幕层 - 使用IgnorePointer避免打断鼠标事件
                           if (videoState.hasVideo)
-                            Consumer<VideoPlayerState>(
-                              builder: (context, videoState, _) {
-                                if (!videoState.danmakuVisible) {
-                                  return const SizedBox.shrink();
-                                }
-                                return DanmakuOverlay(
-                                  danmakuList: videoState.danmakuList,
-                                  currentPosition: videoState.position.inMilliseconds.toDouble(),
-                                  videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
-                                  isPlaying: videoState.status == PlayerStatus.playing,
-                                  fontSize: getFontSize(),
-                                  isVisible: videoState.danmakuVisible,
-                                  opacity: videoState.mappedDanmakuOpacity,
-                                );
-                              },
+                            IgnorePointer(
+                              child: Consumer<VideoPlayerState>(
+                                builder: (context, videoState, _) {
+                                  if (!videoState.danmakuVisible) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return DanmakuOverlay(
+                                    key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
+                                    danmakuList: videoState.danmakuList,
+                                    currentPosition: videoState.position.inMilliseconds.toDouble(),
+                                    videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+                                    isPlaying: videoState.status == PlayerStatus.playing,
+                                    fontSize: getFontSize(),
+                                    isVisible: videoState.danmakuVisible,
+                                    opacity: videoState.mappedDanmakuOpacity,
+                                  );
+                                },
+                              ),
                             ),
                           
                           // 加载中遮罩
@@ -274,12 +280,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
           );
         }
 
-        return const Center(
-          child: Text(
-            '无法显示视频',
-            style: TextStyle(color: Colors.red),
-          ),
-        );
+        return const SizedBox.shrink();
       },
     );
   }

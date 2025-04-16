@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
-import 'tooltip_bubble.dart';
 import 'base_settings_menu.dart';
 
 class ControlBarSettingsMenu extends StatefulWidget {
