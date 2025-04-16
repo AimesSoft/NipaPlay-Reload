@@ -93,7 +93,7 @@ class WatchHistoryManager {
       
       _initialized = true;
     } catch (e) {
-      //print('初始化观看历史管理器失败: $e');
+      //debugPrint('初始化观看历史管理器失败: $e');
       rethrow;
     }
   }
@@ -109,17 +109,17 @@ class WatchHistoryManager {
     
     // 获取当前文件大小
     final int currentSize = await file.length();
-    //print('当前历史文件大小: $currentSize 字节');
+    //debugPrint('当前历史文件大小: $currentSize 字节');
     
     // 检查自动备份文件
     final autoBackupFile = File('$_historyFilePath.bak.auto');
     if (autoBackupFile.existsSync()) {
       final int backupSize = await autoBackupFile.length();
-      //print('自动备份文件大小: $backupSize 字节');
+      //debugPrint('自动备份文件大小: $backupSize 字节');
       
       // 如果当前文件比备份小很多(小于70%)，可能是数据丢失
       if (currentSize < backupSize * 0.7 && backupSize > 50) {
-        //print('警告: 当前历史文件($currentSize字节)比备份文件($backupSize字节)小很多，可能已被清空');
+        //debugPrint('警告: 当前历史文件($currentSize字节)比备份文件($backupSize字节)小很多，可能已被清空');
         await _recoverFromSpecificBackup(autoBackupFile.path);
         return;
       }
@@ -145,11 +145,11 @@ class WatchHistoryManager {
     if (backupFiles.isNotEmpty) {
       final latestBackup = backupFiles.first;
       final int backupSize = await latestBackup.length();
-      //print('最新时间戳备份文件大小: $backupSize 字节');
+      //debugPrint('最新时间戳备份文件大小: $backupSize 字节');
       
       // 如果当前文件比备份小很多(小于70%)，可能是数据丢失
       if (currentSize < backupSize * 0.7 && backupSize > 50) {
-        //print('警告: 当前历史文件($currentSize字节)比时间戳备份($backupSize字节)小很多，可能已被清空');
+        //debugPrint('警告: 当前历史文件($currentSize字节)比时间戳备份($backupSize字节)小很多，可能已被清空');
         await _recoverFromSpecificBackup(latestBackup.path);
         return;
       }
@@ -194,7 +194,7 @@ class WatchHistoryManager {
       // 如果没有找到任何备份，并且主文件不存在，创建一个空文件
       final file = File(_historyFilePath);
       await file.writeAsString('[]');
-      //print('未找到备份，已创建空历史记录文件');
+      //debugPrint('未找到备份，已创建空历史记录文件');
     }
   }
   
@@ -203,7 +203,7 @@ class WatchHistoryManager {
     try {
       final backupFile = File(backupPath);
       if (!backupFile.existsSync()) {
-        //print('备份文件不存在: $backupPath');
+        //debugPrint('备份文件不存在: $backupPath');
         return;
       }
       
@@ -217,14 +217,14 @@ class WatchHistoryManager {
         // 备份有效，恢复到主文件
         final file = File(_historyFilePath);
         await file.writeAsString(content);
-        //print('成功从备份恢复: $backupPath');
+        //debugPrint('成功从备份恢复: $backupPath');
         
         // 创建额外的恢复记录
         final timestamp = DateTime.now().millisecondsSinceEpoch;
         final recoveryLog = File('$_historyFilePath.recovered.$timestamp');
         await recoveryLog.writeAsString('Recovered from: $backupPath\nTime: ${DateTime.now().toIso8601String()}\nSize: ${content.length} bytes');
       } catch (e) {
-        //print('备份文件JSON无效: $e');
+        //debugPrint('备份文件JSON无效: $e');
         // 尝试修复备份
         String fixedContent = content;
         
@@ -236,13 +236,13 @@ class WatchHistoryManager {
           // 修复成功，恢复修复后的内容
           final file = File(_historyFilePath);
           await file.writeAsString(fixedContent);
-          //print('成功修复并恢复备份');
+          //debugPrint('成功修复并恢复备份');
         } catch (e) {
-          //print('修复备份失败: $e');
+          //debugPrint('修复备份失败: $e');
         }
       }
     } catch (e) {
-      //print('从备份恢复失败: $e');
+      //debugPrint('从备份恢复失败: $e');
     }
   }
   
@@ -292,7 +292,7 @@ class WatchHistoryManager {
           try {
             _cachedItems.add(WatchHistoryItem.fromJson(item));
           } catch (e) {
-            //print('解析历史记录条目时出错: $e, 条目: $item');
+            //debugPrint('解析历史记录条目时出错: $e, 条目: $item');
             continue;
           }
         }
@@ -300,15 +300,15 @@ class WatchHistoryManager {
         // 按照最后观看时间排序，最近的在前面
         _cachedItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
       } catch (e) {
-        //print('JSON解析错误: $e');
-        //print('尝试修复历史记录文件...');
+        //debugPrint('JSON解析错误: $e');
+        //debugPrint('尝试修复历史记录文件...');
         // 尝试修复历史记录文件
         await _fixHistoryFile();
         // 重试加载
         await _retryLoadCache();
       }
     } catch (e) {
-      //print('加载缓存失败: $e');
+      //debugPrint('加载缓存失败: $e');
       _cachedItems.clear();
     }
   }
@@ -335,14 +335,14 @@ class WatchHistoryManager {
         try {
           _cachedItems.add(WatchHistoryItem.fromJson(item));
         } catch (e) {
-          //print('修复后仍无法解析条目: $e');
+          //debugPrint('修复后仍无法解析条目: $e');
           continue;
         }
       }
 
       _cachedItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
     } catch (e) {
-      //print('修复后获取历史记录失败: $e');
+      //debugPrint('修复后获取历史记录失败: $e');
       // 如果修复后仍然失败，则返回空列表并备份原文件
       await _backupAndClearHistory();
       _cachedItems.clear();
@@ -378,7 +378,7 @@ class WatchHistoryManager {
       // 备份原始文件
       final backupPath = '$_historyFilePath.bak';
       await file.copy(backupPath);
-      //print('已备份原始历史记录文件至 $backupPath');
+      //debugPrint('已备份原始历史记录文件至 $backupPath');
 
       final content = await file.readAsString();
       if (content.isEmpty) return;
@@ -391,15 +391,15 @@ class WatchHistoryManager {
         json.decode(fixedContent);
         // 写入修复后的内容
         await file.writeAsString(fixedContent);
-        //print('成功修复历史记录文件');
+        //debugPrint('成功修复历史记录文件');
       } catch (e) {
-        //print('无法修复JSON格式: $e');
+        //debugPrint('无法修复JSON格式: $e');
         // 如果无法修复，则创建空的历史记录
         await file.writeAsString('[]');
-        //print('已重置为空历史记录');
+        //debugPrint('已重置为空历史记录');
       }
     } catch (e) {
-      //print('修复历史记录文件失败: $e');
+      //debugPrint('修复历史记录文件失败: $e');
     }
   }
 
@@ -413,14 +413,14 @@ class WatchHistoryManager {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final backupPath = '$_historyFilePath.bak.$timestamp';
       await file.copy(backupPath);
-      //print('已创建带时间戳的备份: $backupPath');
+      //debugPrint('已创建带时间戳的备份: $backupPath');
 
       // 清空历史记录
       await file.writeAsString('[]');
       _cachedItems.clear();
-      //print('已清空历史记录文件');
+      //debugPrint('已清空历史记录文件');
     } catch (e) {
-      //print('备份并清空历史记录失败: $e');
+      //debugPrint('备份并清空历史记录失败: $e');
     }
   }
 
@@ -430,7 +430,7 @@ class WatchHistoryManager {
     
     // 如果正在写入，等待短暂时间后再试
     if (_isWriting) {
-      //print('文件正在写入中，等待1秒后重试...');
+      //debugPrint('文件正在写入中，等待1秒后重试...');
       await Future.delayed(const Duration(seconds: 1));
       return addOrUpdateHistory(item);
     }
@@ -456,15 +456,15 @@ class WatchHistoryManager {
 
       if (existingIndex != -1) {
         // 更新前输出调试信息
-        //print('更新前的记录: 动画=${_cachedItems[existingIndex].animeName}, 集数=${_cachedItems[existingIndex].episodeTitle}');
+        //debugPrint('更新前的记录: 动画=${_cachedItems[existingIndex].animeName}, 集数=${_cachedItems[existingIndex].episodeTitle}');
         // 更新已存在的记录
         _cachedItems[existingIndex] = item;
         // 更新后输出调试信息
-        //print('更新后的记录: 动画=${item.animeName}, 集数=${item.episodeTitle}');
+        //debugPrint('更新后的记录: 动画=${item.animeName}, 集数=${item.episodeTitle}');
       } else {
         // 添加新记录
         _cachedItems.add(item);
-        //print('添加新记录: 动画=${item.animeName}, 集数=${item.episodeTitle}');
+        //debugPrint('添加新记录: 动画=${item.animeName}, 集数=${item.episodeTitle}');
       }
       
       // 重新排序
@@ -479,15 +479,15 @@ class WatchHistoryManager {
       
       // 验证保存后新文件的大小
       final newFileSize = await file.length();
-      //print('保存后的文件大小: $newFileSize 字节，缓存项数量: ${_cachedItems.length}');
+      //debugPrint('保存后的文件大小: $newFileSize 字节，缓存项数量: ${_cachedItems.length}');
       
       // 如果大小异常小，可能是保存失败
       if (newFileSize < 50 && _cachedItems.length > 1) {
-        //print('警告: 保存后文件大小异常小($newFileSize字节)，但缓存项数量为${_cachedItems.length}，可能保存失败');
+        //debugPrint('警告: 保存后文件大小异常小($newFileSize字节)，但缓存项数量为${_cachedItems.length}，可能保存失败');
         // 尝试重新保存
         await file.writeAsString(jsonString);
         final retrySize = await file.length();
-        //print('重试保存后文件大小: $retrySize 字节');
+        //debugPrint('重试保存后文件大小: $retrySize 字节');
       }
       
       // 验证保存是否成功，重新读取文件
@@ -497,7 +497,7 @@ class WatchHistoryManager {
         
         // 检查保存的记录数量
         if (savedList.length != _cachedItems.length) {
-          //print('警告: 保存的记录数量(${savedList.length})与缓存数量(${_cachedItems.length})不匹配');
+          //debugPrint('警告: 保存的记录数量(${savedList.length})与缓存数量(${_cachedItems.length})不匹配');
         }
         
         // 查找刚刚更新的项目
@@ -511,15 +511,15 @@ class WatchHistoryManager {
         }
         
         if (savedItem != null) {
-          //print('保存到文件的记录: 动画=${savedItem['animeName']}, 集数=${savedItem['episodeTitle']}');
+          //debugPrint('保存到文件的记录: 动画=${savedItem['animeName']}, 集数=${savedItem['episodeTitle']}');
         } else {
-          //print('警告: 在保存后的文件中未找到更新的记录');
+          //debugPrint('警告: 在保存后的文件中未找到更新的记录');
         }
       } catch (e) {
-        //print('验证保存时出错: $e');
+        //debugPrint('验证保存时出错: $e');
       }
     } catch (e) {
-      //print('添加/更新观看历史失败: $e');
+      //debugPrint('添加/更新观看历史失败: $e');
       // 如果更新过程中出错，可能是历史记录文件损坏
       // 尝试修复然后重试
       try {
@@ -549,9 +549,9 @@ class WatchHistoryManager {
         await file.writeAsString(jsonString);
         _lastWriteTime = DateTime.now();
         
-        //print('修复后成功更新历史记录');
+        //debugPrint('修复后成功更新历史记录');
       } catch (retryError) {
-        //print('修复后仍无法更新历史记录: $retryError');
+        //debugPrint('修复后仍无法更新历史记录: $retryError');
       }
     } finally {
       _isWriting = false;
@@ -576,7 +576,7 @@ class WatchHistoryManager {
         return null;
       }
     } catch (e) {
-      //print('获取历史项目失败: $e');
+      //debugPrint('获取历史项目失败: $e');
       return null;
     }
   }
@@ -605,7 +605,7 @@ class WatchHistoryManager {
       await file.writeAsString(jsonString);
       _lastWriteTime = DateTime.now();
     } catch (e) {
-      //print('删除观看历史失败: $e');
+      //debugPrint('删除观看历史失败: $e');
     } finally {
       _isWriting = false;
     }
@@ -629,7 +629,7 @@ class WatchHistoryManager {
         _lastWriteTime = DateTime.now();
       }
     } catch (e) {
-      //print('清空观看历史失败: $e');
+      //debugPrint('清空观看历史失败: $e');
     }
   }
 } 

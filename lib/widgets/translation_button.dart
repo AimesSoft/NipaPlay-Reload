@@ -44,7 +44,7 @@ class _TranslationButtonState extends State<TranslationButton> {
       });
       
       final appSecret = await DandanplayService.getAppSecret();
-      //print('开始请求翻译...');
+      //debugPrint('开始请求翻译...');
       
       final response = await http.post(
         Uri.parse('https://nipaplay.aimes-soft.com/tran.php'),
@@ -63,10 +63,10 @@ class _TranslationButtonState extends State<TranslationButton> {
       );
 
       if (response.statusCode == 200) {
-        //print('翻译请求成功');
+        //debugPrint('翻译请求成功');
         return response.body;
       }
-      //print('翻译请求失败，状态码: ${response.statusCode}');
+      //debugPrint('翻译请求失败，状态码: ${response.statusCode}');
       throw Exception('翻译请求失败，状态码: ${response.statusCode}');
     } on TimeoutException {
       const error = '翻译请求超时，请检查网络连接';
@@ -130,17 +130,17 @@ class _TranslationButtonState extends State<TranslationButton> {
             child: InkWell(
               onTap: _isTranslating ? null : () async {
                 if (!widget.translatedSummaries.containsKey(widget.animeId)) {
-                  //print('未找到缓存翻译，开始请求翻译...');
+                  //debugPrint('未找到缓存翻译，开始请求翻译...');
                   final translation = await _translateSummary(widget.summary);
                   if (translation != null) {
-                    //print('翻译成功，更新状态');
+                    //debugPrint('翻译成功，更新状态');
                     final updatedTranslations = Map<int, String>.from(widget.translatedSummaries);
                     updatedTranslations[widget.animeId] = translation;
                     widget.onTranslationUpdated(updatedTranslations);
                     widget.onTranslationStateChanged(true);
                   }
                 } else {
-                  //print('使用缓存翻译');
+                  //debugPrint('使用缓存翻译');
                   widget.onTranslationStateChanged(!widget.isShowingTranslation);
                 }
               },

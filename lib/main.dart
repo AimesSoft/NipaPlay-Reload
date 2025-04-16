@@ -22,12 +22,16 @@ import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'models/watch_history_model.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:nipaplay/utils/network_checker.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 创建应用所需的临时目录，解决macOS沙盒模式下的目录访问问题
   await _ensureTemporaryDirectoryExists();
+
+  // 检查网络连接
+  _checkNetworkConnection();
 
   // 注册 FVP
   fvp.registerWith(options: {
@@ -124,6 +128,103 @@ void main() async {
   });
 }
 
+// 检查网络连接
+Future<void> _checkNetworkConnection() async {
+  debugPrint('==================== 网络连接诊断开始 ====================');
+  debugPrint('设备系统: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
+  debugPrint('设备类型: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : Platform.isMacOS ? 'macOS' : '其他'}');
+  
+  // 检查代理设置
+  final proxySettings = NetworkChecker.checkProxySettings();
+  debugPrint('代理设置检查结果:');
+  if (proxySettings['hasProxy']) {
+    debugPrint('系统存在代理设置:');
+    final settings = proxySettings['proxySettings'] as Map<String, dynamic>;
+    settings.forEach((key, value) {
+      debugPrint(' - $key: $value');
+    });
+  } else {
+    debugPrint('未检测到系统代理设置');
+    if (proxySettings['error'] != null) {
+      debugPrint('检测代理时出错: ${proxySettings['error']}');
+    }
+  }
+  
+  try {
+    debugPrint('\n测试百度连接:');
+    // 检查百度网络连接 (详细模式)
+    final baiduResult = await NetworkChecker.checkConnection(
+      url: 'https://www.baidu.com',
+      timeout: 5,
+      verbose: true,
+    );
+    
+    debugPrint('\n百度连接状态: ${baiduResult['connected'] ? '成功' : '失败'}');
+    if (baiduResult['connected']) {
+      debugPrint('响应时间: ${baiduResult['duration']}ms');
+      debugPrint('响应大小: ${baiduResult['responseSize']} 字节');
+    }
+    
+    // 等待一下再测试下一个地址
+    await Future.delayed(const Duration(seconds: 1));
+    
+    debugPrint('\n测试Google连接(对比测试):');
+    // 检查谷歌网络连接（对比测试）
+    final googleResult = await NetworkChecker.checkConnection(
+      url: 'https://www.google.com',
+      timeout: 5,
+      verbose: true,
+    );
+    
+    debugPrint('\nGoogle连接状态: ${googleResult['connected'] ? '成功' : '失败'}');
+    if (googleResult['connected']) {
+      debugPrint('响应时间: ${googleResult['duration']}ms');
+      debugPrint('响应大小: ${googleResult['responseSize']} 字节');
+    }
+    
+    // 再测试一个国内的站点
+    await Future.delayed(const Duration(seconds: 1));
+    debugPrint('\n测试腾讯连接:');
+    final tencentResult = await NetworkChecker.checkConnection(
+      url: 'https://www.qq.com',
+      timeout: 5,
+      verbose: true,
+    );
+    
+    debugPrint('\n腾讯连接状态: ${tencentResult['connected'] ? '成功' : '失败'}');
+    if (tencentResult['connected']) {
+      debugPrint('响应时间: ${tencentResult['duration']}ms');
+      debugPrint('响应大小: ${tencentResult['responseSize']} 字节');
+    }
+    
+    // 诊断结果总结
+    debugPrint('\n==================== 网络诊断结果总结 ====================');
+    if (baiduResult['connected'] || tencentResult['connected']) {
+      debugPrint('✅ 国内网络连接正常');
+    } else {
+      debugPrint('❌ 国内网络连接异常，请检查网络设置');
+    }
+    
+    if (googleResult['connected']) {
+      debugPrint('✅ 国外网络连接正常');
+    } else {
+      debugPrint('❌ 国外网络连接异常，如果只有国外连接异常可能是正常的');
+    }
+    
+    if (Platform.isIOS && !baiduResult['connected'] && !tencentResult['connected']) {
+      debugPrint('\n⚠️ iOS设备网络问题排查建议:');
+      debugPrint('1. 请确保应用有网络访问权限');
+      debugPrint('2. 检查是否启用了VPN或代理');
+      debugPrint('3. 尝试重启设备或重置网络设置');
+      debugPrint('4. 确认Info.plist中已添加ATS例外配置');
+    }
+  } catch (e) {
+    debugPrint('网络检查过程中发生异常: $e');
+  }
+  
+  debugPrint('==================== 网络连接诊断结束 ====================');
+}
+
 // 确保临时目录存在
 Future<void> _ensureTemporaryDirectoryExists() async {
   try {
@@ -136,15 +237,15 @@ Future<void> _ensureTemporaryDirectoryExists() async {
     
     // 确保tmp目录存在
     if (!tmpDir.existsSync()) {
-      //print('创建应用临时目录: ${tmpDir.path}');
+      //debugPrint('创建应用临时目录: ${tmpDir.path}');
       tmpDir.createSync(recursive: true);
     }
     
     // 输出目录信息用于调试
-    //print('应用文档目录: ${appDir.path}');
-    //print('应用临时目录: ${tmpDir.path}');
+    //debugPrint('应用文档目录: ${appDir.path}');
+    //debugPrint('应用临时目录: ${tmpDir.path}');
   } catch (e) {
-    //print('创建临时目录失败: $e');
+    //debugPrint('创建临时目录失败: $e');
   }
 }
 

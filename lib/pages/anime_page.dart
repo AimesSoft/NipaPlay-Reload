@@ -65,10 +65,10 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       
       // 只有当距离上次更新超过5秒或首次加载时才刷新
       if (lastUpdateDiff > 5 || _watchHistory.isEmpty) {
-        //print('切换到观看记录页面，距离上次更新${lastUpdateDiff}秒，触发刷新');
+        //debugPrint('切换到观看记录页面，距离上次更新${lastUpdateDiff}秒，触发刷新');
         _loadWatchHistory();
       } else {
-        //print('切换到观看记录页面，但刚刚更新过（${lastUpdateDiff}秒前），跳过刷新');
+        //debugPrint('切换到观看记录页面，但刚刚更新过（${lastUpdateDiff}秒前），跳过刷新');
       }
     }
   }
@@ -80,18 +80,18 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         _videoPlayerState!.addThumbnailUpdateListener(_onThumbnailUpdated);
       }
     } catch (e) {
-      //print('设置缩略图更新监听器时出错: $e');
+      //debugPrint('设置缩略图更新监听器时出错: $e');
     }
   }
   
   // 缩略图更新回调
   void _onThumbnailUpdated() {
-    //print('收到缩略图更新通知，刷新观看历史');
+    //debugPrint('收到缩略图更新通知，刷新观看历史');
     // 确保组件挂载时才进行操作
     if (!mounted) return;
     
     // 立即清理图片缓存，确保缩略图能够更新
-    //print('强制清理图片缓存');
+    //debugPrint('强制清理图片缓存');
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
     
@@ -106,7 +106,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     
     // 如果已经有一个重载正在进行，不要启动另一个
     if (_isReloadingHistory) {
-      //print('已有重载历史记录任务正在进行，跳过此次请求');
+      //debugPrint('已有重载历史记录任务正在进行，跳过此次请求');
       return;
     }
     
@@ -142,7 +142,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         _videoPlayerState!.removeThumbnailUpdateListener(_onThumbnailUpdated);
       }
     } catch (e) {
-      //print('移除缩略图更新监听器时出错: $e');
+      //debugPrint('移除缩略图更新监听器时出错: $e');
     }
     
     super.dispose();
@@ -159,11 +159,11 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   Future<void> _loadWatchHistory() async {
     // 如果已经在加载，直接返回
     if (_isReloadingHistory) {
-      //print('已经在加载观看历史，跳过重复请求');
+      //debugPrint('已经在加载观看历史，跳过重复请求');
       return;
     }
     
-    //print('开始重新加载观看历史...');
+    //debugPrint('开始重新加载观看历史...');
     // 先检查组件是否挂载
     if (!mounted) return;
     
@@ -188,12 +188,12 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         final now = DateTime.now();
         if (now.difference(_lastCacheClearTime).inSeconds > 30) {
           // 彻底清理图片缓存，确保缩略图能够刷新
-          //print('清理图片缓存确保最新缩略图更新');
+          //debugPrint('清理图片缓存确保最新缩略图更新');
           PaintingBinding.instance.imageCache.clear();
           PaintingBinding.instance.imageCache.clearLiveImages();
           _lastCacheClearTime = now;
         } else {
-          //print('距上次清理缓存时间不足30秒，跳过此次清理');
+          //debugPrint('距上次清理缓存时间不足30秒，跳过此次清理');
         }
       }
       
@@ -224,9 +224,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           _isLoading = false;
           _lastHistoryUpdateTime = DateTime.now();
         });
-        //print('观看历史已更新，共${history.length}条记录');
+        //debugPrint('观看历史已更新，共${history.length}条记录');
       } else {
-        //print('观看历史无变化，跳过UI更新');
+        //debugPrint('观看历史无变化，跳过UI更新');
         if (initialLoadingState) {
           setState(() {
             _isLoading = false;
@@ -234,7 +234,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      //print('加载观看历史失败: $e');
+      //debugPrint('加载观看历史失败: $e');
       // 确保组件仍然挂载
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -256,7 +256,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       try {
         _videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
       } catch (e) {
-        //print('获取VideoPlayerState失败: $e');
+        //debugPrint('获取VideoPlayerState失败: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('播放器初始化失败，请重试')),
         );
@@ -310,10 +310,8 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
             videoState.removeListener(statusListener);
             // 切换到视频播放页面
             final tabController = DefaultTabController.of(context);
-            if (tabController != null) {
-              tabController.animateTo(0);
-            }
-          }
+            tabController.animateTo(0);
+                    }
         });
       }
     };
@@ -328,7 +326,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       
       if (videoState.status == PlayerStatus.paused && 
           videoState.progress > 0.9) {
-        //print('检测到视频播放接近结束，重新加载观看历史');
+        //debugPrint('检测到视频播放接近结束，重新加载观看历史');
         // 移除监听器，避免重复触发
         videoState.removeListener(playbackFinishListener);
         // 延迟一点时间再刷新，确保观看记录已保存
@@ -589,7 +587,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       if (thumbnailFile.existsSync()) {
         if (isLatestUpdated) {
           // 对最新记录使用更激进的刷新策略
-          //print('使用特殊刷新策略加载最新缩略图: ${item.thumbnailPath}');
+          //debugPrint('使用特殊刷新策略加载最新缩略图: ${item.thumbnailPath}');
           
           // 读取文件字节数据，跳过图片缓存
           try {
@@ -602,12 +600,12 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
               height: double.infinity,
               filterQuality: FilterQuality.medium,
               errorBuilder: (context, error, stackTrace) {
-                //print('加载缩略图字节数据出错: $error');
+                //debugPrint('加载缩略图字节数据出错: $error');
                 return _buildDefaultThumbnail();
               },
             );
           } catch (e) {
-            //print('读取缩略图文件失败: $e');
+            //debugPrint('读取缩略图文件失败: $e');
             return _buildDefaultThumbnail();
           }
         } else {
@@ -622,7 +620,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
             filterQuality: FilterQuality.medium,
             gaplessPlayback: true,
             errorBuilder: (context, error, stackTrace) {
-              //print('加载缩略图出错: $error');
+              //debugPrint('加载缩略图出错: $error');
               return _buildDefaultThumbnail();
             },
           );

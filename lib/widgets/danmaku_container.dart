@@ -1001,23 +1001,25 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         }
 
         // 主弹幕层 - 始终显示
-        final mainDanmakuLayer = Stack(
-          children: [
-            // 滚动弹幕（最底层）
-            ...groupedDanmaku['scroll']!.map((danmaku) {
-              return _buildDanmaku('scroll', danmaku, isPaused);
-            }),
-            
-            // 底部弹幕（中间层）
-            ...groupedDanmaku['bottom']!.map((danmaku) {
-              return _buildDanmaku('bottom', danmaku, isPaused);
-            }),
-            
-            // 顶部弹幕（最上层）
-            ...groupedDanmaku['top']!.map((danmaku) {
-              return _buildDanmaku('top', danmaku, isPaused);
-            }),
-          ],
+        final mainDanmakuLayer = IgnorePointer(
+          child: Stack(
+            children: [
+              // 滚动弹幕（最底层）
+              ...groupedDanmaku['scroll']!.map((danmaku) {
+                return _buildDanmaku('scroll', danmaku, isPaused);
+              }),
+              
+              // 底部弹幕（中间层）
+              ...groupedDanmaku['bottom']!.map((danmaku) {
+                return _buildDanmaku('bottom', danmaku, isPaused);
+              }),
+              
+              // 顶部弹幕（最上层）
+              ...groupedDanmaku['top']!.map((danmaku) {
+                return _buildDanmaku('top', danmaku, isPaused);
+              }),
+            ],
+          ),
         );
 
         // 预建溢出层Widget列表
@@ -1121,16 +1123,13 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
           }
         }
         
-        // 组合主层和溢出层
+        // 返回包含主弹幕层和溢出弹幕层的Stack
         return Stack(
           children: [
-            // 主弹幕层
             mainDanmakuLayer,
-            
-            // 溢出弹幕层 - 根据allowStacking控制是否渲染
-            if (allowStacking && overflowWidgets.isNotEmpty) 
-              Stack(
-                children: overflowWidgets,
+            if (overflowWidgets.isNotEmpty)
+              IgnorePointer(
+                child: Stack(children: overflowWidgets),
               ),
           ],
         );

@@ -22,9 +22,12 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   final FocusNode _focusNode = FocusNode();
   final bool _isIndicatorHovered = false;
   Timer? _doubleTapTimer;
+  Timer? _mouseMoveTimer;
   int _tapCount = 0;
   static const _doubleTapTimeout = Duration(milliseconds: 200);
+  static const _mouseHideDelay = Duration(seconds: 3);
   bool _isProcessingTap = false;
+  bool _isMouseVisible = true;
 
   double getFontSize() {
     if (globals.isPhone) {
@@ -125,10 +128,35 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     }
   }
 
+  void _handleMouseMove(PointerEvent event) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (!videoState.hasVideo) return;
+
+    // 显示鼠标和UI
+    if (!_isMouseVisible) {
+      setState(() {
+        _isMouseVisible = true;
+      });
+    }
+    videoState.setShowControls(true);
+
+    // 重置定时器
+    _mouseMoveTimer?.cancel();
+    _mouseMoveTimer = Timer(_mouseHideDelay, () {
+      if (mounted && !_isIndicatorHovered) {
+        setState(() {
+          _isMouseVisible = false;
+        });
+        videoState.setShowControls(false);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _focusNode.dispose();
     _doubleTapTimer?.cancel();
+    _mouseMoveTimer?.cancel();
     super.dispose();
   }
 
@@ -169,114 +197,148 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
         }
 
         if (textureId != null && textureId > 0) {
-          return Stack(
-            children: [
-              FocusScope(
-                node: FocusScopeNode(),
-                child: globals.isPhone
-                  ? GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _handleTap,
-                      child: Stack(
-                        children: [
-                          // 视频纹理 - 使用RepaintBoundary包装纹理以优化性能
-                          Center(
-                            child: RepaintBoundary(
-                              child: AspectRatio(
-                                aspectRatio: videoState.aspectRatio,
-                                child: Texture(
-                                  textureId: textureId,
-                                  filterQuality: FilterQuality.medium,
-                                ),
-                              ),
-                            ),
-                          ),
-                          
-                          // 加载中遮罩
-                          if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
-                            LoadingOverlay(
-                              messages: videoState.statusMessages,
-                              backgroundOpacity: 0.5,
-                            ),
-                          
-                          // 垂直指示器
-                          if (videoState.hasVideo)
-                            VerticalIndicator(videoState: videoState),
-                        ],
-                      ),
-                    )
-                  : Focus(
-                      focusNode: _focusNode,
-                      autofocus: true,
-                      canRequestFocus: true,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          // 视频纹理 - 使用RepaintBoundary和LayoutBuilder来确保正确布局
-                          GestureDetector(
-                            onTap: _handleTap,
-                            onTapDown: (_) {
-                              if (videoState.hasVideo && videoState.showControls) {
-                                videoState.resetAutoHideTimer();
-                              }
-                            },
-                            child: MouseRegion(
-                              onHover: (event) => videoState.handleMouseMove(event.position),
-                              cursor: videoState.showControls ? SystemMouseCursors.basic : SystemMouseCursors.none,
-                              child: Center(
-                                child: RepaintBoundary(
-                                  child: AspectRatio(
-                                    aspectRatio: videoState.aspectRatio,
-                                    child: Texture(
-                                      textureId: textureId,
-                                      filterQuality: FilterQuality.medium,
+          return MouseRegion(
+            onHover: _handleMouseMove,
+            cursor: _isMouseVisible ? SystemMouseCursors.basic : SystemMouseCursors.none,
+            child: Stack(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _handleTap,
+                  child: FocusScope(
+                    node: FocusScopeNode(),
+                    child: globals.isPhone
+                      ? Stack(
+                          children: [
+                            // 视频纹理 - 使用RepaintBoundary包装纹理以优化性能
+                            Positioned.fill(
+                              child: RepaintBoundary(
+                                child: ColoredBox(
+                                  color: Colors.black,
+                                  child: Center(
+                                    child: AspectRatio(
+                                      aspectRatio: videoState.aspectRatio,
+                                      child: Texture(
+                                        textureId: textureId,
+                                        filterQuality: FilterQuality.medium,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-
-                          // 弹幕层 - 使用IgnorePointer避免打断鼠标事件
-                          if (videoState.hasVideo)
-                            IgnorePointer(
-                              child: Consumer<VideoPlayerState>(
-                                builder: (context, videoState, _) {
-                                  if (!videoState.danmakuVisible) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return DanmakuOverlay(
-                                    key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
-                                    danmakuList: videoState.danmakuList,
-                                    currentPosition: videoState.position.inMilliseconds.toDouble(),
-                                    videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
-                                    isPlaying: videoState.status == PlayerStatus.playing,
-                                    fontSize: getFontSize(),
-                                    isVisible: videoState.danmakuVisible,
-                                    opacity: videoState.mappedDanmakuOpacity,
-                                  );
-                                },
+                            
+                            // 弹幕层
+                            if (videoState.hasVideo)
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  ignoring: true,
+                                  child: Consumer<VideoPlayerState>(
+                                    builder: (context, videoState, _) {
+                                      if (!videoState.danmakuVisible) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return DanmakuOverlay(
+                                        key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
+                                        danmakuList: videoState.danmakuList,
+                                        currentPosition: videoState.position.inMilliseconds.toDouble(),
+                                        videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+                                        isPlaying: videoState.status == PlayerStatus.playing,
+                                        fontSize: getFontSize(),
+                                        isVisible: videoState.danmakuVisible,
+                                        opacity: videoState.mappedDanmakuOpacity,
+                                      );
+                                    },
+                                  ),
+                                ),
                               ),
-                            ),
-                          
-                          // 加载中遮罩
-                          if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
-                            LoadingOverlay(
-                              messages: videoState.statusMessages,
-                              backgroundOpacity: 0.5,
-                            ),
-                          
-                          // 垂直指示器
-                          if (videoState.hasVideo)
-                            VerticalIndicator(videoState: videoState),
-                        ],
-                      ),
-                    ),
-              ),
+                            
+                            // 加载中遮罩
+                            if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
+                              Positioned.fill(
+                                child: LoadingOverlay(
+                                  messages: videoState.statusMessages,
+                                  backgroundOpacity: 0.5,
+                                ),
+                              ),
+                            
+                            // 垂直指示器
+                            if (videoState.hasVideo)
+                              VerticalIndicator(videoState: videoState),
+                          ],
+                        )
+                      : Focus(
+                          focusNode: _focusNode,
+                          autofocus: true,
+                          canRequestFocus: true,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              // 视频纹理 - 使用RepaintBoundary包装纹理以优化性能
+                              Positioned.fill(
+                                child: RepaintBoundary(
+                                  child: ColoredBox(
+                                    color: Colors.black,
+                                    child: Center(
+                                      child: AspectRatio(
+                                        aspectRatio: videoState.aspectRatio,
+                                        child: Texture(
+                                          textureId: textureId,
+                                          filterQuality: FilterQuality.medium,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              
+                              // 弹幕层
+                              if (videoState.hasVideo)
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    ignoring: true,
+                                    child: Consumer<VideoPlayerState>(
+                                      builder: (context, videoState, _) {
+                                        if (!videoState.danmakuVisible) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return DanmakuOverlay(
+                                          key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
+                                          danmakuList: videoState.danmakuList,
+                                          currentPosition: videoState.position.inMilliseconds.toDouble(),
+                                          videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+                                          isPlaying: videoState.status == PlayerStatus.playing,
+                                          fontSize: getFontSize(),
+                                          isVisible: videoState.danmakuVisible,
+                                          opacity: videoState.mappedDanmakuOpacity,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              
+                              // 加载中遮罩
+                              if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
+                                Positioned.fill(
+                                  child: LoadingOverlay(
+                                    messages: videoState.statusMessages,
+                                    backgroundOpacity: 0.5,
+                                  ),
+                                ),
+                              
+                              // 垂直指示器
+                              if (videoState.hasVideo)
+                                VerticalIndicator(videoState: videoState),
+                            ],
+                          ),
+                        ),
+                  ),
+                ),
 
-              // 控制栏 Overlay
-              const VideoControlsOverlay(),
-            ],
+                // 控制栏 Overlay
+                const VideoControlsOverlay(),
+              ],
+            ),
           );
         }
 

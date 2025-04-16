@@ -105,7 +105,7 @@ class KeyboardShortcuts {
         _shortcuts.addAll(Map<String, String>.from(decoded));
         _updateKeyBindings();
       } catch (e) {
-        //print('Error loading shortcuts: $e');
+        //debugPrint('Error loading shortcuts: $e');
         // 如果加载失败，使用默认快捷键
         initialize();
       }

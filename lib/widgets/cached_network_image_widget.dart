@@ -10,6 +10,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final double? height;
   final Widget Function(BuildContext, Object)? errorBuilder;
   final bool shouldRelease;
+  final Duration fadeDuration;
 
   const CachedNetworkImageWidget({
     super.key,
@@ -19,6 +20,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
     this.height,
     this.errorBuilder,
     this.shouldRelease = true,
+    this.fadeDuration = const Duration(milliseconds: 300),
   });
 
   @override
@@ -28,6 +30,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
 class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   Future<ui.Image>? _imageFuture;
   String? _currentUrl;
+  bool _isImageLoaded = false;
 
   @override
   void initState() {
@@ -42,6 +45,9 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       if (_currentUrl != null && widget.shouldRelease) {
         ImageCacheManager.instance.releaseImage(_currentUrl!);
       }
+      setState(() {
+        _isImageLoaded = false;
+      });
       _loadImage();
     }
   }
@@ -66,7 +72,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       future: _imageFuture,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          ////print('图片加载错误: ${snapshot.error}');
+          ////debugPrint('图片加载错误: ${snapshot.error}');
           if (widget.errorBuilder != null) {
             return widget.errorBuilder!(context, snapshot.error!);
           }
@@ -79,12 +85,27 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
         }
 
         if (snapshot.hasData) {
-          return SizedBox(
-            width: widget.width,
-            height: widget.height,
-            child: RawImage(
-              image: snapshot.data,
-              fit: widget.fit,
+          if (!_isImageLoaded) {
+            Future.microtask(() {
+              if (mounted) {
+                setState(() {
+                  _isImageLoaded = true;
+                });
+              }
+            });
+          }
+
+          return AnimatedOpacity(
+            opacity: _isImageLoaded ? 1.0 : 0.0,
+            duration: widget.fadeDuration,
+            curve: Curves.easeInOut,
+            child: SizedBox(
+              width: widget.width,
+              height: widget.height,
+              child: RawImage(
+                image: snapshot.data,
+                fit: widget.fit,
+              ),
             ),
           );
         }

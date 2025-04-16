@@ -59,7 +59,7 @@ class ImageCacheManager {
       }
       _isInitialized = true;
     } catch (e) {
-      ////print('初始化缓存目录失败: $e');
+      ////debugPrint('初始化缓存目录失败: $e');
       rethrow;
     }
   }
@@ -153,18 +153,18 @@ class ImageCacheManager {
       try {
         // 检查 URL 是否有效
         if (url.isEmpty || url == 'assets/backempty.png' || url == 'assets/backEmpty.png') {
-          ////print('跳过无效的图片 URL: $url');
+          ////debugPrint('跳过无效的图片 URL: $url');
           continue;
         }
 
         // 创建加载任务
         final future = loadImage(url).catchError((e) {
-          ////print('预加载图片失败: $url, 错误: $e');
+          ////debugPrint('预加载图片失败: $url, 错误: $e');
           failedUrls.add(url);
         });
         futures.add(future);
       } catch (e) {
-        ////print('预加载图片时发生错误: $url, 错误: $e');
+        ////debugPrint('预加载图片时发生错误: $url, 错误: $e');
         failedUrls.add(url);
       }
     }
@@ -173,9 +173,9 @@ class ImageCacheManager {
     await Future.wait(futures, eagerError: false);
 
     if (failedUrls.isNotEmpty) {
-      ////print('以下图片预加载失败:');
+      ////debugPrint('以下图片预加载失败:');
       for (final url in failedUrls) {
-        ////print('- $url');
+        ////debugPrint('- $url');
       }
     }
   }
@@ -199,7 +199,7 @@ class ImageCacheManager {
       try {
         image.dispose();
       } catch (e) {
-        ////print('释放图片资源时出错: $e');
+        ////debugPrint('释放图片资源时出错: $e');
       }
     }
     // 清除缓存
@@ -221,10 +221,10 @@ class ImageCacheManager {
         if (await _cacheDir!.exists()) {
           await _cacheDir!.delete(recursive: true);
           await _cacheDir!.create();
-          ////print('已清除压缩图片缓存目录: ${_cacheDir!.path}');
+          ////debugPrint('已清除压缩图片缓存目录: ${_cacheDir!.path}');
         }
       } catch (e) {
-        ////print('清除压缩图片缓存失败: $e');
+        ////debugPrint('清除压缩图片缓存失败: $e');
       }
 
       // 清除 cached_network_image 的缓存
@@ -234,10 +234,10 @@ class ImageCacheManager {
         
         if (await imageCacheDir.exists()) {
           await imageCacheDir.delete(recursive: true);
-          ////print('已清除 cached_network_image 缓存目录: ${imageCacheDir.path}');
+          ////debugPrint('已清除 cached_network_image 缓存目录: ${imageCacheDir.path}');
         }
       } catch (e) {
-        ////print('清除 cached_network_image 缓存失败: $e');
+        ////debugPrint('清除 cached_network_image 缓存失败: $e');
       }
 
       // 清除自定义图片缓存
@@ -247,10 +247,10 @@ class ImageCacheManager {
         
         if (await imageCacheDir.exists()) {
           await imageCacheDir.delete(recursive: true);
-          ////print('已清除自定义图片缓存目录: ${imageCacheDir.path}');
+          ////debugPrint('已清除自定义图片缓存目录: ${imageCacheDir.path}');
         }
       } catch (e) {
-        ////print('清除自定义图片缓存失败: $e');
+        ////debugPrint('清除自定义图片缓存失败: $e');
       }
 
       // 清除 Flutter 的图片缓存
@@ -266,9 +266,9 @@ class ImageCacheManager {
             await file.delete(recursive: true);
           }
         }
-        ////print('已清除所有临时文件: ${cacheDir.path}');
+        ////debugPrint('已清除所有临时文件: ${cacheDir.path}');
       } catch (e) {
-        ////print('清除临时文件失败: $e');
+        ////debugPrint('清除临时文件失败: $e');
       }
     } finally {
       _isClearingCache = false;
