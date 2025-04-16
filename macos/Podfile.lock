@@ -4,7 +4,7 @@ PODS:
   - file_selector_macos (0.0.1):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
-  - fvp (0.31.0):
+  - fvp (0.31.2):
     - Flutter
     - FlutterMacOS
     - mdk (~> 0.32.0)
@@ -78,7 +78,7 @@ SPEC CHECKSUMS:
   file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
   file_selector_macos: 6280b52b459ae6c590af5d78fc35c7267a3c4b31
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
-  fvp: ba6791e093cbc3ec5d1335740d576131e3cbc4c7
+  fvp: 89275776efede62b7fde1762afa518974e6d6750
   mdk: a726c85fd49c002b83d586b278d452f387750889
   package_info_plus: f0052d280d17aa382b932f399edf32507174e870
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564

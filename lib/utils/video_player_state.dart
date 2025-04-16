@@ -42,7 +42,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   String? _error;
-  final double _aspectRatio = 16 / 9;
+  double _aspectRatio = 16 / 9;  // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
   Timer? _positionUpdateTimer;
   Timer? _hideControlsTimer;
@@ -349,6 +349,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('6. 分析媒体信息...');
       // 分析并打印媒体信息，特别是字幕轨道
       MediaInfoHelper.analyzeMediaInfo(player.mediaInfo);
+      
+      // 设置视频宽高比
+      if (player.mediaInfo.video != null && player.mediaInfo.video!.isNotEmpty) {
+        final videoTrack = player.mediaInfo.video![0];
+        if (videoTrack.codec.width > 0 && videoTrack.codec.height > 0) {
+          _aspectRatio = videoTrack.codec.width / videoTrack.codec.height;
+          debugPrint('设置视频宽高比: $_aspectRatio');
+        }
+      }
       
       // 优先选择包含sm或中文相关的字幕轨道
       if (player.mediaInfo.subtitle != null) {
