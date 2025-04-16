@@ -158,7 +158,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           return const SizedBox.shrink();
                         }
                         return DanmakuOverlay(
-                          danmakuList: videoState.danmakuList,
                           currentPosition: videoState.position.inMilliseconds.toDouble(),
                           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
                           isPlaying: videoState.status == PlayerStatus.playing,

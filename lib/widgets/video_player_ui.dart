@@ -240,7 +240,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                       }
                                       return DanmakuOverlay(
                                         key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
-                                        danmakuList: videoState.danmakuList,
                                         currentPosition: videoState.position.inMilliseconds.toDouble(),
                                         videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
                                         isPlaying: videoState.status == PlayerStatus.playing,
@@ -304,7 +303,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                         }
                                         return DanmakuOverlay(
                                           key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
-                                          danmakuList: videoState.danmakuList,
                                           currentPosition: videoState.position.inMilliseconds.toDouble(),
                                           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
                                           isPlaying: videoState.status == PlayerStatus.playing,

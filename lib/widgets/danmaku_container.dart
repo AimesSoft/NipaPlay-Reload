@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../utils/globals.dart' as globals;
+import 'danmaku_group_widget.dart';
 
 class DanmakuContainer extends StatefulWidget {
   final List<Map<String, dynamic>> danmakuList;
@@ -62,6 +63,12 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   // 存储按时间排序的弹幕列表，用于预测未来45秒内的弹幕
   List<Map<String, dynamic>> _sortedDanmakuList = [];
   
+  // 存储内容组的第一个出现时间
+  final Map<String, double> _contentFirstTime = {};
+  
+  // 存储内容组的合并信息
+  final Map<String, Map<String, dynamic>> _contentGroupInfo = {};
+  
   // 计算合并弹幕的字体大小倍率
   double _calcMergedFontSizeMultiplier(int mergeCount) {
     // 按照数量计算放大倍率，例如15条是1.5倍
@@ -91,6 +98,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   void _preprocessDanmakuList() {
     if (widget.danmakuList.isEmpty) return;
     
+    // 清空缓存
+    _contentFirstTime.clear();
+    _contentGroupInfo.clear();
+    _processedDanmaku.clear();
+    
     // 复制一份弹幕列表以避免修改原数据
     _sortedDanmakuList = List<Map<String, dynamic>>.from(widget.danmakuList);
     
@@ -98,74 +110,73 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     _sortedDanmakuList.sort((a, b) => 
       (a['time'] as double).compareTo(b['time'] as double));
       
-    // 预计算所有弹幕的状态
-    _precomputeDanmakuStates();
+    // 使用滑动窗口法处理弹幕
+    _processDanmakuWithSlidingWindow();
   }
   
-  // 预计算所有弹幕的显示状态
-  void _precomputeDanmakuStates() {
-    // 用于跟踪已处理的内容组
-    Map<String, double> contentFirstTime = {};
+  // 使用滑动窗口法处理弹幕
+  void _processDanmakuWithSlidingWindow() {
+    if (_sortedDanmakuList.isEmpty) return;
     
-    // 使用滑动窗口法处理弹幕
-    for (int i = 0; i < _sortedDanmakuList.length; i++) {
-      final current = _sortedDanmakuList[i];
-      final content = current['content'] as String;
-      final time = current['time'] as double;
+    // 使用双指针实现滑动窗口
+    int left = 0;
+    int right = 0;
+    final int n = _sortedDanmakuList.length;
+    
+    // 使用哈希表记录窗口内各内容的出现次数
+    final Map<String, int> windowContentCount = {};
+    
+    while (right < n) {
+      final currentDanmaku = _sortedDanmakuList[right];
+      final content = currentDanmaku['content'] as String;
+      final time = currentDanmaku['time'] as double;
       
-      // 弹幕唯一标识
+      // 更新窗口内内容计数
+      windowContentCount[content] = (windowContentCount[content] ?? 0) + 1;
+      
+      // 移动左指针，保持窗口在45秒内
+      while (left <= right && time - (_sortedDanmakuList[left]['time'] as double) > 45.0) {
+        final leftContent = _sortedDanmakuList[left]['content'] as String;
+        windowContentCount[leftContent] = (windowContentCount[leftContent] ?? 1) - 1;
+        if (windowContentCount[leftContent] == 0) {
+          windowContentCount.remove(leftContent);
+        }
+        left++;
+      }
+      
+      // 处理当前弹幕
       final danmakuKey = '$content-$time';
+      final count = windowContentCount[content] ?? 1;
       
-      // 检查此内容是否已经有了第一个出现时间
-      if (contentFirstTime.containsKey(content)) {
-        final firstTime = contentFirstTime[content]!;
-        // 如果当前弹幕在第一次出现后的45秒内，标记为隐藏
-        if (time - firstTime <= 45.0) {
-          _processedDanmaku[danmakuKey] = {
-            ...current,
-            'hidden': true,
-            'belongsToGroup': content
+      if (count > 1) {
+        // 如果窗口内出现多次，标记为合并状态
+        if (!_contentGroupInfo.containsKey(content)) {
+          // 记录组的第一个出现时间
+          _contentFirstTime[content] = time;
+          _contentGroupInfo[content] = {
+            'firstTime': time,
+            'count': count,
+            'processed': false
           };
-          continue;
-        } else {
-          // 超过45秒窗口，这是一个新的组的开始
-          contentFirstTime[content] = time;
-        }
-      } else {
-        // 第一次出现此内容
-        contentFirstTime[content] = time;
-      }
-      
-      // 计算这个内容在未来45秒内出现的次数
-      int futureCount = 1; // 至少包括自己
-      for (int j = i + 1; j < _sortedDanmakuList.length; j++) {
-        final future = _sortedDanmakuList[j];
-        final futureContent = future['content'] as String;
-        final futureTime = future['time'] as double;
-        
-        if (futureContent == content && futureTime - time <= 45.0) {
-          futureCount++;
         }
         
-        // 如果已经超过45秒窗口，停止计数
-        if (futureTime - time > 45.0) {
-          break;
-        }
-      }
-      
-      // 如果有多次出现，标记为合并状态
-      if (futureCount > 1) {
+        // 更新组的计数
+        _contentGroupInfo[content]!['count'] = count;
+        
+        // 处理当前弹幕
         _processedDanmaku[danmakuKey] = {
-          ...current,
+          ...currentDanmaku,
           'merged': true,
-          'mergeCount': futureCount,
-          'isFirstInGroup': true,
+          'mergeCount': count,
+          'isFirstInGroup': time == _contentFirstTime[content],
           'groupContent': content
         };
       } else {
         // 只出现一次，保持原样
-        _processedDanmaku[danmakuKey] = current;
+        _processedDanmaku[danmakuKey] = currentDanmaku;
       }
+      
+      right++;
     }
   }
 
@@ -458,207 +469,75 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     
     // 根据弹幕类型分配轨道
     if (type == 'scroll') {
-      // 滚动弹幕：优先使用上半部分轨道，满了才使用下半部分
-      final availableTracks = maxTracks;
-      final halfTracks = (availableTracks).floor(); // 上半部分轨道数
-      
-      // 根据时间差选择初始轨道
-      final timeDiff = widget.currentTime - time;
-      final initialTrack = ((timeDiff * 0.1) % availableTracks).floor();
-      
-      // 先尝试在上半部分分配轨道
-      for (int i = 0; i < halfTracks; i++) {
-        final track = (initialTrack + i) % halfTracks;
+      // 优化：遍历所有轨道，优先分配不会碰撞的轨道
+      int? availableTrack;
+      for (int track = 0; track < maxTracks; track++) {
         final trackDanmaku = _trackDanmaku['scroll']!.where((d) => d['track'] == track).toList();
-        
-        // 检查轨道中是否有合并弹幕占用多行
-        bool hasMergedDanmaku = false;
+        bool hasCollision = false;
         for (var danmaku in trackDanmaku) {
-          if (danmaku['isMerged'] == true) {
-            final danmakuTime = danmaku['time'] as double;
-            final danmakuMergeCount = danmaku['mergeCount'] as int? ?? 1;
-            // 只考虑时间上重叠的部分，且只有当合并数较大时才避开
-            if (widget.currentTime - danmakuTime <= 10 && widget.currentTime - danmakuTime >= 0 && danmakuMergeCount > 5) {
-              hasMergedDanmaku = true;
-              break;
-            }
-          }
-        }
-        
-        // 如果当前轨道被合并弹幕占用，并且当前弹幕也是合并弹幕，尝试下一个轨道
-        if (hasMergedDanmaku && isMerged && mergeCount > 5) {
-          continue;
-        }
-        
-        if (trackDanmaku.isEmpty) {
-          _trackDanmaku['scroll']!.add({
-            'content': content,
+          if (_willCollide(danmaku, {
             'time': time,
-            'track': track,
             'width': danmakuWidth,
             'isMerged': isMerged,
-          });
-          final yPosition = track * trackHeight + _verticalSpacing;
-          _danmakuYPositions[danmakuKey] = yPosition;
-          // 延迟更新状态
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            videoState.updateDanmakuTrackInfo(danmakuKey, {
-              'track': track,
-              'width': danmakuWidth,
-              'isMerged': isMerged,
-            });
-          });
-          return yPosition;
+            'mergeCount': mergeCount,
+          }, widget.currentTime)) {
+            hasCollision = true;
+            break;
+          }
         }
-        
-        // 检查轨道是否已满
-        if (!_isTrackFull(trackDanmaku, widget.currentTime)) {
-          bool hasCollision = false;
-          for (var danmaku in trackDanmaku) {
-            if (_willCollide(danmaku, {
-              'time': time,
-              'width': danmakuWidth,
-              'isMerged': isMerged,
-              'mergeCount': mergeCount,
-            }, widget.currentTime)) {
-              hasCollision = true;
-              break;
-            }
-          }
-          
-          if (!hasCollision) {
-            _trackDanmaku['scroll']!.add({
-              'content': content,
-              'time': time,
-              'track': track,
-              'width': danmakuWidth,
-              'isMerged': isMerged,
-              'mergeCount': mergeCount,
-            });
-            final yPosition = track * trackHeight + _verticalSpacing;
-            _danmakuYPositions[danmakuKey] = yPosition;
-            // 延迟更新状态
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              videoState.updateDanmakuTrackInfo(danmakuKey, {
-                'track': track,
-                'width': danmakuWidth,
-                'isMerged': isMerged,
-                'mergeCount': mergeCount,
-              });
-            });
-            return yPosition;
-          }
+        if (!hasCollision) {
+          availableTrack = track;
+          break;
         }
       }
-      
-      // 如果弹幕堆叠被禁用，且上半部分的轨道都尝试过，则不显示该弹幕
-      if (!allowStacking) {
-        // 返回一个屏幕外的位置以确保弹幕不会显示
-        _danmakuYPositions[danmakuKey] = -1000;
-        return -1000;
-      }
-      
-      // 如果上半部分轨道都满了，尝试在下半部分分配
-      for (int i = 0; i < halfTracks; i++) {
-        final track = halfTracks + i; // 使用下半部分轨道
-        final trackDanmaku = _trackDanmaku['scroll']!.where((d) => d['track'] == track).toList();
-        
-        if (trackDanmaku.isEmpty) {
-          _trackDanmaku['scroll']!.add({
-            'content': content,
-            'time': time,
-            'track': track,
-            'width': danmakuWidth,
-            'isMerged': isMerged,
-          });
-          final yPosition = track * trackHeight + _verticalSpacing;
-          _danmakuYPositions[danmakuKey] = yPosition;
-          // 延迟更新状态
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            videoState.updateDanmakuTrackInfo(danmakuKey, {
-              'track': track,
-              'width': danmakuWidth,
-              'isMerged': isMerged,
-            });
-          });
-          return yPosition;
-        }
-        
-        // 检查轨道是否已满
-        if (!_isTrackFull(trackDanmaku, widget.currentTime)) {
-          bool hasCollision = false;
-          for (var danmaku in trackDanmaku) {
-            if (_willCollide(danmaku, {
-              'time': time,
-              'width': danmakuWidth,
-              'isMerged': isMerged,
-              'mergeCount': mergeCount,
-            }, widget.currentTime)) {
-              hasCollision = true;
-              break;
-            }
-          }
-          
-          if (!hasCollision) {
-            _trackDanmaku['scroll']!.add({
-              'content': content,
-              'time': time,
-              'track': track,
-              'width': danmakuWidth,
-              'isMerged': isMerged,
-              'mergeCount': mergeCount,
-            });
-            final yPosition = track * trackHeight + _verticalSpacing;
-            _danmakuYPositions[danmakuKey] = yPosition;
-            // 延迟更新状态
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              videoState.updateDanmakuTrackInfo(danmakuKey, {
-                'track': track,
-                'width': danmakuWidth,
-                'isMerged': isMerged,
-                'mergeCount': mergeCount,
-              });
-            });
-            return yPosition;
-          }
-        }
-      }
-      
-      // 如果全部轨道都满了且允许弹幕堆叠，则使用循环轨道
-      if (allowStacking) {
-        // 所有轨道都满了，重新使用第一个轨道
-        // 安全措施：确保不会溢出可用轨道数
-        _currentTrack[type] = (_currentTrack[type]! + 1) % availableTracks;
-        final track = _currentTrack[type]!;
-        
-        _trackDanmaku[type]!.add({
+      if (availableTrack != null) {
+        _trackDanmaku['scroll']!.add({
           'content': content,
           'time': time,
-          'track': track,
+          'track': availableTrack,
           'width': danmakuWidth,
           'isMerged': isMerged,
           'mergeCount': mergeCount,
         });
-        
-        final yPosition = track * trackHeight + _verticalSpacing;
+        final yPosition = availableTrack * trackHeight + _verticalSpacing;
         _danmakuYPositions[danmakuKey] = yPosition;
-        
-        // 延迟更新状态
         WidgetsBinding.instance.addPostFrameCallback((_) {
           videoState.updateDanmakuTrackInfo(danmakuKey, {
-            'track': track,
+            'track': availableTrack,
             'width': danmakuWidth,
             'isMerged': isMerged,
             'mergeCount': mergeCount,
           });
         });
-        
         return yPosition;
-      } else {
-        // 关闭弹幕堆叠，且没有找到合适的轨道，不显示弹幕
+      }
+      // 如果所有轨道都碰撞
+      if (!allowStacking) {
         _danmakuYPositions[danmakuKey] = -1000;
         return -1000;
       }
+      // 允许堆叠时，循环分配轨道
+      _currentTrack[type] = (_currentTrack[type]! + 1) % maxTracks;
+      final fallbackTrack = _currentTrack[type]!;
+      _trackDanmaku['scroll']!.add({
+        'content': content,
+        'time': time,
+        'track': fallbackTrack,
+        'width': danmakuWidth,
+        'isMerged': isMerged,
+        'mergeCount': mergeCount,
+      });
+      final yPosition = fallbackTrack * trackHeight + _verticalSpacing;
+      _danmakuYPositions[danmakuKey] = yPosition;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        videoState.updateDanmakuTrackInfo(danmakuKey, {
+          'track': fallbackTrack,
+          'width': danmakuWidth,
+          'isMerged': isMerged,
+          'mergeCount': mergeCount,
+        });
+      });
+      return yPosition;
     } else if (type == 'top') {
       // 顶部弹幕：从顶部开始逐轨道分配
       final availableTracks = maxTracks;
@@ -889,254 +768,287 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
         // 获取弹幕堆叠设置
         final allowStacking = videoState.danmakuStacking;
         
-        // 按类型分组弹幕
-        final Map<String, List<Map<String, dynamic>>> groupedDanmaku = {
-          'scroll': [],
-          'top': [],
-          'bottom': [],
-        };
-
-        // 存储溢出弹幕（超出轨道容量时）
-        final Map<String, List<Map<String, dynamic>>> overflowDanmaku = {
-          'scroll': [],
-          'top': [],
-          'bottom': [],
-        };
-
-        // 记录当前已显示的内容，确保同一内容在同一时间只显示一次
-        final Set<String> displayedContents = {};
-        
-        // 计算每种类型弹幕的可用轨道数
-        final maxScrollTracks = ((newSize.height - _danmakuHeight - _verticalSpacing) / (_danmakuHeight + _verticalSpacing)).floor();
-        final maxTopTracks = maxScrollTracks ~/ 4; // 顶部弹幕占用1/4的轨道空间
-        final maxBottomTracks = maxScrollTracks ~/ 4; // 底部弹幕占用1/4的轨道空间
-        
-        // 记录已使用的轨道
-        final Map<String, Set<int>> usedTracks = {
-          'scroll': {},
-          'top': {},
-          'bottom': {},
-        };
-
-        // 过滤并分组弹幕
-        for (var danmaku in widget.danmakuList) {
-          final time = danmaku['time'] as double;
-          final timeDiff = widget.currentTime - time;
-          
-          // 修改可见性判断，确保放大弹幕完全离开屏幕才消失
-          // 根据弹幕类型和是否合并计算不同的可见时间
-          double visibleDuration = 10.0; // 默认10秒
-          bool isMerged = false;
-          
-          // 检查是否是合并弹幕
-          final content = danmaku['content'] as String;
-          final danmakuKey = '$content-$time';
-          if (mergeDanmaku && _processedDanmaku.containsKey(danmakuKey)) {
-            final processed = _processedDanmaku[danmakuKey]!;
-            isMerged = processed['merged'] == true;
-            
-            // 如果是合并弹幕，增加可见时间以确保完全离开屏幕
-            if (isMerged) {
-              // 放大弹幕需要更长的时间才能完全滚出屏幕
-              visibleDuration = 15.0; // 增加到15秒
-            }
-          }
-          
-          if (timeDiff >= 0 && timeDiff <= visibleDuration) {
-            final type = danmaku['type'] as String;
-            
-            // 处理合并弹幕逻辑
-            var processedDanmaku = danmaku;
-            if (mergeDanmaku) {
-              // 如果这个弹幕已经处理过，使用缓存的结果
-              if (_processedDanmaku.containsKey(danmakuKey)) {
-                processedDanmaku = _processedDanmaku[danmakuKey]!;
-                
-                // 如果这个内容在当前屏幕已经显示过，强制隐藏
-                if (displayedContents.contains(content) && 
-                    !processedDanmaku.containsKey('isFirstInGroup')) {
-                  processedDanmaku = {...processedDanmaku, 'hidden': true};
-                } else if (!processedDanmaku.containsKey('hidden')) {
-                  // 如果这个内容没有被隐藏，标记为已显示
-                  displayedContents.add(content);
-                }
-              }
-            }
-            
-            // 划分弹幕到主层或溢出层
-            if (processedDanmaku['hidden'] != true) {
-              // 获取弹幕Y轴位置
-              final yPosition = _getYPosition(type, content, time, isMerged, isMerged ? (processedDanmaku['mergeCount'] as int? ?? 1) : 1);
-              
-              // 根据Y轴位置判断是否是溢出弹幕
-              if (yPosition < -500) { // 使用-1000作为标记值，表示这是溢出弹幕
-                // 溢出弹幕，添加到overflowDanmaku
-                overflowDanmaku[type]!.add(processedDanmaku);
-                
-                // 创建溢出弹幕的唯一标识
-                final overflowKey = 'overflow-$type-$content-$time';
-                
-                // 检查是否已有持久化的轨道信息，记录已使用的轨道
-                if (_danmakuTrackInfo.containsKey(overflowKey)) {
-                  // 如果有，使用已有的轨道信息
-                  final track = _danmakuTrackInfo[overflowKey]!['track'] as int;
-                  usedTracks[type]!.add(track);
-                }
-              } else {
-                // 正常弹幕，添加到groupedDanmaku
-                groupedDanmaku[type]!.add(processedDanmaku);
-                
-                // 记录轨道使用情况
-                // 处理屏幕内显示的轨道信息
-                final danmakuInfoKey = '$type-$content-$time';
-                if (_danmakuTrackInfo.containsKey(danmakuInfoKey)) {
-                  final trackInfo = _danmakuTrackInfo[danmakuInfoKey]!;
-                  if (trackInfo.containsKey('track')) {
-                    usedTracks[type]!.add(trackInfo['track'] as int);
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // 主弹幕层 - 始终显示
-        final mainDanmakuLayer = IgnorePointer(
-          child: Stack(
-            children: [
-              // 滚动弹幕（最底层）
-              ...groupedDanmaku['scroll']!.map((danmaku) {
-                return _buildDanmaku('scroll', danmaku, isPaused);
-              }),
-              
-              // 底部弹幕（中间层）
-              ...groupedDanmaku['bottom']!.map((danmaku) {
-                return _buildDanmaku('bottom', danmaku, isPaused);
-              }),
-              
-              // 顶部弹幕（最上层）
-              ...groupedDanmaku['top']!.map((danmaku) {
-                return _buildDanmaku('top', danmaku, isPaused);
-              }),
-            ],
-          ),
+        // 使用缓存优化弹幕分组
+        final groupedDanmaku = _getCachedGroupedDanmaku(
+          widget.danmakuList,
+          widget.currentTime,
+          mergeDanmaku,
+          allowStacking
         );
-
-        // 预建溢出层Widget列表
-        List<Widget> overflowWidgets = [];
         
-        // 如果允许堆叠，才处理溢出弹幕
-        if (allowStacking && isPaused == false) {
-          // 处理溢出弹幕的轨道分配
-          final List<Widget> overflowScrollWidgets = [];
-          final List<Widget> overflowTopWidgets = [];
-          final List<Widget> overflowBottomWidgets = [];
-          
-          // 为每种类型的溢出弹幕分配轨道
-          _assignTracksForOverflowDanmaku(
-            overflowDanmaku['scroll']!, 
-            overflowScrollWidgets, 
-            'scroll', 
-            usedTracks['scroll']!, 
-            maxScrollTracks, 
-            newSize, 
-            isPaused, 
-            videoState
-          );
-          
-          _assignTracksForOverflowDanmaku(
-            overflowDanmaku['top']!, 
-            overflowTopWidgets, 
-            'top', 
-            usedTracks['top']!, 
-            maxTopTracks, 
-            newSize, 
-            isPaused, 
-            videoState
-          );
-          
-          _assignTracksForOverflowDanmaku(
-            overflowDanmaku['bottom']!, 
-            overflowBottomWidgets, 
-            'bottom', 
-            usedTracks['bottom']!, 
-            maxBottomTracks, 
-            newSize, 
-            isPaused, 
-            videoState
-          );
-          
-          overflowWidgets.addAll(overflowScrollWidgets);
-          overflowWidgets.addAll(overflowTopWidgets);
-          overflowWidgets.addAll(overflowBottomWidgets);
-        } 
-        // 视频暂停时，使用缓存的轨道信息重建弹幕
-        else if (allowStacking && isPaused) {
-          // 从缓存重建暂停状态下的溢出弹幕
-          for (var entry in _danmakuTrackInfo.entries) {
-            final key = entry.key;
-            // 只处理溢出弹幕
-            if (key.startsWith('overflow-')) {
-              final trackInfo = entry.value;
-              final parts = key.split('-');
-              if (parts.length >= 3) {
-                final type = parts[1];
-                final content = parts.length > 3 ? parts.sublist(2, parts.length - 1).join('-') : parts[2];
-                final time = double.tryParse(parts.last) ?? 0.0;
-                
-                // 检查此弹幕是否在当前可见的弹幕列表中
-                bool found = false;
-                for (var danmaku in overflowDanmaku[type]!) {
-                  if (danmaku['content'] == content && danmaku['time'] == time) {
-                    found = true;
-                    
-                    // 使用缓存的轨道和位置信息
-                    final track = trackInfo['track'] as int;
-                    final isMerged = trackInfo['isMerged'] as bool? ?? false;
-                    final mergeCount = isMerged ? (trackInfo['mergeCount'] as int? ?? 1) : 1;
-                    
-                    // 使用缓存的Y位置
-                    double yPosition = _danmakuYPositions[key] ?? 0.0;
-                    
-                    // 如果没有缓存Y位置，重新计算
-                    if (yPosition == 0.0) {
-                      final adjustedDanmakuHeight = isMerged ? _danmakuHeight * _calcMergedFontSizeMultiplier(mergeCount) : _danmakuHeight;
-                      final trackHeight = adjustedDanmakuHeight + _verticalSpacing;
-                      
-                      if (type == 'bottom') {
-                        yPosition = newSize.height - (track + 1) * trackHeight - adjustedDanmakuHeight;
-                      } else {
-                        yPosition = track * trackHeight + _verticalSpacing;
-                      }
-                      
-                      // 缓存计算的Y位置
-                      _danmakuYPositions[key] = yPosition;
-                    }
-                    
-                    // 构建弹幕并添加到列表
-                    overflowWidgets.add(_buildOverflowDanmaku(type, danmaku, isPaused, yPosition, key));
-                    break;
-                  }
-                }
-              }
-            }
-          }
-        }
+        // 使用缓存优化溢出弹幕
+        final overflowDanmaku = _getCachedOverflowDanmaku(
+          widget.danmakuList,
+          widget.currentTime,
+          mergeDanmaku,
+          allowStacking
+        );
+        
+        // 主弹幕层 - 使用缓存优化
+        final mainDanmakuLayer = _buildMainDanmakuLayer(
+          groupedDanmaku,
+          isPaused,
+          newSize
+        );
+        
+        // 溢出弹幕层 - 使用缓存优化
+        final overflowLayer = _buildOverflowLayer(
+          overflowDanmaku,
+          isPaused,
+          newSize,
+          allowStacking,
+          videoState
+        );
         
         // 返回包含主弹幕层和溢出弹幕层的Stack
         return Stack(
           children: [
             mainDanmakuLayer,
-            if (overflowWidgets.isNotEmpty)
-              IgnorePointer(
-                child: Stack(children: overflowWidgets),
-              ),
+            if (overflowLayer != null) overflowLayer,
           ],
         );
       },
     );
   }
   
+  // 缓存弹幕分组结果
+  Map<String, List<Map<String, dynamic>>> _groupedDanmakuCache = {
+    'scroll': <Map<String, dynamic>>[],
+    'top': <Map<String, dynamic>>[],
+    'bottom': <Map<String, dynamic>>[],
+  };
+  double _lastGroupedTime = 0;
+  
+  // 获取缓存的弹幕分组
+  Map<String, List<Map<String, dynamic>>> _getCachedGroupedDanmaku(
+    List<Map<String, dynamic>> danmakuList,
+    double currentTime,
+    bool mergeDanmaku,
+    bool allowStacking
+  ) {
+    // 如果时间变化小于0.1秒，使用缓存
+    if ((currentTime - _lastGroupedTime).abs() < 0.1 && _groupedDanmakuCache.isNotEmpty) {
+      return _groupedDanmakuCache;
+    }
+    
+    // 重新计算分组
+    final groupedDanmaku = <String, List<Map<String, dynamic>>>{
+      'scroll': <Map<String, dynamic>>[],
+      'top': <Map<String, dynamic>>[],
+      'bottom': <Map<String, dynamic>>[],
+    };
+    
+    // 记录当前已显示的内容
+    final Set<String> displayedContents = {};
+    
+    for (var danmaku in danmakuList) {
+      final time = danmaku['time'] as double? ?? 0.0;
+      final timeDiff = currentTime - time;
+      
+      if (timeDiff >= 0 && timeDiff <= 10) {
+        final type = danmaku['type'] as String? ?? 'scroll';
+        final content = danmaku['content'] as String? ?? '';
+        // 处理合并弹幕逻辑
+        var processedDanmaku = danmaku;
+        if (mergeDanmaku) {
+          final danmakuKey = '$content-$time';
+          if (_processedDanmaku.containsKey(danmakuKey)) {
+            processedDanmaku = _processedDanmaku[danmakuKey]!;
+            // 合并弹幕只显示组内首条（不分轨道）
+            if (processedDanmaku['merged'] == true && !processedDanmaku['isFirstInGroup']) {
+              continue;
+            }
+          }
+        }
+        // 确保type是有效的类型
+        if (groupedDanmaku.containsKey(type)) {
+          groupedDanmaku[type]!.add(processedDanmaku);
+        }
+      }
+    }
+    
+    // 更新缓存
+    _groupedDanmakuCache = groupedDanmaku;
+    _lastGroupedTime = currentTime;
+    
+    return groupedDanmaku;
+  }
+  
+  // 缓存溢出弹幕结果
+  Map<String, List<Map<String, dynamic>>> _overflowDanmakuCache = {
+    'scroll': <Map<String, dynamic>>[],
+    'top': <Map<String, dynamic>>[],
+    'bottom': <Map<String, dynamic>>[],
+  };
+  double _lastOverflowTime = 0;
+  
+  // 获取缓存的溢出弹幕
+  Map<String, List<Map<String, dynamic>>> _getCachedOverflowDanmaku(
+    List<Map<String, dynamic>> danmakuList,
+    double currentTime,
+    bool mergeDanmaku,
+    bool allowStacking
+  ) {
+    // 如果时间变化小于0.1秒，使用缓存
+    if ((currentTime - _lastOverflowTime).abs() < 0.1 && _overflowDanmakuCache.isNotEmpty) {
+      return _overflowDanmakuCache;
+    }
+    
+    final overflowDanmaku = <String, List<Map<String, dynamic>>>{
+      'scroll': <Map<String, dynamic>>[],
+      'top': <Map<String, dynamic>>[],
+      'bottom': <Map<String, dynamic>>[],
+    };
+    
+    for (var danmaku in danmakuList) {
+      final time = danmaku['time'] as double;
+      final timeDiff = currentTime - time;
+      
+      if (timeDiff >= 0 && timeDiff <= 10) {
+        final type = danmaku['type'] as String;
+        final content = danmaku['content'] as String;
+        final danmakuKey = '$content-$time';
+        
+        if (_processedDanmaku.containsKey(danmakuKey)) {
+          final processed = _processedDanmaku[danmakuKey]!;
+          if (processed['hidden'] != true) {
+            final yPosition = _getYPosition(type, content, time, processed['merged'] == true);
+            if (yPosition < -500) {
+              overflowDanmaku[type]!.add(processed);
+            }
+          }
+        }
+      }
+    }
+    
+    // 更新缓存
+    _overflowDanmakuCache = overflowDanmaku;
+    _lastOverflowTime = currentTime;
+    
+    return overflowDanmaku;
+  }
+  
+  // 构建主弹幕层
+  Widget _buildMainDanmakuLayer(
+    Map<String, List<Map<String, dynamic>>> groupedDanmaku,
+    bool isPaused,
+    Size newSize
+  ) {
+    // 新增：对每个轨道的弹幕按50ms分组
+    List<Widget> groupWidgets = [];
+    for (var type in ['scroll', 'bottom', 'top']) {
+      final danmakuList = groupedDanmaku[type]!;
+      if (danmakuList.isEmpty) continue;
+      // 按轨道分组
+      Map<int, List<Map<String, dynamic>>> trackMap = {};
+      for (var danmaku in danmakuList) {
+        final y = _getYPosition(
+          type,
+          danmaku['content'] as String,
+          danmaku['time'] as double,
+          danmaku['merged'] == true,
+          danmaku['mergeCount'] as int? ?? 1,
+        );
+        // 反查轨道号
+        final danmakuKey = '$type-${danmaku['content']}-${danmaku['time']}';
+        int track = 0;
+        if (_danmakuTrackInfo.containsKey(danmakuKey)) {
+          track = _danmakuTrackInfo[danmakuKey]!['track'] as int? ?? 0;
+        } else if (danmaku.containsKey('track')) {
+          track = danmaku['track'] as int? ?? 0;
+        }
+        trackMap.putIfAbsent(track, () => []).add({...danmaku, 'y': y});
+      }
+      // 每个轨道内按时间排序并分组
+      for (var entry in trackMap.entries) {
+        final trackDanmakus = entry.value;
+        trackDanmakus.sort((a, b) => (a['time'] as double).compareTo(b['time'] as double));
+        List<List<Map<String, dynamic>>> timeGroups = [];
+        for (var danmaku in trackDanmakus) {
+          if (timeGroups.isEmpty) {
+            timeGroups.add([danmaku]);
+          } else {
+            final lastGroup = timeGroups.last;
+            final lastTime = lastGroup.last['time'] as double;
+            if ((danmaku['time'] as double) - lastTime <= 0.2) {
+              lastGroup.add(danmaku);
+            } else {
+              timeGroups.add([danmaku]);
+            }
+          }
+        }
+        // 每组用一个DanmakuGroupWidget渲染
+        for (var group in timeGroups) {
+          groupWidgets.add(DanmakuGroupWidget(
+            danmakus: group,
+            type: type,
+            videoDuration: widget.videoDuration,
+            currentTime: widget.currentTime,
+            fontSize: widget.fontSize,
+            isVisible: widget.isVisible,
+            opacity: widget.opacity,
+          ));
+        }
+      }
+    }
+    return IgnorePointer(
+      child: Stack(children: groupWidgets),
+    );
+  }
+  
+  // 构建溢出弹幕层
+  Widget? _buildOverflowLayer(
+    Map<String, List<Map<String, dynamic>>> overflowDanmaku,
+    bool isPaused,
+    Size newSize,
+    bool allowStacking,
+    VideoPlayerState videoState
+  ) {
+    if (!allowStacking || overflowDanmaku.isEmpty) {
+      return null;
+    }
+    
+    final List<Widget> overflowWidgets = [];
+    
+    // 处理溢出弹幕的轨道分配
+    _assignTracksForOverflowDanmaku(
+      overflowDanmaku['scroll']!, 
+      overflowWidgets, 
+      'scroll', 
+      {}, 
+      ((newSize.height - _danmakuHeight - _verticalSpacing) / (_danmakuHeight + _verticalSpacing)).floor(), 
+      newSize, 
+      isPaused, 
+      videoState
+    );
+    
+    _assignTracksForOverflowDanmaku(
+      overflowDanmaku['top']!, 
+      overflowWidgets, 
+      'top', 
+      {}, 
+      ((newSize.height - _danmakuHeight - _verticalSpacing) / (_danmakuHeight + _verticalSpacing)).floor() ~/ 4, 
+      newSize, 
+      isPaused, 
+      videoState
+    );
+    
+    _assignTracksForOverflowDanmaku(
+      overflowDanmaku['bottom']!, 
+      overflowWidgets, 
+      'bottom', 
+      {}, 
+      ((newSize.height - _danmakuHeight - _verticalSpacing) / (_danmakuHeight + _verticalSpacing)).floor() ~/ 4, 
+      newSize, 
+      isPaused, 
+      videoState
+    );
+    
+    return overflowWidgets.isNotEmpty
+      ? IgnorePointer(child: Stack(children: overflowWidgets))
+      : null;
+  }
+
   // 为溢出弹幕分配轨道并构建widget
   void _assignTracksForOverflowDanmaku(
     List<Map<String, dynamic>> danmakus, 

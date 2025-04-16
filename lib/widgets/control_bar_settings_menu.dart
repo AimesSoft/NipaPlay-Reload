@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import 'base_settings_menu.dart';
+import 'settings_hint_text.dart';
+import 'settings_slider.dart';
 
 class ControlBarSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -139,147 +141,17 @@ class _ControlBarSettingsMenuState extends State<ControlBarSettingsMenu> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    MouseRegion(
-                      onEnter: (_) {
-                        setState(() {
-                          _isHovering = true;
-                        });
-                      },
-                      onExit: (_) {
-                        setState(() {
-                          _isHovering = false;
-                          _isThumbHovered = false;
-                        });
-                      },
-                      onHover: (event) {
-                        if (!_isHovering || _isDragging) return;
-                        
-                        final RenderBox? sliderBox = _sliderKey.currentContext?.findRenderObject() as RenderBox?;
-                        if (sliderBox != null) {
-                          final localPosition = sliderBox.globalToLocal(event.position);
-                          final width = sliderBox.size.width;
-                          
-                          final progress = (localPosition.dx / width).clamp(0.0, 1.0);
-                          final height = (progress * 150).round();
-                          
-                          final progressRect = Rect.fromLTWH(0, 0, width, sliderBox.size.height);
-                          final thumbRect = Rect.fromLTWH(
-                            (videoState.controlBarHeight / 150 * width) - 8,
-                            16,
-                            16,
-                            16
-                          );
-                          
-                          setState(() {
-                            _isThumbHovered = thumbRect.contains(localPosition);
-                          });
-                        }
-                      },
-                      child: GestureDetector(
-                        onHorizontalDragStart: (details) {
-                          setState(() => _isDragging = true);
-                          _updateHeightFromPosition(details.localPosition);
-                          _showOverlay(context, videoState.controlBarHeight / 150);
-                        },
-                        onHorizontalDragUpdate: (details) {
-                          _updateHeightFromPosition(details.localPosition);
-                          if (_overlayEntry != null) {
-                            _showOverlay(context, videoState.controlBarHeight / 150);
-                          }
-                        },
-                        onHorizontalDragEnd: (details) {
-                          setState(() => _isDragging = false);
-                          _updateHeightFromPosition(details.localPosition);
-                          _removeOverlay();
-                        },
-                        onTapDown: (details) {
-                          setState(() => _isDragging = true);
-                          _updateHeightFromPosition(details.localPosition);
-                          _showOverlay(context, videoState.controlBarHeight / 150);
-                        },
-                        onTapUp: (details) {
-                          setState(() => _isDragging = false);
-                          _updateHeightFromPosition(details.localPosition);
-                          _removeOverlay();
-                        },
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Stack(
-                              key: _sliderKey,
-                              clipBehavior: Clip.none,
-                              children: [
-                                // 背景轨道
-                                Container(
-                                  height: 4,
-                                  margin: const EdgeInsets.symmetric(vertical: 20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                                // 进度轨道
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  top: 20,
-                                  child: FractionallySizedBox(
-                                    widthFactor: videoState.controlBarHeight / 150,
-                                    alignment: Alignment.centerLeft,
-                                    child: Container(
-                                      height: 4,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.5),
-                                        borderRadius: BorderRadius.circular(2),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.white.withOpacity(0.3),
-                                            blurRadius: 2,
-                                            spreadRadius: 0.5,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                // 滑块
-                                Positioned(
-                                  left: (videoState.controlBarHeight / 150 * constraints.maxWidth) - (_isThumbHovered || _isDragging ? 8 : 6),
-                                  top: 22 - (_isThumbHovered || _isDragging ? 8 : 6),
-                                  child: MouseRegion(
-                                    cursor: SystemMouseCursors.click,
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 200),
-                                      curve: Curves.easeOutBack,
-                                      width: _isThumbHovered || _isDragging ? 16 : 12,
-                                      height: _isThumbHovered || _isDragging ? 16 : 12,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.2),
-                                            blurRadius: _isThumbHovered || _isDragging ? 6 : 4,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
+                    SettingsSlider(
+                      value: videoState.controlBarHeight,
+                      onChanged: (v) => videoState.setControlBarHeight(v),
+                      label: '控制栏高度',
+                      displayTextBuilder: (v) => '${v.toInt()}px',
+                      min: 0.0,
+                      max: 150.0,
+                      step: 20.0,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      '拖动滑块调整控制栏高度',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
+                    const SettingsHintText('拖动滑块调整控制栏高度'),
                   ],
                 ),
               ),

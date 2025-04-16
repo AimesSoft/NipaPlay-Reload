@@ -338,9 +338,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('5. 获取视频纹理...');
       // 获取视频纹理
       final textureId = await player.updateTexture();
-      if (textureId == null) {
-        throw Exception('无法获取视频纹理');
-      }
       debugPrint('获取到纹理ID: $textureId');
       
       // 等待纹理初始化完成
@@ -1698,5 +1695,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       
       return null;
     }
+  }
+
+  /// 获取当前时间窗口内的弹幕（分批加载/懒加载）
+  List<Map<String, dynamic>> getActiveDanmakuList(double currentTime, {double window = 15.0}) {
+    return _danmakuList.where((d) {
+      final t = d['time'] as double? ?? 0.0;
+      return t >= currentTime - window && t <= currentTime + window;
+    }).toList();
   }
 } 

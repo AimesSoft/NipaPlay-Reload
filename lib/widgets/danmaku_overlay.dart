@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'danmaku_container.dart';
+import 'package:provider/provider.dart';
+import '../utils/video_player_state.dart';
 
 class DanmakuOverlay extends StatefulWidget {
-  final List<Map<String, dynamic>> danmakuList;
   final double currentPosition;
   final double videoDuration;
   final bool isPlaying;
@@ -12,7 +13,6 @@ class DanmakuOverlay extends StatefulWidget {
 
   const DanmakuOverlay({
     super.key,
-    required this.danmakuList,
     required this.currentPosition,
     required this.videoDuration,
     required this.isPlaying,
@@ -28,8 +28,11 @@ class DanmakuOverlay extends StatefulWidget {
 class _DanmakuOverlayState extends State<DanmakuOverlay> {
   @override
   Widget build(BuildContext context) {
+    // 分批加载弹幕：只取当前窗口弹幕
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    final activeDanmakuList = videoState.getActiveDanmakuList(widget.currentPosition / 1000);
     return DanmakuContainer(
-      danmakuList: widget.danmakuList,
+      danmakuList: activeDanmakuList,
       currentTime: widget.currentPosition / 1000, // 转换为秒
       videoDuration: widget.videoDuration / 1000, // 转换为秒
       fontSize: widget.fontSize,
