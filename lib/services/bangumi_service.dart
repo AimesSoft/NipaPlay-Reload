@@ -33,25 +33,13 @@ class BangumiService {
 
   Future<void> loadData() async {
     try {
-      ////print('开始加载番剧数据');
+      print('[新番] 开始加载番剧数据');
       final animes = await getCalendar();
       _preloadedAnimes = animes;
-      ////print('加载 ${animes.length} 个番剧的图片');
-      
-      // 分批预加载图片
-      const batchSize = 10;
-      for (var i = 0; i < animes.length; i += batchSize) {
-        final end = (i + batchSize < animes.length) ? i + batchSize : animes.length;
-        final batch = animes.sublist(i, end);
-        await ImageCacheManager.instance.preloadImages(
-          batch.map((anime) => anime.imageUrl).toList(),
-        ).catchError((e) {
-          ////print('预加载图片时出错: $e');
-          return Future.value(); // 返回一个完成的 Future
-        });
-      }
+      print('[新番] 加载番剧数据完成，数量: \\${animes.length}');
+      // 去掉图片预加载，图片由页面懒加载
     } catch (e) {
-      ////print('加载数据时出错: $e');
+      print('[新番] 加载数据时出错: \\${e.toString()}');
       rethrow;
     }
   }
@@ -141,116 +129,105 @@ class BangumiService {
   }
 
   Future<List<BangumiAnime>> getCalendar({bool forceRefresh = false}) async {
-    // 如果有预加载的数据且不强制刷新，直接返回
+    print('[新番] getCalendar(forceRefresh: \\${forceRefresh})');
     if (!forceRefresh && _preloadedAnimes != null) {
-      //print('使用预加载的数据');
+      print('[新番] 命中预加载数据');
       return _preloadedAnimes!;
     }
 
     if (!forceRefresh) {
-      // 尝试从内存缓存加载
       if (_cache.isNotEmpty) {
-        //print('从内存缓存加载数据');
+        print('[新番] 命中内存缓存');
         return _cache.values.toList();
       }
-
-      // 尝试从本地存储加载
       final cachedData = await _loadFromCache();
       if (cachedData != null) {
-        //print('从本地存储加载数据');
+        print('[新番] 命中本地缓存');
         return cachedData;
       }
     }
 
-    //print('从 API 获取新番列表数据: $_baseUrl');
+    print('[新番] 从API获取新番列表: \\$_baseUrl');
     try {
-      //print('调用_makeRequest获取日历数据...');
       final response = await _makeRequest(_baseUrl);
-
-      //print('处理API响应...');
+      print('[新番] API响应: 状态码=\\${response.statusCode}, 长度=\\${response.bodyBytes.length}');
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
-        //print('解析到 ${data.length} 天的数据');
+        print('[新番] 解析到天数: \\${data.length}');
         final List<BangumiAnime> animes = [];
-
         for (var item in data) {
           if (item['items'] != null) {
             final weekdayItems = item['items'] as List;
-            //print('- 星期${item['weekday'] ?? '?'}: ${weekdayItems.length}个番剧');
+            print('[新番] 星期 \\${item['weekday'] ?? '?'}: \\${weekdayItems.length} 个番剧');
             for (var animeData in weekdayItems) {
               try {
                 final anime = BangumiAnime.fromCalendarItem(animeData);
                 _cache[anime.id.toString()] = anime;
                 animes.add(anime);
               } catch (e) {
-                //print('跳过无效的番剧数据: $e');
+                print('[新番] 跳过无效番剧: \\${e.toString()}');
                 continue;
               }
             }
           }
         }
-
-        // 保存到本地存储
         await _saveToCache(animes);
-        //print('成功获取并缓存 ${animes.length} 个番剧');
+        print('[新番] 成功获取并缓存 \\${animes.length} 个番剧');
         return animes;
       } else {
-        //print('获取日历数据失败: HTTP ${response.statusCode}');
-        throw Exception('Failed to load calendar: ${response.statusCode}');
+        print('[新番] 获取日历数据失败: HTTP \\${response.statusCode}');
+        throw Exception('Failed to load calendar: \\${response.statusCode}');
       }
     } catch (e) {
-      //print('获取日历数据时出错: $e');
+      print('[新番] 获取日历数据时出错: \\${e.toString()}');
       rethrow;
     }
   }
 
   Future<void> _saveToCache(List<BangumiAnime> animes) async {
     try {
+      print('[新番] 保存数据到本地缓存...');
       final prefs = await SharedPreferences.getInstance();
       final data = {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'animes': animes.map((a) => a.toJson()).toList(),
       };
       await prefs.setString(_cacheKey, json.encode(data));
-      ////print('数据已保存到本地存储');
+      print('[新番] 数据已保存到本地存储');
     } catch (e) {
-      ////print('保存到本地存储时出错: $e');
+      print('[新番] 保存到本地存储时出错: \\${e.toString()}');
     }
   }
 
   Future<List<BangumiAnime>?> _loadFromCache() async {
     try {
+      print('[新番] 尝试从本地缓存加载数据...');
       final prefs = await SharedPreferences.getInstance();
       final String? cachedString = prefs.getString(_cacheKey);
-      
       if (cachedString != null) {
         final data = json.decode(cachedString);
         final timestamp = data['timestamp'] as int;
         final now = DateTime.now().millisecondsSinceEpoch;
-        
-        // 检查缓存是否过期
+        print('[新番] 本地缓存时间戳: \\${timestamp}, 当前: \\${now}');
         if (now - timestamp <= _cacheDuration.inMilliseconds) {
           final List<dynamic> animesData = data['animes'];
           final animes = animesData
               .map((data) => BangumiAnime.fromJson(data))
               .toList();
-          
-          // 更新内存缓存
           for (var anime in animes) {
             _cache[anime.id.toString()] = anime;
           }
-          
-          ////print('从本地存储加载了 ${animes.length} 个番剧');
+          print('[新番] 从本地存储加载了 \\${animes.length} 个番剧');
           return animes;
         } else {
-          ////print('缓存已过期');
+          print('[新番] 缓存已过期');
           return null;
         }
       }
-      ////print('没有找到缓存数据');
+      print('[新番] 没有找到缓存数据');
       return null;
     } catch (e) {
-      ////print('加载缓存数据时出错: $e');
+      print('[新番] 加载缓存数据时出错: \\${e.toString()}');
       return null;
     }
   }

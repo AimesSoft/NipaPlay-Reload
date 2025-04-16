@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -20,8 +19,6 @@ import 'services/bangumi_service.dart';
 import 'package:nipaplay/utils/keyboard_shortcuts.dart';
 import 'services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
-import 'package:nipaplay/utils/keyboard_mappings.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'models/watch_history_model.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -54,6 +51,10 @@ void main() async {
       globals.blurPower = results[1] as double;
       globals.backgroundImageMode = results[2] as String;
       globals.customBackgroundPath = results[3] as String;
+
+      // 检查自定义背景路径有效性，发现无效则恢复为默认图片
+      _validateCustomBackgroundPath();
+
       return results[0] as String;
     }),
     
@@ -263,5 +264,36 @@ class _MainPageState extends State<MainPage> {
         ),
       ],
     );
+  }
+}
+
+// 检查自定义背景图片路径有效性
+Future<void> _validateCustomBackgroundPath() async {
+  final customPath = globals.customBackgroundPath;
+  final defaultPath = 'assets/images/main_image.png';
+  bool needReset = false;
+
+  if (customPath == null || customPath.isEmpty) {
+    needReset = true;
+  } else {
+    try {
+      // 只允许常见图片格式
+      final ext = path.extension(customPath).toLowerCase();
+      if (!['.png', '.jpg', '.jpeg', '.bmp', '.gif'].contains(ext)) {
+        needReset = true;
+      } else {
+        final file = File(customPath);
+        if (!file.existsSync()) {
+          needReset = true;
+        }
+      }
+    } catch (e) {
+      needReset = true;
+    }
+  }
+
+  if (needReset) {
+    globals.customBackgroundPath = defaultPath;
+    await SettingsStorage.saveString('customBackgroundPath', defaultPath);
   }
 }
