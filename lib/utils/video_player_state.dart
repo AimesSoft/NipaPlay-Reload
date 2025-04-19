@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fvp/mdk.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
@@ -13,12 +12,9 @@ import '../services/dandanplay_service.dart';
 import 'media_info_helper.dart';
 import '../services/danmaku_cache_manager.dart';
 import '../models/watch_history_model.dart';
-import 'package:path/path.dart' as path;
-import 'dart:ui' as ui;
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/rendering.dart';
 
 enum PlayerStatus {
   idle,        // 空闲状态

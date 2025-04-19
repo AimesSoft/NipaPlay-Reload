@@ -27,28 +27,46 @@ import 'package:flutter/services.dart';
 import 'widgets/video_upload_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+// 将通道定义为全局变量
+final MethodChannel menuChannel = MethodChannel('custom_menu_channel');
+bool _channelHandlerRegistered = false;
+final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<DefaultTabController>>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 注册菜单栏事件监听（全局）
-  if (!globals.isPhone) {
-    const MethodChannel _menuChannel = MethodChannel('custom_menu_channel');
-    _menuChannel.setMethodCallHandler((call) async {
-      print('[Dart] 收到菜单栏事件: \\${call.method}');
-      if (call.method == 'uploadVideo') {
+  // 设置方法通道处理器
+  menuChannel.setMethodCallHandler((call) async {
+    print('[Dart] 收到方法调用: ${call.method}');
+    
+    if (call.method == 'uploadVideo') {
+      try {
+        // 获取UI上下文
         final context = navigatorKey.currentState?.overlay?.context;
-        if (context != null) {
-          print('[Dart] 准备弹出上传视频对话框');
-          await _showGlobalUploadDialog(context);
-        } else {
-          print('[Dart] context 获取失败');
+        if (context == null) {
+          print('[Dart] 错误: 无法获取UI上下文');
+          return '错误: 无法获取UI上下文';
         }
+        
+        // 延迟确保UI准备好
+        Future.microtask(() {
+          print('[Dart] 启动文件选择器');
+          _showGlobalUploadDialog(context);
+        });
+        
+        return '正在显示文件选择器';
+      } catch (e) {
+        print('[Dart] 错误: $e');
+        return '错误: $e';
       }
-    });
-  }
+    }
+    
+    // 默认返回空字符串
+    return '';
+  });
 
   // 创建应用所需的临时目录，解决macOS沙盒模式下的目录访问问题
   await _ensureTemporaryDirectoryExists();
@@ -144,6 +162,7 @@ void main() async {
               initialCustomBackgroundPath: globals.customBackgroundPath,
             ),
           ),
+          ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
         ],
         child: NipaPlayApp(),
       ),
@@ -310,8 +329,43 @@ class MainPage extends StatefulWidget {
   _MainPageState createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin {
   bool isMaximized = false;
+  TabController? globalTabController;
+
+  // TabChangeNotifier监听
+  TabChangeNotifier? _tabChangeNotifier;
+  void _onTabChangeRequested() {
+    final index = _tabChangeNotifier?.targetTabIndex;
+    if (index != null && globalTabController != null) {
+      if (globalTabController!.index != index) {
+        globalTabController!.animateTo(index);
+      }
+      _tabChangeNotifier?.clear();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    globalTabController = TabController(length: widget.pages.length, vsync: this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 只添加一次监听
+    _tabChangeNotifier ??= Provider.of<TabChangeNotifier>(context);
+    _tabChangeNotifier?.removeListener(_onTabChangeRequested);
+    _tabChangeNotifier?.addListener(_onTabChangeRequested);
+  }
+
+  @override
+  void dispose() {
+    _tabChangeNotifier?.removeListener(_onTabChangeRequested);
+    globalTabController?.dispose();
+    super.dispose();
+  }
 
   void _toggleWindowSize() async {
     if (isMaximized) {
@@ -344,6 +398,7 @@ class _MainPageState extends State<MainPage> {
               pages: widget.pages,
               tabPage: createTabLabels(),
               pageIsHome: true,
+              tabController: globalTabController,
             );
           },
         ),
@@ -425,39 +480,90 @@ Future<void> _validateCustomBackgroundPath() async {
 
 // 全局弹出上传视频逻辑
 Future<void> _showGlobalUploadDialog(BuildContext context) async {
-  print('[Dart] 进入 _showGlobalUploadDialog');
+  print('[Dart] 开始选择视频文件');
+  
+  // 尝试获取上次目录
+  String? lastDir;
   try {
-    String? lastDir;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      lastDir = prefs.getString('last_video_dir');
-    } catch (e) {
-      lastDir = null;
-    }
+    final prefs = await SharedPreferences.getInstance();
+    lastDir = prefs.getString('last_video_dir');
+    print('[Dart] 上次目录: $lastDir');
+  } catch (e) {
+    print('[Dart] 获取上次目录失败: $e');
+  }
+  
+  // 选择文件
+  try {
+    print('[Dart] 打开文件选择器');
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp4', 'mkv'],
+      allowedExtensions: ['mp4', 'mkv', 'avi', 'wmv', 'mov'],
       allowMultiple: false,
       initialDirectory: lastDir,
     );
-    if (result != null) {
-      final file = File(result.files.single.path!);
-      // 记忆本次目录
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final dir = file.parent.path;
-        await prefs.setString('last_video_dir', dir);
-      } catch (e) {
-        // 忽略记忆目录失败
-      }
-      // 获取全局VideoPlayerState
+    
+    if (result == null || result.files.isEmpty) {
+      print('[Dart] 用户取消了选择或未选择文件');
+      return;
+    }
+    
+    final filePath = result.files.single.path;
+    if (filePath == null) {
+      print('[Dart] 文件路径为空');
+      return;
+    }
+    
+    print('[Dart] 选择了文件: $filePath');
+    final file = File(filePath);
+    
+    // 保存目录
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final dir = file.parent.path;
+      await prefs.setString('last_video_dir', dir);
+      print('[Dart] 已保存目录: $dir');
+    } catch (e) {
+      print('[Dart] 保存目录失败: $e');
+      // 继续执行，这不是关键错误
+    }
+    
+    // 确保context还有效
+    if (!context.mounted) {
+      print('[Dart] 上下文已失效，无法初始化播放器');
+      return;
+    }
+    
+    // 1. 切换到视频播放Tab（PlayVideoPage，索引0）
+    try {
+      Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
+      print('[Dart] 已请求切换到视频播放Tab');
+    } catch (e) {
+      print('[Dart] 切换Tab时出错: $e');
+      // 继续执行，不影响后续播放器初始化
+    }
+    
+    // 2. 初始化播放器
+    try {
+      print('[Dart] 开始初始化播放器');
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       await videoState.initializePlayer(file.path);
+      print('[Dart] 播放器初始化成功');
+    } catch (e) {
+      print('[Dart] 播放器初始化失败: $e');
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('无法播放视频: $e')),
+        );
+      }
     }
   } catch (e) {
-    print('[Dart] 选择视频时出错: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('选择视频时出错: $e')),
-    );
+    print('[Dart] 文件选择过程出错: $e');
+    
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('选择文件时出错: $e')),
+      );
+    }
   }
 }

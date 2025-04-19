@@ -5,16 +5,19 @@ import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/widgets/background_with_blur.dart'; // 导入背景图和模糊效果控件
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import '../main.dart' show tabControllerKey;
 
 class CustomScaffold extends StatelessWidget {
   final List<Widget> pages;
   final List<Widget> tabPage;
   final bool pageIsHome;
+  final TabController? tabController;
   const CustomScaffold(
       {super.key,
       required this.pages,
       required this.tabPage,
-      required this.pageIsHome});
+      required this.pageIsHome,
+      this.tabController});
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +25,7 @@ class CustomScaffold extends StatelessWidget {
       builder: (context, videoState, child) {
         return DefaultTabController(
           length: pages.length,
+          initialIndex: tabController?.index ?? 0,
           child: BackgroundWithBlur(
             child: Scaffold(
               primary: false,
@@ -51,6 +55,7 @@ class CustomScaffold extends StatelessWidget {
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 bottom: TabBar(
+                  controller: tabController,
                   isScrollable: true,
                   tabs: tabPage, // 使用从 tab_labels.dart 中导入的标签
                   labelColor: Colors.white,
@@ -69,6 +74,7 @@ class CustomScaffold extends StatelessWidget {
                 ),
               ) : null,
               body: TabBarView(
+                controller: tabController,
                 viewportFraction: 1.0,
                 physics: const BouncingScrollPhysics(),
                 children: pages,
