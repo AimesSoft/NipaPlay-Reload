@@ -39,5 +39,11 @@
 	<string>需要访问照片库</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh_CN</string>
+		<string>zh-Hans</string>
+		<string>en</string>
+	</array>
 </dict>
 </plist>

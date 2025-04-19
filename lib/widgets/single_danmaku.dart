@@ -180,7 +180,7 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
     final color = widget.content.color;
     final luminance = (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
     // 如果亮度小于0.1，说明是深色，使用白色描边；否则使用黑色描边
-    final strokeColor = luminance < 0.1 ? Colors.white : Colors.black;
+    final strokeColor = luminance < 0.2 ? Colors.white : Colors.black;
     
     // 应用字体大小倍率
     final adjustedFontSize = widget.fontSize * widget.content.fontSizeMultiplier;

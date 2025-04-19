@@ -23,9 +23,32 @@ import 'models/watch_history_model.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:nipaplay/utils/network_checker.dart';
+import 'package:flutter/services.dart';
+import 'widgets/video_upload_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:file_picker/file_picker.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 注册菜单栏事件监听（全局）
+  if (!globals.isPhone) {
+    const MethodChannel _menuChannel = MethodChannel('custom_menu_channel');
+    _menuChannel.setMethodCallHandler((call) async {
+      print('[Dart] 收到菜单栏事件: \\${call.method}');
+      if (call.method == 'uploadVideo') {
+        final context = navigatorKey.currentState?.overlay?.context;
+        if (context != null) {
+          print('[Dart] 准备弹出上传视频对话框');
+          await _showGlobalUploadDialog(context);
+        } else {
+          print('[Dart] context 获取失败');
+        }
+      }
+    });
+  }
 
   // 创建应用所需的临时目录，解决macOS沙盒模式下的目录访问问题
   await _ensureTemporaryDirectoryExists();
@@ -122,7 +145,7 @@ void main() async {
             ),
           ),
         ],
-        child: const NipaPlayApp(),
+        child: NipaPlayApp(),
       ),
     );
   });
@@ -250,7 +273,7 @@ Future<void> _ensureTemporaryDirectoryExists() async {
 }
 
 class NipaPlayApp extends StatelessWidget {
-  const NipaPlayApp({super.key});
+  NipaPlayApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -264,6 +287,7 @@ class NipaPlayApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: themeNotifier.themeMode,
+          navigatorKey: navigatorKey,
           home: MainPage(),
         );
       },
@@ -371,10 +395,10 @@ class _MainPageState extends State<MainPage> {
 // 检查自定义背景图片路径有效性
 Future<void> _validateCustomBackgroundPath() async {
   final customPath = globals.customBackgroundPath;
-  final defaultPath = 'assets/images/main_image.png';
+  const defaultPath = 'assets/images/main_image.png';
   bool needReset = false;
 
-  if (customPath == null || customPath.isEmpty) {
+  if (customPath.isEmpty) {
     needReset = true;
   } else {
     try {
@@ -396,5 +420,44 @@ Future<void> _validateCustomBackgroundPath() async {
   if (needReset) {
     globals.customBackgroundPath = defaultPath;
     await SettingsStorage.saveString('customBackgroundPath', defaultPath);
+  }
+}
+
+// 全局弹出上传视频逻辑
+Future<void> _showGlobalUploadDialog(BuildContext context) async {
+  print('[Dart] 进入 _showGlobalUploadDialog');
+  try {
+    String? lastDir;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      lastDir = prefs.getString('last_video_dir');
+    } catch (e) {
+      lastDir = null;
+    }
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp4', 'mkv'],
+      allowMultiple: false,
+      initialDirectory: lastDir,
+    );
+    if (result != null) {
+      final file = File(result.files.single.path!);
+      // 记忆本次目录
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final dir = file.parent.path;
+        await prefs.setString('last_video_dir', dir);
+      } catch (e) {
+        // 忽略记忆目录失败
+      }
+      // 获取全局VideoPlayerState
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      await videoState.initializePlayer(file.path);
+    }
+  } catch (e) {
+    print('[Dart] 选择视频时出错: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('选择视频时出错: $e')),
+    );
   }
 }

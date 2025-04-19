@@ -4,6 +4,11 @@ import 'package:glassmorphism/glassmorphism.dart';
 import '../utils/video_player_state.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import '../widgets/blur_dialog.dart';
+import '../utils/globals.dart' as globals;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -113,22 +118,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
                               onTapDown: (_) => setState(() => _isPressed = true),
                               onTapUp: (_) => setState(() => _isPressed = false),
                               onTapCancel: () => setState(() => _isPressed = false),
-                              onTap: () async {
-                                try {
-                                  FilePickerResult? result = await FilePicker.platform.pickFiles(
-                                    type: FileType.custom,
-                                    allowedExtensions: ['mp4', 'mkv'],
-                                    allowMultiple: false,
-                                  );
-
-                                  if (result != null) {
-                                    final file = File(result.files.single.path!);
-                                    await context.read<VideoPlayerState>().initializePlayer(file.path);
-                                  }
-                                } catch (e) {
-                                  ////debugPrint('选择视频时出错: $e');
-                                }
-                              },
+                              onTap: _handleUploadVideo,
                               splashColor: Colors.white.withOpacity(0.2),
                               highlightColor: Colors.white.withOpacity(0.1),
                             ),
@@ -144,5 +134,88 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleUploadVideo() async {
+    try {
+      if (globals.isPhone) {
+        // 手机端弹窗选择来源
+        final source = await BlurDialog.show<String>(
+          context: context,
+          title: '选择来源',
+          content: '请选择视频来源',
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('album'),
+              child: const Text('相册'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('file'),
+              child: const Text('文件管理器'),
+            ),
+          ],
+        );
+        if (source == 'album') {
+          try {
+            final picker = ImagePicker();
+            final XFile? picked = await picker.pickVideo(source: ImageSource.gallery);
+            if (picked != null) {
+              await context.read<VideoPlayerState>().initializePlayer(picked.path);
+            }
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('选择相册视频出错: $e')),
+            );
+          }
+        } else if (source == 'file') {
+          try {
+            FilePickerResult? result = await FilePicker.platform.pickFiles(
+              type: FileType.custom,
+              allowedExtensions: ['mp4', 'mkv'],
+              allowMultiple: false,
+            );
+            if (result != null) {
+              final file = File(result.files.single.path!);
+              await context.read<VideoPlayerState>().initializePlayer(file.path);
+            }
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('选择文件出错: $e')),
+            );
+          }
+        }
+      } else {
+        // 桌面端：记忆上次打开的文件夹
+        String? lastDir;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          lastDir = prefs.getString('last_video_dir');
+        } catch (e) {
+          lastDir = null;
+        }
+        FilePickerResult? result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['mp4', 'mkv'],
+          allowMultiple: false,
+          initialDirectory: lastDir,
+        );
+        if (result != null) {
+          final file = File(result.files.single.path!);
+          // 记忆本次目录
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final dir = file.parent.path;
+            await prefs.setString('last_video_dir', dir);
+          } catch (e) {
+            // 忽略记忆目录失败
+          }
+          await context.read<VideoPlayerState>().initializePlayer(file.path);
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('选择视频时出错: $e')),
+      );
+    }
   }
 } 
