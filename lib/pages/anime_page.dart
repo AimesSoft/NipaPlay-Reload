@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../models/watch_history_model.dart';
 import 'package:glassmorphism/glassmorphism.dart';
-import '../utils/globals.dart' as globals;
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../widgets/loading_overlay.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
+import '../utils/tab_change_notifier.dart';
 
 class AnimePage extends StatefulWidget {
   const AnimePage({super.key});
@@ -311,7 +309,13 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
             // 切换到视频播放页面
             final tabController = DefaultTabController.of(context);
             tabController.animateTo(0);
-                    }
+            // 新增：确保主Tab切换到播放页
+            try {
+              Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
+            } catch (e) {
+              // 忽略异常，防止因Provider未找到导致崩溃
+            }
+          }
         });
       }
     };

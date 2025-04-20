@@ -133,14 +133,6 @@ class _ControlBarSettingsMenuState extends State<ControlBarSettingsMenu> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '控制栏高度',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
                     SettingsSlider(
                       value: videoState.controlBarHeight,
                       onChanged: (v) => videoState.setControlBarHeight(v),
