@@ -34,7 +34,7 @@ PODS:
     - DKImagePickerController/PhotoGallery
     - Flutter
   - Flutter (1.0.0)
-  - fvp (0.31.0):
+  - fvp (0.31.2):
     - Flutter
     - FlutterMacOS
     - mdk (~> 0.32.0)
@@ -109,7 +109,7 @@ SPEC CHECKSUMS:
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60
   file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
-  fvp: ba6791e093cbc3ec5d1335740d576131e3cbc4c7
+  fvp: 89275776efede62b7fde1762afa518974e6d6750
   image_picker_ios: 7fe1ff8e34c1790d6fff70a32484959f563a928a
   mdk: a726c85fd49c002b83d586b278d452f387750889
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
@@ -121,6 +121,6 @@ SPEC CHECKSUMS:
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
   video_player_avfoundation: 2cef49524dd1f16c5300b9cd6efd9611ce03639b
 
-PODFILE CHECKSUM: 819463e6a0290f5a72f145ba7cde16e8b6ef0796
+PODFILE CHECKSUM: dcacb8445dd1d7a927862836b97d8f6240936c78
 
 COCOAPODS: 1.16.2

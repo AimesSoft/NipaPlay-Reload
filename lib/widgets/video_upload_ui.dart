@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/blur_dialog.dart';
+import '../widgets/blur_snackbar.dart';
 import '../utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
@@ -158,14 +159,18 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
         if (source == 'album') {
           try {
             final picker = ImagePicker();
-            final XFile? picked = await picker.pickVideo(source: ImageSource.gallery);
+            final XFile? picked = await picker.pickMedia();
             if (picked != null) {
+              // 检查文件扩展名
+              final extension = picked.path.split('.').last.toLowerCase();
+              if (!['mp4', 'mkv'].contains(extension)) {
+                BlurSnackBar.show(context, '请选择 MP4 或 MKV 格式的视频文件');
+                return;
+              }
               await context.read<VideoPlayerState>().initializePlayer(picked.path);
             }
           } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('选择相册视频出错: $e')),
-            );
+            BlurSnackBar.show(context, '选择相册视频出错: $e');
           }
         } else if (source == 'file') {
           try {
