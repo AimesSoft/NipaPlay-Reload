@@ -108,7 +108,7 @@ jobs:
           curl -L -o mdk-sdk-android.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-android.7z/download
           sudo apt-get update
           sudo apt-get install -y p7zip-full
-          7z x mdk-sdk-android.7z -oandroid/app/src/main/jniLibs/arm64-v8a
+          7z x mdk-sdk-android.7z -oandroid/app/src/main/jniLibs/arm64-v8a -y
           
           # 构建 APK
           flutter build apk --release --split-per-abi
