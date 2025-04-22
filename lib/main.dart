@@ -28,6 +28,7 @@ import 'widgets/video_upload_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/providers/watch_history_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -163,10 +164,21 @@ void main() async {
             ),
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
+          ChangeNotifierProvider(create: (_) => WatchHistoryProvider()),
         ],
         child: NipaPlayApp(),
       ),
     );
+    // 启动后全局加载一次观看记录
+    Future.microtask(() {
+      final navigator = navigatorKey.currentState;
+      if (navigator != null) {
+        final context = navigator.overlay?.context;
+        if (context != null) {
+          Provider.of<WatchHistoryProvider>(context, listen: false).loadHistory();
+        }
+      }
+    });
   });
 }
 

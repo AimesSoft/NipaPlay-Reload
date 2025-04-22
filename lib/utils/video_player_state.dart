@@ -15,6 +15,8 @@ import '../models/watch_history_model.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
+import 'package:provider/provider.dart';
+import '../providers/watch_history_provider.dart';
 
 enum PlayerStatus {
   idle,        // 空闲状态
@@ -71,6 +73,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _currentVideoHash; // 缓存当前视频的哈希值，避免重复计算
   bool _isCapturingFrame = false; // 是否正在截图，避免并发截图
   final List<VoidCallback> _thumbnailUpdateListeners = []; // 缩略图更新监听器列表
+  String? _animeTitle; // 添加动画标题属性
+  String? _episodeTitle; // 添加集数标题属性
   
   // 存储弹幕轨道信息
   final Map<String, Map<String, dynamic>> _danmakuTrackInfo = {};
@@ -117,6 +121,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get danmakuStacking => _danmakuStacking;
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
+  String? get animeTitle => _animeTitle; // 添加动画标题getter
+  String? get episodeTitle => _episodeTitle; // 添加集数标题getter
 
   Future<void> _initialize() async {
     if (globals.isPhone) {
@@ -503,6 +509,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         );
         
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
         return;
       }
       
@@ -531,6 +538,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('创建全新的观看记录: 动画=${item.animeName}');
       // 保存到历史记录
       await WatchHistoryManager.addOrUpdateHistory(item);
+      if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
     } catch (e) {
       debugPrint('初始化观看记录时出错: $e');
     }
@@ -991,7 +999,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           _setStatus(PlayerStatus.recognizing, message: '视频识别成功，正在加载弹幕...');
           
           // 更新观看记录的动画和集数信息
-          _updateWatchHistoryWithVideoInfo(videoPath, videoInfo);
+          await _updateWatchHistoryWithVideoInfo(videoPath, videoInfo);
           
           if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
             final match = videoInfo['matches'][0];
@@ -1100,6 +1108,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       
       debugPrint('识别到动画：${animeName ?? '未知'}，集数：${episodeTitle ?? '未知集数'}，animeId: $animeId, episodeId: $episodeId');
       
+      // 更新当前动画标题和集数标题
+      _animeTitle = animeName;
+      _episodeTitle = episodeTitle;
+      notifyListeners();
+      
       // 创建更新后的观看记录
       final updatedHistory = WatchHistoryItem(
         filePath: existingHistory.filePath,
@@ -1121,6 +1134,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('准备保存更新后的观看记录，动画名: ${updatedHistory.animeName}, 集数: ${updatedHistory.episodeTitle}');
       // 保存更新后的记录
       await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+      if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
       debugPrint('成功更新观看记录');
     } catch (e) {
       debugPrint('更新观看记录时出错: $e');
@@ -1193,6 +1207,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         );
         
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
         //debugPrint('观看记录缩略图已更新: $thumbnailPath');
         
         // 通知缩略图已更新，需要刷新UI
@@ -1547,13 +1562,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         );
         
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
       } else {
         // 如果记录不存在，创建新记录
         final fileName = _currentVideoPath!.split('/').last;
         
         // 尝试从文件名中提取初始动画名称
-        String initialAnimeName = fileName;
-        initialAnimeName = initialAnimeName.replaceAll(RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$'), '');
+        String initialAnimeName = fileName.replaceAll(RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$'), '');
         initialAnimeName = initialAnimeName.replaceAll(RegExp(r'[_\.-]'), ' ');
         
         // 尝试获取缩略图
@@ -1580,6 +1595,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         );
         
         await WatchHistoryManager.addOrUpdateHistory(newHistory);
+        if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
       }
     } catch (e) {
       debugPrint('更新观看记录时出错: $e');

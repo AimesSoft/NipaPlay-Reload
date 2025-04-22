@@ -7,7 +7,6 @@ import 'video_upload_ui.dart';
 import 'vertical_indicator.dart';
 import 'loading_overlay.dart';
 import 'danmaku_overlay.dart';
-import 'video_controls_overlay.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 
@@ -43,6 +42,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     _focusNode.onKey = _handleKeyEvent;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerKeyboardShortcuts();
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.setContext(context);
     });
   }
 
@@ -332,9 +333,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                         ),
                   ),
                 ),
-
-                // 控制栏 Overlay
-                const VideoControlsOverlay(),
               ],
             ),
           );
