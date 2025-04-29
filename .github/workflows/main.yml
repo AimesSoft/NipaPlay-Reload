@@ -282,7 +282,7 @@ jobs:
           echo "Running linuxdeployqt..."
           # The executable path for linuxdeployqt should be the one INSIDE the AppDir, using APP_NAME
           # Also use APP_NAME for the source executable path
-          ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME}" -desktopfile="$APPDIR/${DESKTOP_FILE_NAME}"
+          ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME}"
           
           # Find and rename the generated AppImage
           echo "Locating and renaming generated AppImage..."
