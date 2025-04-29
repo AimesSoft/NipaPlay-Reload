@@ -159,3 +159,6 @@
 - fvp 播放器
 - 弹弹play API
 - Bangumi API
+## 关于看板娘
+
+- 新的图还没画，暂时使用这张替代：https://www.pixiv.net/artworks/122857380 （作者くしだ）

@@ -779,11 +779,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             
             // 检查是否播放结束
             if (_position.inMilliseconds >= _duration.inMilliseconds - 100) {
+              // 播放结束，暂停播放器并跳转到开头
               player.state = PlaybackState.paused;
               _setStatus(PlayerStatus.paused, message: '播放结束');
-              _position = _duration; // 确保位置不会超过视频长度
-              _progress = 1.0;
+              
+              // 跳转到视频开头
+              seekTo(Duration.zero); 
+              
+              // 更新状态以反映跳转后的位置
+              _position = Duration.zero;
+              _progress = 0.0;
               notifyListeners();
+              // 可以在这里考虑停止 positionUpdateTimer，如果需要的话
+              // _positionUpdateTimer?.cancel(); 
             }
           }
           _lastSeekPosition = null;  // 清除最后seek位置

@@ -32,7 +32,7 @@ jobs:
             os: ubuntu-latest
             arch: amd64
             artifact_name: release-Linux-amd64
-            artifact_path: build/linux/*amd64.deb
+            artifact_path: build/linux/*.{deb,AppImage,tar.gz}
           - target: iOS
             os: macos-latest
             cache_pod_key: ios-pods
@@ -191,37 +191,144 @@ jobs:
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
         run: |
-          # AMD64 build
+          # AMD64 build - Install dependencies including fuse for AppImage and qt for linuxdeployqt
           sudo apt-get update -y
-          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev
+          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full
           
+          # Build Flutter app
           flutter config --enable-linux-desktop
           flutter build linux --release
           
-          mkdir -p build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
-          cd build/linux/NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
-          mkdir -p opt/nipaplay usr/share/applications usr/share/icons/hicolor/512x512/apps
-          cp -r ../x64/release/bundle/* opt/nipaplay
-          mkdir -p DEBIAN
-          chmod 0755 DEBIAN
+          # Define variables
+          APP_NAME="NipaPlay" # Change if your app name is different
+          APP_NAME_LOWER="nipaplay" # Lowercase for paths/executable
+          VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)
+          ARCH="amd64" # Assuming amd64 from matrix
+          BUILD_OUTPUT_DIR="build/linux/x64/release/bundle"
+          LINUX_BUILD_DIR="build/linux"
+          DEB_PKG_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}"
+          APPIMAGE_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}.AppImage"
+          ARCHIVE_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}.tar.gz"
+          DESKTOP_FILE_NAME="io.github.MCDFsteve.NipaPlay-Reload.desktop" # Match your actual desktop file name
+          ICON_NAME="io.github.MCDFsteve.NipaPlay-Reload.png" # Match icon name used in desktop file if specific
+          ICON_SOURCE_PATH="../../../assets/images/logo512.png" # Path to your source icon
+          ASSETS_LINUX_DIR="../../../assets/linux"
           
-          sed -e "s/VERSION_PLACEHOLDER/${{ steps.get_version.outputs.version }}/g" \
-              -e "s/ARCH_PLACEHOLDER/amd64/g" \
-              ../../../assets/linux/DEBIAN/control.template > DEBIAN/control
+          echo "--- Starting Packaging ---"
+          echo "Version: ${VERSION}, Arch: ${ARCH}"
+          echo "Build Output: ${BUILD_OUTPUT_DIR}"
+          echo "Linux Build Dir: ${LINUX_BUILD_DIR}"
           
-          if [ -f ../../../assets/linux/DEBIAN/postinst ]; then
-            cp ../../../assets/linux/DEBIAN/postinst DEBIAN/
-            chmod 0755 DEBIAN/postinst
+          # --- Create .deb package ---
+          echo "--- Creating .deb package ---"
+          DEB_ROOT="${LINUX_BUILD_DIR}/${DEB_PKG_NAME}"
+          mkdir -p "${DEB_ROOT}/opt/${APP_NAME_LOWER}"
+          mkdir -p "${DEB_ROOT}/usr/share/applications"
+          mkdir -p "${DEB_ROOT}/usr/share/icons/hicolor/512x512/apps"
+          mkdir -p "${DEB_ROOT}/DEBIAN"
+          chmod 0755 "${DEB_ROOT}/DEBIAN"
+          
+          # Copy app files
+          echo "Copying application files to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
+          cp -r "${BUILD_OUTPUT_DIR}/"* "${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
+          
+          # Create DEBIAN/control from template
+          echo "Creating DEBIAN/control"
+          sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
+              -e "s/ARCH_PLACEHOLDER/${ARCH}/g" \
+              "${ASSETS_LINUX_DIR}/DEBIAN/control.template" > "${DEB_ROOT}/DEBIAN/control"
+          
+          # Copy postinst/postrm scripts if they exist
+          if [ -f "${ASSETS_LINUX_DIR}/DEBIAN/postinst" ]; then
+            echo "Copying postinst script"
+            cp "${ASSETS_LINUX_DIR}/DEBIAN/postinst" "${DEB_ROOT}/DEBIAN/"
+            chmod 0755 "${DEB_ROOT}/DEBIAN/postinst"
           fi
-          if [ -f ../../../assets/linux/DEBIAN/postrm ]; then
-            cp ../../../assets/linux/DEBIAN/postrm DEBIAN/
-            chmod 0755 DEBIAN/postrm
+          if [ -f "${ASSETS_LINUX_DIR}/DEBIAN/postrm" ]; then
+            echo "Copying postrm script"
+            cp "${ASSETS_LINUX_DIR}/DEBIAN/postrm" "${DEB_ROOT}/DEBIAN/"
+            chmod 0755 "${DEB_ROOT}/DEBIAN/postrm"
           fi
           
-          cp ../../../assets/linux/io.github.MCDFsteve.NipaPlay-Reload.desktop usr/share/applications
-          cp ../../../assets/images/logo512.png usr/share/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
-          cd ..
-          dpkg-deb --build --root-owner-group NipaPlay-${{ steps.get_version.outputs.version }}-Linux-${{ matrix.arch }}
+          # Copy desktop file and icon
+          echo "Copying desktop file and icon"
+          cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${DEB_ROOT}/usr/share/applications/"
+          cp "${ICON_SOURCE_PATH}" "${DEB_ROOT}/usr/share/icons/hicolor/512x512/apps/${ICON_NAME}"
+          
+          # Build the .deb package
+          echo "Building .deb package..."
+          dpkg-deb --build --root-owner-group "${DEB_ROOT}" "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb"
+          echo ".deb package created at ${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb"
+          
+          # --- Create AppImage using linuxdeployqt ---
+          echo "--- Creating AppImage ---"
+          # Need AppDir structure
+          APPDIR="${LINUX_BUILD_DIR}/${APP_NAME}-AppDir"
+          mkdir -p "$APPDIR/usr/bin"
+          
+          # Copy main executable and data folder
+          echo "Copying executable and data to AppDir"
+          cp "${BUILD_OUTPUT_DIR}/${APP_NAME_LOWER}" "$APPDIR/usr/bin/" # Ensure executable name is lowercase 'nipaplay'
+          cp -r "${BUILD_OUTPUT_DIR}/data" "$APPDIR/usr/bin/"
+          cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "$APPDIR/"
+          cp "${ICON_SOURCE_PATH}" "$APPDIR/" # Icon for linuxdeployqt
+          
+          # Download linuxdeployqt
+          echo "Downloading linuxdeployqt..."
+          wget -q https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage -O linuxdeployqt
+          chmod +x linuxdeployqt
+          
+          # Run linuxdeployqt
+          echo "Running linuxdeployqt..."
+          # The executable path for linuxdeployqt should be the one INSIDE the AppDir
+          ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME_LOWER}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME_LOWER}" -desktopfile="$APPDIR/${DESKTOP_FILE_NAME}"
+          
+          # Find and rename the generated AppImage
+          echo "Locating and renaming generated AppImage..."
+          # linuxdeployqt usually names the AppImage based on the app name derived from desktop file or executable
+          GENERATED_APPIMAGE=$(find . -maxdepth 1 -name "*.AppImage" -not -name "linuxdeployqt*.AppImage" -print -quit) 
+          if [ -n "$GENERATED_APPIMAGE" ]; then
+            echo "Found generated AppImage: $GENERATED_APPIMAGE"
+            mv "$GENERATED_APPIMAGE" "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
+            echo "AppImage created at ${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
+          else
+            echo "AppImage generation failed or file not found!"
+            # Optionally exit with error: exit 1
+          fi
+          rm -f linuxdeployqt # Clean up downloaded tool
+          
+          # --- Create compressed binary archive (.tar.gz) ---
+          echo "--- Creating .tar.gz archive ---"
+          ARCHIVE_CONTENT_DIR="${LINUX_BUILD_DIR}/archive_content"
+          mkdir -p "${ARCHIVE_CONTENT_DIR}"
+          
+          # Copy the essential runtime files from the build output
+          echo "Copying application files to archive directory"
+          cp -r "${BUILD_OUTPUT_DIR}/"* "${ARCHIVE_CONTENT_DIR}/"
+          
+          # Add a simple run script using echo commands
+          RUN_SCRIPT_PATH="${ARCHIVE_CONTENT_DIR}/run.sh"
+          echo "Creating run.sh script at ${RUN_SCRIPT_PATH}"
+          echo '#!/bin/sh' > "${RUN_SCRIPT_PATH}"
+          echo '# Simple run script for NipaPlay binary archive' >> "${RUN_SCRIPT_PATH}"
+          # Escape special characters ($) for echo
+          echo 'DIR="$(dirname "$(readlink -f "$0")")"' >> "${RUN_SCRIPT_PATH}"
+          echo 'export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
+          echo '# Execute the main binary' >> "${RUN_SCRIPT_PATH}"
+          # Escape special characters (", $) for echo
+          echo '"$DIR/${APP_NAME_LOWER}" "$@"' >> "${RUN_SCRIPT_PATH}"
+          chmod +x "${RUN_SCRIPT_PATH}"
+          
+          # Create the tarball
+          echo "Creating tarball..."
+          tar -czvf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" -C "${ARCHIVE_CONTENT_DIR}" .
+          echo ".tar.gz archive created at ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
+          
+          # --- Cleanup ---
+          echo "--- Cleaning up intermediate directories ---"
+          rm -rf "${DEB_ROOT}" "${APPDIR}" "${ARCHIVE_CONTENT_DIR}"
+          
+          echo "--- Linux Packaging Complete ---"
       
       # Upload Artifacts
       - name: Upload Artifacts
@@ -276,7 +383,8 @@ jobs:
             - 提交: ${{ github.sha }}
             - 分支: ${{ github.ref_name }}
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb
+          # Updated artifacts list to include AppImage and tar.gz for Linux
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.{deb,AppImage,tar.gz}
           artifactErrorsFailBuild: true
           replacesArtifacts: true
 

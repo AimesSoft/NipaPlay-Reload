@@ -3,7 +3,6 @@ import 'package:nipaplay/widgets/video_player_widget.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../widgets/vertical_indicator.dart';
-import '../services/dandanplay_service.dart';
 import '../widgets/danmaku_overlay.dart';
 import '../utils/globals.dart' as globals;
 import '../widgets/video_controls_overlay.dart';
@@ -20,6 +19,11 @@ class PlayVideoPage extends StatefulWidget {
 }
 
 class _PlayVideoPageState extends State<PlayVideoPage> {
+  // Add state variable to track hover status for AnimeInfoWidget area
+  bool _isHoveringAnimeInfo = false;
+  // Add state variable to track hover status for BackButtonWidget area
+  bool _isHoveringBackButton = false;
+
   @override
   void initState() {
     super.initState();
@@ -71,8 +75,34 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       return VerticalIndicator(videoState: videoState);
                     },
                   ),
-                  BackButtonWidget(videoState: videoState),
-                  AnimeInfoWidget(videoState: videoState),
+                  // Wrap BackButtonWidget with MouseRegion for cursor
+                  MouseRegion(
+                    cursor: _isHoveringBackButton
+                        ? SystemMouseCursors.click // Show click cursor on hover
+                        : SystemMouseCursors.basic, // Default cursor otherwise
+                    onEnter: (_) => setState(() => _isHoveringBackButton = true),
+                    onExit: (_) => setState(() => _isHoveringBackButton = false),
+                    child: BackButtonWidget(videoState: videoState),
+                  ),
+                  // Apply Positioned and Align outside MouseRegion/IgnorePointer
+                  Positioned(
+                    left: globals.isPhone ? 40.0 : 16.0,
+                    top: 0,
+                    bottom: 0,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: MouseRegion(
+                        cursor: _isHoveringAnimeInfo 
+                          ? SystemMouseCursors.click // Show click cursor on hover
+                          : SystemMouseCursors.basic, // Default cursor otherwise
+                        onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
+                        onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
+                        child: IgnorePointer(
+                          child: AnimeInfoWidget(videoState: videoState),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
                 // 添加控制栏到根 Stack
                 if (videoState.hasVideo)
