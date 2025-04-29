@@ -272,7 +272,7 @@ jobs:
           cp -r "${BUILD_OUTPUT_DIR}/data" "$APPDIR/usr/bin/"
           # Copy the lib directory containing plugins and engine libs
           mkdir -p "$APPDIR/usr/lib"
-          cp -r "${BUILD_OUTPUT_DIR}/lib" "$APPDIR/usr/lib/" 
+          cp -r "${BUILD_OUTPUT_DIR}/lib/." "$APPDIR/usr/lib/" 
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "$APPDIR/"
           cp "${ICON_SOURCE_PATH}" "$APPDIR/" # Icon for linuxdeployqt
           
