@@ -1,6 +1,6 @@
 <div style="display: flex; align-items: center; justify-content: center;">
   <img src="https://github.com/user-attachments/assets/5366a99f-8906-4198-b2cf-2553252c0fb4" height="100" style="margin-right: 20px;">
-  <img src="macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png" height="100">
+  <img src="https://github.com/user-attachments/assets/1cb4db2a-7e85-4cca-81f5-f28a7ddeeda9" height="100">
 </div>
 
 # NipaPlay-Reload
@@ -33,24 +33,25 @@
 </div>
 
 > NipaPlay使用Flutter的再次重写，一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。
-
 ## 📸 应用截图
-
 <div align="center">
   <p><strong>主界面</strong></p>
-  <img src="others/主界面.png" width="80%" alt="主界面">
-  
+  <img src="https://github.com/user-attachments/assets/a1916cc5-986e-4104-a39e-4cb12ec11a2c" width="80%" alt="主界面">
+
   <p><strong>新番更新界面</strong></p>
-  <img src="others/新番更新界面.png" width="80%" alt="新番更新界面">
+  <img src="https://github.com/user-attachments/assets/1385081c-57df-4751-82c7-522e2ed015cf" width="80%" alt="新番更新界面">
   
   <p><strong>新番详情界面</strong></p>
-  <img src="others/新番详情界面.png" width="80%" alt="新番详情界面">
-  
+  <img src="https://github.com/user-attachments/assets/00026e95-673f-4d31-a2a2-d73beb5ef154" width="80%" alt="新番详情界面">
+
   <p><strong>播放界面</strong></p>
-  <img src="others/播放界面.png" width="80%" alt="播放界面">
-  
+  <img src="https://github.com/user-attachments/assets/1d4b405b-297f-463f-8e26-6cba0ac226f1" width="80%" alt="播放界面">
+
   <p><strong>播放界面UI展示</strong></p>
-  <img src="others/播放界面-UI展示.png" width="80%" alt="播放界面UI展示">
+  <img src="https://github.com/user-attachments/assets/c0765b9f-dfd3-40bc-acbb-06901bfb72de" width="80%" alt="播放界面UI展示">
+
+  <p><strong>观看记录展示</strong></p>
+  <img src="https://github.com/user-attachments/assets/1de519a3-37cb-4f59-bb5e-715cbcd2209a" width="80%" alt="观看记录展示">
 </div>
 
 ## ✨ 已实现功能
