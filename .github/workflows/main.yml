@@ -32,7 +32,7 @@ jobs:
             os: ubuntu-22.04
             arch: amd64
             artifact_name: release-Linux-amd64
-            artifact_path: build/linux/*.{deb,AppImage,tar.gz}
+            artifact_path: build/linux/
           - target: iOS
             os: macos-latest
             cache_pod_key: ios-pods
