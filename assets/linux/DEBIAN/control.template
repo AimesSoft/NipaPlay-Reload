@@ -9,3 +9,4 @@ Maintainer: madoka773 <valigarmanda55@gmail.com>
 Description: A cross platform danmaku video player.
 Homepage: https://github.com/MCDFsteve/NipaPlay-Reload
 Depends: ffmpeg, libass9
+ 
