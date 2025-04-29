@@ -270,6 +270,9 @@ jobs:
           echo "Copying executable and data to AppDir"
           cp "${BUILD_OUTPUT_DIR}/${APP_NAME}" "$APPDIR/usr/bin/"
           cp -r "${BUILD_OUTPUT_DIR}/data" "$APPDIR/usr/bin/"
+          # Copy the lib directory containing plugins and engine libs
+          mkdir -p "$APPDIR/usr/lib"
+          cp -r "${BUILD_OUTPUT_DIR}/lib" "$APPDIR/usr/lib/" 
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "$APPDIR/"
           cp "${ICON_SOURCE_PATH}" "$APPDIR/" # Icon for linuxdeployqt
           
@@ -280,8 +283,11 @@ jobs:
           
           # Run linuxdeployqt
           echo "Running linuxdeployqt..."
+          # Set LD_LIBRARY_PATH so ldd can find libs in the AppDir
+          export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH" 
           # The executable path for linuxdeployqt should be the one INSIDE the AppDir, using APP_NAME
           # Also use APP_NAME for the source executable path
+          # Remove the -desktopfile argument as linuxdeployqt might find it automatically
           ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME}"
           
           # Find and rename the generated AppImage
