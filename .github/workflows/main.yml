@@ -288,18 +288,23 @@ jobs:
           # The executable path for linuxdeployqt should be the one INSIDE the AppDir, using APP_NAME
           # Also use APP_NAME for the source executable path
           # Remove the -desktopfile argument as linuxdeployqt might find it automatically
-          ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME}"
+          ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME}" 
+          # Add ls command to check if AppImage was generated in the current directory
+          echo "Listing *.AppImage files in current directory after linuxdeployqt:"
+          ls -la *.AppImage || echo "No AppImage found in current directory."
           
           # Find and rename the generated AppImage
           echo "Locating and renaming generated AppImage..."
-          # linuxdeployqt usually names the AppImage based on the app name derived from desktop file or executable
           GENERATED_APPIMAGE=$(find . -maxdepth 1 -name "*.AppImage" -not -name "linuxdeployqt*.AppImage" -print -quit) 
           if [ -n "$GENERATED_APPIMAGE" ]; then
             echo "Found generated AppImage: $GENERATED_APPIMAGE"
             mv "$GENERATED_APPIMAGE" "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
             echo "AppImage created at ${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
+            # Add check after move
+            echo "Checking if AppImage exists in build/linux:"
+            ls -la "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" || echo "AppImage move failed or file not found in build/linux."
           else
-            echo "AppImage generation failed or file not found!"
+            echo "AppImage generation failed or file not found by find command!"
             # Optionally exit with error: exit 1
           fi
           rm -f linuxdeployqt # Clean up downloaded tool
@@ -330,7 +335,33 @@ jobs:
           echo "Creating tarball..."
           tar -czvf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" -C "${ARCHIVE_CONTENT_DIR}" .
           echo ".tar.gz archive created at ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
-          
+          # Add ls command to check contents of build/linux after tar
+          echo "Listing contents of build/linux directory after tar:"
+          ls -la "${LINUX_BUILD_DIR}/"
+
+          # --- Final Check before Cleanup ---
+          echo "Checking if all required Linux packages exist..."
+          MISSING_FILES=false
+          if [ ! -f "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" ]; then
+            echo "Error: .deb file not found! Expected: ${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb"
+            MISSING_FILES=true
+          fi
+          if [ ! -f "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" ]; then
+            echo "Error: AppImage file not found! Expected: ${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
+            MISSING_FILES=true
+          fi
+          if [ ! -f "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" ]; then
+            echo "Error: .tar.gz file not found! Expected: ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
+            MISSING_FILES=true
+          fi
+
+          if [ "$MISSING_FILES" = true ]; then
+            echo "One or more package files are missing. Failing the build."
+            exit 1
+          else
+            echo "All required Linux packages found."
+          fi
+
           # --- Cleanup ---
           echo "--- Cleaning up intermediate directories ---"
           rm -rf "${DEB_ROOT}" "${APPDIR}" "${ARCHIVE_CONTENT_DIR}"
