@@ -270,11 +270,11 @@ jobs:
           echo "Copying executable and data to AppDir"
           cp "${BUILD_OUTPUT_DIR}/${APP_NAME}" "$APPDIR/usr/bin/"
           cp -r "${BUILD_OUTPUT_DIR}/data" "$APPDIR/usr/bin/"
-          # Copy the lib directory containing plugins and engine libs
-          mkdir -p "$APPDIR/usr/lib"
+          # Copy the CONTENTS of the lib directory, not the directory itself
           cp -r "${BUILD_OUTPUT_DIR}/lib/." "$APPDIR/usr/lib/" 
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "$APPDIR/"
-          cp "${ICON_SOURCE_PATH}" "$APPDIR/" # Icon for linuxdeployqt
+          # Copy the source icon and rename it to match the name in the desktop file
+          cp "${ICON_SOURCE_PATH}" "$APPDIR/${ICON_NAME}" 
           
           # Download linuxdeployqt
           echo "Downloading linuxdeployqt..."
