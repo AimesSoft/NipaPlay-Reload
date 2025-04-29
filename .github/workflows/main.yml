@@ -268,7 +268,7 @@ jobs:
           
           # Copy main executable and data folder
           echo "Copying executable and data to AppDir"
-          cp "${BUILD_OUTPUT_DIR}/${APP_NAME_LOWER}" "$APPDIR/usr/bin/" # Ensure executable name is lowercase 'nipaplay'
+          cp "${BUILD_OUTPUT_DIR}/${APP_NAME}" "$APPDIR/usr/bin/"
           cp -r "${BUILD_OUTPUT_DIR}/data" "$APPDIR/usr/bin/"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "$APPDIR/"
           cp "${ICON_SOURCE_PATH}" "$APPDIR/" # Icon for linuxdeployqt
@@ -280,8 +280,9 @@ jobs:
           
           # Run linuxdeployqt
           echo "Running linuxdeployqt..."
-          # The executable path for linuxdeployqt should be the one INSIDE the AppDir
-          ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME_LOWER}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME_LOWER}" -desktopfile="$APPDIR/${DESKTOP_FILE_NAME}"
+          # The executable path for linuxdeployqt should be the one INSIDE the AppDir, using APP_NAME
+          # Also use APP_NAME for the source executable path
+          ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME}" -desktopfile="$APPDIR/${DESKTOP_FILE_NAME}"
           
           # Find and rename the generated AppImage
           echo "Locating and renaming generated AppImage..."
@@ -315,8 +316,8 @@ jobs:
           echo 'DIR="$(dirname "$(readlink -f "$0")")"' >> "${RUN_SCRIPT_PATH}"
           echo 'export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
           echo '# Execute the main binary' >> "${RUN_SCRIPT_PATH}"
-          # Escape special characters (", $) for echo
-          echo '"$DIR/${APP_NAME_LOWER}" "$@"' >> "${RUN_SCRIPT_PATH}"
+          # Escape special characters (", $) for echo and use correct executable name (APP_NAME)
+          echo "\"\$DIR/${APP_NAME}\" \"\$@\"" >> "${RUN_SCRIPT_PATH}"
           chmod +x "${RUN_SCRIPT_PATH}"
           
           # Create the tarball
