@@ -211,8 +211,8 @@ jobs:
           ARCHIVE_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}.tar.gz"
           DESKTOP_FILE_NAME="io.github.MCDFsteve.NipaPlay-Reload.desktop" # Match your actual desktop file name
           ICON_NAME="io.github.MCDFsteve.NipaPlay-Reload.png" # Match icon name used in desktop file if specific
-          ICON_SOURCE_PATH="../../../assets/images/logo512.png" # Path to your source icon
-          ASSETS_LINUX_DIR="../../../assets/linux"
+          ICON_SOURCE_PATH="assets/images/logo512.png" # Corrected path relative to root
+          ASSETS_LINUX_DIR="assets/linux" # Corrected path relative to root
           
           echo "--- Starting Packaging ---"
           echo "Version: ${VERSION}, Arch: ${ARCH}"
