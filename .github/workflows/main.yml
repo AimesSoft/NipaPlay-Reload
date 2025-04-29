@@ -391,7 +391,8 @@ jobs:
             - 分支: ${{ github.ref_name }}
           allowUpdates: true
           # Updated artifacts list to include AppImage and tar.gz for Linux
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.{deb,AppImage,tar.gz}
+          # Separate Linux patterns instead of using brace expansion
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz
           artifactErrorsFailBuild: true
           replacesArtifacts: true
 
