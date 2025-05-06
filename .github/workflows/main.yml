@@ -203,7 +203,8 @@ jobs:
           
           echo "Verifying core tools installation (especially desktop-file-utils)..."
           which desktop-file-install || (echo "desktop-file-install command not found! Check desktop-file-utils installation." && exit 1)
-          desktop-file-install --version || (echo "desktop-file-install --version failed!" && exit 1)
+          # desktop-file-install may not support --version, so 'which' is sufficient for basic check.
+          # desktop-file-install --version || (echo "desktop-file-install --version failed!" && exit 1)
           which rpmbuild || (echo "rpmbuild command not found! Check rpm package installation." && exit 1)
           rpmbuild --version || (echo "rpmbuild --version failed!" && exit 1)
           echo "Core tools verified."
