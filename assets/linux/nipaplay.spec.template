@@ -1,0 +1,52 @@
+Name:       nipaplay
+Version:    VERSION_PLACEHOLDER
+Release:    1%{?dist}
+Summary:    NipaPlay - A modern media player
+License:    MIT
+URL:        https://github.com/MCDFSteve/NipaPlay-Reload
+
+# Source0: %{name}-%{version}.tar.gz # If your source is a tarball
+BuildRequires: desktop-file-utils
+# Requires: # Add runtime dependencies here, e.g., libgtk-3-0, libmpv1
+
+%description
+NipaPlay is a modern cross-platform media player built with Flutter.
+
+%prep
+# If using Source0, unpack here: %setup -q
+
+%build
+# Flutter apps are usually pre-compiled, so not much to do here
+
+%install
+rm -rf %{buildroot}
+# Create installation directory structure
+mkdir -p %{buildroot}/opt/%{name}
+mkdir -p %{buildroot}%{_datadir}/applications
+mkdir -p %{buildroot}%{_datadir}/icons/hicolor/512x512/apps
+
+# Copy application files from the location where flutter build linux places them
+# Assuming the GitHub Actions workflow copies the 'bundle' to a temporary source dir for rpmbuild
+# We will define _sourcedir appropriately in the rpmbuild command or setup
+cp -r %{_sourcedir}/bundle/* %{buildroot}/opt/%{name}/
+
+# Copy .desktop file
+# The .desktop file should also be copied to _sourcedir
+desktop-file-install --dir=%{buildroot}%{_datadir}/applications %{_sourcedir}/io.github.MCDFsteve.NipaPlay-Reload.desktop
+
+# Copy icon
+# The icon should also be copied to _sourcedir
+cp %{_sourcedir}/logo512.png %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
+
+%clean
+rm -rf %{buildroot}
+
+%files
+/opt/%{name}
+%{_datadir}/applications/io.github.MCDFsteve.NipaPlay-Reload.desktop
+%{_datadir}/icons/hicolor/512x512/apps/io.github.MCDFsteve.NipaPlay-Reload.png
+# %doc README.md # If you have documentation files
+
+%changelog
+# * Mon Apr 29 2024 Your Name <your.email@example.com> - VERSION_PLACEHOLDER-1
+# - Initial RPM packaging 

@@ -191,9 +191,9 @@ jobs:
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
         run: |
-          # AMD64 build - Install dependencies including fuse for AppImage and qt for linuxdeployqt
+          # AMD64 build - Install dependencies including fuse for AppImage, qt for linuxdeployqt, and rpm tools
           sudo apt-get update -y
-          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full
+          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm rpm-build
           
           # Build Flutter app
           flutter config --enable-linux-desktop
@@ -213,6 +213,9 @@ jobs:
           ICON_NAME="io.github.MCDFsteve.NipaPlay-Reload.png" # Match icon name used in desktop file if specific
           ICON_SOURCE_PATH="assets/images/logo512.png" # Corrected path relative to root
           ASSETS_LINUX_DIR="assets/linux" # Corrected path relative to root
+          RPM_SPEC_TEMPLATE="${ASSETS_LINUX_DIR}/nipaplay.spec.template"
+          RPM_SPEC_FILE="nipaplay.spec" # Will be placed in SPECS dir
+          RPM_PKG_NAME="${APP_NAME}-${VERSION}-1.${ARCH}.rpm" # Adjust if Release tag in spec changes
           
           echo "--- Starting Packaging ---"
           echo "Version: ${VERSION}, Arch: ${ARCH}"
@@ -339,6 +342,54 @@ jobs:
           echo "Listing contents of build/linux directory after tar:"
           ls -la "${LINUX_BUILD_DIR}/"
 
+          # --- Create RPM package ---
+          echo "--- Creating RPM package ---"
+          RPM_BUILD_ROOT="${HOME}/rpmbuild"
+          mkdir -p "${RPM_BUILD_ROOT}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          
+          # Prepare sources for RPM build
+          # Copy Flutter bundle to SOURCES (rpmbuild will look for it here based on _sourcedir)
+          # The spec file refers to %{_sourcedir}/bundle/
+          mkdir -p "${RPM_BUILD_ROOT}/SOURCES/bundle"
+          cp -r "${BUILD_OUTPUT_DIR}/." "${RPM_BUILD_ROOT}/SOURCES/bundle/"
+          # Copy desktop file and icon to SOURCES as well, as spec file refers to them in %{_sourcedir}
+          cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${RPM_BUILD_ROOT}/SOURCES/"
+          cp "${ICON_SOURCE_PATH}" "${RPM_BUILD_ROOT}/SOURCES/logo512.png" # Spec file expects logo512.png
+
+          # Prepare spec file
+          echo "Preparing RPM spec file..."
+          sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
+              "${RPM_SPEC_TEMPLATE}" > "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}"
+          
+          echo "Contents of spec file:"
+          cat "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}"
+
+          # Build RPM
+          echo "Building RPM..."
+          # rpmbuild -ba will build both binary and source RPMs.
+          # We define _sourcedir to point to our SOURCES directory.
+          # We also need to define _topdir for rpmbuild.
+          rpmbuild -ba "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}" --define "_topdir ${RPM_BUILD_ROOT}" --define "_sourcedir ${RPM_BUILD_ROOT}/SOURCES"
+          
+          # Move the generated RPM to the final artifact directory
+          echo "Moving RPM package..."
+          # RPMs are typically in RPMS/arch/
+          # For x86_64 (amd64 for deb), it should be x86_64
+          RPM_ARCH_DIR="x86_64" # RPM uses x86_64 for amd64
+          GENERATED_RPM_PATH=$(find "${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/" -name "nipaplay-${VERSION}*.rpm" -print -quit)
+          if [ -n "${GENERATED_RPM_PATH}" ]; then
+            mv "${GENERATED_RPM_PATH}" "${LINUX_BUILD_DIR}/"
+            echo "RPM package moved to ${LINUX_BUILD_DIR}/$(basename ${GENERATED_RPM_PATH})"
+          else
+            echo "Error: RPM file not found in ${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/"
+            # Consider failing the build if RPM is critical
+            # exit 1 
+          fi
+          
+          # Listing contents of build/linux directory after tar:
+          echo "Listing contents of build/linux directory after RPM build:"
+          ls -la "${LINUX_BUILD_DIR}/"
+
           # --- Final Check before Cleanup ---
           echo "Checking if all required Linux packages exist..."
           MISSING_FILES=false
@@ -353,6 +404,14 @@ jobs:
           if [ ! -f "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" ]; then
             echo "Error: .tar.gz file not found! Expected: ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
             MISSING_FILES=true
+          fi
+          # Add check for RPM file
+          if [ ! -f "${LINUX_BUILD_DIR}/$(basename ${GENERATED_RPM_PATH:-dummy})" ] && [ -n "${GENERATED_RPM_PATH}" ]; then # Check if RPM was supposed to be there
+             echo "Error: RPM file not found in final destination! Expected: ${LINUX_BUILD_DIR}/$(basename ${GENERATED_RPM_PATH})"
+             MISSING_FILES=true
+          elif [ -z "${GENERATED_RPM_PATH}" ]; then # If RPM generation failed earlier
+             echo "Error: RPM generation failed, so RPM file is missing."
+             MISSING_FILES=true # Or decide if RPM is optional
           fi
 
           if [ "$MISSING_FILES" = true ]; then
@@ -421,9 +480,9 @@ jobs:
             - 提交: ${{ github.sha }}
             - 分支: ${{ github.ref_name }}
           allowUpdates: true
-          # Updated artifacts list to include AppImage and tar.gz for Linux
+          # Updated artifacts list to include AppImage, tar.gz and RPM for Linux
           # Separate Linux patterns instead of using brace expansion
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm
           artifactErrorsFailBuild: true
           replacesArtifacts: true
 
@@ -467,3 +526,66 @@ jobs:
           git add pubspec.yaml
           git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
           git push origin refs/heads/main
+
+  # New job for building Flatpak
+  BuildFlatpak:
+    name: Build Flatpak
+    needs: [Publish] # Depends on the Publish job, adjust if needed
+    if: github.ref == 'refs/heads/main' && success() # Only run on main branch after successful publish
+    runs-on: ubuntu-latest # Flatpak building is best on Linux
+    env:
+      APP_ID: io.github.MCDFSteve.NipaPlay-Reload
+      MANIFEST_PATH: io.github.MCDFSteve.NipaPlay-Reload.yaml
+      FLATPAK_NAME: nipaplay.flatpak # Name of the output bundle
+      # Get app version from the Build job output (same as Publish job uses)
+      APP_VERSION: ${{ needs.Build.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history for all tags and branches
+          fetch-depth: 0 
+
+      - name: Install Flatpak and Flatpak-Builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder imagemagick # Keep imagemagick in case other tools need it
+      
+      - name: Install Freedesktop SDK and Platform
+        run: |
+          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          # We no longer install Sdk.Extension.flutter here as the manifest handles the SDK download
+          flatpak --user install -y flathub org.freedesktop.Platform/23.08 org.freedesktop.Sdk/23.08
+        env:
+          XDG_RUNTIME_DIR: /tmp/flatpak-xdg-runtime # Needed for user session bus
+
+      - name: Substitute version in Flatpak manifest
+        run: |
+          echo "Updating manifest source tag to v${APP_VERSION}"
+          # Replace the placeholder tag in the manifest with the actual app version tag
+          # This assumes your manifest's git source has a line like "tag: v0.0.0" or similar placeholder
+          # that needs to be updated to the current version being released.
+          # Ensure the placeholder in your manifest matches what you are replacing (e.g., 'tag: v0.3.10')
+          sed -i "s|tag: v0.3.10 # <<<< IMPORTANT: REPLACE WITH THE ACTUAL TAG/COMMIT FOR THE RELEASE|tag: v${APP_VERSION}|g" ${{ env.MANIFEST_PATH }}
+          echo "Manifest after version substitution:"
+          cat ${{ env.MANIFEST_PATH }}
+
+      - name: Build Flatpak application
+        run: |
+          flatpak-builder --user --install --force-clean flatpak-build-dir ${{ env.MANIFEST_PATH }}
+        env:
+          XDG_RUNTIME_DIR: /tmp/flatpak-xdg-runtime # Needed for user session bus
+
+      - name: Create Flatpak bundle
+        run: |
+          flatpak build-bundle --user repo flatpak-build-dir/metadata ${{ env.FLATPAK_NAME }} ${{ env.APP_ID }} ${{ needs.Build.outputs.version }} # Use the actual version for the bundle branch
+        env:
+          XDG_RUNTIME_DIR: /tmp/flatpak-xdg-runtime # Needed for user session bus
+
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_ID }}-${{ env.APP_VERSION }}
+          path: ${{ env.FLATPAK_NAME }}
+          if-no-files-found: error # Fail if the bundle is not found

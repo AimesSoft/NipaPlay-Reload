@@ -1,0 +1,129 @@
+app-id: io.github.MCDFSteve.NipaPlay-Reload
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+# sdk-extensions:
+  # - org.freedesktop.Sdk.Extension.flutter # Using an SDK extension for Flutter is often cleaner
+command: nipaplay
+finish-args:
+  # Filesystem access (Documents, Downloads, Pictures, Music, Videos via portals)
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-music
+  - --filesystem=xdg-videos
+  # General home/host access (use with caution, prefer portals)
+  # - --filesystem=home 
+  # - --filesystem=host
+  # Wayland and X11 access
+  - --socket=wayland
+  - --socket=fallback-x11
+  # GPU acceleration
+  - --device=dri
+  # Audio
+  - --socket=pulseaudio
+  # Network access
+  - --share=network
+  # D-Bus access (for portals, etc.)
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.portal.Documents
+  - --talk-name=org.freedesktop.portal.FileChooser
+
+# Placeholder for the commit or tag for your application source
+# Flathub will typically build from a tag like 'v0.3.10'
+# You'll replace this placeholder or Flathub's build system will manage it.
+# x-checker-data:
+#   type: git
+#   url: https://github.com/MCDFSteve/NipaPlay-Reload.git
+#   tag-pattern: ^v([\d.]+)$ # Example tag pattern
+
+modules:
+  # Module to download and setup Flutter SDK
+  - name: flutter-sdk
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/flutter-sdk # Changed from /app/flutter to avoid potential name clashes if app itself is named flutter
+      - curl -L -o flutter.tar.xz "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.29.3-stable.tar.xz"
+      - tar -xf flutter.tar.xz -C /app/flutter-sdk --strip-components=1 # Extract directly into flutter-sdk and strip leading 'flutter' directory
+      # No install commands needed as it's used by the next module directly from /app/flutter-sdk
+    sources: [] # No external sources, done via curl
+
+  # Application Module
+  - name: nipaplay-reload
+    buildsystem: simple
+    # Sources: Get source code from your GitHub repository
+    # For local testing, you might use:
+    # sources:
+    #  - type: dir
+    #    path: . # If manifest is in the root of your project
+    # For Flathub, it will typically be git:
+    sources:
+      - type: git
+        url: https://github.com/MCDFSteve/NipaPlay-Reload.git
+        # This commit/tag will be overridden by Flathub's build system
+        # based on the release tag (e.g., v0.3.10)
+        # For local testing, you can specify a commit or branch:
+        # commit: main
+        # Or for a specific tag for testing:
+        tag: v0.3.10 # <<<< IMPORTANT: REPLACE WITH THE ACTUAL TAG/COMMIT FOR THE RELEASE
+    build-commands:
+      # Setup Flutter SDK path from the manually downloaded SDK
+      - export PATH="/app/flutter-sdk/bin:$PATH"
+      # Verify Flutter is found
+      - flutter --version
+      # Standard Flutter build for Linux
+      - flutter pub get
+      - flutter build linux --release
+      # Install the application files
+      - mkdir -p /app/bin/
+      - mkdir -p /app/lib/
+      - mkdir -p /app/share/nipaplay/
+      # Copy the main executable
+      - cp build/linux/x64/release/bundle/NipaPlay /app/bin/nipaplay # Ensure target name is 'nipaplay'
+      # Copy data and lib folders
+      - cp -r build/linux/x64/release/bundle/data /app/share/nipaplay/
+      - cp -r build/linux/x64/release/bundle/lib /app/lib/
+      
+      # Install .desktop file
+      - mkdir -p /app/share/applications/
+      - cp assets/linux/io.github.MCDFSteve.NipaPlay-Reload.desktop /app/share/applications/
+      
+      # Install AppStream metainfo file
+      - mkdir -p /app/share/metainfo/
+      - cp assets/linux/io.github.MCDFSteve.NipaPlay-Reload.appdata.xml /app/share/metainfo/
+      
+      # Install icons from the generated paths
+      - mkdir -p /app/share/icons/hicolor/64x64/apps/
+      - cp assets/icons/flatpak/hicolor/64x64/apps/io.github.MCDFSteve.NipaPlay-Reload.png /app/share/icons/hicolor/64x64/apps/
+      - mkdir -p /app/share/icons/hicolor/128x128/apps/
+      - cp assets/icons/flatpak/hicolor/128x128/apps/io.github.MCDFSteve.NipaPlay-Reload.png /app/share/icons/hicolor/128x128/apps/
+      - mkdir -p /app/share/icons/hicolor/256x256/apps/
+      - cp assets/icons/flatpak/hicolor/256x256/apps/io.github.MCDFSteve.NipaPlay-Reload.png /app/share/icons/hicolor/256x256/apps/
+      - mkdir -p /app/share/icons/hicolor/512x512/apps/
+      - cp assets/icons/flatpak/hicolor/512x512/apps/io.github.MCDFSteve.NipaPlay-Reload.png /app/share/icons/hicolor/512x512/apps/
+      # If you have an SVG icon, place it in assets/icons/flatpak/hicolor/scalable/apps/ and uncomment below:
+      # - mkdir -p /app/share/icons/hicolor/scalable/apps/
+      # - cp assets/icons/flatpak/hicolor/scalable/apps/io.github.MCDFSteve.NipaPlay-Reload.svg /app/share/icons/hicolor/scalable/apps/
+
+    # Ensure post-install script updates icon cache and desktop database, and validates appstream
+    post-install:
+      - gtk-update-icon-cache -f -t /app/share/icons/hicolor
+      - update-desktop-database -q /app/share/applications
+      - appstream-util validate-relax --nonet /app/share/metainfo/*.appdata.xml
+
+# Note on Flutter SDK:
+# This manifest now manually downloads Flutter SDK version 3.29.3.
+# The sdk-extensions for flutter has been commented out.
+#
+#  - name: flutter-sdk # This is now active
+#    buildsystem: simple
+#    build-commands:
+#      - mkdir -p /app/flutter
+#      - curl -L -o flutter.tar.xz "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.22.2-stable.tar.xz" # Replace with desired version
+#      - tar -xf flutter.tar.xz -C /app/
+#      # No install commands needed as it's used by the next module directly from /app/flutter
+#    sources: [] # No external sources, done via curl
+#
+# Then, in your app module's build-commands, you would use:
+# - export PATH="/app/flutter/bin:$PATH"
+# (This manual method is less ideal than using an SDK extension if available) 

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.MCDFSteve.NipaPlay-Reload</id>
+  
+  <name>NipaPlay Reload</name>
+  <summary xml:lang="zh_CN">一款现代化的跨平台媒体播放器</summary>
+  
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer_name>MCDFSteve</developer_name>
+  <!-- <url type="homepage">https://example.com</url> -->
+  <url type="bugtracker">https://github.com/MCDFSteve/NipaPlay-Reload/issues</url>
+  <url type="donation">https://ko-fi.com/MCDFSteve</url> <!-- Example, replace or remove -->
+
+  <description xml:lang="zh_CN">
+    <p>
+      NipaPlay Reload 是一款功能丰富的媒体播放器，使用 Flutter 构建，旨在为多个平台提供无缝的观看体验。
+    </p>
+    <!-- 在此添加更详细的中文描述和特性 -->
+    <!-- 例如:
+    <p>
+      它支持多种视频和音频格式、弹幕显示、播放历史等功能。
+    </p>
+    <ul>
+      <li>特性一</li>
+      <li>特性二</li>
+      <li>特性三</li>
+    </ul>
+    -->
+  </description>
+  
+  <icon type="cached">io.github.MCDFSteve.NipaPlay-Reload</icon>
+  
+  <launchable type="desktop-id">io.github.MCDFSteve.NipaPlay-Reload.desktop</launchable>
+  
+  <screenshots>
+    <!-- 请将截图放在仓库的 'others' 目录下，并更新以下链接 -->
+    <!-- Flathub 推荐 16:9 宽高比的截图 -->
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/screenshot1.png</image>
+      <caption xml:lang="zh_CN">主播放器界面</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/screenshot2.png</image>
+      <caption xml:lang="zh_CN">弹幕设置示例</caption>
+    </screenshot>
+    <!-- 根据需要添加更多截图 -->
+  </screenshots>
+  
+  <releases>
+    <!-- Add release notes here. The version should match your app version. -->
+    <!-- Example for current version:
+    <release version="VERSION_PLACEHOLDER" date="YYYY-MM-DD">
+      <description xml:lang="zh_CN">
+        <p>首次提交到 Flathub。</p>
+        <ul>
+          <li>新特性 A</li>
+          <li>Bug修复 B</li>
+        </ul>
+      </description>
+    </release>
+    -->
+  </releases>
+  
+  <content_rating type="oars-1.1" />
+  <!-- If your app handles mature content, specify it here -->
+  <!-- Example: 
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">none</content_attribute>
+    <content_attribute id="language-profanity">none</content_attribute>
+  </content_rating>
+  -->
+  
+  <categories>
+    <category>AudioVideo</category>
+    <category>Player</category>
+    <category>Video</category>
+    <!-- Add other relevant categories from https://specifications.freedesktop.org/menu-spec/latest/apa.html#main-category-registry -->
+  </categories>
+  
+  <!-- Provide translations if available -->
+  <!-- 
+  <provides>
+    <mediatype>video/mp4</mediatype>
+    <mediatype>audio/mpeg</mediatype>
+  </provides>
+  -->
+</component> 
