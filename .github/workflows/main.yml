@@ -191,9 +191,9 @@ jobs:
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
         run: |
-          # AMD64 build - Install dependencies including fuse for AppImage, qt for linuxdeployqt, and rpm tools
+          # AMD64 build - Install dependencies including fuse for AppImage, qt for linuxdeployqt, rpm tools, and desktop-file-utils for RPM build
           sudo apt-get update -y
-          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm
+          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
           
           # Build Flutter app
           flutter config --enable-linux-desktop
