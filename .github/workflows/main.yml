@@ -191,10 +191,23 @@ jobs:
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
         run: |
-          # AMD64 build - Install dependencies including fuse for AppImage, qt for linuxdeployqt, rpm tools, and desktop-file-utils for RPM build
+          # AMD64 build - Install dependencies
+          echo "Updating package lists..."
           sudo apt-get update -y
-          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
+          if [ $? -ne 0 ]; then echo "apt-get update failed!"; exit 1; fi
           
+          echo "Installing core dependencies..."
+          # Install dependencies including fuse for AppImage, qt for linuxdeployqt, rpm tools, and desktop-file-utils for RPM build
+          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
+          if [ $? -ne 0 ]; then echo "apt-get install failed!"; exit 1; fi
+          
+          echo "Verifying core tools installation (especially desktop-file-utils)..."
+          which desktop-file-install || (echo "desktop-file-install command not found! Check desktop-file-utils installation." && exit 1)
+          desktop-file-install --version || (echo "desktop-file-install --version failed!" && exit 1)
+          which rpmbuild || (echo "rpmbuild command not found! Check rpm package installation." && exit 1)
+          rpmbuild --version || (echo "rpmbuild --version failed!" && exit 1)
+          echo "Core tools verified."
+
           # Build Flutter app
           flutter config --enable-linux-desktop
           flutter build linux --release
@@ -366,6 +379,12 @@ jobs:
 
           # Build RPM
           echo "Building RPM..."
+          # Verify desktop-file-install is available before rpmbuild
+          echo "Verifying desktop-file-install command..."
+          which desktop-file-install || (echo "desktop-file-install command not found! Check desktop-file-utils installation." && exit 1)
+          desktop-file-install --version || (echo "desktop-file-install --version failed!" && exit 1)
+          echo "desktop-file-utils seems to be installed correctly."
+
           # rpmbuild -ba will build both binary and source RPMs.
           # We define _sourcedir to point to our SOURCES directory.
           # We also need to define _topdir for rpmbuild.
