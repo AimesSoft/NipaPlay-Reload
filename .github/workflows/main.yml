@@ -381,7 +381,6 @@ jobs:
           # Verify desktop-file-install is available before rpmbuild
           echo "Verifying desktop-file-install command..."
           which desktop-file-install || (echo "desktop-file-install command not found! Check desktop-file-utils installation." && exit 1)
-          desktop-file-install --version || (echo "desktop-file-install --version failed!" && exit 1)
           echo "desktop-file-utils seems to be installed correctly."
 
           # rpmbuild -ba will build both binary and source RPMs.
