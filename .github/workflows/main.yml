@@ -193,7 +193,7 @@ jobs:
         run: |
           # AMD64 build - Install dependencies including fuse for AppImage, qt for linuxdeployqt, and rpm tools
           sudo apt-get update -y
-          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm rpm-build
+          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm
           
           # Build Flutter app
           flutter config --enable-linux-desktop

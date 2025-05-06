@@ -34,17 +34,26 @@
   <launchable type="desktop-id">io.github.MCDFSteve.NipaPlay-Reload.desktop</launchable>
   
   <screenshots>
-    <!-- 请将截图放在仓库的 'others' 目录下，并更新以下链接 -->
-    <!-- Flathub 推荐 16:9 宽高比的截图 -->
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/screenshot1.png</image>
-      <caption xml:lang="zh_CN">主播放器界面</caption>
+      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/主界面.png</image>
+      <caption xml:lang="zh_CN">应用主界面概览</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/screenshot2.png</image>
-      <caption xml:lang="zh_CN">弹幕设置示例</caption>
+      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/播放界面-UI展示.png</image>
+      <caption xml:lang="zh_CN">播放器用户界面展示</caption>
     </screenshot>
-    <!-- 根据需要添加更多截图 -->
+    <screenshot>
+      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/播放界面.png</image>
+      <caption xml:lang="zh_CN">视频播放核心界面</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/新番详情界面.png</image>
+      <caption xml:lang="zh_CN">新番剧集详情展示</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/MCDFSteve/NipaPlay-Reload/main/others/新番更新界面.png</image>
+      <caption xml:lang="zh_CN">新番更新信息查阅</caption>
+    </screenshot>
   </screenshots>
   
   <releases>
