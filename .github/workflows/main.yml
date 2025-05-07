@@ -395,16 +395,20 @@ jobs:
           # For x86_64 (amd64 for deb), it should be x86_64
           RPM_ARCH_DIR="x86_64" # RPM uses x86_64 for amd64
           GENERATED_RPM_PATH=$(find "${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/" -name "nipaplay-${VERSION}*.rpm" -print -quit)
+          
+          # Define the desired RPM name for consistency
+          DESIRED_RPM_NAME="NipaPlay-${VERSION}-Linux-${ARCH}.rpm" # ARCH is 'amd64' as defined earlier for other packages
+
           if [ -n "${GENERATED_RPM_PATH}" ]; then
-            mv "${GENERATED_RPM_PATH}" "${LINUX_BUILD_DIR}/"
-            echo "RPM package moved to ${LINUX_BUILD_DIR}/$(basename ${GENERATED_RPM_PATH})"
+            mv "${GENERATED_RPM_PATH}" "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME}"
+            echo "RPM package moved and renamed to ${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME}"
           else
             echo "Error: RPM file not found in ${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/"
             # Consider failing the build if RPM is critical
             # exit 1 
           fi
           
-          # Listing contents of build/linux directory after tar:
+          # Listing contents of build/linux directory after RPM build:
           echo "Listing contents of build/linux directory after RPM build:"
           ls -la "${LINUX_BUILD_DIR}/"
 
@@ -424,12 +428,16 @@ jobs:
             MISSING_FILES=true
           fi
           # Add check for RPM file
-          if [ ! -f "${LINUX_BUILD_DIR}/$(basename ${GENERATED_RPM_PATH:-dummy})" ] && [ -n "${GENERATED_RPM_PATH}" ]; then # Check if RPM was supposed to be there
-             echo "Error: RPM file not found in final destination! Expected: ${LINUX_BUILD_DIR}/$(basename ${GENERATED_RPM_PATH})"
+          # Define DESIRED_RPM_NAME_FOR_CHECK again or ensure it's in scope
+          DESIRED_RPM_NAME_FOR_CHECK="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
+          if [ ! -f "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}" ]; then
+             # Check if RPM generation failed earlier (GENERATED_RPM_PATH would be empty)
+             if [ -z "${GENERATED_RPM_PATH}" ]; then
+                echo "Error: RPM generation failed, so RPM file (${DESIRED_RPM_NAME_FOR_CHECK}) is missing."
+             else
+                echo "Error: RPM file not found in final destination! Expected: ${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}"
+             fi
              MISSING_FILES=true
-          elif [ -z "${GENERATED_RPM_PATH}" ]; then # If RPM generation failed earlier
-             echo "Error: RPM generation failed, so RPM file is missing."
-             MISSING_FILES=true # Or decide if RPM is optional
           fi
 
           if [ "$MISSING_FILES" = true ]; then

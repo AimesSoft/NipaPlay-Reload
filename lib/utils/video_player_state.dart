@@ -170,6 +170,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 设置横屏
   Future<void> _setLandscape() async {
+    debugPrint('VideoPlayerState: _setLandscape CALLED. Current _isFullscreen: $_isFullscreen, globals.isPhone: ${globals.isPhone}');
     if (!globals.isPhone) return;
     
     try {
@@ -299,6 +300,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Future<void> initializePlayer(String path) async {
     try {
+      debugPrint('VideoPlayerState: initializePlayer CALLED for path: $path');
+      debugPrint('VideoPlayerState: globals.isPhone = ${globals.isPhone}');
+
       debugPrint('1. 开始初始化播放器...');
       // 加载保存的token
       await DandanplayService.loadToken();
@@ -397,6 +401,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       
       // 获取上次播放位置
       final lastPosition = await _getVideoPosition(path);
+      debugPrint('VideoPlayerState: lastPosition for $path = $lastPosition (raw value from _getVideoPosition)');
       
       // 如果有上次的播放位置，恢复播放位置
       if (lastPosition > 0) {
@@ -442,25 +447,54 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 设置状态为准备就绪
       _setStatus(PlayerStatus.ready, message: '准备就绪');
       
-      debugPrint('12. 开始播放视频...');
-      // 开始播放
-      player.state = PlaybackState.playing;
-      _setStatus(PlayerStatus.playing, message: '正在播放');
+      // 新逻辑：只要是手机，就尝试设置横屏，在确定播放状态之前
+      if (globals.isPhone) {
+        debugPrint('VideoPlayerState: Device is phone. Attempting to call _setLandscape PRIOR to setting final playback state.');
+        await _setLandscape(); 
+      }
       
-      // 等待一小段时间确保播放器真正开始播放
+      debugPrint('12. 设置最终播放状态 (在可能的横屏切换之后)...');
+      if (lastPosition == 0) { // 从头播放
+        player.state = PlaybackState.playing;
+        _setStatus(PlayerStatus.playing, message: '正在播放 (自动)');
+        debugPrint('VideoPlayerState: Setting to PLAYING (auto from start)');
+      } else { // 从中间恢复
+        // player 已经被 seek 到 lastPosition
+        // 检查底层播放器在seek后是否已自行播放，或者我们是否应该强制播放/暂停
+        if (player.state == PlaybackState.playing) { 
+           _setStatus(PlayerStatus.playing, message: '正在播放 (恢复)');
+           debugPrint('VideoPlayerState: Player is ALREADY PLAYING (resumed)');
+        } else {
+           // 对于恢复播放，可以选择默认播放或暂停。为了确保横屏后视频在动，先尝试设为播放。
+           // 如果播放器seek后默认是暂停，并且我们希望它继续播放，则需要下一行。
+           player.state = PlaybackState.playing; // 尝试恢复播放
+           _setStatus(PlayerStatus.playing, message: '正在播放 (尝试恢复)');
+           debugPrint('VideoPlayerState: Attempting to RESUME PLAYING from lastPosition: $lastPosition');
+        }
+      }
+      
+      // 等待一小段时间确保播放器状态稳定
       await Future.delayed(const Duration(milliseconds: 300));
       
-      // 检查播放器实际状态
+      // 再次检查播放器实际状态并同步 _status
       if (player.state == PlaybackState.playing) {
-        // 状态已经设置，不需要重复设置
-        // 确保在真正开始播放时设置横屏
-        if (globals.isPhone) {
-          await _setLandscape();
+        if (_status != PlayerStatus.playing) { // 如果横屏操作导致状态变化，但最终是播放，则同步
+             _setStatus(PlayerStatus.playing, message: '正在播放 (状态确认)');
         }
-      } else {
-        // 如果播放器没有真正开始播放，设置为暂停状态
-        player.state = PlaybackState.paused;
-        _setStatus(PlayerStatus.paused, message: '已暂停');
+        debugPrint('VideoPlayerState: Final check - Player IS PLAYING.');
+      } else { 
+        debugPrint('VideoPlayerState: Final check - Player IS NOT PLAYING. Current _status: $_status, player.state: ${player.state}');
+        // 如果意图是播放 (无论是从头还是恢复)，但播放器最终没有播放，则设为暂停
+        if (_status == PlayerStatus.playing) { // 如果我们之前的意图是播放
+            player.state = PlaybackState.paused;
+            _setStatus(PlayerStatus.paused, message: '已暂停 (播放失败后同步)');
+            debugPrint('VideoPlayerState: Corrected to PAUSED (sync after play attempt failed)');
+        } else if (_status != PlayerStatus.paused) {
+            // 对于其他非播放且非暂停的意外状态，也强制为暂停
+            player.state = PlaybackState.paused;
+            _setStatus(PlayerStatus.paused, message: '已暂停 (状态同步)');
+            debugPrint('VideoPlayerState: Corrected to PAUSED (general sync)');
+        }
       }
       
     } catch (e) {
@@ -789,6 +823,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               // 更新状态以反映跳转后的位置
               _position = Duration.zero;
               _progress = 0.0;
+              // 确保立即用0值保存，覆盖任何之前的播放位置
+              if (_currentVideoPath != null) {
+                _saveVideoPosition(_currentVideoPath!, 0);
+                debugPrint('VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
+              }
               notifyListeners();
               // 可以在这里考虑停止 positionUpdateTimer，如果需要的话
               // _positionUpdateTimer?.cancel(); 

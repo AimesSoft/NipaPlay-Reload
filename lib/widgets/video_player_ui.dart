@@ -202,6 +202,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
             onHover: _handleMouseMove,
             cursor: _isMouseVisible ? SystemMouseCursors.basic : SystemMouseCursors.none,
             child: Stack(
+              fit: StackFit.expand,
               children: [
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -210,6 +211,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                     node: FocusScopeNode(),
                     child: globals.isPhone
                       ? Stack(
+                          fit: StackFit.expand,
                           children: [
                             // 视频纹理 - 使用RepaintBoundary包装纹理以优化性能
                             Positioned.fill(

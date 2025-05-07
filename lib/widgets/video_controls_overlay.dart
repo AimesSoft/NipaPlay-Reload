@@ -18,10 +18,13 @@ class VideoControlsOverlay extends StatelessWidget {
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 150),
             opacity: videoState.showControls ? 1.0 : 0.0,
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 150),
-              offset: Offset(0, videoState.showControls ? 0 : 0.1),
-              child: const ModernVideoControls(),
+            child: IgnorePointer(
+              ignoring: !videoState.showControls,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 150),
+                offset: Offset(0, videoState.showControls ? 0 : 0.1),
+                child: const ModernVideoControls(),
+              ),
             ),
           ),
         );

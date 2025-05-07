@@ -50,8 +50,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           child: Scaffold(
             backgroundColor: Colors.transparent,
             body: Stack(
+              fit: StackFit.expand,
               children: [
-                const VideoPlayerWidget(),
+                Positioned.fill(
+                  child: const VideoPlayerWidget(),
+                ),
                 if (videoState.hasVideo) ...[
                   Positioned.fill(
                     child: Consumer<VideoPlayerState>(
@@ -75,14 +78,26 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       return VerticalIndicator(videoState: videoState);
                     },
                   ),
-                  // Wrap BackButtonWidget with MouseRegion for cursor
-                  MouseRegion(
-                    cursor: _isHoveringBackButton
-                        ? SystemMouseCursors.click // Show click cursor on hover
-                        : SystemMouseCursors.basic, // Default cursor otherwise
-                    onEnter: (_) => setState(() => _isHoveringBackButton = true),
-                    onExit: (_) => setState(() => _isHoveringBackButton = false),
-                    child: BackButtonWidget(videoState: videoState),
+                  // Wrap BackButtonWidget with MouseRegion for cursor and Positioned for layout
+                  Positioned(
+                    top: 16.0, // Adjust as needed
+                    left: 16.0,  // Adjust as needed
+                    // 控制返回按钮的可见性和交互性
+                    child: AnimatedOpacity(
+                      opacity: videoState.showControls ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 150),
+                      child: IgnorePointer(
+                        ignoring: !videoState.showControls,
+                        child: MouseRegion(
+                          cursor: _isHoveringBackButton
+                              ? SystemMouseCursors.click // Show click cursor on hover
+                              : SystemMouseCursors.basic, // Default cursor otherwise
+                          onEnter: (_) => setState(() => _isHoveringBackButton = true),
+                          onExit: (_) => setState(() => _isHoveringBackButton = false),
+                          child: BackButtonWidget(videoState: videoState),
+                        ),
+                      ),
+                    ),
                   ),
                   // Apply Positioned and Align outside MouseRegion/IgnorePointer
                   Positioned(
@@ -91,13 +106,18 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     bottom: 0,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: MouseRegion(
-                        cursor: _isHoveringAnimeInfo 
-                          ? SystemMouseCursors.click // Show click cursor on hover
-                          : SystemMouseCursors.basic, // Default cursor otherwise
-                        onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
-                        onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
-                        child: IgnorePointer(
+                      // 控制AnimeInfoWidget的可见性和交互性 (它内部已有AnimatedOpacity)
+                      child: IgnorePointer(
+                        ignoring: !videoState.showControls, // 使其在隐藏时忽略交互
+                        child: MouseRegion(
+                          cursor: _isHoveringAnimeInfo 
+                            ? SystemMouseCursors.click // Show click cursor on hover
+                            : SystemMouseCursors.basic, // Default cursor otherwise
+                          onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
+                          onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
+                          // AnimeInfoWidget 内部有 AnimatedOpacity
+                          // 外部的 IgnorePointer(ignoring: !videoState.showControls) 已足够
+                          // 原有的无条件 IgnorePointer 已被替换为这个条件性的
                           child: AnimeInfoWidget(videoState: videoState),
                         ),
                       ),
@@ -106,7 +126,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 ],
                 // 添加控制栏到根 Stack
                 if (videoState.hasVideo)
-                  const VideoControlsOverlay(),
+                  const VideoControlsOverlay(), // VideoControlsOverlay handles its own positioning
               ],
             ),
           ),
