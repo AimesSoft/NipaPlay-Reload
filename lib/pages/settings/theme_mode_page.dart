@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import 'package:permission_handler/permission_handler.dart';
 
 class ThemeModePage extends StatefulWidget {
   final ThemeNotifier themeNotifier;
@@ -33,36 +34,55 @@ class _ThemeModePageState extends State<ThemeModePage> {
   }
 
   Future<void> _pickCustomBackground(BuildContext context) async {
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
-      );
+    PermissionStatus status;
+    if (Platform.isAndroid) {
+      // Android 13+ 需要 photos 权限
+      status = await Permission.photos.request();
+    } else if (Platform.isIOS) {
+      status = await Permission.photos.request();
+    } else {
+      status = PermissionStatus.granted; // 其他平台假设不需要
+    }
 
-      if (image != null) {
-        final file = File(image.path);
-        final fileName = path.basename(file.path);
-        
-        // 获取应用文档目录
-        final appDir = await getApplicationDocumentsDirectory();
-        final targetPath = path.join(appDir.path, 'backgrounds', fileName);
-        
-        // 确保目标目录存在
-        await Directory(path.dirname(targetPath)).create(recursive: true);
-        
-        // 复制文件到应用目录
-        await file.copy(targetPath);
-        
-        // 更新 ThemeNotifier 中的自定义背景路径
-        context.read<ThemeNotifier>().customBackgroundPath = targetPath;
+    if (!mounted) return;
+
+    if (status.isGranted) {
+      try {
+        final ImagePicker picker = ImagePicker();
+        final XFile? image = await picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1920,
+          maxHeight: 1080,
+          imageQuality: 85,
+        );
+
+        if (image != null) {
+          final file = File(image.path);
+          final fileName = path.basename(file.path);
+          
+          final appDir = await getApplicationDocumentsDirectory();
+          final targetPath = path.join(appDir.path, 'backgrounds', fileName);
+          
+          await Directory(path.dirname(targetPath)).create(recursive: true);
+          
+          await file.copy(targetPath);
+          
+          // 使用 Provider.of<ThemeNotifier>(context, listen: false) 更安全
+          Provider.of<ThemeNotifier>(context, listen: false).customBackgroundPath = targetPath;
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('选择背景图片时出错: $e')),
+        );
       }
-    } catch (e) {
+    } else {
+      // 权限被拒绝
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('选择背景图片时出错: $e')),
+        const SnackBar(content: Text('需要相册权限才能选择背景图片')),
       );
+      // 可以考虑引导用户去设置开启权限
+      // openAppSettings();
     }
   }
 

@@ -9,7 +9,7 @@ import '../widgets/blur_dialog.dart';
 import '../widgets/blur_snackbar.dart';
 import '../utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -157,20 +157,55 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
           ],
         );
         if (source == 'album') {
-          try {
-            final picker = ImagePicker();
-            final XFile? picked = await picker.pickMedia();
-            if (picked != null) {
-              // 检查文件扩展名
-              final extension = picked.path.split('.').last.toLowerCase();
-              if (!['mp4', 'mkv'].contains(extension)) {
-                BlurSnackBar.show(context, '请选择 MP4 或 MKV 格式的视频文件');
-                return;
+          PermissionStatus photoStatus;
+          PermissionStatus videoStatus;
+
+          if (Platform.isAndroid) {
+            // 请求照片和视频权限 (Android 13+ 需要)
+            // permission_handler 会处理旧版本的 storage 权限映射
+            print("Requesting photos and videos permissions for Android...");
+            photoStatus = await Permission.photos.request();
+            videoStatus = await Permission.videos.request();
+            print("Android permissions status: Photos=$photoStatus, Videos=$videoStatus");
+          } else if (Platform.isIOS) {
+            // iOS 通常只需要 photos 权限
+            print("Requesting photos permission for iOS...");
+            photoStatus = await Permission.photos.request();
+            videoStatus = photoStatus; // iOS 上 photos 权限通常涵盖视频
+            print("iOS permissions status: Photos=$photoStatus");
+          } else {
+            photoStatus = PermissionStatus.granted;
+            videoStatus = PermissionStatus.granted;
+          }
+
+          // 检查权限是否都已授予 (根据需要调整，如果只选图片就只检查photoStatus)
+          if (!mounted) return; // 检查 widget 是否还在树中
+          if (photoStatus.isGranted && videoStatus.isGranted) { // 需要照片和视频权限
+            try {
+              final picker = ImagePicker();
+              // 使用 pickMedia 因为你需要视频
+              final XFile? picked = await picker.pickMedia(); 
+              if (picked != null) {
+                final extension = picked.path.split('.').last.toLowerCase();
+                // 允许mp4和mkv
+                if (!['mp4', 'mkv'].contains(extension)) { 
+                  if (!mounted) return;
+                  BlurSnackBar.show(context, '请选择 MP4 或 MKV 格式的视频文件');
+                  return;
+                }
+                if (!mounted) return;
+                await context.read<VideoPlayerState>().initializePlayer(picked.path);
               }
-              await context.read<VideoPlayerState>().initializePlayer(picked.path);
+            } catch (e) {
+              if (!mounted) return;
+              BlurSnackBar.show(context, '选择相册视频出错: $e');
             }
-          } catch (e) {
-            BlurSnackBar.show(context, '选择相册视频出错: $e');
+          } else {
+            // 权限被拒绝
+            if (!mounted) return;
+            BlurSnackBar.show(context, '需要相册权限才能选择视频');
+            // 可以考虑引导用户去设置开启权限
+            // openAppSettings(); 
           }
         } else if (source == 'file') {
           try {
