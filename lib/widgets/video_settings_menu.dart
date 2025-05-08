@@ -7,6 +7,7 @@ import '../utils/globals.dart' as globals;
 import 'control_bar_settings_menu.dart';
 import 'danmaku_settings_menu.dart';
 import 'audio_tracks_menu.dart';
+import 'danmaku_list_menu.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -26,10 +27,14 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   bool _showControlBarSettings = false;
   bool _showDanmakuSettings = false;
   bool _showAudioTracks = false;
+  bool _showDanmakuList = false;
+
   OverlayEntry? _subtitleTracksOverlay;
   OverlayEntry? _controlBarSettingsOverlay;
   OverlayEntry? _danmakuSettingsOverlay;
   OverlayEntry? _audioTracksOverlay;
+  OverlayEntry? _danmakuListOverlay;
+
   late final List<SettingsItem> _settingsItems;
   late final VideoPlayerState videoState;
 
@@ -62,6 +67,12 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         onTap: _toggleDanmakuSettingsMenu,
         isActive: () => _showDanmakuSettings,
       ),
+      SettingsItem(
+        icon: Icons.list_alt_outlined,
+        title: '弹幕列表',
+        onTap: _toggleDanmakuListMenu,
+        isActive: () => _showDanmakuList,
+      ),
     ];
   }
 
@@ -71,18 +82,13 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _subtitleTracksOverlay = null;
       setState(() => _showSubtitleTracks = false);
     } else {
-      _subtitleTracksOverlay?.remove();
-      _controlBarSettingsOverlay?.remove();
-      _danmakuSettingsOverlay?.remove();
-      _audioTracksOverlay?.remove();
-      _controlBarSettingsOverlay = null;
-      _danmakuSettingsOverlay = null;
-      _audioTracksOverlay = null;
+      _closeAllOverlays();
       setState(() {
         _showSubtitleTracks = true;
         _showControlBarSettings = false;
         _showDanmakuSettings = false;
         _showAudioTracks = false;
+        _showDanmakuList = false;
       });
       
       _subtitleTracksOverlay = OverlayEntry(
@@ -105,18 +111,13 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _audioTracksOverlay = null;
       setState(() => _showAudioTracks = false);
     } else {
-      _subtitleTracksOverlay?.remove();
-      _controlBarSettingsOverlay?.remove();
-      _danmakuSettingsOverlay?.remove();
-      _audioTracksOverlay?.remove();
-      _subtitleTracksOverlay = null;
-      _controlBarSettingsOverlay = null;
-      _danmakuSettingsOverlay = null;
+      _closeAllOverlays();
       setState(() {
         _showAudioTracks = true;
         _showSubtitleTracks = false;
         _showControlBarSettings = false;
         _showDanmakuSettings = false;
+        _showDanmakuList = false;
       });
       
       _audioTracksOverlay = OverlayEntry(
@@ -139,18 +140,13 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _controlBarSettingsOverlay = null;
       setState(() => _showControlBarSettings = false);
     } else {
-      _subtitleTracksOverlay?.remove();
-      _controlBarSettingsOverlay?.remove();
-      _danmakuSettingsOverlay?.remove();
-      _audioTracksOverlay?.remove();
-      _subtitleTracksOverlay = null;
-      _danmakuSettingsOverlay = null;
-      _audioTracksOverlay = null;
+      _closeAllOverlays();
       setState(() {
         _showControlBarSettings = true;
         _showSubtitleTracks = false;
         _showDanmakuSettings = false;
         _showAudioTracks = false;
+        _showDanmakuList = false;
       });
 
       _controlBarSettingsOverlay = OverlayEntry(
@@ -174,18 +170,13 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _danmakuSettingsOverlay = null;
       setState(() => _showDanmakuSettings = false);
     } else {
-      _subtitleTracksOverlay?.remove();
-      _controlBarSettingsOverlay?.remove();
-      _danmakuSettingsOverlay?.remove();
-      _audioTracksOverlay?.remove();
-      _subtitleTracksOverlay = null;
-      _controlBarSettingsOverlay = null;
-      _audioTracksOverlay = null;
+      _closeAllOverlays();
       setState(() {
         _showDanmakuSettings = true;
         _showSubtitleTracks = false;
         _showControlBarSettings = false;
         _showAudioTracks = false;
+        _showDanmakuList = false;
       });
 
       _danmakuSettingsOverlay = OverlayEntry(
@@ -203,12 +194,51 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     }
   }
 
+  void _toggleDanmakuListMenu() {
+    if (_showDanmakuList) {
+      _danmakuListOverlay?.remove();
+      _danmakuListOverlay = null;
+      setState(() => _showDanmakuList = false);
+    } else {
+      _closeAllOverlays();
+      setState(() {
+        _showDanmakuList = true;
+        _showSubtitleTracks = false;
+        _showControlBarSettings = false;
+        _showDanmakuSettings = false;
+        _showAudioTracks = false;
+      });
+
+      _danmakuListOverlay = OverlayEntry(
+        builder: (context) => DanmakuListMenu(
+          onClose: () {
+            _danmakuListOverlay?.remove();
+            _danmakuListOverlay = null;
+            setState(() => _showDanmakuList = false);
+          },
+        ),
+      );
+
+      Overlay.of(context).insert(_danmakuListOverlay!);
+    }
+  }
+
+  void _closeAllOverlays() {
+    _subtitleTracksOverlay?.remove();
+    _subtitleTracksOverlay = null;
+    _controlBarSettingsOverlay?.remove();
+    _controlBarSettingsOverlay = null;
+    _danmakuSettingsOverlay?.remove();
+    _danmakuSettingsOverlay = null;
+    _audioTracksOverlay?.remove();
+    _audioTracksOverlay = null;
+    _danmakuListOverlay?.remove();
+    _danmakuListOverlay = null;
+  }
+
   @override
   void dispose() {
-    _subtitleTracksOverlay?.remove();
-    _controlBarSettingsOverlay?.remove();
-    _danmakuSettingsOverlay?.remove();
-    _audioTracksOverlay?.remove();
+    _closeAllOverlays();
     for (var entry in _overlayEntries) {
       entry.remove();
     }
@@ -232,7 +262,6 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
             height: MediaQuery.of(context).size.height,
             child: Stack(
               children: [
-                // 添加一个全屏的透明点击区域
                 Positioned.fill(
                   child: GestureDetector(
                     onTap: widget.onClose,
@@ -278,7 +307,6 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                // 标题栏
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
@@ -306,7 +334,6 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                                     ],
                                   ),
                                 ),
-                                // 设置选项列表
                                 Expanded(
                                   child: SingleChildScrollView(
                                     child: Column(
@@ -332,8 +359,10 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   }
 
   Widget _buildSettingsItem(SettingsItem item) {
+    final bool isActive = item.isActive();
+    
     return Material(
-      color: Colors.transparent,
+      color: isActive ? Colors.white.withOpacity(0.15) : Colors.transparent,
       child: InkWell(
         onTap: item.onTap,
         child: Container(
@@ -342,7 +371,6 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
             vertical: 12,
           ),
           decoration: BoxDecoration(
-            color: Colors.transparent,
             border: Border(
               bottom: BorderSide(
                 color: Colors.white.withOpacity(0.5),
@@ -367,7 +395,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
               ),
               const Spacer(),
               Icon(
-                Icons.chevron_right_rounded,
+                isActive ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
                 color: Colors.white.withOpacity(0.7),
                 size: 20,
               ),
@@ -379,7 +407,6 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   }
 }
 
-// 设置项数据类
 class SettingsItem {
   final IconData icon;
   final String title;

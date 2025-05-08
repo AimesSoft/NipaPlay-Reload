@@ -110,9 +110,7 @@ class BaseSettingsMenu extends StatelessWidget {
                                   ),
                                   // 内容区域
                                   Expanded(
-                                    child: SingleChildScrollView(
-                                      child: content,
-                                    ),
+                                    child: content,
                                   ),
                                 ],
                               ),

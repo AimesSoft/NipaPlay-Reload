@@ -17,6 +17,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
 import 'package:provider/provider.dart';
 import '../providers/watch_history_provider.dart';
+import 'package:flutter/foundation.dart'; // <--- Add this import for compute
+import 'danmaku_parser.dart'; // <--- Add this import
 
 enum PlayerStatus {
   idle,        // 空闲状态
@@ -543,7 +545,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         );
         
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
-        if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
+        if (_context != null && _context!.mounted) {
+          _context!.read<WatchHistoryProvider>().refresh();
+        }
         return;
       }
       
@@ -554,10 +558,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       String initialAnimeName = fileName;
       
       // 移除常见的文件扩展名
-      initialAnimeName = initialAnimeName.replaceAll(RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$'), '');
+      initialAnimeName = initialAnimeName.replaceAll(RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$', caseSensitive: false), '');
       
       // 替换下划线、点和破折号为空格
-      initialAnimeName = initialAnimeName.replaceAll(RegExp(r'[_\.-]'), ' ');
+      initialAnimeName = initialAnimeName.replaceAll(RegExp(r'[_\.-]'), ' ').trim();
+      
+      // 如果处理后为空，则给一个默认值
+      if (initialAnimeName.isEmpty) {
+        initialAnimeName = "未知动画";
+      }
       
       // 创建初始观看记录
       final item = WatchHistoryItem(
@@ -572,9 +581,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('创建全新的观看记录: 动画=${item.animeName}');
       // 保存到历史记录
       await WatchHistoryManager.addOrUpdateHistory(item);
-      if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
-    } catch (e) {
-      debugPrint('初始化观看记录时出错: $e');
+      if (_context != null && _context!.mounted) {
+         _context!.read<WatchHistoryProvider>().refresh();
+      }
+    } catch (e, s) {
+      debugPrint('初始化观看记录时出错: $e\n$s');
     }
   }
 
@@ -1059,14 +1070,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 
                 // 从缓存加载弹幕
                 debugPrint('检查弹幕缓存...');
-                final cachedDanmaku = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
-                if (cachedDanmaku != null) {
+                final cachedDanmakuRaw = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
+                if (cachedDanmakuRaw != null) {
                   debugPrint('从缓存加载弹幕...');
-                  _setStatus(PlayerStatus.recognizing, message: '正在从缓存加载弹幕...');
-                  _danmakuList = List<Map<String, dynamic>>.from(cachedDanmaku);
+                  _setStatus(PlayerStatus.recognizing, message: '正在从缓存解析弹幕...');
+                  _danmakuList = await compute(parseDanmakuListInBackground, cachedDanmakuRaw as List<dynamic>?);
+                  
+                  // Sort the list immediately after parsing
+                  _danmakuList.sort((a, b) {
+                    final timeA = (a['time'] as double?) ?? 0.0;
+                    final timeB = (b['time'] as double?) ?? 0.0;
+                    return timeA.compareTo(timeB);
+                  });
+                  debugPrint('缓存弹幕解析并排序完成');
+
                   notifyListeners();
-                  _setStatus(PlayerStatus.recognizing, message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
-                  return;
+                  _setStatus(PlayerStatus.recognizing, message: '从缓存加载弹幕完成 (${_danmakuList.length}条)');
+                  return; // Return early after loading from cache
                 }
                 
                 debugPrint('从网络加载弹幕...');
@@ -1076,13 +1096,28 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                     debugPrint('加载弹幕超时');
                     throw TimeoutException('加载弹幕超时');
                   });
+                
+                _setStatus(PlayerStatus.recognizing, message: '正在解析网络弹幕...');
+                if (danmakuData['comments'] != null && danmakuData['comments'] is List) {
+                  // Use compute for parsing network danmaku, using the imported function
+                  _danmakuList = await compute(parseDanmakuListInBackground, danmakuData['comments'] as List<dynamic>?);
                   
-                _danmakuList = List<Map<String, dynamic>>.from(danmakuData['comments']);
+                  // Sort the list immediately after parsing
+                  _danmakuList.sort((a, b) {
+                    final timeA = (a['time'] as double?) ?? 0.0;
+                    final timeB = (b['time'] as double?) ?? 0.0;
+                    return timeA.compareTo(timeB);
+                  });
+                  debugPrint('网络弹幕解析并排序完成');
+
+                } else {
+                  _danmakuList = [];
+                }
+
                 notifyListeners();
-                _setStatus(PlayerStatus.recognizing, message: '弹幕加载完成 (${danmakuData['count']}条)');
-              } catch (e) {
-                debugPrint('弹幕加载错误: $e');
-                // 弹幕加载错误不影响视频播放
+                _setStatus(PlayerStatus.recognizing, message: '弹幕加载完成 (${_danmakuList.length}条)');
+              } catch (e, s) { 
+                debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载失败，跳过');
               }
@@ -1090,21 +1125,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           }
         } else {
           debugPrint('视频未匹配到信息');
-          // 视频未匹配但仍继续播放
           _danmakuList = [];
           _setStatus(PlayerStatus.recognizing, message: '未匹配到视频信息，跳过弹幕');
         }
-      } catch (e) {
-        debugPrint('视频识别网络错误: $e');
-        // 处理网络错误等
+      } catch (e, s) { 
+        debugPrint('视频识别网络错误: $e\n$s');
         _danmakuList = [];
         _setStatus(PlayerStatus.recognizing, message: '无法连接服务器，跳过加载弹幕');
-        // 不抛出异常，允许视频继续播放
       }
-    } catch (e) {
-      debugPrint('严重错误: $e');
-      // 这里只处理真正阻碍视频播放的严重错误
-      rethrow; // 重新抛出异常，让initializePlayer捕获处理
+    } catch (e, s) { 
+      debugPrint('识别视频或加载弹幕时发生严重错误: $e\n$s');
+      rethrow; 
     }
   }
 
@@ -1123,68 +1154,75 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       ////debugPrint('视频信息: ${json.encode(videoInfo)}');
       
       // 获取识别到的动画信息
-      String? animeName;
+      String? apiAnimeName; // 从 videoInfo 或其 matches 中获取
       String? episodeTitle;
       int? animeId, episodeId;
       
       // 从videoInfo直接读取animeTitle和episodeTitle
-      animeName = videoInfo['animeTitle'] as String?;
+      apiAnimeName = videoInfo['animeTitle'] as String?;
       episodeTitle = videoInfo['episodeTitle'] as String?;
       
       // 从匹配信息中获取animeId和episodeId
-      if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
+      if (videoInfo['matches'] != null && videoInfo['matches'] is List && videoInfo['matches'].isNotEmpty) {
         final match = videoInfo['matches'][0];
-        // 如果直接字段为空，从匹配中获取
-        if (animeName == null || animeName.isEmpty) {
-          animeName = match['animeTitle'] as String?;
+        // 如果直接字段为空，且匹配中有值，则使用匹配中的值
+        if ((apiAnimeName == null || apiAnimeName.isEmpty) && match['animeTitle'] != null) {
+          apiAnimeName = match['animeTitle'] as String?;
         }
         
-        // 从匹配中获取episodeId和animeId
         episodeId = match['episodeId'] as int?;
         animeId = match['animeId'] as int?;
       }
       
-      // 如果仍然没有动画名称，使用文件名
-      if (animeName == null || animeName.isEmpty) {
-        final fileName = path.split('/').last;
-        // 尝试从文件名提取格式化的名称
-        String extractedName = fileName.replaceAll(RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$'), '');
-        extractedName = extractedName.replaceAll(RegExp(r'[_\.-]'), ' ');
-        animeName = extractedName;
+      // 解析最终的 animeName，确保非空
+      String resolvedAnimeName;
+      if (apiAnimeName != null && apiAnimeName.isNotEmpty) {
+        resolvedAnimeName = apiAnimeName;
+      } else {
+        // 如果 API 未提供有效名称，则使用现有记录中的名称，
+        // 如果现有记录中的名称也为空（理论上不应发生，因为它是 String 类型），
+        // 则最后从文件名保底。
+        resolvedAnimeName = existingHistory.animeName; // existingHistory.animeName 是 String 类型
+      }
+
+      // 如果仍然没有动画名称（例如 existingHistory.animeName 为空字符串，虽然不太可能），从文件名提取
+      if (resolvedAnimeName.isEmpty) {
+         final fileName = path.split('/').last;
+         String extractedName = fileName.replaceAll(RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$', caseSensitive: false), '');
+         extractedName = extractedName.replaceAll(RegExp(r'[_\.-]'), ' ');
+         resolvedAnimeName = extractedName.trim().isNotEmpty ? extractedName : "未知动画"; // 确保不会是空字符串
       }
       
-      debugPrint('识别到动画：${animeName ?? '未知'}，集数：${episodeTitle ?? '未知集数'}，animeId: $animeId, episodeId: $episodeId');
+      debugPrint('识别到动画：${resolvedAnimeName}，集数：${episodeTitle ?? '未知集数'}，animeId: $animeId, episodeId: $episodeId');
       
       // 更新当前动画标题和集数标题
-      _animeTitle = animeName;
+      _animeTitle = resolvedAnimeName; // 使用 resolvedAnimeName
       _episodeTitle = episodeTitle;
       notifyListeners();
       
       // 创建更新后的观看记录
       final updatedHistory = WatchHistoryItem(
         filePath: existingHistory.filePath,
-        // 使用识别到的动画名称
-        animeName: animeName ?? existingHistory.animeName,
-        // 使用识别到的集数标题，或保留原来的
+        animeName: resolvedAnimeName, // 使用确保非空的 resolvedAnimeName
         episodeTitle: (episodeTitle != null && episodeTitle.isNotEmpty) ? episodeTitle : existingHistory.episodeTitle,
-        // 如果识别到了集数ID，使用识别到的ID，否则保留原来的
         episodeId: episodeId ?? existingHistory.episodeId,
-        // 如果识别到了动画ID，使用识别到的ID，否则保留原来的
         animeId: animeId ?? existingHistory.animeId,
         watchProgress: existingHistory.watchProgress,
         lastPosition: existingHistory.lastPosition,
         duration: existingHistory.duration,
-        lastWatchTime: existingHistory.lastWatchTime,
+        lastWatchTime: existingHistory.lastWatchTime, // 保留上次观看时间，直到真正播放并更新进度
         thumbnailPath: existingHistory.thumbnailPath,
       );
       
       debugPrint('准备保存更新后的观看记录，动画名: ${updatedHistory.animeName}, 集数: ${updatedHistory.episodeTitle}');
       // 保存更新后的记录
       await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
-      if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
+      if (_context != null && _context!.mounted) { // 添加 mounted 检查
+        _context!.read<WatchHistoryProvider>().refresh();
+      }
       debugPrint('成功更新观看记录');
-    } catch (e) {
-      debugPrint('更新观看记录时出错: $e');
+    } catch (e, s) { // 添加 stackTrace
+      debugPrint('更新观看记录时出错: $e\n$s'); // 打印堆栈信息
       // 错误不应阻止视频播放
     }
   }
@@ -1242,7 +1280,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 仅更新缩略图和时间戳，保留其他所有字段
         final updatedHistory = WatchHistoryItem(
           filePath: existingHistory.filePath,
-          animeName: existingHistory.animeName,
+          animeName: existingHistory.animeName, // existingHistory.animeName 应该是可靠的 String
           episodeTitle: existingHistory.episodeTitle,
           episodeId: existingHistory.episodeId,
           animeId: existingHistory.animeId,
@@ -1254,7 +1292,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         );
         
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
-        if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
+        if (_context != null && _context!.mounted) { // 添加 mounted 检查
+           _context!.read<WatchHistoryProvider>().refresh();
+        }
         //debugPrint('观看记录缩略图已更新: $thumbnailPath');
         
         // 通知缩略图已更新，需要刷新UI
@@ -1263,8 +1303,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 尝试刷新已显示的缩略图
         _triggerImageCacheRefresh(thumbnailPath);
       }
-    } catch (e) {
-      debugPrint('更新观看记录缩略图时出错: $e');
+    } catch (e, s) { // 添加 stackTrace
+      debugPrint('更新观看记录缩略图时出错: $e\n$s'); // 打印堆栈信息
     }
   }
   
@@ -1581,7 +1621,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         String? thumbnailPath = _currentThumbnailPath;
         if (thumbnailPath == null || thumbnailPath.isEmpty) {
           thumbnailPath = existingHistory.thumbnailPath;
-          if (thumbnailPath == null || thumbnailPath.isEmpty) {
+          if ((thumbnailPath == null || thumbnailPath.isEmpty) && player.state == PlaybackState.playing) { // 仅在播放时尝试捕获
             // 仅在没有缩略图时才尝试捕获
             try {
               thumbnailPath = await _captureVideoFrameWithoutPausing();
@@ -1597,7 +1637,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 更新现有记录
         final updatedHistory = WatchHistoryItem(
           filePath: existingHistory.filePath,
-          animeName: existingHistory.animeName,
+          animeName: existingHistory.animeName, // existingHistory.animeName 应该是可靠的 String
           episodeTitle: existingHistory.episodeTitle,
           episodeId: existingHistory.episodeId,
           animeId: existingHistory.animeId,
@@ -1609,18 +1649,24 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         );
         
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
-        if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
+        if (_context != null && _context!.mounted) { // 添加 mounted 检查
+          _context!.read<WatchHistoryProvider>().refresh();
+        }
       } else {
-        // 如果记录不存在，创建新记录
+        // 如果记录不存在，创建新记录 (这种情况理论上不常发生，因为 initializeWatchHistory 应该已经创建了)
         final fileName = _currentVideoPath!.split('/').last;
         
         // 尝试从文件名中提取初始动画名称
-        String initialAnimeName = fileName.replaceAll(RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$'), '');
-        initialAnimeName = initialAnimeName.replaceAll(RegExp(r'[_\.-]'), ' ');
+        String initialAnimeName = fileName.replaceAll(RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$', caseSensitive: false), '');
+        initialAnimeName = initialAnimeName.replaceAll(RegExp(r'[_\.-]'), ' ').trim();
+
+        if (initialAnimeName.isEmpty) {
+          initialAnimeName = "未知动画"; // 确保非空
+        }
         
         // 尝试获取缩略图
         String? thumbnailPath = _currentThumbnailPath;
-        if (thumbnailPath == null) {
+        if (thumbnailPath == null && player.state == PlaybackState.playing) { // 仅在播放时尝试捕获
           try {
             thumbnailPath = await _captureVideoFrameWithoutPausing();
             if (thumbnailPath != null) {
@@ -1633,7 +1679,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         
         final newHistory = WatchHistoryItem(
           filePath: _currentVideoPath!,
-          animeName: initialAnimeName,
+          animeName: initialAnimeName, // initialAnimeName 已确保非空
           watchProgress: _progress,
           lastPosition: _position.inMilliseconds,
           duration: _duration.inMilliseconds,
@@ -1642,10 +1688,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         );
         
         await WatchHistoryManager.addOrUpdateHistory(newHistory);
-        if (_context != null) _context!.read<WatchHistoryProvider>().refresh();
+        if (_context != null && _context!.mounted) { // 添加 mounted 检查
+          _context!.read<WatchHistoryProvider>().refresh();
+        }
       }
-    } catch (e) {
-      debugPrint('更新观看记录时出错: $e');
+    } catch (e, s) { // 添加 stackTrace
+      debugPrint('更新观看记录时出错: $e\n$s'); // 打印堆栈信息
     }
   }
 
