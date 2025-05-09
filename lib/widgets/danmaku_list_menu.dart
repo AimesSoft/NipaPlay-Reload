@@ -79,8 +79,6 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
     return BaseSettingsMenu(
       title: '弹幕列表 (${_allSortedDanmakus.length}条)', // Show total count
       onClose: widget.onClose, 
-      width: 300, 
-      rightOffset: 230, 
       content: _allSortedDanmakus.isEmpty
           ? const Padding( 
               padding: EdgeInsets.symmetric(vertical: 20.0),

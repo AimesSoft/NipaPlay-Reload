@@ -10,6 +10,7 @@ import '../utils/tab_change_notifier.dart';
 import 'dart:typed_data';
 import '../widgets/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
+import 'package:flutter/gestures.dart';
 
 class AnimePage extends StatefulWidget {
   const AnimePage({super.key});
@@ -23,8 +24,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   List<String> _loadingMessages = ['正在初始化播放器...'];
   TabController? _tabController;
   VideoPlayerState? _videoPlayerState;
-  DateTime _lastHistoryUpdateTime = DateTime(2000); // 初始设为很早的时间
-  DateTime _lastCacheClearTime = DateTime(2000); // 初始设为很早的时间
+  final DateTime _lastHistoryUpdateTime = DateTime(2000); // 初始设为很早的时间
+  final DateTime _lastCacheClearTime = DateTime(2000); // 初始设为很早的时间
+  final ScrollController _historyScrollController = ScrollController();
 
   @override
   void initState() {
@@ -79,6 +81,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         _videoPlayerState!.removeThumbnailUpdateListener(_onThumbnailUpdated);
       }
     } catch (e) {}
+    _historyScrollController.dispose();
     super.dispose();
   }
 
@@ -290,22 +293,41 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         latestUpdatedPath = item.filePath;
       }
     }
-    return ListView.builder(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: history.length,
-      itemBuilder: (context, index) {
-        final item = history[index];
-        final isLatestUpdated = item.filePath == latestUpdatedPath;
-        return Padding(
-          key: ValueKey('${item.filePath}_${item.lastWatchTime.millisecondsSinceEpoch}'),
-          padding: const EdgeInsets.only(right: 16),
-          child: GestureDetector(
-            onTap: () => _onWatchHistoryItemTap(item),
-            child: _buildHistoryCard(item, isLatestUpdated),
-          ),
-        );
+    return Listener(
+      onPointerSignal: (pointerSignal) {
+        if (pointerSignal is PointerScrollEvent) {
+          // 鼠标滚轮上下滚动时，横向滚动
+          final newOffset = _historyScrollController.offset + pointerSignal.scrollDelta.dy;
+          if (newOffset < 0) {
+            _historyScrollController.jumpTo(0);
+          } else if (newOffset > _historyScrollController.position.maxScrollExtent) {
+            _historyScrollController.jumpTo(_historyScrollController.position.maxScrollExtent);
+          } else {
+            _historyScrollController.jumpTo(newOffset);
+          }
+        }
       },
+      child: Scrollbar(
+        controller: _historyScrollController,
+        child: ListView.builder(
+          controller: _historyScrollController,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: history.length,
+          itemBuilder: (context, index) {
+            final item = history[index];
+            final isLatestUpdated = item.filePath == latestUpdatedPath;
+            return Padding(
+              key: ValueKey('${item.filePath}_${item.lastWatchTime.millisecondsSinceEpoch}'),
+              padding: const EdgeInsets.only(right: 16),
+              child: GestureDetector(
+                onTap: () => _onWatchHistoryItemTap(item),
+                child: _buildHistoryCard(item, isLatestUpdated),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -434,7 +456,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               // 加载中动画，和新番图片一致
-              return LoadingPlaceholder(width: double.infinity, height: 90, borderRadius: 10);
+              return const LoadingPlaceholder(width: double.infinity, height: 90, borderRadius: 10);
             }
             if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
               return _buildDefaultThumbnail();

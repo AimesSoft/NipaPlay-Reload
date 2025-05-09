@@ -277,19 +277,43 @@ jobs:
           
           # --- Create AppImage using linuxdeployqt ---
           echo "--- Creating AppImage ---"
-          # Need AppDir structure
           APPDIR="${LINUX_BUILD_DIR}/${APP_NAME}-AppDir"
-          mkdir -p "$APPDIR/usr/bin"
           
-          # Copy main executable and data folder
-          echo "Copying executable and data to AppDir"
-          cp "${BUILD_OUTPUT_DIR}/${APP_NAME}" "$APPDIR/usr/bin/"
-          cp -r "${BUILD_OUTPUT_DIR}/data" "$APPDIR/usr/bin/"
-          # Copy the CONTENTS of the lib directory, not the directory itself
-          cp -r "${BUILD_OUTPUT_DIR}/lib/." "$APPDIR/usr/lib/" 
-          cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "$APPDIR/"
-          # Copy the source icon and rename it to match the name in the desktop file
-          cp "${ICON_SOURCE_PATH}" "$APPDIR/${ICON_NAME}" 
+          # Create a structure that Flutter expects:
+          # AppDir/
+          #   NipaPlay (executable)
+          #   lib/
+          #     libapp.so
+          #     libflutter_linux_gtk.so
+          #     ... (other libs)
+          #   data/
+          #     flutter_assets/
+          #     ... (other assets)
+          #   io.github.MCDFsteve.NipaPlay-Reload.desktop (or your .desktop file)
+          #   io.github.MCDFsteve.NipaPlay-Reload.png (or your icon file)
+
+          mkdir -p "${APPDIR}/lib"
+          mkdir -p "${APPDIR}/data"
+          
+          # Copy main executable to AppDir root
+          echo "Copying executable to AppDir root"
+          cp "${BUILD_OUTPUT_DIR}/${APP_NAME}" "${APPDIR}/"
+          
+          # Copy contents of bundle/lib to AppDir/lib
+          echo "Copying lib/* to AppDir/lib/"
+          cp -r "${BUILD_OUTPUT_DIR}/lib/." "${APPDIR}/lib/"
+          
+          # Copy contents of bundle/data to AppDir/data
+          echo "Copying data/* to AppDir/data/"
+          cp -r "${BUILD_OUTPUT_DIR}/data/." "${APPDIR}/data/"
+          
+          # Copy desktop file and icon to AppDir root
+          # linuxdeployqt will use these (ensure ICON_NAME matches icon in .desktop file)
+          echo "Copying desktop file and icon to AppDir root"
+          cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${APPDIR}/"
+          # Ensure ICON_NAME is the actual filename, e.g., nipaplay.png or io.github.MCDFsteve.NipaPlay-Reload.png
+          # This should match the Icon= entry in your .desktop file (usually without extension).
+          cp "${ICON_SOURCE_PATH}" "${APPDIR}/${ICON_NAME}" 
           
           # Download linuxdeployqt
           echo "Downloading linuxdeployqt..."
@@ -298,13 +322,18 @@ jobs:
           
           # Run linuxdeployqt
           echo "Running linuxdeployqt..."
-          # Set LD_LIBRARY_PATH so ldd can find libs in the AppDir
-          export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH" 
-          # The executable path for linuxdeployqt should be the one INSIDE the AppDir, using APP_NAME
-          # Also use APP_NAME for the source executable path
-          # Remove the -desktopfile argument as linuxdeployqt might find it automatically
-          ./linuxdeployqt "$APPDIR/usr/bin/${APP_NAME}" -appimage -bundle-non-qt-libs -executable="$APPDIR/usr/bin/${APP_NAME}" 
-          # Add ls command to check if AppImage was generated in the current directory
+          # Set LD_LIBRARY_PATH for linuxdeployqt to find libs within our AppDir's lib folder
+          export LD_LIBRARY_PATH="${APPDIR}/lib:${LD_LIBRARY_PATH}"
+          
+          # Point linuxdeployqt to the executable in the AppDir root.
+          # It should automatically find the .desktop file and icon if they are in the AppDir root
+          # and the .desktop file correctly references the executable and icon.
+          # Make sure the executable inside AppDir is also executable:
+          chmod +x "${APPDIR}/${APP_NAME}"
+
+          # Run linuxdeployqt. It will create an AppRun script.
+          ./linuxdeployqt "${APPDIR}/${APP_NAME}" -appimage -bundle-non-qt-libs
+          
           echo "Listing *.AppImage files in current directory after linuxdeployqt:"
           ls -la *.AppImage || echo "No AppImage found in current directory."
           
@@ -483,13 +512,16 @@ jobs:
         id: commit_message
         run: |
           echo "::set-output name=message::$(git log -1 --pretty=%B)"
-      
-      - name: Get commit range
-        id: commit_range
+
+      - name: Parse commit message
+        id: parse_commit
         run: |
-          # 获取最近10次提交的标题，排除自动版本更新的提交
-          echo "::set-output name=range::$(git log --pretty=format:'- %s' -n 10 | grep -v 'chore: bump version')"
-      
+          full_message="$(git log -1 --pretty=%B)"
+          title="$(echo "$full_message" | head -n1)"
+          description="$(echo "$full_message" | tail -n +3)"
+          echo "::set-output name=title::$title"
+          echo "::set-output name=description::$description"
+
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
@@ -497,12 +529,12 @@ jobs:
           name: Release v${{ needs.Build.outputs.version }}
           body: |
             ## 版本 v${{ needs.Build.outputs.version }}
-            
-            ### 更新内容
-            ${{ steps.commit_message.outputs.message }}
-            
+
+            ### ${{ steps.parse_commit.outputs.title }}
+
+            ${{ steps.parse_commit.outputs.description }}
+
             ### 构建信息
-            - 构建时间: ${{ github.event.head_commit.timestamp }}
             - 提交: ${{ github.sha }}
             - 分支: ${{ github.ref_name }}
           allowUpdates: true

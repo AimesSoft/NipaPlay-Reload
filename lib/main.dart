@@ -24,7 +24,6 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:nipaplay/utils/network_checker.dart';
 import 'package:flutter/services.dart';
-import 'widgets/video_upload_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
@@ -32,7 +31,7 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
-final MethodChannel menuChannel = MethodChannel('custom_menu_channel');
+const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 bool _channelHandlerRegistered = false;
 final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<DefaultTabController>>();
 
@@ -76,11 +75,6 @@ void main() async {
   _checkNetworkConnection();
 
   // 注册 FVP
-  fvp.registerWith(options: {
-   'global': {
-        'log': 'off', // off, error, warning, info, debug, all(default)
-      }
-  });
 
   // 并行执行初始化操作
   await Future.wait(<Future<dynamic>>[
@@ -166,7 +160,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
           ChangeNotifierProvider(create: (_) => WatchHistoryProvider()),
         ],
-        child: NipaPlayApp(),
+        child: const NipaPlayApp(),
       ),
     );
     // 启动后全局加载一次观看记录
@@ -304,7 +298,7 @@ Future<void> _ensureTemporaryDirectoryExists() async {
 }
 
 class NipaPlayApp extends StatelessWidget {
-  NipaPlayApp({super.key});
+  const NipaPlayApp({super.key});
 
   @override
   Widget build(BuildContext context) {

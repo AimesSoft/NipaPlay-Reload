@@ -1,9 +1,36 @@
 // about_page.dart
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
-class AboutPage extends StatelessWidget {
+class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
+
+  @override
+  State<AboutPage> createState() => _AboutPageState();
+}
+
+class _AboutPageState extends State<AboutPage> {
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      setState(() {
+        _version = info.version;
+      });
+    } catch (e) {
+      setState(() {
+        _version = '未知';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +58,11 @@ class AboutPage extends StatelessWidget {
                 style: getTextStyle(context),
                 textAlign: TextAlign.center,
               ),
+            ),
+            const SizedBox(height: 30),
+            Text(
+              '当前版本号：$_version',
+              style: const TextStyle(fontSize: 16, color: Colors.white70),
             ),
           ],
         ),
