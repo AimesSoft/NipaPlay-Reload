@@ -100,22 +100,28 @@ jobs:
           cache: gradle
 
       # Build Android
-      - name: Download mdk-sdk for Android (latest release)
+      - name: Download mdk-sdk for Android (latest release, multi-format)
         if: matrix.target == 'Android'
         run: |
           sudo apt-get update && sudo apt-get install -y jq
-          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-android.7z") | .browser_download_url')
+          for asset in mdk-sdk-android.7z; do
+            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            if [ -n "$url" ]; then
+              echo "找到最新 release 资源: $asset"
+              break
+            fi
+          done
           if [ -z "$url" ]; then
-            echo "未找到 mdk-sdk-android.7z 的最新 release 下载链接！"
+            echo "未找到 Android 相关的 mdk-sdk 资源！"
             exit 1
           fi
-          curl -L -o mdk-sdk-android.7z "$url"
-          if ! file mdk-sdk-android.7z | grep -q '7-zip archive'; then
-            echo "下载的 mdk-sdk-android.7z 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
-            head -20 mdk-sdk-android.7z
+          curl -L -o "$asset" "$url"
+          if ! file "$asset" | grep -q '7-zip archive'; then
+            echo "下载的 $asset 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
+            head -20 "$asset"
             exit 1
           fi
-          7z x mdk-sdk-android.7z -oandroid/app/src/main/jniLibs/arm64-v8a -y
+          7z x "$asset" -oandroid/app/src/main/jniLibs/arm64-v8a -y
       - name: Build Android
         if: matrix.target == 'Android'
         run: |
@@ -137,26 +143,34 @@ jobs:
           flutter pub get
       
       # Build iOS .ipa
-      - name: Download mdk-sdk for iOS (latest release)
+      - name: Download mdk-sdk for iOS (latest release, multi-format)
         if: matrix.target == 'iOS'
         run: |
           brew install jq || true
-          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-iOS.tar.xz") | .browser_download_url')
+          for asset in mdk-sdk-iOS.tar.xz mdk-sdk-apple.tar.xz; do
+            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            if [ -n "$url" ]; then
+              echo "找到最新 release 资源: $asset"
+              break
+            fi
+          done
           if [ -z "$url" ]; then
-            echo "未找到 mdk-sdk-iOS.tar.xz 的最新 release 下载链接！"
+            echo "未找到 iOS 相关的 mdk-sdk 资源！"
             exit 1
           fi
-          curl -L -o mdk-sdk-iOS.tar.xz "$url"
-          if ! file mdk-sdk-iOS.tar.xz | grep -q 'XZ compressed data'; then
-            echo "下载的 mdk-sdk-iOS.tar.xz 不是有效的 xz 文件，可能是 HTML 跳转页，下载失败！"
-            head -20 mdk-sdk-iOS.tar.xz
-            exit 1
+          curl -L -o "$asset" "$url"
+          if [[ "$asset" == *.tar.xz ]]; then
+            if ! file "$asset" | grep -q 'XZ compressed data'; then
+              echo "下载的 $asset 不是有效的 xz 文件，可能是 HTML 跳转页，下载失败！"
+              head -20 "$asset"
+              exit 1
+            fi
+            mkdir -p mdk-sdk-ios
+            tar -xJf "$asset" -C mdk-sdk-ios
+            find mdk-sdk-ios -name 'mdk.framework' -exec cp -R {} ios/Runner/ \;
+            find mdk-sdk-ios -name 'libass*' -exec cp {} ios/Runner/ \;
+            find mdk-sdk-ios -name '*ffmpeg*' -exec cp {} ios/Runner/ \;
           fi
-          mkdir -p mdk-sdk-ios
-          tar -xJf mdk-sdk-iOS.tar.xz -C mdk-sdk-ios
-          cp -R mdk-sdk-ios/mdk-sdk-iOS/ios-arm64/mdk.framework ios/Runner/ || true
-          cp mdk-sdk-ios/mdk-sdk-iOS/ios-arm64/libass* ios/Runner/ || true
-          cp mdk-sdk-ios/mdk-sdk-iOS/ios-arm64/*ffmpeg* ios/Runner/ || true
       - name: Build iOS
         if: matrix.target == 'iOS'
         run: |
@@ -171,25 +185,34 @@ jobs:
           zip -9 NipaPlay_${{ steps.get_version.outputs.version }}_iOS_arm64.ipa -r Payload
       
       # Build macOS .dmg
-      - name: Download mdk-sdk for macOS (latest release)
+      - name: Download mdk-sdk for macOS (latest release, multi-format)
         if: matrix.target == 'macOS'
         run: |
           brew install jq || true
-          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-macos.7z") | .browser_download_url')
+          for asset in mdk-sdk-macOS.tar.xz mdk-sdk-apple.tar.xz; do
+            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            if [ -n "$url" ]; then
+              echo "找到最新 release 资源: $asset"
+              break
+            fi
+          done
           if [ -z "$url" ]; then
-            echo "未找到 mdk-sdk-macos.7z 的最新 release 下载链接！"
+            echo "未找到 macOS 相关的 mdk-sdk 资源！"
             exit 1
           fi
-          curl -L -o mdk-sdk-macos.7z "$url"
-          if ! file mdk-sdk-macos.7z | grep -q '7-zip archive'; then
-            echo "下载的 mdk-sdk-macos.7z 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
-            head -20 mdk-sdk-macos.7z
-            exit 1
+          curl -L -o "$asset" "$url"
+          if [[ "$asset" == *.tar.xz ]]; then
+            if ! file "$asset" | grep -q 'XZ compressed data'; then
+              echo "下载的 $asset 不是有效的 xz 文件，可能是 HTML 跳转页，下载失败！"
+              head -20 "$asset"
+              exit 1
+            fi
+            mkdir -p mdk-sdk-macos
+            tar -xJf "$asset" -C mdk-sdk-macos
+            find mdk-sdk-macos -name 'mdk.framework' -exec cp -R {} macos/Runner/ \;
+            find mdk-sdk-macos -name 'libass*' -exec cp {} macos/Runner/ \;
+            find mdk-sdk-macos -name '*ffmpeg*' -exec cp {} macos/Runner/ \;
           fi
-          7z x mdk-sdk-macos.7z -omdk-sdk-macos -y
-          cp -R mdk-sdk-macos/macos-universal/mdk.framework macos/Runner/ || true
-          cp mdk-sdk-macos/macos-universal/libass* macos/Runner/ || true
-          cp mdk-sdk-macos/macos-universal/*ffmpeg* macos/Runner/ || true
       - name: Build macOS
         if: matrix.target == 'macOS'
         run: |
@@ -209,23 +232,29 @@ jobs:
           ls -la *.dmg
       
       # Build Windows .zip
-      - name: Download mdk-sdk for Windows (latest release)
+      - name: Download mdk-sdk for Windows (latest release, multi-format)
         if: matrix.target == 'Windows'
         run: |
           choco install jq -y || true
-          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-windows.7z") | .browser_download_url')
+          for asset in mdk-sdk-windows-desktop-vs2022.7z mdk-sdk-windows-desktop-x64.7z mdk-sdk-windows-desktop-clang.7z; do
+            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            if [ -n "$url" ]; then
+              echo "找到最新 release 资源: $asset"
+              break
+            fi
+          done
           if [ -z "$url" ]; then
-            echo "未找到 mdk-sdk-windows.7z 的最新 release 下载链接！"
+            echo "未找到 Windows 相关的 mdk-sdk 资源！"
             exit 1
           fi
-          curl -L -o mdk-sdk-windows.7z "$url"
-          if ! file mdk-sdk-windows.7z | grep -q '7-zip archive'; then
-            echo "下载的 mdk-sdk-windows.7z 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
-            head -20 mdk-sdk-windows.7z
+          curl -L -o "$asset" "$url"
+          if ! file "$asset" | grep -q '7-zip archive'; then
+            echo "下载的 $asset 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
+            head -20 "$asset"
             exit 1
           fi
-          7z x mdk-sdk-windows.7z -omdk-sdk-windows -y
-          cp mdk-sdk-windows/x64/*.dll build/windows/NipaPlay_${{ steps.get_version.outputs.version }}_Windows_x64/ || true
+          7z x "$asset" -omdk-sdk-windows
+          find mdk-sdk-windows -name '*.dll' -exec cp {} build/windows/NipaPlay_${{ steps.get_version.outputs.version }}_Windows_x64/ \;
       - name: Build Windows
         if: matrix.target == 'Windows'
         shell: pwsh
@@ -246,23 +275,32 @@ jobs:
           Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_x64.zip" -Force
       
       # Build Linux .deb
-      - name: Download mdk-sdk for Linux (latest release)
+      - name: Download mdk-sdk for Linux (latest release, multi-format)
         if: matrix.target == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y jq
-          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-linux.7z") | .browser_download_url')
+          for asset in mdk-sdk-linux-x64.tar.xz mdk-sdk-linux.tar.xz mdk-sdk-apple.tar.xz; do
+            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            if [ -n "$url" ]; then
+              echo "找到最新 release 资源: $asset"
+              break
+            fi
+          done
           if [ -z "$url" ]; then
-            echo "未找到 mdk-sdk-linux.7z 的最新 release 下载链接！"
+            echo "未找到 Linux 相关的 mdk-sdk 资源！"
             exit 1
           fi
-          curl -L -o mdk-sdk-linux.7z "$url"
-          if ! file mdk-sdk-linux.7z | grep -q '7-zip archive'; then
-            echo "下载的 mdk-sdk-linux.7z 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
-            head -20 mdk-sdk-linux.7z
-            exit 1
+          curl -L -o "$asset" "$url"
+          if [[ "$asset" == *.tar.xz ]]; then
+            if ! file "$asset" | grep -q 'XZ compressed data'; then
+              echo "下载的 $asset 不是有效的 xz 文件，可能是 HTML 跳转页，下载失败！"
+              head -20 "$asset"
+              exit 1
+            fi
+            mkdir -p mdk-sdk-linux
+            tar -xJf "$asset" -C mdk-sdk-linux
+            find mdk-sdk-linux -name '*.so' -exec cp {} build/linux/x64/release/bundle/lib/ \;
           fi
-          7z x mdk-sdk-linux.7z -omdk-sdk-linux -y
-          cp mdk-sdk-linux/x64/*.so build/linux/x64/release/bundle/lib/ || true
       - name: Build Linux .deb
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
