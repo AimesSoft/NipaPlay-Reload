@@ -15,6 +15,14 @@ concurrency:
 
 jobs:
   Build:
+    name: Build ${{ matrix.target }}
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    runs-on: ${{ matrix.os }}
+    env:
+      FLUTTER_VERSION: 3.29.3
+      # FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/ # Keep commented to use nightly
+      FVP_DEPS_LATEST: 1 # Set globally to force latest nightly for all platforms
     strategy:
       fail-fast: false
       matrix:
@@ -47,14 +55,9 @@ jobs:
             cache_pod_restore_keys_hash_file: macos/Podfile.lock
             artifact_name: release-macOS
             artifact_path: NipaPlay_*_macOS_Universal.dmg
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
-    runs-on: ${{ matrix.os }}
-    env:
-      FLUTTER_VERSION: 3.29.3
     steps:
-      # Checkout branch
-      - name: Checkout
+      # Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -100,30 +103,6 @@ jobs:
           cache: gradle
 
       # Build Android
-      - name: Download and extract mdk-sdk for Android (latest release, multi-format)
-        if: matrix.target == 'Android'
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          echo "[调试] GitHub API 返回内容："
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
-          for asset in mdk-sdk-android.7z; do
-            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
-            if [ -n "$url" ]; then
-              echo "找到最新 release 资源: $asset"
-              break
-            fi
-          done
-          if [ -z "$url" ]; then
-            echo "未找到 Android 相关的 mdk-sdk 资源！"
-            exit 1
-          fi
-          curl -L -o "$asset" "$url"
-          if ! file "$asset" | grep -q '7-zip archive'; then
-            echo "下载的 $asset 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
-            head -20 "$asset"
-            exit 1
-          fi
-          7z x "$asset" -omdk-sdk-android
       - name: Build Android
         if: matrix.target == 'Android'
         run: |
@@ -132,11 +111,6 @@ jobs:
           mv app-arm64-v8a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk
           mv app-armeabi-v7a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm32.apk
           mv app-x86_64-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-x86_64.apk
-      - name: Copy mdk-sdk to build dir (Android)
-        if: matrix.target == 'Android'
-        run: |
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a
-          find mdk-sdk-android -name '*.so' -exec cp {} android/app/src/main/jniLibs/arm64-v8a/ \;
       
       # Xcode build for iOS/macOS
       - name: Build Xcode (iOS/macOS)
@@ -150,33 +124,6 @@ jobs:
           flutter pub get
       
       # Build iOS .ipa
-      - name: Download and extract mdk-sdk for iOS (latest release, multi-format)
-        if: matrix.target == 'iOS'
-        run: |
-          brew install jq || true
-          echo "[调试] GitHub API 返回内容："
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
-          for asset in mdk-sdk-iOS.tar.xz mdk-sdk-apple.tar.xz; do
-            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
-            if [ -n "$url" ]; then
-              echo "找到最新 release 资源: $asset"
-              break
-            fi
-          done
-          if [ -z "$url" ]; then
-            echo "未找到 iOS 相关的 mdk-sdk 资源！"
-            exit 1
-          fi
-          curl -L -o "$asset" "$url"
-          if [[ "$asset" == *.tar.xz ]]; then
-            if ! file "$asset" | grep -q 'XZ compressed data'; then
-              echo "下载的 $asset 不是有效的 xz 文件，可能是 HTML 跳转页，下载失败！"
-              head -20 "$asset"
-              exit 1
-            fi
-            mkdir -p mdk-sdk-ios
-            tar -xJf "$asset" -C mdk-sdk-ios
-          fi
       - name: Build iOS
         if: matrix.target == 'iOS'
         run: |
@@ -189,41 +136,8 @@ jobs:
           mkdir -p Payload
           mv ios/iphoneos/*.app Payload
           zip -9 NipaPlay_${{ steps.get_version.outputs.version }}_iOS_arm64.ipa -r Payload
-      - name: Copy mdk-sdk to build dir (iOS)
-        if: matrix.target == 'iOS'
-        run: |
-          find mdk-sdk-ios -name 'mdk.framework' -exec cp -R {} ios/Runner/ \;
-          find mdk-sdk-ios -name 'libass*' -exec cp {} ios/Runner/ \;
-          find mdk-sdk-ios -name '*ffmpeg*' -exec cp {} ios/Runner/ \;
       
       # Build macOS .dmg
-      - name: Download and extract mdk-sdk for macOS (latest release, multi-format)
-        if: matrix.target == 'macOS'
-        run: |
-          brew install jq || true
-          echo "[调试] GitHub API 返回内容："
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
-          for asset in mdk-sdk-macOS.tar.xz mdk-sdk-apple.tar.xz; do
-            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
-            if [ -n "$url" ]; then
-              echo "找到最新 release 资源: $asset"
-              break
-            fi
-          done
-          if [ -z "$url" ]; then
-            echo "未找到 macOS 相关的 mdk-sdk 资源！"
-            exit 1
-          fi
-          curl -L -o "$asset" "$url"
-          if [[ "$asset" == *.tar.xz ]]; then
-            if ! file "$asset" | grep -q 'XZ compressed data'; then
-              echo "下载的 $asset 不是有效的 xz 文件，可能是 HTML 跳转页，下载失败！"
-              head -20 "$asset"
-              exit 1
-            fi
-            mkdir -p mdk-sdk-macos
-            tar -xJf "$asset" -C mdk-sdk-macos
-          fi
       - name: Build macOS
         if: matrix.target == 'macOS'
         run: |
@@ -241,39 +155,8 @@ jobs:
           chmod +x dmg.sh
           ./dmg.sh
           ls -la *.dmg
-      - name: Copy mdk-sdk to build dir (macOS)
-        if: matrix.target == 'macOS'
-        run: |
-          find mdk-sdk-macos -name 'mdk.framework' -exec cp -R {} macos/Runner/ \;
-          find mdk-sdk-macos -name 'libass*' -exec cp {} macos/Runner/ \;
-          find mdk-sdk-macos -name '*ffmpeg*' -exec cp {} macos/Runner/ \;
       
       # Build Windows .zip
-      - name: Download and extract mdk-sdk for Windows (latest release, multi-format)
-        if: matrix.target == 'Windows'
-        shell: bash
-        run: |
-          choco install jq -y || true
-          echo "[调试] GitHub API 返回内容："
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
-          for asset in mdk-sdk-windows-desktop-vs2022.7z mdk-sdk-windows-desktop-x64.7z mdk-sdk-windows-desktop-clang.7z; do
-            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
-            if [ -n "$url" ]; then
-              echo "找到最新 release 资源: $asset"
-              break
-            fi
-          done
-          if [ -z "$url" ]; then
-            echo "未找到 Windows 相关的 mdk-sdk 资源！"
-            exit 1
-          fi
-          curl -L -o "$asset" "$url"
-          if ! file "$asset" | grep -q '7-zip archive'; then
-            echo "下载的 $asset 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
-            head -20 "$asset"
-            exit 1
-          fi
-          7z x "$asset" -omdk-sdk-windows
       - name: Build Windows
         if: matrix.target == 'Windows'
         shell: pwsh
@@ -282,21 +165,16 @@ jobs:
           $arch = "${{ matrix.arch }}"
           $version = "${{ steps.get_version.outputs.version }}"
           if ($arch -eq "arm64") {
-            $DestDir = "build\windows\NipaPlay_${version}_Windows_arm64"
-            $SrcDir = "build\windows\arm64\runner\Release"
+            $DestDir = "build\\windows\\NipaPlay_${version}_Windows_arm64"
+            $SrcDir = "build\\windows\\arm64\\runner\\Release"
           } else {
-            $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
-            $SrcDir = "build\windows\x64\runner\Release"
+            $DestDir = "build\\windows\\NipaPlay_${version}_Windows_x64"
+            $SrcDir = "build\\windows\\x64\\runner\\Release"
           }
           New-Item -Path $DestDir -ItemType Directory -Force
-          Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
-          Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
-          Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_x64.zip" -Force
-      - name: Copy mdk-sdk to build dir (Windows)
-        if: matrix.target == 'Windows'
-        shell: bash
-        run: |
-          find mdk-sdk-windows -name '*.dll' -exec cp {} build/windows/NipaPlay_${{ steps.get_version.outputs.version }}_Windows_x64/ \;
+          Copy-Item -Path "$SrcDir\\*" -Destination $DestDir -Recurse -Force
+          Copy-Item -Path "windows\\*.dll" -Destination $DestDir -Force
+          Compress-Archive -Path $DestDir -DestinationPath "build\\windows\\NipaPlay_${version}_Windows_x64.zip" -Force
       
       # Build Linux .deb
       - name: Install Linux build dependencies
@@ -304,42 +182,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
-      - name: Download and extract mdk-sdk for Linux (latest release, multi-format)
-        if: matrix.target == 'Linux'
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          echo "[调试] GitHub API 返回内容："
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
-          for asset in mdk-sdk-linux-x64.tar.xz mdk-sdk-linux.tar.xz mdk-sdk-apple.tar.xz; do
-            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
-            if [ -n "$url" ]; then
-              echo "找到最新 release 资源: $asset"
-              break
-            fi
-          done
-          if [ -z "$url" ]; then
-            echo "未找到 Linux 相关的 mdk-sdk 资源！"
-            exit 1
-          fi
-          curl -L -o "$asset" "$url"
-          if [[ "$asset" == *.tar.xz ]]; then
-            if ! file "$asset" | grep -q 'XZ compressed data'; then
-              echo "下载的 $asset 不是有效的 xz 文件，可能是 HTML 跳转页，下载失败！"
-              head -20 "$asset"
-              exit 1
-            fi
-            mkdir -p mdk-sdk-linux
-            tar -xJf "$asset" -C mdk-sdk-linux
-          fi
       - name: Build Linux
         if: matrix.target == 'Linux'
         run: |
           flutter build linux --release
-      - name: Copy mdk-sdk to build dir (Linux)
-        if: matrix.target == 'Linux'
-        run: |
-          mkdir -p build/linux/x64/release/bundle/lib/
-          find mdk-sdk-linux -name '*.so' -exec cp {} build/linux/x64/release/bundle/lib/ \;
       - name: Linux packaging and cleanup
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
@@ -588,11 +434,6 @@ jobs:
           pod cache clean mdk
           find . -name Podfile.lock -delete
           rm -rf macos/Pods ios/Pods
-      
-      # 其他平台FVP依赖升级
-      - name: Set FVP_DEPS_LATEST=1 for latest SDK
-        if: matrix.target != 'macOS' && matrix.target != 'iOS'
-        run: echo "FVP_DEPS_LATEST=1" >> $GITHUB_ENV
       
       # 可选：清理flutter pub缓存
       - name: Clean flutter pub cache
