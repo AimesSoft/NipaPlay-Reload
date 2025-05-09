@@ -299,6 +299,11 @@ jobs:
           find mdk-sdk-windows -name '*.dll' -exec cp {} build/windows/NipaPlay_${{ steps.get_version.outputs.version }}_Windows_x64/ \;
       
       # Build Linux .deb
+      - name: Install Linux build dependencies
+        if: matrix.target == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
       - name: Download and extract mdk-sdk for Linux (latest release, multi-format)
         if: matrix.target == 'Linux'
         run: |
@@ -575,6 +580,23 @@ jobs:
           rm -rf "${DEB_ROOT}" "${APPDIR}" "${ARCHIVE_CONTENT_DIR}"
           
           echo "--- Linux Packaging Complete ---"
+      
+      # macOS/iOS CocoaPods依赖清理
+      - name: Clean CocoaPods cache and lock for mdk
+        if: matrix.target == 'macOS' || matrix.target == 'iOS'
+        run: |
+          pod cache clean mdk
+          find . -name Podfile.lock -delete
+          rm -rf macos/Pods ios/Pods
+      
+      # 其他平台FVP依赖升级
+      - name: Set FVP_DEPS_LATEST=1 for latest SDK
+        if: matrix.target != 'macOS' && matrix.target != 'iOS'
+        run: echo "FVP_DEPS_LATEST=1" >> $GITHUB_ENV
+      
+      # 可选：清理flutter pub缓存
+      - name: Clean flutter pub cache
+        run: flutter pub cache clean
       
       # Upload Artifacts
       - name: Upload Artifacts
