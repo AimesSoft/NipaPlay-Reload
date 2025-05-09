@@ -100,17 +100,25 @@ jobs:
           cache: gradle
 
       # Build Android
+      - name: Download mdk-sdk for Android (latest release)
+        if: matrix.target == 'Android'
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-android.7z") | .browser_download_url')
+          if [ -z "$url" ]; then
+            echo "未找到 mdk-sdk-android.7z 的最新 release 下载链接！"
+            exit 1
+          fi
+          curl -L -o mdk-sdk-android.7z "$url"
+          if ! file mdk-sdk-android.7z | grep -q '7-zip archive'; then
+            echo "下载的 mdk-sdk-android.7z 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
+            head -20 mdk-sdk-android.7z
+            exit 1
+          fi
+          7z x mdk-sdk-android.7z -oandroid/app/src/main/jniLibs/arm64-v8a -y
       - name: Build Android
         if: matrix.target == 'Android'
         run: |
-          # 下载并安装 mdk-sdk
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a
-          curl -L -o mdk-sdk-android.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-android.7z/download
-          sudo apt-get update
-          sudo apt-get install -y p7zip-full
-          7z x mdk-sdk-android.7z -oandroid/app/src/main/jniLibs/arm64-v8a -y
-          # 可根据需要拷贝到其他 abi 目录
-          # 构建 APK
           flutter build apk --release --split-per-abi
           cd build/app/outputs/apk/release
           mv app-arm64-v8a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk
@@ -129,16 +137,26 @@ jobs:
           flutter pub get
       
       # Build iOS .ipa
-      - name: Download mdk-sdk for iOS
+      - name: Download mdk-sdk for iOS (latest release)
         if: matrix.target == 'iOS'
         run: |
-          curl -L -o mdk-sdk-ios.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-ios.7z/download
-          brew install p7zip || true
-          7z x mdk-sdk-ios.7z -omdk-sdk-ios -y
-          # 拷贝 framework/dylib 到 ios/Runner/ 或 ios/Pods/ 目录（根据你项目实际需求调整）
-          cp -R mdk-sdk-ios/ios-arm64/mdk.framework ios/Runner/ || true
-          cp mdk-sdk-ios/ios-arm64/libass* ios/Runner/ || true
-          cp mdk-sdk-ios/ios-arm64/*ffmpeg* ios/Runner/ || true
+          brew install jq || true
+          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-iOS.tar.xz") | .browser_download_url')
+          if [ -z "$url" ]; then
+            echo "未找到 mdk-sdk-iOS.tar.xz 的最新 release 下载链接！"
+            exit 1
+          fi
+          curl -L -o mdk-sdk-iOS.tar.xz "$url"
+          if ! file mdk-sdk-iOS.tar.xz | grep -q 'XZ compressed data'; then
+            echo "下载的 mdk-sdk-iOS.tar.xz 不是有效的 xz 文件，可能是 HTML 跳转页，下载失败！"
+            head -20 mdk-sdk-iOS.tar.xz
+            exit 1
+          fi
+          mkdir -p mdk-sdk-ios
+          tar -xJf mdk-sdk-iOS.tar.xz -C mdk-sdk-ios
+          cp -R mdk-sdk-ios/mdk-sdk-iOS/ios-arm64/mdk.framework ios/Runner/ || true
+          cp mdk-sdk-ios/mdk-sdk-iOS/ios-arm64/libass* ios/Runner/ || true
+          cp mdk-sdk-ios/mdk-sdk-iOS/ios-arm64/*ffmpeg* ios/Runner/ || true
       - name: Build iOS
         if: matrix.target == 'iOS'
         run: |
@@ -153,13 +171,22 @@ jobs:
           zip -9 NipaPlay_${{ steps.get_version.outputs.version }}_iOS_arm64.ipa -r Payload
       
       # Build macOS .dmg
-      - name: Download mdk-sdk for macOS
+      - name: Download mdk-sdk for macOS (latest release)
         if: matrix.target == 'macOS'
         run: |
-          curl -L -o mdk-sdk-macos.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-macos.7z/download
-          brew install p7zip || true
+          brew install jq || true
+          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-macos.7z") | .browser_download_url')
+          if [ -z "$url" ]; then
+            echo "未找到 mdk-sdk-macos.7z 的最新 release 下载链接！"
+            exit 1
+          fi
+          curl -L -o mdk-sdk-macos.7z "$url"
+          if ! file mdk-sdk-macos.7z | grep -q '7-zip archive'; then
+            echo "下载的 mdk-sdk-macos.7z 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
+            head -20 mdk-sdk-macos.7z
+            exit 1
+          fi
           7z x mdk-sdk-macos.7z -omdk-sdk-macos -y
-          # 拷贝 framework/dylib 到 macos/Runner/ 或 macos/Pods/ 目录（根据你项目实际需求调整）
           cp -R mdk-sdk-macos/macos-universal/mdk.framework macos/Runner/ || true
           cp mdk-sdk-macos/macos-universal/libass* macos/Runner/ || true
           cp mdk-sdk-macos/macos-universal/*ffmpeg* macos/Runner/ || true
@@ -182,12 +209,22 @@ jobs:
           ls -la *.dmg
       
       # Build Windows .zip
-      - name: Download mdk-sdk for Windows
+      - name: Download mdk-sdk for Windows (latest release)
         if: matrix.target == 'Windows'
         run: |
-          curl -L -o mdk-sdk-windows.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-windows.7z/download
+          choco install jq -y || true
+          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-windows.7z") | .browser_download_url')
+          if [ -z "$url" ]; then
+            echo "未找到 mdk-sdk-windows.7z 的最新 release 下载链接！"
+            exit 1
+          fi
+          curl -L -o mdk-sdk-windows.7z "$url"
+          if ! file mdk-sdk-windows.7z | grep -q '7-zip archive'; then
+            echo "下载的 mdk-sdk-windows.7z 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
+            head -20 mdk-sdk-windows.7z
+            exit 1
+          fi
           7z x mdk-sdk-windows.7z -omdk-sdk-windows -y
-          # 拷贝 dll 到最终打包目录
           cp mdk-sdk-windows/x64/*.dll build/windows/NipaPlay_${{ steps.get_version.outputs.version }}_Windows_x64/ || true
       - name: Build Windows
         if: matrix.target == 'Windows'
@@ -209,12 +246,22 @@ jobs:
           Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_x64.zip" -Force
       
       # Build Linux .deb
-      - name: Download mdk-sdk for Linux
+      - name: Download mdk-sdk for Linux (latest release)
         if: matrix.target == 'Linux'
         run: |
-          curl -L -o mdk-sdk-linux.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-linux.7z/download
+          sudo apt-get update && sudo apt-get install -y jq
+          url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r '.assets[] | select(.name == "mdk-sdk-linux.7z") | .browser_download_url')
+          if [ -z "$url" ]; then
+            echo "未找到 mdk-sdk-linux.7z 的最新 release 下载链接！"
+            exit 1
+          fi
+          curl -L -o mdk-sdk-linux.7z "$url"
+          if ! file mdk-sdk-linux.7z | grep -q '7-zip archive'; then
+            echo "下载的 mdk-sdk-linux.7z 不是有效的 7z 文件，可能是 HTML 跳转页，下载失败！"
+            head -20 mdk-sdk-linux.7z
+            exit 1
+          fi
           7z x mdk-sdk-linux.7z -omdk-sdk-linux -y
-          # 拷贝 so 到最终打包目录
           cp mdk-sdk-linux/x64/*.so build/linux/x64/release/bundle/lib/ || true
       - name: Build Linux .deb
         if: matrix.target == 'Linux'
