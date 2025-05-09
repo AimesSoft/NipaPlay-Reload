@@ -100,7 +100,7 @@ jobs:
           cache: gradle
 
       # Build Android
-      - name: Download mdk-sdk for Android (latest release, multi-format)
+      - name: Download and extract mdk-sdk for Android (latest release, multi-format)
         if: matrix.target == 'Android'
         run: |
           sudo apt-get update && sudo apt-get install -y jq
@@ -123,7 +123,7 @@ jobs:
             head -20 "$asset"
             exit 1
           fi
-          7z x "$asset" -oandroid/app/src/main/jniLibs/arm64-v8a -y
+          7z x "$asset" -omdk-sdk-android
       - name: Build Android
         if: matrix.target == 'Android'
         run: |
@@ -132,6 +132,11 @@ jobs:
           mv app-arm64-v8a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk
           mv app-armeabi-v7a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm32.apk
           mv app-x86_64-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-x86_64.apk
+      - name: Copy mdk-sdk to build dir (Android)
+        if: matrix.target == 'Android'
+        run: |
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          find mdk-sdk-android -name '*.so' -exec cp {} android/app/src/main/jniLibs/arm64-v8a/ \;
       
       # Xcode build for iOS/macOS
       - name: Build Xcode (iOS/macOS)
@@ -145,7 +150,7 @@ jobs:
           flutter pub get
       
       # Build iOS .ipa
-      - name: Download mdk-sdk for iOS (latest release, multi-format)
+      - name: Download and extract mdk-sdk for iOS (latest release, multi-format)
         if: matrix.target == 'iOS'
         run: |
           brew install jq || true
@@ -171,9 +176,6 @@ jobs:
             fi
             mkdir -p mdk-sdk-ios
             tar -xJf "$asset" -C mdk-sdk-ios
-            find mdk-sdk-ios -name 'mdk.framework' -exec cp -R {} ios/Runner/ \;
-            find mdk-sdk-ios -name 'libass*' -exec cp {} ios/Runner/ \;
-            find mdk-sdk-ios -name '*ffmpeg*' -exec cp {} ios/Runner/ \;
           fi
       - name: Build iOS
         if: matrix.target == 'iOS'
@@ -187,9 +189,15 @@ jobs:
           mkdir -p Payload
           mv ios/iphoneos/*.app Payload
           zip -9 NipaPlay_${{ steps.get_version.outputs.version }}_iOS_arm64.ipa -r Payload
+      - name: Copy mdk-sdk to build dir (iOS)
+        if: matrix.target == 'iOS'
+        run: |
+          find mdk-sdk-ios -name 'mdk.framework' -exec cp -R {} ios/Runner/ \;
+          find mdk-sdk-ios -name 'libass*' -exec cp {} ios/Runner/ \;
+          find mdk-sdk-ios -name '*ffmpeg*' -exec cp {} ios/Runner/ \;
       
       # Build macOS .dmg
-      - name: Download mdk-sdk for macOS (latest release, multi-format)
+      - name: Download and extract mdk-sdk for macOS (latest release, multi-format)
         if: matrix.target == 'macOS'
         run: |
           brew install jq || true
@@ -215,9 +223,6 @@ jobs:
             fi
             mkdir -p mdk-sdk-macos
             tar -xJf "$asset" -C mdk-sdk-macos
-            find mdk-sdk-macos -name 'mdk.framework' -exec cp -R {} macos/Runner/ \;
-            find mdk-sdk-macos -name 'libass*' -exec cp {} macos/Runner/ \;
-            find mdk-sdk-macos -name '*ffmpeg*' -exec cp {} macos/Runner/ \;
           fi
       - name: Build macOS
         if: matrix.target == 'macOS'
@@ -236,9 +241,15 @@ jobs:
           chmod +x dmg.sh
           ./dmg.sh
           ls -la *.dmg
+      - name: Copy mdk-sdk to build dir (macOS)
+        if: matrix.target == 'macOS'
+        run: |
+          find mdk-sdk-macos -name 'mdk.framework' -exec cp -R {} macos/Runner/ \;
+          find mdk-sdk-macos -name 'libass*' -exec cp {} macos/Runner/ \;
+          find mdk-sdk-macos -name '*ffmpeg*' -exec cp {} macos/Runner/ \;
       
       # Build Windows .zip
-      - name: Download mdk-sdk for Windows (latest release, multi-format)
+      - name: Download and extract mdk-sdk for Windows (latest release, multi-format)
         if: matrix.target == 'Windows'
         shell: bash
         run: |
@@ -263,7 +274,6 @@ jobs:
             exit 1
           fi
           7z x "$asset" -omdk-sdk-windows
-          find mdk-sdk-windows -name '*.dll' -exec cp {} build/windows/NipaPlay_${{ steps.get_version.outputs.version }}_Windows_x64/ \;
       - name: Build Windows
         if: matrix.target == 'Windows'
         shell: pwsh
@@ -282,9 +292,14 @@ jobs:
           Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
           Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
           Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_x64.zip" -Force
+      - name: Copy mdk-sdk to build dir (Windows)
+        if: matrix.target == 'Windows'
+        shell: bash
+        run: |
+          find mdk-sdk-windows -name '*.dll' -exec cp {} build/windows/NipaPlay_${{ steps.get_version.outputs.version }}_Windows_x64/ \;
       
       # Build Linux .deb
-      - name: Download mdk-sdk for Linux (latest release, multi-format)
+      - name: Download and extract mdk-sdk for Linux (latest release, multi-format)
         if: matrix.target == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y jq
@@ -310,9 +325,17 @@ jobs:
             fi
             mkdir -p mdk-sdk-linux
             tar -xJf "$asset" -C mdk-sdk-linux
-            find mdk-sdk-linux -name '*.so' -exec cp {} build/linux/x64/release/bundle/lib/ \;
           fi
-      - name: Build Linux .deb
+      - name: Build Linux
+        if: matrix.target == 'Linux'
+        run: |
+          flutter build linux --release
+      - name: Copy mdk-sdk to build dir (Linux)
+        if: matrix.target == 'Linux'
+        run: |
+          mkdir -p build/linux/x64/release/bundle/lib/
+          find mdk-sdk-linux -name '*.so' -exec cp {} build/linux/x64/release/bundle/lib/ \;
+      - name: Linux packaging and cleanup
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
         run: |
@@ -332,10 +355,6 @@ jobs:
           rpmbuild --version || (echo "rpmbuild --version failed!" && exit 1)
           echo "Core tools verified."
 
-          # Build Flutter app
-          flutter config --enable-linux-desktop
-          flutter build linux --release
-          
           # Define variables
           APP_NAME="NipaPlay" # Change if your app name is different
           APP_NAME_LOWER="nipaplay" # Lowercase for paths/executable
@@ -404,19 +423,6 @@ jobs:
           echo "--- Creating AppImage ---"
           APPDIR="${LINUX_BUILD_DIR}/${APP_NAME}-AppDir"
           
-          # Create a structure that Flutter expects:
-          # AppDir/
-          #   NipaPlay (executable)
-          #   lib/
-          #     libapp.so
-          #     libflutter_linux_gtk.so
-          #     ... (other libs)
-          #   data/
-          #     flutter_assets/
-          #     ... (other assets)
-          #   io.github.MCDFsteve.NipaPlay-Reload.desktop (or your .desktop file)
-          #   io.github.MCDFsteve.NipaPlay-Reload.png (or your icon file)
-
           mkdir -p "${APPDIR}/lib"
           mkdir -p "${APPDIR}/data"
           
@@ -433,11 +439,8 @@ jobs:
           cp -r "${BUILD_OUTPUT_DIR}/data/." "${APPDIR}/data/"
           
           # Copy desktop file and icon to AppDir root
-          # linuxdeployqt will use these (ensure ICON_NAME matches icon in .desktop file)
           echo "Copying desktop file and icon to AppDir root"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${APPDIR}/"
-          # Ensure ICON_NAME is the actual filename, e.g., nipaplay.png or io.github.MCDFsteve.NipaPlay-Reload.png
-          # This should match the Icon= entry in your .desktop file (usually without extension).
           cp "${ICON_SOURCE_PATH}" "${APPDIR}/${ICON_NAME}" 
           
           # Download linuxdeployqt
@@ -447,16 +450,8 @@ jobs:
           
           # Run linuxdeployqt
           echo "Running linuxdeployqt..."
-          # Set LD_LIBRARY_PATH for linuxdeployqt to find libs within our AppDir's lib folder
           export LD_LIBRARY_PATH="${APPDIR}/lib:${LD_LIBRARY_PATH}"
-          
-          # Point linuxdeployqt to the executable in the AppDir root.
-          # It should automatically find the .desktop file and icon if they are in the AppDir root
-          # and the .desktop file correctly references the executable and icon.
-          # Make sure the executable inside AppDir is also executable:
           chmod +x "${APPDIR}/${APP_NAME}"
-
-          # Run linuxdeployqt. It will create an AppRun script.
           ./linuxdeployqt "${APPDIR}/${APP_NAME}" -appimage -bundle-non-qt-libs
           
           echo "Listing *.AppImage files in current directory after linuxdeployqt:"
@@ -469,12 +464,10 @@ jobs:
             echo "Found generated AppImage: $GENERATED_APPIMAGE"
             mv "$GENERATED_APPIMAGE" "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
             echo "AppImage created at ${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
-            # Add check after move
             echo "Checking if AppImage exists in build/linux:"
             ls -la "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" || echo "AppImage move failed or file not found in build/linux."
           else
             echo "AppImage generation failed or file not found by find command!"
-            # Optionally exit with error: exit 1
           fi
           rm -f linuxdeployqt # Clean up downloaded tool
           
@@ -492,36 +485,30 @@ jobs:
           echo "Creating run.sh script at ${RUN_SCRIPT_PATH}"
           echo '#!/bin/sh' > "${RUN_SCRIPT_PATH}"
           echo '# Simple run script for NipaPlay binary archive' >> "${RUN_SCRIPT_PATH}"
-          # Escape special characters ($) for echo
           echo 'DIR="$(dirname "$(readlink -f "$0")")"' >> "${RUN_SCRIPT_PATH}"
           echo 'export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
           echo '# Execute the main binary' >> "${RUN_SCRIPT_PATH}"
-          # Escape special characters (", $) for echo and use correct executable name (APP_NAME)
-          echo "\"\$DIR/${APP_NAME}\" \"\$@\"" >> "${RUN_SCRIPT_PATH}"
+          echo "\"$DIR/${APP_NAME}\" \"$@\"" >> "${RUN_SCRIPT_PATH}"
           chmod +x "${RUN_SCRIPT_PATH}"
           
           # Create the tarball
           echo "Creating tarball..."
           tar -czvf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" -C "${ARCHIVE_CONTENT_DIR}" .
           echo ".tar.gz archive created at ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
-          # Add ls command to check contents of build/linux after tar
           echo "Listing contents of build/linux directory after tar:"
           ls -la "${LINUX_BUILD_DIR}/"
-
+          
           # --- Create RPM package ---
           echo "--- Creating RPM package ---"
           RPM_BUILD_ROOT="${HOME}/rpmbuild"
           mkdir -p "${RPM_BUILD_ROOT}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
           
           # Prepare sources for RPM build
-          # Copy Flutter bundle to SOURCES (rpmbuild will look for it here based on _sourcedir)
-          # The spec file refers to %{_sourcedir}/bundle/
           mkdir -p "${RPM_BUILD_ROOT}/SOURCES/bundle"
           cp -r "${BUILD_OUTPUT_DIR}/." "${RPM_BUILD_ROOT}/SOURCES/bundle/"
-          # Copy desktop file and icon to SOURCES as well, as spec file refers to them in %{_sourcedir}
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${RPM_BUILD_ROOT}/SOURCES/"
-          cp "${ICON_SOURCE_PATH}" "${RPM_BUILD_ROOT}/SOURCES/logo512.png" # Spec file expects logo512.png
-
+          cp "${ICON_SOURCE_PATH}" "${RPM_BUILD_ROOT}/SOURCES/logo512.png"
+          
           # Prepare spec file
           echo "Preparing RPM spec file..."
           sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
@@ -529,43 +516,28 @@ jobs:
           
           echo "Contents of spec file:"
           cat "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}"
-
+          
           # Build RPM
           echo "Building RPM..."
-          # Verify desktop-file-install is available before rpmbuild
           echo "Verifying desktop-file-install command..."
           which desktop-file-install || (echo "desktop-file-install command not found! Check desktop-file-utils installation." && exit 1)
           echo "desktop-file-utils seems to be installed correctly."
-
-          # rpmbuild -ba will build both binary and source RPMs.
-          # We define _sourcedir to point to our SOURCES directory.
-          # We also need to define _topdir for rpmbuild.
-          # Adding --nodeps as a diagnostic step to bypass build dependency check for desktop-file-utils
           rpmbuild -ba "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}" --define "_topdir ${RPM_BUILD_ROOT}" --define "_sourcedir ${RPM_BUILD_ROOT}/SOURCES" --nodeps
           
           # Move the generated RPM to the final artifact directory
           echo "Moving RPM package..."
-          # RPMs are typically in RPMS/arch/
-          # For x86_64 (amd64 for deb), it should be x86_64
-          RPM_ARCH_DIR="x86_64" # RPM uses x86_64 for amd64
+          RPM_ARCH_DIR="x86_64"
           GENERATED_RPM_PATH=$(find "${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/" -name "nipaplay-${VERSION}*.rpm" -print -quit)
-          
-          # Define the desired RPM name for consistency
-          DESIRED_RPM_NAME="NipaPlay-${VERSION}-Linux-${ARCH}.rpm" # ARCH is 'amd64' as defined earlier for other packages
-
+          DESIRED_RPM_NAME="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
           if [ -n "${GENERATED_RPM_PATH}" ]; then
             mv "${GENERATED_RPM_PATH}" "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME}"
             echo "RPM package moved and renamed to ${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME}"
           else
             echo "Error: RPM file not found in ${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/"
-            # Consider failing the build if RPM is critical
-            # exit 1 
           fi
-          
-          # Listing contents of build/linux directory after RPM build:
           echo "Listing contents of build/linux directory after RPM build:"
           ls -la "${LINUX_BUILD_DIR}/"
-
+          
           # --- Final Check before Cleanup ---
           echo "Checking if all required Linux packages exist..."
           MISSING_FILES=false
@@ -581,11 +553,8 @@ jobs:
             echo "Error: .tar.gz file not found! Expected: ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
             MISSING_FILES=true
           fi
-          # Add check for RPM file
-          # Define DESIRED_RPM_NAME_FOR_CHECK again or ensure it's in scope
           DESIRED_RPM_NAME_FOR_CHECK="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
           if [ ! -f "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}" ]; then
-             # Check if RPM generation failed earlier (GENERATED_RPM_PATH would be empty)
              if [ -z "${GENERATED_RPM_PATH}" ]; then
                 echo "Error: RPM generation failed, so RPM file (${DESIRED_RPM_NAME_FOR_CHECK}) is missing."
              else
