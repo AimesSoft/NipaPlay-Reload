@@ -137,23 +137,83 @@ jobs:
           mv ios/iphoneos/*.app Payload
           zip -9 NipaPlay_${{ steps.get_version.outputs.version }}_iOS_arm64.ipa -r Payload
       
-      # Build macOS .dmg
-      - name: Build macOS
+      # macOS build steps restructured
+      - name: Prepare macOS build environment
         if: matrix.target == 'macOS'
         run: |
-          flutter build macos --release
           cd macos
           export LANG=zh_CN.UTF-8
           export LC_ALL=zh_CN.UTF-8
           mkdir -p ~/.cocoapods
           echo 'source "https://cdn.cocoapods.org/"' > ~/.cocoapods/config
+          echo "Cleaning existing Pods and cache for a fresh mdk nightly..."
           rm -rf Pods Podfile.lock
+          pod cache clean fvp || true # Clean fvp pod's cache, which handles mdk
           pod cache clean --all
+          echo "Running pod install --repo-update (this will run fvp/apple_deps.sh to get mdk nightly)..."
           pod install --repo-update
           cd ..
+
+      - name: Build macOS App
+        if: matrix.target == 'macOS'
+        run: |
+          flutter build macos --release
+
+      - name: Copy mdk.framework.dSYM to App Bundle (macOS)
+        if: matrix.target == 'macOS'
+        run: |
+          echo "Attempting to copy mdk.framework.dSYM for symbolication..."
+          # fvp.podspec runs apple_deps.sh. apple_deps.sh downloads mdk-sdk-apple.tar.xz,
+          # extracts it, and copies mdk.framework & mdk.framework.dSYM
+          # to the root of the fvp pod's directory (where vendored_frameworks are expected).
+          FVP_POD_DIR="macos/Pods/fvp" 
+          DSYM_SOURCE_PATH="${FVP_POD_DIR}/mdk.framework.dSYM"
+          
+          APP_BUNDLE_NAME="NipaPlay.app" # Consistent with dmg.sh and Linux app name
+          APP_BUNDLE_ROOT_DIR="build/macos/Build/Products/Release"
+          TARGET_DSYM_DIR="${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME}/Contents/Frameworks"
+
+          if [ -d "$DSYM_SOURCE_PATH" ]; then
+            echo "Found mdk.framework.dSYM at $DSYM_SOURCE_PATH"
+            
+            if [ ! -d "${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME}" ]; then
+              echo "Error: App bundle ${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME} not found after flutter build."
+              echo "Listing contents of ${APP_BUNDLE_ROOT_DIR}/:"
+              ls -la "${APP_BUNDLE_ROOT_DIR}/"
+              exit 1
+            fi
+            
+            if [ ! -d "$TARGET_DSYM_DIR" ]; then
+               echo "Warning: Target Frameworks directory $TARGET_DSYM_DIR does not exist. Will attempt to create it."
+               mkdir -p "$TARGET_DSYM_DIR"
+            fi
+
+            echo "Copying $DSYM_SOURCE_PATH to $TARGET_DSYM_DIR/"
+            cp -R "$DSYM_SOURCE_PATH" "$TARGET_DSYM_DIR/"
+            if [ $? -eq 0 ]; then
+              echo "Successfully copied mdk.framework.dSYM."
+              echo "Contents of $TARGET_DSYM_DIR after copy:"
+              ls -la "$TARGET_DSYM_DIR"
+            else
+              echo "Error: Failed to copy mdk.framework.dSYM."
+              exit 1 # Fail the build if dSYM is found but cannot be copied
+            fi
+          else
+            echo "Warning: mdk.framework.dSYM not found at expected path $DSYM_SOURCE_PATH."
+            echo "This might be because the 'fvp' pod is named differently or apple_deps.sh places files elsewhere."
+            echo "Listing contents of macos/Pods/ (if it exists):"
+            ls -la "macos/Pods/" || echo "macos/Pods/ directory does not exist."
+            echo "Symbolicated crash logs for mdk might not be available."
+            # This is a warning, build continues.
+          fi
+
+      - name: Package macOS .dmg
+        if: matrix.target == 'macOS'
+        run: |
           brew install create-dmg imagemagick
           chmod +x dmg.sh
           ./dmg.sh
+          echo "Listing final DMG:"
           ls -la *.dmg
       
       # Build Windows .zip
