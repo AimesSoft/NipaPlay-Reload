@@ -104,8 +104,10 @@ jobs:
         if: matrix.target == 'Android'
         run: |
           sudo apt-get update && sudo apt-get install -y jq
+          echo "[调试] GitHub API 返回内容："
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
           for asset in mdk-sdk-android.7z; do
-            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
             if [ -n "$url" ]; then
               echo "找到最新 release 资源: $asset"
               break
@@ -147,8 +149,10 @@ jobs:
         if: matrix.target == 'iOS'
         run: |
           brew install jq || true
+          echo "[调试] GitHub API 返回内容："
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
           for asset in mdk-sdk-iOS.tar.xz mdk-sdk-apple.tar.xz; do
-            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
             if [ -n "$url" ]; then
               echo "找到最新 release 资源: $asset"
               break
@@ -189,8 +193,10 @@ jobs:
         if: matrix.target == 'macOS'
         run: |
           brew install jq || true
+          echo "[调试] GitHub API 返回内容："
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
           for asset in mdk-sdk-macOS.tar.xz mdk-sdk-apple.tar.xz; do
-            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
             if [ -n "$url" ]; then
               echo "找到最新 release 资源: $asset"
               break
@@ -234,10 +240,13 @@ jobs:
       # Build Windows .zip
       - name: Download mdk-sdk for Windows (latest release, multi-format)
         if: matrix.target == 'Windows'
+        shell: bash
         run: |
           choco install jq -y || true
+          echo "[调试] GitHub API 返回内容："
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
           for asset in mdk-sdk-windows-desktop-vs2022.7z mdk-sdk-windows-desktop-x64.7z mdk-sdk-windows-desktop-clang.7z; do
-            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
             if [ -n "$url" ]; then
               echo "找到最新 release 资源: $asset"
               break
@@ -279,8 +288,10 @@ jobs:
         if: matrix.target == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y jq
+          echo "[调试] GitHub API 返回内容："
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest
           for asset in mdk-sdk-linux-x64.tar.xz mdk-sdk-linux.tar.xz mdk-sdk-apple.tar.xz; do
-            url=$(curl -s https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
+            url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/wang-bin/mdk-sdk/releases/latest | jq -r ".assets[] | select(.name == \"$asset\") | .browser_download_url")
             if [ -n "$url" ]; then
               echo "找到最新 release 资源: $asset"
               break
