@@ -33,7 +33,12 @@
 </div>
 
 > NipaPlay使用Flutter的再次重写，一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。
-## 📸 应用截图
+## 下载
+- **Windows（x86 64）/Linux（amd64）/macOS（Intel&Apple Silicon/Android（arm32&arm64&x86 64）/IOS（arm64）**
+  - [GitHub Releases](https://github.com/mcdfsteve/nipaplay-reload/releases)
+- **Arch Linux（amd64）**
+  - [AUR](https://aur.archlinux.org/packages/nipaplay-reload-bin)
+## 应用截图
 <div align="center">
   <p><strong>主界面</strong></p>
   <img src="https://github.com/user-attachments/assets/a1916cc5-986e-4104-a39e-4cb12ec11a2c" width="80%" alt="主界面">
@@ -54,9 +59,9 @@
   <img src="https://github.com/user-attachments/assets/1de519a3-37cb-4f59-bb5e-715cbcd2209a" width="80%" alt="观看记录展示">
 </div>
 
-## ✨ 已实现功能
+## 已实现功能
 
-- 🎬 **视频播放**
+- **视频播放**
   - 支持本地视频文件播放
   - 支持弹幕显示（集成弹弹play）
     - 滚动弹幕、顶部弹幕、底部弹幕
@@ -75,7 +80,7 @@
   - 视频信息自动匹配
   - 播放进度记忆
 
-- 📺 **番剧管理**
+- **番剧管理**
   - 新番时间表展示
   - 按星期分类显示
   - 番剧详情查看
@@ -83,7 +88,7 @@
   - 图片缓存管理
   - 历史记录同步
 
-- ⚙️ **设置中心**
+- **设置中心**
   - 毛玻璃设计风格，提供现代感界面
   - 主题模式切换（亮色/暗色）
   - 背景图片自定义更换
@@ -91,32 +96,30 @@
   - 账户设置
   - 关于页面
 
-## 🚀 开发进度
+## 开发进度
 
 > 持续开发中，欢迎关注 Releases 获取最新版本
 
-## 📋 待加入功能
+## 待加入功能
 
-- 🎯 **字幕增强**
+- **字幕增强**
   - 外挂字幕文件支持
-  - 字幕样式自定义
-  - 字幕位置调整
-  - 字幕大小调节
 
-- 🎨 **界面优化**
-  - 更多主题样式
-  - 自定义播放器皮肤
-  - 动画效果增强
 
-- 🔄 **功能扩展**
+- **功能扩展**
   - 播放列表管理
-  - 视频收藏功能
-  - 云存储支持
+  - 媒体库功能
+  - Bangumi同步观看记录
+  - 评论区功能
+  - 云媒体库挂载（WebDAV、FTP、SMB、Emby）
+  - 弹幕屏蔽
+  - 弹幕调节
+  - 视频截图
+  - 视频导出单独片段为gif
+  - 倍速功能
+  - 新的看板娘
 
-- 🔊 **音频增强**
-  - 音频延迟调整
-
-## 📦 使用的第三方库
+## 使用的第三方库
 
 - **核心功能库**
   - [fvp](https://pub.dev/packages/fvp) - 高性能视频播放器
@@ -153,7 +156,7 @@
 - **开发工具**
   - [flutter_lints](https://pub.dev/packages/flutter_lints) - 代码检查
 
-## 🛠️ 技术栈
+## 技术栈
 
 - Flutter
 - Dart

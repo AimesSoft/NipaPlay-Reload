@@ -109,7 +109,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y p7zip-full
           7z x mdk-sdk-android.7z -oandroid/app/src/main/jniLibs/arm64-v8a -y
-          
+          # 可根据需要拷贝到其他 abi 目录
           # 构建 APK
           flutter build apk --release --split-per-abi
           cd build/app/outputs/apk/release
@@ -129,6 +129,16 @@ jobs:
           flutter pub get
       
       # Build iOS .ipa
+      - name: Download mdk-sdk for iOS
+        if: matrix.target == 'iOS'
+        run: |
+          curl -L -o mdk-sdk-ios.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-ios.7z/download
+          brew install p7zip || true
+          7z x mdk-sdk-ios.7z -omdk-sdk-ios -y
+          # 拷贝 framework/dylib 到 ios/Runner/ 或 ios/Pods/ 目录（根据你项目实际需求调整）
+          cp -R mdk-sdk-ios/ios-arm64/mdk.framework ios/Runner/ || true
+          cp mdk-sdk-ios/ios-arm64/libass* ios/Runner/ || true
+          cp mdk-sdk-ios/ios-arm64/*ffmpeg* ios/Runner/ || true
       - name: Build iOS
         if: matrix.target == 'iOS'
         run: |
@@ -143,18 +153,25 @@ jobs:
           zip -9 NipaPlay_${{ steps.get_version.outputs.version }}_iOS_arm64.ipa -r Payload
       
       # Build macOS .dmg
+      - name: Download mdk-sdk for macOS
+        if: matrix.target == 'macOS'
+        run: |
+          curl -L -o mdk-sdk-macos.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-macos.7z/download
+          brew install p7zip || true
+          7z x mdk-sdk-macos.7z -omdk-sdk-macos -y
+          # 拷贝 framework/dylib 到 macos/Runner/ 或 macos/Pods/ 目录（根据你项目实际需求调整）
+          cp -R mdk-sdk-macos/macos-universal/mdk.framework macos/Runner/ || true
+          cp mdk-sdk-macos/macos-universal/libass* macos/Runner/ || true
+          cp mdk-sdk-macos/macos-universal/*ffmpeg* macos/Runner/ || true
       - name: Build macOS
         if: matrix.target == 'macOS'
         run: |
           flutter build macos --release
           cd macos
-          # 设置 CocoaPods 环境为简体中文
           export LANG=zh_CN.UTF-8
           export LC_ALL=zh_CN.UTF-8
-          # 配置 CocoaPods 源
           mkdir -p ~/.cocoapods
           echo 'source "https://cdn.cocoapods.org/"' > ~/.cocoapods/config
-          # 清理并重新安装 pods
           rm -rf Pods Podfile.lock
           pod cache clean --all
           pod install --repo-update
@@ -165,6 +182,13 @@ jobs:
           ls -la *.dmg
       
       # Build Windows .zip
+      - name: Download mdk-sdk for Windows
+        if: matrix.target == 'Windows'
+        run: |
+          curl -L -o mdk-sdk-windows.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-windows.7z/download
+          7z x mdk-sdk-windows.7z -omdk-sdk-windows -y
+          # 拷贝 dll 到最终打包目录
+          cp mdk-sdk-windows/x64/*.dll build/windows/NipaPlay_${{ steps.get_version.outputs.version }}_Windows_x64/ || true
       - name: Build Windows
         if: matrix.target == 'Windows'
         shell: pwsh
@@ -172,7 +196,6 @@ jobs:
           flutter build windows --release
           $arch = "${{ matrix.arch }}"
           $version = "${{ steps.get_version.outputs.version }}"
-          
           if ($arch -eq "arm64") {
             $DestDir = "build\windows\NipaPlay_${version}_Windows_arm64"
             $SrcDir = "build\windows\arm64\runner\Release"
@@ -180,13 +203,19 @@ jobs:
             $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
             $SrcDir = "build\windows\x64\runner\Release"
           }
-          
           New-Item -Path $DestDir -ItemType Directory -Force
           Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
           Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
           Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_x64.zip" -Force
       
       # Build Linux .deb
+      - name: Download mdk-sdk for Linux
+        if: matrix.target == 'Linux'
+        run: |
+          curl -L -o mdk-sdk-linux.7z https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-linux.7z/download
+          7z x mdk-sdk-linux.7z -omdk-sdk-linux -y
+          # 拷贝 so 到最终打包目录
+          cp mdk-sdk-linux/x64/*.so build/linux/x64/release/bundle/lib/ || true
       - name: Build Linux .deb
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
@@ -519,8 +548,10 @@ jobs:
           full_message="$(git log -1 --pretty=%B)"
           title="$(echo "$full_message" | head -n1)"
           description="$(echo "$full_message" | tail -n +3)"
-          echo "::set-output name=title::$title"
-          echo "::set-output name=description::$description"
+          echo "title=$title" >> $GITHUB_OUTPUT
+          echo "description<<EOF" >> $GITHUB_OUTPUT
+          echo "$description" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Upload to release
         uses: ncipollo/release-action@v1
