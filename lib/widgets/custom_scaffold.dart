@@ -5,7 +5,6 @@ import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/widgets/background_with_blur.dart'; // 导入背景图和模糊效果控件
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import '../main.dart' show tabControllerKey;
 
 class CustomScaffold extends StatelessWidget {
   final List<Widget> pages;

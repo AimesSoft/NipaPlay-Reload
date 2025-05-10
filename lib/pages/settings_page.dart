@@ -132,31 +132,6 @@ class _SettingsPageState extends State<SettingsPage> {
               },
             ),
           ListTile(
-            title: const Text("播放",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              // 假设有一个 PlaybackSettingsPage
-              // _handleItemTap(const PlaybackSettingsPage(), "播放设置");               // 如果没有对应页面，桌面端可以不做任何事，移动端也可以不做或提示
-              if (!globals.isDesktop) {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text("播放设置页面暂未实现")));
-              }
-            },
-          ),
-          ListTile(
-            title: const Text("通知",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: Switch(
-                value: true, // 你需要状态管理来控制这个值
-                onChanged: (bool value) {
-                  // 处理开关逻辑，这通常不涉及页面切换
-                }),
-          ),
-          ListTile(
             title: const Text("关于",
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),

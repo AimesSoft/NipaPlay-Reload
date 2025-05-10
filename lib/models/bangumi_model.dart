@@ -1,23 +1,32 @@
+import 'package:flutter/foundation.dart';
+
 class BangumiAnime {
-  final int id;
-  final String name;
-  final String nameCn;
+  final int id; // Corresponds to Dandanplay's animeId
+  final String name; // Corresponds to Dandanplay's animeTitle, primary name
+  final String nameCn; // Potentially from Dandanplay's titles array or use animeTitle if only one
   final String imageUrl;
   final String? summary;
-  final String? airDate;
-  final int? airWeekday;
-  final double? rating;
-  final List<String>? tags;
-  final Map<String, dynamic> staff;
-  final bool? isNSFW;
-  final bool? isLocked;
-  final String? platform;
-  final int? totalEpisodes;
-  final String? originalWork; // 原作
-  final String? director; // 导演
-  final String? studio; // 制作公司
+  final String? airDate; // Dandanplay's BangumiQueueIntroV2 provides airDate, BangumiDetails might have more specific first episode air date
+  final int? airWeekday; // Corresponds to Dandanplay's airDay (0 for Sun, 1-6 for Mon-Sat)
+  final double? rating; // Dandanplay's rating (0-10)
+  final Map<String, dynamic>? ratingDetails;
+  final List<String>? tags; // From Dandanplay's tags array (BangumiTag object needs name extraction)
+  final List<String>? metadata; // Store Dandanplay's metadata string array
+  final bool? isNSFW; // Corresponds to Dandanplay's isRestricted
+  final String? platform; // No direct equivalent in Dandanplay Intro/Details for this specific field name
+  final int? totalEpisodes; // From Dandanplay's episodes array count in BangumiDetails
+  final String? typeDescription; // From Dandanplay's typeDescription
+  final String? bangumiUrl;
 
-  bool get hasDetails => summary != null && rating != null && tags != null;
+  // Dandanplay specific fields we might want to use:
+  final bool? isOnAir;
+  final bool? isFavorited; // User-specific, from Dandanplay
+  final List<Map<String, String>>? titles; // Store Dandanplay's titles array [{'title': 'name', 'language': 'lang'}]
+  final String? searchKeyword;
+
+  final List<EpisodeData>? episodeList; // Changed from 'episodes' to 'episodeList' to avoid conflict if 'episodes' is a field name in JSON for BangumiDetails itself.
+
+  bool get hasDetails => summary != null && (rating != null || ratingDetails != null) && (tags != null || metadata != null);
 
   BangumiAnime({
     required this.id,
@@ -28,110 +37,138 @@ class BangumiAnime {
     this.airDate,
     this.airWeekday,
     this.rating,
+    this.ratingDetails,
     this.tags,
-    this.staff = const {},
+    this.metadata,
     this.isNSFW,
-    this.isLocked,
     this.platform,
     this.totalEpisodes,
-    this.originalWork,
-    this.director,
-    this.studio,
+    this.typeDescription,
+    this.bangumiUrl,
+    this.isOnAir,
+    this.isFavorited,
+    this.titles,
+    this.searchKeyword,
+    this.episodeList,
   });
 
-  // 用于列表页的简化构造方法
-  factory BangumiAnime.fromCalendarItem(Map<String, dynamic> json) {
-    final String? imageUrl = json['images']?['large'];
-    if (imageUrl == null || imageUrl.isEmpty) {
-      throw Exception('Missing or empty image URL');
-    }
-
-    final airWeekday = json['air_weekday'] as int?;
+  // Used for list items from Dandanplay's /api/v2/bangumi/shin (BangumiIntro schema)
+  factory BangumiAnime.fromDandanplayIntro(Map<String, dynamic> json) {
+    final String? imgUrl = json['imageUrl'];
+    // if (imgUrl == null || imgUrl.isEmpty) {
+    //   // Consider a placeholder or different handling if image is crucial
+    //   // For now, let's allow it to be potentially empty and handle in UI
+    // }
 
     return BangumiAnime(
-      id: json['id'] as int? ?? 0,
-      name: json['name'] as String? ?? '',
-      nameCn: json['name_cn'] as String? ?? json['name'] as String? ?? '',
-      imageUrl: imageUrl,
-      airDate: json['air_date'] as String?,
-      airWeekday: airWeekday,
+      id: json['animeId'] as int? ?? 0,
+      name: json['animeTitle'] as String? ?? '',
+      nameCn: json['animeTitle'] as String? ?? '', // Default to animeTitle, can be refined if 'titles' are available in intro
+      imageUrl: imgUrl ?? 'assets/backempty.png', // Provide a default placeholder
+      airWeekday: json['airDay'] as int?, // 0 for Sun, 1-6 for Mon-Sat
+      rating: (json['rating'] as num?)?.toDouble(),
+      isOnAir: json['isOnAir'] as bool?,
+      isFavorited: json['isFavorited'] as bool?,
+      isNSFW: json['isRestricted'] as bool?,
+      searchKeyword: json['searchKeyword'] as String?,
+      // Fields not in BangumiIntro, will be null or default:
+      summary: null,
+      airDate: null, // airDate in BangumiQueueIntroV2, not directly in BangumiIntro for shin bangumi list
+      tags: null,
+      metadata: null,
+      platform: null,
+      totalEpisodes: null,
+      typeDescription: null,
+      titles: null,
+      episodeList: null, // Episodes are not in BangumiIntro
     );
   }
 
-  // 用于详情页的完整构造方法
-  factory BangumiAnime.fromJson(Map<String, dynamic> json) {
-    ////debugPrint('开始解析番剧数据');
-    final String? imageUrl = json['images']?['large'];
-    if (imageUrl == null || imageUrl.isEmpty) {
-      throw Exception('Missing or empty image URL');
-    }
+  // Used for detailed items from Dandanplay's /api/v2/bangumi/{animeId} (BangumiDetails schema)
+  factory BangumiAnime.fromDandanplayDetail(Map<String, dynamic> json) {
+    // BangumiDetails inherits from BangumiIntro, so all intro fields are present
+    // final String? imageUrl = json['imageUrl'];
 
-    // 处理日期数据
-    String? airDate = json['air_date'] as String?;
-    if (airDate == null || airDate.isEmpty) {
-      airDate = json['date'] as String?; // 尝试使用 date 字段作为备选
-    }
-    ////debugPrint('解析到的播放日期: $airDate');
+    // debugPrint('Rating Details from API: ${json['ratingDetails']}'); // 这行之前移除了
 
-    // 处理 infobox 数据
-    String? originalWork;
-    String? director;
-    String? studio;
-    if (json['infobox'] != null) {
-      ////debugPrint('处理制作信息:');
-      for (var item in json['infobox']) {
-        if (item['key'] != null && item['value'] != null) {
-          ////debugPrint('检查字段: ${item['key']} = ${item['value']}');
-          switch (item['key']) {
-            case '原作':
-              originalWork = item['value'] as String;
-              break;
-            case '导演':
-              director = item['value'] as String;
-              break;
-            case '动画制作':
-            case '制作':
-            case 'アニメーション制作':
-              studio = item['value'] as String;
-              break;
+    // 新增：打印 bangumiUrl
+    debugPrint('Bangumi URL from API: ${json['bangumiUrl']}');
+
+    List<String> parseTags(List<dynamic>? tagsData) {
+      if (tagsData == null) return [];
+      return tagsData
+          .map((tag) => (tag is Map && tag['name'] != null) ? tag['name'] as String : null)
+          .where((name) => name != null)
+          .cast<String>()
+          .toList();
+    }
+    
+    String primaryTitle = json['animeTitle'] as String? ?? '';
+    String chineseTitle = primaryTitle; // Default
+
+    List<Map<String, String>> parsedTitles = [];
+    if (json['titles'] != null && json['titles'] is List) {
+      for (var titleEntry in json['titles']) {
+        if (titleEntry is Map && titleEntry['title'] != null && titleEntry['language'] != null) {
+          parsedTitles.add({
+            'title': titleEntry['title'] as String,
+            'language': titleEntry['language'] as String,
+          });
+          // Attempt to find a Chinese title
+          if ((titleEntry['language'] as String).toLowerCase().contains('zh') || (titleEntry['language'] as String).toLowerCase().contains('cn')) {
+            chineseTitle = titleEntry['title'] as String;
           }
         }
       }
-      ////debugPrint('解析结果:');
-      ////debugPrint('- 原作: $originalWork');
-      ////debugPrint('- 导演: $director');
-      ////debugPrint('- 制作公司: $studio');
+      if (parsedTitles.isNotEmpty && primaryTitle.isEmpty) {
+        primaryTitle = parsedTitles.first['title']!;
+      }
     }
 
-    // 处理标签数据
-    List<String>? tags;
-    if (json['tags'] != null) {
-      tags = (json['tags'] as List)
-          .map((tag) => tag['name'] as String)
+
+    List<String>? parsedMetadata;
+    if (json['metadata'] != null && json['metadata'] is List) {
+      parsedMetadata = (json['metadata'] as List).map((item) => item.toString()).toList();
+    }
+
+    List<EpisodeData>? parsedEpisodeList;
+    if (json['episodes'] != null && json['episodes'] is List) {
+      parsedEpisodeList = (json['episodes'] as List)
+          .map((epJson) => EpisodeData.fromJson(epJson as Map<String, dynamic>))
           .toList();
     }
 
-    final anime = BangumiAnime(
-      id: json['id'] as int? ?? 0,
-      name: json['name'] as String? ?? '',
-      nameCn: json['name_cn'] as String? ?? json['name'] as String? ?? '',
-      imageUrl: imageUrl,
+    Map<String, dynamic>? rawRatingDetails = json['ratingDetails'] as Map<String, dynamic>?;
+    String? bangumiUrlValue = json['bangumiUrl'] as String?;
+
+    return BangumiAnime(
+      id: json['animeId'] as int? ?? 0,
+      name: primaryTitle,
+      nameCn: chineseTitle,
+      imageUrl: json['imageUrl'] as String? ?? 'assets/backempty.png',
       summary: json['summary'] as String?,
-      airDate: airDate,
-      airWeekday: json['air_weekday'] as int?,
-      rating: (json['rating']?['score'] as num?)?.toDouble(),
-      tags: tags,
-      staff: {},
-      isNSFW: json['nsfw'] as bool?,
-      isLocked: json['locked'] as bool?,
-      platform: json['platform'] as String?,
-      totalEpisodes: json['total_episodes'] as int?,
-      originalWork: originalWork,
-      director: director,
-      studio: studio,
+      // airDate: json['airDate'] as String?, // BangumiDetails might have a specific first episode airDate in episodes array.
+                                            // For now, airDate from intro might be more about overall series start.
+                                            // Or we might need to parse json['episodes'][0]['airDate'] if available.
+      airDate: (json['episodes'] != null && (json['episodes'] as List).isNotEmpty && json['episodes'][0]['airDate'] != null)
+                ? json['episodes'][0]['airDate'] as String
+                : null,
+      airWeekday: json['airDay'] as int?,
+      rating: (json['rating'] as num?)?.toDouble(),
+      ratingDetails: rawRatingDetails,
+      tags: parseTags(json['tags'] as List<dynamic>?),
+      metadata: parsedMetadata,
+      isNSFW: json['isRestricted'] as bool?,
+      totalEpisodes: (json['episodes'] as List<dynamic>?)?.length,
+      typeDescription: json['typeDescription'] as String?,
+      bangumiUrl: bangumiUrlValue,
+      isOnAir: json['isOnAir'] as bool?,
+      isFavorited: json['isFavorited'] as bool?, // This might be part of a different structure for user-specific data
+      titles: parsedTitles,
+      searchKeyword: json['searchKeyword'] as String?,
+      episodeList: parsedEpisodeList,
+      // platform: json['platform'] as String?, // No direct field, map if necessary
     );
-    ////debugPrint('创建的番剧对象: ${anime.toJson()}');
-    return anime;
   }
 
   Map<String, dynamic> toJson() {
@@ -142,17 +179,39 @@ class BangumiAnime {
       'imageUrl': imageUrl,
       'summary': summary,
       'air_date': airDate,
-      'air_weekday': airWeekday,
+      'airDay': airWeekday,
       'rating': rating,
+      'ratingDetails': ratingDetails,
       'tags': tags,
-      'staff': staff,
+      'metadata': metadata,
       'isNSFW': isNSFW,
-      'isLocked': isLocked,
       'platform': platform,
       'totalEpisodes': totalEpisodes,
-      'originalWork': originalWork,
-      'director': director,
-      'studio': studio,
+      'typeDescription': typeDescription,
+      'bangumiUrl': bangumiUrl,
+      'isOnAir': isOnAir,
+      'isFavorited': isFavorited,
+      'titles': titles?.map((t) => {'title': t['title'], 'language': t['language']}).toList(),
+      'searchKeyword': searchKeyword,
+      'episodeList': episodeList?.map((e) => {'id': e.id, 'title': e.title}).toList(),
     };
+  }
+}
+
+class EpisodeData {
+  final int id; // Corresponds to Dandanplay's episodeId in BangumiEpisode schema
+  final String title;
+  final String? airDate; // From BangumiEpisode schema
+
+  EpisodeData({required this.id, required this.title, this.airDate});
+
+  factory EpisodeData.fromJson(Map<String, dynamic> json) {
+    // Assuming 'json' is an item from the 'episodes' array in BangumiDetails
+    // which refers to '#/components/schemas/BangumiEpisode'
+    return EpisodeData(
+      id: json['episodeId'] as int? ?? 0,
+      title: json['episodeTitle'] as String? ?? '未知剧集',
+      airDate: json['airDate'] as String?,
+    );
   }
 } 

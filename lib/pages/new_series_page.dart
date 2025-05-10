@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/bangumi_service.dart';
 import '../models/bangumi_model.dart';
+import '../models/watch_history_model.dart';
 import '../utils/image_cache_manager.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
@@ -13,6 +14,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../services/dandanplay_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../pages/anime_detail_page.dart';
+import '../widgets/transparent_page_route.dart';
+import 'package:provider/provider.dart';
+import '../utils/video_player_state.dart';
+import '../utils/tab_change_notifier.dart';
+import '../widgets/loading_overlay.dart';
+import 'package:flutter/rendering.dart';
+import 'package:nipaplay/widgets/floating_action_glass_button.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -21,7 +30,7 @@ class NewSeriesPage extends StatefulWidget {
   State<NewSeriesPage> createState() => _NewSeriesPageState();
 }
 
-class _NewSeriesPageState extends State<NewSeriesPage> {
+class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveClientMixin<NewSeriesPage> {
   final BangumiService _bangumiService = BangumiService.instance;
   List<BangumiAnime> _animes = [];
   bool _isLoading = true;
@@ -31,6 +40,20 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
   static const String _translationCacheKey = 'bangumi_translation_cache';
   static const Duration _translationCacheDuration = Duration(days: 7);
   bool _isShowingTranslation = false;
+  
+  // bool _filterAdultContent = true; // REMOVED
+  // static const String _filterAdultContentKey = 'new_series_filter_adult_content'; // REMOVED
+
+  // States for loading video from detail page
+  bool _isLoadingVideoFromDetail = false;
+  String _loadingMessageForDetail = '正在加载视频...';
+
+  Map<int, bool> _expansionStates = {}; // For weekday expansion state
+  Map<int, bool> _hoverStates = {}; // For weekday header hover state
+
+  // Override wantKeepAlive for AutomaticKeepAliveClientMixin
+  @override
+  bool get wantKeepAlive => true;
 
   // 切换排序方向
   void _toggleSort() {
@@ -48,16 +71,18 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
     4: '周四',
     5: '周五',
     6: '周六',
-    7: '周日', // 添加周日（7）的映射
-    -1: '未知', // 添加未知类别
+    -1: '未知', // For animes with null or invalid airWeekday
   };
 
   @override
   void initState() {
     super.initState();
-    ////debugPrint('NewSeriesPage 初始化');
+    // _loadFilterAdultContentPreference(); // REMOVED
     _loadAnimes();
     _loadTranslationCache();
+    // final today = DateTime.now().weekday % 7; // 旧的初始化方式移除
+    // _expansionStates[today] = true; 
+    // _expansionStates and _hoverStates will be initialized on-demand in build
   }
 
   @override
@@ -69,27 +94,55 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
     super.dispose();
   }
 
-  Future<void> _loadAnimes() async {
+  // Future<void> _loadFilterAdultContentPreference() async { // REMOVED
+  //   final prefs = await SharedPreferences.getInstance();
+  //   // Check if mounted before calling setState, especially if this could complete after dispose
+  //   if (mounted) { 
+  //     setState(() {
+  //       _filterAdultContent = prefs.getBool(_filterAdultContentKey) ?? true; // Default to true
+  //       debugPrint('[NewSeriesPage] Loaded _filterAdultContent preference: $_filterAdultContent');
+  //     });
+  //     // Important: After loading the preference, we might need to reload animes 
+  //     // if the loaded preference is different from the initial default AND _loadAnimes in initState already ran.
+  //     // However, the current initState order (_loadFilterAdultContentPreference before _loadAnimes)
+  //     // should make _loadAnimes use the correct loaded value. 
+  //     // If _loadAnimes was called before this completed, a manual re-trigger might be needed.
+  //     // For simplicity now, relying on initState order.
+  //   }
+  // }
+
+  Future<void> _loadAnimes({bool forceRefresh = false}) async {
     try {
-      //debugPrint('开始加载番剧数据');
+      debugPrint('[NewSeriesPage _loadAnimes] Called. forceRefresh: $forceRefresh');
+      if (!mounted) {
+        debugPrint('[NewSeriesPage _loadAnimes] Not mounted, returning.');
+        return;
+      }
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
-      // 加载数据
-      //debugPrint('调用 BangumiService.loadData()');
-      await _bangumiService.loadData();
+      final prefs = await SharedPreferences.getInstance();
+      // Use the same key defined in general_page.dart. 
+      // Ensure this key is consistently available, e.g. by importing the settings file or having a shared constants file.
+      // For now, we'll use the literal string, assuming 'global_filter_adult_content' is the key.
+      final bool filterAdultContentGlobally = prefs.getBool('global_filter_adult_content') ?? true; 
+      debugPrint('[NewSeriesPage _loadAnimes] Using global NSFW filter: $filterAdultContentGlobally');
 
-      //debugPrint('调用 BangumiService.getCalendar()');
-      final animes = await _bangumiService.getCalendar();
-      //debugPrint('获取到 ${animes.length} 个番剧');
+      final animes = await _bangumiService.getCalendar(
+        forceRefresh: forceRefresh, 
+        filterAdultContent: filterAdultContentGlobally // Use the global setting value
+      );
+      debugPrint('[NewSeriesPage _loadAnimes] getCalendar returned ${animes.length} animes.');
 
       if (mounted) {
+        debugPrint('[NewSeriesPage _loadAnimes] Before final setState - animes.length from service: ${animes.length}');
         setState(() {
           _animes = animes;
           _isLoading = false;
         });
+        debugPrint('[NewSeriesPage _loadAnimes] After final setState - _animes.length now: ${_animes.length}, _isLoading: $_isLoading');
       }
       //debugPrint('番剧数据加载完成');
     } catch (e) {
@@ -179,71 +232,93 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
   // 按星期几分组番剧
   Map<int, List<BangumiAnime>> _groupAnimesByWeekday() {
     final grouped = <int, List<BangumiAnime>>{};
-    // 过滤掉没有图片信息和没有名字的番剧
+    // Restore original filter
     final validAnimes = _animes.where((anime) => 
-      anime.imageUrl != 'assets/backempty.png' && 
-      anime.imageUrl != 'assets/backEmpty.png' &&
-      anime.nameCn.isNotEmpty &&  // 确保有中文名
-      anime.name.isNotEmpty      // 确保有日文名
+      anime.imageUrl.isNotEmpty && 
+      anime.imageUrl != 'assets/backempty.png'
+      // && anime.nameCn.isNotEmpty && // Temporarily removed to allow display even if names are empty
+      // && anime.name.isNotEmpty       // Temporarily removed
     ).toList();
+    // final validAnimes = _animes.toList(); // Test: Show all animes from cache (Reverted)
     
-    // 先处理未知更新时间的番剧
     final unknownAnimes = validAnimes.where((anime) => 
       anime.airWeekday == null || 
       anime.airWeekday == -1 || 
       anime.airWeekday! < 0 || 
-      anime.airWeekday! > 7
+      anime.airWeekday! > 6 // Dandanplay airDay is 0-6
     ).toList();
     
     if (unknownAnimes.isNotEmpty) {
       grouped[-1] = unknownAnimes;
     }
     
-    // 再处理已知更新时间的番剧
     for (var anime in validAnimes) {
       if (anime.airWeekday != null && 
-          anime.airWeekday != -1 && 
           anime.airWeekday! >= 0 && 
-          anime.airWeekday! <= 7) {
-        // 将 7 转换为 0，保持一致性
-        final weekday = anime.airWeekday == 7 ? 0 : anime.airWeekday!;
-        grouped.putIfAbsent(weekday, () => []).add(anime);
+          anime.airWeekday! <= 6) { // Dandanplay airDay is 0-6
+        grouped.putIfAbsent(anime.airWeekday!, () => []).add(anime);
       }
     }
-    
-    ////debugPrint('分组结果: ${grouped.keys.toList()}');
     return grouped;
   }
 
-  Widget _buildAnimeSection(List<BangumiAnime> animes) {
+  // Modified to accept weekdayKey for PageStorageKey
+  Widget _buildAnimeSection(List<BangumiAnime> animes, int weekdayKey) {
+    if (animes.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Center(child: Text("本日无新番", style: TextStyle(color: Colors.white70))),
+      );
+    }
     return GridView.builder(
+      key: PageStorageKey<String>('gridview_for_weekday_$weekdayKey'), // Added unique PageStorageKey
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(top: 8.0, bottom: 16.0, left: 16.0, right: 16.0), // Add padding around the grid
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 150,
         childAspectRatio: 7/12,
         crossAxisSpacing: 20,
-        mainAxisSpacing: 0,
+        mainAxisSpacing: 20, // Added mainAxisSpacing for vertical gap
       ),
       itemCount: animes.length,
       addAutomaticKeepAlives: false,
       addRepaintBoundaries: false,
       itemBuilder: (context, index) {
         final anime = animes[index];
-        return _buildAnimeCard(context, anime);
+        return _buildAnimeCard(context, anime, key: ValueKey(anime.id));
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    ////debugPrint('NewSeriesPage build - isLoading: $_isLoading, hasError: ${_error != null}, animeCount: ${_animes.length}');
+    super.build(context); // Added for AutomaticKeepAliveClientMixin
+    debugPrint('[NewSeriesPage build] START - isLoading: $_isLoading, error: $_error, animes.length: ${_animes.length}');
     
+    // Outer Stack to handle the new LoadingOverlay for video loading
+    return Stack(
+      children: [
+        // Original content based on _isLoading for anime list
+        _buildMainContent(context), // Extracted original content to a new method
+        if (_isLoadingVideoFromDetail)
+          LoadingOverlay(
+            messages: [_loadingMessageForDetail], // LoadingOverlay expects a list of messages
+            backgroundOpacity: 0.7, // Optional: customize opacity
+          ),
+      ],
+    );
+  }
+
+  // Extracted original build content into a new method
+  Widget _buildMainContent(BuildContext context) {
     if (_isLoading && _animes.isEmpty) {
+      debugPrint('[NewSeriesPage build] Showing loading indicator.');
       return const Center(child: CircularProgressIndicator());
     }
 
     if (_error != null && _animes.isEmpty) {
+      debugPrint('[NewSeriesPage build] Showing error message: $_error');
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -251,7 +326,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
             Text('加载失败: $_error'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _loadAnimes,
+              onPressed: () => _loadAnimes(),
               child: const Text('重试'),
             ),
           ],
@@ -260,19 +335,13 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
     }
 
     final groupedAnimes = _groupAnimesByWeekday();
-    // 分离已知和未知更新时间的番剧
     final knownWeekdays = groupedAnimes.keys.where((day) => day != -1).toList();
     final unknownWeekdays = groupedAnimes.keys.where((day) => day == -1).toList();
-    
-    // 对已知更新时间的番剧进行排序
+
     knownWeekdays.sort((a, b) {
-      final today = DateTime.now().weekday % 7; // 获取今天的星期（0-6）
-      
-      // 如果是今天，排在最前面
+      final today = DateTime.now().weekday % 7;
       if (a == today) return -1;
       if (b == today) return 1;
-
-      // 计算与今天的距离
       final distA = (a - today + 7) % 7;
       final distB = (b - today + 7) % 7;
       return _isReversed ? distB.compareTo(distA) : distA.compareTo(distB);
@@ -280,158 +349,145 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
 
     return Stack(
       children: [
-        CustomRefreshIndicator(
-          onRefresh: _loadAnimes,
-          color: Colors.white,
-          strokeWidth: 3.0,
-          blur: 20.0,
-          opacity: 0.8,
-          child: CustomScrollView(
+        CustomScrollView(
             slivers: [
-              SliverList(
-                delegate: SliverChildListDelegate([
-                  ...knownWeekdays.map((weekday) => Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          _weekdays[weekday] ?? '未知',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    ...knownWeekdays.map((weekday) {
+                      // Initialize states if not present
+                      _expansionStates.putIfAbsent(weekday, () => weekday == (DateTime.now().weekday % 7));
+                      _hoverStates.putIfAbsent(weekday, () => false);
+
+                      bool isExpanded = _expansionStates[weekday]!;
+                      bool isHovering = _hoverStates[weekday]!;
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                        child: Column( // Changed from ExpansionTile to Column
+                          children: [
+                            MouseRegion(
+                              onEnter: (_) => setState(() => _hoverStates[weekday] = true),
+                              onExit: (_) => setState(() => _hoverStates[weekday] = false),
+                              child: _buildCollapsibleSectionHeader(context, _weekdays[weekday] ?? '未知', weekday, isExpanded, isHovering),
+                            ),
+                            // Conditional rendering of children with animation
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                              child: Visibility(
+                                visible: isExpanded,
+                                // maintainState: true, // Consider if state should be kept for hidden children
+                                child: _buildAnimeSection(groupedAnimes[weekday]!, weekday),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      _buildAnimeSection(groupedAnimes[weekday]!),
+                      );
+                    }),
+                    if (unknownWeekdays.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      const Divider(color: Colors.white24, indent: 16, endIndent: 16),
+                      const SizedBox(height: 12),
+                      _buildCollapsibleSectionHeader(context, '更新时间未定', -1, false, false), // isHovering is false as it's not interactive
+                      // For non-interactive 'unknown' section, direct visibility or no animation
+                      if (groupedAnimes[-1] != null && groupedAnimes[-1]!.isNotEmpty) // Ensure there are animes to show
+                         _buildAnimeSection(groupedAnimes[-1]!, -1),
                     ],
-                  )),
-                  if (unknownWeekdays.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    const Divider(),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        '更新时间未定',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    _buildAnimeSection(groupedAnimes[-1]!),
-                  ],
-                ]),
+                  ]),
+                ),
               ),
             ],
           ),
-        ),
-        // 添加悬浮按钮
         Positioned(
           right: 16,
           bottom: 16,
-          child: GlassmorphicContainer(
-            width: 56,
-            height: 56,
-            borderRadius: 28,
-            blur: 10,
-            alignment: Alignment.center,
-            border: 1,
-            linearGradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFFffffff).withOpacity(0.1),
-                const Color(0xFFFFFFFF).withOpacity(0.05),
-              ],
-            ),
-            borderGradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFFffffff).withOpacity(0.5),
-                const Color((0xFFFFFFFF)).withOpacity(0.5),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(28),
-                onTap: _toggleSort,
-                child: Center(
-                  child: Icon(
-                    _isReversed ? Ionicons.chevron_up_outline : Ionicons.chevron_down_outline,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-              ),
-            ),
+          child: FloatingActionGlassButton(
+            iconData: _isReversed ? Ionicons.chevron_up_outline : Ionicons.chevron_down_outline,
+            onPressed: _toggleSort,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildAnimeCard(BuildContext context, BangumiAnime anime) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+  Widget _buildAnimeCard(BuildContext context, BangumiAnime anime, {Key? key}) {
+    return Card(
+      key: key,
+      elevation: 2.0,
+      margin: EdgeInsets.zero, // Adjusted margin as GridView now has spacing
+      clipBehavior: Clip.antiAlias,
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: InkWell(
         onTap: () => _showAnimeDetail(anime),
-        child: Container(
-          height: 250,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12), // Match shape for InkWell ripple
+        child: GlassmorphicContainer(
+          width: double.infinity,
+          height: double.infinity, 
+          borderRadius: 12,
+          blur: 10,
+          alignment: Alignment.bottomCenter,
+          border: 0.5,
+          linearGradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).colorScheme.surface.withOpacity(0.1),
+              Theme.of(context).colorScheme.surface.withOpacity(0.2),
+            ],
+            stops: const [0.1, 1],
+          ),
+          borderGradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withOpacity(0.2),
+              Colors.white.withOpacity(0.2),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AspectRatio(
-                aspectRatio: 7/10,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
+              Expanded(
+                flex: 7,
                   child: CachedNetworkImageWidget(
                     imageUrl: anime.imageUrl,
                     fit: BoxFit.cover,
-                    shouldRelease: true,
-                    errorBuilder: (context, error) {
-                      ////debugPrint('图片加载失败: ${anime.nameCn}, URL: ${anime.imageUrl}');
-                      return Container(
-                        color: Colors.grey[800],
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline, color: Colors.white54),
-                            const SizedBox(height: 8),
-                            Text(
-                              '加载失败\n${anime.nameCn}',
-                              style: const TextStyle(color: Colors.white54, fontSize: 12),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                    width: double.infinity,
                 ),
               ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: Center(
                 child: Text(
-                  anime.nameCn,
+                      _isShowingTranslation && _translatedSummaries.containsKey(anime.id) 
+                          ? _translatedSummaries[anime.id]! 
+                          : anime.nameCn, // Display Chinese name by default
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontSize: 12,
                     height: 1.2,
                     color: Colors.white,
+                        fontWeight: FontWeight.w600
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                 ),
               ),
+                ),
+              ),
+              // Potentially add icons for isOnAir or isFavorited if space and design allow
+              // if (anime.isOnAir ?? false) // Show a small indicator if it's on air
+              //   Padding(
+              //     padding: const EdgeInsets.only(bottom: 4.0),
+              //     child: Icon(Ionicons.time_outline, color: Colors.greenAccent.withOpacity(0.8), size: 12),
+              // ),
             ],
           ),
         ),
@@ -483,269 +539,200 @@ class _NewSeriesPageState extends State<NewSeriesPage> {
     }
   }
 
-  Future<void> _showAnimeDetail(BangumiAnime anime) async {
-    showDialog(
-      context: context,
-      builder: (context) => FutureBuilder<BangumiAnime>(
-        future: _bangumiService.getAnimeDetails(anime.id),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return AlertDialog(
-              title: const Text('错误'),
-              content: Text('加载失败: ${snapshot.error}'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('关闭'),
-                ),
-              ],
-            );
-          }
-
-          final detailedAnime = snapshot.data!;
-          final airWeekday = anime.airWeekday;
-          
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              return BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Dialog(
-                  backgroundColor: Colors.transparent,
-                  child: Container(
-                    width: 600,
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color.fromARGB(255, 130, 130, 130).withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Theme.of(context).brightness == Brightness.light
-                            ? const Color.fromARGB(255, 201, 201, 201)
-                            : const Color.fromARGB(255, 130, 130, 130),
-                        width: 0.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 5,
-                          spreadRadius: 1,
-                          offset: const Offset(1, 1),
-                        ),
-                      ],
-                    ),
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Container(
-                                    width: 120,
-                                    height: 120 * 10 / 7,
-                                    color: Colors.transparent,
-                                    child: CachedNetworkImageWidget(
-                                      imageUrl: anime.imageUrl,
-                                      width: 120,
-                                      height: 120 * 10 / 7,
-                                      fit: BoxFit.cover,
-                                      shouldRelease: true,
-                                      errorBuilder: (context, error) => Container(
-                                        color: Colors.transparent,
-                                        child: const Icon(Icons.error, color: Colors.white54),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        detailedAnime.nameCn,
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                          fontSize: 16,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      if (detailedAnime.name != detailedAnime.nameCn)
-                                        Text(
-                                          detailedAnime.name,
-                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                            fontSize: 14,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      const SizedBox(height: 4),
-                                      if (detailedAnime.rating != null)
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.star, color: Colors.amber, size: 16),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              detailedAnime.rating!.toStringAsFixed(1),
-                                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                fontSize: 14,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      const SizedBox(height: 4),
-                                      if (detailedAnime.airDate != null && detailedAnime.airDate!.isNotEmpty) ...[
-                                        Text(
-                                          '放送日期: ${_formatDate(detailedAnime.airDate)}${airWeekday != null ? ' (${_weekdays[airWeekday]})' : ''}',
-                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            fontSize: 12,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ],
-                                      if (detailedAnime.totalEpisodes != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '话数: ${detailedAnime.totalEpisodes}话',
-                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            fontSize: 12,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ],
-                                      if (detailedAnime.originalWork != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '原作: ${detailedAnime.originalWork}',
-                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            fontSize: 12,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ],
-                                      if (detailedAnime.director != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '导演: ${detailedAnime.director}',
-                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            fontSize: 12,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ],
-                                      if (detailedAnime.studio != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '制作公司: ${detailedAnime.studio}',
-                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            fontSize: 12,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (detailedAnime.summary != null) ...[
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Text(
-                                    '简介:',
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  if (detailedAnime.summary!.contains('の')) ...[
-                                    const SizedBox(width: 8),
-                                    TranslationButton(
-                                      animeId: detailedAnime.id,
-                                      summary: detailedAnime.summary!,
-                                      translatedSummaries: _translatedSummaries,
-                                      onTranslationUpdated: (updatedTranslations) {
-                                        setDialogState(() {
-                                          _translatedSummaries = updatedTranslations;
-                                          _saveTranslationCache();
-                                        });
-                                      },
-                                      isShowingTranslation: _isShowingTranslation,
-                                      onTranslationStateChanged: (isShowing) {
-                                        setDialogState(() {
-                                          _isShowingTranslation = isShowing;
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _translatedSummaries.containsKey(detailedAnime.id) && _isShowingTranslation
-                                    ? _translatedSummaries[detailedAnime.id]!
-                                    : detailedAnime.summary!,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                            if (detailedAnime.tags?.isNotEmpty == true) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                '标签:',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: detailedAnime.tags!
-                                    .map((tag) => Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        tag,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ))
-                                    .toList(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        },
+  Future<void> _showAnimeDetail(BangumiAnime animeFromList) async {
+    // Navigate to the new AnimeDetailPage
+    // We pass the necessary data and callbacks for translation state management.
+    // The new page will handle fetching full details itself using animeFromList.id
+    final result = await Navigator.push(
+      context,
+      TransparentPageRoute(
+        builder: (context) => AnimeDetailPage(
+          animeId: animeFromList.id, 
+        ),
       ),
     );
+
+    if (result is WatchHistoryItem) {
+      // If a WatchHistoryItem is returned, handle playing the episode
+      if (mounted) { // Ensure widget is still mounted
+        _handlePlayEpisode(result);
+      }
+    }
+  }
+
+  Future<void> _handlePlayEpisode(WatchHistoryItem historyItem) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingVideoFromDetail = true;
+      _loadingMessageForDetail = '正在初始化播放器...'; // Or more specific messages
+    });
+
+    try {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      final tabNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+
+      // Define the status listener
+      late VoidCallback statusListener;
+      statusListener = () {
+        if (!mounted) {
+          videoState.removeListener(statusListener);
+          return;
+        }
+        
+        // Update loading messages from videoState if desired
+        // For simplicity, we use a static message here, but could be dynamic:
+        // if (videoState.statusMessages.isNotEmpty && 
+        //     videoState.statusMessages.last != _loadingMessageForDetail) {
+        //   WidgetsBinding.instance.addPostFrameCallback((_) {
+        //     if (mounted) {
+        //       setState(() {
+        //         _loadingMessageForDetail = videoState.statusMessages.last;
+        //       });
+        //     }
+        //   });
+        // }
+
+        if (videoState.status == PlayerStatus.ready || videoState.status == PlayerStatus.playing) {
+          videoState.removeListener(statusListener);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _isLoadingVideoFromDetail = false;
+              });
+              // Switch to the player tab (assuming index 0 for player)
+              // Attempt both methods for tab switching as seen in anime_page.dart
+              try {
+                DefaultTabController.of(context).animateTo(0);
+              } catch (e) {
+                debugPrint('[NewSeriesPage] Error switching tab with DefaultTabController: $e');
+              }
+              tabNotifier.changeTab(0); 
+            }
+          });
+        } else if (videoState.status == PlayerStatus.error) {
+            videoState.removeListener(statusListener);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() {
+                  _isLoadingVideoFromDetail = false;
+                  // Optionally show an error message to the user
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('播放器加载失败: ${videoState.error ?? '未知错误'}')),
+                  );
+                });
+              }
+            });
+        }
+      };
+
+      videoState.addListener(statusListener);
+      await videoState.initializePlayer(historyItem.filePath);
+
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingVideoFromDetail = false;
+          _loadingMessageForDetail = '发生错误: $e'; // Show error in overlay or use a SnackBar
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('处理播放请求时出错: $e')),
+        );
+        debugPrint('[NewSeriesPage _handlePlayEpisode] Error: $e');
+      }
+    }
+  }
+
+  Future<String?> _translateSummaryWithCache(int animeId, String text) async {
+    if (_translatedSummaries.containsKey(animeId) && _isShowingTranslation) { // Check _isShowingTranslation as well
+      return _translatedSummaries[animeId];
+    }
+    // This function is now primarily used by the old logic if any, 
+    // TranslationButton has its own _translateSummary.
+    // However, keeping it for now. The button's internal logic is preferred.
+    final translation = await _translateSummary(text); // _translateSummary is the actual API call
+    if (translation != null) {
+      // No setState here, the caller (TranslationButton or old logic) should handle state.
+      return translation;
+    }
+    return null;
+  }
+
+  // New method for the custom collapsible section header
+  Widget _buildCollapsibleSectionHeader(BuildContext context, String title, int weekdayKey, bool isExpanded, bool isHovering) {
+    final List<Color> glassGradientColors = isHovering
+        ? [ // Brighter/different colors for hover state
+            Theme.of(context).colorScheme.surface.withOpacity(0.20),
+            Theme.of(context).colorScheme.surface.withOpacity(0.30),
+          ]
+        : [ // Default colors
+            Theme.of(context).colorScheme.surface.withOpacity(0.1),
+            Theme.of(context).colorScheme.surface.withOpacity(0.2),
+          ];
+
+    final List<Color> borderGradientColors = isHovering
+        ? [ // Brighter/different border colors for hover state
+            Colors.white.withOpacity(0.35),
+            Colors.white.withOpacity(0.35),
+          ]
+        : [ // Default border colors
+            Colors.white.withOpacity(0.2),
+            Colors.white.withOpacity(0.2),
+          ];
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _expansionStates[weekdayKey] = !isExpanded;
+        });
+      },
+      child: GlassmorphicContainer(
+          width: double.infinity,
+          height: 48,
+          borderRadius: 12,
+          blur: 10,
+          border: 0.5,
+          linearGradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: glassGradientColors, 
+            stops: const [0.1, 1],
+          ),
+          borderGradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: borderGradientColors,
+          ),
+          child: Center( // Added Center to wrap Padding
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                    ),
+                  ),
+                  AnimatedRotation( // Wrap Icon with AnimatedRotation
+                    turns: isExpanded ? 0.5 : 0.0, // Rotate 180 degrees when expanded
+                    duration: const Duration(milliseconds: 200), // Match expansion animation duration
+                    child: const Icon(
+                      Ionicons.chevron_down_outline, // Always use the same icon
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ), // End GlassmorphicContainer
+    ); // End GestureDetector
   }
 } 

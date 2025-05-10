@@ -14,6 +14,7 @@ class WatchHistoryItem {
   int duration;
   DateTime lastWatchTime;
   String? thumbnailPath;
+  bool isFromScan;
 
   WatchHistoryItem({
     required this.filePath,
@@ -26,6 +27,7 @@ class WatchHistoryItem {
     required this.duration,
     required this.lastWatchTime,
     this.thumbnailPath,
+    this.isFromScan = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -40,6 +42,7 @@ class WatchHistoryItem {
       'duration': duration,
       'lastWatchTime': lastWatchTime.toIso8601String(),
       'thumbnailPath': thumbnailPath,
+      'isFromScan': isFromScan,
     };
   }
 
@@ -57,6 +60,7 @@ class WatchHistoryItem {
           ? DateTime.parse(json['lastWatchTime'])
           : DateTime.now(),
       thumbnailPath: json['thumbnailPath'],
+      isFromScan: json['isFromScan'] ?? false,
     );
   }
 }
@@ -614,22 +618,108 @@ class WatchHistoryManager {
   // 清空所有历史记录
   static Future<void> clearAllHistory() async {
     if (!_initialized) await initialize();
+    _cachedItems.clear();
+    final file = File(_historyFilePath);
+    if (await file.exists()) {
+      await file.delete();
+      // Recreate an empty file
+      await file.writeAsString('[]'); 
+    }
+    _lastWriteTime = DateTime.now(); 
+    //debugPrint('所有观看历史已清除');
+  }
 
+  // New method to get history item by animeId and episodeId
+  static Future<WatchHistoryItem?> getHistoryItemByEpisode(int animeId, int episodeId) async {
+    if (!_initialized) {
+      //debugPrint('WatchHistoryManager not initialized. Initializing now...');
+      await initialize();
+    }
+
+    // Try to find in the memory cache first for performance
     try {
-      final file = File(_historyFilePath);
-      if (file.existsSync()) {
-        // 先备份
-        final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final backupPath = '$_historyFilePath.bak.$timestamp';
-        await file.copy(backupPath);
-        
-        // 清空文件
-        await file.writeAsString('[]');
-        _cachedItems.clear();
+      return _cachedItems.firstWhere(
+        (item) => item.animeId == animeId && item.episodeId == episodeId,
+      );
+    } catch (e) {
+      // Not found in cache.
+      // Assuming _cachedItems is the single source of truth after initialization.
+      ////debugPrint('Item with animeId: $animeId, episodeId: $episodeId not found in memory cache (_cachedItems length: ${_cachedItems.length}).');
+      return null;
+    }
+  }
+
+  // 获取缓存中的所有历史记录项 (同步方法)
+  static List<WatchHistoryItem> getAllCachedHistory() {
+    return List.from(_cachedItems);
+  }
+
+  // NEW: Get items by file path prefix
+  static Future<List<WatchHistoryItem>> getItemsByPathPrefix(String pathPrefix) async {
+    if (!_initialized) await initialize(); // Ensure initialized
+    return _cachedItems.where((item) => item.filePath.startsWith(pathPrefix)).toList();
+  }
+
+  // NEW: Remove items by file path prefix
+  static Future<void> removeItemsByPathPrefix(String pathPrefix) async {
+    if (!_initialized) await initialize();
+    if (_isWriting) {
+      //debugPrint('WatchHistoryManager: File is being written, retrying removeItemsByPathPrefix in 1s for $pathPrefix');
+      await Future.delayed(const Duration(seconds: 1));
+      return removeItemsByPathPrefix(pathPrefix); // Retry
+    }
+    try {
+      _isWriting = true;
+      int initialCount = _cachedItems.length;
+      _cachedItems.removeWhere((item) => item.filePath.startsWith(pathPrefix));
+      if (_cachedItems.length < initialCount) {
+        final jsonList = _cachedItems.map((item) => item.toJson()).toList();
+        final jsonString = json.encode(jsonList);
+        final file = File(_historyFilePath);
+        await file.writeAsString(jsonString);
         _lastWriteTime = DateTime.now();
+        //debugPrint('WatchHistoryManager: Removed ${_initialCount - _cachedItems.length} items with prefix: $pathPrefix and saved.');
       }
     } catch (e) {
-      //debugPrint('清空观看历史失败: $e');
+      //debugPrint('WatchHistoryManager: Error removing items by prefix $pathPrefix: $e');
+      // Optionally, rethrow or handle error (e.g., try to restore from backup or _fixHistoryFile)
+    } finally {
+      _isWriting = false;
+    }
+  }
+
+  // NEW: Get all items for a specific animeId
+  static Future<List<WatchHistoryItem>> getAllItemsForAnime(int animeId) async {
+    if (!_initialized) await initialize();
+    return _cachedItems.where((item) => item.animeId == animeId).toList();
+  }
+  
+  // NEW: Remove a single history item by its exact file path (if needed, otherwise removeHistory can be used)
+  // This version mirrors the removeItemsByPathPrefix structure for consistency if specific logic is needed.
+  // If removeHistory is sufficient, this might be redundant.
+  static Future<void> removeHistoryItemByPath(String filePath) async {
+    if (!_initialized) await initialize();
+    if (_isWriting) {
+      //debugPrint('WatchHistoryManager: File is being written, retrying removeHistoryItemByPath in 1s for $filePath');
+      await Future.delayed(const Duration(seconds: 1));
+      return removeHistoryItemByPath(filePath); // Retry
+    }
+    try {
+      _isWriting = true;
+      int initialCount = _cachedItems.length;
+      _cachedItems.removeWhere((item) => item.filePath == filePath);
+      if (_cachedItems.length < initialCount) {
+        final jsonList = _cachedItems.map((item) => item.toJson()).toList();
+        final jsonString = json.encode(jsonList);
+        final file = File(_historyFilePath);
+        await file.writeAsString(jsonString);
+        _lastWriteTime = DateTime.now();
+        //debugPrint('WatchHistoryManager: Removed item with path: $filePath and saved.');
+      }
+    } catch (e) {
+      //debugPrint('WatchHistoryManager: Error removing item by path $filePath: $e');
+    } finally {
+      _isWriting = false;
     }
   }
 } 

@@ -11,6 +11,11 @@ import 'dart:typed_data';
 import '../widgets/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
 import 'package:flutter/gestures.dart';
+import '../pages/media_library_page.dart';
+import 'package:nipaplay/widgets/floating_action_glass_button.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import '../widgets/library_management_tab.dart';
+import 'package:nipaplay/services/scan_service.dart';
 
 class AnimePage extends StatefulWidget {
   const AnimePage({super.key});
@@ -22,36 +27,24 @@ class AnimePage extends StatefulWidget {
 class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   bool _loadingVideo = false;
   List<String> _loadingMessages = ['正在初始化播放器...'];
-  TabController? _tabController;
   VideoPlayerState? _videoPlayerState;
-  final DateTime _lastHistoryUpdateTime = DateTime(2000); // 初始设为很早的时间
-  final DateTime _lastCacheClearTime = DateTime(2000); // 初始设为很早的时间
   final ScrollController _historyScrollController = ScrollController();
+
+  int _mediaLibraryVersion = 0; // Key for MediaLibraryPage
 
   @override
   void initState() {
     super.initState();
-    // 在下一帧执行，确保上下文可用
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setupTabController();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {});
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 在didChangeDependencies中获取Provider，并保存引用
     _videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
     _setupThumbnailUpdateListener();
   }
 
-  void _setupTabController() {
-    // 获取 TabController
-    _tabController = DefaultTabController.of(context);
-    // 不再添加监听器和刷新逻辑
-  }
-
-  // 设置缩略图更新监听器
   void _setupThumbnailUpdateListener() {
     try {
       if (_videoPlayerState != null) {
@@ -62,7 +55,6 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     }
   }
 
-  // 缩略图更新回调
   void _onThumbnailUpdated() {
     if (!mounted) return;
     PaintingBinding.instance.imageCache.clear();
@@ -72,9 +64,6 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    if (_tabController != null) {
-      _tabController!.removeListener(() {}); // 移除无用监听
-    }
     WidgetsBinding.instance.removeObserver(this);
     try {
       if (_videoPlayerState != null) {
@@ -86,11 +75,11 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   }
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) {
-    // 使用保存的引用，而不是每次都从Provider获取
     if (_videoPlayerState == null) {
       // 如果没有引用，安全地获取
       try {
-        _videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
+        _videoPlayerState =
+            Provider.of<VideoPlayerState>(context, listen: false);
       } catch (e) {
         //debugPrint('获取VideoPlayerState失败: $e');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -99,19 +88,19 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         return;
       }
     }
-    
+
     final videoState = _videoPlayerState!;
-    
+
     // 显示加载中遮罩
     setState(() {
       _loadingVideo = true;
       _loadingMessages = ['正在初始化播放器...'];
     });
-    
+
     // 声明一个监听器变量，但暂时不赋值
     late final VoidCallback statusListener;
     late final VoidCallback playbackFinishListener;
-    
+
     // 定义并赋值状态监听器函数
     statusListener = () {
       // 确保页面仍然挂载
@@ -119,9 +108,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         videoState.removeListener(statusListener);
         return;
       }
-      
+
       // 更新加载消息
-      if (videoState.statusMessages.isNotEmpty && 
+      if (videoState.statusMessages.isNotEmpty &&
           videoState.statusMessages.last != _loadingMessages.last) {
         // 使用安全的方式更新状态，确保不在布局过程中调用setState
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -132,9 +121,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           }
         });
       }
-      
+
       // 当视频状态变为ready或playing时，表示初始化完成，此时再跳转
-      if (videoState.status == PlayerStatus.ready || 
+      if (videoState.status == PlayerStatus.ready ||
           videoState.status == PlayerStatus.playing) {
         // 隐藏加载中遮罩，使用postFrameCallback确保安全
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -149,7 +138,8 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
             tabController.animateTo(0);
             // 新增：确保主Tab切换到播放页
             try {
-              Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
+              Provider.of<TabChangeNotifier>(context, listen: false)
+                  .changeTab(0);
             } catch (e) {
               // 忽略异常，防止因Provider未找到导致崩溃
             }
@@ -157,7 +147,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         });
       }
     };
-    
+
     // 定义播放结束监听器，用于刷新观看历史
     playbackFinishListener = () {
       // 如果播放状态变为暂停并且视频进度接近结束，认为播放结束了
@@ -165,8 +155,8 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         videoState.removeListener(playbackFinishListener);
         return;
       }
-      
-      if (videoState.status == PlayerStatus.paused && 
+
+      if (videoState.status == PlayerStatus.paused &&
           videoState.progress > 0.9) {
         //debugPrint('检测到视频播放接近结束，重新加载观看历史');
         // 移除监听器，避免重复触发
@@ -176,11 +166,11 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         provider.refresh();
       }
     };
-    
+
     // 添加监听器
     videoState.addListener(statusListener);
     videoState.addListener(playbackFinishListener);
-    
+
     // 加载选定的视频
     videoState.initializePlayer(item.filePath);
   }
@@ -190,7 +180,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     final hours = twoDigits(duration.inHours);
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
-    
+
     if (duration.inHours > 0) {
       return '$hours:$minutes:$seconds';
     } else {
@@ -200,80 +190,133 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context);
-    if (!watchHistoryProvider.isLoaded && !watchHistoryProvider.isLoading) {
-      // 兜底触发一次加载
-      Future.microtask(() {
-        watchHistoryProvider.loadHistory();
-      });
-    }
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {
         final history = historyProvider.history;
-        final isLoading = historyProvider.isLoading;
-        return Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.only(top: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text("观看记录", style: TextStyle(fontSize: 28, color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 180,
-                    child: isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : history.isEmpty
-                        ? _buildEmptyState()
-                        : _buildWatchHistoryList(history),
-                  ),
-                  const SizedBox(height: 24),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text("媒体库", style: TextStyle(fontSize: 22, color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(height: 12),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Center(
-                      child: Text(
-                        "媒体库功能开发中...",
-                        style: TextStyle(color: Colors.grey),
+        final isLoadingHistory = historyProvider.isLoading;
+
+        return Builder(
+          builder: (context) {
+            final scanService = Provider.of<ScanService>(context);
+            if (scanService.scanJustCompleted) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  incrementMediaLibraryVersion();
+                  try {
+                    Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
+                    debugPrint(
+                        "WatchHistoryProvider refreshed from AnimePage due to scan or folder event.");
+                  } catch (e) {
+                    debugPrint(
+                        "Error refreshing WatchHistoryProvider from AnimePage: $e");
+                  }
+                  scanService.acknowledgeScanCompleted();
+                }
+              });
+            }
+
+            Widget pageContent = Stack(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 24, left: 16.0, right: 16.0),
+                      child: Text("观看记录",
+                          style: TextStyle(
+                              fontSize: 28,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 180,
+                      child: isLoadingHistory && history.isEmpty
+                          ? const Center(child: CircularProgressIndicator())
+                          : history.isEmpty
+                              ? _buildEmptyState(
+                                  message: "暂无观看记录，已扫描的视频可在媒体库查看")
+                              : _buildWatchHistoryList(history),
+                    ),
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: DefaultTabController(
+                        length: 2,
+                        child: Column(
+                          children: [
+                            TabBar(
+                              isScrollable: true,
+                              tabs: const [
+                                Tab(text: "媒体库"),
+                                Tab(text: "库管理"),
+                              ],
+                              labelColor: Colors.white,
+                              unselectedLabelColor: Colors.white70,
+                              labelStyle: const TextStyle(
+                                  fontSize: 24, fontWeight: FontWeight.bold),
+                              indicatorPadding: const EdgeInsets.only(
+                                  top: 45, left: 0, right: 0),
+                              indicator: BoxDecoration(
+                                color: Colors.greenAccent,
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              tabAlignment: TabAlignment.start,
+                              dividerColor: const Color.fromARGB(59, 255, 255, 255),
+                              dividerHeight: 3.0,
+                              indicatorSize: TabBarIndicatorSize.tab,
+                            ),
+                            Expanded(
+                              child: TabBarView(
+                                children: [
+                                  MediaLibraryPage(
+                                    key: ValueKey(_mediaLibraryVersion),
+                                    onPlayEpisode: _onWatchHistoryItemTap,
+                                  ),
+                                  LibraryManagementTab(onPlayEpisode: _onWatchHistoryItemTap),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  ],
+                ),
+              ],
+            );
+
+            return Stack(
+              children: [
+                pageContent,
+                if (_loadingVideo)
+                  Positioned.fill(
+                    child: LoadingOverlay(
+                      messages: _loadingMessages,
+                    ),
                   ),
-                ],
-              ),
-            ),
-            if (_loadingVideo)
-              LoadingOverlay(
-                messages: _loadingMessages,
-                backgroundOpacity: 0.5,
-              ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildEmptyState() {
-    return const Center(
+  Widget _buildEmptyState({String message = "暂无观看记录"}) {
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.history,
             color: Colors.white38,
             size: 48,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
-            "暂无观看记录",
-            style: TextStyle(
+            message, // Use the message parameter
+            textAlign: TextAlign.center,
+            style: const TextStyle(
               color: Colors.white54,
               fontSize: 16,
             ),
@@ -284,10 +327,19 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   }
 
   Widget _buildWatchHistoryList(List<WatchHistoryItem> history) {
-    // 确定哪个是最新更新的记录
+    // Filter out items with zero duration, as they are likely just scanned entries without playback
+    final displayedHistory =
+        history.where((item) => item.duration > 0).toList();
+    // The history from provider is already sorted by lastWatchTime.
+
+    if (displayedHistory.isEmpty) {
+      return _buildEmptyState(message: "暂无观看记录，已扫描的视频可在媒体库查看");
+    }
+
+    // 确定哪个是最新更新的记录 (from the displayed list)
     String? latestUpdatedPath;
     DateTime latestTime = DateTime(2000);
-    for (var item in history) {
+    for (var item in displayedHistory) {
       if (item.lastWatchTime.isAfter(latestTime)) {
         latestTime = item.lastWatchTime;
         latestUpdatedPath = item.filePath;
@@ -297,11 +349,14 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       onPointerSignal: (pointerSignal) {
         if (pointerSignal is PointerScrollEvent) {
           // 鼠标滚轮上下滚动时，横向滚动
-          final newOffset = _historyScrollController.offset + pointerSignal.scrollDelta.dy;
+          final newOffset =
+              _historyScrollController.offset + pointerSignal.scrollDelta.dy;
           if (newOffset < 0) {
             _historyScrollController.jumpTo(0);
-          } else if (newOffset > _historyScrollController.position.maxScrollExtent) {
-            _historyScrollController.jumpTo(_historyScrollController.position.maxScrollExtent);
+          } else if (newOffset >
+              _historyScrollController.position.maxScrollExtent) {
+            _historyScrollController
+                .jumpTo(_historyScrollController.position.maxScrollExtent);
           } else {
             _historyScrollController.jumpTo(newOffset);
           }
@@ -313,12 +368,13 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           controller: _historyScrollController,
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: history.length,
+          itemCount: displayedHistory.length, // Use filtered list length
           itemBuilder: (context, index) {
-            final item = history[index];
+            final item = displayedHistory[index]; // Use filtered list item
             final isLatestUpdated = item.filePath == latestUpdatedPath;
             return Padding(
-              key: ValueKey('${item.filePath}_${item.lastWatchTime.millisecondsSinceEpoch}'),
+              key: ValueKey(
+                  '${item.filePath}_${item.lastWatchTime.millisecondsSinceEpoch}'),
               padding: const EdgeInsets.only(right: 16),
               child: GestureDetector(
                 onTap: () => _onWatchHistoryItemTap(item),
@@ -391,7 +447,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                   children: [
                     // 显示动画名称，如果没有则显示文件名
                     Text(
-                      item.animeName.isEmpty ? path.basename(item.filePath) : item.animeName,
+                      item.animeName.isEmpty
+                          ? path.basename(item.filePath)
+                          : item.animeName,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -421,7 +479,8 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          _formatDuration(Duration(milliseconds: item.lastPosition)),
+                          _formatDuration(
+                              Duration(milliseconds: item.lastPosition)),
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.secondary,
                             fontSize: 11,
@@ -456,15 +515,20 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               // 加载中动画，和新番图片一致
-              return const LoadingPlaceholder(width: double.infinity, height: 90, borderRadius: 10);
+              return const LoadingPlaceholder(
+                  width: double.infinity, height: 90, borderRadius: 10);
             }
-            if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
+            if (snapshot.hasError ||
+                !snapshot.hasData ||
+                snapshot.data == null) {
               return _buildDefaultThumbnail();
             }
             try {
               return Image.memory(
                 snapshot.data!,
-                key: isLatestUpdated ? UniqueKey() : ValueKey(item.thumbnailPath),
+                key: isLatestUpdated
+                    ? UniqueKey()
+                    : ValueKey(item.thumbnailPath),
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
@@ -491,5 +555,13 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         child: Icon(Icons.video_library, color: Colors.white30, size: 32),
       ),
     );
+  }
+
+  void incrementMediaLibraryVersion() {
+    if (mounted) {
+      setState(() {
+        _mediaLibraryVersion++;
+      });
+    }
   }
 }

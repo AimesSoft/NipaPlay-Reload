@@ -29,6 +29,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:nipaplay/services/scan_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -178,6 +179,7 @@ void main() async {
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
           ChangeNotifierProvider(create: (_) => WatchHistoryProvider()),
+          ChangeNotifierProvider(create: (_) => ScanService()),
         ],
         child: const NipaPlayApp(),
       ),

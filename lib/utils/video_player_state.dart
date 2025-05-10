@@ -829,11 +829,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               _setStatus(PlayerStatus.paused, message: '播放结束');
               
               // 跳转到视频开头
-              seekTo(Duration.zero); 
+              //seekTo(Duration.zero); 
               
               // 更新状态以反映跳转后的位置
-              _position = Duration.zero;
-              _progress = 0.0;
+              //_position = Duration.zero;
+              //_progress = 0.0;
               // 确保立即用0值保存，覆盖任何之前的播放位置
               if (_currentVideoPath != null) {
                 _saveVideoPosition(_currentVideoPath!, 0);
@@ -1193,7 +1193,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
          resolvedAnimeName = extractedName.trim().isNotEmpty ? extractedName : "未知动画"; // 确保不会是空字符串
       }
       
-      debugPrint('识别到动画：${resolvedAnimeName}，集数：${episodeTitle ?? '未知集数'}，animeId: $animeId, episodeId: $episodeId');
+      debugPrint('识别到动画：$resolvedAnimeName，集数：${episodeTitle ?? '未知集数'}，animeId: $animeId, episodeId: $episodeId');
       
       // 更新当前动画标题和集数标题
       _animeTitle = resolvedAnimeName; // 使用 resolvedAnimeName

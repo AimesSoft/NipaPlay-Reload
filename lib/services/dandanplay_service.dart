@@ -89,7 +89,7 @@ class DandanplayService {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-AppId': appId,
-            'X-Signature': _c(timestamp, '/api/v2/login/renew', appSecret),
+            'X-Signature': generateSignature(appId, timestamp, '/api/v2/login/renew', appSecret),
             'X-Timestamp': '$timestamp',
             'Authorization': 'Bearer $_token',
           },
@@ -164,19 +164,26 @@ class DandanplayService {
 
   // 获取appSecret
   static Future<String> getAppSecret() async {
-    if (_appSecret != null) return _appSecret!;
+    debugPrint('[DandanplayService] getAppSecret: Called.');
+    if (_appSecret != null) {
+      debugPrint('[DandanplayService] getAppSecret: Returning cached _appSecret.');
+      return _appSecret!;
+    }
 
     // 尝试从 SharedPreferences 获取 appSecret
     final prefs = await SharedPreferences.getInstance();
     final savedAppSecret = prefs.getString('dandanplay_app_secret');
     if (savedAppSecret != null) {
       _appSecret = savedAppSecret;
+      debugPrint('[DandanplayService] getAppSecret: Returning appSecret from SharedPreferences.');
       return _appSecret!;
     }
+    debugPrint('[DandanplayService] getAppSecret: No cached appSecret. Fetching from servers...');
 
     // 从服务器列表获取 appSecret
     Exception? lastException;
     for (final server in _servers) {
+      debugPrint('[DandanplayService] getAppSecret: Trying server: $server');
       try {
         //debugPrint('尝试从服务器 $server 获取appSecret');
         final response = await http.get(
@@ -202,14 +209,15 @@ class DandanplayService {
         }
         throw Exception('从 $server 获取appSecret失败：HTTP ${response.statusCode}');
       } on TimeoutException {
-        //debugPrint('从 $server 获取appSecret超时，尝试下一个服务器');
+        debugPrint('[DandanplayService] getAppSecret: Timeout with server $server');
         lastException = TimeoutException('从 $server 获取appSecret超时');
       } catch (e) {
-        //debugPrint('从 $server 获取appSecret失败: $e，详细错误: ${e.toString()}');
+        debugPrint('[DandanplayService] getAppSecret: Failed with server $server: $e');
         lastException = e as Exception;
       }
     }
     
+    debugPrint('[DandanplayService] getAppSecret: Finished attempting all servers.');
     //debugPrint('所有服务器均不可用，最后的错误: ${lastException?.toString()}');
     throw lastException ?? Exception('获取appSecret失败：所有服务器均不可用');
   }
@@ -247,7 +255,7 @@ class DandanplayService {
     }).join('');
   }
 
-  static String _c(int timestamp, String apiPath, String appSecret) {
+  static String generateSignature(String appId, int timestamp, String apiPath, String appSecret) {
     final signatureString = '$appId$timestamp$apiPath$appSecret';
     final hash = sha256.convert(utf8.encode(signatureString));
     return base64.encode(hash.bytes);
@@ -268,7 +276,7 @@ class DandanplayService {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'X-AppId': appId,
-          'X-Signature': _c(timestamp, '/api/v2/login', appSecret),
+          'X-Signature': generateSignature(appId, timestamp, '/api/v2/login', appSecret),
           'X-Timestamp': '$timestamp',
         },
         body: json.encode({
@@ -351,7 +359,7 @@ class DandanplayService {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-AppId': appId,
-        'X-Signature': _c(timestamp, '/api/v2/match', appSecret),
+        'X-Signature': generateSignature(appId, timestamp, '/api/v2/match', appSecret),
         'X-Timestamp': '$timestamp',
         if (isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
       };
@@ -462,7 +470,7 @@ class DandanplayService {
         headers: {
           'Accept': 'application/json',
           'X-AppId': appId,
-          'X-Signature': _c(timestamp, apiPath, appSecret),
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           if (_token != null) 'Authorization': 'Bearer $_token',
         },

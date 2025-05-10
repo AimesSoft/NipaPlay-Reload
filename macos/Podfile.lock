@@ -3,6 +3,8 @@ PODS:
     - FlutterMacOS
   - file_selector_macos (0.0.1):
     - FlutterMacOS
+  - flutter_local_notifications (0.0.1):
+    - FlutterMacOS
   - FlutterMacOS (1.0.0)
   - fvp (0.31.2):
     - Flutter
@@ -33,6 +35,7 @@ PODS:
 DEPENDENCIES:
   - file_picker (from `Flutter/ephemeral/.symlinks/plugins/file_picker/macos`)
   - file_selector_macos (from `Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos`)
+  - flutter_local_notifications (from `Flutter/ephemeral/.symlinks/plugins/flutter_local_notifications/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - fvp (from `Flutter/ephemeral/.symlinks/plugins/fvp/darwin`)
   - package_info_plus (from `Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos`)
@@ -53,6 +56,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/file_picker/macos
   file_selector_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos
+  flutter_local_notifications:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_local_notifications/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
   fvp:
@@ -77,6 +82,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
   file_selector_macos: 6280b52b459ae6c590af5d78fc35c7267a3c4b31
+  flutter_local_notifications: 4bf37a31afde695b56091b4ae3e4d9c7a7e6cda0
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   fvp: 89275776efede62b7fde1762afa518974e6d6750
   mdk: a726c85fd49c002b83d586b278d452f387750889

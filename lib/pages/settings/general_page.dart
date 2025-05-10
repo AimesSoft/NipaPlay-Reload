@@ -3,14 +3,67 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class GeneralPage extends StatelessWidget {
+// Define the key for SharedPreferences
+const String globalFilterAdultContentKey = 'global_filter_adult_content';
+
+class GeneralPage extends StatefulWidget {
   const GeneralPage({super.key});
+
+  @override
+  State<GeneralPage> createState() => _GeneralPageState();
+}
+
+class _GeneralPageState extends State<GeneralPage> {
+  bool _filterAdultContent = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFilterPreference();
+  }
+
+  Future<void> _loadFilterPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _filterAdultContent = prefs.getBool(globalFilterAdultContentKey) ?? true;
+      });
+    }
+  }
+
+  Future<void> _saveFilterPreference(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(globalFilterAdultContentKey, value);
+  }
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       children: [
+        SwitchListTile(
+          title: const Text(
+            "过滤成人内容 (全局)",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          subtitle: const Text(
+            "在新番列表等处隐藏成人内容",
+            style: TextStyle(color: Colors.white70),
+          ),
+          value: _filterAdultContent,
+          onChanged: (bool value) {
+            setState(() {
+              _filterAdultContent = value;
+            });
+            _saveFilterPreference(value);
+          },
+          activeColor: Colors.greenAccent,
+          inactiveThumbColor: Colors.grey[400],
+          inactiveTrackColor: Colors.white.withOpacity(0.3),
+          secondary: Icon(Ionicons.eye_off_outline, color: _filterAdultContent ? Colors.greenAccent.withOpacity(0.7) : Colors.white54),
+        ),
+        const Divider(color: Colors.white12, height: 1),
         ListTile(
           title: const Text(
             "清除图片缓存",
@@ -22,7 +75,6 @@ class GeneralPage extends StatelessWidget {
           ),
           trailing: const Icon(Ionicons.trash_outline, color: Colors.white),
           onTap: () async {
-            // 显示确认对话框
             final bool? confirm = await BlurDialog.show<bool>(
               context: context,
               title: '确认清除缓存',
