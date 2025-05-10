@@ -1,0 +1,3666 @@
+{
+  "x-generator": "NSwag v14.2.0.0 (NJsonSchema v11.1.0.0 (Newtonsoft.Json v13.0.0.0))",
+  "openapi": "3.0.0",
+  "info": {
+    "title": "弹弹play API",
+    "description": "弹弹play 弹幕开放平台API v2。接口基本说明请参考 https://doc.dandanplay.com/open/",
+    "termsOfService": "https://github.com/kaedei/dandanplay-libraryindex/blob/master/api/OpenPlatform.md",
+    "contact": {
+      "name": "弹弹play主页",
+      "url": "https://www.dandanplay.com"
+    },
+    "license": {
+      "name": "联系作者",
+      "url": "mailto:kaedei@dandanplay.net?subject=弹弹play API v2"
+    },
+    "version": "v2"
+  },
+  "servers": [
+    {
+      "url": "https://api.dandanplay.net"
+    }
+  ],
+  "paths": {
+    "/api/v2/bangumi/shin": {
+      "get": {
+        "tags": [
+          "番剧"
+        ],
+        "summary": "获取新番列表",
+        "description": "### 接口说明\n此接口用于获取官方的新番列表\n\n### 所需权限\n当未提供jwt token时，将认为是匿名用户，返回的番剧列表中`isFavorited`始终为`false`。\n当提供jwt token时（登录状态），返回的番剧列表中将按照当前用户对番剧关注状态设定`isFavorited`值。",
+        "operationId": "Bangumi_GetShinBangumi",
+        "parameters": [
+          {
+            "name": "filterAdultContent",
+            "in": "query",
+            "description": "是否过滤成人内容",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BangumiListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/bangumi/season/anime/{year}/{month}": {
+      "get": {
+        "tags": [
+          "番剧"
+        ],
+        "summary": "获取指定季度中上映的动画番剧",
+        "description": "### 接口说明\n此接口用于获取指定季度中上映的动画番剧列表。\n\n## 参数说明\nUrl中的`year`与`month`参数需要先通过`/season/anime`接口获取。\n例如2018年只有1、4、7、10四个季度，如果`month`的值不为此四个数字之一将无法获取到对应季度的番剧。\n\n### 所需权限\n当未提供jwt token时，将认为是匿名用户，返回的番剧列表中`isFavorited`始终为`false`。\n当提供jwt token时（登录状态），返回的番剧列表中将按照当前用户对番剧关注状态设定`isFavorited`值。",
+        "operationId": "Bangumi_GetSeasonBangumiOfAnime",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "path",
+            "required": true,
+            "description": "年份",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "month",
+            "in": "path",
+            "required": true,
+            "description": "季度月份（一般指1、4、7、10）",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "x-position": 2
+          },
+          {
+            "name": "filterAdultContent",
+            "in": "query",
+            "description": "是否过滤成人内容",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 3
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BangumiListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/bangumi/season/anime": {
+      "get": {
+        "tags": [
+          "番剧"
+        ],
+        "summary": "获取动画类型番剧季度的列表",
+        "operationId": "Bangumi_GetSeasons",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BangumiSeasonListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/bangumi/queue/intro": {
+      "get": {
+        "tags": [
+          "番剧"
+        ],
+        "summary": "获取近期未看番剧的列表",
+        "description": "### 接口说明\n此接口用户获取用户近期关注但未看/未看完的番剧的列表。\n\n### 权限需求\n此接口需要登录状态才可调用。",
+        "operationId": "Bangumi_GetQueueIntro",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BangumiQueueIntroResponseV2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/bangumi/queue/details": {
+      "get": {
+        "tags": [
+          "番剧"
+        ],
+        "summary": "获取完整版未看番剧的列表",
+        "description": "### 接口说明\n此接口用户获取用户完整的未看完的番剧的列表。\n\n### 权限需求\n此接口需要登录状态才可调用。",
+        "operationId": "Bangumi_GetQueueDetails",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BangumiQueueDetailsResponseV2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/bangumi/{bangumiId}": {
+      "get": {
+        "tags": [
+          "番剧"
+        ],
+        "summary": "获取番剧详情",
+        "description": "### 接口说明\n此接口用于获取指定编号的作品的详细数据，包括简介、评分、详细剧集等。\n\n### 所需权限\n此接口无需登录状态即可调用。当提供了token时，返回的剧集列表中将包含当前用户的上次播放时间。",
+        "operationId": "Bangumi_GetBangumiDetails",
+        "parameters": [
+          {
+            "name": "bangumiId",
+            "in": "path",
+            "required": true,
+            "description": "作品编号",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BangumiDetailsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/comment/{episodeId}": {
+      "get": {
+        "tags": [
+          "弹幕"
+        ],
+        "summary": "获取指定弹幕库的所有弹幕",
+        "description": "### 接口说明\n此接口用于获取弹弹play服务器上指定弹幕库的弹幕。\n\n### withRelated 参数\n当`withRelated`参数为`true`时，接口将会返回此弹幕库对应的所有第三方关联网址的弹幕。相当于同时调用了 /related 和 /extcomment 接口。\n如果您没有解析第三方弹幕的能力，推荐使用此参数获取整合后的弹幕。\n\n### 接口跳转\n在调用此接口时，将会跳转到弹幕加速服务上获取弹幕。返回的状态码为302，Location头部包含了跳转的地址。\n            \n### 返回值\n字段`p`的说明：格式为`出现时间,模式,颜色,用户ID`，各个值之间使用英文逗号分隔\n* 弹幕出现时间：格式为 0.00，单位为秒，精确到小数点后两位，例如12.34、445.6、789.01 \n* 弹幕模式：1-普通弹幕，4-底部弹幕，5-顶部弹幕\n* 颜色：32位整数表示的颜色，算法为 Rx256x256+Gx256+B，R/G/B的范围应是0-255\n* 用户ID：字符串形式表示的用户ID，通常为数字，不会包含特殊字符",
+        "operationId": "Comment_GetComment",
+        "parameters": [
+          {
+            "name": "episodeId",
+            "in": "path",
+            "required": true,
+            "description": "弹幕库编号",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "起始弹幕编号，忽略此编号以前的弹幕。默认值为0",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "default": 0
+            },
+            "x-position": 2
+          },
+          {
+            "name": "withRelated",
+            "in": "query",
+            "description": "是否同时获取关联的第三方弹幕。默认值为false",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 3
+          },
+          {
+            "name": "chConvert",
+            "in": "query",
+            "description": "中文简繁转换。0-不转换，1-转换为简体，2-转换为繁体。",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 4
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "跳转到弹幕加速服务获取弹幕",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentResponseV2"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "弹幕"
+        ],
+        "summary": "向指定的弹幕库发送弹幕",
+        "description": "### 接口说明\n此接口用于客户端向弹弹play服务器上的指定弹幕库发送弹幕。\n\n### 权限需求\n此接口需要用户登录后才可使用",
+        "operationId": "Comment_SendComment",
+        "parameters": [
+          {
+            "name": "episodeId",
+            "in": "path",
+            "required": true,
+            "description": "弹幕库ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "弹幕内容",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCommentRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "返回发送弹幕的结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendCommentResponseV2"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/extcomment": {
+      "get": {
+        "tags": [
+          "弹幕"
+        ],
+        "summary": "获取指定第三方url的弹幕",
+        "description": "### 接口说明\n此接口用于获取第三方弹幕站（如A/B/C站）上指定网址对应的弹幕。\n\n### 注意事项\n* 因为网址中可能包含特殊字符，`url`参数需要先进行UrlEncode编码\n* 获取到的弹幕并非最新，而是服务器上的缓存。所以此接口有可能获取到已被删除视频的弹幕。\n* 当网址不支持解析或缓存不存在时，将返回0条弹幕。\n            \n### 接口跳转说明\n在调用此接口时，将会跳转到弹幕加速服务上获取弹幕。返回的状态码为302，Location头部包含了跳转的地址。\n\n### 返回值\n 字段`p`的说明：格式为`出现时间,模式,颜色,用户ID`，各个值之间使用英文逗号分隔\n* 弹幕出现时间：格式为 0.00，单位为秒，精确到小数点后两位，例如12.34、445.6、789.01 \n* 弹幕模式：1-普通弹幕，4-底部弹幕，5-顶部弹幕\n* 颜色：32位整数表示的颜色，算法为 Rx256x256+Gx256+B，R/G/B的范围应是0-255\n* 用户ID：字符串形式表示的用户ID",
+        "operationId": "Comment_GetExtComment",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "第三方网站的页面地址",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "chConvert",
+            "in": "query",
+            "description": "中文简繁转换。0-不转换，1-转换为简体，2-转换为繁体。",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "跳转到弹幕加速服务获取弹幕",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentResponseV2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/favorite": {
+      "get": {
+        "tags": [
+          "关注"
+        ],
+        "summary": "获取当前用户关注的所有动画作品",
+        "description": "### 接口说明\n此接口用于获取用户当前关注的所有动画作品信息\n\n### 权限需求\n此接口需要登录状态才能调用",
+        "operationId": "Favorite_GetUserFavorite",
+        "parameters": [
+          {
+            "name": "onlyOnAir",
+            "in": "query",
+            "description": "只返回正在连载的作品",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "返回用户关注的作品列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserFavoriteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "关注"
+        ],
+        "summary": "添加关注",
+        "description": "### 接口说明\n此接口用于为用户增加关注某一部作品。\n\n### 权限需求\n此接口需要登录状态才能调用，同时应用应拥有添加关注的权限。",
+        "operationId": "Favorite_AddFavorite",
+        "requestBody": {
+          "x-name": "request",
+          "description": "增加关注作品的信息",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserAddFavoriteRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "返回添加关注的结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAddFavoriteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/favorite/{animeId}": {
+      "delete": {
+        "tags": [
+          "关注"
+        ],
+        "summary": "取消关注",
+        "description": "### 接口说明\n此接口用于为用户取消关注某一部作品。\n\n### 权限需求\n此接口需要登录状态才能调用，同时应用应拥有取消关注的权限。",
+        "operationId": "Favorite_DeleteFavorite",
+        "parameters": [
+          {
+            "name": "animeId",
+            "in": "path",
+            "required": true,
+            "description": "作品编号",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "返回取消关注的结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDeleteFavoriteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/homepage": {
+      "get": {
+        "tags": [
+          "首页"
+        ],
+        "summary": "获取整合后的首页数据",
+        "description": "### 接口说明\n此接口用于一次性获取系统公告、未看剧集列表、当季新番列表、热门种子等接口的数据，并合并为同一个文档进行返回。\n\n### 权限需求\n当未提供jwt token时，将认为是匿名用户，返回的番剧列表中`isFavorited`始终为`false`。\n当提供jwt token时（登录状态），返回的番剧列表中将按照当前用户对番剧关注状态设定`isFavorited`值。",
+        "operationId": "Homepage_GetHomepage",
+        "parameters": [
+          {
+            "name": "filterAdultContent",
+            "in": "query",
+            "description": "是否过滤可能出现的成人内容",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomepageResponseV2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/homepage/banner": {
+      "get": {
+        "tags": [
+          "首页"
+        ],
+        "summary": "获取系统公告",
+        "operationId": "Homepage_GetBanner",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BannerResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/login": {
+      "post": {
+        "tags": [
+          "登录"
+        ],
+        "summary": "使用用户名密码登录",
+        "description": "### 接口说明\n通过此接口可以使用用户名/密码获取到后续接口需要的JWT Token。\n调用此接口需要有应用的AppId与AppSecret，您可以联系弹弹play开发方申请。\n\n### Hash计算方法\nHash属性的计算方法为，将登录请求中 `appId` `password` `unixTimestamp` `userName` 属性的值以及您应用的 `AppSecret` 密钥的值依次拼接起来，\n计算出32位MD5（不区分大小写）。举例来说，`appId`为`dandanplay`，AppSecret为`FFFFF`，用户名为`test1`，密码为`test2`，\n那么计算方法将会是 `hash=MD5(dandanplaytest2666666666test1FFFFF)`。\n\n### 错误代码\n当调用接口发生错误时，例如参数不完整、验证错误、登录失败，`success`属性值将为`false`，`errorCode`代码将不为`0`，\n同时`errorMessage`属性将包含错误的描述信息 。",
+        "operationId": "Login_Login",
+        "requestBody": {
+          "x-name": "request",
+          "description": "登录请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/login/renew": {
+      "get": {
+        "tags": [
+          "登录"
+        ],
+        "summary": "延长已有Token的有效时间",
+        "description": "### 接口说明\n默认情况下Token的有效期为21天，此接口用于在此期间延长一个有效的JWT Token的有效时间。\n\n### 权限需求\n此接口需要登录后才可使用（请求中包含Authorization头）\n\n### 返回值说明\n调用此接口后相当于重新使用当前用户的信息进行重新登录，将会返回最新的用户信息（包括已延长有效期的JWT Token）。\n如果应用或用户的状态异常，将会返回相应的错误代码。",
+        "operationId": "Login_RenewToken",
+        "responses": {
+          "200": {
+            "description": "返回Token刷新后的用户信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未提供有效的Token"
+          }
+        }
+      }
+    },
+    "/api/v2/match": {
+      "post": {
+        "tags": [
+          "文件识别"
+        ],
+        "summary": "使用指定的文件名、Hash、文件长度信息寻找文件可能对应的节目信息。",
+        "description": "### 接口说明\n此接口用于当用户打开某视频文件时，可以通过文件名称、Hash等信息查找此视频可能对应的节目信息。\n\n此接口首先会使用Hash信息进行搜寻，如果有相应的记录，会返回“精确关联”的结果（即`isMatched`属性为`true`，此时列表中只包含一个搜索结果）。\n\n如果Hash信息匹配失败，则会继续通过文件名进行模糊搜寻。\n\n\n### 返回值说明\n一个包含节目信息的列表，节目在列表中排名越靠前，这个节目越有可能是视频文件的内容。\n当列表中只有一个节目时（`isMatched`属性为`true`），视为“精确关联” —— 说明此视频已被人工关联了某一节目。客户端应自动选择这个唯一的结果，不必再让用户做出选择。",
+        "operationId": "Match_Match",
+        "requestBody": {
+          "x-name": "request",
+          "description": "匹配请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchResponseV2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/match/batch": {
+      "post": {
+        "tags": [
+          "文件识别"
+        ],
+        "summary": "使用指定的文件信息批量匹配节目信息",
+        "description": "### 接口说明\n此接口用于批量匹配（参考`/match`接口），可以通过Hash、文件名称等信息查找多个视频对应的节目信息。\n每次批量匹配提供的文件信息不能多于`32`个，文件信息中不能有重复项。\n此接口只会返回“精确关联”的结果，如果文件未能成功匹配上一个弹幕库，对应匹配结果的`success`将为`false`。\n\n### 返回值说明\n一个包含匹配结果的列表，将与请求中的文件信息一一对应。例如请求中包含了20个文件信息，返回结果的列表中也将包含20个匹配结果。\n\n如果某个文件匹配成功，对应结果的`success`属性将为`true`。如果某文件未匹配成功，或是某个请求未通过验证，对应结果的`success`属性将为`false`。",
+        "operationId": "Match_BatchMatch",
+        "requestBody": {
+          "x-name": "request",
+          "description": "批量匹配请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchMatchRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchMatchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/playhistory": {
+      "get": {
+        "tags": [
+          "播放历史"
+        ],
+        "summary": "获取用户播放历史",
+        "description": "### 接口说明\n此接口用于获取用户的播放历史（作品+剧集）。只能获取到用户已关注作品的播放历史。\n\n### 权限需求\n此接口需要登录状态才可以调用。\n\n### 开始结束日期参数说明\n开始日期不能晚于结束日期；\n开始日期与结束日期不能相差大于一年（最多查询一年的数据）；\n当没有提供`toDate`参数时，默认将使用当前日期；\n当没有提供`fromDate`参数时，默认将使用`toDate`减去三个月的日期。",
+        "operationId": "PlayHistory_GetUserPlayHistory",
+        "parameters": [
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "开始日期",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "结束日期",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "返回用户播放历史",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPlayHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "播放历史"
+        ],
+        "summary": "增加播放历史记录和评分",
+        "description": "### 接口说明\n此接口用于提交用户的播放历史数据，同时可以更新用户对某剧集的评分。\n\n### 权限需求\n此接口需要登录权限才可以调用。\n\n### 参数限制说明\n接口支持单个或批量增加历史数据。\n\n提交的请求中，如果`episodeIdList`数组只包含一条数据，则`addToFavorite`参数（关注此作品）和`rating`参数（更新评分）可以生效。\n如果`episodeIdList`数组包含不止一条数据，则会忽略`addToFavorite`和`rating`参数。\n\n在批量添加历史记录时，`episodeIdList`数组最多只能包含100条数据，而且其中的episodeId必须全部属于同一部作品。",
+        "operationId": "PlayHistory_AddPlayHistory",
+        "requestBody": {
+          "x-name": "request",
+          "description": "播放历史记录数据",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserAddPlayHistoryRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "返回播放历史添加结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAddPlayHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/register": {
+      "post": {
+        "tags": [
+          "注册"
+        ],
+        "summary": "注册新的弹弹play用户",
+        "description": "### 接口说明\n通过此接口可以注册新的弹弹play用户，注册成功后将返回登录结果。\n调用此接口需要有应用的AppId与AppSecret，您可以联系弹弹play开发方申请。\n\n### Hash计算方法\nHash属性的计算方法为，将登录请求中 `appId` `email` `password` `screenName` `unixTimestamp` `userName` 属性的值加上您应用的 `AppSecret` 密钥的值按顺序拼接起来，\n计算出32位MD5（不区分大小写）。举例来说，`appId`为`dandanplay`，AppSecret为`FFFFF`，用户名为`test1`，密码为`test2`，邮箱为`test3@example.com`，昵称为`弹弹`\n那么计算方法将会是 `hash=MD5(dandanplaytest3@example.comtest2弹弹666666666test1FFFFF)`。\n\n### 错误代码\n当调用接口发生错误时，例如参数不完整、验证错误、登录失败，`success`属性值将为`false`，`errorCode`代码将不为`0`，\n同时`errorMessage`属性将包含错误的描述信息 。",
+        "operationId": "Register_RegisterMainUser",
+        "requestBody": {
+          "x-name": "request",
+          "description": "注册请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequestV2"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/register/resetpassword": {
+      "post": {
+        "tags": [
+          "注册"
+        ],
+        "summary": "重置用户密码",
+        "description": "### 接口说明\n通过此接口可以重置一个用户的密码至随机密码，重置成功后新的随机密码将会发送到对应的邮箱中。\n调用此接口需要有应用的AppId与AppSecret，您可以联系弹弹play开发方申请。\n\n### 请求说明\n请求参数中`userName`和`email`必须和注册时的信息完全一致，方能成功重置。\n重置密码的请求每2分钟只能发送一次，否则会返回错误信息。\n\n### Hash计算方法\nHash属性的计算方法为，将登录请求中 `appId` `email` `unixTimestamp` `userName` 属性的值加上您应用的 `AppSecret` 密钥的值按顺序拼接起来，\n计算出32位MD5（不区分大小写）。举例来说，`appId`为`dandanplay`，AppSecret为`FFFFF`，用户名为`test1`，邮箱为`test3@example.com`，\n那么计算方法将会是 `hash=MD5(dandanplaytest3@example.com666666666test1FFFFF)`。\n\n### 错误代码\n当调用接口发生错误时，例如参数不完整、验证错误、登录失败，`success`属性值将为`false`，`errorCode`代码将不为`0`，\n同时`errorMessage`属性将包含错误的描述信息 。",
+        "operationId": "Register_ResetPassword",
+        "requestBody": {
+          "x-name": "request",
+          "description": "重置密码请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequestV2"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetPasswordResponseV2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/register/findmyid": {
+      "post": {
+        "tags": [
+          "注册"
+        ],
+        "summary": "查找邮箱对应的用户名",
+        "description": "### 接口说明\n通过此接口可以查找一个指定邮箱对应的用户名，查找结果将会发送到对应的邮箱中。\n调用此接口需要有应用的AppId与AppSecret，您可以联系弹弹play开发方申请。\n\n### 请求说明\n请求参数中`email`必须和注册时的信息完全一致，方能查找成功。\n查找用户名的请求每`10`分钟只能发送一次，否则会返回错误信息。\n\n### Hash计算方法\nHash属性的计算方法为，将登录请求中 `appId` `email` `unixTimestamp` 属性的值加上您应用的 `AppSecret` 密钥的值按顺序拼接起来，\n计算出32位MD5（不区分大小写）。举例来说，`appId`为`dandanplay`，AppSecret为`FFFFF`，邮箱为`test3@example.com`，\n那么计算方法将会是 `hash=MD5(dandanplaytest3@example.com666666666FFFFF)`。\n\n### 错误代码\n当调用接口发生错误时，例如参数不完整、验证错误、登录失败，`success`属性值将为`false`，`errorCode`代码将不为`0`，\n同时`errorMessage`属性将包含错误的描述信息 。",
+        "operationId": "Register_FindMyId",
+        "requestBody": {
+          "x-name": "request",
+          "description": "查找用户名请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindMyIdRequestV2"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindMyIdResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/related/{episodeId}": {
+      "get": {
+        "tags": [
+          "弹幕关联"
+        ],
+        "summary": "获取指定弹幕库关联的所有第三方弹幕源信息",
+        "description": "### 接口说明\n此接口用于在弹弹play官方弹幕库中弹幕不足的时候，获取此弹幕库对应的其他网站的播放地址，用以补充弹幕数量，提高观看体验。\n\n### 第三方弹幕源\n第三方弹幕源指的是除弹弹play自己外其他弹幕提供网站。常见的Acfun、BiliBili、Tucao等。\n应用可以使用 */extcomment* 接口获取来自第三方网站的弹幕，不必自行编写解析代码。",
+        "operationId": "Related_GetRelated",
+        "parameters": [
+          {
+            "name": "episodeId",
+            "in": "path",
+            "required": true,
+            "description": "弹幕库ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedResponseV2"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "弹幕关联"
+        ],
+        "summary": "提交第三方关联弹幕源数据（投赞成票）",
+        "description": "### 接口说明\n此接口用于提交“弹幕库-第三方弹幕源”的关联数据，或是对已有的关联数据投出赞成票。\n\n### 权限需求\n此接口需要登录状态才可以调用。\n\n### 提交说明\n提交后并不意味着数据会被直接接受。\n当用户对某个“弹幕库-第三方弹幕源”的关联投出足够数量和比例的赞成票时，服务器才会接受对应的关联。",
+        "operationId": "Related_AddRelated",
+        "parameters": [
+          {
+            "name": "episodeId",
+            "in": "path",
+            "required": true,
+            "description": "弹幕库编号",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "关联数据",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserAddRelatedRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "返回投票结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAddRelatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "弹幕关联"
+        ],
+        "summary": "向某个第三方弹幕源关联数据投反对票",
+        "description": "### 接口说明\n此接口用于对某个“弹幕库-第三方弹幕源”的关联数据投出反对票。\n\n### 权限需求\n此接口需要登录状态才可以调用。\n\n### 提交说明\n提交后并不意味着数据会被直接接受。\n当用户对某个已被服务器接受的“弹幕库-第三方弹幕源”的关联投出足够多比例和数量的反对票时，\n服务器才会从弹幕库中删除对应的第三方弹幕源关联。",
+        "operationId": "Related_DeleteRelated",
+        "parameters": [
+          {
+            "name": "episodeId",
+            "in": "path",
+            "required": true,
+            "description": "弹幕库编号",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "url",
+            "in": "query",
+            "description": "第三方弹幕源网站的网址",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "返回投票结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDeleteRelatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        }
+      }
+    },
+    "/api/v2/search/anime": {
+      "get": {
+        "tags": [
+          "搜索"
+        ],
+        "summary": "根据关键词搜索作品",
+        "description": "### 接口说明\n根据用户提供的关键词，在弹弹play数据库中搜索对应的作品信息，搜索结果中不包含剧集信息。\n\n### 权限需求\n不需要登录状态即可使用\n\n### 关键词说明\n* 关键词长度至少为`2`。\n* 关键词中的空格将被认定为 AND 条件，其他字符将被作为原始字符去搜索。\n* 可以通过中文、日文、罗马音、英文等条件对作品的别名进行搜索，繁体中文关键词将被统一为简体中文。",
+        "operationId": "Search_SearchAnime",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "nullable": true,
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AnimeType"
+                    }
+                  ]
+                }
+              ]
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchAnimeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/search/tmdb": {
+      "get": {
+        "tags": [
+          "搜索"
+        ],
+        "summary": "根据关键词搜索TMDB中的作品",
+        "description": "### 接口说明\n根据用户提供的关键词，在TMDB数据库中搜索作品，搜索结果中不包含剧集信息。\n            \n### 权限需求\n不需要登录状态即可使用\n            \n### 关键词说明\n* 关键词长度至少为`2`。\n* 可以通过中文、日文、罗马音、英文等条件对作品的别名进行搜索。\n            \n### 返回结果\n返回结果中将包含TMDB电视剧和电影的搜索结果。电视剧结果排列在前，电影将排列在后。",
+        "operationId": "Search_SearchTmdb",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchAnimeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/search/episodes": {
+      "get": {
+        "tags": [
+          "搜索"
+        ],
+        "summary": "根据关键词搜索所有匹配的剧集信息",
+        "description": "### 接口说明\n此接口用于根据关键词搜索所有匹配的剧集信息。\n当自动匹配失败或结果不理想时可以调用此接口，让用户手动通过关键词搜索到作品。\n            \n### 参数说明\n- anime：作品标题。支持通过中文、日语（含罗马音）、英语搜索，至少为2个字符。\n- tmdbId：使用 TMDB ID 搜索作品，如果指定此参数，将仅返回此 TMDB ID 的关联作品（可能有多个）。\n- episode：剧集标题，默认为空。当参数为纯数字时，将仅保留指定集数的结果。当参数值为“movie”时，将仅保留剧场版的结果。其他情况下，将仅保留剧集标题中包含这个文字的结果，不建议使用。\n            \n必须提供`anime`和`tmdbId`中至少一个参数。\n当同时提供`anime`和`tmdbId`参数时，会先尝试使用`anime`参数进行搜索，之后在搜索结果中匹配`tmdbId`的剧集。\n\n### 参数注意事项\n* 参数可以包含空格，但空格将作为查询字符串的一部分而不是传统的“OR”查询。\n* 未提供`episode`参数的情况下，如果`anime`参数中包含空格，且空格后为数字（如“EVA 10”），此数字将被认定为是`episode`参数。\n* 如果参数中包含特殊字符，需要经过Url编码后才能传递。\n\n### 返回值说明\n接口将返回包含节目信息的列表，当结果集过大时，`hasMore`属性为`true`，这时客户端应该提示用户填写更详细的信息以缩小搜索范围。",
+        "operationId": "Search_SearchEpisodes",
+        "parameters": [
+          {
+            "name": "anime",
+            "in": "query",
+            "description": "作品标题。支持通过中文、日语（含罗马音）、英语搜索，至少为2个字符。",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "tmdbId",
+            "in": "query",
+            "description": "TMDB ID，如果指定此参数，将仅返回此 TMDB ID 的关联作品（可能有多个）。",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "episode",
+            "in": "query",
+            "description": "剧集标题，默认为空。\n当值为纯数字时，将仅保留指定集数的结果。\n当值为“movie”时，将仅保留剧场版的结果。\n其他情况下，将仅保留剧集标题中包含这个文字的结果，不建议使用。",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 3
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchEpisodesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v2/search/tag": {
+      "get": {
+        "tags": [
+          "搜索"
+        ],
+        "summary": "根据标签搜索最匹配的作品",
+        "description": "### 接口说明\n根据用户提供的标签列表搜索到对应的作品信息，搜索结果中不包含剧集信息。\n\n### 权限需求\n不需要登录状态即可使用。返回中的`isFavorited`属性目前都为`false`。\n            \n### 返回值\n将返回根据提供的标签列表最匹配的作品列表。\n\n### 参数说明\n`tags`参数必须为标签ID使用逗号连接起来，例如想查询拥有 15、20、66、108 标签的作品，需要传入 `15,20,66,108`。\n参数不能包含除数字与逗号之外其他的字符。",
+        "operationId": "Search_SearchAnimeByTag",
+        "parameters": [
+          {
+            "name": "tags",
+            "in": "query",
+            "description": "标签列表。格式请见接口说明。",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchAnimeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/search/adv/config": {
+      "get": {
+        "tags": [
+          "搜索"
+        ],
+        "summary": "获取高级搜索默认配置",
+        "description": "### 接口说明\n获取高级搜索功能所需的配置项，用于初始化客户端搜索界面。例如类别、标签等。\n            \n### 权限需求\n不需要登录状态即可使用。",
+        "operationId": "Search_GetSearchAdvConfig",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "anidb",
+              "nullable": true
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchAdvancedConfigResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/search/adv": {
+      "get": {
+        "tags": [
+          "搜索"
+        ],
+        "summary": "高级搜索",
+        "operationId": "Search_SearchAdvanced",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "description": "数据源。anidb|tmdb。默认为anidb",
+            "schema": {
+              "type": "string",
+              "default": "anidb",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "作品标题关键词",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "作品类型",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "description": "标签，一个或多个数字。若填写多个数字请用英文逗号隔开，例如 12,34,56 。设定多个数字时将搜索同时包含这些标签的作品。",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 4
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "description": "限定作品上映的年份",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 5
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "限定年份前提下继续限定作品月份",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 6
+          },
+          {
+            "name": "minRate",
+            "in": "query",
+            "description": "限定最低评分（包含）",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 7
+          },
+          {
+            "name": "maxRate",
+            "in": "query",
+            "description": "限定最高评分（包含）",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "x-position": 8
+          },
+          {
+            "name": "restricted",
+            "in": "query",
+            "description": "只显示限制级别的内容。不提供此参数则不过滤结果，提供true或false都将过滤结果。",
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "x-position": 9
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "设定排序规则",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchBangumiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/user/password": {
+      "post": {
+        "tags": [
+          "用户"
+        ],
+        "summary": "为已登录用户修改密码",
+        "description": "### 接口说明\n此接口用于为已经登录的用户修改当前的登录密码。\n\n### 权限需求\n此接口需要登录后才可使用（请求中包含Authorization头）",
+        "operationId": "User_UpdatePassword",
+        "requestBody": {
+          "x-name": "request",
+          "description": "修改密码请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdatePasswordRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "修改密码结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserUpdateProfileResponseV2"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/user/profile": {
+      "post": {
+        "tags": [
+          "用户"
+        ],
+        "summary": "修改用户资料（昵称、头像等）",
+        "description": "### 接口说明\n此接口用于为已经登录的用户修改当前的基本资料（如昵称、头像）。\n当提供`screenName`时才更新昵称，提供`profileImageBase64`时才更新头像图片，否则不会产生变化。\n            \n### 更新头像图片\n头像图片需要转换成base64编码后放入`profileImageBase64`字段中。此字段长度不能超过1MB。\n上传的图片将保留长宽比，转换为边长最长600px的长方形，并存储为jpg格式。\n\n### 权限需求\n此接口需要登录后才可使用（请求中包含Authorization头）",
+        "operationId": "User_UpdateProfile",
+        "requestBody": {
+          "x-name": "request",
+          "description": "修改用户资料请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateProfileRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "返回修改结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserUpdateProfileResponseV2"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/user/email": {
+      "post": {
+        "tags": [
+          "用户"
+        ],
+        "summary": "为已登录用户修改关联邮箱",
+        "description": "### 接口说明\n            此接口用于为已经登录的用户修改当前账号关联的邮箱地址。\n            \n            ### 权限需求\n            此接口需要登录后才可使用（请求中包含Authorization头）",
+        "operationId": "User_UpdateUserEmail",
+        "requestBody": {
+          "x-name": "request",
+          "description": "修改关联邮箱请求",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateEmailRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "修改邮箱结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserUpdateProfileResponseV2"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          }
+        },
+        "security": [
+          {
+            "AppId": []
+          },
+          {
+            "AppSecret": []
+          },
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BangumiListResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "bangumiList": {
+                "type": "array",
+                "description": "番剧列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiIntro"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BangumiIntro": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animeId": {
+            "type": "integer",
+            "description": "作品编号",
+            "format": "int32"
+          },
+          "bangumiId": {
+            "type": "string",
+            "description": "作品ID（新）",
+            "nullable": true
+          },
+          "animeTitle": {
+            "type": "string",
+            "description": "作品标题",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "海报图片地址",
+            "nullable": true
+          },
+          "searchKeyword": {
+            "type": "string",
+            "description": "搜索关键词",
+            "nullable": true
+          },
+          "isOnAir": {
+            "type": "boolean",
+            "description": "是否正在连载中"
+          },
+          "airDay": {
+            "type": "integer",
+            "description": "周几上映，0代表周日，1-6代表周一至周六",
+            "format": "int32"
+          },
+          "isFavorited": {
+            "type": "boolean",
+            "description": "当前用户是否已关注（无论是否为已弃番等附加状态）"
+          },
+          "isRestricted": {
+            "type": "boolean",
+            "description": "是否为限制级别的内容（例如属于R18分级）"
+          },
+          "rating": {
+            "type": "number",
+            "description": "番剧综合评分（综合多个来源的评分求出的加权平均值，0-10分）",
+            "format": "decimal"
+          }
+        }
+      },
+      "ResponseBase": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "errorCode": {
+            "type": "integer",
+            "description": "错误代码，0表示没有发生错误，非0表示有错误，详细信息会包含在errorMessage属性中",
+            "format": "int32"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "接口是否调用成功"
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "当发生错误时，说明错误具体原因",
+            "nullable": true
+          }
+        }
+      },
+      "BangumiSeasonListResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "seasons": {
+                "type": "array",
+                "description": "番剧季度列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiSeason"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BangumiSeason": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "year": {
+            "type": "integer",
+            "description": "年份",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "description": "月份",
+            "format": "int32"
+          },
+          "seasonName": {
+            "type": "string",
+            "description": "季度名称",
+            "nullable": true
+          }
+        }
+      },
+      "BangumiQueueIntroResponseV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "hasMore": {
+                "type": "boolean",
+                "description": "是否有更多数据可以展示（显示界面上的“更多”按钮）"
+              },
+              "bangumiList": {
+                "type": "array",
+                "description": "未看剧集列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiQueueIntroV2"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BangumiQueueIntroV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animeId": {
+            "type": "integer",
+            "description": "作品编号",
+            "format": "int32"
+          },
+          "animeTitle": {
+            "type": "string",
+            "description": "作品标题",
+            "nullable": true
+          },
+          "episodeTitle": {
+            "type": "string",
+            "description": "最新一集的剧集标题",
+            "nullable": true
+          },
+          "airDate": {
+            "type": "string",
+            "description": "剧集上映日期（无小时分钟，当地时间）",
+            "format": "date-time",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "海报图片地址",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "未看状态的说明，如“今天更新”，“昨天更新”，“有多集未看”等",
+            "nullable": true
+          },
+          "isOnAir": {
+            "type": "boolean",
+            "description": "番剧是否在连载中"
+          }
+        }
+      },
+      "BangumiQueueDetailsResponseV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "bangumiList": {
+                "type": "array",
+                "description": "未看番剧剧集列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiQueueDetailsV2"
+                }
+              },
+              "unwatchedBangumiList": {
+                "type": "array",
+                "description": "已关注但从未看过的番剧列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiQueueDetailsV2"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BangumiQueueDetailsV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animeId": {
+            "type": "integer",
+            "description": "作品编号",
+            "format": "int32"
+          },
+          "animeTitle": {
+            "type": "string",
+            "description": "作品标题",
+            "nullable": true
+          },
+          "isOnAir": {
+            "type": "boolean",
+            "description": "是否正在连载中"
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "海报图片地址",
+            "nullable": true
+          },
+          "searchKeyword": {
+            "type": "string",
+            "description": "搜索资源的关键词",
+            "nullable": true
+          },
+          "lastWatched": {
+            "type": "string",
+            "description": "上次观看时间（null表示尚未看过）",
+            "format": "date-time",
+            "nullable": true
+          },
+          "episodes": {
+            "type": "array",
+            "description": "未看剧集的列表",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/BangumiQueueEpisodeV2"
+            }
+          }
+        }
+      },
+      "BangumiQueueEpisodeV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "episodeId": {
+            "type": "integer",
+            "description": "剧集编号（弹幕库编号）",
+            "format": "int64"
+          },
+          "episodeTitle": {
+            "type": "string",
+            "description": "剧集标题",
+            "nullable": true
+          },
+          "airDate": {
+            "type": "string",
+            "description": "上映日期（无小时分钟，当地时间），可能为null",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "BangumiDetailsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "bangumi": {
+                "description": "番剧详情",
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/BangumiDetails"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "BangumiDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BangumiIntro"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "description": "作品类型",
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AnimeType"
+                  }
+                ]
+              },
+              "typeDescription": {
+                "type": "string",
+                "description": "类型描述",
+                "nullable": true
+              },
+              "titles": {
+                "type": "array",
+                "description": "作品标题",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiTitle"
+                }
+              },
+              "seasons": {
+                "type": "array",
+                "description": "作品季度列表。可能为空，仅对部分源（如TMDB源）有效",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiEpisodeSeason"
+                }
+              },
+              "episodes": {
+                "type": "array",
+                "description": "剧集列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiEpisode"
+                }
+              },
+              "summary": {
+                "type": "string",
+                "description": "番剧简介",
+                "nullable": true
+              },
+              "metadata": {
+                "type": "array",
+                "description": "番剧元数据（名称、制作人员、配音人员等）",
+                "nullable": true,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "bangumiUrl": {
+                "type": "string",
+                "description": "Bangumi.tv页面地址",
+                "nullable": true
+              },
+              "userRating": {
+                "type": "integer",
+                "description": "用户个人评分（0-10）",
+                "format": "int32"
+              },
+              "favoriteStatus": {
+                "description": "关注状态",
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/FavoriteStatus"
+                  }
+                ]
+              },
+              "comment": {
+                "type": "string",
+                "description": "用户对此番剧的备注/评论/标签",
+                "nullable": true
+              },
+              "ratingDetails": {
+                "type": "object",
+                "description": "各个站点的评分详情",
+                "nullable": true,
+                "additionalProperties": {
+                  "type": "number",
+                  "format": "decimal"
+                }
+              },
+              "relateds": {
+                "type": "array",
+                "description": "与此作品直接关联的其他作品（例如同一作品的不同季、剧场版、OVA等）",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiIntro"
+                }
+              },
+              "similars": {
+                "type": "array",
+                "description": "与此作品相似的其他作品",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiIntro"
+                }
+              },
+              "tags": {
+                "type": "array",
+                "description": "标签列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiTag"
+                }
+              },
+              "onlineDatabases": {
+                "type": "array",
+                "description": "此作品在其他在线数据库/网站的对应url",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiOnlineDatabase"
+                }
+              },
+              "trailers": {
+                "type": "array",
+                "description": "预告片列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiTrailer"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "AnimeType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "tvseries",
+          "tvspecial",
+          "ova",
+          "movie",
+          "musicvideo",
+          "web",
+          "other",
+          "jpmovie",
+          "jpdrama",
+          "unknown",
+          "tmdbtv",
+          "tmdbmovie"
+        ],
+        "enum": [
+          "tvseries",
+          "tvspecial",
+          "ova",
+          "movie",
+          "musicvideo",
+          "web",
+          "other",
+          "jpmovie",
+          "jpdrama",
+          "unknown",
+          "tmdbtv",
+          "tmdbmovie"
+        ]
+      },
+      "BangumiTitle": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "语言",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "description": "标题",
+            "nullable": true
+          }
+        }
+      },
+      "BangumiEpisodeSeason": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "季度ID",
+            "nullable": true
+          },
+          "airDate": {
+            "type": "string",
+            "description": "上映日期",
+            "format": "date-time",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "description": "季度名称",
+            "nullable": true
+          },
+          "episodeCount": {
+            "type": "integer",
+            "description": "剧集数量",
+            "format": "int32"
+          },
+          "summary": {
+            "type": "string",
+            "description": "季度简介",
+            "nullable": true
+          }
+        }
+      },
+      "BangumiEpisode": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "seasonId": {
+            "type": "string",
+            "description": "季度ID（如果为空表示只有一个季度）",
+            "nullable": true
+          },
+          "episodeId": {
+            "type": "integer",
+            "description": "剧集ID（弹幕库编号）",
+            "format": "int64"
+          },
+          "episodeTitle": {
+            "type": "string",
+            "description": "剧集完整标题",
+            "nullable": true
+          },
+          "episodeNumber": {
+            "type": "string",
+            "description": "剧集短标题（可以用来排序，非纯数字，可能包含字母）",
+            "nullable": true
+          },
+          "lastWatched": {
+            "type": "string",
+            "description": "上次观看时间（服务器时间，即北京时间）",
+            "format": "date-time",
+            "nullable": true
+          },
+          "airDate": {
+            "type": "string",
+            "description": "本集上映时间（当地时间）",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "FavoriteStatus": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "favorited",
+          "finished",
+          "abandoned"
+        ],
+        "enum": [
+          "favorited",
+          "finished",
+          "abandoned"
+        ]
+      },
+      "BangumiTag": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "标签编号",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "description": "标签内容",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "description": "观众为此标签+1次数",
+            "format": "int32"
+          }
+        }
+      },
+      "BangumiOnlineDatabase": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "网站名称",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "description": "网址",
+            "nullable": true
+          }
+        }
+      },
+      "BangumiTrailer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "视频编号",
+            "format": "int32"
+          },
+          "url": {
+            "type": "string",
+            "description": "视频播放页地址",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "description": "视频标题",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "视频封面",
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "description": "发布时间",
+            "format": "date-time"
+          }
+        }
+      },
+      "CommentResponseV2": {
+        "type": "object",
+        "description": "弹幕列表",
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer",
+            "description": "弹幕数量",
+            "format": "int32"
+          },
+          "comments": {
+            "type": "array",
+            "description": "弹幕列表",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/CommentData"
+            }
+          }
+        }
+      },
+      "CommentData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cid": {
+            "type": "integer",
+            "description": "弹幕ID",
+            "format": "int64"
+          },
+          "p": {
+            "type": "string",
+            "description": "弹幕参数（出现时间,模式,颜色,用户ID）",
+            "nullable": true
+          },
+          "m": {
+            "type": "string",
+            "description": "弹幕内容",
+            "nullable": true
+          }
+        }
+      },
+      "SendCommentResponseV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "cid": {
+                "type": "integer",
+                "description": "此弹幕库中的弹幕ID",
+                "format": "int64"
+              }
+            }
+          }
+        ]
+      },
+      "SendCommentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "number",
+            "description": "弹幕出现时间，单位为秒",
+            "format": "double"
+          },
+          "mode": {
+            "type": "integer",
+            "description": "弹幕模式：1-普通弹幕，4-顶部弹幕，5-底部弹幕",
+            "format": "int32"
+          },
+          "color": {
+            "type": "integer",
+            "description": "弹幕颜色，计算方式为 Rx255x255+Gx255+B",
+            "format": "int32"
+          },
+          "comment": {
+            "type": "string",
+            "description": "弹幕内容，不能长于100个字符",
+            "nullable": true
+          }
+        }
+      },
+      "UserFavoriteResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "favorites": {
+                "type": "array",
+                "description": "关注列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/UserFavoriteItem"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "UserFavoriteItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animeId": {
+            "type": "integer",
+            "description": "作品编号",
+            "format": "int32"
+          },
+          "bangumiId": {
+            "type": "string",
+            "description": "作品编号",
+            "nullable": true
+          },
+          "animeTitle": {
+            "type": "string",
+            "description": "作品标题",
+            "nullable": true
+          },
+          "type": {
+            "description": "作品类型",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AnimeType"
+              }
+            ]
+          },
+          "lastFavoriteTime": {
+            "type": "string",
+            "description": "上次关注的时间",
+            "format": "date-time"
+          },
+          "lastAirDate": {
+            "type": "string",
+            "description": "上次剧集更新的时间",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastWatchTime": {
+            "type": "string",
+            "description": "上次播放作品相关剧集的时间",
+            "format": "date-time",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "海报图片地址",
+            "nullable": true
+          },
+          "episodeTotal": {
+            "type": "integer",
+            "description": "此作品的总集数",
+            "format": "int32"
+          },
+          "episodeWatched": {
+            "type": "integer",
+            "description": "当前已看的集数",
+            "format": "int32"
+          },
+          "startDate": {
+            "type": "string",
+            "description": "番剧首话上映日期",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isOnAir": {
+            "type": "boolean",
+            "description": "此作品是否正在连载中"
+          },
+          "favoriteStatus": {
+            "description": "关注状态",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FavoriteStatus"
+              }
+            ]
+          },
+          "userRating": {
+            "type": "integer",
+            "description": "用户给此作品的评分（1-10分，0代表未评分）",
+            "format": "int32"
+          },
+          "rating": {
+            "type": "number",
+            "description": "此番剧的综合评分（0-10分）",
+            "format": "decimal"
+          }
+        }
+      },
+      "UserAddFavoriteResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false
+          }
+        ]
+      },
+      "UserAddFavoriteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animeId": {
+            "type": "integer",
+            "description": "动画作品编号",
+            "format": "int32"
+          },
+          "favoriteStatus": {
+            "description": "设定或刷新当前的关注状态。设置为null代表不修改当前状态。",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FavoriteStatus"
+              }
+            ]
+          },
+          "rating": {
+            "type": "integer",
+            "description": "给作品打分（1-10分），0代表不修改当前分数",
+            "format": "int32"
+          },
+          "comment": {
+            "type": "string",
+            "description": "给作品添加评论，最长为500个字符。当值为null或空字符串时将不修改当前的值。\n如果希望清空所有文字，请传入至少一个空格。",
+            "nullable": true
+          }
+        }
+      },
+      "UserDeleteFavoriteResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false
+          }
+        ]
+      },
+      "HomepageResponseV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "banners": {
+                "type": "array",
+                "description": "公告列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BannerPageItem"
+                }
+              },
+              "bangumiQueueIntroList": {
+                "type": "array",
+                "description": "未看剧集列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiQueueIntroV2"
+                }
+              },
+              "shinBangumiList": {
+                "type": "array",
+                "description": "新番列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiIntro"
+                }
+              },
+              "bangumiSeasons": {
+                "type": "array",
+                "description": "动画番剧季度列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BangumiSeason"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BannerPageItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "公告ID",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string",
+            "description": "标题",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "子标题、描述",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "description": "落地页链接",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "图片地址",
+            "nullable": true
+          }
+        }
+      },
+      "BannerResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "banners": {
+                "type": "array",
+                "description": "公告列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BannerPageItem"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LoginResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "registerRequired": {
+                "type": "boolean",
+                "description": "该用户是否需要先注册弹弹play账号才可正常登录。当此值为true时表示用户使用了QQ微博等第三方登录但没有注册弹弹play账号。"
+              },
+              "userId": {
+                "type": "integer",
+                "description": "用户编号",
+                "format": "int32"
+              },
+              "userName": {
+                "type": "string",
+                "description": "弹弹play用户名。如果用户使用第三方账号登录（如QQ微博）且没有关联弹弹play账号，此属性将为null",
+                "nullable": true
+              },
+              "legacyTokenNumber": {
+                "type": "integer",
+                "description": "旧API中使用的数字形式的token，仅为兼容性设置，不要在新代码中使用此属性",
+                "format": "int32"
+              },
+              "token": {
+                "type": "string",
+                "description": "字符串形式的JWT token。将来调用需要验证权限的接口时，需要在HTTP Authorization头中设置“Bearer token”。",
+                "nullable": true
+              },
+              "tokenExpireTime": {
+                "type": "string",
+                "description": "JWT token过期时间，默认为21天。如果是APP应用开发者账号使用自己的应用登录则为1年。",
+                "format": "date-time"
+              },
+              "userType": {
+                "type": "string",
+                "description": "用户注册来源类型",
+                "nullable": true
+              },
+              "screenName": {
+                "type": "string",
+                "description": "昵称",
+                "nullable": true
+              },
+              "profileImage": {
+                "type": "string",
+                "description": "头像图片的地址",
+                "nullable": true
+              },
+              "appScope": {
+                "type": "string",
+                "description": "当前登录会话内应用权限列表，可以由此判断能否调用哪些API",
+                "nullable": true
+              },
+              "payConfigs": {
+                "type": "array",
+                "description": "商品列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/PayConfig"
+                }
+              },
+              "privileges": {
+                "description": "用户权益过期时间（全部为北京时间）",
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/UserPrivileges"
+                  }
+                ]
+              },
+              "code": {
+                "type": "string",
+                "description": "消息体验证码",
+                "nullable": true
+              },
+              "ts": {
+                "type": "integer",
+                "description": "当前时间戳",
+                "format": "int64"
+              }
+            }
+          }
+        ]
+      },
+      "PayConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "description": "支付渠道（wechat,alipay）",
+            "nullable": true
+          },
+          "providerName": {
+            "type": "string",
+            "description": "支付渠道名称（微信支付，支付宝）",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "description": "商品列表",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/PayConfigItem"
+            }
+          }
+        }
+      },
+      "PayConfigItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "商品ID",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "description": "商品名称（如：1个月会员）",
+            "nullable": true
+          },
+          "price": {
+            "type": "integer",
+            "description": "商品价格（单位：分）",
+            "format": "int32"
+          },
+          "currency": {
+            "type": "string",
+            "description": "货币单位（CNY）",
+            "nullable": true
+          }
+        }
+      },
+      "UserPrivileges": {
+        "type": "object",
+        "description": "用户各类权益到期时间",
+        "additionalProperties": false,
+        "properties": {
+          "member": {
+            "type": "string",
+            "description": "会员权益过期时间（北京时间）",
+            "format": "date-time",
+            "nullable": true
+          },
+          "resmonitor": {
+            "type": "string",
+            "description": "弹弹play资源监视器权益过期时间（北京时间）",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "请求用户登录",
+        "additionalProperties": false,
+        "required": [
+          "userName",
+          "password",
+          "appId",
+          "hash"
+        ],
+        "properties": {
+          "userName": {
+            "type": "string",
+            "description": "弹弹play用户名",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "password": {
+            "type": "string",
+            "description": "用户密码",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "appId": {
+            "type": "string",
+            "description": "客户端ID",
+            "maxLength": 20,
+            "minLength": 0
+          },
+          "unixTimestamp": {
+            "type": "integer",
+            "description": "Unix时间戳：从协调世界时1970年1月1日0时0分0秒起至现在的总秒数，不考虑闰秒。",
+            "format": "int64",
+            "maximum": 9223372036854780000.0,
+            "minimum": 1.0
+          },
+          "hash": {
+            "type": "string",
+            "description": "通过参数计算得到的32位MD5值，不区分大小写。计算方法请参考接口说明。",
+            "minLength": 1,
+            "pattern": "^[0-9a-fA-F]{32}$"
+          }
+        }
+      },
+      "MatchResponseV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "isMatched": {
+                "type": "boolean",
+                "description": "是否已精确关联到某个弹幕库"
+              },
+              "matches": {
+                "type": "array",
+                "description": "搜索匹配的结果",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/MatchResultV2"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "MatchResultV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "episodeId": {
+            "type": "integer",
+            "description": "弹幕库ID",
+            "format": "int64"
+          },
+          "animeId": {
+            "type": "integer",
+            "description": "作品ID",
+            "format": "int32"
+          },
+          "animeTitle": {
+            "type": "string",
+            "description": "作品标题",
+            "nullable": true
+          },
+          "episodeTitle": {
+            "type": "string",
+            "description": "剧集标题",
+            "nullable": true
+          },
+          "type": {
+            "description": "作品类别",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AnimeType"
+              }
+            ]
+          },
+          "typeDescription": {
+            "type": "string",
+            "description": "类型描述",
+            "nullable": true
+          },
+          "shift": {
+            "type": "number",
+            "description": "弹幕偏移时间（弹幕应延迟多少秒出现）。此数字为负数时表示弹幕应提前多少秒出现。",
+            "format": "double"
+          }
+        }
+      },
+      "MatchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "description": "视频文件名，不包含文件夹名称和扩展名，特殊字符需进行转义。",
+            "nullable": true
+          },
+          "fileHash": {
+            "type": "string",
+            "description": "文件前16MB (16x1024x1024 Byte) 数据的32位MD5结果，不区分大小写。",
+            "nullable": true
+          },
+          "fileSize": {
+            "type": "integer",
+            "description": "文件总长度，单位为Byte。",
+            "format": "int64"
+          },
+          "videoDuration": {
+            "type": "integer",
+            "description": "[可选]32位整数的视频时长，单位为秒。默认为0。",
+            "format": "int32"
+          },
+          "matchMode": {
+            "description": "[可选]匹配模式。",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MatchMode"
+              }
+            ]
+          }
+        }
+      },
+      "MatchMode": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "hashAndFileName",
+          "fileNameOnly",
+          "hashOnly"
+        ],
+        "enum": [
+          "hashAndFileName",
+          "fileNameOnly",
+          "hashOnly"
+        ]
+      },
+      "BatchMatchResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "description": "批量匹配的结果",
+            "additionalProperties": false,
+            "properties": {
+              "results": {
+                "type": "array",
+                "description": "批量匹配的结果。将针对每个请求生成对应的结果。",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/BatchMatchResponseItem"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BatchMatchResponseItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "fileHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "matchResult": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MatchResultV2"
+              }
+            ]
+          }
+        }
+      },
+      "BatchMatchRequest": {
+        "type": "object",
+        "description": "批量匹配的请求",
+        "additionalProperties": false,
+        "properties": {
+          "requests": {
+            "type": "array",
+            "description": "匹配请求，列表中最多包括32个请求",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/MatchRequest"
+            }
+          }
+        }
+      },
+      "UserPlayHistoryResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "playHistoryAnimes": {
+                "type": "array",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/UserPlayHistoryAnime"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "UserPlayHistoryAnime": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animeId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "animeTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "description": "作品类别",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AnimeType"
+              }
+            ]
+          },
+          "typeDescription": {
+            "type": "string",
+            "description": "类型描述",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "isOnAir": {
+            "type": "boolean"
+          },
+          "episodes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/BangumiEpisode"
+            }
+          }
+        }
+      },
+      "UserAddPlayHistoryResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false
+          }
+        ]
+      },
+      "UserAddPlayHistoryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "episodeIdList": {
+            "type": "array",
+            "description": "弹幕库编号列表（最多100项，必须都属于同一作品）",
+            "nullable": true,
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "addToFavorite": {
+            "type": "boolean",
+            "description": "关注此作品（弹幕库编号列表中必须只有一项）"
+          },
+          "rating": {
+            "type": "integer",
+            "description": "给此剧集打分（弹幕库编号列表中必须只有一项）。范围为1-10分，0代表不修改当前评分。",
+            "format": "int32"
+          }
+        }
+      },
+      "RegisterRequestV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "appId",
+          "userName",
+          "password",
+          "email",
+          "screenName",
+          "hash"
+        ],
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "客户端ID",
+            "minLength": 1
+          },
+          "userName": {
+            "type": "string",
+            "description": "用户名。只能包含英文或数字，长度为5-20位，首位不能为数字。",
+            "minLength": 1
+          },
+          "password": {
+            "type": "string",
+            "description": "密码。长度为5到20位之间。",
+            "minLength": 1
+          },
+          "email": {
+            "type": "string",
+            "description": "备用邮箱（找回密码用）。长度不能超过50个字符。",
+            "minLength": 1
+          },
+          "screenName": {
+            "type": "string",
+            "description": "昵称。长度不能超过50个字符。",
+            "minLength": 1
+          },
+          "unixTimestamp": {
+            "type": "integer",
+            "description": "Unix时间戳：从协调世界时1970年1月1日0时0分0秒起至现在的总秒数，不考虑闰秒。",
+            "format": "int64",
+            "maximum": 9223372036854780000.0,
+            "minimum": 1.0
+          },
+          "hash": {
+            "type": "string",
+            "description": "通过参数计算得到的32位MD5值，不区分大小写。计算方法请参考接口说明。",
+            "minLength": 1,
+            "pattern": "^[0-9a-fA-F]{32}$"
+          }
+        }
+      },
+      "ResetPasswordResponseV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ResetPasswordRequestV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "appId",
+          "userName",
+          "email",
+          "hash"
+        ],
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "应用ID",
+            "minLength": 1
+          },
+          "userName": {
+            "type": "string",
+            "description": "用户名",
+            "maxLength": 20,
+            "minLength": 5
+          },
+          "email": {
+            "type": "string",
+            "description": "注册此用户时填写的备用邮箱",
+            "minLength": 1
+          },
+          "unixTimestamp": {
+            "type": "integer",
+            "description": "Unix时间戳：从协调世界时1970年1月1日0时0分0秒起至现在的总秒数，不考虑闰秒。",
+            "format": "int64",
+            "maximum": 9223372036854780000.0,
+            "minimum": 1.0
+          },
+          "hash": {
+            "type": "string",
+            "description": "通过参数计算得到的32位MD5值，不区分大小写。计算方法请参考接口说明。",
+            "minLength": 1,
+            "pattern": "^[0-9a-fA-F]{32}$"
+          }
+        }
+      },
+      "FindMyIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false
+          }
+        ]
+      },
+      "FindMyIdRequestV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "appId",
+          "email",
+          "hash"
+        ],
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "应用ID",
+            "maxLength": 20,
+            "minLength": 1
+          },
+          "email": {
+            "type": "string",
+            "description": "注册此用户时填写的备用邮箱",
+            "maxLength": 50,
+            "minLength": 1
+          },
+          "unixTimestamp": {
+            "type": "integer",
+            "description": "Unix时间戳：从协调世界时1970年1月1日0时0分0秒起至现在的总秒数，不考虑闰秒。",
+            "format": "int64",
+            "maximum": 9223372036854780000.0,
+            "minimum": 1.0
+          },
+          "hash": {
+            "type": "string",
+            "description": "通过参数计算得到的32位MD5值，不区分大小写。计算方法请参考接口说明。",
+            "minLength": 1,
+            "pattern": "^[0-9a-fA-F]{32}$"
+          }
+        }
+      },
+      "RelatedResponseV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "relateds": {
+                "type": "array",
+                "description": "关联的第三方弹幕列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/RelatedItemV2"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RelatedItemV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "第三方弹幕页面地址",
+            "nullable": true
+          },
+          "shift": {
+            "type": "number",
+            "description": "弹幕偏移时间。当此值为正数时表示弹幕应延迟多少秒出现，负数时表示弹幕应提前多少秒出现。",
+            "format": "double"
+          }
+        }
+      },
+      "UserAddRelatedResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false
+          }
+        ]
+      },
+      "UserAddRelatedRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "episodeId": {
+            "type": "integer",
+            "description": "弹幕库编号",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string",
+            "description": "关联的第三方网站播放地址",
+            "nullable": true
+          },
+          "shift": {
+            "type": "number",
+            "description": "弹幕偏移时间（正数为弹幕延迟几秒出现，负数为弹幕提前几秒出现）",
+            "format": "double"
+          }
+        }
+      },
+      "UserDeleteRelatedResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SearchAnimeResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "animes": {
+                "type": "array",
+                "description": "作品列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/SearchAnimeDetails"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SearchAnimeDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animeId": {
+            "type": "integer",
+            "description": "作品ID",
+            "format": "int32"
+          },
+          "bangumiId": {
+            "type": "string",
+            "description": "作品ID（新）",
+            "nullable": true
+          },
+          "animeTitle": {
+            "type": "string",
+            "description": "作品标题",
+            "nullable": true
+          },
+          "type": {
+            "description": "作品类型",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AnimeType"
+              }
+            ]
+          },
+          "typeDescription": {
+            "type": "string",
+            "description": "类型描述",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "海报图片地址",
+            "nullable": true
+          },
+          "startDate": {
+            "type": "string",
+            "description": "上映日期",
+            "format": "date-time",
+            "nullable": true
+          },
+          "episodeCount": {
+            "type": "integer",
+            "description": "剧集总数",
+            "format": "int32"
+          },
+          "rating": {
+            "type": "number",
+            "description": "此作品的综合评分（0-10）",
+            "format": "decimal"
+          },
+          "isFavorited": {
+            "type": "boolean",
+            "description": "当前用户是否已关注此作品"
+          }
+        }
+      },
+      "SearchEpisodesResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "hasMore": {
+                "type": "boolean",
+                "description": "是否有更多未显示的搜索结果。当返回的搜索结果过多时此值为`true`"
+              },
+              "animes": {
+                "type": "array",
+                "description": "搜索结果（作品信息）列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/SearchEpisodesAnime"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SearchEpisodesAnime": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "animeId": {
+            "type": "integer",
+            "description": "作品编号",
+            "format": "int32"
+          },
+          "animeTitle": {
+            "type": "string",
+            "description": "作品标题",
+            "nullable": true
+          },
+          "type": {
+            "description": "作品类型",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AnimeType"
+              }
+            ]
+          },
+          "typeDescription": {
+            "type": "string",
+            "description": "类型描述",
+            "nullable": true
+          },
+          "episodes": {
+            "type": "array",
+            "description": "此作品的剧集列表",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/SearchEpisodeDetails"
+            }
+          }
+        }
+      },
+      "SearchEpisodeDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "episodeId": {
+            "type": "integer",
+            "description": "剧集ID（弹幕库编号）",
+            "format": "int64"
+          },
+          "episodeTitle": {
+            "type": "string",
+            "description": "剧集标题",
+            "nullable": true
+          }
+        }
+      },
+      "SearchAdvancedConfigResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "description": "高级搜索配置项",
+            "additionalProperties": false,
+            "properties": {
+              "types": {
+                "type": "array",
+                "description": "类型列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/ConfigKey"
+                }
+              },
+              "tags": {
+                "type": "array",
+                "description": "可用标签列表",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/ConfigKey"
+                }
+              },
+              "sorts": {
+                "type": "array",
+                "description": "排序依据",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/ConfigKey"
+                }
+              },
+              "minYear": {
+                "type": "integer",
+                "description": "搜索允许的最早年份",
+                "format": "int32"
+              },
+              "maxYear": {
+                "type": "integer",
+                "description": "搜索允许的最晚年份",
+                "format": "int32"
+              }
+            }
+          }
+        ]
+      },
+      "ConfigKey": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "integer",
+            "description": "搜索中使用的值",
+            "format": "int32"
+          },
+          "value": {
+            "type": "string",
+            "description": "用户界面上显示的文字",
+            "nullable": true
+          }
+        }
+      },
+      "SearchBangumiResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "bangumis": {
+                "type": "array",
+                "description": "搜索结果",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/SearchBangumiDetails"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SearchBangumiDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SearchAnimeDetails"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rank": {
+                "type": "integer",
+                "description": "搜索结果中的排名，用于界面中排序展示，从1开始递增",
+                "format": "int32"
+              },
+              "searchKeyword": {
+                "type": "string",
+                "description": "搜索关键词",
+                "nullable": true
+              },
+              "isOnAir": {
+                "type": "boolean",
+                "description": "是否正在连载中"
+              },
+              "isRestricted": {
+                "type": "boolean",
+                "description": "是否为限制级别的内容（例如属于R18分级）"
+              }
+            }
+          }
+        ]
+      },
+      "UserUpdateProfileResponseV2": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "updateScreenName": {
+                "type": "string",
+                "nullable": true
+              },
+              "updateProfileImage": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
+      "UserUpdatePasswordRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "oldPassword",
+          "newPassword"
+        ],
+        "properties": {
+          "oldPassword": {
+            "type": "string",
+            "description": "旧密码（5-20位）",
+            "maxLength": 20,
+            "minLength": 5
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "新密码（5-20位）",
+            "maxLength": 20,
+            "minLength": 5
+          }
+        }
+      },
+      "UserUpdateProfileRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "screenName": {
+            "type": "string",
+            "description": "用户新的昵称（留空将不修改昵称）",
+            "maxLength": 50,
+            "minLength": 0,
+            "nullable": true
+          },
+          "profileImageBase64": {
+            "type": "string",
+            "description": "用户头像图片使用Base64编码后的数据（jpg格式，长度不能超过1MB）。留空将不修改头像图片",
+            "nullable": true
+          }
+        }
+      },
+      "UserUpdateEmailRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "oldEmail",
+          "newEmail"
+        ],
+        "properties": {
+          "oldEmail": {
+            "type": "string",
+            "description": "当前的关联邮箱地址",
+            "minLength": 1
+          },
+          "newEmail": {
+            "type": "string",
+            "description": "新的关联邮箱地址",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "AppId": {
+        "type": "apiKey",
+        "description": "在这里输入您的AppId",
+        "name": "X-AppId",
+        "in": "header"
+      },
+      "AppSecret": {
+        "type": "apiKey",
+        "description": "在这里输入您的AppSecret",
+        "name": "X-AppSecret",
+        "in": "header"
+      },
+      "Bearer": {
+        "type": "http",
+        "description": "在这里输入您的JWT令牌（Bearer 后面的部分）",
+        "scheme": "Bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "AppId": []
+    },
+    {
+      "AppSecret": []
+    },
+    {
+      "Bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "番剧"
+    },
+    {
+      "name": "弹幕"
+    },
+    {
+      "name": "关注"
+    },
+    {
+      "name": "首页"
+    },
+    {
+      "name": "登录"
+    },
+    {
+      "name": "文件识别"
+    },
+    {
+      "name": "播放历史"
+    },
+    {
+      "name": "注册"
+    },
+    {
+      "name": "弹幕关联"
+    },
+    {
+      "name": "搜索"
+    },
+    {
+      "name": "用户"
+    }
+  ]
+}

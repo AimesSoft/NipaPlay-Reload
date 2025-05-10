@@ -10,6 +10,7 @@ import '../widgets/blur_snackbar.dart';
 import '../utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -147,82 +148,116 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
           content: '请选择视频来源',
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop('album'),
+              onPressed: () {
+                Navigator.of(context).pop('album');
+              },
               child: const Text('相册'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop('file'),
+              onPressed: () {
+                Navigator.of(context).pop('file'); // 先 pop
+              },
               child: const Text('文件管理器'),
             ),
           ],
         );
-        if (source == 'album') {
-          PermissionStatus photoStatus;
-          PermissionStatus videoStatus;
 
-          if (Platform.isAndroid) {
+        if (!mounted) return; // 检查 mounted 状态
+
+        if (source == 'album') {
+          if (Platform.isAndroid) { // 只在 Android 上使用 permission_handler
+            PermissionStatus photoStatus;
+            PermissionStatus videoStatus;
             // 请求照片和视频权限 (Android 13+ 需要)
-            // permission_handler 会处理旧版本的 storage 权限映射
             print("Requesting photos and videos permissions for Android...");
             photoStatus = await Permission.photos.request();
             videoStatus = await Permission.videos.request();
             print("Android permissions status: Photos=$photoStatus, Videos=$videoStatus");
-          } else if (Platform.isIOS) {
-            // iOS 通常只需要 photos 权限
-            print("Requesting photos permission for iOS...");
-            photoStatus = await Permission.photos.request();
-            videoStatus = photoStatus; // iOS 上 photos 权限通常涵盖视频
-            print("iOS permissions status: Photos=$photoStatus");
-          } else {
-            photoStatus = PermissionStatus.granted;
-            videoStatus = PermissionStatus.granted;
-          }
 
-          // 检查权限是否都已授予 (根据需要调整，如果只选图片就只检查photoStatus)
-          if (!mounted) return; // 检查 widget 是否还在树中
-          if (photoStatus.isGranted && videoStatus.isGranted) { // 需要照片和视频权限
-            try {
-              final picker = ImagePicker();
-              // 使用 pickMedia 因为你需要视频
-              final XFile? picked = await picker.pickMedia(); 
-              if (picked != null) {
-                final extension = picked.path.split('.').last.toLowerCase();
-                // 允许mp4和mkv
-                if (!['mp4', 'mkv'].contains(extension)) { 
-                  if (!mounted) return;
-                  BlurSnackBar.show(context, '请选择 MP4 或 MKV 格式的视频文件');
-                  return;
-                }
-                if (!mounted) return;
-                await context.read<VideoPlayerState>().initializePlayer(picked.path);
-              }
-            } catch (e) {
-              if (!mounted) return;
-              BlurSnackBar.show(context, '选择相册视频出错: $e');
-            }
-          } else {
-            // 权限被拒绝
             if (!mounted) return;
-            BlurSnackBar.show(context, '需要相册权限才能选择视频');
-            // 可以考虑引导用户去设置开启权限
-            // openAppSettings(); 
+            if (photoStatus.isGranted && videoStatus.isGranted) {
+              // Android 权限通过，继续选择
+              await _pickMediaFromGallery(); 
+            } else {
+              // Android 权限被拒绝
+              if (!mounted) return;
+              print("Android permissions not granted. Photo status: $photoStatus, Video status: $videoStatus");
+              if (photoStatus.isPermanentlyDenied || videoStatus.isPermanentlyDenied) {
+                BlurDialog.show<void>(
+                  context: context,
+                  title: '权限被永久拒绝',
+                  content: '您已永久拒绝相关权限。请前往系统设置手动为NipaPlay开启所需权限。',
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        openAppSettings();
+                      },
+                      child: const Text('前往设置'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('取消'),
+                    ),
+                  ],
+                );
+              } else {
+                BlurSnackBar.show(context, '需要相册和视频权限才能选择');
+              }
+            }
+          } else if (Platform.isIOS) { // 在 iOS 上直接尝试选择
+            print("iOS: Bypassing permission_handler, directly calling ImagePicker.");
+            await _pickMediaFromGallery(); 
+          } else { // 其他平台 (如果支持，也直接尝试)
+            print("Other platform: Bypassing permission_handler, directly calling ImagePicker/FilePicker.");
+            await _pickMediaFromGallery(); // 或者根据平台选择不同的picker逻辑
           }
         } else if (source == 'file') {
-          try {
-            FilePickerResult? result = await FilePicker.platform.pickFiles(
-              type: FileType.custom,
-              allowedExtensions: ['mp4', 'mkv'],
-              allowMultiple: false,
-            );
-            if (result != null) {
-              final file = File(result.files.single.path!);
-              await context.read<VideoPlayerState>().initializePlayer(file.path);
+          // 使用 Future.delayed ensure pop 完成后再执行
+          // await Future.delayed(Duration.zero, () async { 
+          // Try a slightly longer delay to ensure the dialog dismissal animation has a chance to complete
+          await Future.delayed(const Duration(milliseconds: 100), () async { 
+            if (!mounted) return; // 在延迟后再次检查 mounted
+            try {
+              String? initialDirectoryPath;
+              if (Platform.isIOS) {
+                try {
+                  final Directory appDocDir = await getApplicationDocumentsDirectory();
+                  initialDirectoryPath = appDocDir.path;
+                } catch (e) {
+                  print("Error getting documents directory for iOS: $e");
+                }
+              }
+
+              FilePickerResult? result = await FilePicker.platform.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: ['mp4', 'mkv'],
+                allowMultiple: false,
+                initialDirectory: initialDirectoryPath, // 设置初始目录
+              );
+
+              if (!mounted) return; // 再次检查
+
+              if (result != null) {
+                final file = File(result.files.single.path!);
+                // 确保 VideoPlayerState 的 context 仍然有效
+                // ignore: use_build_context_synchronously
+                if (context.mounted) { 
+                   await Provider.of<VideoPlayerState>(context, listen: false)
+                                .initializePlayer(file.path);
+                }
+              }
+            } catch (e) {
+              // ignore: use_build_context_synchronously
+              if (mounted) { // 确保 mounted
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('选择文件出错: $e')),
+                );
+              } else {
+                print('选择文件出错但 widget 已 unmounted: $e');
+              }
             }
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('选择文件出错: $e')),
-            );
-          }
+          });
         }
       } else {
         // 桌面端：记忆上次打开的文件夹
@@ -256,6 +291,39 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('选择视频时出错: $e')),
       );
+    }
+  }
+
+  // 提取出一个公共的选择媒体的方法
+  Future<void> _pickMediaFromGallery() async {
+    try {
+      final picker = ImagePicker();
+      // 使用 pickMedia 因为你需要视频
+      final XFile? picked = await picker.pickMedia();
+      if (!mounted) return; // 再次检查 mounted
+
+      if (picked != null) {
+        final extension = picked.path.split('.').last.toLowerCase();
+        if (!['mp4', 'mkv'].contains(extension)) {
+          BlurSnackBar.show(context, '请选择 MP4 或 MKV 格式的视频文件');
+          return;
+        }
+        await context.read<VideoPlayerState>().initializePlayer(picked.path);
+      } else {
+        // 用户可能取消了选择，或者 image_picker 因为权限问题返回了 null
+        print("Media picking cancelled or failed (possibly due to permissions).");
+        // 可以考虑在这里给用户一个温和的提示，如果 image_picker 没有自己处理好权限拒绝的UI反馈
+        // 例如：BlurSnackBar.show(context, '未能选择视频，请确保应用有权访问相册。');
+        // 但首先要观察 image_picker 在iOS上直接调用时的行为
+      }
+    } catch (e) {
+      if (!mounted) return;
+      print("Error picking media from gallery: $e");
+      BlurSnackBar.show(context, '选择相册视频出错: $e');
+      // 如果错误与权限有关，image_picker 可能会抛出 PlatformException
+      // if (e is PlatformException && (e.code == 'photo_access_denied' || e.code == 'camera_access_denied')) {
+      //   // 提示用户检查系统设置
+      // }
     }
   }
 } 

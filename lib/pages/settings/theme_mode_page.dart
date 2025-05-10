@@ -34,55 +34,95 @@ class _ThemeModePageState extends State<ThemeModePage> {
   }
 
   Future<void> _pickCustomBackground(BuildContext context) async {
-    PermissionStatus status;
-    if (Platform.isAndroid) {
-      // Android 13+ 需要 photos 权限
-      status = await Permission.photos.request();
-    } else if (Platform.isIOS) {
-      status = await Permission.photos.request();
-    } else {
-      status = PermissionStatus.granted; // 其他平台假设不需要
-    }
+    if (Platform.isAndroid) { // 只在 Android 上使用 permission_handler
+      PermissionStatus status = await Permission.photos.request();
+      if (!mounted) return;
 
-    if (!mounted) return;
-
-    if (status.isGranted) {
-      try {
-        final ImagePicker picker = ImagePicker();
-        final XFile? image = await picker.pickImage(
-          source: ImageSource.gallery,
-          maxWidth: 1920,
-          maxHeight: 1080,
-          imageQuality: 85,
-        );
-
-        if (image != null) {
-          final file = File(image.path);
-          final fileName = path.basename(file.path);
-          
-          final appDir = await getApplicationDocumentsDirectory();
-          final targetPath = path.join(appDir.path, 'backgrounds', fileName);
-          
-          await Directory(path.dirname(targetPath)).create(recursive: true);
-          
-          await file.copy(targetPath);
-          
-          // 使用 Provider.of<ThemeNotifier>(context, listen: false) 更安全
-          Provider.of<ThemeNotifier>(context, listen: false).customBackgroundPath = targetPath;
+      if (status.isGranted) {
+        await _pickImageFromGalleryForBackground(context); // 传递 context
+      } else {
+        // Android 权限被拒绝
+        print("Android photos permission denied for custom background. Status: $status");
+        if (status.isPermanentlyDenied) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('相册权限已被永久拒绝。请前往系统设置开启。'),
+              action: SnackBarAction(
+                label: '去设置',
+                onPressed: openAppSettings,
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('需要相册权限才能选择背景图片')),
+          );
         }
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择背景图片时出错: $e')),
-        );
       }
-    } else {
-      // 权限被拒绝
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('需要相册权限才能选择背景图片')),
+    } else if (Platform.isIOS) { // 在 iOS 上直接尝试选择
+      print("iOS: Bypassing permission_handler for custom background, directly calling ImagePicker.");
+      await _pickImageFromGalleryForBackground(context); // 传递 context
+    } else { // 其他平台 (如果支持，也直接尝试)
+      print("Other platform: Bypassing permission_handler for custom background, directly calling ImagePicker.");
+      await _pickImageFromGalleryForBackground(context); // 传递 context
+    }
+  }
+
+  // 提取选择图片并设置为背景的逻辑
+  Future<void> _pickImageFromGalleryForBackground(BuildContext context) async { // 接收 context
+    try {
+      // 在异步操作前检查 mounted 状态
+      if (!mounted) return;
+
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
       );
-      // 可以考虑引导用户去设置开启权限
-      // openAppSettings();
+
+      // 异步操作后再次检查 mounted 状态
+      if (!mounted) return;
+
+      if (image != null) {
+        final file = File(image.path);
+        
+        // 获取原始文件的扩展名
+        String extension = path.extension(image.path); 
+        if (extension.isEmpty) { 
+          // 如果 image_picker 返回的路径不含扩展名, imageQuality: 85 暗示JPEG
+          extension = '.jpg'; 
+        }
+
+        // 定义固定的文件名
+        final String fixedFileName = 'custom_background$extension'; 
+
+        final appDir = await getApplicationDocumentsDirectory();
+        // 在 'backgrounds' 子目录下保存，文件名固定
+        final targetPath = path.join(appDir.path, 'backgrounds', fixedFileName); 
+        
+        final targetDirectory = Directory(path.dirname(targetPath));
+        if (!await targetDirectory.exists()) {
+          await targetDirectory.create(recursive: true);
+        }
+        
+        // 复制文件，如果目标文件已存在，File.copy() 会覆盖它
+        await file.copy(targetPath); 
+        
+        // 更新 ThemeNotifier 中的路径
+        Provider.of<ThemeNotifier>(context, listen: false).customBackgroundPath = targetPath;
+        
+      } else {
+        print("Custom background image picking cancelled or failed (possibly due to permissions).");
+      }
+    } catch (e) {
+      // 异步操作后再次检查 mounted 状态
+      if (!mounted) return;
+      print("Error picking custom background image: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('选择背景图片时出错: $e')),
+      );
     }
   }
 

@@ -28,6 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -37,6 +38,24 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 在应用启动时为iOS请求相册权限
+  // if (Platform.isIOS) {
+  //   print("[App Startup] Attempting to request photos permission for iOS...");
+  //   PermissionStatus photoStatus = await Permission.photos.request();
+  //   print("[App Startup] iOS Photos permission status: $photoStatus");
+  //
+  //   if (photoStatus.isPermanentlyDenied) {
+  //     print("[App Startup] iOS Photos permission was permanently denied. User needs to go to settings.");
+  //     // 这里可以考虑后续添加一个全局提示，引导用户去系统设置
+  //   } else if (photoStatus.isDenied) {
+  //     print("[App Startup] iOS Photos permission was denied by the user in this session.");
+  //   } else if (photoStatus.isGranted) {
+  //     print("[App Startup] iOS Photos permission granted.");
+  //   } else {
+  //     print("[App Startup] iOS Photos permission status: $photoStatus (unhandled case)");
+  //   }
+  // }
 
   // 设置方法通道处理器
   menuChannel.setMethodCallHandler((call) async {
