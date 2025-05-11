@@ -101,7 +101,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     bool isInternalPath = selectedDirectory.startsWith(appDocPath) || 
                           (appDocPath.startsWith('/var') && selectedDirectory.startsWith('/private$appDocPath'));
 
-    if (!isInternalPath) {
+    if (Platform.isIOS&&!isInternalPath) {
       if (mounted) {
         String dialogContent = "您选择的文件夹位于 NipaPlay 应用外部。\n\n";
         dialogContent += "为了正常扫描和管理媒体文件，请将文件或文件夹拷贝到 NipaPlay 的专属文件夹中。\n\n";
