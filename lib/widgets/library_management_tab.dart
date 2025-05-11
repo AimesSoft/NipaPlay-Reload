@@ -47,6 +47,22 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       return;
     }
 
+    // --- iOS Specific Logic ---
+    if (Platform.isIOS) {
+      final Directory appDocDir = await getApplicationDocumentsDirectory();
+      // Optionally, save this as the \"last picked path\" for consistency if other parts of the app use it.
+      // However, since we are not picking, just using it directly might be cleaner.
+      // try {
+      //   final prefs = await SharedPreferences.getInstance();
+      //   await prefs.setString(_lastScannedDirectoryPickerPathKey, appDocDir.path);
+      // } catch (e) {
+      //   debugPrint(\"Error saving appDocDir as last picked path on iOS: $e\");
+      // }
+      await scanService.startDirectoryScan(appDocDir.path);
+      return; // Skip file picker for iOS
+    }
+    // --- End iOS Specific Logic ---
+
     String? initialPickerPath;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -322,10 +338,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                     child: InkWell(
                       onTap: _pickAndScanDirectory,
                       borderRadius: BorderRadius.circular(12),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          '添加并扫描文件夹',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
+                          Platform.isIOS ? '扫描NipaPlay文件夹' : '添加并扫描文件夹',
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ),
                     ),
