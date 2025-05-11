@@ -10,7 +10,6 @@
 </div>
 
 <div align="center" style="margin: 10px 0;">
-  <img src="https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=for-the-badge&logo=github&label=总下载量&color=brightgreen" alt="下载统计">
   <img src="https://img.shields.io/badge/QQ群-701184841-12B7F5?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ群">
   <img src="https://img.shields.io/badge/番剧-追番中-ff69b4?style=for-the-badge&logo=anilist" alt="追番状态">
   <img src="https://img.shields.io/badge/弹幕-密集-ff6b6b?style=for-the-badge&logo=wechat" alt="弹幕密度">
@@ -41,22 +40,36 @@
 ## 应用截图
 <div align="center">
   <p><strong>主界面</strong></p>
-  <img src="https://github.com/user-attachments/assets/a1916cc5-986e-4104-a39e-4cb12ec11a2c" width="80%" alt="主界面">
+  <img src="others/%E4%B8%BB%E7%95%8C%E9%9D%A2.png" width="70%" alt="主界面">
+  <img src="others/%E4%B8%BB%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="主界面-手机">
 
   <p><strong>新番更新界面</strong></p>
-  <img src="https://github.com/user-attachments/assets/1385081c-57df-4751-82c7-522e2ed015cf" width="80%" alt="新番更新界面">
+  <img src="others/%E6%96%B0%E7%95%AA%E6%9B%B4%E6%96%B0%E7%95%8C%E9%9D%A2.png" width="70%" alt="新番更新界面">
+  <img src="others/%E6%96%B0%E7%95%AA%E6%9B%B4%E6%96%B0%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="新番更新界面-手机">
   
   <p><strong>新番详情界面</strong></p>
-  <img src="https://github.com/user-attachments/assets/00026e95-673f-4d31-a2a2-d73beb5ef154" width="80%" alt="新番详情界面">
+  <img src="others/%E6%96%B0%E7%95%AA%E8%AF%A6%E6%83%85%E7%95%8C%E9%9D%A2.png" width="70%" alt="新番详情界面">
+  <img src="others/%E6%96%B0%E7%95%AA%E8%AF%A6%E6%83%85%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="新番详情界面-手机">
 
   <p><strong>播放界面</strong></p>
-  <img src="https://github.com/user-attachments/assets/1d4b405b-297f-463f-8e26-6cba0ac226f1" width="80%" alt="播放界面">
+  <img src="others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2.png" width="70%" alt="播放界面">
+  <img src="others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="70%" alt="播放界面-手机">
 
   <p><strong>播放界面UI展示</strong></p>
-  <img src="https://github.com/user-attachments/assets/c0765b9f-dfd3-40bc-acbb-06901bfb72de" width="80%" alt="播放界面UI展示">
+  <img src="others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2-UI%E5%B1%95%E7%A4%BA.png" width="70%" alt="播放界面UI展示">
+  <img src="others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2-UI%E5%B1%95%E7%A4%BA-%E6%89%8B%E6%9C%BA.png" width="70%" alt="播放界面UI展示-手机">
 
-  <p><strong>观看记录展示</strong></p>
-  <img src="https://github.com/user-attachments/assets/1de519a3-37cb-4f59-bb5e-715cbcd2209a" width="80%" alt="观看记录展示">
+  <p><strong>媒体库界面</strong></p>
+  <img src="others/%E5%AA%92%E4%BD%93%E5%BA%93%E7%95%8C%E9%9D%A2.png" width="70%" alt="媒体库界面">
+  <img src="others/%E5%AA%92%E4%BD%93%E5%BA%93%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="媒体库界面-手机">
+
+  <p><strong>剧集列表界面</strong></p>
+  <img src="others/%E5%89%A7%E9%9B%86%E5%88%97%E8%A1%A8%E7%95%8C%E9%9D%A2.png" width="70%" alt="剧集列表界面">
+  <img src="others/%E5%89%A7%E9%9B%86%E5%88%97%E8%A1%A8%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="剧集列表界面-手机">
+
+  <p><strong>库管理界面</strong></p>
+  <img src="others/%E5%BA%93%E7%AE%A1%E7%90%86%E7%95%8C%E9%9D%A2.png" width="70%" alt="库管理界面">
+  <img src="others/%E5%BA%93%E7%AE%A1%E7%90%86%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="库管理界面-手机">
 </div>
 
 ## 已实现功能
