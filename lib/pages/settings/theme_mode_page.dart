@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/rendering.dart';
 
 class ThemeModePage extends StatefulWidget {
   final ThemeNotifier themeNotifier;
@@ -91,27 +92,48 @@ class _ThemeModePageState extends State<ThemeModePage> {
         // 获取原始文件的扩展名
         String extension = path.extension(image.path); 
         if (extension.isEmpty) { 
-          // 如果 image_picker 返回的路径不含扩展名, imageQuality: 85 暗示JPEG
           extension = '.jpg'; 
         }
 
-        // 定义固定的文件名
-        final String fixedFileName = 'custom_background$extension'; 
+        // 生成基于时间戳的唯一文件名
+        final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+        final String uniqueFileName = 'custom_background_$timestamp$extension'; 
 
         final appDir = await getApplicationDocumentsDirectory();
-        // 在 'backgrounds' 子目录下保存，文件名固定
-        final targetPath = path.join(appDir.path, 'backgrounds', fixedFileName); 
+        final String backgroundDirectoryPath = path.join(appDir.path, 'backgrounds');
+        final targetPath = path.join(backgroundDirectoryPath, uniqueFileName); 
         
-        final targetDirectory = Directory(path.dirname(targetPath));
+        final targetDirectory = Directory(backgroundDirectoryPath);
         if (!await targetDirectory.exists()) {
           await targetDirectory.create(recursive: true);
         }
         
-        // 复制文件，如果目标文件已存在，File.copy() 会覆盖它
+        // 复制文件
         await file.copy(targetPath); 
         
+        // !! 获取旧路径，用于后续可能的比较和清理，如果 ThemeNotifier 先更新，这里需要注意
+        // final oldPath = Provider.of<ThemeNotifier>(context, listen: false).customBackgroundPath;
+
         // 更新 ThemeNotifier 中的路径
         Provider.of<ThemeNotifier>(context, listen: false).customBackgroundPath = targetPath;
+        
+        // 清理旧的自定义背景图片
+        final dir = Directory(backgroundDirectoryPath);
+        if (await dir.exists()) {
+          final List<FileSystemEntity> entities = await dir.list().toList();
+          for (FileSystemEntity entity in entities) {
+            if (entity is File && entity.path != targetPath && path.basename(entity.path).startsWith('custom_background_')) {
+              try {
+                await entity.delete();
+                print('Deleted old background image: ${entity.path}');
+              } catch (e) {
+                print('Error deleting old background image ${entity.path}: $e');
+              }
+            }
+          }
+        }
+        // PaintingBinding.instance.imageCache.evict(FileImage(imageFileToClear)); // 这行不再需要，移除
+        // print("Evicted image from cache: $targetPath"); // 这行关联代码也移除
         
       } else {
         print("Custom background image picking cancelled or failed (possibly due to permissions).");
