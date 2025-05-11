@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
-import 'custom_slider.dart';
 import 'base_settings_menu.dart';
 import 'settings_hint_text.dart';
 import 'dart:ui';

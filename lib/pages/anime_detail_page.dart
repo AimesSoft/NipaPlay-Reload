@@ -615,7 +615,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.75),
+      backgroundColor: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.3),
       body: Padding(
         padding: EdgeInsets.fromLTRB(
             20, MediaQuery.of(context).padding.top + 20, 20, 20),
@@ -630,8 +630,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color.fromARGB(255, 133, 133, 133).withOpacity(0.25),
-              const Color.fromARGB(255, 147, 147, 147).withOpacity(0.35),
+              const Color.fromARGB(255, 219, 219, 219).withOpacity(0.2),
+              const Color.fromARGB(255, 208, 208, 208).withOpacity(0.2),
             ],
             stops: const [0.1, 1],
           ),

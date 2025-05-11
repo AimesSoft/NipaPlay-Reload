@@ -17,6 +17,21 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import '../widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
 
+// Custom ScrollBehavior to completely hide scrollbars
+class NoScrollbarBehavior extends ScrollBehavior {
+  @override
+  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) {
+    // By returning child directly, we effectively remove the scrollbar.
+    return child;
+  }
+
+  // For some platforms/versions, you might also want to hide glow/overscroll indicators
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    return child;
+  }
+}
+
 class AnimePage extends StatefulWidget {
   const AnimePage({super.key});
 
@@ -28,7 +43,8 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   bool _loadingVideo = false;
   List<String> _loadingMessages = ['正在初始化播放器...'];
   VideoPlayerState? _videoPlayerState;
-  final ScrollController _historyScrollController = ScrollController();
+  final ScrollController _mainPageScrollController = ScrollController();
+  final ScrollController _watchHistoryListScrollController = ScrollController();
 
   int _mediaLibraryVersion = 0; // Key for MediaLibraryPage
 
@@ -70,11 +86,19 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         _videoPlayerState!.removeThumbnailUpdateListener(_onThumbnailUpdated);
       }
     } catch (e) {}
-    _historyScrollController.dispose();
+    _mainPageScrollController.dispose();
+    _watchHistoryListScrollController.dispose();
     super.dispose();
   }
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) {
+    debugPrint('[AnimePage] _onWatchHistoryItemTap: Received item: $item');
+    if (item != null) {
+      debugPrint('[AnimePage] item.animeName: ${item.animeName}');
+      debugPrint('[AnimePage] item.filePath: ${item.filePath}');
+      debugPrint('[AnimePage] item.episodeTitle: ${item.episodeTitle}');
+    }
+
     if (_videoPlayerState == null) {
       // 如果没有引用，安全地获取
       try {
@@ -172,7 +196,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     videoState.addListener(playbackFinishListener);
 
     // 加载选定的视频
-    videoState.initializePlayer(item.filePath);
+    videoState.initializePlayer(item.filePath, historyItem: item);
   }
 
   String _formatDuration(Duration duration) {
@@ -217,85 +241,84 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
 
             Widget pageContent = Stack(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 24, left: 16.0, right: 16.0),
-                      child: Text("观看记录",
-                          style: TextStyle(
-                              fontSize: 28,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 180,
-                      child: isLoadingHistory && history.isEmpty
-                          ? const Center(child: CircularProgressIndicator())
-                          : history.isEmpty
-                              ? _buildEmptyState(
-                                  message: "暂无观看记录，已扫描的视频可在媒体库查看")
-                              : _buildWatchHistoryList(history),
-                    ),
-                    const SizedBox(height: 24),
-                    Expanded(
-                      child: DefaultTabController(
-                        length: 2,
-                        child: Column(
-                          children: [
-                            TabBar(
-                              isScrollable: true,
-                              tabs: const [
-                                Tab(text: "媒体库"),
-                                Tab(text: "库管理"),
-                              ],
-                              labelColor: Colors.white,
-                              unselectedLabelColor: Colors.white70,
-                              labelStyle: const TextStyle(
-                                  fontSize: 24, fontWeight: FontWeight.bold),
-                              indicatorPadding: const EdgeInsets.only(
-                                  top: 45, left: 0, right: 0),
-                              indicator: BoxDecoration(
-                                color: Colors.greenAccent,
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              tabAlignment: TabAlignment.start,
-                              dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                              dividerHeight: 3.0,
-                              indicatorSize: TabBarIndicatorSize.tab,
-                            ),
-                            Expanded(
-                              child: TabBarView(
-                                children: [
-                                  MediaLibraryPage(
-                                    key: ValueKey(_mediaLibraryVersion),
-                                    onPlayEpisode: _onWatchHistoryItemTap,
-                                  ),
-                                  LibraryManagementTab(onPlayEpisode: _onWatchHistoryItemTap),
-                                ],
-                              ),
-                            ),
-                          ],
+                ScrollConfiguration(
+                  behavior: NoScrollbarBehavior(),
+                  child: SingleChildScrollView(
+                    controller: _mainPageScrollController,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 24, left: 16.0, right: 16.0),
+                          child: Text("观看记录",
+                              style: TextStyle(
+                                  fontSize: 28,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 180,
+                          child: isLoadingHistory && history.isEmpty
+                              ? const Center(child: CircularProgressIndicator())
+                              : history.isEmpty
+                                  ? _buildEmptyState(
+                                      message: "暂无观看记录，已扫描的视频可在媒体库查看")
+                                  : _buildWatchHistoryList(history),
+                        ),
+                        const SizedBox(height: 24),
+                        DefaultTabController(
+                          length: 2,
+                          child: Column(
+                            children: [
+                              TabBar(
+                                isScrollable: true,
+                                tabs: const [
+                                  Tab(text: "媒体库"),
+                                  Tab(text: "库管理"),
+                                ],
+                                labelColor: Colors.white,
+                                unselectedLabelColor: Colors.white70,
+                                labelStyle: const TextStyle(
+                                    fontSize: 24, fontWeight: FontWeight.bold),
+                                indicatorPadding: const EdgeInsets.only(
+                                    top: 45, left: 0, right: 0),
+                                indicator: BoxDecoration(
+                                  color: Colors.greenAccent,
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                tabAlignment: TabAlignment.start,
+                                dividerColor: const Color.fromARGB(59, 255, 255, 255),
+                                dividerHeight: 3.0,
+                                indicatorSize: TabBarIndicatorSize.tab,
+                              ),
+                              SizedBox(
+                                height: 600,
+                                child: TabBarView(
+                                  children: [
+                                    MediaLibraryPage(
+                                      key: ValueKey(_mediaLibraryVersion),
+                                      onPlayEpisode: _onWatchHistoryItemTap,
+                                    ),
+                                    LibraryManagementTab(onPlayEpisode: _onWatchHistoryItemTap),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ],
-            );
-
-            return Stack(
-              children: [
-                pageContent,
                 if (_loadingVideo)
                   Positioned.fill(
-                    child: LoadingOverlay(
-                      messages: _loadingMessages,
-                    ),
+                    child: LoadingOverlay(messages: _loadingMessages),
                   ),
               ],
             );
+
+            return pageContent;
           },
         );
       },
@@ -345,45 +368,58 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         latestUpdatedPath = item.filePath;
       }
     }
+
+    Widget actualListView = ListView.builder(
+      controller: _watchHistoryListScrollController,
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: displayedHistory.length, // Use filtered list length
+      itemBuilder: (context, index) {
+        final item = displayedHistory[index]; // Use filtered list item
+        final isLatestUpdated = item.filePath == latestUpdatedPath;
+        return Padding(
+          key: ValueKey(
+              '${item.filePath}_${item.lastWatchTime.millisecondsSinceEpoch}'),
+          padding: const EdgeInsets.only(right: 16),
+          child: GestureDetector(
+            onTap: () => _onWatchHistoryItemTap(item),
+            child: _buildHistoryCard(item, isLatestUpdated),
+          ),
+        );
+      },
+    );
+
+    Widget listWidget;
+    // Check if the platform is mobile
+    if (Platform.isAndroid || Platform.isIOS) {
+      // On mobile, do not use Scrollbar
+      listWidget = actualListView;
+    } else {
+      // On non-mobile platforms (e.g., desktop), use Scrollbar
+      listWidget = Scrollbar(
+        controller: _watchHistoryListScrollController,
+        child: actualListView,
+      );
+    }
+
     return Listener(
       onPointerSignal: (pointerSignal) {
         if (pointerSignal is PointerScrollEvent) {
           // 鼠标滚轮上下滚动时，横向滚动
           final newOffset =
-              _historyScrollController.offset + pointerSignal.scrollDelta.dy;
+              _watchHistoryListScrollController.offset + pointerSignal.scrollDelta.dy;
           if (newOffset < 0) {
-            _historyScrollController.jumpTo(0);
+            _watchHistoryListScrollController.jumpTo(0);
           } else if (newOffset >
-              _historyScrollController.position.maxScrollExtent) {
-            _historyScrollController
-                .jumpTo(_historyScrollController.position.maxScrollExtent);
+              _watchHistoryListScrollController.position.maxScrollExtent) {
+            _watchHistoryListScrollController
+                .jumpTo(_watchHistoryListScrollController.position.maxScrollExtent);
           } else {
-            _historyScrollController.jumpTo(newOffset);
+            _watchHistoryListScrollController.jumpTo(newOffset);
           }
         }
       },
-      child: Scrollbar(
-        controller: _historyScrollController,
-        child: ListView.builder(
-          controller: _historyScrollController,
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: displayedHistory.length, // Use filtered list length
-          itemBuilder: (context, index) {
-            final item = displayedHistory[index]; // Use filtered list item
-            final isLatestUpdated = item.filePath == latestUpdatedPath;
-            return Padding(
-              key: ValueKey(
-                  '${item.filePath}_${item.lastWatchTime.millisecondsSinceEpoch}'),
-              padding: const EdgeInsets.only(right: 16),
-              child: GestureDetector(
-                onTap: () => _onWatchHistoryItemTap(item),
-                child: _buildHistoryCard(item, isLatestUpdated),
-              ),
-            );
-          },
-        ),
-      ),
+      child: listWidget, // Use the conditionally wrapped list
     );
   }
 

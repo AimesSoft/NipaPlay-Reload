@@ -9,6 +9,9 @@ import 'loading_overlay.dart';
 import 'danmaku_overlay.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'brightness_indicator.dart';
+import 'brightness_gesture_area.dart';
+import 'volume_gesture_area.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -27,6 +30,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   static const _mouseHideDelay = Duration(seconds: 3);
   bool _isProcessingTap = false;
   bool _isMouseVisible = true;
+  bool _isHorizontalDragging = false;
 
   double getFontSize() {
     if (globals.isPhone) {
@@ -44,6 +48,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
       _registerKeyboardShortcuts();
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       videoState.setContext(context);
+      if (!globals.isPhone) {
+        _resetMouseHideTimer();
+      }
     });
   }
 
@@ -79,24 +86,47 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     KeyboardShortcuts.registerActionHandler('toggle_danmaku', () {
       videoState.toggleDanmakuVisible();
     });
+
+    KeyboardShortcuts.registerActionHandler('volume_up', () {
+      if (videoState.hasVideo) {
+        videoState.increaseVolume();
+      }
+    });
+
+    KeyboardShortcuts.registerActionHandler('volume_down', () {
+      if (videoState.hasVideo) {
+        videoState.decreaseVolume();
+      }
+    });
+  }
+
+  void _resetMouseHideTimer() {
+    _mouseMoveTimer?.cancel();
+    if (!globals.isPhone) {
+      _mouseMoveTimer = Timer(_mouseHideDelay, () {
+        if (mounted && !_isProcessingTap) {
+          setState(() {
+            _isMouseVisible = false;
+          });
+        }
+      });
+    }
   }
 
   void _handleTap() {
     if (_isProcessingTap) return;
+    if (_isHorizontalDragging) return;
     
     _tapCount++;
     if (_tapCount == 1) {
-      // 启动双击检测定时器
       _doubleTapTimer?.cancel();
       _doubleTapTimer = Timer(_doubleTapTimeout, () {
         if (_tapCount == 1) {
-          // 如果定时器结束时还是1次点击，则执行单点操作
           _handleSingleTap();
         }
         _tapCount = 0;
       });
     } else if (_tapCount == 2) {
-      // 处理双击
       _doubleTapTimer?.cancel();
       _tapCount = 0;
       _handleDoubleTap();
@@ -133,7 +163,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (!videoState.hasVideo) return;
 
-    // 显示鼠标和UI
     if (!_isMouseVisible) {
       setState(() {
         _isMouseVisible = true;
@@ -141,7 +170,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     }
     videoState.setShowControls(true);
 
-    // 重置定时器
     _mouseMoveTimer?.cancel();
     _mouseMoveTimer = Timer(_mouseHideDelay, () {
       if (mounted && !_isIndicatorHovered) {
@@ -153,6 +181,35 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     });
   }
 
+  void _handleHorizontalDragStart(BuildContext context, DragStartDetails details) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (videoState.hasVideo) {
+      _isHorizontalDragging = true;
+      videoState.startSeekDrag(context);
+      _doubleTapTimer?.cancel();
+      _tapCount = 0;
+    }
+  }
+
+  void _handleHorizontalDragUpdate(BuildContext context, DragUpdateDetails details) {
+    if (_isHorizontalDragging) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      if (details.primaryDelta != null && details.primaryDelta!.abs() > 0) {
+        if ((details.delta.dx.abs() > details.delta.dy.abs())) {
+          videoState.updateSeekDrag(details.delta.dx, context);
+        }
+      }
+    }
+  }
+
+  void _handleHorizontalDragEnd(BuildContext context, DragEndDetails details) {
+    if (_isHorizontalDragging) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.endSeekDrag();
+      _isHorizontalDragging = false;
+    }
+  }
+
   @override
   void dispose() {
     _focusNode.dispose();
@@ -162,6 +219,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, RawKeyEvent event) {
+    debugPrint('[VideoPlayerUI] _handleKeyEvent: ${event.logicalKey}');
     if (event is! RawKeyDownEvent) {
       return KeyEventResult.ignored;
     }
@@ -207,13 +265,15 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: _handleTap,
+                  onHorizontalDragStart: globals.isPhone ? (details) => _handleHorizontalDragStart(context, details) : null,
+                  onHorizontalDragUpdate: globals.isPhone ? (details) => _handleHorizontalDragUpdate(context, details) : null,
+                  onHorizontalDragEnd: globals.isPhone ? (details) => _handleHorizontalDragEnd(context, details) : null,
                   child: FocusScope(
                     node: FocusScopeNode(),
                     child: globals.isPhone
                       ? Stack(
                           fit: StackFit.expand,
                           children: [
-                            // 视频纹理 - 使用RepaintBoundary包装纹理以优化性能
                             Positioned.fill(
                               child: RepaintBoundary(
                                 child: ColoredBox(
@@ -231,7 +291,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                               ),
                             ),
                             
-                            // 弹幕层
                             if (videoState.hasVideo)
                               Positioned.fill(
                                 child: IgnorePointer(
@@ -255,7 +314,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 ),
                               ),
                             
-                            // 加载中遮罩
                             if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
                               Positioned.fill(
                                 child: LoadingOverlay(
@@ -264,9 +322,14 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 ),
                               ),
                             
-                            // 垂直指示器
                             if (videoState.hasVideo)
                               VerticalIndicator(videoState: videoState),
+                            
+                            if (globals.isPhone && videoState.hasVideo)
+                              const BrightnessGestureArea(),
+                            
+                            if (globals.isPhone && videoState.hasVideo)
+                              const VolumeGestureArea(),
                           ],
                         )
                       : Focus(
@@ -276,7 +339,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              // 视频纹理 - 使用RepaintBoundary包装纹理以优化性能
                               Positioned.fill(
                                 child: RepaintBoundary(
                                   child: ColoredBox(
@@ -294,7 +356,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 ),
                               ),
                               
-                              // 弹幕层
                               if (videoState.hasVideo)
                                 Positioned.fill(
                                   child: IgnorePointer(
@@ -318,7 +379,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                   ),
                                 ),
                               
-                              // 加载中遮罩
                               if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
                                 Positioned.fill(
                                   child: LoadingOverlay(
@@ -327,7 +387,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                   ),
                                 ),
                               
-                              // 垂直指示器
                               if (videoState.hasVideo)
                                 VerticalIndicator(videoState: videoState),
                             ],

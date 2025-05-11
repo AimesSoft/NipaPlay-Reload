@@ -5,30 +5,30 @@ class MediaInfoHelper {
   static void analyzeMediaInfo(MediaInfo mediaInfo) {
     try {
       // 打印基本媒体信息
-      //debugdebugPrint('=== 视频媒体信息 ===');
-      //debugdebugPrint('格式: ${mediaInfo.format ?? "未知"}');
-      //debugdebugPrint('时长: ${_formatDuration(mediaInfo.duration)}');
-      //debugdebugPrint('开始时间: ${_formatDuration(mediaInfo.startTime)}');
-      //debugdebugPrint('比特率: ${mediaInfo.bitRate} bps');
+      //debug//debugPrint('=== 视频媒体信息 ===');
+      //debug//debugPrint('格式: ${mediaInfo.format ?? "未知"}');
+      //debug//debugPrint('时长: ${_formatDuration(mediaInfo.duration)}');
+      //debug//debugPrint('开始时间: ${_formatDuration(mediaInfo.startTime)}');
+      //debug//debugPrint('比特率: ${mediaInfo.bitRate} bps');
       
       // 打印视频流数量
       final videoCount = mediaInfo.video?.length ?? 0;
-      //debugdebugPrint('=== 视频轨道 (${videoCount}) ===');
+      //debug//debugPrint('=== 视频轨道 (${videoCount}) ===');
       
       // 打印音频流数量
       final audioCount = mediaInfo.audio?.length ?? 0;
-      //debugdebugPrint('=== 音频轨道 (${audioCount}) ===');
+      //debug//debugPrint('=== 音频轨道 (${audioCount}) ===');
       
       // 打印字幕轨道信息
       final subtitleCount = mediaInfo.subtitle?.length ?? 0;
-      ////debugdebugPrint('=== 字幕轨道 (${subtitleCount}) ===');
+      ////debug//debugPrint('=== 字幕轨道 (${subtitleCount}) ===');
       
       if (subtitleCount > 0) {
         for (var i = 0; i < subtitleCount; i++) {
           final track = mediaInfo.subtitle![i];
-          ////debugdebugPrint('字幕轨道 #$i:');
-          ////debugdebugPrint('  编解码器: ${track.codec}');
-          ////debugdebugPrint('  完整数据: ${track.toString()}');
+          ////debug//debugPrint('字幕轨道 #$i:');
+          ////debug//debugPrint('  编解码器: ${track.codec}');
+          ////debug//debugPrint('  完整数据: ${track.toString()}');
           
           // 尝试更详细地解析codec信息
           try {
@@ -40,7 +40,7 @@ class MediaInfoHelper {
               // 解析codec属性
               for (final part in parts) {
                 final trimmed = part.trim();
-                ////debugdebugPrint('  属性: $trimmed');
+                ////debug//debugPrint('  属性: $trimmed');
               }
             }
             
@@ -49,7 +49,7 @@ class MediaInfoHelper {
             final properties = ['description', 'index', 'id', 'title', 'language', 'extraData'];
             
             // 使用runtimeType查看对象类型
-            ////debugdebugPrint('  类型: ${instance.runtimeType}');
+            ////debug//debugPrint('  类型: ${instance.runtimeType}');
             
             // 打印原始对象字符串的所有部分
             final objectString = instance.toString();
@@ -62,27 +62,27 @@ class MediaInfoHelper {
               for (final attr in attributes) {
                 final trimmed = attr.trim();
                 if (trimmed.isNotEmpty) {
-                  ////debugdebugPrint('  属性: $trimmed');
+                  ////debug//debugPrint('  属性: $trimmed');
                 }
               }
             }
           } catch (e) {
-            ////debugdebugPrint('  无法获取更多字幕属性: $e');
+            ////debug//debugPrint('  无法获取更多字幕属性: $e');
           }
         }
       } else {
-        ////debugdebugPrint('该视频没有字幕轨道');
+        ////debug//debugPrint('该视频没有字幕轨道');
       }
       
       // 打印章节信息
       final chapterCount = mediaInfo.chapters?.length ?? 0;
-      //debugdebugPrint('=== 章节信息 (${chapterCount}) ===');
+      //debug//debugPrint('=== 章节信息 (${chapterCount}) ===');
       
       // 尝试识别字幕语言
       identifySubtitleLanguages(mediaInfo);
       
     } catch (e) {
-      //debugdebugPrint('分析媒体信息时出错: $e');
+      //debug//debugPrint('分析媒体信息时出错: $e');
     }
   }
   
@@ -102,7 +102,7 @@ class MediaInfoHelper {
     final subtitleCount = mediaInfo.subtitle?.length ?? 0;
     if (subtitleCount == 0) return;
     
-    ////debugdebugPrint('=== 字幕轨道信息汇总 ===');
+    ////debug//debugPrint('=== 字幕轨道信息汇总 ===');
     
     // 语言代码映射
     final languageCodes = {
@@ -182,7 +182,7 @@ class MediaInfoHelper {
       summary.write('语言: ${detectedLanguage ?? "未知"}, ');
       summary.write('编码: ${track.codec.toString().split(',').first.split('(').last.trim()}');
       
-      ////debugdebugPrint(summary.toString());
+      ////debug//debugPrint(summary.toString());
     }
   }
 } 

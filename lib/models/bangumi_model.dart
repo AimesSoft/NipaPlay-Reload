@@ -89,10 +89,10 @@ class BangumiAnime {
     // BangumiDetails inherits from BangumiIntro, so all intro fields are present
     // final String? imageUrl = json['imageUrl'];
 
-    // debugPrint('Rating Details from API: ${json['ratingDetails']}'); // 这行之前移除了
+    // //debugPrint('Rating Details from API: ${json['ratingDetails']}'); // 这行之前移除了
 
     // 新增：打印 bangumiUrl
-    debugPrint('Bangumi URL from API: ${json['bangumiUrl']}');
+    //debugPrint('Bangumi URL from API: ${json['bangumiUrl']}');
 
     List<String> parseTags(List<dynamic>? tagsData) {
       if (tagsData == null) return [];

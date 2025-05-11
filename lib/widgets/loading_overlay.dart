@@ -78,17 +78,20 @@ class LoadingOverlay extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                TypingText(
-                  messages: messages,
-                  style: TextStyle(
-                    color: textColor.withOpacity(textOpacity),
-                    fontSize: fontSize,
-                    fontWeight: isBold ? FontWeight.w600 : FontWeight.normal,
-                    letterSpacing: 0.5,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: TypingText(
+                    messages: messages,
+                    style: TextStyle(
+                      color: textColor.withOpacity(textOpacity),
+                      fontSize: fontSize,
+                      fontWeight: isBold ? FontWeight.w600 : FontWeight.normal,
+                      letterSpacing: 0.5,
+                    ),
+                    typingSpeed: const Duration(milliseconds: 50),
+                    deleteSpeed: const Duration(milliseconds: 30),
+                    pauseDuration: const Duration(seconds: 1),
                   ),
-                  typingSpeed: const Duration(milliseconds: 50),
-                  deleteSpeed: const Duration(milliseconds: 30),
-                  pauseDuration: const Duration(seconds: 1),
                 ),
               ],
             ),

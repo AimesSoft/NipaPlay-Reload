@@ -27,7 +27,7 @@ class ThemeNotifier with ChangeNotifier {
   set themeMode(ThemeMode mode) {
     _themeMode = mode;
     SettingsStorage.saveString('themeMode', mode.toString().split('.').last).then((_) {
-      //////debugPrint('Theme mode saved: ${mode.toString().split('.').last}'); // 添加日志输出
+      ////////debugPrint('Theme mode saved: ${mode.toString().split('.').last}'); // 添加日志输出
     });
     notifyListeners();
   } 
@@ -35,7 +35,7 @@ class ThemeNotifier with ChangeNotifier {
   set blurPower(double blur) {
     _blurPower = blur;
     SettingsStorage.saveDouble('blurPower', _blurPower).then((_) { // 使用 saveDouble
-      //////debugPrint('Blur power saved: $_blurPower'); // 添加日志输出
+      ////////debugPrint('Blur power saved: $_blurPower'); // 添加日志输出
     });
     notifyListeners();
   }
@@ -44,7 +44,7 @@ class ThemeNotifier with ChangeNotifier {
     if (_backgroundImageMode != mode) {
       _backgroundImageMode = mode;
       SettingsStorage.saveString('backgroundImageMode', mode).then((_) {
-        //////debugPrint('Background image mode saved: $mode'); // 添加日志输出
+        ////////debugPrint('Background image mode saved: $mode'); // 添加日志输出
       });
       globals.backgroundImageMode = mode; // 更新全局变量
       notifyListeners();
@@ -55,7 +55,7 @@ class ThemeNotifier with ChangeNotifier {
     if (_customBackgroundPath != path) {
       _customBackgroundPath = path;
       SettingsStorage.saveString('customBackgroundPath', path).then((_) {
-        //////debugPrint('Custom background path saved: $path'); // 添加日志输出
+        ////////debugPrint('Custom background path saved: $path'); // 添加日志输出
       });
       globals.customBackgroundPath = path; // 更新全局变量
       notifyListeners();

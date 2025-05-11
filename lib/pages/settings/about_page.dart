@@ -1,4 +1,5 @@
 // about_page.dart
+import 'dart:ui'; // 需要 ImageFilter
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
@@ -43,7 +44,7 @@ class _AboutPageState extends State<AboutPage> {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       // Log or show a snackbar if url can't be launched
-      debugPrint('Could not launch $urlString');
+      //debugPrint('Could not launch $urlString');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('无法打开链接: $urlString')),
@@ -81,7 +82,7 @@ class _AboutPageState extends State<AboutPage> {
               ),
               const SizedBox(height: 24),
               Text(
-                'NipaPlay Reloaded 当前版本: $_version', // App Name
+                'NipaPlay Reload 当前版本: $_version', // App Name
                 style: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
@@ -93,9 +94,9 @@ class _AboutPageState extends State<AboutPage> {
                   _buildRichText(
                     context,
                     [
-                      const TextSpan(text: 'NipaPlay,名字是从《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 那句 "'),
+                      const TextSpan(text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
                       TextSpan(text: 'にぱ〜☆', style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
-                      const TextSpan(text: '" 来的灵感。\n\n用 macOS和Linux 看番是不是总觉得差点意思？我也是！所以就有了 NipaPlay，希望能给你一个看番良好的体验！'),
+                      const TextSpan(text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
                     ],
                   ),
                 ],
@@ -109,9 +110,9 @@ class _AboutPageState extends State<AboutPage> {
                    _buildRichText(
                     context,
                     [
-                      const TextSpan(text: '感谢弹弹play (DandanPlay) 和它超棒的开发者 '),
+                      const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
                       TextSpan(text: 'Kaedei', style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
-                      const TextSpan(text: '！\n给了 NipaPlay 相关api接口和超多灵感和方向。一些功能和设计受到了不少启发，'),
+                      const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
                     ]
                   ),
                 ],
@@ -125,7 +126,7 @@ class _AboutPageState extends State<AboutPage> {
                   _buildRichText(
                     context,
                     [
-                      const TextSpan(text: 'NipaPlay Reload 是个开源小项目，希望可以变的更全面！\n不管你是不是代码大佬，只要喜欢二次元、有点子，都欢迎来一起贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
+                      const TextSpan(text: '欢迎贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
                     ]
                   ),
                   const SizedBox(height: 16),
@@ -162,30 +163,37 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Widget _buildInfoCard({required BuildContext context, String? title, required List<Widget> children}) {
-    // Using a simple styled container, can be replaced with GlassmorphicContainer if appropriate
-    // Given the transparent background of the page, a semi-transparent card is better.
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25), // Semi-transparent background for the card
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (title != null) ...[
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Colors.white, 
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          ...children,
-        ],
+    return ClipRRect( // ClipRRect 用于实现圆角效果
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 25.0, sigmaY: 25.0), // 调整模糊程度
+        child: Container(
+          // BackdropFilter 需要其子项至少部分透明才能看到模糊效果
+          // 所以 Container 的颜色需要有透明度
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 211, 211, 211).withOpacity(0.25), // 半透明背景色
+            // 不需要再在这里定义 borderRadius 或 border，因为 ClipRRect 处理了圆角
+            // 如果还需要边框，可以嵌套一个有边框的Container，或者在ClipRRect外层再包一个装饰性的Container
+          ),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min, // 使Column高度包裹内容
+            children: [
+              if (title != null) ...[
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.white, 
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              ...children,
+            ],
+          ),
+        ),
       ),
     );
   }

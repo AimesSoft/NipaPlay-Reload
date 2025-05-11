@@ -78,7 +78,6 @@ class BaseSettingsMenu extends StatelessWidget {
                                     : MediaQuery.of(context).size.height - 200,
                               ),
                               child: Column(
-                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   // 标题栏
                                   Container(
@@ -110,7 +109,9 @@ class BaseSettingsMenu extends StatelessWidget {
                                   ),
                                   // 内容区域
                                   Expanded(
-                                    child: content,
+                                    child: SingleChildScrollView(
+                                      child: content,
+                                    ),
                                   ),
                                 ],
                               ),

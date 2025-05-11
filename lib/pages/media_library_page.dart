@@ -103,7 +103,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         _fetchAndPersistFullDetailsInBackground();
       }
     } catch (e) {
-      debugPrint('[MediaLibraryPage] Error loading initial media library data: $e');
+      //debugPrint('[MediaLibraryPage] Error loading initial media library data: $e');
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -141,7 +141,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
             }
           }
         } catch (e) {
-          debugPrint('[MediaLibraryPage] Background fetch error for animeId ${historyItem.animeId}: $e');
+          //debugPrint('[MediaLibraryPage] Background fetch error for animeId ${historyItem.animeId}: $e');
           // Consider removing from prefs if fetch consistently fails for a known bad ID?
         }
       }
@@ -173,7 +173,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         // try {
         //   Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
         // } catch (e) {
-        //   debugPrint(
+        //   //debugPrint(
         //       '[MediaLibraryPage] Error switching tab with TabChangeNotifier: $e');
         //   // Fallback or alternative tab switching if needed, though TabChangeNotifier is preferred.
         //   // For example, if DefaultTabController is accessible here:

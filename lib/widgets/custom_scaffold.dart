@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/background_with_blur.dart'; // 导入背景图和模糊效果控件
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -22,6 +23,18 @@ class CustomScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        // 判断当前活动页面是否为视频播放页 (假定视频播放页索引为0)
+        final bool isVideoPlayerPageActive = tabController?.index == 0;
+        
+        // 根据设备类型、播放/暂停状态以及当前是否为视频播放页来决定 TabBarView 的滑动行为
+        final bool shouldDisableSwipe = globals.isPhone && 
+                                      (videoState.status == PlayerStatus.playing || videoState.status == PlayerStatus.paused) && 
+                                      isVideoPlayerPageActive;
+        
+        final ScrollPhysics tabBarViewPhysics = shouldDisableSwipe
+            ? const NeverScrollableScrollPhysics()
+            : const BouncingScrollPhysics();
+
         return DefaultTabController(
           length: pages.length,
           initialIndex: tabController?.index ?? 0,
@@ -36,9 +49,9 @@ class CustomScaffold extends StatelessWidget {
                   : Colors.black.withOpacity(0.2),
               extendBodyBehindAppBar: false,
               appBar: videoState.shouldShowAppBar() ? AppBar(
-                toolbarHeight: !pageIsHome && !isDesktop
+                toolbarHeight: !pageIsHome && !globals.isDesktop
                     ? 100
-                    : isDesktop
+                    : globals.isDesktop
                         ? 20
                         : 60,
                 leading: pageIsHome
@@ -75,7 +88,7 @@ class CustomScaffold extends StatelessWidget {
               body: TabBarView(
                 controller: tabController,
                 viewportFraction: 1.0,
-                physics: const BouncingScrollPhysics(),
+                physics: tabBarViewPhysics, // 使用动态的 physics
                 children: pages,
               ),
             ),

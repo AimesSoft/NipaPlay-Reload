@@ -72,7 +72,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       future: _imageFuture,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          ////debugPrint('图片加载错误: ${snapshot.error}');
+          //////debugPrint('图片加载错误: ${snapshot.error}');
           if (widget.errorBuilder != null) {
             return widget.errorBuilder!(context, snapshot.error!);
           }

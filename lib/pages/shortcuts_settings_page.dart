@@ -18,6 +18,8 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'rewind': '快退',
     'forward': '快进',
     'toggle_danmaku': '显示/隐藏弹幕',
+    'volume_up': '增大音量',
+    'volume_down': '减小音量',
   };
 
   final Map<String, List<String>> _availableShortcuts = {
@@ -26,6 +28,8 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'rewind': ['←', 'J', '4'],
     'forward': ['→', 'L', '6'],
     'toggle_danmaku': ['D', 'T', 'B'],
+    'volume_up': ['↑', '+', 'PageUp'],
+    'volume_down': ['↓', '-', 'PageDown'],
   };
 
   final Map<String, GlobalKey> _dropdownKeys = {
@@ -34,6 +38,8 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'rewind': GlobalKey(),
     'forward': GlobalKey(),
     'toggle_danmaku': GlobalKey(),
+    'volume_up': GlobalKey(),
+    'volume_down': GlobalKey(),
   };
 
   Future<void> _showRestartDialog() async {

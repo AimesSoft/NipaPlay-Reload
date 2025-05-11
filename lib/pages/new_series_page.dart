@@ -100,7 +100,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   //   if (mounted) { 
   //     setState(() {
   //       _filterAdultContent = prefs.getBool(_filterAdultContentKey) ?? true; // Default to true
-  //       debugPrint('[NewSeriesPage] Loaded _filterAdultContent preference: $_filterAdultContent');
+  //       //debugPrint('[NewSeriesPage] Loaded _filterAdultContent preference: $_filterAdultContent');
   //     });
   //     // Important: After loading the preference, we might need to reload animes 
   //     // if the loaded preference is different from the initial default AND _loadAnimes in initState already ran.
@@ -113,9 +113,9 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
 
   Future<void> _loadAnimes({bool forceRefresh = false}) async {
     try {
-      debugPrint('[NewSeriesPage _loadAnimes] Called. forceRefresh: $forceRefresh');
+      //debugPrint('[NewSeriesPage _loadAnimes] Called. forceRefresh: $forceRefresh');
       if (!mounted) {
-        debugPrint('[NewSeriesPage _loadAnimes] Not mounted, returning.');
+        //debugPrint('[NewSeriesPage _loadAnimes] Not mounted, returning.');
         return;
       }
       setState(() {
@@ -128,25 +128,25 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       // Ensure this key is consistently available, e.g. by importing the settings file or having a shared constants file.
       // For now, we'll use the literal string, assuming 'global_filter_adult_content' is the key.
       final bool filterAdultContentGlobally = prefs.getBool('global_filter_adult_content') ?? true; 
-      debugPrint('[NewSeriesPage _loadAnimes] Using global NSFW filter: $filterAdultContentGlobally');
+      //debugPrint('[NewSeriesPage _loadAnimes] Using global NSFW filter: $filterAdultContentGlobally');
 
       final animes = await _bangumiService.getCalendar(
         forceRefresh: forceRefresh, 
         filterAdultContent: filterAdultContentGlobally // Use the global setting value
       );
-      debugPrint('[NewSeriesPage _loadAnimes] getCalendar returned ${animes.length} animes.');
+      //debugPrint('[NewSeriesPage _loadAnimes] getCalendar returned ${animes.length} animes.');
 
       if (mounted) {
-        debugPrint('[NewSeriesPage _loadAnimes] Before final setState - animes.length from service: ${animes.length}');
+        //debugPrint('[NewSeriesPage _loadAnimes] Before final setState - animes.length from service: ${animes.length}');
         setState(() {
           _animes = animes;
           _isLoading = false;
         });
-        debugPrint('[NewSeriesPage _loadAnimes] After final setState - _animes.length now: ${_animes.length}, _isLoading: $_isLoading');
+        //debugPrint('[NewSeriesPage _loadAnimes] After final setState - _animes.length now: ${_animes.length}, _isLoading: $_isLoading');
       }
-      //debugPrint('番剧数据加载完成');
+      ////debugPrint('番剧数据加载完成');
     } catch (e) {
-      //debugPrint('加载番剧数据时出错: $e');
+      ////debugPrint('加载番剧数据时出错: $e');
       String errorMsg = e.toString();
       if (e is TimeoutException) {
         errorMsg = '网络请求超时，请检查网络连接后重试';
@@ -173,15 +173,15 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       final String? cachedString = prefs.getString(_translationCacheKey);
       
       if (cachedString != null) {
-        //debugPrint('找到翻译缓存数据');
+        ////debugPrint('找到翻译缓存数据');
         final data = json.decode(cachedString);
         final timestamp = data['timestamp'] as int;
         final now = DateTime.now().millisecondsSinceEpoch;
         
-        //debugPrint('缓存时间戳: $timestamp');
-        //debugPrint('当前时间戳: $now');
-        //debugPrint('时间差: ${now - timestamp}ms');
-        //debugPrint('缓存有效期: ${_translationCacheDuration.inMilliseconds}ms');
+        ////debugPrint('缓存时间戳: $timestamp');
+        ////debugPrint('当前时间戳: $now');
+        ////debugPrint('时间差: ${now - timestamp}ms');
+        ////debugPrint('缓存有效期: ${_translationCacheDuration.inMilliseconds}ms');
         
         // 检查缓存是否过期
         if (now - timestamp <= _translationCacheDuration.inMilliseconds) {
@@ -191,19 +191,19 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           translations.forEach((key, value) {
             parsedTranslations[int.parse(key)] = value;
           });
-          //debugPrint('从缓存加载翻译，共 ${parsedTranslations.length} 条');
+          ////debugPrint('从缓存加载翻译，共 ${parsedTranslations.length} 条');
           setState(() {
             _translatedSummaries = parsedTranslations;
           });
         } else {
-          //debugPrint('翻译缓存已过期，清除缓存');
+          ////debugPrint('翻译缓存已过期，清除缓存');
           await prefs.remove(_translationCacheKey);
         }
       } else {
-        //debugPrint('未找到翻译缓存');
+        ////debugPrint('未找到翻译缓存');
       }
     } catch (e) {
-      //debugPrint('加载翻译缓存失败: $e');
+      ////debugPrint('加载翻译缓存失败: $e');
     }
   }
 
@@ -222,10 +222,10 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       };
       final jsonString = json.encode(data);
       await prefs.setString(_translationCacheKey, jsonString);
-      //debugPrint('保存翻译到缓存，共 ${_translatedSummaries.length} 条');
-      //debugPrint('缓存数据大小: ${jsonString.length} 字节');
+      ////debugPrint('保存翻译到缓存，共 ${_translatedSummaries.length} 条');
+      ////debugPrint('缓存数据大小: ${jsonString.length} 字节');
     } catch (e) {
-      //debugPrint('保存翻译缓存失败: $e');
+      ////debugPrint('保存翻译缓存失败: $e');
     }
   }
 
@@ -294,7 +294,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   @override
   Widget build(BuildContext context) {
     super.build(context); // Added for AutomaticKeepAliveClientMixin
-    debugPrint('[NewSeriesPage build] START - isLoading: $_isLoading, error: $_error, animes.length: ${_animes.length}');
+    //debugPrint('[NewSeriesPage build] START - isLoading: $_isLoading, error: $_error, animes.length: ${_animes.length}');
     
     // Outer Stack to handle the new LoadingOverlay for video loading
     return Stack(
@@ -313,12 +313,12 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   // Extracted original build content into a new method
   Widget _buildMainContent(BuildContext context) {
     if (_isLoading && _animes.isEmpty) {
-      debugPrint('[NewSeriesPage build] Showing loading indicator.');
+      //debugPrint('[NewSeriesPage build] Showing loading indicator.');
       return const Center(child: CircularProgressIndicator());
     }
 
     if (_error != null && _animes.isEmpty) {
-      debugPrint('[NewSeriesPage build] Showing error message: $_error');
+      //debugPrint('[NewSeriesPage build] Showing error message: $_error');
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -504,10 +504,10 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       if (parts.length == 3) {
         return '${parts[0]}年${parts[1]}月${parts[2]}日';
       }
-      ////debugPrint('日期格式不正确: $dateStr');
+      //////debugPrint('日期格式不正确: $dateStr');
       return dateStr;
     } catch (e) {
-      ////debugPrint('格式化日期出错: $e');
+      //////debugPrint('格式化日期出错: $e');
       return dateStr;
     }
   }
@@ -515,7 +515,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   Future<String?> _translateSummary(String text) async {
     try {
       final appSecret = await DandanplayService.getAppSecret();
-      //debugPrint('开始请求翻译...');
+      ////debugPrint('开始请求翻译...');
       final response = await http.post(
         Uri.parse('https://nipaplay.aimes-soft.com/tran.php'),
         headers: {
@@ -528,13 +528,13 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       );
 
       if (response.statusCode == 200) {
-        //debugPrint('翻译请求成功');
+        ////debugPrint('翻译请求成功');
         return response.body;
       }
-      //debugPrint('翻译请求失败，状态码: ${response.statusCode}');
+      ////debugPrint('翻译请求失败，状态码: ${response.statusCode}');
       return null;
     } catch (e) {
-      //debugPrint('翻译请求异常: $e');
+      ////debugPrint('翻译请求异常: $e');
       return null;
     }
   }
@@ -605,7 +605,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
               try {
                 DefaultTabController.of(context).animateTo(0);
               } catch (e) {
-                debugPrint('[NewSeriesPage] Error switching tab with DefaultTabController: $e');
+                //debugPrint('[NewSeriesPage] Error switching tab with DefaultTabController: $e');
               }
               tabNotifier.changeTab(0); 
             }
@@ -638,7 +638,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('处理播放请求时出错: $e')),
         );
-        debugPrint('[NewSeriesPage _handlePlayEpisode] Error: $e');
+        //debugPrint('[NewSeriesPage _handlePlayEpisode] Error: $e');
       }
     }
   }

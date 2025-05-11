@@ -14,7 +14,7 @@ List<Map<String, dynamic>> parseDanmakuListInBackground(List<dynamic>? rawDanmak
     );
   } catch (e, s) {
     // It's good practice to log errors that happen in isolates
-    debugPrint('Error parsing danmaku data in background isolate: $e\n$s');
+    //debugPrint('Error parsing danmaku data in background isolate: $e\n$s');
     return []; // Return an empty list or handle error as appropriate
   }
 } 

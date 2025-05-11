@@ -58,10 +58,10 @@ class _GeneralPageState extends State<GeneralPage> {
             });
             _saveFilterPreference(value);
           },
-          activeColor: Colors.greenAccent,
-          inactiveThumbColor: Colors.grey[400],
-          inactiveTrackColor: Colors.white.withOpacity(0.3),
-          secondary: Icon(Ionicons.eye_off_outline, color: _filterAdultContent ? Colors.greenAccent.withOpacity(0.7) : Colors.white54),
+          activeColor: Colors.white,
+          inactiveThumbColor: Colors.white,
+          inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
+          //secondary: Icon(Ionicons.eye_off_outline, color: _filterAdultContent ? const Color.fromARGB(255, 255, 255, 255) : const Color.fromARGB(184, 236, 236, 236)),
         ),
         const Divider(color: Colors.white12, height: 1),
         ListTile(

@@ -33,7 +33,7 @@
 
 > NipaPlay使用Flutter的再次重写，一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。
 ## 下载
-- **Windows（x86 64）/Linux（amd64）/macOS（Intel&Apple Silicon/Android（arm32&arm64&x86 64）/IOS（arm64）**
+- **Windows（x86 64）/Linux（amd64）/macOS（Intel&Apple Silicon）/Android（arm32&arm64&x86 64）/IOS（arm64）**
   - [GitHub Releases](https://github.com/mcdfsteve/nipaplay-reload/releases)
 - **Arch Linux（amd64）**
   - [AUR](https://aur.archlinux.org/packages/nipaplay-reload-bin)

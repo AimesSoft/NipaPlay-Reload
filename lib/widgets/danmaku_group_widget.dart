@@ -95,16 +95,16 @@ class DanmakuGroupWidget extends StatelessWidget {
       if (localOpacity > 0) {
         // 计算描边色
         final luminance = (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
-        final strokeColor = luminance < 0.1 ? Colors.white : Colors.black;
+        final strokeColor = luminance < 0.114 ? Colors.white : Colors.black;
         final shadowList = [
-          Shadow(offset: Offset(-1, -1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(1, -1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(1, 1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(-1, 1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(0, -1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(0, 1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(-1, 0), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(1, 0), blurRadius: 0, color: strokeColor),
+          Shadow(offset: const Offset(-1, -1), blurRadius: 0, color: strokeColor),
+          Shadow(offset: const Offset(1, -1), blurRadius: 0, color: strokeColor),
+          Shadow(offset: const Offset(1, 1), blurRadius: 0, color: strokeColor),
+          Shadow(offset: const Offset(-1, 1), blurRadius: 0, color: strokeColor),
+          Shadow(offset: const Offset(0, -1), blurRadius: 0, color: strokeColor),
+          Shadow(offset: const Offset(0, 1), blurRadius: 0, color: strokeColor),
+          Shadow(offset: const Offset(-1, 0), blurRadius: 0, color: strokeColor),
+          Shadow(offset: const Offset(1, 0), blurRadius: 0, color: strokeColor),
         ];
         final hasCountText = danmakuItem.countText != null;
         children.add(Positioned(
@@ -128,7 +128,7 @@ class DanmakuGroupWidget extends StatelessWidget {
                         TextSpan(
                           text: danmakuItem.countText,
                           style: TextStyle(
-                            fontSize: 25.0,
+                            fontSize: 16.0,
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                             shadows: shadowList,

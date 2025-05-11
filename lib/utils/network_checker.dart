@@ -19,8 +19,8 @@ class NetworkChecker {
     
     try {
       if (verbose) {
-        debugPrint('开始检查网络连接: $url');
-        debugPrint('设备信息: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
+        //debugPrint('开始检查网络连接: $url');
+        //debugPrint('设备信息: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
       }
       
       // 先检查DNS解析
@@ -38,9 +38,9 @@ class NetworkChecker {
       }
       
       if (verbose) {
-        debugPrint('DNS解析成功: ${addresses.length} 个地址');
+        //debugPrint('DNS解析成功: ${addresses.length} 个地址');
         for (var address in addresses) {
-          debugPrint(' - ${address.address} (${address.type == InternetAddressType.IPv4 ? 'IPv4' : 'IPv6'})');
+          //debugPrint(' - ${address.address} (${address.type == InternetAddressType.IPv4 ? 'IPv4' : 'IPv6'})');
         }
       }
       
@@ -57,10 +57,10 @@ class NetworkChecker {
       final connectionSpeed = stopwatch.elapsed.inMilliseconds;
       
       if (verbose) {
-        debugPrint('HTTP请求完成，状态码: ${response.statusCode}');
-        debugPrint('响应时间: ${connectionSpeed}ms');
-        //debugPrint('响应头: ${response.headers}');
-        debugPrint('响应大小: ${response.bodyBytes.length} 字节');
+        //debugPrint('HTTP请求完成，状态码: ${response.statusCode}');
+        //debugPrint('响应时间: ${connectionSpeed}ms');
+        ////debugPrint('响应头: ${response.headers}');
+        //debugPrint('响应大小: ${response.bodyBytes.length} 字节');
       }
       
       return {
@@ -74,8 +74,8 @@ class NetworkChecker {
     } on SocketException catch (e) {
       stopwatch.stop();
       if (verbose) {
-        debugPrint('连接失败(Socket异常): ${e.toString()}');
-        debugPrint('错误详情: ${e.message}, 地址: ${e.address?.address}, 端口: ${e.port}');
+        //debugPrint('连接失败(Socket异常): ${e.toString()}');
+        //debugPrint('错误详情: ${e.message}, 地址: ${e.address?.address}, 端口: ${e.port}');
       }
       
       return {

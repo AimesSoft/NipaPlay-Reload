@@ -8,6 +8,8 @@ import '../utils/globals.dart' as globals;
 import '../widgets/video_controls_overlay.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/anime_info_widget.dart';
+import '../utils/tab_change_notifier.dart';
+import 'package:flutter/gestures.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -19,14 +21,78 @@ class PlayVideoPage extends StatefulWidget {
 }
 
 class _PlayVideoPageState extends State<PlayVideoPage> {
-  // Add state variable to track hover status for AnimeInfoWidget area
   bool _isHoveringAnimeInfo = false;
-  // Add state variable to track hover status for BackButtonWidget area
   bool _isHoveringBackButton = false;
+  double _horizontalDragDistance = 0.0;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  void _handleSideSwipeDragStart(DragStartDetails details) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (globals.isPhone && videoState.isFullscreen) {
+      _horizontalDragDistance = 0.0;
+      //debugPrint("[PlayVideoPage] Side swipe drag start.");
+    }
+  }
+
+  void _handleSideSwipeDragUpdate(DragUpdateDetails details) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (globals.isPhone && videoState.isFullscreen) {
+      _horizontalDragDistance += details.delta.dx;
+    }
+  }
+
+  void _handleSideSwipeDragEnd(DragEndDetails details) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (!(globals.isPhone && videoState.isFullscreen)) {
+      _horizontalDragDistance = 0.0;
+      return;
+    }
+
+    //debugPrint("[PlayVideoPage] Side swipe drag end.");
+    //debugPrint("[PlayVideoPage] Accumulated Drag Distance: $_horizontalDragDistance");
+    //debugPrint("[PlayVideoPage] Drag Velocity: ${details.primaryVelocity}");
+
+    final tabController = DefaultTabController.of(context);
+    final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+
+    if (tabController == null) {
+      //debugPrint("[PlayVideoPage] TabController is null, exiting side swipe.");
+       _horizontalDragDistance = 0.0;
+      return;
+    }
+
+    final currentIndex = tabController.index;
+    final tabCount = tabController.length;
+    int newIndex = currentIndex;
+    
+    final double dragThreshold = MediaQuery.of(context).size.width / 15;
+    //debugPrint("[PlayVideoPage] Drag Threshold: $dragThreshold");
+
+    if (_horizontalDragDistance < -dragThreshold) {
+      //debugPrint("[PlayVideoPage] Swipe Left detected (by distance).");
+      if (currentIndex < tabCount - 1) {
+        newIndex = currentIndex + 1;
+      }
+    } else if (_horizontalDragDistance > dragThreshold) {
+      //debugPrint("[PlayVideoPage] Swipe Right detected (by distance).");
+      if (currentIndex > 0) {
+        newIndex = currentIndex - 1;
+      }
+    } else {
+       //debugPrint("[PlayVideoPage] Drag distance not enough for side swipe.");
+    }
+
+    if (newIndex != currentIndex) {
+      //debugPrint("[PlayVideoPage] Changing tab to index: $newIndex via side swipe.");
+      tabChangeNotifier.changeTab(newIndex);
+    } else {
+      //debugPrint("[PlayVideoPage] No tab change needed from side swipe.");
+    }
+    _horizontalDragDistance = 0.0;
   }
 
   double getFontSize() {
@@ -52,8 +118,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             body: Stack(
               fit: StackFit.expand,
               children: [
-                Positioned.fill(
-                  child: const VideoPlayerWidget(),
+                const Positioned.fill(
+                  child: VideoPlayerWidget(),
                 ),
                 if (videoState.hasVideo) ...[
                   Positioned.fill(
@@ -78,11 +144,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       return VerticalIndicator(videoState: videoState);
                     },
                   ),
-                  // Wrap BackButtonWidget with MouseRegion for cursor and Positioned for layout
                   Positioned(
-                    top: 16.0, // Adjust as needed
-                    left: 16.0,  // Adjust as needed
-                    // 控制返回按钮的可见性和交互性
+                    top: 16.0,
+                    left: 16.0,
                     child: AnimatedOpacity(
                       opacity: videoState.showControls ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 150),
@@ -90,8 +154,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                         ignoring: !videoState.showControls,
                         child: MouseRegion(
                           cursor: _isHoveringBackButton
-                              ? SystemMouseCursors.click // Show click cursor on hover
-                              : SystemMouseCursors.basic, // Default cursor otherwise
+                              ? SystemMouseCursors.click
+                              : SystemMouseCursors.basic,
                           onEnter: (_) => setState(() => _isHoveringBackButton = true),
                           onExit: (_) => setState(() => _isHoveringBackButton = false),
                           child: BackButtonWidget(videoState: videoState),
@@ -99,34 +163,44 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       ),
                     ),
                   ),
-                  // Apply Positioned and Align outside MouseRegion/IgnorePointer
                   Positioned(
                     left: globals.isPhone ? 40.0 : 16.0,
                     top: 0,
                     bottom: 0,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      // 控制AnimeInfoWidget的可见性和交互性 (它内部已有AnimatedOpacity)
                       child: IgnorePointer(
-                        ignoring: !videoState.showControls, // 使其在隐藏时忽略交互
+                        ignoring: !videoState.showControls,
                         child: MouseRegion(
                           cursor: _isHoveringAnimeInfo 
-                            ? SystemMouseCursors.click // Show click cursor on hover
-                            : SystemMouseCursors.basic, // Default cursor otherwise
+                            ? SystemMouseCursors.click
+                            : SystemMouseCursors.basic,
                           onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
                           onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
-                          // AnimeInfoWidget 内部有 AnimatedOpacity
-                          // 外部的 IgnorePointer(ignoring: !videoState.showControls) 已足够
-                          // 原有的无条件 IgnorePointer 已被替换为这个条件性的
                           child: AnimeInfoWidget(videoState: videoState),
                         ),
                       ),
                     ),
                   ),
+                  if (globals.isPhone && videoState.isFullscreen)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 60,
+                      child: GestureDetector(
+                        onHorizontalDragStart: _handleSideSwipeDragStart,
+                        onHorizontalDragUpdate: _handleSideSwipeDragUpdate,
+                        onHorizontalDragEnd: _handleSideSwipeDragEnd,
+                        behavior: HitTestBehavior.translucent,
+                        dragStartBehavior: DragStartBehavior.down,
+                        child: Container(
+                        ),
+                      ),
+                    ),
                 ],
-                // 添加控制栏到根 Stack
                 if (videoState.hasVideo)
-                  const VideoControlsOverlay(), // VideoControlsOverlay handles its own positioning
+                  const VideoControlsOverlay(),
               ],
             ),
           ),
