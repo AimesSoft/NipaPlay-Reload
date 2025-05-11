@@ -63,14 +63,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     } catch (e) {
       debugPrint("FilePicker error: $e");
       if (mounted) {
-        scanService.updateScanMessage("选择文件夹失败: $e");
+        BlurSnackBar.show(context, "选择文件夹失败: ${e.toString()}");
       }
       return;
     }
 
     if (selectedDirectory == null) {
       if (mounted) {
-        scanService.updateScanMessage("未选择文件夹。");
+        BlurSnackBar.show(context, "未选择文件夹。");
       }
       return;
     }
@@ -78,12 +78,31 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final Directory appDocDir = await getApplicationDocumentsDirectory();
     final String appDocPath = appDocDir.path;
 
-    if (!selectedDirectory.startsWith(appDocPath)) {
+    // Normalize paths to handle potential '/private' prefix discrepancy on iOS
+    String effectiveSelectedDir = selectedDirectory;
+    if (selectedDirectory.startsWith('/private') && !appDocPath.startsWith('/private')) {
+      // If selected has /private but appDocPath doesn't, selected might be /private/var... and appDocPath /var...
+      // No change needed for selectedDirectory here, comparison logic will handle it.
+    } else if (!selectedDirectory.startsWith('/private') && appDocPath.startsWith('/private')) {
+      // If selected doesn't have /private but appDocPath does, this is unusual, but we adapt.
+      // This case is less likely if appDocDir.path is from path_provider.
+    }
+
+    // The core comparison: selected path must start with appDocPath OR /private + appDocPath
+    bool isInternalPath = selectedDirectory.startsWith(appDocPath) || 
+                          (appDocPath.startsWith('/var') && selectedDirectory.startsWith('/private$appDocPath'));
+
+    if (!isInternalPath) {
       if (mounted) {
+        String dialogContent = "您选择的文件夹位于 NipaPlay 应用外部。\n\n";
+        dialogContent += "为了正常扫描和管理媒体文件，请将文件或文件夹拷贝到 NipaPlay 的专属文件夹中。\n\n";
+        dialogContent += "您可以在\"文件\"应用中，导航至\"我的 iPhone / iPad\" > \"NipaPlay\"找到此文件夹。\n\n";
+        dialogContent += "这是由于iOS系统的安全和权限机制，确保应用仅能访问您明确置于其管理区域内的数据。";
+
         BlurDialog.show<void>(
           context: context,
-          title: "访问提示",
-          content: "您选择的文件夹位于 NipaPlay 应用外部。\n\n为了正常扫描和管理媒体文件，请将文件或文件夹拷贝到 NipaPlay 的专属文件夹中。\n\n您可以在\"文件\"应用中，导航至\"我的 iPhone / iPad\" > \"NipaPlay\"找到此文件夹。\n\n这是由于iOS系统的安全和权限机制，确保应用仅能访问您明确置于其管理区域内的数据。",
+          title: "访问提示 ",
+          content: dialogContent,
           actions: <Widget>[
             TextButton(
               child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
