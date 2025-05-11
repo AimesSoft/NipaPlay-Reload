@@ -739,23 +739,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       //debugPrint('12. 设置最终播放状态 (在可能的横屏切换之后)...');
       if (lastPosition == 0) {
         // 从头播放
-        player.state = PlaybackState.playing;
-        _setStatus(PlayerStatus.playing, message: '正在播放 (自动)');
-        //debugPrint('VideoPlayerState: Setting to PLAYING (auto from start)');
+        // debugPrint('VideoPlayerState: Initializing playback from start, calling play().'); // <--- REMOVED PRINT
+        play(); // Call our central play method
       } else {
         // 从中间恢复
-        // player 已经被 seek 到 lastPosition
-        // 检查底层播放器在seek后是否已自行播放，或者我们是否应该强制播放/暂停
         if (player.state == PlaybackState.playing) {
-          _setStatus(PlayerStatus.playing, message: '正在播放 (恢复)');
-          //debugPrint('VideoPlayerState: Player is ALREADY PLAYING (resumed)');
+          // Player is already playing after seek (e.g., underlying engine auto-resumed)
+          _setStatus(PlayerStatus.playing, message: '正在播放 (恢复)'); // Sync our status
+          // debugPrint('VideoPlayerState: Player already playing on resume. Directly starting screenshot timer.'); // <--- REMOVED PRINT
+          _startScreenshotTimer(); // Start timer directly
         } else {
-          // 对于恢复播放，可以选择默认播放或暂停。为了确保横屏后视频在动，先尝试设为播放。
-          // 如果播放器seek后默认是暂停，并且我们希望它继续播放，则需要下一行。
-          player.state = PlaybackState.playing; // 尝试恢复播放
-          _setStatus(PlayerStatus.playing, message: '正在播放 (尝试恢复)');
-          debugPrint(
-              'VideoPlayerState: Attempting to RESUME PLAYING from lastPosition: $lastPosition');
+          // Player did not auto-play after seek, or was paused. We need to start it.
+          // _status should be 'ready' from earlier _setStatus call in initializePlayer
+          // debugPrint('VideoPlayerState: Resuming playback (player was not auto-playing), calling play().'); // <--- REMOVED PRINT
+          play(); // Call our central play method
         }
       }
 
@@ -1004,6 +1001,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
       player.state = PlaybackState.playing;
       _setStatus(PlayerStatus.playing, message: '开始播放');
+      // debugPrint("[VideoPlayerState] play() called, starting screenshot timer."); // <--- REMOVED PRINT
+      _startScreenshotTimer(); // <--- EXISTING CALL
       // _resetHideControlsTimer(); // Temporarily commented out as the method name is uncertain.
       // Please provide the correct method if you want to show controls on play.
     }
@@ -1736,11 +1735,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _stopScreenshotTimer(); // 先停止现有定时器
 
     if (_currentVideoPath != null && hasVideo) {
+      // debugPrint("[VideoPlayerState] _startScreenshotTimer: Timer initiated for path: $_currentVideoPath"); // <--- REMOVED PRINT
       _screenshotTimer =
           Timer.periodic(const Duration(seconds: 5), (timer) async {
         if (_status == PlayerStatus.playing && !_isCapturingFrame) {
           _isCapturingFrame = true; // 设置标志，防止并发截图
           try {
+            // debugPrint("[VideoPlayerState] Screenshot Timer Tick: Attempting to capture frame..."); // <--- REMOVED PRINT
             // 使用异步操作减少主线程阻塞
             final newThumbnailPath =
                 await Future(() => _captureVideoFrameWithoutPausing());
