@@ -225,8 +225,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     }
 
     return GridView.builder(
-      shrinkWrap: true, 
-      physics: const NeverScrollableScrollPhysics(), 
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 150, 
         childAspectRatio: 7/12,   

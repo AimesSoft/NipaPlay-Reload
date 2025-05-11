@@ -431,14 +431,12 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                         children: [
                           IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
-                            //tooltip: '移除此文件夹',
                             padding: const EdgeInsets.symmetric(horizontal: 6.0),
                             constraints: const BoxConstraints(),
                             onPressed: scanService.isScanning ? null : () => _handleRemoveFolder(folderPath),
                           ),
                           IconButton(
                             icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
-                            //tooltip: '重新扫描此文件夹 (全面扫描)',
                             padding: const EdgeInsets.symmetric(horizontal: 6.0),
                             constraints: const BoxConstraints(),
                             onPressed: scanService.isScanning 
