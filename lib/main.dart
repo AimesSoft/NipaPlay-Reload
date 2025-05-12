@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:fvp/fvp.dart' as fvp;
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -28,7 +27,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/scan_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -477,7 +475,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 // 检查自定义背景图片路径有效性
 Future<void> _validateCustomBackgroundPath() async {
   final customPath = globals.customBackgroundPath;
-  const defaultPath = 'assets/images/main_image.png';
+  var defaultPath = !globals.isPhone ? 'assets/images/main_image.png' : 'assets/images/main_image_mobile.png';
   bool needReset = false;
 
   if (customPath.isEmpty) {

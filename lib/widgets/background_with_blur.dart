@@ -5,7 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'dart:io';
+
 // 导入 glassmorphism 插件
+String backgroundImageUrl = !globals.isPhone
+    ? 'assets/images/main_image.png'
+    : 'assets/images/main_image_mobile.png';
 
 class BackgroundWithBlur extends StatefulWidget {
   final Widget child;
@@ -36,7 +40,8 @@ class _BackgroundWithBlurState extends State<BackgroundWithBlur> {
             padding: const EdgeInsets.all(20), // 内边距
             height: double.infinity,
             width: double.infinity,
-            linearGradient: LinearGradient( // 添加线性渐变
+            linearGradient: LinearGradient(
+              // 添加线性渐变
               colors: [
                 const Color.fromARGB(255, 0, 0, 0).withOpacity(0),
                 const Color.fromARGB(255, 0, 0, 0).withOpacity(0),
@@ -44,7 +49,8 @@ class _BackgroundWithBlurState extends State<BackgroundWithBlur> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderGradient: LinearGradient( // 添加边框渐变
+            borderGradient: LinearGradient(
+              // 添加边框渐变
               colors: [
                 const Color.fromARGB(255, 0, 0, 0).withOpacity(0.3),
                 const Color.fromARGB(255, 0, 0, 0).withOpacity(0.1),
@@ -67,7 +73,7 @@ class _BackgroundWithBlurState extends State<BackgroundWithBlur> {
       );
     } else if (globals.backgroundImageMode == '看板娘') {
       return Image.asset(
-        'assets/images/main_image.png',
+        backgroundImageUrl,
         fit: BoxFit.cover,
       );
     } else if (globals.backgroundImageMode == '自定义') {
@@ -78,20 +84,20 @@ class _BackgroundWithBlurState extends State<BackgroundWithBlur> {
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             return Image.asset(
-              'assets/images/main_image.png',
+              backgroundImageUrl,
               fit: BoxFit.cover,
             );
           },
         );
       } else {
         return Image.asset(
-          'assets/images/main_image.png',
+          backgroundImageUrl,
           fit: BoxFit.cover,
         );
       }
     }
     return Image.asset(
-      'assets/images/main_image.png',
+      backgroundImageUrl,
       fit: BoxFit.cover,
     );
   }

@@ -6,11 +6,11 @@ import 'package:flutter/material.dart';
 
 //////全局变量/////
 double mobileThreshold = 550;
-double blurPower = 25;
+double blurPower = 0;
 // ignore: non_constant_identifier_names
 String Appversion = "1.0.0";
 String backgroundImageMode = "看板娘"; // 添加背景图像模式变量
-String customBackgroundPath = 'assets/main_image.png'; // 添加自定义背景图片路径变量
+String customBackgroundPath = 'assets/images/main_image.png'; // 添加自定义背景图片路径变量
 //////全局变量/////
 ///
 //////设备类型判断/////

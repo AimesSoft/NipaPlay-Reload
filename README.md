@@ -2,6 +2,7 @@
   <img src="https://github.com/user-attachments/assets/5366a99f-8906-4198-b2cf-2553252c0fb4" height="100" style="margin-right: 20px;">
   <img src="https://github.com/user-attachments/assets/1cb4db2a-7e85-4cca-81f5-f28a7ddeeda9" height="100">
 </div>
+<img src="assets/images/main_image.png" width="100%">
 
 # NipaPlay-Reload
 
@@ -97,7 +98,6 @@
   - 新番时间表展示
   - 按星期分类显示
   - 番剧详情查看
-    - 日文简介支持翻译成中文（ChatGPT4omini）
   - 图片缓存管理
   - 历史记录同步
 
@@ -176,4 +176,4 @@
 - Bangumi API
 ## 关于看板娘
 
-- 新的图还没画，暂时使用这张替代：https://www.pixiv.net/artworks/122857380 （作者くしだ）
+- https://www.pixiv.net/artworks/130349456 （作者MCDFsteve）
