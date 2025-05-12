@@ -42,6 +42,7 @@ class SeekIndicator extends StatelessWidget {
                         color: Color.fromARGB(139, 255, 255, 255),
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ),

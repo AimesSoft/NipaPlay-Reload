@@ -80,7 +80,8 @@ class VolumeIndicator extends StatelessWidget { // Changed class name
                           style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 10,
-                              fontWeight: FontWeight.w500),
+                              fontWeight: FontWeight.w500,
+                              decoration: TextDecoration.none),
                         ),
                       )
                     ],
