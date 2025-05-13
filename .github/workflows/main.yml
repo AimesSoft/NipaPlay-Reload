@@ -21,7 +21,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       FLUTTER_VERSION: 3.29.3
-      # FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/ # Keep commented to use nightly
+      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1 # Set globally to force latest nightly for all platforms
     strategy:
       fail-fast: false
@@ -244,6 +244,48 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
+
+      - name: Ensure mdk-sdk is available for Linux build
+        if: matrix.target == 'Linux'
+        run: |
+          echo "Ensuring mdk-sdk is available for Linux build..."
+          # Attempt to download mdk-sdk directly and verify it
+          MDK_SDK_DIR="linux/flutter/ephemeral/.plugin_symlinks/fvp"
+          mkdir -p "${MDK_SDK_DIR}"
+          
+          # First try SourceForge
+          echo "Trying to download mdk-sdk from SourceForge..."
+          SF_MDK_URL="https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-linux-x64.tar.xz"
+          wget -q --tries=3 ${SF_MDK_URL} -O "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz"
+          
+          # Check if download succeeded
+          if [ -s "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz" ]; then
+            echo "Successfully downloaded mdk-sdk from SourceForge"
+          else
+            # Fallback to GitHub
+            echo "SourceForge download failed, trying GitHub..."
+            GITHUB_MDK_URL="https://github.com/wang-bin/mdk-sdk/releases/latest/download/mdk-sdk-linux-x64.tar.xz"
+            wget -q --tries=3 ${GITHUB_MDK_URL} -O "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz"
+            
+            if [ ! -s "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz" ]; then
+              echo "WARNING: Both SourceForge and GitHub downloads failed. Build might fail later."
+            else
+              echo "Successfully downloaded mdk-sdk from GitHub"
+            fi
+          fi
+          
+          # If we have a valid tarball, extract it
+          if [ -s "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz" ]; then
+            echo "Extracting mdk-sdk..."
+            tar -xf "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz" -C "${MDK_SDK_DIR}"
+            
+            if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
+              echo "mdk-sdk extracted successfully"
+            else
+              echo "WARNING: Extraction failed or directory structure is unexpected"
+            fi
+          fi
+
       - name: Build Linux
         if: matrix.target == 'Linux'
         run: |
