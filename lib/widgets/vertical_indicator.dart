@@ -19,6 +19,10 @@ class _VerticalIndicatorState extends State<VerticalIndicator> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.videoState.isFullscreen) {
+      return const SizedBox.shrink();
+    }
+
     return Positioned(
       right: 10,
       child: AnimatedSlide(

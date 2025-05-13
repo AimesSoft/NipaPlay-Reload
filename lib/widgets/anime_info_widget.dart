@@ -73,12 +73,6 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.movie_outlined,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
                       Flexible(
                         child: Text(
                           widget.videoState.animeTitle!,
