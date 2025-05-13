@@ -25,6 +25,7 @@ import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brigh
 import '../widgets/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
 import '../widgets/volume_indicator.dart'; // Added import for VolumeIndicator widget
 import '../widgets/seek_indicator.dart'; // Added import for SeekIndicator widget
+import 'subtitle_parser.dart'; // Added import for subtitle parser
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -74,6 +75,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _mergeDanmaku = false; // 默认不合并弹幕
   static const String _danmakuStackingKey = 'danmaku_stacking';
   bool _danmakuStacking = false; // 默认不启用弹幕堆叠
+  
+  // 弹幕类型屏蔽
+  static const String _blockTopDanmakuKey = 'block_top_danmaku';
+  static const String _blockBottomDanmakuKey = 'block_bottom_danmaku';
+  static const String _blockScrollDanmakuKey = 'block_scroll_danmaku';
+  bool _blockTopDanmaku = false; // 默认不屏蔽顶部弹幕
+  bool _blockBottomDanmaku = false; // 默认不屏蔽底部弹幕
+  bool _blockScrollDanmaku = false; // 默认不屏蔽滚动弹幕
+  
+  // 弹幕屏蔽词
+  static const String _danmakuBlockWordsKey = 'danmaku_block_words';
+  List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
+  
   dynamic danmakuController; // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
   bool _isFullscreenTransitioning = false;
@@ -83,6 +97,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final List<VoidCallback> _thumbnailUpdateListeners = []; // 缩略图更新监听器列表
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性
+  String? _currentExternalSubtitlePath; // 当前加载的外部字幕路径
 
   // 存储弹幕轨道信息
   final Map<String, Map<String, dynamic>> _danmakuTrackInfo = {};
@@ -169,6 +184,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isSeekIndicatorVisible => _isSeekIndicatorVisible; // <<< ADDED THIS GETTER
   Duration get dragSeekTargetPosition => _dragSeekTargetPosition; // <<< ADDED THIS GETTER
 
+  // 弹幕类型屏蔽Getters
+  bool get blockTopDanmaku => _blockTopDanmaku;
+  bool get blockBottomDanmaku => _blockBottomDanmaku;
+  bool get blockScrollDanmaku => _blockScrollDanmaku;
+  List<String> get danmakuBlockWords => _danmakuBlockWords;
+
   Future<void> _initialize() async {
     if (globals.isPhone) {
       await _setPortrait();
@@ -185,6 +206,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await _loadDanmakuVisible(); // 加载弹幕可见性
     await _loadMergeDanmaku(); // 加载弹幕合并设置
     await _loadDanmakuStacking(); // 加载弹幕堆叠设置
+    
+    // 加载弹幕类型屏蔽设置
+    await _loadBlockTopDanmaku();
+    await _loadBlockBottomDanmaku();
+    await _loadBlockScrollDanmaku();
+    
+    // 加载弹幕屏蔽词
+    await _loadDanmakuBlockWords();
 
     // Ensure wakelock is disabled on initialization
     try {
@@ -565,6 +594,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     _clearPreviousVideoState(); // 清理旧状态
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
+    _currentExternalSubtitlePath = null; // 清除外部字幕路径
 
     _currentVideoPath = videoPath;
     print('historyItem: $historyItem');
@@ -592,6 +622,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (player.state != PlaybackState.stopped) {
         player.state = PlaybackState.stopped;
       }
+      // 清除视频资源
+      player.state = PlaybackState.stopped;
+      player.setMedia("", MediaType.video); // 使用空字符串和视频类型清除媒体
+      
       // 释放旧纹理
       if (player.textureId.value != null) {
         player.textureId.value = null;
@@ -664,8 +698,25 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
         // 如果找到了优先的字幕轨道，就激活它
         if (preferredSubtitleIndex != null) {
-          player.activeSubtitleTracks = [preferredSubtitleIndex];
+          player.activeSubtitleTracks = [preferredSubtitleIndex + 1]; // MDK 字幕轨道从 1 开始
+          
+          // 更新字幕轨道信息
+          if (player.mediaInfo.subtitle != null && 
+              preferredSubtitleIndex < player.mediaInfo.subtitle!.length) {
+            final track = player.mediaInfo.subtitle![preferredSubtitleIndex];
+            updateDanmakuTrackInfo('embedded_subtitle', {
+              'index': preferredSubtitleIndex,
+              'title': track.toString(),
+              'isActive': true,
+            });
+          }
         }
+        
+        // 无论是否有优先字幕轨道，都更新所有字幕轨道信息
+        _updateAllSubtitleTracksInfo();
+        
+        // 通知字幕轨道变化
+        onSubtitleTrackChanged();
       }
 
       //debugPrint('7. 更新视频状态...');
@@ -711,6 +762,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 初始化基础的观看记录（只在没有记录时创建新记录）
       await _initializeWatchHistory(videoPath);
 
+      // 尝试自动检测和加载字幕（在识别视频前）
+      await _autoDetectAndLoadSubtitle(videoPath);
+
       //debugPrint('10. 开始识别视频和加载弹幕...');
       // 尝试识别视频和加载弹幕
       try {
@@ -752,6 +806,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           play(); // Call our central play method
         }
       }
+
+      // 尝试自动检测和加载字幕
+      await _autoDetectAndLoadSubtitle(videoPath);
 
       // 等待一小段时间确保播放器状态稳定
       await Future.delayed(const Duration(milliseconds: 300));
@@ -880,6 +937,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         await _updateWatchHistory();
       }
 
+      // 清除字幕设置（使用空字符串表示清除外部字幕）
+      player.setMedia("", MediaType.subtitle);
+      player.activeSubtitleTracks = [];
+
       // 先停止播放
       if (player.state != PlaybackState.stopped) {
         player.state = PlaybackState.stopped;
@@ -905,12 +966,24 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _duration = Duration.zero;
       _progress = 0.0;
       _error = null;
+      _animeTitle = null;  // 清除动画标题
+      _episodeTitle = null; // 清除集数标题
+      _danmakuList = []; // 清除弹幕列表
       _setStatus(PlayerStatus.idle);
 
       // 在手机平台上恢复竖屏
       if (globals.isPhone) {
         await _setPortrait();
       }
+      
+      // 关闭唤醒锁
+      try {
+        WakelockPlus.disable();
+      } catch (e) {
+        //debugPrint("Error disabling wakelock: $e");
+      }
+      
+      notifyListeners();
     } catch (e) {
       //debugPrint('重置播放器时出错: $e');
       rethrow;
@@ -1020,6 +1093,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _currentThumbnailPath = null;
     _animeTitle = null;
     _episodeTitle = null;
+    _currentExternalSubtitlePath = null; // 清除外部字幕路径
     _danmakuList.clear();
     clearDanmakuTrackInfo();
     danmakuController
@@ -2229,7 +2303,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   /// 获取当前时间窗口内的弹幕（分批加载/懒加载）
   List<Map<String, dynamic>> getActiveDanmakuList(double currentTime,
       {double window = 15.0}) {
-    return _danmakuList.where((d) {
+    // 先过滤掉被屏蔽的弹幕
+    final filteredDanmakuList = getFilteredDanmakuList();
+    
+    // 然后在过滤后的列表中查找时间窗口内的弹幕
+    return filteredDanmakuList.where((d) {
       final t = d['time'] as double? ?? 0.0;
       return t >= currentTime - window && t <= currentTime + window;
     }).toList();
@@ -2419,5 +2497,492 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _seekOverlayEntry = null;
       }
     }
+  }
+
+  // 获取字幕轨道的语言名称
+  String _getLanguageName(String language) {
+    // 语言代码映射
+    final Map<String, String> languageCodes = {
+      'chi': '中文',
+      'eng': '英文',
+      'jpn': '日语',
+      'kor': '韩语',
+      'fra': '法语',
+      'deu': '德语',
+      'spa': '西班牙语',
+      'ita': '意大利语',
+      'rus': '俄语',
+    };
+    
+    // 常见的语言标识符
+    final Map<String, String> languagePatterns = {
+      r'chi|chs|zh|中文|简体|繁体|chi.*?simplified|chinese': '中文',
+      r'eng|en|英文|english': '英文',
+      r'jpn|ja|日文|japanese': '日语',
+      r'kor|ko|韩文|korean': '韩语',
+      r'fra|fr|法文|french': '法语',
+      r'ger|de|德文|german': '德语',
+      r'spa|es|西班牙文|spanish': '西班牙语',
+      r'ita|it|意大利文|italian': '意大利语',
+      r'rus|ru|俄文|russian': '俄语',
+    };
+
+    // 首先检查语言代码映射
+    final mappedLanguage = languageCodes[language.toLowerCase()];
+    if (mappedLanguage != null) {
+      return mappedLanguage;
+    }
+
+    // 然后检查语言标识符
+    for (final entry in languagePatterns.entries) {
+      final pattern = RegExp(entry.key, caseSensitive: false);
+      if (pattern.hasMatch(language.toLowerCase())) {
+        return entry.value;
+      }
+    }
+
+    return language;
+  }
+
+  // 更新指定的字幕轨道信息
+  void _updateSubtitleTracksInfo(int trackIndex) {
+    if (player.mediaInfo.subtitle == null || 
+        trackIndex >= player.mediaInfo.subtitle!.length) {
+      return;
+    }
+    
+    final track = player.mediaInfo.subtitle![trackIndex];
+    // 尝试从track中提取title和language
+    String title = '轨道 $trackIndex';
+    String language = '未知';
+    
+    final fullString = track.toString();
+    if (fullString.contains('metadata: {')) {
+      final metadataStart = fullString.indexOf('metadata: {') + 'metadata: {'.length;
+      final metadataEnd = fullString.indexOf('}', metadataStart);
+      
+      if (metadataEnd > metadataStart) {
+        final metadataStr = fullString.substring(metadataStart, metadataEnd);
+        
+        // 提取title
+        final titleMatch = RegExp(r'title: ([^,}]+)').firstMatch(metadataStr);
+        if (titleMatch != null) {
+          title = titleMatch.group(1)?.trim() ?? title;
+        }
+        
+        // 提取language
+        final languageMatch = RegExp(r'language: ([^,}]+)').firstMatch(metadataStr);
+        if (languageMatch != null) {
+          language = languageMatch.group(1)?.trim() ?? language;
+          // 获取映射后的语言名称
+          language = _getLanguageName(language);
+        }
+      }
+    }
+    
+    // 更新VideoPlayerState的字幕轨道信息
+    updateDanmakuTrackInfo('embedded_subtitle_$trackIndex', {
+      'index': trackIndex,
+      'title': title,
+      'language': language,
+      'isActive': player.activeSubtitleTracks.contains(trackIndex)
+    });
+    
+    // 清除外部字幕信息的激活状态
+    if (player.activeSubtitleTracks.contains(trackIndex) && 
+        _danmakuTrackInfo.containsKey('external_subtitle')) {
+      updateDanmakuTrackInfo('external_subtitle', {
+        'isActive': false
+      });
+    }
+  }
+  
+  // 更新所有字幕轨道信息
+  void _updateAllSubtitleTracksInfo() {
+    if (player.mediaInfo.subtitle == null) {
+      return;
+    }
+    
+    // 清除之前的内嵌字幕轨道信息
+    for (final key in List.from(_danmakuTrackInfo.keys)) {
+      if (key.startsWith('embedded_subtitle_')) {
+        _danmakuTrackInfo.remove(key);
+      }
+    }
+    
+    // 更新所有内嵌字幕轨道信息
+    for (var i = 0; i < player.mediaInfo.subtitle!.length; i++) {
+      _updateSubtitleTracksInfo(i);
+    }
+    
+    // 在更新完成后检查当前激活的字幕轨道并确保相应的信息被更新
+    if (player.activeSubtitleTracks.isNotEmpty) {
+      final activeIndex = player.activeSubtitleTracks.first;
+      if (activeIndex > 0 && activeIndex <= player.mediaInfo.subtitle!.length) {
+        // 激活的是内嵌字幕轨道
+        updateDanmakuTrackInfo('embedded_subtitle', {
+          'index': activeIndex - 1, // MDK 字幕轨道从 1 开始，而我们的索引从 0 开始
+          'title': player.mediaInfo.subtitle![activeIndex - 1].toString(),
+          'isActive': true,
+        });
+        
+        // 通知字幕轨道变化
+        onSubtitleTrackChanged();
+      }
+    }
+    
+    notifyListeners();
+  }
+
+  // 获取当前活跃的外部字幕文件路径
+  String? getActiveExternalSubtitlePath() {
+    if (player.activeSubtitleTracks.isEmpty) {
+      return null;
+    }
+    
+    // 检查是否是外部字幕
+    final activeTrack = player.activeSubtitleTracks.first;
+    // 查找外部字幕信息
+    if (_danmakuTrackInfo.containsKey('external_subtitle') && 
+        _danmakuTrackInfo['external_subtitle']?['isActive'] == true) {
+      // 返回外部字幕文件路径
+      return _danmakuTrackInfo['external_subtitle']?['path'];
+    }
+    
+    // 特殊处理：当轨道索引为0，可能是外部字幕
+    if (activeTrack == 0 && _currentExternalSubtitlePath != null) {
+      return _currentExternalSubtitlePath;
+    }
+    
+    return null;
+  }
+  
+  // 字幕内容缓存
+  final Map<String, List<dynamic>> _subtitleCache = {};
+  
+  // 获取已解析的字幕内容
+  List<dynamic>? getCachedSubtitle(String path) {
+    return _subtitleCache[path];
+  }
+  
+  // 获取当前显示的字幕文本
+  String getCurrentSubtitleText() {
+    try {
+      // 如果没有激活的字幕轨道
+      if (player.activeSubtitleTracks.isEmpty) {
+        debugPrint('VideoPlayerState: getCurrentSubtitleText - 没有激活的字幕轨道');
+        return '';
+      }
+      
+      // 检查是否是外部字幕
+      String? externalSubtitlePath = _currentExternalSubtitlePath;
+      if (externalSubtitlePath == null || externalSubtitlePath.isEmpty) {
+        // 再次尝试从danmakuTrackInfo中获取
+        if (danmakuTrackInfo.containsKey('external_subtitle') && 
+            danmakuTrackInfo['external_subtitle']?['isActive'] == true) {
+          externalSubtitlePath = danmakuTrackInfo['external_subtitle']?['path'] as String?;
+        }
+      }
+      
+      // 输出详细调试信息
+      debugPrint('VideoPlayerState: getCurrentSubtitleText - 外部字幕路径: $externalSubtitlePath');
+      debugPrint('VideoPlayerState: getCurrentSubtitleText - 激活轨道: ${player.activeSubtitleTracks}');
+     // debugPrint('VideoPlayerState: getCurrentSubtitleText - 字幕轨道信息: $danmakuTrackInfo');
+      
+      // 如果是外部字幕
+      if (externalSubtitlePath != null && externalSubtitlePath.isNotEmpty) {
+        final fileName = externalSubtitlePath.split('/').last;
+        return "正在使用外部字幕文件 - $fileName";
+      }
+      
+      // 如果是内嵌字幕
+      final activeTrack = player.activeSubtitleTracks.first;
+      return "正在播放内嵌字幕轨道 $activeTrack - 当前播放时间: ${_position.inMinutes}:${(_position.inSeconds % 60).toString().padLeft(2, '0')}";
+    } catch (e) {
+      debugPrint('VideoPlayerState: 获取当前字幕内容失败: $e');
+      return '';
+    }
+  }
+  
+  // 异步预加载字幕文件
+  Future<void> preloadSubtitleFile(String path) async {
+    // 如果已经缓存过，不重复加载
+    if (_subtitleCache.containsKey(path)) {
+      return;
+    }
+    
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        // 检查文件扩展名，只处理.ass和.srt文件
+        final extension = p.extension(path).toLowerCase();
+        if (extension == '.ass' || extension == '.srt') {
+          // 导入字幕解析器（假设已存在或另外实现）
+          final entries = await SubtitleParser.parseAssFile(path);
+          _subtitleCache[path] = entries;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('预加载字幕文件失败: $e');
+    }
+  }
+  
+  // 当字幕轨道改变时调用
+  void onSubtitleTrackChanged() {
+    final subtitlePath = getActiveExternalSubtitlePath();
+    if (subtitlePath != null) {
+      preloadSubtitleFile(subtitlePath);
+    }
+  }
+
+  // 设置当前外部字幕路径
+  void setCurrentExternalSubtitlePath(String path) {
+    _currentExternalSubtitlePath = path;
+    //debugPrint('设置当前外部字幕路径: $path');
+  }
+
+  // 设置外部字幕并更新路径
+  void setExternalSubtitle(String path) {
+    try {
+      debugPrint('VideoPlayerState: 设置外部字幕: $path');
+      
+      // 如果字幕文件存在
+      if (path.isNotEmpty && File(path).existsSync()) {
+        // 设置外部字幕文件
+        player.setMedia(path, MediaType.subtitle);
+        
+        // 更新字幕轨道
+        player.activeSubtitleTracks = [0];
+        
+        // 更新内部路径
+        _currentExternalSubtitlePath = path;
+        
+        // 更新轨道信息
+        updateDanmakuTrackInfo('external_subtitle', {
+          'path': path,
+          'title': path.split('/').last,
+          'isActive': true,
+        });
+        
+        // 预加载字幕文件
+        preloadSubtitleFile(path);
+        
+        debugPrint('VideoPlayerState: 外部字幕设置成功');
+      } else if (path.isEmpty) {
+        // 清除外部字幕
+        player.setMedia("", MediaType.subtitle);
+        _currentExternalSubtitlePath = null;
+        
+        // 更新轨道信息
+        if (danmakuTrackInfo.containsKey('external_subtitle')) {
+          updateDanmakuTrackInfo('external_subtitle', {
+            'isActive': false
+          });
+        }
+        
+        debugPrint('VideoPlayerState: 外部字幕已清除');
+      } else {
+        debugPrint('VideoPlayerState: 字幕文件不存在: $path');
+      }
+      
+      // 通知字幕轨道变化
+      onSubtitleTrackChanged();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('设置外部字幕失败: $e');
+    }
+  }
+
+  // 自动检测并加载同名字幕文件
+  Future<void> _autoDetectAndLoadSubtitle(String videoPath) async {
+    try {
+      debugPrint('VideoPlayerState: 自动检测字幕文件...');
+      
+      // 检查视频文件是否存在
+      final videoFile = File(videoPath);
+      if (!videoFile.existsSync()) {
+        debugPrint('VideoPlayerState: 视频文件不存在，无法检测字幕');
+        return;
+      }
+      
+      // 获取视频文件目录和文件名（不含扩展名）
+      final videoDir = videoFile.parent.path;
+      final videoName = videoPath.split('/').last.split('.').first;
+      
+      // 常见字幕文件扩展名按优先级排序
+      final subtitleExts = ['.ass', '.srt', '.ssa', '.sub'];
+      
+      // 搜索可能的字幕文件
+      for (final ext in subtitleExts) {
+        final potentialPath = '$videoDir/$videoName$ext';
+        debugPrint('VideoPlayerState: 尝试检测字幕文件: $potentialPath');
+        final subtitleFile = File(potentialPath);
+        if (subtitleFile.existsSync()) {
+          debugPrint('VideoPlayerState: 找到匹配的字幕文件: $potentialPath');
+          
+          // 等待一段时间确保播放器准备好
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          // 设置外部字幕
+          setExternalSubtitle(potentialPath);
+          
+          // 设置完成后强制刷新状态
+          await Future.delayed(const Duration(milliseconds: 300));
+          notifyListeners();
+          return;
+        }
+      }
+      
+      // 如果没有找到完全匹配的，尝试查找目录中任何字幕文件
+      final videoDirectory = Directory(videoDir);
+      if (videoDirectory.existsSync()) {
+        try {
+          final files = videoDirectory.listSync();
+          for (final file in files) {
+            if (file is File) {
+              final ext = p.extension(file.path).toLowerCase();
+              if (subtitleExts.contains(ext)) {
+                // 找到了一个字幕文件
+                debugPrint('VideoPlayerState: 找到可能的字幕文件: ${file.path}');
+                
+                // 等待一段时间确保播放器准备好
+                await Future.delayed(const Duration(milliseconds: 500));
+                
+                // 设置外部字幕
+                setExternalSubtitle(file.path);
+                
+                // 设置完成后强制刷新状态
+                await Future.delayed(const Duration(milliseconds: 300));
+                notifyListeners();
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('VideoPlayerState: 目录搜索错误: $e');
+        }
+      }
+      
+      debugPrint('VideoPlayerState: 未找到匹配的字幕文件');
+    } catch (e) {
+      debugPrint('VideoPlayerState: 自动检测字幕文件失败: $e');
+    }
+  }
+
+  // 加载顶部弹幕屏蔽设置
+  Future<void> _loadBlockTopDanmaku() async {
+    final prefs = await SharedPreferences.getInstance();
+    _blockTopDanmaku = prefs.getBool(_blockTopDanmakuKey) ?? false;
+    notifyListeners();
+  }
+  
+  // 设置顶部弹幕屏蔽
+  Future<void> setBlockTopDanmaku(bool block) async {
+    if (_blockTopDanmaku != block) {
+      _blockTopDanmaku = block;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_blockTopDanmakuKey, block);
+      notifyListeners();
+    }
+  }
+  
+  // 加载底部弹幕屏蔽设置
+  Future<void> _loadBlockBottomDanmaku() async {
+    final prefs = await SharedPreferences.getInstance();
+    _blockBottomDanmaku = prefs.getBool(_blockBottomDanmakuKey) ?? false;
+    notifyListeners();
+  }
+  
+  // 设置底部弹幕屏蔽
+  Future<void> setBlockBottomDanmaku(bool block) async {
+    if (_blockBottomDanmaku != block) {
+      _blockBottomDanmaku = block;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_blockBottomDanmakuKey, block);
+      notifyListeners();
+    }
+  }
+  
+  // 加载滚动弹幕屏蔽设置
+  Future<void> _loadBlockScrollDanmaku() async {
+    final prefs = await SharedPreferences.getInstance();
+    _blockScrollDanmaku = prefs.getBool(_blockScrollDanmakuKey) ?? false;
+    notifyListeners();
+  }
+  
+  // 设置滚动弹幕屏蔽
+  Future<void> setBlockScrollDanmaku(bool block) async {
+    if (_blockScrollDanmaku != block) {
+      _blockScrollDanmaku = block;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_blockScrollDanmakuKey, block);
+      notifyListeners();
+    }
+  }
+  
+  // 加载弹幕屏蔽词列表
+  Future<void> _loadDanmakuBlockWords() async {
+    final prefs = await SharedPreferences.getInstance();
+    final blockWordsJson = prefs.getString(_danmakuBlockWordsKey);
+    if (blockWordsJson != null && blockWordsJson.isNotEmpty) {
+      try {
+        final List<dynamic> decodedList = json.decode(blockWordsJson);
+        _danmakuBlockWords = decodedList.map((e) => e.toString()).toList();
+      } catch (e) {
+        debugPrint('加载弹幕屏蔽词失败: $e');
+        _danmakuBlockWords = [];
+      }
+    } else {
+      _danmakuBlockWords = [];
+    }
+    notifyListeners();
+  }
+  
+  // 添加弹幕屏蔽词
+  Future<void> addDanmakuBlockWord(String word) async {
+    if (word.isNotEmpty && !_danmakuBlockWords.contains(word)) {
+      _danmakuBlockWords.add(word);
+      await _saveDanmakuBlockWords();
+      notifyListeners();
+    }
+  }
+  
+  // 移除弹幕屏蔽词
+  Future<void> removeDanmakuBlockWord(String word) async {
+    if (_danmakuBlockWords.contains(word)) {
+      _danmakuBlockWords.remove(word);
+      await _saveDanmakuBlockWords();
+      notifyListeners();
+    }
+  }
+  
+  // 保存弹幕屏蔽词列表
+  Future<void> _saveDanmakuBlockWords() async {
+    final prefs = await SharedPreferences.getInstance();
+    final blockWordsJson = json.encode(_danmakuBlockWords);
+    await prefs.setString(_danmakuBlockWordsKey, blockWordsJson);
+  }
+  
+  // 检查弹幕是否应该被屏蔽
+  bool shouldBlockDanmaku(Map<String, dynamic> danmaku) {
+    // 检查弹幕类型是否应该被屏蔽
+    final type = danmaku['type'] as String? ?? 'scroll';
+    if (_blockTopDanmaku && type == 'top') return true;
+    if (_blockBottomDanmaku && type == 'bottom') return true;
+    if (_blockScrollDanmaku && type == 'scroll') return true;
+    
+    // 检查弹幕内容是否包含屏蔽词
+    final content = danmaku['content'] as String? ?? '';
+    for (final word in _danmakuBlockWords) {
+      if (content.contains(word)) return true;
+    }
+    
+    return false;
+  }
+  
+  // 获取过滤后的弹幕列表
+  List<Map<String, dynamic>> getFilteredDanmakuList() {
+    return _danmakuList.where((danmaku) => !shouldBlockDanmaku(danmaku)).toList();
   }
 }

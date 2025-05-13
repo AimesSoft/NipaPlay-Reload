@@ -8,6 +8,7 @@ class BaseSettingsMenu extends StatelessWidget {
   final String title;
   final Widget content;
   final VoidCallback? onClose;
+  final Widget? extraButton;
   final double width;
   final double rightOffset;
 
@@ -16,6 +17,7 @@ class BaseSettingsMenu extends StatelessWidget {
     required this.title,
     required this.content,
     this.onClose,
+    this.extraButton,
     this.width = 300,
     this.rightOffset = 240,
   });
@@ -104,6 +106,15 @@ class BaseSettingsMenu extends StatelessWidget {
                                           ),
                                         ),
                                         const Spacer(),
+                                        if (extraButton != null) extraButton!,
+                                        if (onClose != null)
+                                          IconButton(
+                                            icon: const Icon(Icons.close, color: Colors.white),
+                                            onPressed: onClose,
+                                            iconSize: 18,
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
                                       ],
                                     ),
                                   ),

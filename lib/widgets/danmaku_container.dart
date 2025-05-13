@@ -69,6 +69,14 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   // 存储内容组的合并信息
   final Map<String, Map<String, dynamic>> _contentGroupInfo = {};
   
+  // 添加一个变量追踪屏蔽状态的哈希值
+  String _lastBlockStateHash = '';
+  
+  // 计算当前屏蔽状态的哈希值
+  String _getBlockStateHash(VideoPlayerState videoState) {
+    return '${videoState.blockTopDanmaku}-${videoState.blockBottomDanmaku}-${videoState.blockScrollDanmaku}-${videoState.danmakuBlockWords.length}';
+  }
+
   // 计算合并弹幕的字体大小倍率
   double _calcMergedFontSizeMultiplier(int mergeCount) {
     // 按照数量计算放大倍率，例如15条是1.5倍
@@ -759,53 +767,67 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
           _resize(newSize);
         }
         
-        // 获取VideoPlayerState，用于检查设置
-        final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-        // 检查视频是否暂停
-        final isPaused = videoState.isPaused;
-        // 使用getter检测是否存在mergeDanmaku
-        final mergeDanmaku = videoState.danmakuVisible && (videoState.mergeDanmaku ?? false);
-        // 获取弹幕堆叠设置
-        final allowStacking = videoState.danmakuStacking;
-        
-        // 使用缓存优化弹幕分组
-        final groupedDanmaku = _getCachedGroupedDanmaku(
-          widget.danmakuList,
-          widget.currentTime,
-          mergeDanmaku,
-          allowStacking
-        );
-        
-        // 使用缓存优化溢出弹幕
-        final overflowDanmaku = _getCachedOverflowDanmaku(
-          widget.danmakuList,
-          widget.currentTime,
-          mergeDanmaku,
-          allowStacking
-        );
-        
-        // 主弹幕层 - 使用缓存优化
-        final mainDanmakuLayer = _buildMainDanmakuLayer(
-          groupedDanmaku,
-          isPaused,
-          newSize
-        );
-        
-        // 溢出弹幕层 - 使用缓存优化
-        final overflowLayer = _buildOverflowLayer(
-          overflowDanmaku,
-          isPaused,
-          newSize,
-          allowStacking,
-          videoState
-        );
-        
-        // 返回包含主弹幕层和溢出弹幕层的Stack
-        return Stack(
-          children: [
-            mainDanmakuLayer,
-            if (overflowLayer != null) overflowLayer,
-          ],
+        // 使用Consumer替代Provider.of，确保监听状态变化
+        return Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            // 检查视频是否暂停
+            final isPaused = videoState.isPaused;
+            // 使用getter检测是否存在mergeDanmaku
+            final mergeDanmaku = videoState.danmakuVisible && (videoState.mergeDanmaku ?? false);
+            // 获取弹幕堆叠设置
+            final allowStacking = videoState.danmakuStacking;
+            
+            // 检查屏蔽状态是否变化
+            final currentBlockStateHash = _getBlockStateHash(videoState);
+            final forceRefresh = currentBlockStateHash != _lastBlockStateHash;
+            
+            // 更新屏蔽状态哈希
+            if (forceRefresh) {
+              _lastBlockStateHash = currentBlockStateHash;
+            }
+            
+            // 使用缓存优化弹幕分组，状态变化时强制刷新
+            final groupedDanmaku = _getCachedGroupedDanmaku(
+              widget.danmakuList,
+              widget.currentTime,
+              mergeDanmaku,
+              allowStacking,
+              force: forceRefresh
+            );
+            
+            // 使用缓存优化溢出弹幕，状态变化时强制刷新
+            final overflowDanmaku = _getCachedOverflowDanmaku(
+              widget.danmakuList,
+              widget.currentTime,
+              mergeDanmaku,
+              allowStacking,
+              force: forceRefresh
+            );
+            
+            // 主弹幕层 - 使用缓存优化
+            final mainDanmakuLayer = _buildMainDanmakuLayer(
+              groupedDanmaku,
+              isPaused,
+              newSize
+            );
+            
+            // 溢出弹幕层 - 使用缓存优化
+            final overflowLayer = _buildOverflowLayer(
+              overflowDanmaku,
+              isPaused,
+              newSize,
+              allowStacking,
+              videoState
+            );
+            
+            // 返回包含主弹幕层和溢出弹幕层的Stack
+            return Stack(
+              children: [
+                mainDanmakuLayer,
+                if (overflowLayer != null) overflowLayer,
+              ],
+            );
+          }
         );
       },
     );
@@ -824,10 +846,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     List<Map<String, dynamic>> danmakuList,
     double currentTime,
     bool mergeDanmaku,
-    bool allowStacking
+    bool allowStacking,
+    {bool force = false}
   ) {
-    // 如果时间变化小于0.1秒，使用缓存
-    if ((currentTime - _lastGroupedTime).abs() < 0.1 && _groupedDanmakuCache.isNotEmpty) {
+    // 如果时间变化小于0.1秒且没有强制刷新，使用缓存
+    if (!force && (currentTime - _lastGroupedTime).abs() < 0.1 && _groupedDanmakuCache.isNotEmpty) {
       return _groupedDanmakuCache;
     }
     
@@ -887,10 +910,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     List<Map<String, dynamic>> danmakuList,
     double currentTime,
     bool mergeDanmaku,
-    bool allowStacking
+    bool allowStacking,
+    {bool force = false}
   ) {
-    // 如果时间变化小于0.1秒，使用缓存
-    if ((currentTime - _lastOverflowTime).abs() < 0.1 && _overflowDanmakuCache.isNotEmpty) {
+    // 如果时间变化小于0.1秒且没有强制刷新，使用缓存
+    if (!force && (currentTime - _lastOverflowTime).abs() < 0.1 && _overflowDanmakuCache.isNotEmpty) {
       return _overflowDanmakuCache;
     }
     

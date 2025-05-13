@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
@@ -270,55 +269,65 @@ class _AccountPageState extends State<AccountPage> {
               ),
               const SizedBox(height: 16),
               if (_isLoggedIn) ...[
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      if (_avatarUrl != null)
-                        ClipOval(
-                          child: Image.network(
-                            _avatarUrl!,
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(Icons.person, color: Colors.white, size: 40);
-                            },
-                          ),
-                        )
-                      else
-                        const Icon(Icons.person, color: Colors.white, size: 40),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _username,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const Text(
-                              '已登录',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1,
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.logout, color: Colors.white),
-                        onPressed: _logout,
+                      child: Row(
+                        children: [
+                          if (_avatarUrl != null)
+                            ClipOval(
+                              child: Image.network(
+                                _avatarUrl!,
+                                width: 40,
+                                height: 40,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(Icons.person, color: Colors.white, size: 40);
+                                },
+                              ),
+                            )
+                          else
+                            const Icon(Icons.person, color: Colors.white, size: 40),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _username,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const Text(
+                                  '已登录',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.logout, color: Colors.white),
+                            onPressed: _logout,
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ] else ...[

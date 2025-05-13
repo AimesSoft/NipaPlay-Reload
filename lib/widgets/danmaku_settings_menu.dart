@@ -5,6 +5,8 @@ import 'base_settings_menu.dart';
 import 'settings_hint_text.dart';
 import 'dart:ui';
 import 'settings_slider.dart';
+import 'blur_dialog.dart';
+import 'blur_button.dart';
 
 class DanmakuSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -21,6 +23,109 @@ class DanmakuSettingsMenu extends StatefulWidget {
 }
 
 class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
+  // 屏蔽词输入控制器
+  final TextEditingController _blockWordController = TextEditingController();
+  // 屏蔽词是否有错误
+  bool _hasBlockWordError = false;
+  // 错误消息
+  String _blockWordErrorMessage = '';
+
+  @override
+  void dispose() {
+    _blockWordController.dispose();
+    super.dispose();
+  }
+
+  // 添加屏蔽词
+  void _addBlockWord() {
+    final word = _blockWordController.text.trim();
+    
+    // 验证输入
+    if (word.isEmpty) {
+      setState(() {
+        _hasBlockWordError = true;
+        _blockWordErrorMessage = '屏蔽词不能为空';
+      });
+      return;
+    }
+    
+    if (widget.videoState.danmakuBlockWords.contains(word)) {
+      setState(() {
+        _hasBlockWordError = true;
+        _blockWordErrorMessage = '该屏蔽词已存在';
+      });
+      return;
+    }
+    
+    // 添加屏蔽词
+    widget.videoState.addDanmakuBlockWord(word);
+    
+    // 清空输入框和错误状态
+    _blockWordController.clear();
+    setState(() {
+      _hasBlockWordError = false;
+      _blockWordErrorMessage = '';
+    });
+  }
+
+  // 构建屏蔽词展示UI
+  Widget _buildBlockWordsList() {
+    return Consumer<VideoPlayerState>(
+      builder: (context, videoState, child) {
+        if (videoState.danmakuBlockWords.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            alignment: Alignment.center,
+            child: Text(
+              '暂无屏蔽词',
+              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+            ),
+          );
+        }
+        
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: videoState.danmakuBlockWords.map((word) {
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          word,
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () => videoState.removeDanmakuBlockWord(word),
+                          child: const Icon(Icons.close, size: 14, color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
@@ -113,6 +218,165 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     ),
                     const SettingsHintText('将内容相同的弹幕合并为一条显示，减少屏幕干扰'),
                   ],
+                ),
+              ),
+              // 弹幕类型屏蔽（移除标题，只保留开关）
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                child: Consumer<VideoPlayerState>(
+                  builder: (context, videoState, child) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 顶部弹幕屏蔽
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              '屏蔽顶部弹幕',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Switch(
+                              value: videoState.blockTopDanmaku,
+                              onChanged: (value) {
+                                videoState.setBlockTopDanmaku(value);
+                              },
+                            ),
+                          ],
+                        ),
+                        // 底部弹幕屏蔽
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              '屏蔽底部弹幕',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Switch(
+                              value: videoState.blockBottomDanmaku,
+                              onChanged: (value) {
+                                videoState.setBlockBottomDanmaku(value);
+                              },
+                            ),
+                          ],
+                        ),
+                        // 滚动弹幕屏蔽
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              '屏蔽滚动弹幕',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Switch(
+                              value: videoState.blockScrollDanmaku,
+                              onChanged: (value) {
+                                videoState.setBlockScrollDanmaku(value);
+                              },
+                            ),
+                          ],
+                        ),
+                        const SettingsHintText('选择屏蔽特定类型的弹幕，对应类型的弹幕将不会显示'),
+                      ],
+                    );
+                  }
+                ),
+              ),
+              // 弹幕屏蔽词
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
+                child: Consumer<VideoPlayerState>(
+                  builder: (context, videoState, child) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              '弹幕屏蔽词',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            // 毛玻璃效果的白色添加按钮
+                            BlurButton(
+                              icon: Icons.add,
+                              text: '添加',
+                              onTap: () => _addBlockWord(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // 添加输入框
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                            child: Container(
+                              height: 40, // 设置固定高度
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _hasBlockWordError 
+                                    ? Colors.redAccent.withOpacity(0.8) 
+                                    : Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Center( // 使用Center包装确保垂直居中
+                                child: TextField(
+                                  controller: _blockWordController,
+                                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                                  textAlignVertical: TextAlignVertical.center,
+                                  decoration: InputDecoration(
+                                    hintText: '输入要屏蔽的关键词',
+                                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0), // 垂直padding设为0
+                                    isDense: true,
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.clear, color: Colors.white70, size: 18),
+                                      onPressed: () => _blockWordController.clear(),
+                                      tooltip: '',
+                                      padding: EdgeInsets.zero,
+                                      visualDensity: VisualDensity.compact,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => _addBlockWord(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // 错误信息
+                        if (_hasBlockWordError)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, left: 12),
+                            child: Text(
+                              _blockWordErrorMessage,
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                        _buildBlockWordsList(),
+                        const SettingsHintText('包含屏蔽词的弹幕将被过滤不显示'),
+                      ],
+                    );
+                  }
                 ),
               ),
               // 弹幕透明度

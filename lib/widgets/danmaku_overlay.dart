@@ -28,16 +28,20 @@ class DanmakuOverlay extends StatefulWidget {
 class _DanmakuOverlayState extends State<DanmakuOverlay> {
   @override
   Widget build(BuildContext context) {
-    // 分批加载弹幕：只取当前窗口弹幕
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    final activeDanmakuList = videoState.getActiveDanmakuList(widget.currentPosition / 1000);
-    return DanmakuContainer(
-      danmakuList: activeDanmakuList,
-      currentTime: widget.currentPosition / 1000, // 转换为秒
-      videoDuration: widget.videoDuration / 1000, // 转换为秒
-      fontSize: widget.fontSize,
-      isVisible: widget.isVisible,
-      opacity: widget.opacity,
+    // 使用Consumer包装，监听VideoPlayerState的变化
+    return Consumer<VideoPlayerState>(
+      builder: (context, videoState, child) {
+        // 分批加载弹幕：只取当前窗口弹幕，并且应用过滤
+        final activeDanmakuList = videoState.getActiveDanmakuList(widget.currentPosition / 1000);
+        return DanmakuContainer(
+          danmakuList: activeDanmakuList,
+          currentTime: widget.currentPosition / 1000, // 转换为秒
+          videoDuration: widget.videoDuration / 1000, // 转换为秒
+          fontSize: widget.fontSize,
+          isVisible: widget.isVisible,
+          opacity: widget.opacity,
+        );
+      },
     );
   }
 } 
