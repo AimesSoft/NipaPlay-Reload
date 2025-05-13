@@ -28,7 +28,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
-import 'package:nipaplay/services/render_fix_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -93,10 +92,7 @@ void main() async {
   // 检查网络连接
   _checkNetworkConnection();
 
-  // 在Linux系统上初始化渲染修复服务
-  if (Platform.isLinux) {
-    await RenderFixService().initialize();
-  }
+  // 注册 FVP
 
   // 并行执行初始化操作
   await Future.wait(<Future<dynamic>>[

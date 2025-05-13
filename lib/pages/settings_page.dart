@@ -1,5 +1,4 @@
 // settings_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/pages/settings/theme_mode_page.dart'; // 导入 ThemeModePage
@@ -11,7 +10,6 @@ import 'package:nipaplay/pages/settings/about_page.dart'; // 导入 AboutPage
 import 'package:nipaplay/utils/globals.dart' as globals; // 导入包含 isDesktop 的全局变量文件
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:nipaplay/pages/settings/account_page.dart';
-import 'package:nipaplay/pages/settings/developer_options_page.dart'; // 导入开发者选项页面
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -130,41 +128,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 _handleItemTap(
                     const ShortcutsSettingsPage(),
                     "快捷键设置"
-                    );
-              },
-            ),
-          // 仅在Linux系统上显示开发者选项
-          if (Platform.isLinux)
-            ListTile(
-              title: Row(
-                children: [
-                  const Text("开发者选项",
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.orange,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      "实验性",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              trailing: const Icon(Ionicons.chevron_forward_outline,
-                  color: Colors.white),
-              onTap: () {
-                _handleItemTap(
-                    const DeveloperOptionsPage(),
-                    "开发者选项"
                     );
               },
             ),

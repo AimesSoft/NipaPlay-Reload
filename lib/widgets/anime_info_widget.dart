@@ -37,80 +37,85 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
             maxWidth: MediaQuery.of(context).size.width * 0.5,
           ),
           child: IntrinsicWidth(
-            child: MouseRegion(
-              onEnter: (_) {
-                widget.videoState.setControlsHovered(true);
-              },
-              onExit: (_) {
-                widget.videoState.setControlsHovered(false);
-              },
-              child: GlassmorphicContainer(
-                width: double.infinity,
-                height: 48,
-                borderRadius: 24,
-                blur: 20,
-                alignment: Alignment.center,
-                border: 1,
-                linearGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFF808080).withOpacity(0.3),
-                    const Color(0xFF808080).withOpacity(0.3),
-                  ],
-                ),
-                borderGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFFffffff).withOpacity(0.5),
-                    const Color(0xFFFFFFFF).withOpacity(0.5),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          widget.videoState.animeTitle!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: MouseRegion(
-                          onEnter: (_) {
-                            setState(() => _isEpisodeHovered = true);
-                          },
-                          onExit: (_) {
-                            setState(() => _isEpisodeHovered = false);
-                          },
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 200),
-                            style: TextStyle(
-                              color: _isEpisodeHovered
-                                  ? Colors.white
-                                  : Colors.white70,
-                              fontSize: 14,
-                            ),
-                            child: Text(
-                              widget.videoState.episodeTitle!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ),
+            child: GestureDetector(
+              onTapDown: (_) => setState(() {}),
+              onTapUp: (_) => setState(() {}),
+              onTapCancel: () => setState(() {}),
+              child: MouseRegion(
+                onEnter: (_) {
+                  widget.videoState.setControlsHovered(true);
+                },
+                onExit: (_) {
+                  widget.videoState.setControlsHovered(false);
+                },
+                child: GlassmorphicContainer(
+                  width: double.infinity,
+                  height: 48,
+                  borderRadius: 24,
+                  blur: 20,
+                  alignment: Alignment.center,
+                  border: 1,
+                  linearGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF808080).withOpacity(0.3),
+                      const Color(0xFF808080).withOpacity(0.3),
                     ],
+                  ),
+                  borderGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFFffffff).withOpacity(0.5),
+                      const Color(0xFFFFFFFF).withOpacity(0.5),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.videoState.animeTitle!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: MouseRegion(
+                            onEnter: (_) {
+                              setState(() => _isEpisodeHovered = true);
+                            },
+                            onExit: (_) {
+                              setState(() => _isEpisodeHovered = false);
+                            },
+                            child: AnimatedDefaultTextStyle(
+                              duration: const Duration(milliseconds: 200),
+                              style: TextStyle(
+                                color: _isEpisodeHovered
+                                    ? Colors.white
+                                    : Colors.white70,
+                                fontSize: 14,
+                              ),
+                              child: Text(
+                                widget.videoState.episodeTitle!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
