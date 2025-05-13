@@ -26,6 +26,7 @@ import '../widgets/brightness_indicator.dart'; // Added import for BrightnessInd
 import '../widgets/volume_indicator.dart'; // Added import for VolumeIndicator widget
 import '../widgets/seek_indicator.dart'; // Added import for SeekIndicator widget
 import 'subtitle_parser.dart'; // Added import for subtitle parser
+import '../services/render_fix_service.dart'; // Added import for RenderFixService
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -656,6 +657,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 获取视频纹理
       final textureId = await player.updateTexture();
       //debugPrint('获取到纹理ID: $textureId');
+      
+      // 配置渲染修复（针对SteamDeck和Linux系统）
+      if (Platform.isLinux) {
+        try {
+          var renderFixService = RenderFixService();
+          renderFixService.configurePlayerInstance(player);
+          debugPrint('已应用渲染修复配置');
+        } catch (e) {
+          debugPrint('应用渲染修复失败: $e');
+        }
+      }
 
       // 等待纹理初始化完成
       await Future.delayed(const Duration(milliseconds: 200));

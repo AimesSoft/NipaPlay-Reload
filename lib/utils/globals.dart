@@ -58,10 +58,3 @@ String settingTitle = "设置";
 String playVideoTitle = "视频播放";
 String libraryTitle = "媒体库";
 //////文本//////
-
-// 判断是否是SteamDeck或Linux平台，用于特殊渲染处理
-bool isLinuxPlatform = false;
-bool isSteamDeck = false;
-bool needsPermanentRenderLayer = false;
-// 渲染层模式: 0=无, 1=BackdropFilter, 2=带模糊的BackdropFilter, 3=设置菜单结构
-int renderLayerMode = 1;

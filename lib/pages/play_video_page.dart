@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/widgets/video_player_widget.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,7 @@ import '../widgets/video_controls_overlay.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/anime_info_widget.dart';
 import '../utils/tab_change_notifier.dart';
+import '../widgets/invisible_settings_menu.dart';
 import 'package:flutter/gestures.dart';
 
 class PlayVideoPage extends StatefulWidget {
@@ -189,6 +191,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 ],
                 if (videoState.hasVideo)
                   const VideoControlsOverlay(),
+                
+                if (Platform.isLinux && videoState.hasVideo)
+                  const InvisibleSettingsMenu(),
               ],
             ),
           ),
