@@ -59,12 +59,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     final tabController = DefaultTabController.of(context);
     final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
 
-    if (tabController == null) {
-      //debugPrint("[PlayVideoPage] TabController is null, exiting side swipe.");
-       _horizontalDragDistance = 0.0;
-      return;
-    }
-
     final currentIndex = tabController.index;
     final tabCount = tabController.length;
     int newIndex = currentIndex;
@@ -152,32 +146,26 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       duration: const Duration(milliseconds: 150),
                       child: IgnorePointer(
                         ignoring: !videoState.showControls,
-                        child: MouseRegion(
-                          cursor: _isHoveringBackButton
-                              ? SystemMouseCursors.click
-                              : SystemMouseCursors.basic,
-                          onEnter: (_) => setState(() => _isHoveringBackButton = true),
-                          onExit: (_) => setState(() => _isHoveringBackButton = false),
-                          child: BackButtonWidget(videoState: videoState),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: globals.isPhone ? 40.0 : 16.0,
-                    top: 0,
-                    bottom: 0,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: IgnorePointer(
-                        ignoring: !videoState.showControls,
-                        child: MouseRegion(
-                          cursor: _isHoveringAnimeInfo 
-                            ? SystemMouseCursors.click
-                            : SystemMouseCursors.basic,
-                          onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
-                          onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
-                          child: AnimeInfoWidget(videoState: videoState),
+                        child: Row(
+                          children: [
+                            MouseRegion(
+                              cursor: _isHoveringBackButton
+                                  ? SystemMouseCursors.click
+                                  : SystemMouseCursors.basic,
+                              onEnter: (_) => setState(() => _isHoveringBackButton = true),
+                              onExit: (_) => setState(() => _isHoveringBackButton = false),
+                              child: BackButtonWidget(videoState: videoState),
+                            ),
+                            const SizedBox(width: 10.0),
+                            MouseRegion(
+                              cursor: _isHoveringAnimeInfo 
+                                ? SystemMouseCursors.click
+                                : SystemMouseCursors.basic,
+                              onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
+                              onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
+                              child: AnimeInfoWidget(videoState: videoState),
+                            ),
+                          ],
                         ),
                       ),
                     ),

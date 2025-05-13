@@ -214,12 +214,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (!globals.isPhone) return;
     try {
       // Get initial volume from the MDK player (0.0 - 1.0 range)
-      if (player.volume != null) { 
-         _currentVolume = player.volume!; 
-      } else {
-        _currentVolume = 0.5; 
-      }
-      _currentVolume = _currentVolume.clamp(0.0, 1.0); // Ensure it's within 0-1 range
+ 
+       _currentVolume = player.volume; 
+          _currentVolume = _currentVolume.clamp(0.0, 1.0); // Ensure it's within 0-1 range
       _initialDragVolume = _currentVolume;
       //debugPrint("Initial system volume loaded from player (0-1 range): $_currentVolume");
     } catch (e) {
@@ -306,7 +303,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           );
         },
       );
-      Overlay.of(_context!)!.insert(_brightnessOverlayEntry!);
+      Overlay.of(_context!).insert(_brightnessOverlayEntry!);
     }
     
     notifyListeners(); 
@@ -367,7 +364,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           );
         },
       );
-      Overlay.of(_context!)!.insert(_volumeOverlayEntry!);
+      Overlay.of(_context!).insert(_volumeOverlayEntry!);
     }
     notifyListeners();
 
@@ -871,7 +868,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (_context != null && _context!.mounted) {
         _context!.read<WatchHistoryProvider>().refresh();
       }
-    } catch (e, s) {
+    } catch (e) {
       //debugPrint('初始化观看记录时出错: $e\n$s');
     }
   }
@@ -1486,7 +1483,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 notifyListeners();
                 _setStatus(PlayerStatus.recognizing,
                     message: '弹幕加载完成 (${_danmakuList.length}条)');
-              } catch (e, s) {
+              } catch (e) {
                 //debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载失败，跳过');
@@ -1498,12 +1495,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           _danmakuList = [];
           _setStatus(PlayerStatus.recognizing, message: '未匹配到视频信息，跳过弹幕');
         }
-      } catch (e, s) {
+      } catch (e) {
         //debugPrint('视频识别网络错误: $e\n$s');
         _danmakuList = [];
         _setStatus(PlayerStatus.recognizing, message: '无法连接服务器，跳过加载弹幕');
       }
-    } catch (e, s) {
+    } catch (e) {
       //debugPrint('识别视频或加载弹幕时发生严重错误: $e\n$s');
       rethrow;
     }
@@ -1616,7 +1613,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _context!.read<WatchHistoryProvider>().refresh();
       }
       //debugPrint('成功更新观看记录');
-    } catch (e, s) {
+    } catch (e) {
       // 添加 stackTrace
       //debugPrint('更新观看记录时出错: $e\n$s'); // 打印堆栈信息
       // 错误不应阻止视频播放
@@ -1703,7 +1700,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 尝试刷新已显示的缩略图
         _triggerImageCacheRefresh(thumbnailPath);
       }
-    } catch (e, s) {
+    } catch (e) {
       // 添加 stackTrace
       //debugPrint('更新观看记录缩略图时出错: $e\n$s'); // 打印堆栈信息
     }
@@ -2112,7 +2109,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           _context!.read<WatchHistoryProvider>().refresh();
         }
       }
-    } catch (e, s) {
+    } catch (e) {
       // 添加 stackTrace
       //debugPrint('更新观看记录时出错: $e\n$s'); // 打印堆栈信息
     }
@@ -2260,10 +2257,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     try {
       // Set system volume using MDK player.volume (0.0-1.0 range)
-      if (player.volume != null) { // Check if volume property is available
-        player.volume = newVolume; 
-      }
-      _currentVolume = newVolume; 
+ // Check if volume property is available
+      player.volume = newVolume; 
+          _currentVolume = newVolume; 
       _initialDragVolume = newVolume; 
       _showVolumeIndicator(); 
       notifyListeners();
@@ -2288,10 +2284,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       double currentVolume = player.volume ?? _currentVolume;
       double newVolume = (currentVolume + (step ?? _volumeStep)).clamp(0.0, 1.0);
       
-      if (player.volume != null) {
-        player.volume = newVolume;
-      }
-      _currentVolume = newVolume;
+      player.volume = newVolume;
+          _currentVolume = newVolume;
       // Keep _initialDragVolume in sync in case a touch/mouse drag starts later
       _initialDragVolume = newVolume; 
       _showVolumeIndicator();
@@ -2310,10 +2304,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       double currentVolume = player.volume ?? _currentVolume;
       double newVolume = (currentVolume - (step ?? _volumeStep)).clamp(0.0, 1.0);
 
-      if (player.volume != null) {
-        player.volume = newVolume;
-      }
-      _currentVolume = newVolume;
+      player.volume = newVolume;
+          _currentVolume = newVolume;
       // Keep _initialDragVolume in sync in case a touch/mouse drag starts later
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
@@ -2394,7 +2386,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           );
         },
       );
-      Overlay.of(_context!)!.insert(_seekOverlayEntry!); 
+      Overlay.of(_context!).insert(_seekOverlayEntry!); 
     }
     notifyListeners(); // To trigger opacity animation in SeekIndicator
 

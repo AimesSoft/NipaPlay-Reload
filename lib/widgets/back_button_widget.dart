@@ -34,7 +34,7 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
         duration: const Duration(milliseconds: 150),
         offset: Offset(widget.videoState.showControls ? 0 : -0.1, 0),
         child: Padding(
-          padding: EdgeInsets.all(16.0).copyWith(
+          padding: const EdgeInsets.all(16.0).copyWith(
             left: globals.isPhone ? 40.0 : 16.0,
           ),
           child: MouseRegion(
@@ -48,7 +48,7 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
             },
             child: TooltipBubble(
               text: '返回',
-              showOnRight: true,
+              showOnRight: false,
               verticalOffset: 8,
               child: GestureDetector(
                 onTapDown: (_) => setState(() => _isBackButtonPressed = true),

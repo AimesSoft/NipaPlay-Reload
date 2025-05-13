@@ -1,6 +1,6 @@
 <div style="display: flex; align-items: center; justify-content: center;">
-  <img src="https://github.com/user-attachments/assets/5366a99f-8906-4198-b2cf-2553252c0fb4" height="100" style="margin-right: 20px;">
-  <img src="https://github.com/user-attachments/assets/1cb4db2a-7e85-4cca-81f5-f28a7ddeeda9" height="100">
+  <img src="https://github.com/user-attachments/assets/5366a99f-8906-4198-b2cf-2553252c0fb4" width="70%" style="margin-right: 20px;">
+  <img src="https://github.com/user-attachments/assets/1cb4db2a-7e85-4cca-81f5-f28a7ddeeda9" width="30%">
 </div>
 <img src="assets/images/main_image.png" width="100%">
 
@@ -128,7 +128,6 @@
   - 视频截图
   - 视频导出单独片段为gif
   - 倍速功能
-  - 新的看板娘
 
 ## 使用的第三方库
 
