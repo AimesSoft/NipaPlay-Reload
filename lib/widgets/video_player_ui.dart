@@ -9,9 +9,11 @@ import 'loading_overlay.dart';
 import 'danmaku_overlay.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
-import 'brightness_indicator.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
+import 'package:flutter/rendering.dart';
+import 'dart:ui';
+import 'video_controls_overlay.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -247,6 +249,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                   messages: videoState.statusMessages,
                   backgroundOpacity: 0.5,
                 ),
+              const PermanentRenderLayer(),
             ],
           );
         }
@@ -290,6 +293,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 ),
                               ),
                             ),
+                            
+                            const PermanentRenderLayer(),
                             
                             if (videoState.hasVideo)
                               Positioned.fill(
@@ -356,6 +361,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 ),
                               ),
                               
+                              const PermanentRenderLayer(),
+                              
                               if (videoState.hasVideo)
                                 Positioned.fill(
                                   child: IgnorePointer(
@@ -402,5 +409,93 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
         return const SizedBox.shrink();
       },
     );
+  }
+}
+
+// 添加持久渲染层组件，用于解决SteamDeck/Linux上的渲染问题
+class PermanentRenderLayer extends StatelessWidget {
+  const PermanentRenderLayer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 只在需要时创建此层
+    if (!globals.needsPermanentRenderLayer) {
+      return const SizedBox.shrink();
+    }
+
+    // 根据设置的渲染层模式选择不同的渲染方式
+    switch (globals.renderLayerMode) {
+      case 0: // 无渲染层
+        return const SizedBox.shrink();
+        
+      case 1: // 默认BackdropFilter
+        return Positioned.fill(
+          child: IgnorePointer(
+            ignoring: true,
+            child: Opacity(
+              opacity: 0.001,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+          ),
+        );
+        
+      case 2: // 带模糊的BackdropFilter
+        return Positioned.fill(
+          child: IgnorePointer(
+            ignoring: true,
+            child: Opacity(
+              opacity: 0.01,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 0.1, sigmaY: 0.1),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+          ),
+        );
+        
+      case 3: // 类似设置菜单的结构
+        return Positioned.fill(
+          child: IgnorePointer(
+            ignoring: true,
+            child: Opacity(
+              opacity: 0.001,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.01),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        
+      default: // 默认BackdropFilter
+        return Positioned.fill(
+          child: IgnorePointer(
+            ignoring: true,
+            child: Opacity(
+              opacity: 0.001,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+          ),
+        );
+    }
   }
 } 

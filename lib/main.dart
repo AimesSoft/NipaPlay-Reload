@@ -35,8 +35,40 @@ const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 bool _channelHandlerRegistered = false;
 final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<DefaultTabController>>();
 
+// 检测操作系统类型，特别是SteamDeck
+Future<void> _detectOperatingSystem() async {
+  // 检测是否为Linux系统
+  if (Platform.isLinux) {
+    globals.isLinuxPlatform = true;
+    
+    // 尝试检测是否为SteamOS/SteamDeck
+    try {
+      final result = await Process.run('cat', ['/etc/os-release']);
+      if (result.stdout.toString().toLowerCase().contains('steamos') || 
+          result.stdout.toString().toLowerCase().contains('steam deck')) {
+        globals.isSteamDeck = true;
+      }
+    } catch (e) {
+      debugPrint('检测SteamOS失败: $e');
+    }
+    
+    // 从设置中加载是否启用永久渲染层
+    final enabled = await SettingsStorage.loadBool('needsPermanentRenderLayer', defaultValue: true);
+    globals.needsPermanentRenderLayer = enabled;
+    
+    // 从设置中加载渲染层模式
+    final renderMode = await SettingsStorage.loadInt('renderLayerMode', defaultValue: 1);
+    globals.renderLayerMode = renderMode;
+    
+    debugPrint('检测到Linux平台，永久渲染层状态: ${globals.needsPermanentRenderLayer}，模式: ${globals.renderLayerMode}');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 检测操作系统类型
+  await _detectOperatingSystem();
 
   // 在应用启动时为iOS请求相册权限
   // if (Platform.isIOS) {
