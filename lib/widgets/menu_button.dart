@@ -1,6 +1,8 @@
 // ignore: file_names
 import 'package:flutter/material.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/image_assets.dart';
+import 'package:window_manager/window_manager.dart';
 // 导入 system_theme.dart
 
 const double iconSize = 15.0; // 图标大小
@@ -86,7 +88,7 @@ class _WindowControlButtonState extends State<WindowControlButton> {
   }
 }
 
-class WindowControlButtons extends StatelessWidget {
+class WindowControlButtons extends StatefulWidget {
   final bool isMaximized;
   final VoidCallback onMinimize;
   final VoidCallback onMaximizeRestore;
@@ -101,6 +103,44 @@ class WindowControlButtons extends StatelessWidget {
   });
 
   @override
+  State<WindowControlButtons> createState() => _WindowControlButtonsState();
+}
+
+class _WindowControlButtonsState extends State<WindowControlButtons> with WindowListener {
+  @override
+  void initState() {
+    super.initState();
+    if (globals.winLinDesktop) {
+      windowManager.addListener(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (globals.winLinDesktop) {
+      windowManager.removeListener(this);
+    }
+    super.dispose();
+  }
+
+  // WindowListener回调
+  @override
+  void onWindowMaximize() {
+    // 窗口最大化时强制更新UI
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    // 窗口还原时强制更新UI
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -108,19 +148,19 @@ class WindowControlButtons extends StatelessWidget {
         // 使用统一的图片路径
         WindowControlButton(
           imagePath: ImageAssets.minButton, // 最小化按钮
-          onPressed: onMinimize,
+          onPressed: widget.onMinimize,
         ),
         const SizedBox(width: horizontalSpacing), // 使用 SizedBox 来设置按钮之间的间距
         WindowControlButton(
-          imagePath: isMaximized
+          imagePath: widget.isMaximized
               ? ImageAssets.unMaxButton
               : ImageAssets.maxButton, // 最大化/恢复按钮
-          onPressed: onMaximizeRestore,
+          onPressed: widget.onMaximizeRestore,
         ),
         const SizedBox(width: horizontalSpacing), // 使用 SizedBox 来设置按钮之间的间距
         WindowControlButton(
           imagePath: ImageAssets.closeButton, // 关闭按钮
-          onPressed: onClose,
+          onPressed: widget.onClose,
         ),
       ],
     );

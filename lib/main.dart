@@ -354,7 +354,7 @@ class MainPage extends StatefulWidget {
   _MainPageState createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin {
+class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, WindowListener {
   bool isMaximized = false;
   TabController? globalTabController;
 
@@ -374,6 +374,24 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   void initState() {
     super.initState();
     globalTabController = TabController(length: widget.pages.length, vsync: this);
+    
+    // 窗口管理器初始化
+    if (globals.winLinDesktop) {
+      windowManager.addListener(this);
+      _checkWindowMaximizedState();
+    }
+  }
+
+  // 检查窗口是否已最大化
+  Future<void> _checkWindowMaximizedState() async {
+    if (globals.winLinDesktop) {
+      final maximized = await windowManager.isMaximized();
+      if (maximized != isMaximized) {
+        setState(() {
+          isMaximized = maximized;
+        });
+      }
+    }
   }
 
   @override
@@ -389,18 +407,22 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   void dispose() {
     _tabChangeNotifier?.removeListener(_onTabChangeRequested);
     globalTabController?.dispose();
+    if (globals.winLinDesktop) {
+      windowManager.removeListener(this);
+    }
     super.dispose();
   }
 
+  // 切换窗口大小
   void _toggleWindowSize() async {
-    if (isMaximized) {
-      await windowManager.unmaximize();
-    } else {
-      await windowManager.maximize();
+    if (globals.winLinDesktop) {
+      if (await windowManager.isMaximized()) {
+        await windowManager.unmaximize();
+      } else {
+        await windowManager.maximize();
+      }
+      // 状态更新由windowManager的事件监听器处理
     }
-    setState(() {
-      isMaximized = !isMaximized;
-    });
   }
 
   void _minimizeWindow() async {
@@ -409,6 +431,32 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
   void _closeWindow() async {
     await windowManager.close();
+  }
+
+  // WindowListener回调
+  @override
+  void onWindowMaximize() {
+    setState(() {
+      isMaximized = true;
+    });
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    setState(() {
+      isMaximized = false;
+    });
+  }
+
+  @override
+  void onWindowResize() {
+    _checkWindowMaximizedState();
+  }
+
+  @override
+  void onWindowEvent(String eventName) {
+    // 监听所有窗口事件，可以在这里添加日志
+    // print('窗口事件: $eventName');
   }
 
   @override
