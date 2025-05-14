@@ -11,8 +11,6 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
-import 'dart:io';
-import 'dart:math' as math;
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -21,7 +19,7 @@ class VideoPlayerUI extends StatefulWidget {
   State<VideoPlayerUI> createState() => _VideoPlayerUIState();
 }
 
-class _VideoPlayerUIState extends State<VideoPlayerUI> with SingleTickerProviderStateMixin {
+class _VideoPlayerUIState extends State<VideoPlayerUI> {
   final FocusNode _focusNode = FocusNode();
   final bool _isIndicatorHovered = false;
   Timer? _doubleTapTimer;
@@ -32,8 +30,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> with SingleTickerProvider
   bool _isProcessingTap = false;
   bool _isMouseVisible = true;
   bool _isHorizontalDragging = false;
-  late AnimationController _linuxRefreshController;
-  late AnimationController _linuxFastRefreshController;
 
   double getFontSize() {
     if (globals.isPhone) {
@@ -55,22 +51,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> with SingleTickerProvider
         _resetMouseHideTimer();
       }
     });
-    
-    _linuxRefreshController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    
-    _linuxFastRefreshController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 50),
-    );
-    
-    final bool isLinuxPlatform = Platform.isLinux;
-    
-    if (isLinuxPlatform) {
-      _startLinuxRefreshAnimation();
-    }
   }
 
   void _registerKeyboardShortcuts() {
@@ -229,18 +209,11 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> with SingleTickerProvider
     }
   }
 
-  void _startLinuxRefreshAnimation() {
-    _linuxRefreshController.repeat(reverse: true);
-    _linuxFastRefreshController.repeat(reverse: true);
-  }
-
   @override
   void dispose() {
     _focusNode.dispose();
     _doubleTapTimer?.cancel();
     _mouseMoveTimer?.cancel();
-    _linuxRefreshController.dispose();
-    _linuxFastRefreshController.dispose();
     super.dispose();
   }
 
@@ -260,8 +233,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
-    final bool isLinuxPlatform = Platform.isLinux;
-
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final textureId = videoState.player.textureId.value;
@@ -309,46 +280,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> with SingleTickerProvider
                                   child: Center(
                                     child: AspectRatio(
                                       aspectRatio: videoState.aspectRatio,
-                                      child: Stack(
-                                        children: [
-                                          Texture(
-                                            textureId: textureId,
-                                            filterQuality: FilterQuality.medium,
-                                          ),
-                                          if (isLinuxPlatform) ...[
-                                            TickerMode(
-                                              enabled: true,
-                                              child: Positioned.fill(
-                                                child: AnimatedBuilder(
-                                                  animation: _linuxRefreshController,
-                                                  builder: (context, child) {
-                                                    return CustomPaint(
-                                                      painter: _LinuxRefreshPainter(
-                                                        animationValue: _linuxRefreshController.value,
-                                                      ),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                            TickerMode(
-                                              enabled: true,
-                                              child: Positioned.fill(
-                                                child: AnimatedBuilder(
-                                                  animation: _linuxFastRefreshController,
-                                                  builder: (context, child) {
-                                                    return Opacity(
-                                                      opacity: 0.001 + 0.001 * _linuxFastRefreshController.value,
-                                                      child: Container(
-                                                        color: Colors.transparent,
-                                                      ),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
+                                      child: Texture(
+                                        textureId: textureId,
+                                        filterQuality: FilterQuality.medium,
                                       ),
                                     ),
                                   ),
@@ -411,46 +345,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> with SingleTickerProvider
                                     child: Center(
                                       child: AspectRatio(
                                         aspectRatio: videoState.aspectRatio,
-                                        child: Stack(
-                                          children: [
-                                            Texture(
-                                              textureId: textureId,
-                                              filterQuality: FilterQuality.medium,
-                                            ),
-                                            if (isLinuxPlatform) ...[
-                                              TickerMode(
-                                                enabled: true,
-                                                child: Positioned.fill(
-                                                  child: AnimatedBuilder(
-                                                    animation: _linuxRefreshController,
-                                                    builder: (context, child) {
-                                                      return CustomPaint(
-                                                        painter: _LinuxRefreshPainter(
-                                                          animationValue: _linuxRefreshController.value,
-                                                        ),
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                              ),
-                                              TickerMode(
-                                                enabled: true,
-                                                child: Positioned.fill(
-                                                  child: AnimatedBuilder(
-                                                    animation: _linuxFastRefreshController,
-                                                    builder: (context, child) {
-                                                      return Opacity(
-                                                        opacity: 0.001 + 0.001 * _linuxFastRefreshController.value,
-                                                        child: Container(
-                                                          color: Colors.transparent,
-                                                        ),
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ],
+                                        child: Texture(
+                                          textureId: textureId,
+                                          filterQuality: FilterQuality.medium,
                                         ),
                                       ),
                                     ),
@@ -505,29 +402,4 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> with SingleTickerProvider
       },
     );
   }
-}
-
-/// Linux专用的刷新画布，绘制透明内容触发重绘
-class _LinuxRefreshPainter extends CustomPainter {
-  final double animationValue;
-  
-  _LinuxRefreshPainter({required this.animationValue});
-  
-  @override
-  void paint(Canvas canvas, Size size) {
-    // 完全透明的绘制，但每一帧都会绘制，迫使视频纹理刷新
-    final paint = Paint()
-      ..color = Colors.transparent.withOpacity(0.001)
-      ..style = PaintingStyle.fill;
-      
-    // 在不同位置绘制一些点，但它们是不可见的
-    final x = size.width * (0.1 + 0.1 * math.sin(animationValue * math.pi * 2));
-    final y = size.height * (0.1 + 0.1 * math.cos(animationValue * math.pi * 2));
-    
-    canvas.drawCircle(Offset(x, y), 1.0, paint);
-  }
-  
-  @override
-  bool shouldRepaint(_LinuxRefreshPainter oldDelegate) => 
-      oldDelegate.animationValue != animationValue;
 } 
