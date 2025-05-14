@@ -518,7 +518,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                 
                                 return Material(
                                   color: isCurrentSubtitle 
-                                      ? Colors.blueAccent.withOpacity(0.3) 
+                                      ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.3) 
                                       : Colors.transparent,
                                   child: InkWell(
                                     onTap: () => _seekToTime(entry.startTimeMs),
@@ -622,7 +622,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                   
                                   return Material(
                                     color: isCurrentSubtitle 
-                                        ? Colors.blueAccent.withOpacity(0.3) 
+                                        ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.3) 
                                         : Colors.transparent,
                                     child: InkWell(
                                       onTap: () => _seekToTime(entry.startTimeMs),
@@ -648,13 +648,13 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                   style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
-                                                    fontWeight: isCurrentSubtitle ? FontWeight.bold : FontWeight.normal,
+                                                    fontWeight: FontWeight.normal,
                                                   ),
                                                 ),
-                                                const Text(
+                                                Text(
                                                   ' → ',
                                                   style: TextStyle(
-                                                    color: Colors.grey,
+                                                    color: Colors.grey.shade400,
                                                     fontSize: 12,
                                                   ),
                                                 ),
@@ -663,7 +663,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                   style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
-                                                    fontWeight: isCurrentSubtitle ? FontWeight.bold : FontWeight.normal,
+                                                    fontWeight: FontWeight.normal,
                                                   ),
                                                 ),
                                                 const Spacer(),

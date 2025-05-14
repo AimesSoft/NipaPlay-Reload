@@ -98,6 +98,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性
   String? _currentExternalSubtitlePath; // 当前加载的外部字幕路径
+  
+  // 外部字幕自动加载回调
+  Function(String path, String fileName)? onExternalSubtitleAutoLoaded;
 
   // 存储弹幕轨道信息
   final Map<String, Map<String, dynamic>> _danmakuTrackInfo = {};
@@ -763,7 +766,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       await _initializeWatchHistory(videoPath);
 
       // 尝试自动检测和加载字幕（在识别视频前）
-      await _autoDetectAndLoadSubtitle(videoPath);
+      // 移除此处的字幕自动加载调用，在下方加载完弹幕后再调用
+      // await _autoDetectAndLoadSubtitle(videoPath);
 
       //debugPrint('10. 开始识别视频和加载弹幕...');
       // 尝试识别视频和加载弹幕
@@ -2743,9 +2747,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   // 设置外部字幕并更新路径
-  void setExternalSubtitle(String path) {
+  void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     try {
-      debugPrint('VideoPlayerState: 设置外部字幕: $path');
+      debugPrint('VideoPlayerState: 设置外部字幕: $path, 手动设置: $isManualSetting');
       
       // 如果字幕文件存在
       if (path.isNotEmpty && File(path).existsSync()) {
@@ -2755,7 +2759,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 更新字幕轨道
         player.activeSubtitleTracks = [0];
         
-        // 更新内部路径
+        // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
         _currentExternalSubtitlePath = path;
         
         // 更新轨道信息
@@ -2763,6 +2767,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           'path': path,
           'title': path.split('/').last,
           'isActive': true,
+          'isManualSet': isManualSetting, // 添加是否手动设置的标记
         });
         
         // 预加载字幕文件
@@ -2774,10 +2779,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         player.setMedia("", MediaType.subtitle);
         _currentExternalSubtitlePath = null;
         
-        // 更新轨道信息
+        // 更新轨道信息，明确清除所有相关标记
         if (danmakuTrackInfo.containsKey('external_subtitle')) {
           updateDanmakuTrackInfo('external_subtitle', {
-            'isActive': false
+            'isActive': false,
+            'isManualSet': false, // 明确清除手动设置标记
+            'path': null
           });
         }
         
@@ -2794,10 +2801,40 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
+  // 强制设置外部字幕（手动操作）
+  void forceSetExternalSubtitle(String path) {
+    // 调用setExternalSubtitle，并标记为手动设置
+    setExternalSubtitle(path, isManualSetting: true);
+  }
+
   // 自动检测并加载同名字幕文件
   Future<void> _autoDetectAndLoadSubtitle(String videoPath) async {
     try {
       debugPrint('VideoPlayerState: 自动检测字幕文件...');
+      
+      // 检查视频是否有内嵌字幕
+      bool hasEmbeddedSubtitles = player.mediaInfo.subtitle != null && 
+                              player.mediaInfo.subtitle!.isNotEmpty;
+      
+      // 检查是否已激活内嵌字幕轨道
+      bool hasActiveEmbeddedTrack = false;
+      if (player.activeSubtitleTracks.isNotEmpty) {
+        // 排除轨道0（外部字幕轨道）
+        hasActiveEmbeddedTrack = player.activeSubtitleTracks.any((track) => track > 0);
+      }
+      
+      // 如果以前手动设置过外部字幕，则始终尝试加载
+      bool wasManuallySet = false;
+      if (danmakuTrackInfo.containsKey('external_subtitle')) {
+        wasManuallySet = danmakuTrackInfo['external_subtitle']?['isManualSet'] == true;
+      }
+      
+      // 修改判断条件：只要有内嵌字幕且没有手动设置过外部字幕，就跳过自动加载
+      // 移除对hasActiveEmbeddedTrack的依赖
+      if (hasEmbeddedSubtitles && !wasManuallySet) {
+        debugPrint('VideoPlayerState: 检测到内嵌字幕，跳过自动加载外部字幕');
+        return;
+      }
       
       // 检查视频文件是否存在
       final videoFile = File(videoPath);
@@ -2805,6 +2842,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('VideoPlayerState: 视频文件不存在，无法检测字幕');
         return;
       }
+      
+      // 以下是正常的字幕检测和加载过程
       
       // 获取视频文件目录和文件名（不含扩展名）
       final videoDir = videoFile.parent.path;
@@ -2824,12 +2863,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           // 等待一段时间确保播放器准备好
           await Future.delayed(const Duration(milliseconds: 500));
           
-          // 设置外部字幕
-          setExternalSubtitle(potentialPath);
+          // 设置外部字幕（不标记为手动设置）
+          setExternalSubtitle(potentialPath, isManualSetting: false);
           
           // 设置完成后强制刷新状态
           await Future.delayed(const Duration(milliseconds: 300));
           notifyListeners();
+          
+          // 触发自动加载字幕回调
+          if (onExternalSubtitleAutoLoaded != null) {
+            final fileName = potentialPath.split('/').last;
+            onExternalSubtitleAutoLoaded!(potentialPath, fileName);
+          }
+          
           return;
         }
       }
@@ -2849,12 +2895,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 // 等待一段时间确保播放器准备好
                 await Future.delayed(const Duration(milliseconds: 500));
                 
-                // 设置外部字幕
-                setExternalSubtitle(file.path);
+                // 设置外部字幕（不标记为手动设置）
+                setExternalSubtitle(file.path, isManualSetting: false);
                 
                 // 设置完成后强制刷新状态
                 await Future.delayed(const Duration(milliseconds: 300));
                 notifyListeners();
+                
+                // 触发自动加载字幕回调
+                if (onExternalSubtitleAutoLoaded != null) {
+                  final fileName = file.path.split('/').last;
+                  onExternalSubtitleAutoLoaded!(file.path, fileName);
+                }
+                
                 return;
               }
             }

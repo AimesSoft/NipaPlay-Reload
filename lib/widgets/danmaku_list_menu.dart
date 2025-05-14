@@ -384,7 +384,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                           });
                           _loadDanmakus();
                         },
-                        activeColor: Colors.blueAccent,
+                        activeColor: const Color.fromARGB(255, 255, 255, 255),
                       ),
                     ],
                   ),
@@ -450,7 +450,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                 
                                 return Material(
                                   color: isCurrentDanmaku 
-                                      ? Colors.blueAccent.withOpacity(0.3) 
+                                      ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.3) 
                                       : Colors.transparent,
                                   child: InkWell(
                                     onTap: () => _seekToTime(timeInSeconds),

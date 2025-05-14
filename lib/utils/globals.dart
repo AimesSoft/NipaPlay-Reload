@@ -45,7 +45,7 @@ bool get noMenuButton {
 }
 bool get winLinDesktop {
   //windows和linux桌面平台
-  return !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+  return !kIsWeb && (Platform.isWindows || Platform.isLinux);
 }
 bool get isDesktop {
   //windows和linux和macOS桌面平台

@@ -33,6 +33,23 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   void initState() {
     super.initState();
     _loadExternalSubtitles();
+    
+    // 设置自动加载字幕的回调
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.onExternalSubtitleAutoLoaded = _handleAutoLoadedSubtitle;
+      
+      // 检查当前是否有激活的外部字幕
+      _checkCurrentExternalSubtitle(videoState);
+    });
+  }
+  
+  @override
+  void dispose() {
+    // 清除回调
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    videoState.onExternalSubtitleAutoLoaded = null;
+    super.dispose();
   }
   
   // 从SharedPreferences加载已保存的外部字幕信息
@@ -144,10 +161,21 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     try {
       setState(() => _isLoading = true);
       
+      // 获取上次打开的字幕文件夹
+      String? lastSubtitleDir;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        lastSubtitleDir = prefs.getString('last_subtitle_dir');
+      } catch (e) {
+        debugPrint('获取上次字幕目录失败: $e');
+        lastSubtitleDir = null;
+      }
+      
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['srt', 'ass', 'ssa', 'sub'],
         dialogTitle: '选择字幕文件',
+        initialDirectory: lastSubtitleDir,
       );
 
       if (result == null || result.files.single.path == null) {
@@ -157,6 +185,16 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       
       final filePath = result.files.single.path!;
       final fileName = result.files.single.name;
+      
+      // 保存当前字幕文件夹路径
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final dir = File(filePath).parent.path;
+        await prefs.setString('last_subtitle_dir', dir);
+      } catch (e) {
+        debugPrint('保存字幕目录失败: $e');
+        // 忽略保存失败
+      }
 
       // 检查是否是有效的字幕文件
       if (!filePath.toLowerCase().endsWith('.srt') && 
@@ -228,8 +266,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         _externalSubtitles[index]['isActive'] = true;
       }
       
-      // 使用新的方法设置外部字幕
-      videoState.setExternalSubtitle(filePath);
+      // 使用强制设置外部字幕的方法，确保它会被标记为手动设置，优先于内嵌字幕
+      videoState.forceSetExternalSubtitle(filePath);
       
       setState(() {});
     } catch (e) {
@@ -297,7 +335,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
           
           // 清除外部字幕信息
           videoState.updateDanmakuTrackInfo('external_subtitle', {
-            'isActive': false
+            'isActive': false,
+            'isManualSet': false
           });
         }
       } else {
@@ -306,6 +345,12 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         
         // 清除所有字幕轨道信息
         videoState.clearDanmakuTrackInfo();
+        
+        // 明确清除外部字幕的手动设置标记
+        videoState.updateDanmakuTrackInfo('external_subtitle', {
+          'isActive': false,
+          'isManualSet': false
+        });
       }
       
       setState(() {});
@@ -389,6 +434,84 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     if (context.mounted) {
       await _saveExternalSubtitles(context);
       BlurSnackBar.show(context, '已移除字幕: $fileName');
+    }
+  }
+
+  // 处理自动加载的字幕
+  void _handleAutoLoadedSubtitle(String path, String fileName) {
+    // 检查是否已经添加过相同路径的字幕
+    final existingIndex = _externalSubtitles.indexWhere((s) => s['path'] == path);
+    if (existingIndex >= 0) {
+      // 已存在，直接更新激活状态
+      setState(() {
+        for (var subtitle in _externalSubtitles) {
+          subtitle['isActive'] = false;
+        }
+        _externalSubtitles[existingIndex]['isActive'] = true;
+      });
+      return;
+    }
+
+    // 创建新的字幕信息
+    final subtitleInfo = {
+      'path': path,
+      'name': fileName,
+      'type': p.extension(path).toLowerCase().substring(1),
+      'addTime': DateTime.now().millisecondsSinceEpoch,
+      'isActive': true
+    };
+    
+    // 添加到列表并更新UI
+    setState(() {
+      // 将所有字幕设为非激活
+      for (var subtitle in _externalSubtitles) {
+        subtitle['isActive'] = false;
+      }
+      _externalSubtitles.add(subtitleInfo);
+    });
+    
+    // 保存字幕列表
+    if (context.mounted) {
+      _saveExternalSubtitles(context);
+    }
+  }
+  
+  // 检查当前是否有激活的外部字幕
+  void _checkCurrentExternalSubtitle(VideoPlayerState videoState) {
+    // 获取当前外部字幕路径
+    final currentPath = videoState.getActiveExternalSubtitlePath();
+    if (currentPath == null || currentPath.isEmpty) return;
+    
+    // 检查是否已经在列表中
+    final existingIndex = _externalSubtitles.indexWhere((s) => s['path'] == currentPath);
+    if (existingIndex >= 0) {
+      // 已存在，直接更新激活状态
+      setState(() {
+        for (var subtitle in _externalSubtitles) {
+          subtitle['isActive'] = false;
+        }
+        _externalSubtitles[existingIndex]['isActive'] = true;
+      });
+      return;
+    }
+    
+    // 不在列表中，添加到列表
+    final fileName = currentPath.split('/').last;
+    final subtitleInfo = {
+      'path': currentPath,
+      'name': fileName,
+      'type': p.extension(currentPath).toLowerCase().substring(1),
+      'addTime': DateTime.now().millisecondsSinceEpoch,
+      'isActive': true
+    };
+    
+    setState(() {
+      _externalSubtitles.add(subtitleInfo);
+    });
+    
+    // 保存字幕列表
+    if (context.mounted) {
+      _saveExternalSubtitles(context);
     }
   }
 
