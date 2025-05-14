@@ -210,12 +210,6 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
             _visibleEntries = [currentEntry];
             _currentSubtitleIndex = 0;
             _isLoading = false;
-            
-            if (subtitleText.contains("正在播放内嵌字幕")) {
-              _errorMessage = '内嵌字幕内容只能实时显示，无法查看完整列表';
-            } else if (subtitleText.contains("正在使用外部字幕文件")) {
-              _errorMessage = '外部字幕文件路径存在但无法直接读取，请检查文件权限';
-            }
           });
           return;
         }
@@ -360,7 +354,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     final subtitlePath = videoState.getActiveExternalSubtitlePath();
     
     // 对于内嵌字幕，需要定期更新内容
-    if (hasActiveSubtitles && subtitlePath == null && _errorMessage.contains('内嵌字幕')) {
+    if (hasActiveSubtitles && subtitlePath == null) {
       final newSubtitleText = videoState.getCurrentSubtitleText();
       
       if (newSubtitleText.isNotEmpty) {
@@ -374,7 +368,6 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
           _allSubtitleEntries = [currentEntry];
           _visibleEntries = [currentEntry];
           _currentSubtitleIndex = 0;
-          _errorMessage = ''; // 清除错误信息
         });
         return;
       }
@@ -462,12 +455,12 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                   ),
                 ),
               )
-            : !hasActiveSubtitles || _errorMessage.isNotEmpty
+            : !hasActiveSubtitles
               ? Padding(
                   padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                   child: Center(
                     child: Text(
-                      _errorMessage.isEmpty ? '没有激活的字幕轨道\n请在字幕轨道设置中激活字幕' : _errorMessage,
+                      '没有激活的字幕轨道\n请在字幕轨道设置中激活字幕',
                       style: const TextStyle(color: Colors.white70),
                       textAlign: TextAlign.center,
                     ),
@@ -518,7 +511,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                 
                                 return Material(
                                   color: isCurrentSubtitle 
-                                      ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.3) 
+                                      ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.15) 
                                       : Colors.transparent,
                                   child: InkWell(
                                     onTap: () => _seekToTime(entry.startTimeMs),
@@ -622,7 +615,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                   
                                   return Material(
                                     color: isCurrentSubtitle 
-                                        ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.3) 
+                                        ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.15) 
                                         : Colors.transparent,
                                     child: InkWell(
                                       onTap: () => _seekToTime(entry.startTimeMs),

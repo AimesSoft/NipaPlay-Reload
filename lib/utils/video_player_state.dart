@@ -98,7 +98,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性
   String? _currentExternalSubtitlePath; // 当前加载的外部字幕路径
-  
+
   // 外部字幕自动加载回调
   Function(String path, String fileName)? onExternalSubtitleAutoLoaded;
 
@@ -2664,9 +2664,51 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 字幕内容缓存
   final Map<String, List<dynamic>> _subtitleCache = {};
   
+  // 视频-字幕路径映射的持久化存储键
+  static const String _videoSubtitleMapKey = 'video_subtitle_map';
+  
   // 获取已解析的字幕内容
   List<dynamic>? getCachedSubtitle(String path) {
     return _subtitleCache[path];
+  }
+  
+  // 保存视频与字幕路径的映射
+  Future<void> _saveVideoSubtitleMapping(String videoPath, String subtitlePath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final mappingJson = prefs.getString(_videoSubtitleMapKey) ?? '{}';
+      final Map<String, dynamic> mappingMap = Map<String, dynamic>.from(json.decode(mappingJson));
+      mappingMap[videoPath] = subtitlePath;
+      await prefs.setString(_videoSubtitleMapKey, json.encode(mappingMap));
+      debugPrint('VideoPlayerState: 保存视频字幕映射 - 视频: $videoPath, 字幕: $subtitlePath');
+    } catch (e) {
+      debugPrint('VideoPlayerState: 保存视频字幕映射失败: $e');
+    }
+  }
+  
+  // 获取视频对应的字幕路径
+  Future<String?> _getVideoSubtitlePath(String videoPath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final mappingJson = prefs.getString(_videoSubtitleMapKey) ?? '{}';
+      final Map<String, dynamic> mappingMap = Map<String, dynamic>.from(json.decode(mappingJson));
+      final subtitlePath = mappingMap[videoPath] as String?;
+      debugPrint('VideoPlayerState: 获取视频对应的字幕路径 - 视频: $videoPath, 字幕: $subtitlePath');
+      
+      // 检查字幕文件是否仍然存在
+      if (subtitlePath != null && subtitlePath.isNotEmpty) {
+        final subtitleFile = File(subtitlePath);
+        if (!subtitleFile.existsSync()) {
+          debugPrint('VideoPlayerState: 记录的字幕文件不存在: $subtitlePath');
+          return null;
+        }
+      }
+      
+      return subtitlePath;
+    } catch (e) {
+      debugPrint('VideoPlayerState: 获取视频字幕映射失败: $e');
+      return null;
+    }
   }
   
   // 获取当前显示的字幕文本
@@ -2773,6 +2815,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 预加载字幕文件
         preloadSubtitleFile(path);
         
+        // 如果是手动设置的或者是视频首次使用外部字幕，保存映射关系
+        if (isManualSetting && _currentVideoPath != null) {
+          _saveVideoSubtitleMapping(_currentVideoPath!, path);
+        }
+        
         debugPrint('VideoPlayerState: 外部字幕设置成功');
       } else if (path.isEmpty) {
         // 清除外部字幕
@@ -2812,6 +2859,42 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       debugPrint('VideoPlayerState: 自动检测字幕文件...');
       
+      // 首先检查是否有保存的字幕路径
+      String? savedSubtitlePath = await _getVideoSubtitlePath(videoPath);
+      if (savedSubtitlePath != null && savedSubtitlePath.isNotEmpty) {
+        debugPrint('VideoPlayerState: 找到保存的字幕映射: $savedSubtitlePath');
+        
+        // 检查字幕文件是否存在
+        final subtitleFile = File(savedSubtitlePath);
+        if (subtitleFile.existsSync()) {
+          debugPrint('VideoPlayerState: 加载上次使用的外部字幕: $savedSubtitlePath');
+          
+          // 等待一段时间确保播放器准备好
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          // 设置外部字幕（标记为手动设置，因为这是用户曾经手动选择过的）
+          setExternalSubtitle(savedSubtitlePath, isManualSetting: true);
+          
+          // 设置完成后强制刷新状态
+          await Future.delayed(const Duration(milliseconds: 300));
+          
+          // 在调用notifyListeners前检查mounted状态
+          if (_context != null && _context!.mounted) {
+            notifyListeners();
+          }
+          
+          // 触发自动加载字幕回调
+          if (onExternalSubtitleAutoLoaded != null) {
+            final fileName = savedSubtitlePath.split('/').last;
+            onExternalSubtitleAutoLoaded!(savedSubtitlePath, fileName);
+          }
+          
+          return;
+        } else {
+          debugPrint('VideoPlayerState: 保存的字幕文件不存在，尝试寻找新的字幕文件');
+        }
+      }
+      
       // 检查视频是否有内嵌字幕
       bool hasEmbeddedSubtitles = player.mediaInfo.subtitle != null && 
                               player.mediaInfo.subtitle!.isNotEmpty;
@@ -2829,10 +2912,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         wasManuallySet = danmakuTrackInfo['external_subtitle']?['isManualSet'] == true;
       }
       
-      // 修改判断条件：只要有内嵌字幕且没有手动设置过外部字幕，就跳过自动加载
-      // 移除对hasActiveEmbeddedTrack的依赖
-      if (hasEmbeddedSubtitles && !wasManuallySet) {
-        debugPrint('VideoPlayerState: 检测到内嵌字幕，跳过自动加载外部字幕');
+      // 如果是第一次检查，并且有内嵌字幕，跳过自动加载
+      // 注意：现在我们已经检查了保存的字幕路径，所以只有在未找到保存记录的情况下才会跳过
+      if (hasEmbeddedSubtitles && !wasManuallySet && savedSubtitlePath == null) {
+        debugPrint('VideoPlayerState: 检测到内嵌字幕且无手动设置记录，跳过自动加载外部字幕');
         return;
       }
       
@@ -2863,12 +2946,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           // 等待一段时间确保播放器准备好
           await Future.delayed(const Duration(milliseconds: 500));
           
-          // 设置外部字幕（不标记为手动设置）
+          // 设置外部字幕（不标记为手动设置，因为是自动检测的）
           setExternalSubtitle(potentialPath, isManualSetting: false);
+          
+          // 保存这个自动找到的字幕路径，下次可以直接使用
+          _saveVideoSubtitleMapping(videoPath, potentialPath);
           
           // 设置完成后强制刷新状态
           await Future.delayed(const Duration(milliseconds: 300));
-          notifyListeners();
+          
+          // 在调用notifyListeners前检查mounted状态
+          if (_context != null && _context!.mounted) {
+            notifyListeners();
+          }
           
           // 触发自动加载字幕回调
           if (onExternalSubtitleAutoLoaded != null) {
@@ -2895,12 +2985,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 // 等待一段时间确保播放器准备好
                 await Future.delayed(const Duration(milliseconds: 500));
                 
-                // 设置外部字幕（不标记为手动设置）
+                // 设置外部字幕（不标记为手动设置，因为是自动检测的）
                 setExternalSubtitle(file.path, isManualSetting: false);
+                
+                // 保存这个自动找到的字幕路径，下次可以直接使用
+                _saveVideoSubtitleMapping(videoPath, file.path);
                 
                 // 设置完成后强制刷新状态
                 await Future.delayed(const Duration(milliseconds: 300));
-                notifyListeners();
+                
+                // 在调用notifyListeners前检查mounted状态
+                if (_context != null && _context!.mounted) {
+                  notifyListeners();
+                }
                 
                 // 触发自动加载字幕回调
                 if (onExternalSubtitleAutoLoaded != null) {

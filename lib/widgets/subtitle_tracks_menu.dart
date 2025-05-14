@@ -718,7 +718,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: isActive ? Colors.white.withOpacity(0.1) : Colors.transparent,
+                          color: Colors.transparent,
                           border: Border(
                             bottom: BorderSide(
                               color: Colors.white.withOpacity(0.5),
