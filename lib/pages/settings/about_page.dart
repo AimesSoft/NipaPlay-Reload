@@ -1,8 +1,5 @@
 // about_page.dart
-import 'dart:ui'; // 需要 ImageFilter
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -162,37 +159,48 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Widget _buildInfoCard({required BuildContext context, String? title, required List<Widget> children}) {
-    return ClipRRect( // ClipRRect 用于实现圆角效果
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25.0, sigmaY: 25.0), // 调整模糊程度
-        child: Container(
-          // BackdropFilter 需要其子项至少部分透明才能看到模糊效果
-          // 所以 Container 的颜色需要有透明度
-          decoration: BoxDecoration(
-            color: const Color.fromARGB(255, 211, 211, 211).withOpacity(0.25), // 半透明背景色
-            // 不需要再在这里定义 borderRadius 或 border，因为 ClipRRect 处理了圆角
-            // 如果还需要边框，可以嵌套一个有边框的Container，或者在ClipRRect外层再包一个装饰性的Container
-          ),
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min, // 使Column高度包裹内容
-            children: [
-              if (title != null) ...[
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white, 
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              ...children,
-            ],
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        //color: const Color.fromARGB(255, 255, 255, 255).withOpacity(0.6), // 半透明背景色
+        borderRadius: BorderRadius.circular(12),
+        // 添加细微渐变效果模拟毛玻璃的高级感
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.2),
+            Colors.white.withOpacity(0.2),
+          ],
         ),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.15),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, // 使Column高度包裹内容
+        children: [
+          if (title != null) ...[
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Colors.white, 
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          ...children,
+        ],
       ),
     );
   }

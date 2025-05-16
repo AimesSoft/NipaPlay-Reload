@@ -77,6 +77,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    // 启动时异步清理过期缓存
+    _bangumiService.cleanExpiredDetailCache().then((_) {
+      debugPrint("[番剧详情] 已清理过期的番剧详情缓存");
+    });
     _fetchAnimeDetails();
   }
 
@@ -178,7 +182,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     final valueStyle = TextStyle(
         color: Colors.white.withOpacity(0.85), fontSize: 13, height: 1.5);
-    final boldWhiteKeyStyle = TextStyle(
+    const boldWhiteKeyStyle = TextStyle(
         color: Colors.white,
         fontWeight: FontWeight.w600,
         fontSize: 13,
@@ -193,8 +197,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       metadataWidgets.add(const SizedBox(height: 8));
       metadataWidgets.add(Text('制作信息:', style: sectionTitleStyle));
       for (String item in anime.metadata!) {
-        if (item.trim().startsWith('别名:') || item.trim().startsWith('别名：'))
+        if (item.trim().startsWith('别名:') || item.trim().startsWith('别名：')) {
           continue;
+        }
         var parts = item.split(RegExp(r'[:：]'));
         if (parts.length == 2) {
           metadataWidgets.add(Padding(
@@ -227,8 +232,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         String titleText = titleEntry['title'] ?? '未知标题';
         String languageText = '';
         if (titleEntry['language'] != null &&
-            titleEntry['language']!.isNotEmpty)
+            titleEntry['language']!.isNotEmpty) {
           languageText = ' (${titleEntry['language']})';
+        }
         titlesWidgets.add(Padding(
             padding: const EdgeInsets.only(top: 3.0, left: 8.0),
             child: Text(
@@ -311,8 +317,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                             (entry.value as num) > 0)
                         .map((entry) {
                       String siteName = entry.key;
-                      if (siteName.endsWith('评分'))
+                      if (siteName.endsWith('评分')) {
                         siteName = siteName.substring(0, siteName.length - 2);
+                      }
                       final score = entry.value as num;
                       return RichText(
                           text: TextSpan(
@@ -467,13 +474,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   // Exists in history, 0 progress, not from scan - unlikely state, treat as not found or specific icon?
                   // For now, let it fall through to the "Not Found in History" case or define a specific state.
                   // To treat as not found for icon/text:
-                  leadingIcon = Icon(Ionicons.play_circle_outline,
+                  leadingIcon = const Icon(Ionicons.play_circle_outline,
                       color: Colors.white38, size: 16);
                   progressText = '未找到';
                 }
               } else {
                 // No data in snapshot, even if connection is done (means not found in WatchHistoryManager)
-                leadingIcon = Icon(Ionicons.play_circle_outline,
+                leadingIcon = const Icon(Ionicons.play_circle_outline,
                     color: Colors.white38, size: 16); // Grey play icon
                 progressText = '未找到'; // Text indicating "Not Found"
               }

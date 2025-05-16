@@ -27,7 +27,7 @@ class MediaLibraryPage extends StatefulWidget {
 class _MediaLibraryPageState extends State<MediaLibraryPage> {
   List<WatchHistoryItem> _uniqueLibraryItems = []; 
   Map<int, String> _persistedImageUrls = {}; // Loaded from SharedPreferences
-  Map<int, BangumiAnime> _fetchedFullAnimeData = {}; // Freshly fetched in this session
+  final Map<int, BangumiAnime> _fetchedFullAnimeData = {}; // Freshly fetched in this session
   bool _isLoadingInitial = true; // For the initial list from history
   String? _error;
   // No longer a single _isLoading; initial load and background fetches are separate concerns.
@@ -116,63 +116,116 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
   Future<void> _fetchAndPersistFullDetailsInBackground() async {
     final prefs = await SharedPreferences.getInstance();
+    // 一次只加载最多3个番剧的详情，避免过多并行请求
+    List<Future> pendingRequests = [];
+    int maxConcurrentRequests = 3;
+    int batchSize = 0; // 已处理批次数，用于延迟处理
+    
     for (var historyItem in _uniqueLibraryItems) {
       if (historyItem.animeId != null) { 
-        // Check if data already fetched in this session to avoid redundant API calls
-        if (_fetchedFullAnimeData.containsKey(historyItem.animeId!)) {
+        // 只有在以下情况才获取详情：
+        // 1. 本次会话中未获取过
+        // 2. 没有缓存的图片URL
+        if (_fetchedFullAnimeData.containsKey(historyItem.animeId!) || 
+            _persistedImageUrls.containsKey(historyItem.animeId!)) {
             continue;
         }
-        try {
-          final animeDetail = await BangumiService.instance.getAnimeDetails(historyItem.animeId!);
-          if (mounted) {
-            setState(() {
-              _fetchedFullAnimeData[historyItem.animeId!] = animeDetail;
-            });
-            if (animeDetail.imageUrl.isNotEmpty) {
-              await prefs.setString('$_prefsKeyPrefix${historyItem.animeId!}', animeDetail.imageUrl);
-            } else {
-              // If fetched URL is empty, remove potentially stale persisted URL
-              await prefs.remove('$_prefsKeyPrefix${historyItem.animeId!}');
-              // Also update UI state if it was relying on a persisted URL that's now invalid
-              if(mounted && _persistedImageUrls.containsKey(historyItem.animeId!)){
-                setState(() {
-                  _persistedImageUrls.remove(historyItem.animeId!);
-                });
+        
+        // 每批次间隔200毫秒，避免频繁UI更新
+        if (batchSize > 0 && batchSize % 5 == 0) {
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
+        batchSize++;
+        
+        // 创建获取详情的异步函数
+        Future<void> fetchDetailForItem() async {
+          try {
+            final animeDetail = await BangumiService.instance.getAnimeDetails(historyItem.animeId!);
+            if (mounted) {
+              setState(() {
+                _fetchedFullAnimeData[historyItem.animeId!] = animeDetail;
+              });
+              if (animeDetail.imageUrl.isNotEmpty) {
+                await prefs.setString('$_prefsKeyPrefix${historyItem.animeId!}', animeDetail.imageUrl);
+                if (mounted) {
+                  setState(() {
+                    _persistedImageUrls[historyItem.animeId!] = animeDetail.imageUrl;
+                  });
+                }
+              } else {
+                // If fetched URL is empty, remove potentially stale persisted URL
+                await prefs.remove('$_prefsKeyPrefix${historyItem.animeId!}');
+                // Also update UI state if it was relying on a persisted URL that's now invalid
+                if(mounted && _persistedImageUrls.containsKey(historyItem.animeId!)){
+                  setState(() {
+                    _persistedImageUrls.remove(historyItem.animeId!);
+                  });
+                }
               }
             }
+          } catch (e) {
+            //debugPrint('[MediaLibraryPage] Background fetch error for animeId ${historyItem.animeId}: $e');
           }
-        } catch (e) {
-          //debugPrint('[MediaLibraryPage] Background fetch error for animeId ${historyItem.animeId}: $e');
-          // Consider removing from prefs if fetch consistently fails for a known bad ID?
         }
+        
+        // 限制并发请求数量
+        if (pendingRequests.length >= maxConcurrentRequests) {
+          // 等待其中一个请求完成
+          await Future.any(pendingRequests);
+          // 监控每个请求，移除已完成的
+          // 由于无法直接检查Future是否完成，需要创建新的请求列表
+          pendingRequests = [...pendingRequests];
+          // 移除一个请求，确保有空间添加新请求
+          pendingRequests.removeAt(0);
+        }
+        
+        // 添加新请求
+        final request = fetchDetailForItem();
+        pendingRequests.add(request);
       }
+    }
+    
+    // 等待所有剩余请求完成
+    if (pendingRequests.isNotEmpty) {
+      await Future.wait(pendingRequests);
+    }
+  }
+
+  // 在用户点击番剧卡片时加载详情
+  Future<void> _preloadAnimeDetail(int animeId) async {
+    // 如果已经在本会话中加载过，就不再重复加载
+    if (_fetchedFullAnimeData.containsKey(animeId)) {
+      return;
+    }
+    
+    try {
+      final animeDetail = await BangumiService.instance.getAnimeDetails(animeId);
+      if (mounted) {
+        setState(() {
+          _fetchedFullAnimeData[animeId] = animeDetail;
+        });
+      }
+    } catch (e) {
+      // 加载失败时不显示错误，让详情页处理错误
+      //debugPrint('[MediaLibraryPage] Failed to preload anime detail: $e');
     }
   }
 
   void _navigateToAnimeDetail(int animeId) {
+    // 直接显示详情页，不等待预加载完成
     AnimeDetailPage.show(context, animeId).then((WatchHistoryItem? result) {
       if (result != null && result.filePath.isNotEmpty) {
         // filePath is from WatchHistoryItem, which should be non-empty if an episode was chosen
         
         // Instead of initializing player here, call the callback
         widget.onPlayEpisode?.call(result);
-        
-        // Old logic (to be removed or handled by the parent via callback):
-        // final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-        // videoState.initializePlayer(result.filePath);
-
-        // // Switch to the player tab (assuming index 0 for player)
-        // try {
-        //   Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
-        // } catch (e) {
-        //   //debugPrint(
-        //       '[MediaLibraryPage] Error switching tab with TabChangeNotifier: $e');
-        //   // Fallback or alternative tab switching if needed, though TabChangeNotifier is preferred.
-        //   // For example, if DefaultTabController is accessible here:
-        //   // DefaultTabController.of(context)?.animateTo(0);
-        // }
       }
     });
+    
+    // 在后台尝试预加载详情数据，为下次查看做准备
+    if (!_fetchedFullAnimeData.containsKey(animeId)) {
+      _preloadAnimeDetail(animeId);
+    }
   }
 
   @override
@@ -216,54 +269,70 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       );
     }
 
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 150, 
-        childAspectRatio: 7/12,   
-        crossAxisSpacing: 8,      
-        mainAxisSpacing: 8,       
+    // 使用RepaintBoundary包装整个GridView，优化重绘
+    return RepaintBoundary(
+      child: GridView.builder(
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 150, 
+          childAspectRatio: 7/12,   
+          crossAxisSpacing: 8,      
+          mainAxisSpacing: 8,       
+        ),
+        padding: const EdgeInsets.all(0),
+        // 增加cacheExtent以提升滚动流畅度
+        cacheExtent: 800, // 提高预缓存距离
+        // 优化GridView性能
+        clipBehavior: Clip.hardEdge,
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        // 添加更多GridView性能优化参数
+        addAutomaticKeepAlives: false, // 避免保持所有项目活动
+        addRepaintBoundaries: true, // 为每个项目添加绘制边界
+        // 只渲染两行之后的项目，控制同时显示的项目数量
+        // 通过key和index控制垂直方向的显示
+        itemCount: _uniqueLibraryItems.length,
+        itemBuilder: (context, index) {
+          // 判断是否超出当前屏幕过多，实现按需渲染
+          // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
+          final useOptimizedRendering = index > 11;
+          final historyItem = _uniqueLibraryItems[index];
+          final animeId = historyItem.animeId;
+
+          String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
+          String nameToDisplay = historyItem.animeName.isNotEmpty 
+              ? historyItem.animeName 
+              : (historyItem.episodeTitle ?? '未知动画');
+
+          if (animeId != null) {
+              if (_fetchedFullAnimeData.containsKey(animeId)) {
+                  final fetchedData = _fetchedFullAnimeData[animeId]!;
+                  if (fetchedData.imageUrl.isNotEmpty) {
+                      imageUrlToDisplay = fetchedData.imageUrl;
+                  }
+                  if (fetchedData.nameCn.isNotEmpty) {
+                      nameToDisplay = fetchedData.nameCn;
+                  } else if (fetchedData.name.isNotEmpty) {
+                      nameToDisplay = fetchedData.name;
+                  }
+              } else if (_persistedImageUrls.containsKey(animeId)) {
+                  imageUrlToDisplay = _persistedImageUrls[animeId]!;
+                  // Name remains from historyItem until full details are fetched in this session
+              }
+          }
+
+          return AnimeCard(
+            key: ValueKey(animeId ?? historyItem.filePath), 
+            name: nameToDisplay, 
+            imageUrl: imageUrlToDisplay,
+            onTap: () {
+              if (animeId != null) {
+                _navigateToAnimeDetail(animeId);
+              } else {
+                BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+              }
+            },
+          );
+        },
       ),
-      padding: const EdgeInsets.all(0), 
-      itemCount: _uniqueLibraryItems.length,
-      itemBuilder: (context, index) {
-        final historyItem = _uniqueLibraryItems[index];
-        final animeId = historyItem.animeId;
-
-        String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
-        String nameToDisplay = historyItem.animeName.isNotEmpty 
-            ? historyItem.animeName 
-            : (historyItem.episodeTitle ?? '未知动画');
-
-        if (animeId != null) {
-            if (_fetchedFullAnimeData.containsKey(animeId)) {
-                final fetchedData = _fetchedFullAnimeData[animeId]!;
-                if (fetchedData.imageUrl.isNotEmpty) {
-                    imageUrlToDisplay = fetchedData.imageUrl;
-                }
-                if (fetchedData.nameCn.isNotEmpty) {
-                    nameToDisplay = fetchedData.nameCn;
-                } else if (fetchedData.name.isNotEmpty) {
-                    nameToDisplay = fetchedData.name;
-                }
-            } else if (_persistedImageUrls.containsKey(animeId)) {
-                imageUrlToDisplay = _persistedImageUrls[animeId]!;
-                // Name remains from historyItem until full details are fetched in this session
-            }
-        }
-
-        return AnimeCard(
-          key: ValueKey(animeId ?? historyItem.filePath), 
-          name: nameToDisplay, 
-          imageUrl: imageUrlToDisplay,
-          onTap: () {
-            if (animeId != null) {
-              _navigateToAnimeDetail(animeId);
-            } else {
-              BlurSnackBar.show(context, '无法打开详情，动画ID未知');
-            }
-          },
-        );
-      },
     );
   }
 } 

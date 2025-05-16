@@ -12,6 +12,7 @@ import '../services/dandanplay_service.dart';
 import 'media_info_helper.dart';
 import '../services/danmaku_cache_manager.dart';
 import '../models/watch_history_model.dart';
+import '../models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p; // Added import for path package
@@ -127,9 +128,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _dragSeekTargetPosition = Duration.zero; // To show target position during drag
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
 
+  // 加载状态相关
+  bool _isInFinalLoadingPhase = false; // 是否处于最终加载阶段，用于优化动画性能
+
   VideoPlayerState() {
     _subtitleManager = SubtitleManager(player: player);
-    this.onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
+    onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
     _initialize();
   }
 
@@ -182,6 +186,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get blockBottomDanmaku => _blockBottomDanmaku;
   bool get blockScrollDanmaku => _blockScrollDanmaku;
   List<String> get danmakuBlockWords => _danmakuBlockWords;
+
+  // 获取是否处于最终加载阶段
+  bool get isInFinalLoadingPhase => _isInFinalLoadingPhase;
 
   Future<void> _initialize() async {
     if (globals.isPhone) {
@@ -816,11 +823,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _danmakuList = [];
         _addStatusMessage('无法连接服务器，跳过加载弹幕');
       }
-
+      
+      // 设置进入最终加载阶段，以优化动画性能
+      _isInFinalLoadingPhase = true;
+      notifyListeners();
+      
       //debugPrint('11. 设置准备就绪状态...');
       // 设置状态为准备就绪
       _setStatus(PlayerStatus.ready, message: '准备就绪');
-
+      
       // 新逻辑：只要是手机，就尝试设置横屏，在确定播放状态之前
       if (globals.isPhone) {
         debugPrint(
@@ -1063,6 +1074,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void _setStatus(PlayerStatus newStatus,
       {String? message, bool clearPreviousMessages = false}) {
+    // 在状态即将从loading或recognizing变为ready或playing时，设置最终加载阶段标志
+    if ((_status == PlayerStatus.loading || _status == PlayerStatus.recognizing) && 
+        (newStatus == PlayerStatus.ready || newStatus == PlayerStatus.playing)) {
+      _isInFinalLoadingPhase = true;
+      
+      // 延迟通知UI刷新，给足够时间处理状态变更
+      Future.microtask(() {
+        notifyListeners();
+      });
+    }
+    
     if (clearPreviousMessages) {
       _statusMessages.clear();
     }
@@ -1084,6 +1106,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       } catch (e) {
         ////debugPrint("Error enabling wakelock: $e");
       }
+      
+      // 在播放开始后一小段时间重置最终加载阶段标志
+      Future.delayed(const Duration(milliseconds: 200), () {
+        _isInFinalLoadingPhase = false;
+        notifyListeners();
+      });
     } else {
       // Disable for any other status (paused, error, idle, disposed, ready, loading, recognizing)
       try {
@@ -1520,8 +1548,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   Future<void> _recognizeVideo(String videoPath) async {
+    if (videoPath.isEmpty) return;
+
     try {
-      //debugPrint('开始识别视频...');
       _setStatus(PlayerStatus.recognizing, message: '正在识别视频...');
 
       // 使用超时处理网络请求
@@ -1556,6 +1585,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 if (cachedDanmakuRaw != null) {
                   //debugPrint('从缓存加载弹幕...');
                   _setStatus(PlayerStatus.recognizing, message: '正在从缓存解析弹幕...');
+                  
+                  // 设置最终加载阶段标志，减少动画性能消耗
+                  _isInFinalLoadingPhase = true;
+                  notifyListeners();
+                  
                   _danmakuList = await compute(parseDanmakuListInBackground,
                       cachedDanmakuRaw as List<dynamic>?);
 
@@ -1582,6 +1616,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                   throw TimeoutException('加载弹幕超时');
                 });
 
+                // 设置最终加载阶段标志，减少动画性能消耗
+                _isInFinalLoadingPhase = true;
+                notifyListeners();
+                
                 _setStatus(PlayerStatus.recognizing, message: '正在解析网络弹幕...');
                 if (danmakuData['comments'] != null &&
                     danmakuData['comments'] is List) {
@@ -1609,11 +1647,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载失败，跳过');
               }
             }
+          } else {
+            //debugPrint('视频未匹配到信息');
+            _danmakuList = [];
+            _setStatus(PlayerStatus.recognizing, message: '未匹配到视频信息，跳过弹幕');
           }
-        } else {
-          //debugPrint('视频未匹配到信息');
-          _danmakuList = [];
-          _setStatus(PlayerStatus.recognizing, message: '未匹配到视频信息，跳过弹幕');
         }
       } catch (e) {
         //debugPrint('视频识别网络错误: $e\n$s');
@@ -1632,14 +1670,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       //debugPrint('更新观看记录开始，视频路径: $path');
       // 获取现有记录
-      final existingHistory = await WatchHistoryManager.getHistoryItem(path);
+      WatchHistoryItem? existingHistory;
+      
+      if (_context != null && _context!.mounted) {
+        final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
+        existingHistory = await watchHistoryProvider.getHistoryItem(path);
+      } else {
+        existingHistory = await WatchHistoryDatabase.instance.getHistoryByFilePath(path);
+      }
+      
       if (existingHistory == null) {
         //debugPrint('未找到现有观看记录，跳过更新');
         return;
       }
-
-      // 打印完整的视频信息以便调试
-      //////debugPrint('视频信息: ${json.encode(videoInfo)}');
 
       // 获取识别到的动画信息
       String? apiAnimeName; // 从 videoInfo 或其 matches 中获取
@@ -1670,14 +1713,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (apiAnimeName != null && apiAnimeName.isNotEmpty) {
         resolvedAnimeName = apiAnimeName;
       } else {
-        // 如果 API 未提供有效名称，则使用现有记录中的名称，
-        // 如果现有记录中的名称也为空（理论上不应发生，因为它是 String 类型），
-        // 则最后从文件名保底。
-        resolvedAnimeName =
-            existingHistory.animeName; // existingHistory.animeName 是 String 类型
+        // 如果 API 未提供有效名称，则使用现有记录中的名称
+        resolvedAnimeName = existingHistory.animeName;
       }
 
-      // 如果仍然没有动画名称（例如 existingHistory.animeName 为空字符串，虽然不太可能），从文件名提取
+      // 如果仍然没有动画名称，从文件名提取
       if (resolvedAnimeName.isEmpty) {
         final fileName = path.split('/').last;
         String extractedName = fileName.replaceAll(
@@ -1692,26 +1732,24 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           '识别到动画：$resolvedAnimeName，集数：${episodeTitle ?? '未知集数'}，animeId: $animeId, episodeId: $episodeId');
 
       // 更新当前动画标题和集数标题
-      _animeTitle = resolvedAnimeName; // 使用 resolvedAnimeName
+      _animeTitle = resolvedAnimeName;
       _episodeTitle = episodeTitle;
 
       // 如果仍在加载/识别状态，并且成功识别出动画标题，则更新状态消息
-        // _statusMessages.clear(); // 清除之前的加载消息 (L1579) - 注释掉这行以进行测试
-        debugPrint('更新观看记录: $_animeTitle'); // (L1580)
-        String message = '正在加载: $_animeTitle'; // (L1582)
-        if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
-          message += ' - $_episodeTitle';
-        }
-        // 直接设置状态和消息，但不改变PlayerStatus本身，除非需要
-        // 这里我们假设 PlayerStatus.loading 或 PlayerStatus.recognizing 仍然是合适的状态
-        _setStatus(_status, message: message);
+      debugPrint('更新观看记录: $_animeTitle');
+      String message = '正在加载: $_animeTitle';
+      if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
+        message += ' - $_episodeTitle';
+      }
+      // 直接设置状态和消息，但不改变PlayerStatus本身
+      _setStatus(_status, message: message);
 
       notifyListeners();
 
       // 创建更新后的观看记录
       final updatedHistory = WatchHistoryItem(
         filePath: existingHistory.filePath,
-        animeName: resolvedAnimeName, // 使用确保非空的 resolvedAnimeName
+        animeName: resolvedAnimeName,
         episodeTitle: (episodeTitle != null && episodeTitle.isNotEmpty)
             ? episodeTitle
             : existingHistory.episodeTitle,
@@ -1722,20 +1760,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         duration: existingHistory.duration,
         lastWatchTime: existingHistory.lastWatchTime, // 保留上次观看时间，直到真正播放并更新进度
         thumbnailPath: existingHistory.thumbnailPath,
+        isFromScan: existingHistory.isFromScan,
       );
 
       debugPrint(
           '准备保存更新后的观看记录，动画名: ${updatedHistory.animeName}, 集数: ${updatedHistory.episodeTitle}');
+      
       // 保存更新后的记录
-      await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
       if (_context != null && _context!.mounted) {
-        // 添加 mounted 检查
-        _context!.read<WatchHistoryProvider>().refresh();
+        await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
+      } else {
+        await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(updatedHistory);
       }
-      //debugPrint('成功更新观看记录');
+      
+      debugPrint('成功更新观看记录');
     } catch (e) {
-      // 添加 stackTrace
-      //debugPrint('更新观看记录时出错: $e\n$s'); // 打印堆栈信息
+      debugPrint('更新观看记录时出错: $e');
       // 错误不应阻止视频播放
     }
   }
@@ -1788,15 +1828,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     try {
       // 获取当前播放记录
-      final existingHistory =
-          await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+      WatchHistoryItem? existingHistory;
+      
+      if (_context != null && _context!.mounted) {
+        final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
+        existingHistory = await watchHistoryProvider.getHistoryItem(_currentVideoPath!);
+      } else {
+        existingHistory = await WatchHistoryDatabase.instance.getHistoryByFilePath(_currentVideoPath!);
+      }
 
       if (existingHistory != null) {
         // 仅更新缩略图和时间戳，保留其他所有字段
         final updatedHistory = WatchHistoryItem(
           filePath: existingHistory.filePath,
-          animeName: existingHistory
-              .animeName, // existingHistory.animeName 应该是可靠的 String
+          animeName: existingHistory.animeName,
           episodeTitle: existingHistory.episodeTitle,
           episodeId: existingHistory.episodeId,
           animeId: existingHistory.animeId,
@@ -1805,14 +1850,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           duration: _duration.inMilliseconds,
           lastWatchTime: DateTime.now(),
           thumbnailPath: thumbnailPath,
+          isFromScan: existingHistory.isFromScan,
         );
 
-        await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        // 保存更新后的记录
         if (_context != null && _context!.mounted) {
-          // 添加 mounted 检查
-          _context!.read<WatchHistoryProvider>().refresh();
+          await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
+        } else {
+          await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(updatedHistory);
         }
-        ////debugPrint('观看记录缩略图已更新: $thumbnailPath');
+        
+        debugPrint('观看记录缩略图已更新: $thumbnailPath');
 
         // 通知缩略图已更新，需要刷新UI
         _notifyThumbnailUpdateListeners();
@@ -2111,6 +2159,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           await DanmakuCacheManager.getDanmakuFromCache(episodeId);
       if (cachedDanmaku != null) {
         _setStatus(PlayerStatus.recognizing, message: '正在从缓存加载弹幕...');
+        
+        // 设置最终加载阶段标志，减少动画性能消耗
+        _isInFinalLoadingPhase = true;
+        notifyListeners();
+        
         danmakuController?.loadDanmaku(cachedDanmaku);
         _setStatus(PlayerStatus.playing,
             message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
@@ -2119,6 +2172,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
       // 从网络加载弹幕
       final animeId = int.tryParse(animeIdStr) ?? 0;
+      
+      // 设置最终加载阶段标志，减少动画性能消耗
+      _isInFinalLoadingPhase = true;
+      notifyListeners();
+      
       final danmakuData =
           await DandanplayService.getDanmaku(episodeId, animeId);
       danmakuController?.loadDanmaku(danmakuData['comments']);
@@ -2141,9 +2199,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_currentVideoPath == null) return;
 
     try {
-      // 获取当前播放记录
-      final existingHistory =
-          await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+      // 使用 Provider 获取播放记录
+      WatchHistoryItem? existingHistory;
+      
+      if (_context != null && _context!.mounted) {
+        final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
+        existingHistory = await watchHistoryProvider.getHistoryItem(_currentVideoPath!);
+      } else {
+        // 不使用 Provider 更新状态，避免不必要的 UI 刷新
+        existingHistory = await WatchHistoryDatabase.instance.getHistoryByFilePath(_currentVideoPath!);
+      }
 
       if (existingHistory != null) {
         // 使用当前缩略图路径，如果没有则尝试捕获一个
@@ -2168,8 +2233,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 更新现有记录
         final updatedHistory = WatchHistoryItem(
           filePath: existingHistory.filePath,
-          animeName: existingHistory
-              .animeName, // existingHistory.animeName 应该是可靠的 String
+          animeName: existingHistory.animeName,
           episodeTitle: existingHistory.episodeTitle,
           episodeId: existingHistory.episodeId,
           animeId: existingHistory.animeId,
@@ -2178,15 +2242,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           duration: _duration.inMilliseconds,
           lastWatchTime: DateTime.now(),
           thumbnailPath: thumbnailPath,
+          isFromScan: existingHistory.isFromScan,
         );
 
-        await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        // 通过 Provider 更新记录
         if (_context != null && _context!.mounted) {
-          // 添加 mounted 检查
-          _context!.read<WatchHistoryProvider>().refresh();
+          await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
+        } else {
+          // 直接使用数据库更新
+          await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(updatedHistory);
         }
       } else {
-        // 如果记录不存在，创建新记录 (这种情况理论上不常发生，因为 initializeWatchHistory 应该已经创建了)
+        // 如果记录不存在，创建新记录
         final fileName = _currentVideoPath!.split('/').last;
 
         // 尝试从文件名中提取初始动画名称
@@ -2215,23 +2282,25 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
         final newHistory = WatchHistoryItem(
           filePath: _currentVideoPath!,
-          animeName: initialAnimeName, // initialAnimeName 已确保非空
+          animeName: initialAnimeName,
           watchProgress: _progress,
           lastPosition: _position.inMilliseconds,
           duration: _duration.inMilliseconds,
           lastWatchTime: DateTime.now(),
           thumbnailPath: thumbnailPath,
+          isFromScan: false,
         );
 
-        await WatchHistoryManager.addOrUpdateHistory(newHistory);
+        // 通过 Provider 添加记录
         if (_context != null && _context!.mounted) {
-          // 添加 mounted 检查
-          _context!.read<WatchHistoryProvider>().refresh();
+          await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(newHistory);
+        } else {
+          // 直接使用数据库添加
+          await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(newHistory);
         }
       }
     } catch (e) {
-      // 添加 stackTrace
-      //debugPrint('更新观看记录时出错: $e\n$s'); // 打印堆栈信息
+      debugPrint('更新观看记录时出错: $e');
     }
   }
 
@@ -2859,5 +2928,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 添加setter用于设置外部字幕自动加载回调
   set onExternalSubtitleAutoLoaded(Function(String, String)? callback) {
     _subtitleManager.onExternalSubtitleAutoLoaded = callback;
+  }
+
+  // 在文件选择后立即设置加载状态，显示加载界面
+  void setPreInitLoadingState(String message) {
+    _statusMessages.clear(); // 清除之前的状态消息
+    _setStatus(PlayerStatus.loading, message: message);
+    // 确保状态变更立即生效
+    notifyListeners();
   }
 }

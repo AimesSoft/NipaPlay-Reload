@@ -80,7 +80,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
             final path = subtitleInfo['path'] as String;
             if (File(path).existsSync()) {
               // 延迟加载，避免初始化冲突
-              Future.delayed(Duration(milliseconds: 500), () {
+              Future.delayed(const Duration(milliseconds: 500), () {
                 _applyExternalSubtitle(path, lastActiveIndex);
               });
             }

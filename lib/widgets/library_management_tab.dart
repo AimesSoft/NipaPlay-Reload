@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
-import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
 import 'dart:async';
-import 'dart:math';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';

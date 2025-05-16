@@ -87,7 +87,7 @@ class FilePickerService {
         
         // 在iOS上，我们知道文档目录的一般格式，可以尝试直接构建
         if (Platform.isIOS) {
-          final String appDocPath = '/var/mobile/Containers/Data/Application/';
+          const String appDocPath = '/var/mobile/Containers/Data/Application/';
           // 获取源文件所在的应用容器ID
           final segments = filePath.split('/');
           String? containerId;
@@ -221,7 +221,7 @@ class FilePickerService {
       // 定义视频文件类型组
       XTypeGroup videoGroup = XTypeGroup(
         label: '视频文件',
-        extensions: ['mp4', 'mkv', 'avi', 'wmv', 'mov'],
+        extensions: const ['mp4', 'mkv', 'avi', 'wmv', 'mov'],
         uniformTypeIdentifiers: Platform.isIOS 
             ? ['public.movie', 'public.video', 'public.mpeg-4', 'com.apple.quicktime-movie'] 
             : null,
@@ -306,7 +306,7 @@ class FilePickerService {
       // 定义字幕文件类型组
       XTypeGroup subtitleGroup = XTypeGroup(
         label: '字幕文件',
-        extensions: ['srt', 'ass', 'ssa', 'sub'],
+        extensions: const ['srt', 'ass', 'ssa', 'sub'],
         uniformTypeIdentifiers: Platform.isIOS 
             ? ['public.text', 'public.plain-text'] 
             : null,

@@ -1,6 +1,5 @@
 import 'dart:io'; // Required for File
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/cached_network_image_widget.dart'; // Using package import
 
@@ -18,89 +17,85 @@ class AnimeCard extends StatelessWidget {
     this.isOnAir = false,
   });
 
+  // 占位图组件
+  Widget _buildPlaceholder(BuildContext context) {
+    return Container(
+      color: Colors.grey[800]?.withOpacity(0.5),
+      child: const Center(
+        child: Icon(
+          Ionicons.image_outline,
+          color: Colors.white30,
+          size: 40,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    bool isNetworkImage = imageUrl.startsWith('http');
-    bool imagePathIsNotEmpty = imageUrl.isNotEmpty;
-
+    // 确定图片来源和处理方式
     Widget imageWidget;
-    if (imagePathIsNotEmpty) {
-      if (isNetworkImage) {
-        imageWidget = CachedNetworkImageWidget(
-          imageUrl: imageUrl,
-          fit: BoxFit.cover,
-          width: double.infinity,
-        );
-      } else {
-        // Local file image
-        imageWidget = Image.file(
-          File(imageUrl),
-          fit: BoxFit.cover,
-          width: double.infinity,
-          errorBuilder: (context, error, stackTrace) {
-            // Fallback for local file load error
-            return Container(
-              color: Colors.grey[800]?.withOpacity(0.5),
-              child: const Center(
-                child: Icon(
-                  Ionicons.image_outline,
-                  color: Colors.white30,
-                  size: 40,
-                ),
-              ),
-            );
-          },
-        );
-      }
+    
+    if (imageUrl.isEmpty) {
+      // 没有图片URL，使用占位符
+      imageWidget = _buildPlaceholder(context);
+    } else if (imageUrl.startsWith('http')) {
+      // 网络图片，使用缓存组件
+      imageWidget = CachedNetworkImageWidget(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        errorBuilder: (context, error) {
+          return _buildPlaceholder(context);
+        },
+      );
     } else {
-      // Placeholder for empty imageUrl
-      imageWidget = Container(
-        color: Colors.grey[800]?.withOpacity(0.5),
-        child: const Center(
-          child: Icon(
-            Ionicons.image_outline,
-            color: Colors.white30,
-            size: 40,
-          ),
-        ),
+      // 本地文件，使用异步加载，避免在主线程进行文件检查
+      // 直接使用Image.file，如果文件不存在会自动显示错误构建器
+      imageWidget = Image.file(
+        File(imageUrl),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        cacheWidth: 300, // 优化内存使用和图片加载
+        errorBuilder: (context, error, stackTrace) {
+          return _buildPlaceholder(context);
+        },
       );
     }
 
-    return Card(
-      elevation: 2.0,
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      clipBehavior: Clip.antiAlias,
-      color: Colors.transparent, // Make card background transparent
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: InkWell(
+    // 使用RepaintBoundary包装整个卡片，减少不必要的重绘
+    return RepaintBoundary(
+      child: GestureDetector(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12), // Match shape for ripple effect
-        child: GlassmorphicContainer(
-          width: double.infinity,
-          height: double.infinity,
-          borderRadius: 12,
-          blur: 10,
-          alignment: Alignment.bottomCenter,
-          border: 0.5,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.surface.withOpacity(0.1),
-              Theme.of(context).colorScheme.surface.withOpacity(0.2),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            // 使用半透明背景
+            color: Colors.black.withOpacity(0.5),
+            // 添加渐变效果模拟毛玻璃的高级感，但不使用真正的毛玻璃效果
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.05),
+                Colors.white.withOpacity(0.02),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            // 添加精细的边框增强立体感
+            border: Border.all(
+              color: Colors.white.withOpacity(0.15),
+              width: 0.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
             ],
-            stops: const [0.1, 1],
           ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.2),
-              Colors.white.withOpacity(0.2),
-            ],
-          ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

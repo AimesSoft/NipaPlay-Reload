@@ -4,8 +4,10 @@ import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/widgets/menu_button.dart';
+import 'package:nipaplay/widgets/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
@@ -23,13 +25,11 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:nipaplay/utils/network_checker.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'dart:async';
-import 'package:file_selector/file_selector.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'services/file_picker_service.dart';
 import 'widgets/blur_snackbar.dart';
 
@@ -137,6 +137,13 @@ void main() async {
     
     // 初始化观看记录管理器
     WatchHistoryManager.initialize(),
+    
+    // 初始化系统资源监控（仅桌面平台）
+    Future(() async {
+      if (globals.isDesktop) {
+        await SystemResourceMonitor.initialize();
+      }
+    }),
   ]).then((results) {
     // 处理主题模式设置
     String savedThemeMode = results[1] as String;
@@ -182,6 +189,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
           ChangeNotifierProvider(create: (_) => WatchHistoryProvider()),
           ChangeNotifierProvider(create: (_) => ScanService()),
+          ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
         ],
         child: const NipaPlayApp(),
       ),
@@ -414,6 +422,12 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     if (globals.winLinDesktop) {
       windowManager.removeListener(this);
     }
+    
+    // 释放系统资源监控
+    if (globals.isDesktop) {
+      SystemResourceMonitor.dispose();
+    }
+    
     super.dispose();
   }
 
@@ -519,6 +533,14 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
             );
           },
         ),
+        
+        // 系统资源监控显示
+        if (globals.isDesktop)
+          Positioned(
+            top: 4,
+            right: 110,
+            child: const SystemResourceDisplay(),
+          ),
       ],
     );
   }

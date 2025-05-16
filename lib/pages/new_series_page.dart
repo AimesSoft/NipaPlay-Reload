@@ -23,6 +23,7 @@ import '../widgets/loading_overlay.dart';
 import 'package:flutter/rendering.dart';
 import 'package:nipaplay/widgets/floating_action_glass_button.dart';
 import '../widgets/blur_snackbar.dart';
+import '../widgets/anime_card.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -40,7 +41,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   Map<int, String> _translatedSummaries = {};
   static const String _translationCacheKey = 'bangumi_translation_cache';
   static const Duration _translationCacheDuration = Duration(days: 7);
-  bool _isShowingTranslation = false;
+  final bool _isShowingTranslation = false;
   
   // bool _filterAdultContent = true; // REMOVED
   // static const String _filterAdultContentKey = 'new_series_filter_adult_content'; // REMOVED
@@ -49,8 +50,8 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   bool _isLoadingVideoFromDetail = false;
   String _loadingMessageForDetail = '正在加载视频...';
 
-  Map<int, bool> _expansionStates = {}; // For weekday expansion state
-  Map<int, bool> _hoverStates = {}; // For weekday header hover state
+  final Map<int, bool> _expansionStates = {}; // For weekday expansion state
+  final Map<int, bool> _hoverStates = {}; // For weekday header hover state
 
   // Override wantKeepAlive for AutomaticKeepAliveClientMixin
   @override
@@ -414,85 +415,14 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   }
 
   Widget _buildAnimeCard(BuildContext context, BangumiAnime anime, {Key? key}) {
-    return Card(
+    return AnimeCard(
       key: key,
-      elevation: 2.0,
-      margin: EdgeInsets.zero, // Adjusted margin as GridView now has spacing
-      clipBehavior: Clip.antiAlias,
-      color: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: InkWell(
-        onTap: () => _showAnimeDetail(anime),
-        borderRadius: BorderRadius.circular(12), // Match shape for InkWell ripple
-        child: GlassmorphicContainer(
-          width: double.infinity,
-          height: double.infinity, 
-          borderRadius: 12,
-          blur: 10,
-          alignment: Alignment.bottomCenter,
-          border: 0.5,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.surface.withOpacity(0.1),
-              Theme.of(context).colorScheme.surface.withOpacity(0.2),
-            ],
-            stops: const [0.1, 1],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.2),
-              Colors.white.withOpacity(0.2),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 7,
-                  child: CachedNetworkImageWidget(
-                    imageUrl: anime.imageUrl,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                ),
-              ),
-              Expanded(
-                flex: 3,
-                child: Padding(
-                  padding: const EdgeInsets.all(6.0),
-                  child: Center(
-                child: Text(
-                      _isShowingTranslation && _translatedSummaries.containsKey(anime.id) 
-                          ? _translatedSummaries[anime.id]! 
-                          : anime.nameCn, // Display Chinese name by default
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontSize: 12,
-                    height: 1.2,
-                    color: Colors.white,
-                        fontWeight: FontWeight.w600
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-                ),
-              ),
-              // Potentially add icons for isOnAir or isFavorited if space and design allow
-              // if (anime.isOnAir ?? false) // Show a small indicator if it's on air
-              //   Padding(
-              //     padding: const EdgeInsets.only(bottom: 4.0),
-              //     child: Icon(Ionicons.time_outline, color: Colors.greenAccent.withOpacity(0.8), size: 12),
-              // ),
-            ],
-          ),
-        ),
-      ),
+      name: _isShowingTranslation && _translatedSummaries.containsKey(anime.id) 
+          ? _translatedSummaries[anime.id]! 
+          : anime.nameCn,
+      imageUrl: anime.imageUrl,
+      isOnAir: false,
+      onTap: () => _showAnimeDetail(anime),
     );
   }
 
@@ -648,25 +578,14 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
 
   // New method for the custom collapsible section header
   Widget _buildCollapsibleSectionHeader(BuildContext context, String title, int weekdayKey, bool isExpanded, bool isHovering) {
-    final List<Color> glassGradientColors = isHovering
-        ? [ // Brighter/different colors for hover state
-            Theme.of(context).colorScheme.surface.withOpacity(0.20),
-            Theme.of(context).colorScheme.surface.withOpacity(0.30),
-          ]
-        : [ // Default colors
-            Theme.of(context).colorScheme.surface.withOpacity(0.1),
-            Theme.of(context).colorScheme.surface.withOpacity(0.2),
-          ];
-
-    final List<Color> borderGradientColors = isHovering
-        ? [ // Brighter/different border colors for hover state
-            Colors.white.withOpacity(0.35),
-            Colors.white.withOpacity(0.35),
-          ]
-        : [ // Default border colors
-            Colors.white.withOpacity(0.2),
-            Colors.white.withOpacity(0.2),
-          ];
+    // 根据悬停状态调整颜色
+    final Color backgroundColor = isHovering
+        ? Theme.of(context).colorScheme.surface.withOpacity(0.5)
+        : Theme.of(context).colorScheme.surface.withOpacity(1);
+    
+    final Color borderColor = isHovering
+        ? Colors.white.withOpacity(0.3)
+        : Colors.white.withOpacity(0.2);
 
     return GestureDetector(
       onTap: () {
@@ -674,53 +593,63 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           _expansionStates[weekdayKey] = !isExpanded;
         });
       },
-      child: GlassmorphicContainer(
-          width: double.infinity,
-          height: 48,
-          borderRadius: 12,
-          blur: 10,
-          border: 0.5,
-          linearGradient: LinearGradient(
+      child: Container(
+        width: double.infinity,
+        height: 48,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor,
+            width: 0.5,
+          ),
+          // 添加渐变效果模拟毛玻璃的高级感，但不使用真正的毛玻璃效果
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: glassGradientColors, 
-            stops: const [0.1, 1],
+            colors: [
+              Colors.white.withOpacity(0.15),
+              Colors.white.withOpacity(0.15),
+            ],
           ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: borderGradientColors,
-          ),
-          child: Center( // Added Center to wrap Padding
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                    ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                   ),
-                  AnimatedRotation( // Wrap Icon with AnimatedRotation
-                    turns: isExpanded ? 0.5 : 0.0, // Rotate 180 degrees when expanded
-                    duration: const Duration(milliseconds: 200), // Match expansion animation duration
-                    child: const Icon(
-                      Ionicons.chevron_down_outline, // Always use the same icon
-                      color: Colors.white70,
-                      size: 20,
-                    ),
+                ),
+                AnimatedRotation(
+                  turns: isExpanded ? 0.5 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(
+                    Ionicons.chevron_down_outline,
+                    color: Colors.white70,
+                    size: 20,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ), // End GlassmorphicContainer
-    ); // End GestureDetector
+        ),
+      ),
+    );
   }
 } 

@@ -17,6 +17,7 @@ import '../pages/media_library_page.dart';
 import '../widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import '../widgets/blur_snackbar.dart';
+import '../widgets/history_all_modal.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -108,12 +109,10 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) {
     debugPrint('[AnimePage] _onWatchHistoryItemTap: Received item: $item');
-    if (item != null) {
-      debugPrint('[AnimePage] item.animeName: ${item.animeName}');
-      debugPrint('[AnimePage] item.filePath: ${item.filePath}');
-      debugPrint('[AnimePage] item.episodeTitle: ${item.episodeTitle}');
-    }
-
+    debugPrint('[AnimePage] item.animeName: ${item.animeName}');
+    debugPrint('[AnimePage] item.filePath: ${item.filePath}');
+    debugPrint('[AnimePage] item.episodeTitle: ${item.episodeTitle}');
+  
     // 检查文件是否存在
     final videoFile = File(item.filePath);
     bool fileExists = videoFile.existsSync();
@@ -328,15 +327,21 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                       ];
                     },
                     body: TabBarView(
+                      // 禁用滑动切换，减少无意间的重建和滑动时的性能损耗
+                      physics: const NeverScrollableScrollPhysics(),
                       children: [
-                        MediaLibraryPage(
-                          key: ValueKey(_mediaLibraryVersion),
-                          onPlayEpisode: _onWatchHistoryItemTap,
-                          // Physics might need adjustment here, to be reviewed
+                        // 使用RepaintBoundary隔离绘制边界，减少重绘范围
+                        RepaintBoundary(
+                          child: MediaLibraryPage(
+                            key: ValueKey(_mediaLibraryVersion),
+                            onPlayEpisode: _onWatchHistoryItemTap,
+                          ),
                         ),
-                        LibraryManagementTab(
-                          onPlayEpisode: _onWatchHistoryItemTap,
-                          // Physics might need adjustment here, to be reviewed
+                        // 使用RepaintBoundary隔离绘制边界，减少重绘范围
+                        RepaintBoundary(
+                          child: LibraryManagementTab(
+                            onPlayEpisode: _onWatchHistoryItemTap,
+                          ),
                         ),
                       ],
                     ),
@@ -379,77 +384,135 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   }
 
   Widget _buildWatchHistoryList(List<WatchHistoryItem> history) {
-    // Filter out items with zero duration, as they are likely just scanned entries without playback
-    final displayedHistory =
-        history.where((item) => item.duration > 0).toList();
-    // The history from provider is already sorted by lastWatchTime.
-
-    if (displayedHistory.isEmpty) {
+    // 过滤出有效的观看记录（持续时间大于0）
+    final validHistoryItems = history.where((item) => item.duration > 0).toList();
+    
+    if (validHistoryItems.isEmpty) {
       return _buildEmptyState(message: "暂无观看记录，已扫描的视频可在媒体库查看");
     }
 
-    // 确定哪个是最新更新的记录 (from the displayed list)
+    // 确定哪个是最新更新的记录
     String? latestUpdatedPath;
     DateTime latestTime = DateTime(2000);
-    for (var item in displayedHistory) {
+    for (var item in validHistoryItems) {
       if (item.lastWatchTime.isAfter(latestTime)) {
         latestTime = item.lastWatchTime;
         latestUpdatedPath = item.filePath;
       }
     }
-
+    
+    // 计算屏幕能显示的卡片数量（每个卡片宽度为150+16=166像素）
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = 166.0; // 卡片宽度 + 右侧padding
+    // 现在最多显示计算得到的卡片数量，不再保留一个位置给"查看更多"按钮
+    final visibleCards = (screenWidth / cardWidth).floor();
+    
+    // 决定是否需要"查看更多"按钮（现在使用固定宽度）
+    final showViewMoreButton = validHistoryItems.length > visibleCards + 2;
+    
+    // 确定实际显示多少张卡片（不包括"查看更多"按钮）
+    final displayItemCount = showViewMoreButton 
+        ? visibleCards + 2  // 如果显示"查看更多"按钮，则显示比屏幕可容纳多两张卡片
+        : validHistoryItems.length;  // 否则显示所有历史记录
+    
+    // 创建ListView.builder
     Widget actualListView = ListView.builder(
       controller: _watchHistoryListScrollController,
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: displayedHistory.length, // Use filtered list length
+      itemCount: showViewMoreButton 
+          ? displayItemCount + 1  // 实际显示的卡片数量 + 1个"查看更多"按钮
+          : validHistoryItems.length, // 如果历史记录较少，显示全部
       itemBuilder: (context, index) {
-        final item = displayedHistory[index]; // Use filtered list item
-        final isLatestUpdated = item.filePath == latestUpdatedPath;
-        return Padding(
-          key: ValueKey(
-              '${item.filePath}_${item.lastWatchTime.millisecondsSinceEpoch}'),
-          padding: const EdgeInsets.only(right: 16),
-          child: GestureDetector(
-            onTap: () => _onWatchHistoryItemTap(item),
-            child: _buildHistoryCard(item, isLatestUpdated),
-          ),
-        );
+        // 检查是否是"查看更多"按钮的位置（现在应该始终是最后一个位置）
+        if (showViewMoreButton && index == displayItemCount) {
+          // 使用固定宽度的"查看更多"按钮，与卡片相同宽度
+          const moreButtonWidth = 150.0; // 与卡片相同宽度
+          
+          return Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: SizedBox(
+              width: moreButtonWidth,
+              child: GestureDetector(
+                onTap: () => _showAllHistory(validHistoryItems),
+                child: GlassmorphicContainer(
+                  width: moreButtonWidth,
+                  height: 180,
+                  borderRadius: 10,
+                  blur: 20,
+                  border: 1.5,
+                  linearGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.1),
+                      Colors.white.withOpacity(0.1),
+                    ],
+                  ),
+                  borderGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.5),
+                      Colors.white.withOpacity(0.5),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.more_horiz, color: Colors.white, size: 32),
+                        SizedBox(height: 8),
+                        Text(
+                          "查看更多",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        // 正常的历史记录项
+        // 确保索引在有效范围内
+        if (index < validHistoryItems.length) {
+          final item = validHistoryItems[index];
+          final isLatestUpdated = item.filePath == latestUpdatedPath;
+          
+          return Padding(
+            key: ValueKey('${item.filePath}_${item.lastWatchTime.millisecondsSinceEpoch}'),
+            padding: const EdgeInsets.only(right: 16),
+            child: GestureDetector(
+              onTap: () => _onWatchHistoryItemTap(item),
+              child: _buildHistoryCard(item, isLatestUpdated),
+            ),
+          );
+        }
+        
+        // 如果索引无效，返回一个空的容器（实际上不应该发生）
+        return const SizedBox.shrink();
       },
     );
 
-    Widget listWidget;
-    // Check if the platform is mobile
+    // 根据平台决定是否显示滚动条
     if (Platform.isAndroid || Platform.isIOS) {
-      // On mobile, do not use Scrollbar
-      listWidget = actualListView;
+      return actualListView; // 移动平台不显示滚动条
     } else {
-      // On non-mobile platforms (e.g., desktop), use Scrollbar
-      listWidget = Scrollbar(
+      // 桌面平台显示滚动条，但无交互时自动隐藏
+      return Scrollbar(
         controller: _watchHistoryListScrollController,
+        thumbVisibility: false, // 改为false，使滚动条在无交互时隐藏
+        thickness: 4, // 滚动条粗细
+        radius: const Radius.circular(2), // 滚动条圆角
         child: actualListView,
       );
     }
-
-    return Listener(
-      onPointerSignal: (pointerSignal) {
-        if (pointerSignal is PointerScrollEvent) {
-          // 鼠标滚轮上下滚动时，横向滚动
-          final newOffset =
-              _watchHistoryListScrollController.offset + pointerSignal.scrollDelta.dy;
-          if (newOffset < 0) {
-            _watchHistoryListScrollController.jumpTo(0);
-          } else if (newOffset >
-              _watchHistoryListScrollController.position.maxScrollExtent) {
-            _watchHistoryListScrollController
-                .jumpTo(_watchHistoryListScrollController.position.maxScrollExtent);
-          } else {
-            _watchHistoryListScrollController.jumpTo(newOffset);
-          }
-        }
-      },
-      child: listWidget, // Use the conditionally wrapped list
-    );
   }
 
   Widget _buildHistoryCard(WatchHistoryItem item, bool isLatestUpdated) {
@@ -457,26 +520,34 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       width: 150,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        child: GlassmorphicContainer(
+        child: Container(
           width: 150,
           height: 170,
-          borderRadius: 10,
-          blur: 20,
-          border: 1.5,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.1),
-              Colors.white.withOpacity(0.1),
-            ],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.5),
-              Colors.white.withOpacity(0.5),
+          decoration: BoxDecoration(
+            // 使用更不透明的背景色
+            color: const Color(0xFF2A2A2A),
+            // 添加细微渐变效果
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.05),
+                Colors.white.withOpacity(0.02),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(10),
+            // 添加精细的边框增强立体感
+            border: Border.all(
+              color: Colors.white.withOpacity(0.5),
+              width: 1.5,
+            ),
+            // 添加阴影增强立体感
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
           child: Column(
@@ -628,5 +699,18 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         _mediaLibraryVersion++;
       });
     }
+  }
+  
+  // 显示所有历史记录的对话框
+  void _showAllHistory(List<WatchHistoryItem> allHistory) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => HistoryAllModal(
+        history: allHistory,
+        onItemTap: _onWatchHistoryItemTap,
+      ),
+    );
   }
 }

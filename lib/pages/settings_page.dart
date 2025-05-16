@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/pages/settings/theme_mode_page.dart'; // 导入 ThemeModePage
 import 'package:nipaplay/pages/settings/general_page.dart';
+import 'package:nipaplay/pages/settings/developer_options_page.dart'; // 导入开发者选项页面
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/widgets/responsive_container.dart'; // 导入响应式容器
@@ -131,6 +132,20 @@ class _SettingsPageState extends State<SettingsPage> {
                     );
               },
             ),
+          // 开发者选项
+          ListTile(
+            title: const Text("开发者选项",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(
+                  const DeveloperOptionsPage(),
+                  "开发者选项"
+                  );
+            },
+          ),
           ListTile(
             title: const Text("关于",
                 style: TextStyle(

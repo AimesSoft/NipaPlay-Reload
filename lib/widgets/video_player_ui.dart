@@ -318,6 +318,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 child: LoadingOverlay(
                                   messages: videoState.statusMessages,
                                   backgroundOpacity: 0.5,
+                                  highPriorityAnimation: !videoState.isInFinalLoadingPhase,
                                 ),
                               ),
                             
@@ -383,6 +384,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                   child: LoadingOverlay(
                                     messages: videoState.statusMessages,
                                     backgroundOpacity: 0.5,
+                                    highPriorityAnimation: !videoState.isInFinalLoadingPhase,
                                   ),
                                 ),
                               
