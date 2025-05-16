@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/widgets/blur_snackbar.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -149,16 +150,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   }
 
   void _navigateToAnimeDetail(int animeId) {
-    Navigator.push<
-        WatchHistoryItem?> // Specify that it can return a WatchHistoryItem
-    (
-      context,
-      TransparentPageRoute(
-        builder: (context) => AnimeDetailPage(
-          animeId: animeId,
-        ),
-      ),
-    ).then((WatchHistoryItem? result) {
+    AnimeDetailPage.show(context, animeId).then((WatchHistoryItem? result) {
       if (result != null && result.filePath.isNotEmpty) {
         // filePath is from WatchHistoryItem, which should be non-empty if an episode was chosen
         
@@ -267,9 +259,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
             if (animeId != null) {
               _navigateToAnimeDetail(animeId);
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('无法打开详情，动画ID未知')),
-              );
+              BlurSnackBar.show(context, '无法打开详情，动画ID未知');
             }
           },
         );

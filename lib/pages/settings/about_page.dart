@@ -6,6 +6,7 @@ import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import '../../widgets/blur_snackbar.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -46,9 +47,7 @@ class _AboutPageState extends State<AboutPage> {
       // Log or show a snackbar if url can't be launched
       //debugPrint('Could not launch $urlString');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法打开链接: $urlString')),
-        );
+        BlurSnackBar.show(context, '无法打开链接: $urlString');
       }
     }
   }

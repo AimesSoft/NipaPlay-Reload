@@ -24,10 +24,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:nipaplay/utils/network_checker.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'dart:async';
+import 'package:file_selector/file_selector.dart';
+import 'package:glassmorphism/glassmorphism.dart';
+import 'services/file_picker_service.dart';
+import 'widgets/blur_snackbar.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -555,50 +559,18 @@ Future<void> _validateCustomBackgroundPath() async {
 Future<void> _showGlobalUploadDialog(BuildContext context) async {
   print('[Dart] 开始选择视频文件');
   
-  // 尝试获取上次目录
-  String? lastDir;
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    lastDir = prefs.getString('last_video_dir');
-    print('[Dart] 上次目录: $lastDir');
-  } catch (e) {
-    print('[Dart] 获取上次目录失败: $e');
-  }
-  
-  // 选择文件
+  // 使用FilePickerService选择视频文件
   try {
     print('[Dart] 打开文件选择器');
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['mp4', 'mkv', 'avi', 'wmv', 'mov'],
-      allowMultiple: false,
-      initialDirectory: lastDir,
-    );
+    final filePickerService = FilePickerService();
+    final filePath = await filePickerService.pickVideoFile();
     
-    if (result == null || result.files.isEmpty) {
+    if (filePath == null) {
       print('[Dart] 用户取消了选择或未选择文件');
       return;
     }
     
-    final filePath = result.files.single.path;
-    if (filePath == null) {
-      print('[Dart] 文件路径为空');
-      return;
-    }
-    
     print('[Dart] 选择了文件: $filePath');
-    final file = File(filePath);
-    
-    // 保存目录
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final dir = file.parent.path;
-      await prefs.setString('last_video_dir', dir);
-      print('[Dart] 已保存目录: $dir');
-    } catch (e) {
-      print('[Dart] 保存目录失败: $e');
-      // 继续执行，这不是关键错误
-    }
     
     // 确保context还有效
     if (!context.mounted) {
@@ -619,24 +591,20 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
     try {
       print('[Dart] 开始初始化播放器');
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      await videoState.initializePlayer(file.path);
+      await videoState.initializePlayer(filePath);
       print('[Dart] 播放器初始化成功');
     } catch (e) {
       print('[Dart] 播放器初始化失败: $e');
       
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法播放视频: $e')),
-        );
+        BlurSnackBar.show(context, '无法播放视频: $e');
       }
     }
   } catch (e) {
     print('[Dart] 文件选择过程出错: $e');
     
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('选择文件时出错: $e')),
-      );
+      BlurSnackBar.show(context, '选择文件时出错: $e');
     }
   }
 }

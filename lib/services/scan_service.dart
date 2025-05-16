@@ -38,6 +38,18 @@ class ScanService with ChangeNotifier {
     }
   }
 
+  // 扫描是否刚结束的标志，用于检查扫描结果
+  bool _justFinishedScanning = false;
+  bool get justFinishedScanning => _justFinishedScanning;
+  
+  // 重置刚完成扫描的标志
+  void resetJustFinishedScanning() {
+    _justFinishedScanning = false;
+  }
+  
+  // 扫描找到的文件数量
+  int _totalFilesFound = 0;
+  int get totalFilesFound => _totalFilesFound;
 
   ScanService() {
     _loadScannedFolders();
@@ -141,6 +153,8 @@ class ScanService with ChangeNotifier {
     }
 
     if (_isScanning || foldersProcessedCount == allFoldersToScan.length) {
+        // 批量扫描完成，设置标志
+        _justFinishedScanning = true;
         _updateScanState(scanning: false, progress: 1.0, message: "所有媒体文件夹刷新完毕。", completed: true);
     }
   }
@@ -197,11 +211,11 @@ class ScanService with ChangeNotifier {
       return;
     }
 
-    if (!_isScanning) {
-      //debugPrint("ScanService: Scan cancelled while listing files for $directoryPath.");
+    if (!_isScanning && !isPartOfBatch) { // If scan was cancelled externally and not part of batch
       _updateScanState(scanning: false, message: "扫描已取消: $directoryPath", completed: true);
       return;
     }
+    // If part of a batch and cancelled, rescanAllFolders handles the main message.
 
     if (videoFiles.isEmpty) {
       if (!isPartOfBatch) {
@@ -338,26 +352,45 @@ class ScanService with ChangeNotifier {
     }
     // If part of a batch and cancelled, rescanAllFolders handles the main message.
 
-    String completionMessage = "";
-    if (failedFiles.isNotEmpty) {
-      completionMessage = "扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。${failedFiles.length} 个文件处理失败。";
-    } else {
-      completionMessage = "扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。";
-    }
-    if (skippedFilesCount > 0) {
-      completionMessage += " 跳过了 $skippedFilesCount 个已匹配文件。";
-    }
-    
-    if (!isPartOfBatch) {
+    if (!isPartOfBatch && _isScanning) {
+      if (filesProcessed > 0) {
+        // 更新找到的文件总数
+        _totalFilesFound = videoFiles.length;
+        
+        String completionMessage = "";
+        if (failedFiles.isNotEmpty) {
+          completionMessage = "扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。${failedFiles.length} 个文件处理失败。";
+        } else {
+          completionMessage = "扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。";
+        }
+        if (skippedFilesCount > 0) {
+          completionMessage += " 跳过了 $skippedFilesCount 个已匹配文件。";
+        }
+        
+        // 设置刚完成扫描的标志，用于UI检查
+        _justFinishedScanning = true;
+        
         _updateScanState(scanning: false, progress: 1.0, message: completionMessage, completed: true);
-    } else {
-        // For batch, update message. Overall progress/completion is handled by rescanAllFolders.
-        // _updateScanMessage(completionMessage); // This might be too noisy if many folders
-        // The progress will be updated by rescanAllFolders.
-        // _isScanning should remain true if it's a batch scan and not the last folder.
-        // This means startDirectoryScan should NOT set _isScanning to false if isPartOfBatch is true,
-        // UNLESS it's the very last folder of the batch, which rescanAllFolders will handle.
-        // So, if isPartOfBatch, we don't call _updateScanState to set scanning to false here.
+      } else {
+        // 更新找到的文件总数为0
+        _totalFilesFound = 0;
+        
+        // 设置刚完成扫描的标志，用于UI检查
+        _justFinishedScanning = true;
+        
+        _updateScanState(scanning: false, progress: 1.0, message: "扫描 $directoryPath 完成，未找到视频文件。", completed: true);
+      }
+    } else if (isPartOfBatch) {
+      // 在批量扫描中更新总文件数
+      _totalFilesFound += videoFiles.length;
+      
+      // For batch, update message. Overall progress/completion is handled by rescanAllFolders.
+      // _updateScanMessage(completionMessage); // This might be too noisy if many folders
+      // The progress will be updated by rescanAllFolders.
+      // _isScanning should remain true if it's a batch scan and not the last folder.
+      // This means startDirectoryScan should NOT set _isScanning to false if isPartOfBatch is true,
+      // UNLESS it's the very last folder of the batch, which rescanAllFolders will handle.
+      // So, if isPartOfBatch, we don't call _updateScanState to set scanning to false here.
     }
   }
 

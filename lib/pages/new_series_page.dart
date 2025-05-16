@@ -22,6 +22,7 @@ import '../utils/tab_change_notifier.dart';
 import '../widgets/loading_overlay.dart';
 import 'package:flutter/rendering.dart';
 import 'package:nipaplay/widgets/floating_action_glass_button.dart';
+import '../widgets/blur_snackbar.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -540,17 +541,8 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   }
 
   Future<void> _showAnimeDetail(BangumiAnime animeFromList) async {
-    // Navigate to the new AnimeDetailPage
-    // We pass the necessary data and callbacks for translation state management.
-    // The new page will handle fetching full details itself using animeFromList.id
-    final result = await Navigator.push(
-      context,
-      TransparentPageRoute(
-        builder: (context) => AnimeDetailPage(
-          animeId: animeFromList.id, 
-        ),
-      ),
-    );
+    // 使用新的静态show方法，而不是TransparentPageRoute
+    final result = await AnimeDetailPage.show(context, animeFromList.id);
 
     if (result is WatchHistoryItem) {
       // If a WatchHistoryItem is returned, handle playing the episode
@@ -617,9 +609,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
                 setState(() {
                   _isLoadingVideoFromDetail = false;
                   // Optionally show an error message to the user
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('播放器加载失败: ${videoState.error ?? '未知错误'}')),
-                  );
+                  BlurSnackBar.show(context, '播放器加载失败: ${videoState.error ?? '未知错误'}');
                 });
               }
             });
@@ -635,9 +625,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           _isLoadingVideoFromDetail = false;
           _loadingMessageForDetail = '发生错误: $e'; // Show error in overlay or use a SnackBar
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('处理播放请求时出错: $e')),
-        );
+        BlurSnackBar.show(context, '处理播放请求时出错: $e');
         //debugPrint('[NewSeriesPage _handlePlayEpisode] Error: $e');
       }
     }

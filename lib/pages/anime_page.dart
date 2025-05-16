@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import '../models/watch_history_model.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
+import 'dart:async';
+import 'dart:math';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:glassmorphism/glassmorphism.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../widgets/loading_overlay.dart';
@@ -14,6 +16,7 @@ import 'package:flutter/gestures.dart';
 import '../pages/media_library_page.dart';
 import '../widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import '../widgets/blur_snackbar.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -111,14 +114,56 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       debugPrint('[AnimePage] item.episodeTitle: ${item.episodeTitle}');
     }
 
+    // 检查文件是否存在
+    final videoFile = File(item.filePath);
+    bool fileExists = videoFile.existsSync();
+    
+    // 在iOS系统上，有时文件路径可能会有/private前缀，或者没有这个前缀，尝试两种路径
+    String filePath = item.filePath;
+    if (!fileExists && Platform.isIOS) {
+      String altPath = filePath;
+      if (filePath.startsWith('/private')) {
+        // 尝试去掉/private前缀
+        altPath = filePath.replaceFirst('/private', '');
+      } else {
+        // 尝试添加/private前缀
+        altPath = '/private$filePath';
+      }
+      
+      final File altFile = File(altPath);
+      fileExists = altFile.existsSync();
+      if (fileExists) {
+        // 如果找到了文件，更新路径
+        filePath = altPath;
+        // 创建新的项目以便传递更新后的路径
+        item = WatchHistoryItem(
+          filePath: filePath,
+          animeName: item.animeName,
+          episodeTitle: item.episodeTitle,
+          episodeId: item.episodeId,
+          animeId: item.animeId,
+          watchProgress: item.watchProgress,
+          lastPosition: item.lastPosition,
+          duration: item.duration,
+          lastWatchTime: item.lastWatchTime,
+          thumbnailPath: item.thumbnailPath,
+          isFromScan: item.isFromScan,
+        );
+      }
+    }
+    
+    if (!fileExists) {
+      BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(item.filePath)}');
+      // 考虑从历史记录中移除这个项目，或标记为不可用
+      return;
+    }
+
     if (_videoPlayerState == null) {
       try {
         _videoPlayerState =
             Provider.of<VideoPlayerState>(context, listen: false);
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('播放器初始化失败，请重试')),
-        );
+        BlurSnackBar.show(context, '播放器初始化失败，请重试');
         return;
       }
     }

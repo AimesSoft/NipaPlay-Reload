@@ -26,6 +26,8 @@ import '../widgets/brightness_indicator.dart'; // Added import for BrightnessInd
 import '../widgets/volume_indicator.dart'; // Added import for VolumeIndicator widget
 import '../widgets/seek_indicator.dart'; // Added import for SeekIndicator widget
 import 'subtitle_parser.dart'; // Added import for subtitle parser
+import 'subtitle_manager.dart'; // 导入字幕管理器
+import '../services/file_picker_service.dart'; // Added import for FilePickerService
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -97,28 +99,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final List<VoidCallback> _thumbnailUpdateListeners = []; // 缩略图更新监听器列表
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性
-  String? _currentExternalSubtitlePath; // 当前加载的外部字幕路径
-
-  // 外部字幕自动加载回调
-  Function(String path, String fileName)? onExternalSubtitleAutoLoaded;
-
-  // 存储弹幕轨道信息
-  final Map<String, Map<String, dynamic>> _danmakuTrackInfo = {};
-
-  // 获取弹幕轨道信息
-  Map<String, Map<String, dynamic>> get danmakuTrackInfo => _danmakuTrackInfo;
-
-  // 更新弹幕轨道信息
-  void updateDanmakuTrackInfo(String key, Map<String, dynamic> info) {
-    _danmakuTrackInfo[key] = info;
-    notifyListeners();
-  }
-
-  // 清除弹幕轨道信息
-  void clearDanmakuTrackInfo() {
-    _danmakuTrackInfo.clear();
-    notifyListeners();
-  }
+  
+  // 字幕管理器
+  late SubtitleManager _subtitleManager;
 
   // Screen Brightness Control
   double _currentBrightness =
@@ -145,6 +128,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
 
   VideoPlayerState() {
+    _subtitleManager = SubtitleManager(player: player);
+    this.onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
     _initialize();
   }
 
@@ -174,6 +159,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get currentVideoPath => _currentVideoPath;
   String? get animeTitle => _animeTitle; // 添加动画标题getter
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
+  
+  // 字幕管理器相关的getter
+  SubtitleManager get subtitleManager => _subtitleManager;
+  String? get currentExternalSubtitlePath => _subtitleManager.currentExternalSubtitlePath;
+  Map<String, Map<String, dynamic>> get subtitleTrackInfo => _subtitleManager.subtitleTrackInfo;
 
   // Brightness Getters
   double get currentScreenBrightness => _currentBrightness;
@@ -597,7 +587,58 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     _clearPreviousVideoState(); // 清理旧状态
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
-    _currentExternalSubtitlePath = null; // 清除外部字幕路径
+    
+    // 首先检查文件是否存在
+    bool fileExists = false;
+    
+    // 使用FilePickerService处理文件路径问题
+    if (Platform.isIOS) {
+      final filePickerService = FilePickerService();
+      
+      // 首先检查文件是否存在
+      fileExists = filePickerService.checkFileExists(videoPath);
+      
+      // 如果文件不存在，尝试获取有效的文件路径
+      if (!fileExists) {
+        final validPath = await filePickerService.getValidFilePath(videoPath);
+        if (validPath != null) {
+          debugPrint('找到有效路径: $validPath (原路径: $videoPath)');
+          videoPath = validPath;
+          fileExists = true;
+        } else {
+          // 检查是否是iOS临时文件路径
+          if (videoPath.contains('/tmp/') || 
+              videoPath.contains('-Inbox/') || 
+              videoPath.contains('/Inbox/')) {
+            debugPrint('检测到iOS临时文件路径: $videoPath');
+            // 尝试从原始路径获取文件名，然后检查是否在持久化目录中
+            final fileName = p.basename(videoPath);
+            final docDir = await getApplicationDocumentsDirectory();
+            final persistentPath = '${docDir.path}/Videos/$fileName';
+            
+            if (File(persistentPath).existsSync()) {
+              debugPrint('找到持久化存储中的文件: $persistentPath');
+              videoPath = persistentPath;
+              fileExists = true;
+            }
+          }
+        }
+      }
+    } else {
+      // 非iOS平台直接检查文件是否存在
+      final File videoFile = File(videoPath);
+      fileExists = videoFile.existsSync();
+    }
+    
+    if (!fileExists) {
+      debugPrint('VideoPlayerState: 文件不存在: $videoPath');
+      _setStatus(PlayerStatus.error, message: '找不到文件: ${p.basename(videoPath)}');
+      _error = '文件不存在或无法访问';
+      return;
+    }
+    
+    // 更新字幕管理器的视频路径
+    _subtitleManager.setCurrentVideoPath(videoPath);
 
     _currentVideoPath = videoPath;
     print('historyItem: $historyItem');
@@ -707,7 +748,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           if (player.mediaInfo.subtitle != null && 
               preferredSubtitleIndex < player.mediaInfo.subtitle!.length) {
             final track = player.mediaInfo.subtitle![preferredSubtitleIndex];
-            updateDanmakuTrackInfo('embedded_subtitle', {
+            _subtitleManager.updateSubtitleTrackInfo('embedded_subtitle', {
               'index': preferredSubtitleIndex,
               'title': track.toString(),
               'isActive': true,
@@ -716,10 +757,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
         
         // 无论是否有优先字幕轨道，都更新所有字幕轨道信息
-        _updateAllSubtitleTracksInfo();
+        _subtitleManager.updateAllSubtitleTracksInfo();
         
         // 通知字幕轨道变化
-        onSubtitleTrackChanged();
+        _subtitleManager.onSubtitleTrackChanged();
       }
 
       //debugPrint('7. 更新视频状态...');
@@ -765,10 +806,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 初始化基础的观看记录（只在没有记录时创建新记录）
       await _initializeWatchHistory(videoPath);
 
-      // 尝试自动检测和加载字幕（在识别视频前）
-      // 移除此处的字幕自动加载调用，在下方加载完弹幕后再调用
-      // await _autoDetectAndLoadSubtitle(videoPath);
-
       //debugPrint('10. 开始识别视频和加载弹幕...');
       // 尝试识别视频和加载弹幕
       try {
@@ -812,7 +849,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
 
       // 尝试自动检测和加载字幕
-      await _autoDetectAndLoadSubtitle(videoPath);
+      await _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
 
       // 等待一小段时间确保播放器状态稳定
       await Future.delayed(const Duration(milliseconds: 300));
@@ -848,6 +885,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 尝试恢复
       _tryRecoverFromError();
     }
+  }
+
+  // 外部字幕自动加载回调处理
+  void _onExternalSubtitleAutoLoaded(String path, String fileName) {
+    // 这里可以处理回调，例如显示提示或更新UI
+    debugPrint('VideoPlayerState: 外部字幕自动加载: $fileName');
   }
 
   // 预先计算视频哈希值
@@ -973,6 +1016,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _animeTitle = null;  // 清除动画标题
       _episodeTitle = null; // 清除集数标题
       _danmakuList = []; // 清除弹幕列表
+      _subtitleManager.clearSubtitleTrackInfo();
       _setStatus(PlayerStatus.idle);
 
       // 在手机平台上恢复竖屏
@@ -1097,9 +1141,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _currentThumbnailPath = null;
     _animeTitle = null;
     _episodeTitle = null;
-    _currentExternalSubtitlePath = null; // 清除外部字幕路径
     _danmakuList.clear();
-    clearDanmakuTrackInfo();
+    _subtitleManager.clearSubtitleTrackInfo();
     danmakuController
         ?.dispose(); // Assuming danmakuController has a dispose method
     danmakuController = null;
@@ -1127,7 +1170,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _animeTitle = null;
     _episodeTitle = null;
     _danmakuList.clear();
-    clearDanmakuTrackInfo();
+    _subtitleManager.clearSubtitleTrackInfo();
     danmakuController
         ?.dispose(); // Assuming danmakuController has a dispose method
     danmakuController = null;
@@ -1253,15 +1296,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (!_isSeeking && hasVideo) {
         if (_status == PlayerStatus.playing) {
           // 播放状态：从播放器获取位置
-          _position = Duration(milliseconds: player.position);
-          _duration = Duration(milliseconds: player.mediaInfo.duration);
-          if (_duration.inMilliseconds > 0) {
+          final playerPosition = player.position;
+          final playerDuration = player.mediaInfo.duration;
+          
+          // 检查值是否有效
+          if (playerPosition >= 0 && playerDuration > 0) {
+            _position = Duration(milliseconds: playerPosition);
+            _duration = Duration(milliseconds: playerDuration);
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            
             // 保存当前播放位置
             _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
 
-            // 更新观看记录 - 每秒更新一次，避免频繁写入
-            if (_position.inMilliseconds % 1000 < 20) {
+            // 更新观看记录 - 每10秒更新一次，减少文件系统操作和历史刷新
+            if (_position.inMilliseconds % 10000 < 20) {
               _updateWatchHistory();
             }
 
@@ -1271,12 +1319,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               player.state = PlaybackState.paused;
               _setStatus(PlayerStatus.paused, message: '播放结束');
 
-              // 跳转到视频开头
-              //seekTo(Duration.zero);
-
-              // 更新状态以反映跳转后的位置
-              //_position = Duration.zero;
-              //_progress = 0.0;
               // 确保立即用0值保存，覆盖任何之前的播放位置
               if (_currentVideoPath != null) {
                 _saveVideoPosition(_currentVideoPath!, 0);
@@ -1284,9 +1326,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                     'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
               }
               notifyListeners();
-              // 可以在这里考虑停止 positionUpdateTimer，如果需要的话
-              // _positionUpdateTimer?.cancel();
             }
+          } else {
+            debugPrint('VideoPlayerState: 播放器返回无效值 - position: $playerPosition, duration: $playerDuration');
           }
           _lastSeekPosition = null; // 清除最后seek位置
           notifyListeners();
@@ -2585,7 +2627,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     
     // 更新VideoPlayerState的字幕轨道信息
-    updateDanmakuTrackInfo('embedded_subtitle_$trackIndex', {
+    _subtitleManager.updateSubtitleTrackInfo('embedded_subtitle_$trackIndex', {
       'index': trackIndex,
       'title': title,
       'language': language,
@@ -2594,8 +2636,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 清除外部字幕信息的激活状态
     if (player.activeSubtitleTracks.contains(trackIndex) && 
-        _danmakuTrackInfo.containsKey('external_subtitle')) {
-      updateDanmakuTrackInfo('external_subtitle', {
+        _subtitleManager.subtitleTrackInfo.containsKey('external_subtitle')) {
+      _subtitleManager.updateSubtitleTrackInfo('external_subtitle', {
         'isActive': false
       });
     }
@@ -2608,9 +2650,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     
     // 清除之前的内嵌字幕轨道信息
-    for (final key in List.from(_danmakuTrackInfo.keys)) {
+    for (final key in List.from(_subtitleManager.subtitleTrackInfo.keys)) {
       if (key.startsWith('embedded_subtitle_')) {
-        _danmakuTrackInfo.remove(key);
+        _subtitleManager.subtitleTrackInfo.remove(key);
       }
     }
     
@@ -2624,400 +2666,78 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final activeIndex = player.activeSubtitleTracks.first;
       if (activeIndex > 0 && activeIndex <= player.mediaInfo.subtitle!.length) {
         // 激活的是内嵌字幕轨道
-        updateDanmakuTrackInfo('embedded_subtitle', {
+        _subtitleManager.updateSubtitleTrackInfo('embedded_subtitle', {
           'index': activeIndex - 1, // MDK 字幕轨道从 1 开始，而我们的索引从 0 开始
           'title': player.mediaInfo.subtitle![activeIndex - 1].toString(),
           'isActive': true,
         });
         
         // 通知字幕轨道变化
-        onSubtitleTrackChanged();
+        _subtitleManager.onSubtitleTrackChanged();
       }
     }
     
     notifyListeners();
   }
 
-  // 获取当前活跃的外部字幕文件路径
-  String? getActiveExternalSubtitlePath() {
-    if (player.activeSubtitleTracks.isEmpty) {
-      return null;
-    }
-    
-    // 检查是否是外部字幕
-    final activeTrack = player.activeSubtitleTracks.first;
-    // 查找外部字幕信息
-    if (_danmakuTrackInfo.containsKey('external_subtitle') && 
-        _danmakuTrackInfo['external_subtitle']?['isActive'] == true) {
-      // 返回外部字幕文件路径
-      return _danmakuTrackInfo['external_subtitle']?['path'];
-    }
-    
-    // 特殊处理：当轨道索引为0，可能是外部字幕
-    if (activeTrack == 0 && _currentExternalSubtitlePath != null) {
-      return _currentExternalSubtitlePath;
-    }
-    
-    return null;
-  }
-  
-  // 字幕内容缓存
-  final Map<String, List<dynamic>> _subtitleCache = {};
-  
-  // 视频-字幕路径映射的持久化存储键
-  static const String _videoSubtitleMapKey = 'video_subtitle_map';
-  
-  // 获取已解析的字幕内容
-  List<dynamic>? getCachedSubtitle(String path) {
-    return _subtitleCache[path];
-  }
-  
-  // 保存视频与字幕路径的映射
-  Future<void> _saveVideoSubtitleMapping(String videoPath, String subtitlePath) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final mappingJson = prefs.getString(_videoSubtitleMapKey) ?? '{}';
-      final Map<String, dynamic> mappingMap = Map<String, dynamic>.from(json.decode(mappingJson));
-      mappingMap[videoPath] = subtitlePath;
-      await prefs.setString(_videoSubtitleMapKey, json.encode(mappingMap));
-      debugPrint('VideoPlayerState: 保存视频字幕映射 - 视频: $videoPath, 字幕: $subtitlePath');
-    } catch (e) {
-      debugPrint('VideoPlayerState: 保存视频字幕映射失败: $e');
-    }
-  }
-  
-  // 获取视频对应的字幕路径
-  Future<String?> _getVideoSubtitlePath(String videoPath) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final mappingJson = prefs.getString(_videoSubtitleMapKey) ?? '{}';
-      final Map<String, dynamic> mappingMap = Map<String, dynamic>.from(json.decode(mappingJson));
-      final subtitlePath = mappingMap[videoPath] as String?;
-      debugPrint('VideoPlayerState: 获取视频对应的字幕路径 - 视频: $videoPath, 字幕: $subtitlePath');
-      
-      // 检查字幕文件是否仍然存在
-      if (subtitlePath != null && subtitlePath.isNotEmpty) {
-        final subtitleFile = File(subtitlePath);
-        if (!subtitleFile.existsSync()) {
-          debugPrint('VideoPlayerState: 记录的字幕文件不存在: $subtitlePath');
-          return null;
-        }
-      }
-      
-      return subtitlePath;
-    } catch (e) {
-      debugPrint('VideoPlayerState: 获取视频字幕映射失败: $e');
-      return null;
-    }
-  }
-  
-  // 获取当前显示的字幕文本
-  String getCurrentSubtitleText() {
-    try {
-      // 如果没有激活的字幕轨道
-      if (player.activeSubtitleTracks.isEmpty) {
-        debugPrint('VideoPlayerState: getCurrentSubtitleText - 没有激活的字幕轨道');
-        return '';
-      }
-      
-      // 检查是否是外部字幕
-      String? externalSubtitlePath = _currentExternalSubtitlePath;
-      if (externalSubtitlePath == null || externalSubtitlePath.isEmpty) {
-        // 再次尝试从danmakuTrackInfo中获取
-        if (danmakuTrackInfo.containsKey('external_subtitle') && 
-            danmakuTrackInfo['external_subtitle']?['isActive'] == true) {
-          externalSubtitlePath = danmakuTrackInfo['external_subtitle']?['path'] as String?;
-        }
-      }
-      
-      // 输出详细调试信息
-      debugPrint('VideoPlayerState: getCurrentSubtitleText - 外部字幕路径: $externalSubtitlePath');
-      debugPrint('VideoPlayerState: getCurrentSubtitleText - 激活轨道: ${player.activeSubtitleTracks}');
-     // debugPrint('VideoPlayerState: getCurrentSubtitleText - 字幕轨道信息: $danmakuTrackInfo');
-      
-      // 如果是外部字幕
-      if (externalSubtitlePath != null && externalSubtitlePath.isNotEmpty) {
-        final fileName = externalSubtitlePath.split('/').last;
-        return "正在使用外部字幕文件 - $fileName";
-      }
-      
-      // 如果是内嵌字幕
-      final activeTrack = player.activeSubtitleTracks.first;
-      return "正在播放内嵌字幕轨道 $activeTrack - 当前播放时间: ${_position.inMinutes}:${(_position.inSeconds % 60).toString().padLeft(2, '0')}";
-    } catch (e) {
-      debugPrint('VideoPlayerState: 获取当前字幕内容失败: $e');
-      return '';
-    }
-  }
-  
-  // 异步预加载字幕文件
-  Future<void> preloadSubtitleFile(String path) async {
-    // 如果已经缓存过，不重复加载
-    if (_subtitleCache.containsKey(path)) {
-      return;
-    }
-    
-    try {
-      final file = File(path);
-      if (await file.exists()) {
-        // 检查文件扩展名，只处理.ass和.srt文件
-        final extension = p.extension(path).toLowerCase();
-        if (extension == '.ass' || extension == '.srt') {
-          // 导入字幕解析器（假设已存在或另外实现）
-          final entries = await SubtitleParser.parseAssFile(path);
-          _subtitleCache[path] = entries;
-          notifyListeners();
-        }
-      }
-    } catch (e) {
-      debugPrint('预加载字幕文件失败: $e');
-    }
-  }
-  
-  // 当字幕轨道改变时调用
-  void onSubtitleTrackChanged() {
-    final subtitlePath = getActiveExternalSubtitlePath();
-    if (subtitlePath != null) {
-      preloadSubtitleFile(subtitlePath);
-    }
-  }
-
   // 设置当前外部字幕路径
   void setCurrentExternalSubtitlePath(String path) {
-    _currentExternalSubtitlePath = path;
+    _subtitleManager.setCurrentExternalSubtitlePath(path);
     //debugPrint('设置当前外部字幕路径: $path');
   }
 
   // 设置外部字幕并更新路径
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
-    try {
-      debugPrint('VideoPlayerState: 设置外部字幕: $path, 手动设置: $isManualSetting');
-      
-      // 如果字幕文件存在
-      if (path.isNotEmpty && File(path).existsSync()) {
-        // 设置外部字幕文件
-        player.setMedia(path, MediaType.subtitle);
-        
-        // 更新字幕轨道
-        player.activeSubtitleTracks = [0];
-        
-        // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
-        _currentExternalSubtitlePath = path;
-        
-        // 更新轨道信息
-        updateDanmakuTrackInfo('external_subtitle', {
-          'path': path,
-          'title': path.split('/').last,
-          'isActive': true,
-          'isManualSet': isManualSetting, // 添加是否手动设置的标记
-        });
-        
-        // 预加载字幕文件
-        preloadSubtitleFile(path);
-        
-        // 如果是手动设置的或者是视频首次使用外部字幕，保存映射关系
-        if (isManualSetting && _currentVideoPath != null) {
-          _saveVideoSubtitleMapping(_currentVideoPath!, path);
-        }
-        
-        debugPrint('VideoPlayerState: 外部字幕设置成功');
-      } else if (path.isEmpty) {
-        // 清除外部字幕
-        player.setMedia("", MediaType.subtitle);
-        _currentExternalSubtitlePath = null;
-        
-        // 更新轨道信息，明确清除所有相关标记
-        if (danmakuTrackInfo.containsKey('external_subtitle')) {
-          updateDanmakuTrackInfo('external_subtitle', {
-            'isActive': false,
-            'isManualSet': false, // 明确清除手动设置标记
-            'path': null
-          });
-        }
-        
-        debugPrint('VideoPlayerState: 外部字幕已清除');
-      } else {
-        debugPrint('VideoPlayerState: 字幕文件不存在: $path');
-      }
-      
-      // 通知字幕轨道变化
-      onSubtitleTrackChanged();
-      notifyListeners();
-    } catch (e) {
-      debugPrint('设置外部字幕失败: $e');
-    }
+    _subtitleManager.setExternalSubtitle(path, isManualSetting: isManualSetting);
   }
 
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
-    // 调用setExternalSubtitle，并标记为手动设置
-    setExternalSubtitle(path, isManualSetting: true);
+    _subtitleManager.forceSetExternalSubtitle(path);
+  }
+  
+  // 桥接方法：预加载字幕文件
+  Future<void> preloadSubtitleFile(String path) async {
+    await _subtitleManager.preloadSubtitleFile(path);
+  }
+  
+  // 桥接方法：获取当前活跃的外部字幕文件路径
+  String? getActiveExternalSubtitlePath() {
+    return _subtitleManager.getActiveExternalSubtitlePath();
+  }
+  
+  // 桥接方法：获取当前显示的字幕文本
+  String getCurrentSubtitleText() {
+    return _subtitleManager.getCurrentSubtitleText();
+  }
+  
+  // 桥接方法：当字幕轨道改变时调用
+  void onSubtitleTrackChanged() {
+    _subtitleManager.onSubtitleTrackChanged();
+  }
+  
+  // 桥接方法：获取缓存的字幕内容
+  List<dynamic>? getCachedSubtitle(String path) {
+    return _subtitleManager.getCachedSubtitle(path);
+  }
+  
+  // 桥接方法：获取弹幕/字幕轨道信息
+  Map<String, Map<String, dynamic>> get danmakuTrackInfo => _subtitleManager.subtitleTrackInfo;
+  
+  // 桥接方法：更新弹幕/字幕轨道信息
+  void updateDanmakuTrackInfo(String key, Map<String, dynamic> info) {
+    _subtitleManager.updateSubtitleTrackInfo(key, info);
+  }
+  
+  // 桥接方法：清除弹幕/字幕轨道信息
+  void clearDanmakuTrackInfo() {
+    _subtitleManager.clearSubtitleTrackInfo();
   }
 
   // 自动检测并加载同名字幕文件
   Future<void> _autoDetectAndLoadSubtitle(String videoPath) async {
-    try {
-      debugPrint('VideoPlayerState: 自动检测字幕文件...');
-      
-      // 首先检查是否有保存的字幕路径
-      String? savedSubtitlePath = await _getVideoSubtitlePath(videoPath);
-      if (savedSubtitlePath != null && savedSubtitlePath.isNotEmpty) {
-        debugPrint('VideoPlayerState: 找到保存的字幕映射: $savedSubtitlePath');
-        
-        // 检查字幕文件是否存在
-        final subtitleFile = File(savedSubtitlePath);
-        if (subtitleFile.existsSync()) {
-          debugPrint('VideoPlayerState: 加载上次使用的外部字幕: $savedSubtitlePath');
-          
-          // 等待一段时间确保播放器准备好
-          await Future.delayed(const Duration(milliseconds: 500));
-          
-          // 设置外部字幕（标记为手动设置，因为这是用户曾经手动选择过的）
-          setExternalSubtitle(savedSubtitlePath, isManualSetting: true);
-          
-          // 设置完成后强制刷新状态
-          await Future.delayed(const Duration(milliseconds: 300));
-          
-          // 在调用notifyListeners前检查mounted状态
-          if (_context != null && _context!.mounted) {
-            notifyListeners();
-          }
-          
-          // 触发自动加载字幕回调
-          if (onExternalSubtitleAutoLoaded != null) {
-            final fileName = savedSubtitlePath.split('/').last;
-            onExternalSubtitleAutoLoaded!(savedSubtitlePath, fileName);
-          }
-          
-          return;
-        } else {
-          debugPrint('VideoPlayerState: 保存的字幕文件不存在，尝试寻找新的字幕文件');
-        }
-      }
-      
-      // 检查视频是否有内嵌字幕
-      bool hasEmbeddedSubtitles = player.mediaInfo.subtitle != null && 
-                              player.mediaInfo.subtitle!.isNotEmpty;
-      
-      // 检查是否已激活内嵌字幕轨道
-      bool hasActiveEmbeddedTrack = false;
-      if (player.activeSubtitleTracks.isNotEmpty) {
-        // 排除轨道0（外部字幕轨道）
-        hasActiveEmbeddedTrack = player.activeSubtitleTracks.any((track) => track > 0);
-      }
-      
-      // 如果以前手动设置过外部字幕，则始终尝试加载
-      bool wasManuallySet = false;
-      if (danmakuTrackInfo.containsKey('external_subtitle')) {
-        wasManuallySet = danmakuTrackInfo['external_subtitle']?['isManualSet'] == true;
-      }
-      
-      // 如果是第一次检查，并且有内嵌字幕，跳过自动加载
-      // 注意：现在我们已经检查了保存的字幕路径，所以只有在未找到保存记录的情况下才会跳过
-      if (hasEmbeddedSubtitles && !wasManuallySet && savedSubtitlePath == null) {
-        debugPrint('VideoPlayerState: 检测到内嵌字幕且无手动设置记录，跳过自动加载外部字幕');
-        return;
-      }
-      
-      // 检查视频文件是否存在
-      final videoFile = File(videoPath);
-      if (!videoFile.existsSync()) {
-        debugPrint('VideoPlayerState: 视频文件不存在，无法检测字幕');
-        return;
-      }
-      
-      // 以下是正常的字幕检测和加载过程
-      
-      // 获取视频文件目录和文件名（不含扩展名）
-      final videoDir = videoFile.parent.path;
-      final videoName = videoPath.split('/').last.split('.').first;
-      
-      // 常见字幕文件扩展名按优先级排序
-      final subtitleExts = ['.ass', '.srt', '.ssa', '.sub'];
-      
-      // 搜索可能的字幕文件
-      for (final ext in subtitleExts) {
-        final potentialPath = '$videoDir/$videoName$ext';
-        debugPrint('VideoPlayerState: 尝试检测字幕文件: $potentialPath');
-        final subtitleFile = File(potentialPath);
-        if (subtitleFile.existsSync()) {
-          debugPrint('VideoPlayerState: 找到匹配的字幕文件: $potentialPath');
-          
-          // 等待一段时间确保播放器准备好
-          await Future.delayed(const Duration(milliseconds: 500));
-          
-          // 设置外部字幕（不标记为手动设置，因为是自动检测的）
-          setExternalSubtitle(potentialPath, isManualSetting: false);
-          
-          // 保存这个自动找到的字幕路径，下次可以直接使用
-          _saveVideoSubtitleMapping(videoPath, potentialPath);
-          
-          // 设置完成后强制刷新状态
-          await Future.delayed(const Duration(milliseconds: 300));
-          
-          // 在调用notifyListeners前检查mounted状态
-          if (_context != null && _context!.mounted) {
-            notifyListeners();
-          }
-          
-          // 触发自动加载字幕回调
-          if (onExternalSubtitleAutoLoaded != null) {
-            final fileName = potentialPath.split('/').last;
-            onExternalSubtitleAutoLoaded!(potentialPath, fileName);
-          }
-          
-          return;
-        }
-      }
-      
-      // 如果没有找到完全匹配的，尝试查找目录中任何字幕文件
-      final videoDirectory = Directory(videoDir);
-      if (videoDirectory.existsSync()) {
-        try {
-          final files = videoDirectory.listSync();
-          for (final file in files) {
-            if (file is File) {
-              final ext = p.extension(file.path).toLowerCase();
-              if (subtitleExts.contains(ext)) {
-                // 找到了一个字幕文件
-                debugPrint('VideoPlayerState: 找到可能的字幕文件: ${file.path}');
-                
-                // 等待一段时间确保播放器准备好
-                await Future.delayed(const Duration(milliseconds: 500));
-                
-                // 设置外部字幕（不标记为手动设置，因为是自动检测的）
-                setExternalSubtitle(file.path, isManualSetting: false);
-                
-                // 保存这个自动找到的字幕路径，下次可以直接使用
-                _saveVideoSubtitleMapping(videoPath, file.path);
-                
-                // 设置完成后强制刷新状态
-                await Future.delayed(const Duration(milliseconds: 300));
-                
-                // 在调用notifyListeners前检查mounted状态
-                if (_context != null && _context!.mounted) {
-                  notifyListeners();
-                }
-                
-                // 触发自动加载字幕回调
-                if (onExternalSubtitleAutoLoaded != null) {
-                  final fileName = file.path.split('/').last;
-                  onExternalSubtitleAutoLoaded!(file.path, fileName);
-                }
-                
-                return;
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint('VideoPlayerState: 目录搜索错误: $e');
-        }
-      }
-      
-      debugPrint('VideoPlayerState: 未找到匹配的字幕文件');
-    } catch (e) {
-      debugPrint('VideoPlayerState: 自动检测字幕文件失败: $e');
-    }
+    // 此方法不再需要，我们使用subtitleManager的方法代替
+    await _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
   }
 
   // 加载顶部弹幕屏蔽设置
@@ -3134,5 +2854,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 获取过滤后的弹幕列表
   List<Map<String, dynamic>> getFilteredDanmakuList() {
     return _danmakuList.where((danmaku) => !shouldBlockDanmaku(danmaku)).toList();
+  }
+
+  // 添加setter用于设置外部字幕自动加载回调
+  set onExternalSubtitleAutoLoaded(Function(String, String)? callback) {
+    _subtitleManager.onExternalSubtitleAutoLoaded = callback;
   }
 }

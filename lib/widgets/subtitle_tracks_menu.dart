@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'base_settings_menu.dart';
-import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:fvp/mdk.dart';
@@ -11,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../widgets/blur_snackbar.dart';
 import 'blur_button.dart';
+import 'package:file_selector/file_selector.dart';
+import '../services/file_picker_service.dart';
 
 class SubtitleTracksMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -161,41 +162,17 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     try {
       setState(() => _isLoading = true);
       
-      // 获取上次打开的字幕文件夹
-      String? lastSubtitleDir;
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        lastSubtitleDir = prefs.getString('last_subtitle_dir');
-      } catch (e) {
-        debugPrint('获取上次字幕目录失败: $e');
-        lastSubtitleDir = null;
-      }
-      
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['srt', 'ass', 'ssa', 'sub'],
-        dialogTitle: '选择字幕文件',
-        initialDirectory: lastSubtitleDir,
-      );
+      // 使用FilePickerService选择字幕文件
+      final filePickerService = FilePickerService();
+      final filePath = await filePickerService.pickSubtitleFile();
 
-      if (result == null || result.files.single.path == null) {
+      if (filePath == null) {
         setState(() => _isLoading = false);
         return;
       }
       
-      final filePath = result.files.single.path!;
-      final fileName = result.files.single.name;
+      final fileName = p.basename(filePath);
       
-      // 保存当前字幕文件夹路径
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final dir = File(filePath).parent.path;
-        await prefs.setString('last_subtitle_dir', dir);
-      } catch (e) {
-        debugPrint('保存字幕目录失败: $e');
-        // 忽略保存失败
-      }
-
       // 检查是否是有效的字幕文件
       if (!filePath.toLowerCase().endsWith('.srt') && 
           !filePath.toLowerCase().endsWith('.ass') && 

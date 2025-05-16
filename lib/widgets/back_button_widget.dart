@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import '../utils/video_player_state.dart';
 import 'tooltip_bubble.dart';
 import '../utils/globals.dart' as globals;
+import 'blur_snackbar.dart';
 
 class BackButtonWidget extends StatefulWidget {
   final VideoPlayerState videoState;
@@ -59,9 +60,7 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
                     await widget.videoState.resetPlayer();
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('重置播放器时出错: $e')),
-                      );
+                      BlurSnackBar.show(context, '重置播放器时出错: $e');
                     }
                   }
                 },

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
@@ -15,6 +15,8 @@ import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
+import '../services/file_picker_service.dart';
+import '../utils/globals.dart' as globals;
 
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -34,10 +36,24 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   @override
   void initState() {
     super.initState();
+    
+    // 在initState中保存ScanService引用，避免在dispose中不安全访问Provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final scanService = Provider.of<ScanService>(context, listen: false);
+      _scanService = scanService; // 保存引用
+      scanService.addListener(_checkScanResults);
+    });
   }
+
+  // 存储ScanService引用
+  ScanService? _scanService;
 
   @override
   void dispose() {
+    // 安全移除监听器，使用保存的引用
+    if (_scanService != null) {
+      _scanService!.removeListener(_checkScanResults);
+    }
     super.dispose();
   }
 
@@ -48,34 +64,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       return;
     }
 
-    // --- iOS Specific Logic ---
-    if (Platform.isIOS) {
+    // --- Mobile Platform Logic (iOS & Android) ---
+    if (globals.isPhone) {
       final Directory appDocDir = await getApplicationDocumentsDirectory();
       await scanService.startDirectoryScan(appDocDir.path, skipPreviouslyMatchedUnwatched: false); // Ensure full scan for new folder
       return; 
     }
-    // --- End iOS Specific Logic ---
+    // --- End Mobile Platform Logic ---
 
-    String? initialPickerPath;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      initialPickerPath = prefs.getString(_lastScannedDirectoryPickerPathKey);
-    } catch (e) {
-      //debugPrint("Error loading last scanned directory picker path: $e");
-    }
-
-    String? selectedDirectory;
-    try {
-      selectedDirectory = await FilePicker.platform.getDirectoryPath(
-        initialDirectory: initialPickerPath,
-      );
-    } catch (e) {
-      //debugPrint("FilePicker error: $e");
-      if (mounted) {
-        BlurSnackBar.show(context, "选择文件夹失败: ${e.toString()}");
-      }
-      return;
-    }
+    // 使用FilePickerService选择目录（桌面平台）
+    final filePickerService = FilePickerService();
+    final selectedDirectory = await filePickerService.pickDirectory();
 
     if (selectedDirectory == null) {
       if (mounted) {
@@ -101,12 +100,18 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     bool isInternalPath = selectedDirectory.startsWith(appDocPath) || 
                           (appDocPath.startsWith('/var') && selectedDirectory.startsWith('/private$appDocPath'));
 
-    if (Platform.isIOS&&!isInternalPath) {
+    if (globals.isPhone && !isInternalPath) {
       if (mounted) {
-        String dialogContent = "您选择的文件夹位于 NipaPlay 应用外部。\n\n";
-        dialogContent += "为了正常扫描和管理媒体文件，请将文件或文件夹拷贝到 NipaPlay 的专属文件夹中。\n\n";
-        dialogContent += "您可以在\"文件\"应用中，导航至\"我的 iPhone / iPad\" > \"NipaPlay\"找到此文件夹。\n\n";
-        dialogContent += "这是由于iOS系统的安全和权限机制，确保应用仅能访问您明确置于其管理区域内的数据。";
+        String dialogContent = "您选择的文件夹位于应用外部。\n\n";
+        dialogContent += "为了正常扫描和管理媒体文件，请将文件或文件夹拷贝到应用的专属文件夹中。\n\n";
+        
+        if (Platform.isIOS) {
+          dialogContent += "您可以在\"文件\"应用中，导航至\"我的 iPhone / iPad\" > \"NipaPlay\"找到此文件夹。\n\n";
+        } else if (Platform.isAndroid) {
+          dialogContent += "您可以将文件复制到 Android/data/com.aimessoft.nipaplay 文件夹中。\n\n";
+        }
+        
+        dialogContent += "这是由于移动平台的安全和权限机制，确保应用仅能访问您明确置于其管理区域内的数据。";
 
         BlurDialog.show<void>(
           context: context,
@@ -123,29 +128,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         );
       }
       return;
-    }
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      String pathToSave = selectedDirectory;
-      try {
-        // Check if the selected directory is not the root of the filesystem
-        // For example, on Linux/macOS, root is '/', on Windows it might be 'C:\'
-        // Directory('.').parent.path on root might give the root itself or error,
-        // so we explicitly check if parent is different.
-        final Directory parentDir = Directory(selectedDirectory).parent;
-        if (parentDir.path != selectedDirectory && await parentDir.exists()) { // Ensure parent is different and exists
-          pathToSave = parentDir.path;
-        }
-      } catch (e) {
-        //debugPrint("Error getting parent directory for $selectedDirectory, or it's a root directory: $e");
-        // Fallback to selectedDirectory if parent cannot be determined or is the root
-        pathToSave = selectedDirectory;
-      }
-      await prefs.setString(_lastScannedDirectoryPickerPathKey, pathToSave);
-      //debugPrint("Saved picker path: $pathToSave (selected: $selectedDirectory)");
-    } catch (e) {
-      //debugPrint("Error saving last scanned directory picker path: $e");
     }
 
     await scanService.startDirectoryScan(selectedDirectory, skipPreviouslyMatchedUnwatched: false); // Ensure full scan for new folder
@@ -293,6 +275,64 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }).toList();
   }
 
+  // 检查扫描结果，如果没有找到视频文件，显示指导弹窗
+  void _checkScanResults() {
+    final scanService = Provider.of<ScanService>(context, listen: false);
+    
+    // 只在扫描刚结束时检查
+    if (!scanService.isScanning && scanService.justFinishedScanning) {
+      // 重置标志
+      scanService.resetJustFinishedScanning();
+      
+      // 如果没有文件，或者扫描文件夹为空，显示指导弹窗
+      if ((scanService.totalFilesFound == 0 || scanService.scannedFolders.isEmpty) && mounted) {
+        _showFileImportGuideDialog();
+      }
+    }
+  }
+  
+  // 显示文件导入指导弹窗
+  void _showFileImportGuideDialog() {
+    if (!mounted) return;
+    
+    String dialogContent = "未发现任何视频文件。以下是向NipaPlay添加视频的方法：\n\n";
+    
+    if (Platform.isIOS) {
+      dialogContent += "1. 打开iOS「文件」应用\n";
+      dialogContent += "2. 浏览到包含您视频的文件夹\n";
+      dialogContent += "3. 长按视频文件，选择「分享」\n";
+      dialogContent += "4. 在分享菜单中选择「拷贝到NipaPlay」\n\n";
+      dialogContent += "或者：\n";
+      dialogContent += "1. 通过iTunes文件共享功能\n";
+      dialogContent += "2. 从电脑直接拷贝视频到NipaPlay文件夹\n";
+    } else if (Platform.isAndroid) {
+      dialogContent += "1. 使用文件管理器应用\n";
+      dialogContent += "2. 浏览到您的视频文件所在位置\n";
+      dialogContent += "3. 复制视频文件\n";
+      dialogContent += "4. 导航到「内部存储 > Android > data > com.aimessoft.nipaplay > files」\n";
+      dialogContent += "5. 粘贴文件到此文件夹中\n\n";
+      dialogContent += "或者：\n";
+      dialogContent += "1. 将手机连接到电脑\n";
+      dialogContent += "2. 通过USB传输模式复制视频到应用文件夹\n";
+    }
+    
+    dialogContent += "\n添加完文件后，点击上方的「扫描NipaPlay文件夹」按钮刷新媒体库。";
+    
+    BlurDialog.show<void>(
+      context: context,
+      title: "如何添加视频文件",
+      content: dialogContent,
+      actions: <Widget>[
+        TextButton(
+          child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scanService = Provider.of<ScanService>(context);
@@ -370,7 +410,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 borderRadius: BorderRadius.circular(12),
                 child: Center(
                   child: Text(
-                    Platform.isIOS ? '扫描NipaPlay文件夹' : '添加并扫描文件夹',
+                    globals.isPhone ? '扫描NipaPlay文件夹' : '添加并扫描文件夹',
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ),

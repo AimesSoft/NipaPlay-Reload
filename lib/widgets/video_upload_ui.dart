@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import '../utils/video_player_state.dart';
-import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/blur_dialog.dart';
@@ -11,6 +10,8 @@ import '../utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:file_selector/file_selector.dart';
+import '../services/file_picker_service.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -219,40 +220,24 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
           await Future.delayed(const Duration(milliseconds: 100), () async { 
             if (!mounted) return; // 在延迟后再次检查 mounted
             try {
-              String? initialDirectoryPath;
-              if (Platform.isIOS) {
-                try {
-                  final Directory appDocDir = await getApplicationDocumentsDirectory();
-                  initialDirectoryPath = appDocDir.path;
-                } catch (e) {
-                  print("Error getting documents directory for iOS: $e");
-                }
-              }
-
-              FilePickerResult? result = await FilePicker.platform.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: ['mp4', 'mkv'],
-                allowMultiple: false,
-                initialDirectory: initialDirectoryPath, // 设置初始目录
-              );
+              // 使用FilePickerService选择视频文件
+              final filePickerService = FilePickerService();
+              final filePath = await filePickerService.pickVideoFile();
 
               if (!mounted) return; // 再次检查
 
-              if (result != null) {
-                final file = File(result.files.single.path!);
+              if (filePath != null) {
                 // 确保 VideoPlayerState 的 context 仍然有效
                 // ignore: use_build_context_synchronously
                 if (context.mounted) { 
                    await Provider.of<VideoPlayerState>(context, listen: false)
-                                .initializePlayer(file.path);
+                                .initializePlayer(filePath);
                 }
               }
             } catch (e) {
               // ignore: use_build_context_synchronously
               if (mounted) { // 确保 mounted
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('选择文件出错: $e')),
-                );
+                BlurSnackBar.show(context, '选择文件出错: $e');
               } else {
                 print('选择文件出错但 widget 已 unmounted: $e');
               }
@@ -260,37 +245,16 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
           });
         }
       } else {
-        // 桌面端：记忆上次打开的文件夹
-        String? lastDir;
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          lastDir = prefs.getString('last_video_dir');
-        } catch (e) {
-          lastDir = null;
-        }
-        FilePickerResult? result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['mp4', 'mkv'],
-          allowMultiple: false,
-          initialDirectory: lastDir,
-        );
-        if (result != null) {
-          final file = File(result.files.single.path!);
-          // 记忆本次目录
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            final dir = file.parent.path;
-            await prefs.setString('last_video_dir', dir);
-          } catch (e) {
-            // 忽略记忆目录失败
-          }
-          await context.read<VideoPlayerState>().initializePlayer(file.path);
+        // 桌面端：使用FilePickerService选择视频文件
+        final filePickerService = FilePickerService();
+        final filePath = await filePickerService.pickVideoFile();
+        
+        if (filePath != null) {
+          await context.read<VideoPlayerState>().initializePlayer(filePath);
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('选择视频时出错: $e')),
-      );
+      BlurSnackBar.show(context, '选择视频时出错: $e');
     }
   }
 

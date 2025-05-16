@@ -12,6 +12,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/rendering.dart';
+import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/widgets/blur_dialog.dart';
 
 class ThemeModePage extends StatefulWidget {
   final ThemeNotifier themeNotifier;
@@ -45,19 +47,26 @@ class _ThemeModePageState extends State<ThemeModePage> {
         // Android 权限被拒绝
         print("Android photos permission denied for custom background. Status: $status");
         if (status.isPermanentlyDenied) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('相册权限已被永久拒绝。请前往系统设置开启。'),
-              action: SnackBarAction(
-                label: '去设置',
-                onPressed: openAppSettings,
+          BlurDialog.show(
+            context: context,
+            title: '权限已被永久拒绝',
+            content: '相册权限已被永久拒绝。请前往系统设置开启。',
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  openAppSettings();
+                },
+                child: const Text('去设置'),
               ),
-            ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
+            ],
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('需要相册权限才能选择背景图片')),
-          );
+          BlurSnackBar.show(context, '需要相册权限才能选择背景图片');
         }
       }
     } else if (Platform.isIOS) { // 在 iOS 上直接尝试选择
@@ -142,9 +151,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
       // 异步操作后再次检查 mounted 状态
       if (!mounted) return;
       print("Error picking custom background image: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('选择背景图片时出错: $e')),
-      );
+      BlurSnackBar.show(context, '选择背景图片时出错: $e');
     }
   }
 

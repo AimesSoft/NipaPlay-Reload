@@ -567,20 +567,65 @@ class WatchHistoryManager {
     try {
       // 优先从内存缓存获取
       try {
-        return _cachedItems.firstWhere((item) => item.filePath == filePath);
+        // 首先尝试精确匹配
+        for (var item in _cachedItems) {
+          if (item.filePath == filePath) {
+            return item;
+          }
+        }
+        
+        // iOS路径前缀处理
+        if (Platform.isIOS) {
+          String alternativePath;
+          if (filePath.startsWith('/private')) {
+            // 尝试移除/private前缀
+            alternativePath = filePath.replaceFirst('/private', '');
+          } else {
+            // 尝试添加/private前缀
+            alternativePath = '/private$filePath';
+          }
+          
+          for (var item in _cachedItems) {
+            if (item.filePath == alternativePath) {
+              return item;
+            }
+          }
+        }
       } catch (e) {
         // 缓存中未找到
       }
       
       // 如果内存缓存中没有，尝试重新加载
       final historyItems = await getAllHistory();
-      try {
-        return historyItems.firstWhere((item) => item.filePath == filePath);
-      } catch (e) {
-        return null;
+      
+      // 首先尝试精确匹配
+      for (var item in historyItems) {
+        if (item.filePath == filePath) {
+          return item;
+        }
       }
+      
+      // iOS路径前缀处理
+      if (Platform.isIOS) {
+        String alternativePath;
+        if (filePath.startsWith('/private')) {
+          // 尝试移除/private前缀
+          alternativePath = filePath.replaceFirst('/private', '');
+        } else {
+          // 尝试添加/private前缀
+          alternativePath = '/private$filePath';
+        }
+        
+        for (var item in historyItems) {
+          if (item.filePath == alternativePath) {
+            return item;
+          }
+        }
+      }
+      
+      return null;
     } catch (e) {
-      ////debugPrint('获取历史项目失败: $e');
+      //debugPrint('获取历史项目失败: $e');
       return null;
     }
   }

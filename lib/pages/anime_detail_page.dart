@@ -22,6 +22,33 @@ class AnimeDetailPage extends StatefulWidget {
 
   @override
   State<AnimeDetailPage> createState() => _AnimeDetailPageState();
+  
+  static Future<WatchHistoryItem?> show(BuildContext context, int animeId) {
+    return showGeneralDialog<WatchHistoryItem>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.5),
+      barrierLabel: '关闭详情页',
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return AnimeDetailPage(animeId: animeId);
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curvedAnimation = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutBack,
+        );
+        
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
+          child: FadeTransition(
+            opacity: animation,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _AnimeDetailPageState extends State<AnimeDetailPage>
@@ -649,45 +676,3 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     );
   }
 }
-
-// REMOVE THIS CLASS FROM HERE AND MOVE TO a separate file lib/widgets/transparent_page_route.dart
-/*
-class TransparentPageRoute<T> extends PageRoute<T> {
-  TransparentPageRoute({
-    required this.builder,
-    super.settings,
-  });
-
-  final WidgetBuilder builder;
-
-  @override
-  bool get opaque => false; 
-
-  @override
-  Color? get barrierColor => null;
-
-  @override
-  String? get barrierLabel => null;
-
-  @override
-  Widget buildPage(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation) {
-    return builder(context);
-  }
-
-  @override
-  bool get maintainState => true;
-
-  @override
-  Duration get transitionDuration => const Duration(milliseconds: 300); 
-
-  @override
-  Widget buildTransitions(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation, Widget child) {
-    return FadeTransition(
-      opacity: animation,
-      child: child,
-    );
-  }
-}
-*/
