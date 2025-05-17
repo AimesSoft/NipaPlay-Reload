@@ -5,6 +5,8 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/background_with_blur.dart'; // 导入背景图和模糊效果控件
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/widgets/switchable_view.dart';
 
 class CustomScaffold extends StatefulWidget {
   final List<Widget> pages;
@@ -69,6 +71,10 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       builder: (context, videoState, child) {
         // 判断当前活动页面是否为视频播放页 (假定视频播放页索引为0)
         final bool isVideoPlayerPageActive = _currentIndex == 0;
+        
+        // 获取外观设置，判断是否启用页面滑动动画
+        final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
+        final enableAnimation = appearanceSettings.enablePageAnimation;
 
         return DefaultTabController(
           length: widget.pages.length,
@@ -120,9 +126,25 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                   indicatorSize: TabBarIndicatorSize.tab,
                 ),
               ) : null,
-              // 使用IndexedStack替代TabBarView，保持所有页面状态
-              body: IndexedStack(
-                index: _currentIndex,
+              // 使用SwitchableView替代IndexedStack，可以根据设置切换是否启用动画
+              body: SwitchableView(
+                enableAnimation: enableAnimation,
+                currentIndex: _currentIndex,
+                physics: enableAnimation
+                    ? const PageScrollPhysics() // 开启动画时使用页面滑动物理效果
+                    : const NeverScrollableScrollPhysics(), // 关闭动画时禁止滑动
+                onPageChanged: (index) {
+                  if (_currentIndex != index && widget.tabController != null) {
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                    // 使用animateTo而不是直接设置index，保持动画效果
+                    widget.tabController!.animateTo(index);
+                    
+                    // 额外的调试信息，帮助排查问题
+                    print('主页面切换到: $index (启用动画: $enableAnimation)');
+                  }
+                },
                 children: widget.pages.map((page) => 
                   // 为每个页面添加RepaintBoundary，限制重绘范围
                   RepaintBoundary(child: page)

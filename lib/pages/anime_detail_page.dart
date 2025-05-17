@@ -10,10 +10,12 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 // import 'package:http/http.dart' as http; // No longer needed for local translation state
 // import '../services/dandanplay_service.dart'; // No longer needed for local translation state
 import '../widgets/blur_snackbar.dart'; // Added for blur snackbar
-// import 'package:provider/provider.dart'; // Removed from here
+import 'package:provider/provider.dart'; // 重新添加
 // import '../utils/video_player_state.dart'; // Removed from here
 import 'dart:io'; // Added for File operations
 // import '../utils/tab_change_notifier.dart'; // Removed from here
+import '../providers/appearance_settings_provider.dart'; // 添加外观设置Provider
+import '../widgets/switchable_view.dart'; // 添加SwitchableView组件
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -24,6 +26,10 @@ class AnimeDetailPage extends StatefulWidget {
   State<AnimeDetailPage> createState() => _AnimeDetailPageState();
   
   static Future<WatchHistoryItem?> show(BuildContext context, int animeId) {
+    // 获取外观设置Provider
+    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
+    final enableAnimation = appearanceSettings.enablePageAnimation;
+    
     return showGeneralDialog<WatchHistoryItem>(
       context: context,
       barrierDismissible: true,
@@ -34,6 +40,16 @@ class AnimeDetailPage extends StatefulWidget {
         return AnimeDetailPage(animeId: animeId);
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
+        // 如果禁用动画，直接返回child
+        if (!enableAnimation) {
+          return FadeTransition(
+            opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            ),
+            child: child,
+          );
+        }
+        
         final curvedAnimation = CurvedAnimation(
           parent: animation,
           curve: Curves.easeOutBack,
@@ -58,6 +74,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   bool _isLoading = true;
   String? _error;
   TabController? _tabController;
+  // 添加外观设置
+  AppearanceSettingsProvider? _appearanceSettings;
 
   // 新增：评分到评价文本的映射
   static const Map<int, String> _ratingEvaluationMap = {
@@ -86,6 +104,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       debugPrint("[番剧详情] 已清理过期的番剧详情缓存");
     });
     _fetchAnimeDetails();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 获取外观设置provider
+    _appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
   }
 
   @override
@@ -603,6 +628,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     }
 
     final anime = _detailedAnime!;
+    // 获取是否启用页面切换动画
+    final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
+    
     return Column(
       children: [
         Padding(
@@ -648,12 +676,21 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           ],
         ),
         Expanded(
-            child: IndexedStack(
-              index: _tabController?.index ?? 0,
-              children: [
-                // 使用RepaintBoundary隔离绘制边界，减少重绘范围
-                RepaintBoundary(child: _buildSummaryView(anime)),
-                RepaintBoundary(child: _buildEpisodesListView(anime)),
+          child: SwitchableView(
+            enableAnimation: enableAnimation, // 使用外观设置的动画开关
+            currentIndex: _tabController?.index ?? 0,
+            physics: enableAnimation 
+                ? const PageScrollPhysics() // 开启动画时使用页面滑动物理效果
+                : const NeverScrollableScrollPhysics(), // 关闭动画时禁止滑动
+            onPageChanged: (index) {
+              if ((_tabController?.index ?? 0) != index) {
+                _tabController?.animateTo(index);
+              }
+            },
+            children: [
+              // 使用RepaintBoundary隔离绘制边界，减少重绘范围
+              RepaintBoundary(child: _buildSummaryView(anime)),
+              RepaintBoundary(child: _buildEpisodesListView(anime)),
             ],
           ),
         ),

@@ -28,21 +28,34 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   final Map<String, List<FileSystemEntity>> _expandedFolderContents = {};
   final Set<String> _loadingFolders = {};
   final ScrollController _listScrollController = ScrollController();
+  
+  // 存储ScanService引用
+  ScanService? _scanService;
 
   @override
   void initState() {
     super.initState();
     
-    // 在initState中保存ScanService引用，避免在dispose中不安全访问Provider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final scanService = Provider.of<ScanService>(context, listen: false);
-      _scanService = scanService; // 保存引用
-      scanService.addListener(_checkScanResults);
+    // 延迟初始化，确保挂载完成
+    _initScanServiceListener();
+  }
+  
+  // 提取为单独的方法，方便管理生命周期
+  void _initScanServiceListener() {
+    // 使用微任务确保在当前渲染帧结束后执行
+    Future.microtask(() {
+      // 确保组件仍然挂载
+      if (!mounted) return;
+      
+      try {
+        final scanService = Provider.of<ScanService>(context, listen: false);
+        _scanService = scanService; // 保存引用
+        scanService.addListener(_checkScanResults);
+      } catch (e) {
+        print('初始化ScanService监听器失败: $e');
+      }
     });
   }
-
-  // 存储ScanService引用
-  ScanService? _scanService;
 
   @override
   void dispose() {
@@ -274,17 +287,24 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 检查扫描结果，如果没有找到视频文件，显示指导弹窗
   void _checkScanResults() {
-    final scanService = Provider.of<ScanService>(context, listen: false);
+    // 首先检查 mounted 状态
+    if (!mounted) return;
     
-    // 只在扫描刚结束时检查
-    if (!scanService.isScanning && scanService.justFinishedScanning) {
-      // 重置标志
-      scanService.resetJustFinishedScanning();
+    try {
+      final scanService = Provider.of<ScanService>(context, listen: false);
       
-      // 如果没有文件，或者扫描文件夹为空，显示指导弹窗
-      if ((scanService.totalFilesFound == 0 || scanService.scannedFolders.isEmpty) && mounted) {
-        _showFileImportGuideDialog();
+      // 只在扫描刚结束时检查
+      if (!scanService.isScanning && scanService.justFinishedScanning) {
+        // 重置标志
+        scanService.resetJustFinishedScanning();
+        
+        // 如果没有文件，或者扫描文件夹为空，显示指导弹窗
+        if ((scanService.totalFilesFound == 0 || scanService.scannedFolders.isEmpty) && mounted) {
+          _showFileImportGuideDialog();
+        }
       }
+    } catch (e) {
+      print('检查扫描结果时出错: $e');
     }
   }
   

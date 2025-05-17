@@ -43,12 +43,32 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   void initState() {
     super.initState();
     _focusNode.onKey = _handleKeyEvent;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _registerKeyboardShortcuts();
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      videoState.setContext(context);
-      if (!globals.isPhone) {
-        _resetMouseHideTimer();
+    
+    // 使用安全的方式初始化，避免在卸载后访问context
+    _safeInitialize();
+  }
+  
+  // 使用单独的方法进行安全初始化
+  Future<void> _safeInitialize() async {
+    // 使用微任务确保在当前帧渲染完成后执行
+    Future.microtask(() {
+      // 首先检查组件是否仍然挂载
+      if (!mounted) return;
+      
+      try {
+        _registerKeyboardShortcuts();
+        
+        // 安全获取视频状态
+        final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+        videoState.setContext(context);
+        
+        // 如果不是手机，重置鼠标隐藏计时器
+        if (!globals.isPhone) {
+          _resetMouseHideTimer();
+        }
+      } catch (e) {
+        // 捕获并记录任何异常
+        print('VideoPlayerUI初始化出错: $e');
       }
     });
   }
@@ -211,9 +231,29 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
 
   @override
   void dispose() {
+    // 确保清理所有资源
     _focusNode.dispose();
     _doubleTapTimer?.cancel();
     _mouseMoveTimer?.cancel();
+    
+    // 清理键盘快捷键注册
+    // 注意：KeyboardShortcuts没有提供unregisterActionHandler方法
+    // 我们可以替换之前注册的处理程序为空函数，以防止在组件卸载后被调用
+    try {
+      if (!mounted) {
+        // 用空函数替换所有注册的处理程序
+        KeyboardShortcuts.registerActionHandler('play_pause', () {});
+        KeyboardShortcuts.registerActionHandler('fullscreen', () {});
+        KeyboardShortcuts.registerActionHandler('rewind', () {});
+        KeyboardShortcuts.registerActionHandler('forward', () {});
+        KeyboardShortcuts.registerActionHandler('toggle_danmaku', () {});
+        KeyboardShortcuts.registerActionHandler('volume_up', () {});
+        KeyboardShortcuts.registerActionHandler('volume_down', () {});
+      }
+    } catch (e) {
+      print('清理VideoPlayerUI键盘快捷键时出错: $e');
+    }
+    
     super.dispose();
   }
 

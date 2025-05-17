@@ -14,12 +14,14 @@ import '../widgets/loading_overlay.dart';
 import '../utils/tab_change_notifier.dart';
 import '../widgets/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
+import '../providers/appearance_settings_provider.dart';
 import 'package:flutter/gestures.dart';
 import '../pages/media_library_page.dart';
 import '../widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import '../widgets/blur_snackbar.dart';
 import '../widgets/history_all_modal.dart';
+import '../widgets/switchable_view.dart';
 import 'package:flutter/rendering.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
@@ -751,6 +753,10 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerP
 
   @override
   Widget build(BuildContext context) {
+    // 获取外观设置，判断是否启用页面滑动动画
+    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
+    final enableAnimation = appearanceSettings.enablePageAnimation;
+    
     return Column(
       children: [
         // Tab控制器
@@ -776,15 +782,32 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerP
           dividerHeight: 3.0,
           indicatorSize: TabBarIndicatorSize.tab,
         ),
-        // 内容区域 - 使用IndexedStack替代PageView
+        // 内容区域 - 使用SwitchableView替代直接使用IndexedStack
         Expanded(
-          child: IndexedStack(
-            index: _currentIndex,
+          child: SwitchableView(
+            enableAnimation: enableAnimation,
+            currentIndex: _currentIndex,
+            // 使用更合适的物理滑动效果
+            physics: enableAnimation 
+                ? const PageScrollPhysics() // 开启动画时使用页面滑动物理效果
+                : const NeverScrollableScrollPhysics(), // 关闭动画时禁止滑动
+            onPageChanged: (index) {
+              if (_currentIndex != index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+                // 使用animateTo而不是直接设置index，这样可以保持动画效果
+                _tabController.animateTo(index);
+                
+                // 额外的调试信息，帮助排查问题
+                print('页面变更到: $index (启用动画: $enableAnimation)');
+              }
+            },
             children: [
               // 使用RepaintBoundary隔离绘制边界，减少重绘范围
               RepaintBoundary(
                 child: MediaLibraryPage(
-                  key: ValueKey(widget.mediaLibraryVersion),
+                  key: ValueKey('mediaLibrary_${widget.mediaLibraryVersion}'),
                   onPlayEpisode: widget.onPlayEpisode,
                 ),
               ),

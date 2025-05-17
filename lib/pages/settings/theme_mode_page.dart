@@ -13,6 +13,8 @@ import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:glassmorphism/glassmorphism.dart';
 
 class ThemeModePage extends StatefulWidget {
   final ThemeNotifier themeNotifier;
@@ -28,6 +30,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
   final GlobalKey _dropdownKey = GlobalKey();
   final GlobalKey _blurDropdownKey = GlobalKey();
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
+  final GlobalKey _animationDropdownKey = GlobalKey();
 
   @override
   void initState() {
@@ -156,6 +159,9 @@ class _ThemeModePageState extends State<ThemeModePage> {
 
   @override
   Widget build(BuildContext context) {
+    // 获取外观设置提供者
+    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
+    
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Padding(
@@ -270,6 +276,21 @@ class _ThemeModePageState extends State<ThemeModePage> {
                   }
                 },
               ),
+            ),
+            // 改为使用与"过滤成人内容"一模一样的开关样式
+            SwitchListTile(
+              title: Text("页面滑动动画", style: getTitleTextStyle(context)),
+              value: appearanceSettings.enablePageAnimation,
+              onChanged: (value) {
+                appearanceSettings.setEnablePageAnimation(value);
+                BlurSnackBar.show(
+                  context, 
+                  value ? '已启用页面滑动动画' : '已关闭页面滑动动画'
+                );
+              },
+              activeColor: Colors.white,
+              inactiveThumbColor: Colors.white,
+              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
             ),
           ],
         ),

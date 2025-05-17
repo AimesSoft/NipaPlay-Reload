@@ -29,6 +29,7 @@ import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'widgets/blur_snackbar.dart';
@@ -191,6 +192,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => WatchHistoryProvider()),
           ChangeNotifierProvider(create: (_) => ScanService()),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
+          ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
         ],
         child: const NipaPlayApp(),
       ),
