@@ -2530,8 +2530,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     final screenWidth = MediaQuery.of(context).size.width;
     
     // Sensitivity: 滑动整个屏幕宽度对应总时长的N分之一，例如1/3或者一个固定时长如60秒
-    // Let's say sliding half the screen width seeks 60 seconds.
-    const double pixelsPerSecond = 1.0; // Smaller value = more sensitive, e.g. screenWidth / 60.0 for 60s per screen
+    // 修改灵敏度：1像素约等于6秒，这样轻滑动大约10-15像素就是10秒左右
+    const double pixelsPerSecond = 6.0; // 增大数值以减少灵敏度(原来是1.0)
     double seekOffsetSeconds = _accumulatedDragDx / pixelsPerSecond; 
 
     Duration newPositionDuration = _dragSeekStartPosition + Duration(seconds: seekOffsetSeconds.round());

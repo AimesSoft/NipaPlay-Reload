@@ -279,7 +279,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
             ),
             // 改为使用与"过滤成人内容"一模一样的开关样式
             SwitchListTile(
-              title: Text("页面滑动动画", style: getTitleTextStyle(context)),
+              title: Text("页面滑动动画（关闭提升性能）", style: getTitleTextStyle(context)),
               value: appearanceSettings.enablePageAnimation,
               onChanged: (value) {
                 appearanceSettings.setEnablePageAnimation(value);
