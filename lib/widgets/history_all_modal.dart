@@ -140,28 +140,56 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
               ),
             ),
             Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(16),
-                itemCount: _displayedHistory.length + (_hasMoreData ? 1 : 0),
-                itemBuilder: (context, index) {
-                  // 判断是否是加载更多项
-                  if (index == _displayedHistory.length) {
-                    return _buildLoadingIndicator();
-                  }
-                  
-                  final item = _displayedHistory[index];
-                  
-                  return HistoryListItem(
-                    key: ValueKey('history_${item.filePath}'),
-                    item: item,
-                    onTap: () {
-                      Navigator.pop(context);
-                      widget.onItemTap(item);
+              child: Platform.isAndroid || Platform.isIOS
+                ? ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _displayedHistory.length + (_hasMoreData ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      // 判断是否是加载更多项
+                      if (index == _displayedHistory.length) {
+                        return _buildLoadingIndicator();
+                      }
+                      
+                      final item = _displayedHistory[index];
+                      
+                      return HistoryListItem(
+                        key: ValueKey('history_${item.filePath}'),
+                        item: item,
+                        onTap: () {
+                          Navigator.pop(context);
+                          widget.onItemTap(item);
+                        },
+                      );
                     },
-                  );
-                },
-              ),
+                  )
+                : Scrollbar(
+                    controller: _scrollController,
+                    radius: const Radius.circular(2),
+                    thickness: 4,
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _displayedHistory.length + (_hasMoreData ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        // 判断是否是加载更多项
+                        if (index == _displayedHistory.length) {
+                          return _buildLoadingIndicator();
+                        }
+                        
+                        final item = _displayedHistory[index];
+                        
+                        return HistoryListItem(
+                          key: ValueKey('history_${item.filePath}'),
+                          item: item,
+                          onTap: () {
+                            Navigator.pop(context);
+                            widget.onItemTap(item);
+                          },
+                        );
+                      },
+                    ),
+                  ),
             ),
           ],
         ),

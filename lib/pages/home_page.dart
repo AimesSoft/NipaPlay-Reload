@@ -29,7 +29,8 @@ class _HomePageState extends State<HomePage> {
         children: [
           // ... sidebar ...
           Expanded(
-            child: PageView(
+            child: IndexedStack(
+              index: 0, // 固定显示第一个页面
               children: const [
                 NewSeriesPage(),
                 // ... other pages ...

@@ -36,7 +36,7 @@ class SettingsStorage {
     await prefs.setDouble(key, value);
   }
 
-  static Future<double> loadDouble(String key, {double defaultValue = 100.0}) async {
+  static Future<double> loadDouble(String key, {double defaultValue = 0.0}) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(key) ?? defaultValue;
   }

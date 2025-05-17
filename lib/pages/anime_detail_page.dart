@@ -77,6 +77,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
+    // 添加TabController监听
+    _tabController!.addListener(_handleTabChange);
+    
     // 启动时异步清理过期缓存
     _bangumiService.cleanExpiredDetailCache().then((_) {
       debugPrint("[番剧详情] 已清理过期的番剧详情缓存");
@@ -86,8 +90,18 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   void dispose() {
+    _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
     super.dispose();
+  }
+  
+  // 处理标签切换
+  void _handleTabChange() {
+    if (_tabController!.indexIsChanging) {
+      setState(() {
+        // 更新UI以显示新的页面
+      });
+    }
   }
 
   Future<void> _fetchAnimeDetails() async {
@@ -634,11 +648,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           ],
         ),
         Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildSummaryView(anime),
-              _buildEpisodesListView(anime),
+            child: IndexedStack(
+              index: _tabController?.index ?? 0,
+              children: [
+                // 使用RepaintBoundary隔离绘制边界，减少重绘范围
+                RepaintBoundary(child: _buildSummaryView(anime)),
+                RepaintBoundary(child: _buildEpisodesListView(anime)),
             ],
           ),
         ),

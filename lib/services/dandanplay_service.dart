@@ -33,6 +33,38 @@ class DandanplayService {
     await loadToken();
   }
 
+  // 预加载最近更新的动画数据
+  static Future<void> preloadRecentAnimes() async {
+    try {
+      debugPrint('[弹弹play服务] 开始预加载最近更新的番剧数据');
+      
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/bangumi/recent';
+      const apiUrl = 'https://api.dandanplay.net/api/v2/bangumi/recent?limit=20';
+      
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Accept': 'application/json',
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        // 数据已成功预加载，不需要进一步处理
+        debugPrint('[弹弹play服务] 最近更新的番剧数据预加载成功');
+      } else {
+        debugPrint('[弹弹play服务] 预加载最近更新番剧失败: HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 预加载最近更新番剧时出错: $e');
+    }
+  }
+
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('dandanplay_token');

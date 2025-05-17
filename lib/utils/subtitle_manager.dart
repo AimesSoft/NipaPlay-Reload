@@ -338,6 +338,14 @@ class SubtitleManager extends ChangeNotifier {
       final videoDir = videoFile.parent.path;
       final videoName = videoPath.split('/').last.split('.').first;
       
+      // 从视频文件名中提取数字（可能的集数）
+      final videoNumberMatch = RegExp(r'(\d+)').allMatches(videoName).toList();
+      List<String> videoNumbers = [];
+      if (videoNumberMatch.isNotEmpty) {
+        videoNumbers = videoNumberMatch.map((match) => match.group(0)!).toList();
+        debugPrint('SubtitleManager: 从视频文件名中提取的数字: $videoNumbers');
+      }
+      
       // 常见字幕文件扩展名按优先级排序
       final subtitleExts = ['.ass', '.srt', '.ssa', '.sub'];
       
@@ -371,39 +379,118 @@ class SubtitleManager extends ChangeNotifier {
         }
       }
       
-      // 如果没有找到完全匹配的，尝试查找目录中任何字幕文件
+      // 如果没有找到完全匹配的，尝试查找目录中可能匹配的字幕文件
       final videoDirectory = Directory(videoDir);
       if (videoDirectory.existsSync()) {
         try {
           final files = videoDirectory.listSync();
+          
+          // 收集所有字幕文件
+          List<File> subtitleFiles = [];
           for (final file in files) {
             if (file is File) {
               final ext = p.extension(file.path).toLowerCase();
               if (subtitleExts.contains(ext)) {
-                // 找到了一个字幕文件
-                debugPrint('SubtitleManager: 找到可能的字幕文件: ${file.path}');
-                
-                // 等待一段时间确保播放器准备好
-                await Future.delayed(const Duration(milliseconds: 500));
-                
-                // 设置外部字幕（不标记为手动设置，因为是自动检测的）
-                setExternalSubtitle(file.path, isManualSetting: false);
-                
-                // 保存这个自动找到的字幕路径，下次可以直接使用
-                saveVideoSubtitleMapping(videoPath, file.path);
-                
-                // 设置完成后强制刷新状态
-                await Future.delayed(const Duration(milliseconds: 300));
-                
-                // 触发自动加载字幕回调
-                if (onExternalSubtitleAutoLoaded != null) {
-                  final fileName = file.path.split('/').last;
-                  onExternalSubtitleAutoLoaded!(file.path, fileName);
-                }
-                
-                return;
+                subtitleFiles.add(file);
               }
             }
+          }
+          
+          if (subtitleFiles.isEmpty) {
+            debugPrint('SubtitleManager: 目录中没有找到任何字幕文件');
+            return;
+          }
+          
+          // 如果视频文件名中有数字（可能的集数），尝试基于数字匹配
+          if (videoNumbers.isNotEmpty) {
+            // 评分系统：根据字幕文件名中包含的视频文件名中的数字数量，给每个字幕文件打分
+            Map<File, int> fileScores = {};
+            
+            for (final subtitleFile in subtitleFiles) {
+              final subtitleName = subtitleFile.path.split('/').last.split('.').first;
+              final subtitleNumberMatch = RegExp(r'(\d+)').allMatches(subtitleName).toList();
+              List<String> subtitleNumbers = [];
+              
+              if (subtitleNumberMatch.isNotEmpty) {
+                subtitleNumbers = subtitleNumberMatch.map((match) => match.group(0)!).toList();
+                debugPrint('SubtitleManager: 字幕文件 ${subtitleFile.path} 中的数字: $subtitleNumbers');
+              
+                // 计算匹配分数：视频文件名中的数字在字幕文件名中出现的次数
+                int score = 0;
+                for (final videoNum in videoNumbers) {
+                  if (subtitleNumbers.contains(videoNum)) {
+                    score++;
+                  }
+                }
+                
+                // 如果最后一个数字相同（可能是集数），增加权重
+                if (videoNumbers.isNotEmpty && 
+                    subtitleNumbers.isNotEmpty && 
+                    videoNumbers.last == subtitleNumbers.last) {
+                  score += 3;  // 增加更多权重给最后的数字匹配
+                }
+                
+                fileScores[subtitleFile] = score;
+              } else {
+                // 没有数字的字幕文件得分为0
+                fileScores[subtitleFile] = 0;
+              }
+            }
+            
+            // 按匹配分数排序字幕文件
+            subtitleFiles.sort((a, b) => (fileScores[b] ?? 0).compareTo(fileScores[a] ?? 0));
+            
+            // 如果有得分大于0的字幕文件，使用最高分的
+            if (subtitleFiles.isNotEmpty && (fileScores[subtitleFiles.first] ?? 0) > 0) {
+              final bestMatchFile = subtitleFiles.first;
+              debugPrint('SubtitleManager: 找到最佳匹配的字幕文件: ${bestMatchFile.path} (分数: ${fileScores[bestMatchFile]})');
+              
+              // 等待一段时间确保播放器准备好
+              await Future.delayed(const Duration(milliseconds: 500));
+              
+              // 设置外部字幕（不标记为手动设置，因为是自动检测的）
+              setExternalSubtitle(bestMatchFile.path, isManualSetting: false);
+              
+              // 保存这个自动找到的字幕路径，下次可以直接使用
+              saveVideoSubtitleMapping(videoPath, bestMatchFile.path);
+              
+              // 设置完成后强制刷新状态
+              await Future.delayed(const Duration(milliseconds: 300));
+              
+              // 触发自动加载字幕回调
+              if (onExternalSubtitleAutoLoaded != null) {
+                final fileName = bestMatchFile.path.split('/').last;
+                onExternalSubtitleAutoLoaded!(bestMatchFile.path, fileName);
+              }
+              
+              return;
+            }
+          }
+          
+          // 如果没有找到基于数字匹配的，或者视频文件名中没有数字，退回到原来的逻辑：选择第一个字幕文件
+          if (subtitleFiles.isNotEmpty) {
+            final file = subtitleFiles.first;
+            debugPrint('SubtitleManager: 没有找到基于数字匹配的字幕，使用第一个可用字幕: ${file.path}');
+            
+            // 等待一段时间确保播放器准备好
+            await Future.delayed(const Duration(milliseconds: 500));
+            
+            // 设置外部字幕（不标记为手动设置，因为是自动检测的）
+            setExternalSubtitle(file.path, isManualSetting: false);
+            
+            // 保存这个自动找到的字幕路径，下次可以直接使用
+            saveVideoSubtitleMapping(videoPath, file.path);
+            
+            // 设置完成后强制刷新状态
+            await Future.delayed(const Duration(milliseconds: 300));
+            
+            // 触发自动加载字幕回调
+            if (onExternalSubtitleAutoLoaded != null) {
+              final fileName = file.path.split('/').last;
+              onExternalSubtitleAutoLoaded!(file.path, fileName);
+            }
+            
+            return;
           }
         } catch (e) {
           debugPrint('SubtitleManager: 目录搜索错误: $e');

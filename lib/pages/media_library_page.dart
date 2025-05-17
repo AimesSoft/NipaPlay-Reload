@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // For image URL pe
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'dart:io'; // 添加Platform导入
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -31,6 +32,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   bool _isLoadingInitial = true; // For the initial list from history
   String? _error;
   // No longer a single _isLoading; initial load and background fetches are separate concerns.
+  final ScrollController _gridScrollController = ScrollController();
 
   static const String _prefsKeyPrefix = 'media_library_image_url_';
 
@@ -42,6 +44,12 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         _loadInitialMediaLibraryData();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _gridScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInitialMediaLibraryData() async {
@@ -271,68 +279,138 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
     // 使用RepaintBoundary包装整个GridView，优化重绘
     return RepaintBoundary(
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 150, 
-          childAspectRatio: 7/12,   
-          crossAxisSpacing: 8,      
-          mainAxisSpacing: 8,       
-        ),
-        padding: const EdgeInsets.all(0),
-        // 增加cacheExtent以提升滚动流畅度
-        cacheExtent: 800, // 提高预缓存距离
-        // 优化GridView性能
-        clipBehavior: Clip.hardEdge,
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        // 添加更多GridView性能优化参数
-        addAutomaticKeepAlives: false, // 避免保持所有项目活动
-        addRepaintBoundaries: true, // 为每个项目添加绘制边界
-        // 只渲染两行之后的项目，控制同时显示的项目数量
-        // 通过key和index控制垂直方向的显示
-        itemCount: _uniqueLibraryItems.length,
-        itemBuilder: (context, index) {
-          // 判断是否超出当前屏幕过多，实现按需渲染
-          // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
-          final useOptimizedRendering = index > 11;
-          final historyItem = _uniqueLibraryItems[index];
-          final animeId = historyItem.animeId;
+      child: Platform.isAndroid || Platform.isIOS 
+      ? GridView.builder(
+          controller: _gridScrollController,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 150, 
+            childAspectRatio: 7/12,   
+            crossAxisSpacing: 8,      
+            mainAxisSpacing: 8,       
+          ),
+          padding: const EdgeInsets.all(0),
+          // 增加cacheExtent以提升滚动流畅度
+          cacheExtent: 800, // 提高预缓存距离
+          // 优化GridView性能
+          clipBehavior: Clip.hardEdge,
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          // 添加更多GridView性能优化参数
+          addAutomaticKeepAlives: false, // 避免保持所有项目活动
+          addRepaintBoundaries: true, // 为每个项目添加绘制边界
+          // 只渲染两行之后的项目，控制同时显示的项目数量
+          // 通过key和index控制垂直方向的显示
+          itemCount: _uniqueLibraryItems.length,
+          itemBuilder: (context, index) {
+            // 判断是否超出当前屏幕过多，实现按需渲染
+            // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
+            final useOptimizedRendering = index > 11;
+            final historyItem = _uniqueLibraryItems[index];
+            final animeId = historyItem.animeId;
 
-          String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
-          String nameToDisplay = historyItem.animeName.isNotEmpty 
-              ? historyItem.animeName 
-              : (historyItem.episodeTitle ?? '未知动画');
+            String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
+            String nameToDisplay = historyItem.animeName.isNotEmpty 
+                ? historyItem.animeName 
+                : (historyItem.episodeTitle ?? '未知动画');
 
-          if (animeId != null) {
-              if (_fetchedFullAnimeData.containsKey(animeId)) {
-                  final fetchedData = _fetchedFullAnimeData[animeId]!;
-                  if (fetchedData.imageUrl.isNotEmpty) {
-                      imageUrlToDisplay = fetchedData.imageUrl;
-                  }
-                  if (fetchedData.nameCn.isNotEmpty) {
-                      nameToDisplay = fetchedData.nameCn;
-                  } else if (fetchedData.name.isNotEmpty) {
-                      nameToDisplay = fetchedData.name;
-                  }
-              } else if (_persistedImageUrls.containsKey(animeId)) {
-                  imageUrlToDisplay = _persistedImageUrls[animeId]!;
-                  // Name remains from historyItem until full details are fetched in this session
-              }
-          }
+            if (animeId != null) {
+                if (_fetchedFullAnimeData.containsKey(animeId)) {
+                    final fetchedData = _fetchedFullAnimeData[animeId]!;
+                    if (fetchedData.imageUrl.isNotEmpty) {
+                        imageUrlToDisplay = fetchedData.imageUrl;
+                    }
+                    if (fetchedData.nameCn.isNotEmpty) {
+                        nameToDisplay = fetchedData.nameCn;
+                    } else if (fetchedData.name.isNotEmpty) {
+                        nameToDisplay = fetchedData.name;
+                    }
+                } else if (_persistedImageUrls.containsKey(animeId)) {
+                    imageUrlToDisplay = _persistedImageUrls[animeId]!;
+                    // Name remains from historyItem until full details are fetched in this session
+                }
+            }
 
-          return AnimeCard(
-            key: ValueKey(animeId ?? historyItem.filePath), 
-            name: nameToDisplay, 
-            imageUrl: imageUrlToDisplay,
-            onTap: () {
+            return AnimeCard(
+              key: ValueKey(animeId ?? historyItem.filePath), 
+              name: nameToDisplay, 
+              imageUrl: imageUrlToDisplay,
+              onTap: () {
+                if (animeId != null) {
+                  _navigateToAnimeDetail(animeId);
+                } else {
+                  BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                }
+              },
+            );
+          },
+        )
+      : Scrollbar(
+          controller: _gridScrollController,
+          thickness: 4,
+          radius: const Radius.circular(2),
+          child: GridView.builder(
+            controller: _gridScrollController,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 150, 
+              childAspectRatio: 7/12,   
+              crossAxisSpacing: 8,      
+              mainAxisSpacing: 8,       
+            ),
+            padding: const EdgeInsets.all(0),
+            // 增加cacheExtent以提升滚动流畅度
+            cacheExtent: 800, // 提高预缓存距离
+            // 优化GridView性能
+            clipBehavior: Clip.hardEdge,
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            // 添加更多GridView性能优化参数
+            addAutomaticKeepAlives: false, // 避免保持所有项目活动
+            addRepaintBoundaries: true, // 为每个项目添加绘制边界
+            // 只渲染两行之后的项目，控制同时显示的项目数量
+            // 通过key和index控制垂直方向的显示
+            itemCount: _uniqueLibraryItems.length,
+            itemBuilder: (context, index) {
+              // 判断是否超出当前屏幕过多，实现按需渲染
+              // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
+              final useOptimizedRendering = index > 11;
+              final historyItem = _uniqueLibraryItems[index];
+              final animeId = historyItem.animeId;
+
+              String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
+              String nameToDisplay = historyItem.animeName.isNotEmpty 
+                  ? historyItem.animeName 
+                  : (historyItem.episodeTitle ?? '未知动画');
+
               if (animeId != null) {
-                _navigateToAnimeDetail(animeId);
-              } else {
-                BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                  if (_fetchedFullAnimeData.containsKey(animeId)) {
+                      final fetchedData = _fetchedFullAnimeData[animeId]!;
+                      if (fetchedData.imageUrl.isNotEmpty) {
+                          imageUrlToDisplay = fetchedData.imageUrl;
+                      }
+                      if (fetchedData.nameCn.isNotEmpty) {
+                          nameToDisplay = fetchedData.nameCn;
+                      } else if (fetchedData.name.isNotEmpty) {
+                          nameToDisplay = fetchedData.name;
+                      }
+                  } else if (_persistedImageUrls.containsKey(animeId)) {
+                      imageUrlToDisplay = _persistedImageUrls[animeId]!;
+                      // Name remains from historyItem until full details are fetched in this session
+                  }
               }
+
+              return AnimeCard(
+                key: ValueKey(animeId ?? historyItem.filePath), 
+                name: nameToDisplay, 
+                imageUrl: imageUrlToDisplay,
+                onTap: () {
+                  if (animeId != null) {
+                    _navigateToAnimeDetail(animeId);
+                  } else {
+                    BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                  }
+                },
+              );
             },
-          );
-        },
-      ),
+          ),
+        ),
     );
   }
 } 

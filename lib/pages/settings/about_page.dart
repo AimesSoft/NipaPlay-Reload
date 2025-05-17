@@ -1,4 +1,5 @@
 // about_page.dart
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -159,48 +160,41 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Widget _buildInfoCard({required BuildContext context, String? title, required List<Widget> children}) {
-    return Container(
-      decoration: BoxDecoration(
-        //color: const Color.fromARGB(255, 255, 255, 255).withOpacity(0.6), // 半透明背景色
-        borderRadius: BorderRadius.circular(12),
-        // 添加细微渐变效果模拟毛玻璃的高级感
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.2),
-            Colors.white.withOpacity(0.2),
-          ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: 25,
+          sigmaY: 25,
         ),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.15),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min, // 使Column高度包裹内容
-        children: [
-          if (title != null) ...[
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Colors.white, 
-                fontWeight: FontWeight.bold,
-              ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.white.withOpacity(0.3),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 0.5,
             ),
-            const SizedBox(height: 12),
-          ],
-          ...children,
-        ],
+          ),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (title != null) ...[
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.white, 
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              ...children,
+            ],
+          ),
+        ),
       ),
     );
   }

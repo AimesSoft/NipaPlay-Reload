@@ -1,15 +1,17 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
+import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:glassmorphism/glassmorphism.dart';
-import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../widgets/loading_overlay.dart';
 import '../utils/tab_change_notifier.dart';
-import 'dart:typed_data';
 import '../widgets/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
 import 'package:flutter/gestures.dart';
@@ -18,6 +20,7 @@ import '../widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import '../widgets/blur_snackbar.dart';
 import '../widgets/history_all_modal.dart';
+import 'package:flutter/rendering.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -43,10 +46,12 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     // Using a Material widget to ensure proper theming and background.
     // Changed color to Colors.transparent to remove the black background.
-    return Material(
-      color: Colors.transparent, // Changed from Theme.of(context).scaffoldBackgroundColor
-      elevation: overlapsContent ? 4.0 : 0.0, // Add elevation when content overlaps (sticks)
-      child: tabBar,
+    return RepaintBoundary(
+      child: Material(
+        color: Colors.transparent, // Changed from Theme.of(context).scaffoldBackgroundColor
+        elevation: overlapsContent ? 4.0 : 0.0, // Add elevation when content overlaps (sticks)
+        child: tabBar,
+      ),
     );
   }
 
@@ -62,13 +67,15 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   VideoPlayerState? _videoPlayerState;
   final ScrollController _mainPageScrollController = ScrollController(); // Used for NestedScrollView
   final ScrollController _watchHistoryListScrollController = ScrollController();
+  
+  // 仅保留当前标签页索引用于初始化_MediaLibraryTabs
+  int _currentTabIndex = 0;
 
   int _mediaLibraryVersion = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {});
   }
 
   @override
@@ -265,18 +272,17 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
               });
             }
 
-            // DefaultTabController is moved to wrap NestedScrollView
-            return DefaultTabController(
-              length: 2,
-              child: Stack(
-                children: [
-                  NestedScrollView(
-                    controller: _mainPageScrollController,
-                    headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-                      return <Widget>[
-                        const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.only(top: 24, left: 16.0, right: 16.0),
+            // 移除DefaultTabController，直接使用Stack
+            return Stack(
+              children: [
+                NestedScrollView(
+                  controller: _mainPageScrollController,
+                  headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+                    return <Widget>[
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: 24, left: 16.0, right: 16.0),
+                          child: RepaintBoundary(
                             child: Text("观看记录",
                                 style: TextStyle(
                                     fontSize: 28,
@@ -284,10 +290,12 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                                     fontWeight: FontWeight.bold)),
                           ),
                         ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                        SliverToBoxAdapter(
-                          child: SizedBox(
-                            height: 180,
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 180,
+                          child: RepaintBoundary(
                             child: isLoadingHistory && history.isEmpty
                                 ? const Center(child: CircularProgressIndicator())
                                 : history.isEmpty
@@ -296,62 +304,32 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                                     : _buildWatchHistoryList(history),
                           ),
                         ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                        SliverPersistentHeader(
-                          delegate: _SliverTabBarDelegate(
-                            TabBar(
-                              isScrollable: true,
-                              tabs: const [
-                                Tab(text: "媒体库"),
-                                Tab(text: "库管理"),
-                              ],
-                              labelColor: Colors.white,
-                              unselectedLabelColor: Colors.white70,
-                              labelStyle: const TextStyle(
-                                  fontSize: 24, fontWeight: FontWeight.bold),
-                              indicatorPadding: const EdgeInsets.only(
-                                  top: 45, left: 0, right: 0),
-                              indicator: BoxDecoration(
-                                color: Colors.greenAccent,
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              tabAlignment: TabAlignment.start,
-                              dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                              dividerHeight: 3.0,
-                              indicatorSize: TabBarIndicatorSize.tab,
-                            ),
-                          ),
-                          pinned: true, // This makes the TabBar stick
-                          floating: false, // Keeps TabBar visible once pinned
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Text("媒体内容",
+                              style: TextStyle(
+                                  fontSize: 28,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
                         ),
-                      ];
-                    },
-                    body: TabBarView(
-                      // 禁用滑动切换，减少无意间的重建和滑动时的性能损耗
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        // 使用RepaintBoundary隔离绘制边界，减少重绘范围
-                        RepaintBoundary(
-                          child: MediaLibraryPage(
-                            key: ValueKey(_mediaLibraryVersion),
-                            onPlayEpisode: _onWatchHistoryItemTap,
-                          ),
-                        ),
-                        // 使用RepaintBoundary隔离绘制边界，减少重绘范围
-                        RepaintBoundary(
-                          child: LibraryManagementTab(
-                            onPlayEpisode: _onWatchHistoryItemTap,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                    ];
+                  },
+                  body: _MediaLibraryTabs(
+                    initialIndex: _currentTabIndex,
+                    onPlayEpisode: _onWatchHistoryItemTap,
+                    mediaLibraryVersion: _mediaLibraryVersion,
                   ),
-                  if (_loadingVideo)
-                    Positioned.fill(
-                      child: LoadingOverlay(messages: _loadingMessages),
-                    ),
-                ],
-              ),
+                ),
+                if (_loadingVideo)
+                  Positioned.fill(
+                    child: LoadingOverlay(messages: _loadingMessages),
+                  ),
+              ],
             );
           },
         );
@@ -410,13 +388,14 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     // 决定是否需要"查看更多"按钮（现在使用固定宽度）
     final showViewMoreButton = validHistoryItems.length > visibleCards + 2;
     
-    // 确定实际显示多少张卡片（不包括"查看更多"按钮）
+    // The number of items shown in the list
     final displayItemCount = showViewMoreButton 
         ? visibleCards + 2  // 如果显示"查看更多"按钮，则显示比屏幕可容纳多两张卡片
         : validHistoryItems.length;  // 否则显示所有历史记录
     
-    // 创建ListView.builder
-    Widget actualListView = ListView.builder(
+    // 创建ListView
+    ListView historyListView = ListView.builder(
+      key: const PageStorageKey<String>('watch_history_list'),
       controller: _watchHistoryListScrollController,
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -500,141 +479,150 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       },
     );
 
-    // 根据平台决定是否显示滚动条
+    // 根据平台决定是否使用Scrollbar
     if (Platform.isAndroid || Platform.isIOS) {
-      return actualListView; // 移动平台不显示滚动条
+      return historyListView; // 移动平台不显示滚动条
     } else {
-      // 桌面平台显示滚动条，但无交互时自动隐藏
+      // 创建适用于桌面平台的Scrollbar
       return Scrollbar(
         controller: _watchHistoryListScrollController,
-        thumbVisibility: false, // 改为false，使滚动条在无交互时隐藏
-        thickness: 4, // 滚动条粗细
-        radius: const Radius.circular(2), // 滚动条圆角
-        child: actualListView,
+        radius: const Radius.circular(2),
+        thickness: 4, 
+        thumbVisibility: false,
+        child: historyListView,
       );
     }
   }
 
   Widget _buildHistoryCard(WatchHistoryItem item, bool isLatestUpdated) {
-    return SizedBox(
-      width: 150,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          width: 150,
-          height: 170,
-          decoration: BoxDecoration(
-            // 使用更不透明的背景色
-            color: const Color(0xFF2A2A2A),
-            // 添加细微渐变效果
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.05),
-                Colors.white.withOpacity(0.02),
+    return RepaintBoundary(
+      child: SizedBox(
+        width: 150,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            width: 150,
+            height: 170,
+            margin: const EdgeInsets.symmetric(vertical: 2),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 0.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
               ],
             ),
-            borderRadius: BorderRadius.circular(10),
-            // 添加精细的边框增强立体感
-            border: Border.all(
-              color: Colors.white.withOpacity(0.5),
-              width: 1.5,
-            ),
-            // 添加阴影增强立体感
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 缩略图部分 (如果有则显示，否则显示默认图片)
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(10),
-                  topRight: Radius.circular(10),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              children: [
+                // 底层：模糊的缩略图背景
+                Positioned.fill(
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(
+                      sigmaX: 20,
+                      sigmaY: 20,
+                    ),
+                    child: _getVideoThumbnail(item, isLatestUpdated),
+                  ),
                 ),
-                child: Container(
-                  height: 90,
-                  width: double.infinity,
-                  color: Colors.black38,
-                  child: _getVideoThumbnail(item, isLatestUpdated),
+                
+                // 中间层：半透明遮罩，提高可读性
+                Positioned.fill(
+                  child: Container(
+                    color: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.2),
+                  ),
                 ),
-              ),
-              // 进度条
-              LinearProgressIndicator(
-                value: item.watchProgress,
-                backgroundColor: Colors.white10,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  Theme.of(context).colorScheme.secondary,
-                ),
-                minHeight: 2,
-              ),
-              // 标题和信息部分
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
+                
+                // 顶层：内容
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 显示动画名称，如果没有则显示文件名
-                    Text(
-                      item.animeName.isEmpty
-                          ? path.basename(item.filePath)
-                          : item.animeName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    // 清晰的缩略图部分
+                    SizedBox(
+                      height: 90,
+                      width: double.infinity,
+                      child: _getVideoThumbnail(item, isLatestUpdated),
                     ),
-                    const SizedBox(height: 4),
-                    // 显示集数标题，如果没有则显示文件名
-                    Text(
-                      item.episodeTitle ?? '未知集数',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
+                    
+                    // 进度条
+                    LinearProgressIndicator(
+                      value: item.watchProgress,
+                      backgroundColor: Colors.white10,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).colorScheme.secondary,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      minHeight: 2,
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.play_circle_outline,
-                          color: Theme.of(context).colorScheme.secondary,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDuration(
-                              Duration(milliseconds: item.lastPosition)),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.secondary,
-                            fontSize: 11,
+                    
+                    // 标题和信息部分
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 显示动画名称，如果没有则显示文件名
+                          Text(
+                            item.animeName.isEmpty
+                                ? path.basename(item.filePath)
+                                : item.animeName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        Text(
-                          " / ${_formatDuration(Duration(milliseconds: item.duration))}",
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 11,
+                          const SizedBox(height: 4),
+                          // 显示集数标题，如果没有则显示文件名
+                          Text(
+                            item.episodeTitle ?? '未知集数',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.play_circle_outline,
+                                color: Theme.of(context).colorScheme.secondary,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _formatDuration(
+                                    Duration(milliseconds: item.lastPosition)),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.secondary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Text(
+                                " / ${_formatDuration(Duration(milliseconds: item.duration))}",
+                                style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -686,7 +674,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   // 默认缩略图
   Widget _buildDefaultThumbnail() {
     return Container(
-      color: Colors.black54,
+      color: const Color.fromARGB(255, 77, 77, 77),
       child: const Center(
         child: Icon(Icons.video_library, color: Colors.white30, size: 32),
       ),
@@ -711,6 +699,105 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         history: allHistory,
         onItemTap: _onWatchHistoryItemTap,
       ),
+    );
+  }
+}
+
+// 在文件末尾添加新的类用于管理媒体库标签页
+class _MediaLibraryTabs extends StatefulWidget {
+  final int initialIndex;
+  final ValueChanged<WatchHistoryItem> onPlayEpisode;
+  final int mediaLibraryVersion;
+
+  const _MediaLibraryTabs({
+    Key? key,
+    this.initialIndex = 0,
+    required this.onPlayEpisode,
+    required this.mediaLibraryVersion,
+  }) : super(key: key);
+
+  @override
+  State<_MediaLibraryTabs> createState() => _MediaLibraryTabsState();
+}
+
+class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _tabController = TabController(length: 2, vsync: this, initialIndex: _currentIndex);
+    _tabController.addListener(_handleTabChange);
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_handleTabChange);
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _handleTabChange() {
+    if (!_tabController.indexIsChanging) return;
+    
+    if (_currentIndex != _tabController.index) {
+      setState(() {
+        _currentIndex = _tabController.index;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Tab控制器
+        TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabs: const [
+            Tab(text: "媒体库"),
+            Tab(text: "库管理"),
+          ],
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          labelStyle: const TextStyle(
+              fontSize: 24, fontWeight: FontWeight.bold),
+          indicatorPadding: const EdgeInsets.only(
+              top: 45, left: 0, right: 0),
+          indicator: BoxDecoration(
+            color: Colors.greenAccent,
+            borderRadius: BorderRadius.circular(30),
+          ),
+          tabAlignment: TabAlignment.start,
+          dividerColor: const Color.fromARGB(59, 255, 255, 255),
+          dividerHeight: 3.0,
+          indicatorSize: TabBarIndicatorSize.tab,
+        ),
+        // 内容区域 - 使用IndexedStack替代PageView
+        Expanded(
+          child: IndexedStack(
+            index: _currentIndex,
+            children: [
+              // 使用RepaintBoundary隔离绘制边界，减少重绘范围
+              RepaintBoundary(
+                child: MediaLibraryPage(
+                  key: ValueKey(widget.mediaLibraryVersion),
+                  onPlayEpisode: widget.onPlayEpisode,
+                ),
+              ),
+              // 使用RepaintBoundary隔离绘制边界，减少重绘范围
+              RepaintBoundary(
+                child: LibraryManagementTab(
+                  onPlayEpisode: widget.onPlayEpisode,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

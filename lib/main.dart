@@ -32,6 +32,7 @@ import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'widgets/blur_snackbar.dart';
+import 'package:nipaplay/utils/page_prewarmer.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -198,10 +199,14 @@ void main() async {
     Future.microtask(() {
       final navigator = navigatorKey.currentState;
       if (navigator != null) {
-        final context = navigator.overlay?.context;
-        if (context != null) {
-          Provider.of<WatchHistoryProvider>(context, listen: false).loadHistory();
-        }
+        final context = navigator.context;
+        final provider = Provider.of<WatchHistoryProvider>(context, listen: false);
+        provider.loadHistory();
+        
+        // 初始化并启动页面预热过程
+        PagePrewarmer().initialize().then((_) {
+          PagePrewarmer().startPrewarm(context);
+        });
       }
     });
   });

@@ -496,6 +496,87 @@ class BangumiService {
       return null;
     }
   }
+
+  // 预加载常用的番剧数据，用于页面预热
+  Future<void> preloadCommonData() async {
+    try {
+      debugPrint('[番剧服务] 开始预加载常用番剧数据');
+      
+      // 尝试加载番剧日历数据
+      if (_preloadedAnimes == null) {
+        await loadData();
+      }
+      
+      // 如果前两天查看过番剧详情，预加载它们
+      await _preloadRecentPopularAnimes();
+      
+      debugPrint('[番剧服务] 常用番剧数据预加载完成');
+    } catch (e) {
+      debugPrint('[番剧服务] 预加载常用番剧数据失败: $e');
+    }
+  }
+  
+  // 预加载最近流行的动画
+  Future<void> _preloadRecentPopularAnimes() async {
+    try {
+      // 这里可以根据实际需求预加载某些特定类别或热门的番剧
+      // 比如每季度新番、高分作品等
+      // 为了演示，我们这里只预加载日历中的前5个番剧详情
+      if (_preloadedAnimes != null && _preloadedAnimes!.isNotEmpty) {
+        final animesToPreload = _preloadedAnimes!.take(5).toList();
+        
+        for (final anime in animesToPreload) {
+          if (!_detailsCache.containsKey(anime.id)) {
+            // 异步加载，不等待完成
+            getAnimeDetails(anime.id).catchError((e) {
+              // 忽略预加载错误
+              debugPrint('[番剧服务] 预加载番剧 ${anime.id} 详情失败: $e');
+            });
+            
+            // 短暂延迟以避免并发请求过多
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[番剧服务] 预加载热门番剧失败: $e');
+    }
+  }
+  
+  // 检查是否已经缓存了番剧详情
+  Future<bool> hasCachedAnimeDetails(int animeId) async {
+    // 检查内存缓存
+    if (_detailsCache.containsKey(animeId)) {
+      final cacheTime = _detailsCacheTime[animeId];
+      if (cacheTime != null && _isCacheValid(animeId, cacheTime)) {
+        return true;
+      }
+    }
+    
+    // 检查磁盘缓存
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = '$_detailsCacheKeyPrefix$animeId';
+      final String? cachedString = prefs.getString(cacheKey);
+      
+      if (cachedString != null) {
+        final data = json.decode(cachedString);
+        final timestamp = data['timestamp'] as int;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final cacheDuration = _getCacheDurationForAnime(animeId);
+        
+        // 检查是否过期
+        if (now - timestamp <= cacheDuration.inMilliseconds) {
+          return true;
+        }
+      }
+    } catch (e) {
+      // 出错时假设没有缓存
+      debugPrint('[番剧服务] 检查番剧 $animeId 缓存状态时出错: $e');
+    }
+    
+    return false;
+  }
 }
 
 class _RequestItem {

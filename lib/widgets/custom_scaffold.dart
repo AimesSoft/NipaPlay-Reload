@@ -1,43 +1,78 @@
 // widgets/custom_scaffold.dart
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/background_with_blur.dart'; // 导入背景图和模糊效果控件
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
-class CustomScaffold extends StatelessWidget {
+class CustomScaffold extends StatefulWidget {
   final List<Widget> pages;
   final List<Widget> tabPage;
   final bool pageIsHome;
   final TabController? tabController;
-  const CustomScaffold(
-      {super.key,
-      required this.pages,
-      required this.tabPage,
-      required this.pageIsHome,
-      this.tabController});
+  
+  const CustomScaffold({
+    super.key,
+    required this.pages,
+    required this.tabPage,
+    required this.pageIsHome,
+    this.tabController
+  });
+
+  @override
+  State<CustomScaffold> createState() => _CustomScaffoldState();
+}
+
+class _CustomScaffoldState extends State<CustomScaffold> {
+  late int _currentIndex;
+  
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.tabController?.index ?? 0;
+    
+    // 添加监听器以更新当前索引
+    widget.tabController?.addListener(_handleTabChange);
+  }
+  
+  @override
+  void didUpdateWidget(CustomScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // 当控制器改变时，更新监听器
+    if (oldWidget.tabController != widget.tabController) {
+      oldWidget.tabController?.removeListener(_handleTabChange);
+      widget.tabController?.addListener(_handleTabChange);
+      _currentIndex = widget.tabController?.index ?? 0;
+    }
+  }
+  
+  @override
+  void dispose() {
+    // 移除监听器
+    widget.tabController?.removeListener(_handleTabChange);
+    super.dispose();
+  }
+  
+  void _handleTabChange() {
+    if (widget.tabController != null && _currentIndex != widget.tabController!.index) {
+      setState(() {
+        _currentIndex = widget.tabController!.index;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         // 判断当前活动页面是否为视频播放页 (假定视频播放页索引为0)
-        final bool isVideoPlayerPageActive = tabController?.index == 0;
-        
-        // 根据设备类型、播放/暂停状态以及当前是否为视频播放页来决定 TabBarView 的滑动行为
-        final bool shouldDisableSwipe = globals.isPhone && 
-                                      (videoState.status == PlayerStatus.playing || videoState.status == PlayerStatus.paused) && 
-                                      isVideoPlayerPageActive;
-        
-        final ScrollPhysics tabBarViewPhysics = shouldDisableSwipe
-            ? const NeverScrollableScrollPhysics()
-            : const BouncingScrollPhysics();
+        final bool isVideoPlayerPageActive = _currentIndex == 0;
 
         return DefaultTabController(
-          length: pages.length,
-          initialIndex: tabController?.index ?? 0,
+          length: widget.pages.length,
+          initialIndex: _currentIndex,
           child: BackgroundWithBlur(
             child: Scaffold(
               primary: false,
@@ -49,12 +84,12 @@ class CustomScaffold extends StatelessWidget {
                   : Colors.black.withOpacity(0.2),
               extendBodyBehindAppBar: false,
               appBar: videoState.shouldShowAppBar() ? AppBar(
-                toolbarHeight: !pageIsHome && !globals.isDesktop
+                toolbarHeight: !widget.pageIsHome && !globals.isDesktop
                     ? 100
                     : globals.isDesktop
                         ? 20
                         : 60,
-                leading: pageIsHome
+                leading: widget.pageIsHome
                     ? null
                     : IconButton(
                         icon: const Icon(Ionicons.chevron_back_outline),
@@ -67,9 +102,9 @@ class CustomScaffold extends StatelessWidget {
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 bottom: TabBar(
-                  controller: tabController,
+                  controller: widget.tabController,
                   isScrollable: true,
-                  tabs: tabPage, // 使用从 tab_labels.dart 中导入的标签
+                  tabs: widget.tabPage, // 使用从 tab_labels.dart 中导入的标签
                   labelColor: Colors.white,
                   dividerColor: const Color.fromARGB(59, 255, 255, 255),
                   dividerHeight: 3.0,
@@ -85,11 +120,13 @@ class CustomScaffold extends StatelessWidget {
                   indicatorSize: TabBarIndicatorSize.tab,
                 ),
               ) : null,
-              body: TabBarView(
-                controller: tabController,
-                viewportFraction: 1.0,
-                physics: tabBarViewPhysics, // 使用动态的 physics
-                children: pages,
+              // 使用IndexedStack替代TabBarView，保持所有页面状态
+              body: IndexedStack(
+                index: _currentIndex,
+                children: widget.pages.map((page) => 
+                  // 为每个页面添加RepaintBoundary，限制重绘范围
+                  RepaintBoundary(child: page)
+                ).toList(),
               ),
             ),
           ),
