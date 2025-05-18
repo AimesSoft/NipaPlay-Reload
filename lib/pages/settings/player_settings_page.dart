@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fvp/mdk.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/widgets/blur_snackbar.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({Key? key}) : super(key: key);
@@ -19,11 +21,20 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   bool _useHardwareDecoder = true;
   List<String> _availableDecoders = [];
   List<String> _selectedDecoders = [];
+  late DecoderManager _decoderManager;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final playerState = Provider.of<VideoPlayerState>(context, listen: false);
+    _decoderManager = playerState.decoderManager;
+    
     _getAvailableDecoders();
   }
 
@@ -32,39 +43,48 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     setState(() {
       _useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true;
       
-      // 获取保存的解码器列表
       final savedDecoders = prefs.getStringList(_selectedDecodersKey);
       if (savedDecoders != null && savedDecoders.isNotEmpty) {
         _selectedDecoders = savedDecoders;
       } else {
-        // 默认解码器设置
-        if (Platform.isMacOS || Platform.isIOS) {
-          _selectedDecoders = ["VT", "hap", "FFmpeg", "dav1d"];
-        } else if (Platform.isWindows) {
-          _selectedDecoders = ["MFT:d3d=11", "D3D11", "DXVA", "CUDA", "hap", "FFmpeg", "dav1d"];
-        } else if (Platform.isLinux) {
-          _selectedDecoders = ["VAAPI", "VDPAU", "CUDA", "hap", "FFmpeg", "dav1d"];
-        } else if (Platform.isAndroid) {
-          _selectedDecoders = ["AMediaCodec", "FFmpeg", "dav1d"];
-        } else {
-          _selectedDecoders = ["FFmpeg"];
-        }
+        _selectedDecoders = ["FFmpeg"];
       }
     });
   }
 
   void _getAvailableDecoders() {
-    // 根据平台设置可用的解码器
-    if (Platform.isMacOS || Platform.isIOS) {
-      _availableDecoders = ["VT", "hap", "FFmpeg", "dav1d"];
+    final allDecoders = _decoderManager.getAllSupportedDecoders();
+    
+    if (Platform.isMacOS) {
+      _availableDecoders = allDecoders['macos']!;
+      if (_selectedDecoders.length <= 1) {
+        _selectedDecoders = List.from(allDecoders['macos']!);
+      }
+    } else if (Platform.isIOS) {
+      _availableDecoders = allDecoders['ios']!;
+      if (_selectedDecoders.length <= 1) {
+        _selectedDecoders = List.from(allDecoders['ios']!);
+      }
     } else if (Platform.isWindows) {
-      _availableDecoders = ["MFT:d3d=11", "D3D11", "DXVA", "CUDA", "hap", "FFmpeg", "dav1d"];
+      _availableDecoders = allDecoders['windows']!;
+      if (_selectedDecoders.length <= 1) {
+        _selectedDecoders = List.from(allDecoders['windows']!);
+      }
     } else if (Platform.isLinux) {
-      _availableDecoders = ["VAAPI", "VDPAU", "CUDA", "hap", "FFmpeg", "dav1d"];
+      _availableDecoders = allDecoders['linux']!;
+      if (_selectedDecoders.length <= 1) {
+        _selectedDecoders = List.from(allDecoders['linux']!);
+      }
     } else if (Platform.isAndroid) {
-      _availableDecoders = ["AMediaCodec", "FFmpeg", "dav1d"];
+      _availableDecoders = allDecoders['android']!;
+      if (_selectedDecoders.length <= 1) {
+        _selectedDecoders = List.from(allDecoders['android']!);
+      }
     } else {
       _availableDecoders = ["FFmpeg"];
+      if (_selectedDecoders.length <= 1) {
+        _selectedDecoders = ["FFmpeg"];
+      }
     }
   }
 
@@ -73,14 +93,42 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     await prefs.setBool(_useHardwareDecoderKey, _useHardwareDecoder);
     await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
     
-    // 更新视频播放器的解码器设置
     if (context.mounted) {
-      final playerState = Provider.of<VideoPlayerState>(context, listen: false);
-      
       if (_useHardwareDecoder) {
-        playerState.updateDecoders(_selectedDecoders);
+        // 应用新的解码器设置
+        await _decoderManager.updateDecoders(_selectedDecoders);
+        
+        // HEVC视频格式的特殊处理
+        final playerState = Provider.of<VideoPlayerState>(context, listen: false);
+        if (playerState.hasVideo && 
+            playerState.player.mediaInfo.video != null && 
+            playerState.player.mediaInfo.video!.isNotEmpty) {
+          
+          final videoTrack = playerState.player.mediaInfo.video![0];
+          final codecString = videoTrack.toString().toLowerCase();
+          if (codecString.contains('hevc') || codecString.contains('h265')) {
+            debugPrint('检测到设置变更时正在播放HEVC视频，应用特殊优化...');
+            
+            if (Platform.isMacOS) {
+              // 确保VideoToolbox优先
+              if (_selectedDecoders.isNotEmpty && _selectedDecoders[0] != "VT") {
+                _selectedDecoders.remove("VT");
+                _selectedDecoders.insert(0, "VT");
+                
+                await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
+                await _decoderManager.updateDecoders(_selectedDecoders);
+                
+                // 提示用户
+                BlurSnackBar.show(context, '已优化解码器设置以支持HEVC硬件解码');
+              }
+              
+              // 强制启用硬件解码
+              await playerState.forceEnableHardwareDecoder();
+            }
+          }
+        }
       } else {
-        playerState.updateDecoders(["FFmpeg"]);
+        await _decoderManager.updateDecoders(["FFmpeg"]);
       }
     }
   }

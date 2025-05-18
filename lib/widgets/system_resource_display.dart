@@ -25,6 +25,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
   String _activeDecoder = "未知"; // 添加当前活跃的解码器
+  String _mdkVersion = "未知"; // 添加MDK版本号
   
   @override
   void initState() {
@@ -53,6 +54,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
           _memoryUsageMB = SystemResourceMonitor().memoryUsageMB;
           _fps = SystemResourceMonitor().fps;
           _activeDecoder = SystemResourceMonitor().activeDecoder;
+          _mdkVersion = SystemResourceMonitor().mdkVersion;
         });
       }
     });
@@ -185,22 +187,66 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  // 解码器信息
+                  
+                  // 解码器和MDK版本信息
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.video_library, size: 18, color: Colors.white70),
-                      const SizedBox(width: 4),
+                      // 解码器信息
                       Flexible(
-                        child: Text(
-                          _activeDecoder,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            decoration: TextDecoration.none,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                        flex: 3,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.video_library, size: 18, color: Colors.white70),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                _activeDecoder,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  decoration: TextDecoration.none,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // 分隔符
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Container(
+                          height: 16,
+                          width: 1,
+                          color: Colors.white30,
+                        ),
+                      ),
+                      
+                      // MDK版本信息
+                      Flexible(
+                        flex: 2,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.info_outline, size: 16, color: Colors.white70),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                'MDK $_mdkVersion',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  decoration: TextDecoration.none,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

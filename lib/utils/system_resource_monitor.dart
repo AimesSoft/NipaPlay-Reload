@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:convert';
 import 'dart:math';
+import 'package:fvp/mdk.dart'; // 导入MDK库
 
 /// 系统资源监控类
 /// 用于监控应用的CPU使用率、帧率和内存使用情况
@@ -22,6 +23,7 @@ class SystemResourceMonitor {
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
   String _activeDecoder = "未知"; // 添加当前活跃的解码器
+  String _mdkVersion = "未知"; // 添加MDK版本号
 
   // 定时器
   Timer? _resourceTimer;
@@ -49,12 +51,38 @@ class SystemResourceMonitor {
   
   /// 获取当前活跃的解码器
   String get activeDecoder => _activeDecoder;
+  
+  /// 获取MDK版本号
+  String get mdkVersion => _mdkVersion;
 
   /// 初始化系统资源监控
   static Future<void> initialize() async {
     // 只在桌面平台上初始化
     if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       await _instance._startMonitoring();
+      
+      // 获取并设置MDK版本号
+      _instance._initMdkVersion();
+    }
+  }
+  
+  /// 初始化MDK版本号
+  void _initMdkVersion() {
+    try {
+      // 获取原始版本号（整数形式）
+      final versionInt = version();
+      
+      // 解析版本号 - MDK版本号通常是以10000为基数的整数
+      // 例如: 10000 = 1.0.0, 10100 = 1.1.0, 10101 = 1.1.1
+      final major = versionInt ~/ 10000;
+      final minor = (versionInt % 10000) ~/ 100;
+      final patch = versionInt % 100;
+      
+      _mdkVersion = '$major.$minor.$patch';
+      debugPrint('MDK版本: $_mdkVersion (原始值: $versionInt)');
+    } catch (e) {
+      debugPrint('获取MDK版本号出错: $e');
+      _mdkVersion = "未知";
     }
   }
 
