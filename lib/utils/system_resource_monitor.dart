@@ -21,6 +21,7 @@ class SystemResourceMonitor {
   double _cpuUsage = 0.0;
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
+  String _activeDecoder = "未知"; // 添加当前活跃的解码器
 
   // 定时器
   Timer? _resourceTimer;
@@ -45,6 +46,9 @@ class SystemResourceMonitor {
   
   /// 获取当前帧率
   double get fps => _fps;
+  
+  /// 获取当前活跃的解码器
+  String get activeDecoder => _activeDecoder;
 
   /// 初始化系统资源监控
   static Future<void> initialize() async {
@@ -169,5 +173,10 @@ class SystemResourceMonitor {
       _ticker.stop();
       _ticker.dispose();
     }
+  }
+  
+  /// 设置当前活跃的解码器
+  void setActiveDecoder(String decoder) {
+    _activeDecoder = decoder;
   }
 } 

@@ -11,6 +11,7 @@ import 'package:nipaplay/pages/settings/about_page.dart'; // 导入 AboutPage
 import 'package:nipaplay/utils/globals.dart' as globals; // 导入包含 isDesktop 的全局变量文件
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:nipaplay/pages/settings/account_page.dart';
+import 'package:nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -115,6 +116,19 @@ class _SettingsPageState extends State<SettingsPage> {
               _handleItemTap(
                   const GeneralPage(),
                   "通用设置"
+                  );
+            },
+          ),
+          ListTile(
+            title: const Text("播放器",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(
+                  const PlayerSettingsPage(),
+                  "播放器设置"
                   );
             },
           ),

@@ -24,6 +24,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   double _cpuUsage = 0.0;
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
+  String _activeDecoder = "未知"; // 添加当前活跃的解码器
   
   @override
   void initState() {
@@ -51,6 +52,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
           _cpuUsage = SystemResourceMonitor().cpuUsage;
           _memoryUsageMB = SystemResourceMonitor().memoryUsageMB;
           _fps = SystemResourceMonitor().fps;
+          _activeDecoder = SystemResourceMonitor().activeDecoder;
         });
       }
     });
@@ -119,60 +121,86 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                   width: 0.5,
                 ),
               ),
-              child: Row(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // CPU使用率
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.memory, size: 22, color: Colors.white70),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_cpuUsage.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: _getCpuColor(),
-                          decoration: TextDecoration.none,
-                        ),
+                      // CPU使用率
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.memory, size: 22, color: Colors.white70),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_cpuUsage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: _getCpuColor(),
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 10),
+                      
+                      // 内存使用量
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.sd_storage_outlined, size: 22, color: Colors.white70),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_memoryUsageMB.toStringAsFixed(1)}MB',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: _getMemoryColor(),
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 10),
+                      
+                      // 帧率
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.speed, size: 22, color: Colors.white70),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_fps.toStringAsFixed(1)} FPS',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: _getFpsColor(),
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(width: 10),
-                  
-                  // 内存使用量
+                  const SizedBox(height: 4),
+                  // 解码器信息
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.sd_storage_outlined, size: 22, color: Colors.white70),
+                      const Icon(Icons.video_library, size: 18, color: Colors.white70),
                       const SizedBox(width: 4),
-                      Text(
-                        '${_memoryUsageMB.toStringAsFixed(1)}MB',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: _getMemoryColor(),
-                          decoration: TextDecoration.none,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 10),
-                  
-                  // 帧率
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.speed, size: 22, color: Colors.white70),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_fps.toStringAsFixed(1)} FPS',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: _getFpsColor(),
-                          decoration: TextDecoration.none,
+                      Flexible(
+                        child: Text(
+                          _activeDecoder,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            decoration: TextDecoration.none,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="en"><head><script type="text/javascript" src="https://www.googletagmanager.com/gtm.js?id=GTM-MX6DBN9" async="async"></script><script type="text/javascript" src="/static/hash-44kmit6u/js/gtm.js"></script><meta charset="utf-8"/><meta http-equiv="X-UA-Compatible" content="IE=edge"/><meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no"/><meta name="generator" content="made with love by dartdoc"/><meta name="description" content="media_kit API docs, for the Dart programming language."/><title>media_kit - Dart API docs</title><link rel="canonical" href="https://pub.dev/documentation/media_kit/latest/"/><link rel="preconnect" href="https://fonts.gstatic.com"/><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&amp;display=swap"/><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"/><link rel="stylesheet" href="/static/hash-44kmit6u/css/dartdoc.css"/><link rel="icon" href="/favicon.ico?hash=nk4nss8c7444fg0chird9erqef2vkhb8"/></head><body class="light-theme" data-base-href="" data-using-base-href="false"><noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-MX6DBN9" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript><div id="overlay-under-drawer"></div><header id="title"><span id="sidenav-left-toggle" class="material-symbols-outlined" role="button" tabindex="0">menu</span><a class="hidden-xs" href="/"><img src="/static/hash-44kmit6u/img/dart-logo.svg" alt="" width="30" height="30" role="presentation" aria-label="Go to the landing page of pub.dev" style="height: 30px; margin-right: 1em;"/></a><ol class="breadcrumbs gt-separated dark hidden-xs"><li><a href="/packages/media_kit">media_kit package</a></li><li class="self-crumb">documentation</li></ol><div class="self-name">media_kit package</div><form class="search navbar-right" role="search"><input id="search-box" class="form-control typeahead" type="text" placeholder="Loading search..." autocomplete="off"/></form><div id="theme-button" class="toggle" title="Toggle brightness"><label for="theme"><input id="theme" type="checkbox" value="light-theme"/><span id="dark-theme-button" class="material-symbols-outlined">dark_mode</span><span id="light-theme-button" class="material-symbols-outlined">light_mode</span></label></div></header><main><div id="dartdoc-main-content" class="main-content">
+      
+<div class="desc markdown markdown-body">
+  <h1 id="packagemedia_kithttpsgithubcommedia-kitmedia-kit"><a href="https://github.com/media-kit/media-kit" rel="ugc nofollow">package:media_kit</a></h1>
+<h4 id="a-cross-platform-video-player--audio-player-for-flutter--dart">A cross-platform video player &amp; audio player for Flutter &amp; Dart.</h4>
+<p><a href="https://discord.gg/h7qf2R9n57" rel="ugc nofollow"><img src="https://img.shields.io/discord/1079685977523617792?color=33cd57&amp;label=Discord&amp;logo=discord&amp;logoColor=discord" alt=""></a> <a href="https://github.com/media-kit/media-kit/actions/workflows/ci.yml" rel="ugc nofollow"><img src="https://github.com/media-kit/media-kit/actions/workflows/ci.yml/badge.svg" alt="Github Actions"></a></p>
+<hr>
+<p><strong>Sponsored with 💖 by</strong></p>
+<a href="https://getstream.io/chat/sdk/flutter/?utm_source=alexmercerind_dart&amp;utm_medium=Github_Repo_Content_Ad&amp;utm_content=Developer&amp;utm_campaign=alexmercerind_December2022_FlutterSDK_klmh22" target="_blank" rel="ugc nofollow">
+<img alt="Stream Chat" width="200" height="auto" src="https://user-images.githubusercontent.com/28951144/204903022-bbaa49ca-74c2-4a8f-a05d-af8314bfd2cc.svg">
+</a>
+<br><br>
+<strong>
+<a href="https://getstream.io/chat/sdk/flutter/?utm_source=alexmercerind_dart&amp;utm_medium=Github_Repo_Content_Ad&amp;utm_content=Developer&amp;utm_campaign=alexmercerind_December2022_FlutterSDK_klmh22" target="_blank" rel="ugc nofollow">
+Try the Flutter Chat tutorial
+</a>
+</strong>
+<p><br><br></p>
+<a href="https://ottomatic.io/" target="_blank" rel="ugc nofollow">
+<img alt="Stream Chat" width="200" height="auto" src="https://user-images.githubusercontent.com/28951144/228648844-f2a59ab1-12cd-4fee-bc8d-b2d332033c45.svg">
+</a>
+<br><br>
+<strong>
+<a href="https://ottomatic.io/" target="_blank" rel="ugc nofollow">
+Clever Apps for Film Professionals
+</a>
+</strong>
+<h2 id="installation">Installation</h2>
+<p><a href="https://github.com/media-kit/media-kit" rel="ugc nofollow">package:media_kit</a> is split into multiple packages to improve modularity &amp; reduce bundle size.</p>
+<h4 id="for-apps-that-need-video-playback">For apps that need video playback:</h4>
+<pre class="language-yaml"><code class="language-yaml">dependencies:
+  media_kit: ^1.1.11 # Primary package.
+  media_kit_video: ^1.2.5 # For video rendering.
+  media_kit_libs_video: ^1.0.5 # Native video dependencies.
+</code></pre>
+<h4 id="for-apps-that-need-audio-playback">For apps that need audio playback:</h4>
+<pre class="language-yaml"><code class="language-yaml">dependencies:
+  media_kit: ^1.1.11 # Primary package.
+  media_kit_libs_audio: ^1.0.5 # Native audio dependencies.
+</code></pre>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>The video libraries should be selected if both video &amp; audio support is needed.</li>
+<li>The <code>media_kit_libs_video</code> &amp; <code>media_kit_libs_audio</code> packages should not be mixed.</li>
+<li>The performance in <a href="https://docs.flutter.dev/testing/build-modes#release" rel="ugc nofollow">"Release" mode</a> is substantially higher than in <a href="https://docs.flutter.dev/testing/build-modes#debug" rel="ugc nofollow">"Debug" mode</a>.</li>
+<li><a href="https://docs.flutter.dev/deployment/android#what-is-a-fat-apk" rel="ugc nofollow">Enable --split-per-abi</a> or <a href="https://docs.flutter.dev/deployment/android#when-should-i-build-app-bundles-versus-apks" rel="ugc nofollow">use app bundle (instead of APK)</a> on Android.</li>
+</ul>
+<h2 id="platforms">Platforms</h2>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Video</th>
+<th>Audio</th>
+<th>Notes</th>
+<th>Demo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Android</td>
+<td>✅</td>
+<td>✅</td>
+<td>Android 5.0 or above.</td>
+<td><a href="https://github.com/media-kit/media-kit/releases/download/media_kit-v1.1.10/media_kit_test_android-arm64-v8a.apk" rel="ugc nofollow">Download</a></td>
+</tr>
+<tr>
+<td>iOS</td>
+<td>✅</td>
+<td>✅</td>
+<td>iOS 9 or above.</td>
+<td><a href="https://github.com/media-kit/media-kit/releases/download/media_kit-v1.1.10/media_kit_test_ios_arm64.7z" rel="ugc nofollow">Download</a></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>✅</td>
+<td>✅</td>
+<td>macOS 10.9 or above.</td>
+<td><a href="https://github.com/media-kit/media-kit/releases/download/media_kit-v1.1.10/media_kit_test_macos_universal.7z" rel="ugc nofollow">Download</a></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>✅</td>
+<td>✅</td>
+<td>Windows 7 or above.</td>
+<td><a href="https://github.com/media-kit/media-kit/releases/download/media_kit-v1.1.10/media_kit_test_win32_x64.7z" rel="ugc nofollow">Download</a></td>
+</tr>
+<tr>
+<td>GNU/Linux</td>
+<td>✅</td>
+<td>✅</td>
+<td>Any modern GNU/Linux distribution.</td>
+<td><a href="https://github.com/media-kit/media-kit/releases/download/media_kit-v1.1.10/media_kit_test_linux_x64.7z" rel="ugc nofollow">Download</a></td>
+</tr>
+<tr>
+<td>Web</td>
+<td>✅</td>
+<td>✅</td>
+<td>Any modern web browser.</td>
+<td><a href="https://media-kit.github.io/media-kit/" rel="ugc nofollow">Visit</a></td>
+</tr>
+</tbody>
+</table>
+<table>
+  <tbody><tr>
+    <td>
+      Android
+    </td>
+    <td>
+      iOS
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <img src="https://github.com/media-kit/media-kit/assets/28951144/cf93a1fd-e1d8-4d1c-8bd5-cc393cef1ce9" height="400" alt="Android">
+      <img src="https://github.com/media-kit/media-kit/assets/28951144/aea1f480-51e2-452a-b53c-c0e27f71f0d8" height="400" alt="Android">
+    </td>
+    <td>
+      <img src="https://github.com/media-kit/media-kit/assets/28951144/e8ce64cb-1ea9-4a3e-bc9c-db620abf88c9" height="400" alt="iOS">
+      <img src="https://github.com/media-kit/media-kit/assets/28951144/d7159df2-1df1-46d3-84f8-238e2a66bfbc" height="400" alt="iOS">
+    </td>
+  </tr>
+  <tr>
+    <td>
+      macOS
+    </td>
+    <td>
+      Windows
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <img src="https://github.com/media-kit/media-kit/assets/28951144/fca8dbbf-4262-431f-a04a-f3aa6afb2911" height="200" alt="macOS">
+    </td>
+    <td>
+      <img src="https://github.com/media-kit/media-kit/assets/28951144/742b0016-da58-42de-9880-ecaa0604c2b2" height="200" alt="Windows">
+    </td>
+  </tr>
+  <tr>
+    <td>
+      GNU/Linux
+    </td>
+    <td>
+      Web
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <img src="https://github.com/media-kit/media-kit/assets/28951144/8cd63750-6746-4c75-bc4e-cca5e4c61890" height="200" alt="GNU/Linux">
+    </td>
+    <td>
+      <img src="https://github.com/media-kit/media-kit/assets/28951144/feb9fdf2-095f-43db-96af-f7782985238d" height="200" alt="Web">
+    </td>
+</tr></tbody></table>
+<ul>
+<li>✅ Video playback</li>
+<li>✅ Audio playback</li>
+<li>✅ Cross platform</li>
+<li>✅ Wide format/codec support</li>
+<li>✅ Hardware/GPU acceleration</li>
+<li>✅ Playlist support with next/previous/jump/shuffle</li>
+<li>✅ Volume/Rate/Pitch change</li>
+<li>✅ Video/Audio/Subtitle track selection</li>
+<li>✅ External audio/subtitle track selection</li>
+<li>✅ HTTP headers</li>
+<li>✅ Video controls</li>
+<li>✅ Subtitle styling</li>
+<li>✅ Screenshot</li>
+</ul>
+<h2 id="tldr">TL;DR</h2>
+<p>A quick usage example.</p>
+<pre class="language-dart"><code class="language-dart">// Make sure to add following packages to pubspec.yaml:
+// * media_kit
+// * media_kit_video
+// * media_kit_libs_video
+import 'package:flutter/material.dart';
+
+import 'package:media_kit/media_kit.dart';                      // Provides [Player], [Media], [Playlist] etc.
+import 'package:media_kit_video/media_kit_video.dart';          // Provides [VideoController] &amp; [Video] etc.
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Necessary initialization for package:media_kit.
+  MediaKit.ensureInitialized();
+  runApp(
+    const MaterialApp(
+      home: MyScreen(),
+    ),
+  );
+}
+
+class MyScreen extends StatefulWidget {
+  const MyScreen({Key? key}) : super(key: key);
+  @override
+  State&lt;MyScreen&gt; createState() =&gt; MyScreenState();
+}
+
+class MyScreenState extends State&lt;MyScreen&gt; {
+  // Create a [Player] to control playback.
+  late final player = Player();
+  // Create a [VideoController] to handle video output from [Player].
+  late final controller = VideoController(player);
+
+  @override
+  void initState() {
+    super.initState();
+    // Play a [Media] or [Playlist].
+    player.open(Media('https://user-images.githubusercontent.com/28951144/229373695-22f88f13-d18f-4288-9bf1-c3e078d83722.mp4'));
+  }
+
+  @override
+  void dispose() {
+    player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.width * 9.0 / 16.0,
+        // Use [Video] widget to display video output.
+        child: Video(controller: controller),
+      ),
+    );
+  }
+}
+</code></pre>
+<p><strong>Note:</strong> You may need to add required <a href="#permissions">permissions</a> to your project.</p>
+<h2 id="guide">Guide</h2>
+<p>A usage guide for <a href="https://github.com/media-kit/media-kit" rel="ugc nofollow">package:media_kit</a>.</p>
+<p><strong>Tip:</strong> Use <kbd>Ctrl</kbd> + <kbd>F</kbd> to quickly search for things.</p>
+<h3 id="contents">Contents</h3>
+<ul>
+<li><a href="#initialization">Initialization</a></li>
+<li><a href="#create-a-player">Create a <code>Player</code></a></li>
+<li><a href="#dispose-a-player">Dispose a <code>Player</code></a></li>
+<li><a href="#open-a-media-or-playlist">Open a <code>Media</code> or <code>Playlist</code></a></li>
+<li><a href="#play-pause-or-playpause">Play, pause or play/pause</a></li>
+<li><a href="#seek">Seek</a></li>
+<li><a href="#loop-or-repeat">Loop or repeat</a></li>
+<li><a href="#set-volume-rate-or-pitch">Set volume, rate or pitch</a></li>
+<li><a href="#handle-playback-events">Handle playback events</a></li>
+<li><a href="#shuffle-the-queue">Shuffle the queue</a></li>
+<li><a href="#use-http-headers">Use HTTP headers</a></li>
+<li><a href="use-extras-store-additional-data-with-media">Use <code>extras</code> to store additional data with <code>Media</code></a></li>
+<li><a href="#go-to-next-previous-or-any-other-position-in-queue">Go to next, previous or any other position in queue</a></li>
+<li><a href="#modify-players-queue">Modify <code>Player</code>'s queue</a></li>
+<li><a href="#select-video-audio-or-subtitle-track">Select video, audio or subtitle track</a></li>
+<li><a href="#select-audio-device">Select audio device</a></li>
+<li><a href="#display-the-video">Display the video</a></li>
+<li><a href="#capture-screenshot">Capture screenshot</a></li>
+<li><a href="#customize-subtitles">Customize subtitles</a></li>
+<li><a href="#load-external-subtitle-track">Load external subtitle track</a></li>
+<li><a href="#load-external-audio-track">Load external audio track</a></li>
+<li><a href="#video-controls">Video controls</a></li>
+<li><a href="#next-steps">Next steps</a></li>
+</ul>
+<h3 id="initialization">Initialization</h3>
+<p><code>MediaKit.ensureInitialized</code> must be called before using the package:</p>
+<pre class="language-dart"><code class="language-dart">void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Make sure to add the required packages to pubspec.yaml:
+  // * https://github.com/media-kit/media-kit#installation
+  // * https://pub.dev/packages/media_kit#installation
+  MediaKit.ensureInitialized();
+  runApp(const MyApp());
+}
+</code></pre>
+<p>The method also has some optional arguments to customize the global behavior. To handle any initialization errors, this may be surrounded by <code>try</code>/<code>catch</code>.</p>
+<h3 id="create-a-player">Create a <code>Player</code></h3>
+<p>A <code>Player</code> instance is used to start &amp; control the playback of a media source e.g. URL or file.</p>
+<pre class="language-dart"><code class="language-dart">final Player player = Player();
+</code></pre>
+<p>Additional options may be provided using the <code>configuration</code> argument in the constructor. In general situations, you will never require this.</p>
+<pre class="language-dart"><code class="language-dart">final Player player = Player(
+  configuration: PlayerConfiguration(
+    // Supply your options:
+    title: 'My awesome package:media_kit application',
+    ready: () {
+      print('The initialization is complete.');
+    },
+  ),
+);
+</code></pre>
+<h3 id="dispose-a-player">Dispose a <code>Player</code></h3>
+<p>It is extremely important to release the allocated resources back to the system:</p>
+<pre class="language-dart"><code class="language-dart">await player.dispose();
+</code></pre>
+<h3 id="open-a-media-or-playlist">Open a <code>Media</code> or <code>Playlist</code></h3>
+<p>A <code>Playable</code> can either be a <code>Media</code> or a <code>Playlist</code>.</p>
+<ul>
+<li><code>Media</code>: Single playback source (file or URL).</li>
+<li><code>Playlist</code>: Queue of playback sources (file or URL).</li>
+</ul>
+<p>Use the <code>Player.open</code> method to load &amp; start playback.</p>
+<h4 id="media"><code>Media</code></h4>
+<pre class="language-dart"><code class="language-dart">final playable = Media('https://user-images.githubusercontent.com/28951144/229373695-22f88f13-d18f-4288-9bf1-c3e078d83722.mp4');
+await player.open(playable);
+</code></pre>
+<h4 id="playlist"><code>Playlist</code></h4>
+<pre class="language-dart"><code class="language-dart">final playable = Playlist(
+  [
+    Media('https://user-images.githubusercontent.com/28951144/229373695-22f88f13-d18f-4288-9bf1-c3e078d83722.mp4'),
+    Media('https://user-images.githubusercontent.com/28951144/229373709-603a7a89-2105-4e1b-a5a5-a6c3567c9a59.mp4'),
+    Media('https://user-images.githubusercontent.com/28951144/229373716-76da0a4e-225a-44e4-9ee7-3e9006dbc3e3.mp4'),
+    Media('https://user-images.githubusercontent.com/28951144/229373718-86ce5e1d-d195-45d5-baa6-ef94041d0b90.mp4'),
+    Media('https://user-images.githubusercontent.com/28951144/229373720-14d69157-1a56-4a78-a2f4-d7a134d7c3e9.mp4'),
+  ],
+);
+await player.open(playable);
+</code></pre>
+<p><strong>Notes:</strong></p>
+<ol>
+<li>By default, this will automatically start playing the playable. This may be disabled as follows:</li>
+</ol>
+<pre class="language-dart"><code class="language-dart">await player.open(
+  playable,
+  play: false,
+);
+</code></pre>
+<ol start="2">
+<li>By default, the playlist will start at the index <code>0</code>. This may be changed as follows:</li>
+</ol>
+<pre class="language-dart"><code class="language-dart">final playable = Playlist(
+  [
+    Media('https://user-images.githubusercontent.com/28951144/229373695-22f88f13-d18f-4288-9bf1-c3e078d83722.mp4'),
+    Media('https://user-images.githubusercontent.com/28951144/229373709-603a7a89-2105-4e1b-a5a5-a6c3567c9a59.mp4'),
+    Media('https://user-images.githubusercontent.com/28951144/229373716-76da0a4e-225a-44e4-9ee7-3e9006dbc3e3.mp4'),
+    Media('https://user-images.githubusercontent.com/28951144/229373718-86ce5e1d-d195-45d5-baa6-ef94041d0b90.mp4'),
+    Media('https://user-images.githubusercontent.com/28951144/229373720-14d69157-1a56-4a78-a2f4-d7a134d7c3e9.mp4'),
+  ],
+  // Declare the starting position.
+  index: 0,
+);
+await player.open(playable);
+</code></pre>
+<h3 id="play-pause-or-playpause">Play, pause or play/pause</h3>
+<p>The 3 methods are:</p>
+<pre class="language-dart"><code class="language-dart">await player.play();
+</code></pre>
+<pre class="language-dart"><code class="language-dart">await player.pause();
+</code></pre>
+<pre class="language-dart"><code class="language-dart">await player.playOrPause();
+</code></pre>
+<h3 id="stop">Stop</h3>
+<p>The <code>stop</code> method may be used to stop the playback of currently opened <code>Media</code> or <code>Playlist</code>.</p>
+<pre class="language-dart"><code class="language-dart">await player.stop();
+</code></pre>
+<p>It does not release allocated resources back to the system (unlike <a href="#dispose-a-player"><code>dispose</code></a>) &amp; <code>Player</code> still stays usable.</p>
+<h3 id="seek">Seek</h3>
+<p>Supply the final position to <code>Player.seek</code> method as <code>Duration</code>:</p>
+<pre class="language-dart"><code class="language-dart">await player.seek(
+  const Duration(
+    minutes: 6,
+    seconds: 9,
+  ),
+);
+</code></pre>
+<h3 id="loop-or-repeat">Loop or repeat</h3>
+<p>Three <code>PlaylistMode</code>s are available:</p>
+<ul>
+<li><code>PlaylistMode.none</code>: End playback once end of the playlist is reached.</li>
+<li><code>PlaylistMode.single</code>: Indefinitely loop over the currently playing file in the playlist.</li>
+<li><code>PlaylistMode.loop</code>: Loop over the playlist &amp; restart it from beginning once end is reached.</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">await player.setPlaylistMode(PlaylistMode.single);
+</code></pre>
+<h3 id="set-volume-rate-or-pitch">Set volume, rate or pitch</h3>
+<h4 id="set-the-volume">Set the volume</h4>
+<p>This controls the loudness of audio output. The maximum volume is <code>100.0</code>.</p>
+<pre class="language-dart"><code class="language-dart">await player.setVolume(50.0);
+</code></pre>
+<h4 id="set-the-rate">Set the rate</h4>
+<p>This controls the playback speed.</p>
+<pre class="language-dart"><code class="language-dart">await player.setRate(1.5);
+</code></pre>
+<h4 id="set-the-pitch">Set the pitch</h4>
+<p>This controls the pitch of the audio output.</p>
+<pre class="language-dart"><code class="language-dart">await player.setPitch(1.2);
+</code></pre>
+<p><strong>Note:</strong> This requires <code>pitch</code> argument to be <code>true</code> in <code>PlayerConfiguration</code>.</p>
+<h3 id="handle-playback-events">Handle playback events</h3>
+<p>You can access or subscribe to <code>Player</code>'s state changes.</p>
+<p>Event handling is an extremely important part of media playback. It is used to show changes in the UI, handle errors, detect the occurrence of play/pause, end-of-file, position updates etc.</p>
+<ul>
+<li><code>Player.stream.*</code>: Provides access to <code>Player</code>'s state as <a href="https://dart.dev/tutorials/language/streams" rel="ugc"><code>Stream</code></a>(s).</li>
+<li><code>Player.state.*</code>: Provides access to <code>Player</code>'s state directly (for instantaneous access).</li>
+</ul>
+<p>A typical example will be:</p>
+<pre class="language-dart"><code class="language-dart">player.stream.playing.listen(
+  (bool playing) {
+    if (playing) {
+      // Playing.
+    } else {
+      // Paused.
+    }
+  },
+);
+player.stream.position.listen(
+  (Duration position) {
+    setState(() {
+      // Update UI.
+    });
+  },
+);
+</code></pre>
+<p>The following state(s) are available as events:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Stream&lt;Playlist&gt;</code></td>
+<td><code>playlist</code></td>
+<td>Currently opened media sources.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;bool&gt;</code></td>
+<td><code>playing</code></td>
+<td>Whether playing or not.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;bool&gt;</code></td>
+<td><code>completed</code></td>
+<td>Whether end of currently playing media source has been reached.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;Duration&gt;</code></td>
+<td><code>position</code></td>
+<td>Current playback position.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;Duration&gt;</code></td>
+<td><code>duration</code></td>
+<td>Current playback duration.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;double&gt;</code></td>
+<td><code>volume</code></td>
+<td>Current volume.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;double&gt;</code></td>
+<td><code>rate</code></td>
+<td>Current playback rate.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;double&gt;</code></td>
+<td><code>pitch</code></td>
+<td>Current pitch.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;bool&gt;</code></td>
+<td><code>buffering</code></td>
+<td>Whether buffering or not.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;Duration&gt;</code></td>
+<td><code>buffer</code></td>
+<td>Current buffer position. This indicates how much of the stream has been decoded &amp; cached by the demuxer.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;PlaylistMode&gt;</code></td>
+<td><code>playlistMode</code></td>
+<td>Current playlist mode.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;AudioParams&gt;</code></td>
+<td><code>audioParams</code></td>
+<td>Audio parameters of the currently playing media source e.g. sample rate, channels, etc.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;VideoParams&gt;</code></td>
+<td><code>videoParams</code></td>
+<td>Video parameters of the currently playing media source e.g. width, height, rotation etc.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;double?&gt;</code></td>
+<td><code>audioBitrate</code></td>
+<td>Audio bitrate of the currently playing media source.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;AudioDevice&gt;</code></td>
+<td><code>audioDevice</code></td>
+<td>Currently selected audio device.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;List&lt;AudioDevice&gt;&gt;</code></td>
+<td><code>audioDevices</code></td>
+<td>Currently available audio devices.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;Track&gt;</code></td>
+<td><code>track</code></td>
+<td>Currently selected video, audio and subtitle track.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;Tracks&gt;</code></td>
+<td><code>tracks</code></td>
+<td>Currently available video, audio and subtitle tracks.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;int&gt;</code></td>
+<td><code>width</code></td>
+<td>Currently playing video's width.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;int&gt;</code></td>
+<td><code>height</code></td>
+<td>Currently playing video's height.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;int&gt;</code></td>
+<td><code>subtitle</code></td>
+<td>Currently displayed subtitle.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;PlayerLog&gt;</code></td>
+<td><code>log</code></td>
+<td>Internal logs.</td>
+</tr>
+<tr>
+<td><code>Stream&lt;String&gt;</code></td>
+<td><code>error</code></td>
+<td>Error messages. This may be used to handle &amp; display errors to the user.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="shuffle-the-queue">Shuffle the queue</h3>
+<p>You may find the requirement to shuffle the <code>Playlist</code> you <code>open</code>'d in <code>Player</code>, like some music players do.</p>
+<pre class="language-dart"><code class="language-dart">await player.setShuffle(true);
+</code></pre>
+<p><strong>Note:</strong> This option is reset upon the next <code>Player.open</code> call.</p>
+<h3 id="use-http-headers">Use HTTP headers</h3>
+<p>Declare the <code>httpHeaders</code> argument in <code>Media</code> constructor. It takes the HTTP headers as <code>Map&lt;String, String&gt;</code>.</p>
+<pre class="language-dart"><code class="language-dart">final playable = Media(
+  'https://user-images.githubusercontent.com/28951144/229373695-22f88f13-d18f-4288-9bf1-c3e078d83722.mp4',
+  httpHeaders: {
+    'Foo': 'Bar',
+    'Accept': '*/*',
+    'Range': 'bytes=0-',
+  },
+);
+</code></pre>
+<h3 id="use-extras-to-store-additional-data-with-media">Use <code>extras</code> to store additional data with <code>Media</code></h3>
+<p>The <code>extras</code> argument may be utilized to store additional data with a <code>Media</code> in form of <code>Map&lt;String, dynamic&gt;</code>.</p>
+<pre class="language-dart"><code class="language-dart">final playable = Media(
+  'https://user-images.githubusercontent.com/28951144/229373695-22f88f13-d18f-4288-9bf1-c3e078d83722.mp4',
+  extras: {
+    'track': '9',
+    'year': '2012',
+    'title': 'Courtesy Call',
+    'artist': 'Thousand Foot Krutch',
+    'album': 'The End Is Where We Begin',
+  },
+);
+</code></pre>
+<h3 id="modify-players-queue">Modify <code>Player</code>'s queue</h3>
+<p>You can add or remove (etc.) a <code>Media</code> in an already playing <code>Playlist</code>:</p>
+<h4 id="add">Add</h4>
+<p>Add a new <code>Media</code> to the back of the queue:</p>
+<pre class="language-dart"><code class="language-dart">await player.add(Media('https://user-images.githubusercontent.com/28951144/229373695-22f88f13-d18f-4288-9bf1-c3e078d83722.mp4'));
+</code></pre>
+<h4 id="remove">Remove</h4>
+<p>Remove any item from the queue:</p>
+<pre class="language-dart"><code class="language-dart">await player.remove(0);
+</code></pre>
+<h4 id="move">Move</h4>
+<p>Move any item in the queue from one position to another:</p>
+<pre class="language-dart"><code class="language-dart">await player.move(6, 9);
+</code></pre>
+<h3 id="go-to-next-previous-or-any-other-position-in-queue">Go to next, previous or any other position in queue</h3>
+<h4 id="skip-to-the-next-queue-item">Skip to the next queue item</h4>
+<pre class="language-dart"><code class="language-dart">await player.next();
+</code></pre>
+<h4 id="skip-to-the-previous-queue-item">Skip to the previous queue item</h4>
+<pre class="language-dart"><code class="language-dart">await player.previous();
+</code></pre>
+<h4 id="skip-to-any-other-queue-item">Skip to any other queue item</h4>
+<pre class="language-dart"><code class="language-dart">await player.jump(5);
+</code></pre>
+<h3 id="select-video-audio-or-subtitle-track">Select video, audio or subtitle track</h3>
+<p>A media source may contain multiple video, audio or subtitle tracks e.g. for multiple languages. Available video, audio or subtitle tracks are notified through <code>Player</code>'s state. See <a href="#handle-playback-events">"Handle playback events" section</a> for related information.</p>
+<p>By default, video, audio &amp; subtitle track is selected automatically <em>i.e.</em> <code>VideoTrack.auto()</code>, <code>AudioTrack.auto()</code> &amp; <code>SubtitleTrack.auto()</code>.</p>
+<h4 id="automatic-selection">Automatic selection</h4>
+<pre class="language-dart"><code class="language-dart">await player.setVideoTrack(VideoTrack.auto());
+
+await player.setAudioTrack(AudioTrack.auto());
+
+await player.setSubtitleTrack(SubtitleTrack.auto());
+</code></pre>
+<h4 id="disable-track">Disable track</h4>
+<p>This may be used to essentially disable video output, disable audio output or stop rendering of subtitles etc.</p>
+<pre class="language-dart"><code class="language-dart">await player.setVideoTrack(VideoTrack.no());
+
+await player.setAudioTrack(AudioTrack.no());
+
+await player.setSubtitleTrack(SubtitleTrack.no());
+</code></pre>
+<h4 id="select-custom-track">Select custom track</h4>
+<ul>
+<li>Retrieve currently available tracks:</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">List&lt;VideoTrack&gt; videos = player.state.tracks.video;
+List&lt;AudioTrack&gt; audios = player.state.tracks.audio;
+List&lt;SubtitleTrack&gt; subtitles = player.state.tracks.subtitle;
+
+// Get notified as [Stream]:
+player.stream.tracks.listen((event) {
+  List&lt;VideoTrack&gt; videos = event.video;
+  List&lt;AudioTrack&gt; audios = event.audio;
+  List&lt;SubtitleTrack&gt; subtitles = event.subtitle;
+});
+</code></pre>
+<ul>
+<li>Select the track:</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">await player.setVideoTrack(videos[0]);
+await player.setAudioTrack(audios[1]);
+await player.setSubtitleTrack(subtitles[2]);
+</code></pre>
+<ul>
+<li>Get notified about currently selected track:</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">VideoTrack video = player.state.track.video;
+AudioTrack audio = player.state.track.audio;
+SubtitleTrack subtitle = player.state.track.subtitle;
+
+// Get notified as [Stream]:
+player.stream.track.listen((event) {
+  VideoTrack video = event.video;
+  AudioTrack audio = event.audio;
+  SubtitleTrack subtitle = event.subtitle;
+});
+</code></pre>
+<h3 id="select-audio-device">Select audio device</h3>
+<p>Available audio devices are notified through <code>Player</code>'s state. See <a href="#handle-playback-events">"Handle playback events" section</a> for related information.</p>
+<p>By default, audio device is selected automatically <em>i.e.</em> <code>AudioDevice.auto()</code>.</p>
+<h4 id="default-selection">Default selection</h4>
+<pre class="language-dart"><code class="language-dart">await player.setAudioDevice(AudioDevice.auto());
+</code></pre>
+<h4 id="disable-audio-output">Disable audio output</h4>
+<pre class="language-dart"><code class="language-dart">await player.setAudioDevice(AudioDevice.no());
+</code></pre>
+<h4 id="select-custom-audio-device">Select custom audio device</h4>
+<ul>
+<li>Retrieve currently available audio devices:</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">List&lt;AudioDevice&gt; devices = player.state.audioDevices;
+
+// Get notified as [Stream]:
+player.stream.audioDevices.listen((event) {
+  List&lt;AudioDevice&gt; devices = event;
+});
+</code></pre>
+<ul>
+<li>Select the audio device:</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">await player.setAudioDevice(devices[1]);
+</code></pre>
+<ul>
+<li>Get notified about currently selected audio device:</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">AudioDevice device = player.state.audioDevice;
+
+// Get notified as [Stream]:
+player.stream.audioDevice.listen((event) {
+  AudioDevice device = event;
+});
+</code></pre>
+<h3 id="display-the-video">Display the video</h3>
+<p>The <strong>existing <a href="#tldr">"TL;DR example"</a> should provide you better idea</strong>.</p>
+<p>For displaying the video inside Flutter UI, you must:</p>
+<ul>
+<li>Create <code>VideoController</code>
+<ul>
+<li>Pass the <code>Player</code> you already have.</li>
+</ul>
+</li>
+<li>Create <code>Video</code> widget
+<ul>
+<li>Pass the <code>VideoController</code> you already have.</li>
+</ul>
+</li>
+</ul>
+<p>The code is easier to understand:</p>
+<pre class="language-dart"><code class="language-dart">class _MyScreenState extends State&lt;MyScreen&gt; {
+  late final Player player = Player();
+  late final VideoController controller = VideoController(player);
+
+  @override
+  void dispose() {
+    player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Video(
+        controller: controller,
+      ),
+    );
+  }
+}
+</code></pre>
+<p>The video playback uses <a href="https://en.wikipedia.org/wiki/Hardware_acceleration" rel="ugc nofollow">hardware acceleration</a> <em>i.e.</em> GPU by default.</p>
+<p>Additional options may be provided using the <code>configuration</code> argument in the constructor. In general situations, you will never require this.</p>
+<pre class="language-dart"><code class="language-dart">final VideoController player = VideoController(
+  player,
+  configuration: const VideoControllerConfiguration(
+    // Supply your options:
+    enableHardwareAcceleration: true,      // default: true
+    width: 640,                            // default: null
+    height: 480,                           // default: null
+    // The in-code comments is best place to know more about these options:
+    // https://github.com/media-kit/media-kit/blob/main/media_kit_video/lib/src/video_controller/video_controller.dart
+  ),
+);
+</code></pre>
+<h3 id="capture-screenshot">Capture screenshot</h3>
+<p>The <code>screenshot</code> method takes the snapshot of the current video frame &amp; returns encoded image bytes as <code>Uint8List</code>.</p>
+<pre class="language-dart"><code class="language-dart">final Uint8List? screenshot = await player.screenshot();
+</code></pre>
+<p>Additionally <code>format</code> argument may be specified to change the encoding format. Following formats are supported:</p>
+<ul>
+<li><code>image/jpeg</code>: Returns a JPEG encoded image.</li>
+<li><code>image/png</code>: Returns a PNG encoded image.</li>
+<li><code>null</code>: Returns BGRA pixel buffer.</li>
+</ul>
+<h3 id="customize-subtitles">Customize subtitles</h3>
+<p><code>SubtitleViewConfiguration</code> can be passed to the <code>Video</code> widget for customizing the subtitles. The code is easier to understand:</p>
+<p>Notably, <code>TextStyle</code>, <code>TextAlign</code> &amp; <code>EdgeInsetsGeometry</code> can be provided.</p>
+<pre class="language-dart"><code class="language-dart">Video(
+  controller: controller,
+  subtitleViewConfiguration: const SubtitleViewConfiguration(
+    style: TextStyle(
+      height: 1.4,
+      fontSize: 24.0,
+      letterSpacing: 0.0,
+      wordSpacing: 0.0,
+      color: Color(0xffffffff),
+      fontWeight: FontWeight.normal,
+      backgroundColor: Color(0xaa000000),
+    ),
+    textAlign: TextAlign.center,
+    padding: EdgeInsets.all(24.0),
+  ),
+);
+</code></pre>
+<p><a href="https://user-images.githubusercontent.com/28951144/253067794-73b5ca5d-e90d-4892-bc09-2a80f05c9f0b.mp4" rel="ugc nofollow">https://user-images.githubusercontent.com/28951144/253067794-73b5ca5d-e90d-4892-bc09-2a80f05c9f0b.mp4</a></p>
+<h3 id="load-external-subtitle-track">Load external subtitle track</h3>
+<p>The <code>SubtitleTrack.uri</code> constructor can be used to load external subtitle track <strong>with URI</strong> e.g. SRT, WebVTT etc. The code is easier to understand:</p>
+<pre class="language-dart"><code class="language-dart">await player.setSubtitleTrack(
+  SubtitleTrack.uri(
+    'https://www.iandevlin.com/html5test/webvtt/upc-video-subtitles-en.vtt',
+    title: 'English',
+    language: 'en',
+  ),
+);
+</code></pre>
+<p>The <code>SubtitleTrack.data</code> constructor can be used to load external subtitle track <strong>with data</strong> e.g. SRT, WebVTT etc. The code is easier to understand:</p>
+<pre class="language-dart"><code class="language-dart">player.setSubtitleTrack(
+  SubtitleTrack.data(
+    '''WEBVTT FILE
+
+1
+00:00:03.500 --&gt; 00:00:05.000 D:vertical A:start
+Everyone wants the most from life
+
+2
+00:00:06.000 --&gt; 00:00:09.000 A:start
+Like internet experiences that are rich &lt;b&gt;and&lt;/b&gt; entertaining
+
+3
+00:00:11.000 --&gt; 00:00:14.000 A:end
+Phone conversations where people truly &lt;c.highlight&gt;connect&lt;/c&gt;
+
+4
+00:00:14.500 --&gt; 00:00:18.000
+Your favourite TV programmes ready to watch at the touch of a button
+
+5
+00:00:19.000 --&gt; 00:00:24.000
+Which is why we are bringing TV, internet and phone together in &lt;c.highlight&gt;one&lt;/c&gt; super package
+
+6
+00:00:24.500 --&gt; 00:00:26.000
+&lt;c.highlight&gt;One&lt;/c&gt; simple way to get everything
+
+7
+00:00:26.500 --&gt; 00:00:27.500 L:12%
+UPC
+
+8
+00:00:28.000 --&gt; 00:00:30.000 L:75%
+Simply for &lt;u&gt;everyone&lt;/u&gt;
+''',
+    title: 'English',
+    language: 'en',
+  ),
+);
+</code></pre>
+<h3 id="load-external-audio-track">Load external audio track</h3>
+<p>The <code>AudioTrack.uri</code> constructor can be used to load external audio track <strong>with URI</strong>. The code is easier to understand:</p>
+<pre class="language-dart"><code class="language-dart">await player.setAudioTrack(
+  AudioTrack.uri(
+    'https://www.iandevlin.com/html5test/webvtt/v/upc-tobymanley.mp4',
+    title: 'English',
+    language: 'en',
+  ),
+);
+</code></pre>
+<h3 id="video-controls">Video controls</h3>
+<p><a href="https://github.com/media-kit/media-kit" rel="ugc nofollow"><code>package:media_kit</code></a> provides highly-customizable pre-built video controls for usage.</p>
+<p>Apart from theming, layout can be customized, position of buttons can be modified, custom buttons can be created etc. Necessary features like fullscreen, keyboard shortcuts &amp; swipe-based controls are also supported by default.</p>
+<table>
+<tbody><tr>
+<td>
+<a href="#materialdesktopvideocontrols"><tt>MaterialDesktopVideoControls</tt></a>
+</td>
+<td>
+<a href="#materialvideocontrols"><tt>MaterialVideoControls</tt></a>
+</td>
+</tr>
+<tr>
+<td>
+<img height="312" src="https://user-images.githubusercontent.com/28951144/246606748-72557578-8be4-43c6-a3df-cb0aea99c879.jpg">
+</td>
+<td>
+<img height="312" src="https://user-images.githubusercontent.com/28951144/246650427-a5bbabad-6f7b-4098-9325-ebe2a3068720.jpg">
+</td>
+</tr>
+</tbody></table>
+<ul>
+<li><code>Video</code> widget provides <code>controls</code> argument to display &amp; customize video controls.</li>
+<li>By default, <a href="#adaptivevideocontrols"><code>AdaptiveVideoControls</code></a> are used.</li>
+</ul>
+<h4 id="types">Types</h4>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#adaptivevideocontrols"><code>AdaptiveVideoControls</code></a></td>
+<td>Selects <a href="#materialvideocontrols"><code>MaterialVideoControls</code></a>, <a href="#cupertinovideocontrols"><code>CupertinoVideoControls</code></a> etc. based on platform.</td>
+</tr>
+<tr>
+<td><a href="#materialvideocontrols"><code>MaterialVideoControls</code></a></td>
+<td><a href="https://material.io/" rel="ugc nofollow">Material Design</a> video controls.</td>
+</tr>
+<tr>
+<td><a href="#materialdesktopvideocontrols"><code>MaterialDesktopVideoControls</code></a></td>
+<td><a href="https://material.io/" rel="ugc nofollow">Material Design</a> video controls for desktop.</td>
+</tr>
+<tr>
+<td><a href="#cupertinovideocontrols"><code>CupertinoVideoControls</code></a></td>
+<td><a href="https://developer.apple.com/design/human-interface-guidelines/designing-for-ios" rel="ugc nofollow">iOS-style</a> video controls.</td>
+</tr>
+<tr>
+<td><a href="#novideocontrols"><code>NoVideoControls</code></a></td>
+<td>Disable video controls <em>i.e.</em> only render video output.</td>
+</tr>
+<tr>
+<td>Custom</td>
+<td>Provide custom <code>builder</code> for video controls.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="select-existing-video-controls">Select existing video controls</h4>
+<p>Modify the <code>controls</code> argument. For advanced theming of existing video controls, see <a href="#theming-&amp;-modifying-video-controls">theming &amp; modifying video controls</a> section.</p>
+<pre class="language-dart"><code class="language-dart">Scaffold(
+  body: Video(
+    controller: controller,
+    // Select [MaterialVideoControls].
+    controls: MaterialVideoControls,
+  ),
+);
+</code></pre>
+<pre class="language-dart"><code class="language-dart">Scaffold(
+  body: Video(
+    controller: controller,
+    // Select [CupertinoVideoControls].
+    controls: CupertinoVideoControls,
+  ),
+);
+</code></pre>
+<h4 id="build-custom-video-controls">Build custom video controls</h4>
+<p>Pass custom builder <code>Widget Function(BuildContext, VideoController)</code> as <code>controls</code> argument.</p>
+<pre class="language-dart"><code class="language-dart">Scaffold(
+  body: Video(
+    controller: controller,
+    // Provide custom builder for controls.
+    controls: (state) {
+      return Center(
+        child: IconButton(
+          onPressed: () {
+            state.widget.controller.player.playOrPause();
+          },
+          icon: StreamBuilder(
+            stream: state.widget.controller.player.stream.playing,
+            builder: (context, playing) =&gt; Icon(
+              playing.data == true ? Icons.pause : Icons.play_arrow,
+            ),
+          ),
+          // It's not necessary to use [StreamBuilder] or to use [Player] &amp; [VideoController] from [state].
+          // [StreamSubscription]s can be made inside [initState] of this widget.
+        ),
+      );
+    },
+  ),
+);
+</code></pre>
+<h4 id="use--modify-video-controls">Use &amp; modify video controls</h4>
+<h5 id="adaptivevideocontrols"><code>AdaptiveVideoControls</code></h5>
+<ul>
+<li>Selects <a href="#materialvideocontrols"><code>MaterialVideoControls</code></a>, <a href="#cupertinovideocontrols"><code>CupertinoVideoControls</code></a> etc. based on platform.</li>
+<li>Theming:
+<ul>
+<li>Theme the specific controls according to sections below.</li>
+</ul>
+</li>
+</ul>
+<h5 id="materialvideocontrols"><code>MaterialVideoControls</code></h5>
+<ul>
+<li><a href="https://material.io/" rel="ugc nofollow">Material Design</a> video controls.</li>
+<li>Theming:
+<ul>
+<li>Use <code>MaterialVideoControlsTheme</code> widget.</li>
+<li><code>Video</code> widget(s) in the <code>child</code> tree will follow the specified theme:</li>
+</ul>
+</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">// Wrap [Video] widget with [MaterialVideoControlsTheme].
+MaterialVideoControlsTheme(
+  normal: MaterialVideoControlsThemeData(
+    // Modify theme options:
+    buttonBarButtonSize: 24.0,
+    buttonBarButtonColor: Colors.white,
+    // Modify top button bar:
+    topButtonBar: [
+      const Spacer(),
+      MaterialDesktopCustomButton(
+        onPressed: () {
+          debugPrint('Custom "Settings" button pressed.');
+        },
+        icon: const Icon(Icons.settings),
+      ),
+    ],
+  ),
+  fullscreen: const MaterialVideoControlsThemeData(
+    // Modify theme options:
+    displaySeekBar: false,
+    automaticallyImplySkipNextButton: false,
+    automaticallyImplySkipPreviousButton: false,
+  ),
+  child: Scaffold(
+    body: Video(
+      controller: controller,
+    ),
+  ),
+);
+</code></pre>
+<ul>
+<li>Related widgets (may be used in <code>primaryButtonBar</code>, <code>topButtonBar</code> &amp; <code>bottomButtonBar</code>):
+<ul>
+<li><code>MaterialPlayOrPauseButton</code></li>
+<li><code>MaterialSkipNextButton</code></li>
+<li><code>MaterialSkipPreviousButton</code></li>
+<li><code>MaterialFullscreenButton</code></li>
+<li><code>MaterialCustomButton</code></li>
+<li><code>MaterialPositionIndicator</code></li>
+</ul>
+</li>
+</ul>
+<h5 id="materialdesktopvideocontrols"><code>MaterialDesktopVideoControls</code></h5>
+<ul>
+<li><a href="https://material.io/" rel="ugc nofollow">Material Design</a> video controls for desktop.</li>
+<li>Theming:
+<ul>
+<li>Use <code>MaterialDesktopVideoControlsTheme</code> widget.</li>
+<li><code>Video</code> widget(s) in the <code>child</code> tree will follow the specified theme:</li>
+</ul>
+</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">// Wrap [Video] widget with [MaterialDesktopVideoControlsTheme].
+MaterialDesktopVideoControlsTheme(
+  normal: MaterialDesktopVideoControlsThemeData(
+    // Modify theme options:
+    seekBarThumbColor: Colors.blue,
+    seekBarPositionColor: Colors.blue,
+    toggleFullscreenOnDoublePress: false,
+    // Modify top button bar:
+    topButtonBar: [
+      const Spacer(),
+      MaterialDesktopCustomButton(
+        onPressed: () {
+          debugPrint('Custom "Settings" button pressed.');
+        },
+        icon: const Icon(Icons.settings),
+      ),
+    ],
+    // Modify bottom button bar:
+    bottomButtonBar: const [
+      Spacer(),
+      MaterialDesktopPlayOrPauseButton(),
+      Spacer(),
+    ],
+  ),
+  fullscreen: const MaterialDesktopVideoControlsThemeData(),
+  child: Scaffold(
+    body: Video(
+      controller: controller,
+    ),
+  ),
+);
+</code></pre>
+<ul>
+<li>Related widgets (may be used in <code>primaryButtonBar</code>, <code>topButtonBar</code> &amp; <code>bottomButtonBar</code>):
+<ul>
+<li><code>MaterialDesktopPlayOrPauseButton</code></li>
+<li><code>MaterialDesktopSkipNextButton</code></li>
+<li><code>MaterialDesktopSkipPreviousButton</code></li>
+<li><code>MaterialDesktopFullscreenButton</code></li>
+<li><code>MaterialDesktopCustomButton</code></li>
+<li><code>MaterialDesktopVolumeButton</code></li>
+<li><code>MaterialDesktopPositionIndicator</code></li>
+</ul>
+</li>
+<li>Keyboard shortcuts may be modified using <code>keyboardShortcuts</code> argument. Default ones are listed below:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Shortcut</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Media Play Button</td>
+<td>Play</td>
+</tr>
+<tr>
+<td>Media Pause Button</td>
+<td>Pause</td>
+</tr>
+<tr>
+<td>Media Play/Pause Button</td>
+<td>Play/Pause</td>
+</tr>
+<tr>
+<td>Media Next Track Button</td>
+<td>Skip Next</td>
+</tr>
+<tr>
+<td>Media Previous Track Button</td>
+<td>Skip Previous</td>
+</tr>
+<tr>
+<td>Space</td>
+<td>Play/Pause</td>
+</tr>
+<tr>
+<td>J</td>
+<td>Seek 10s Behind</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Seek 10s Ahead</td>
+</tr>
+<tr>
+<td>Arrow Left</td>
+<td>Seek 2s Behind</td>
+</tr>
+<tr>
+<td>Arrow Right</td>
+<td>Seek 2s Ahead</td>
+</tr>
+<tr>
+<td>Arrow Up</td>
+<td>Increase Volume 5%</td>
+</tr>
+<tr>
+<td>Arrow Down</td>
+<td>Decrease Volume 5%</td>
+</tr>
+<tr>
+<td>F</td>
+<td>Enter/Exit Fullscreen</td>
+</tr>
+<tr>
+<td>Escape</td>
+<td>Exit Fullscreen</td>
+</tr>
+</tbody>
+</table>
+<h5 id="cupertinovideocontrols"><code>CupertinoVideoControls</code></h5>
+<ul>
+<li><a href="https://developer.apple.com/design/human-interface-guidelines/designing-for-ios" rel="ugc nofollow">iOS-style</a> video controls.</li>
+<li>Theming:
+<ul>
+<li>Use <code>CupertinoVideoControlsTheme</code> widget.</li>
+<li><code>Video</code> widget(s) in the <code>child</code> tree will follow the specified theme:</li>
+</ul>
+</li>
+</ul>
+<pre class="language-dart"><code class="language-dart">// Wrap [Video] widget with [CupertinoVideoControlsTheme].
+CupertinoVideoControlsTheme(
+  normal: const CupertinoVideoControlsThemeData(
+    // W.I.P.
+  ),
+  fullscreen: const CupertinoVideoControlsThemeData(
+    // W.I.P.
+  ),
+  child: Scaffold(
+    body: Video(
+      controller: controller,
+    ),
+  ),
+);
+</code></pre>
+<h5 id="novideocontrols"><code>NoVideoControls</code></h5>
+<ul>
+<li>Disable video controls <em>i.e.</em> only render video output.</li>
+<li>Theming:
+<ul>
+<li>No theming applicable.</li>
+</ul>
+</li>
+</ul>
+<h3 id="next-steps">Next steps</h3>
+<p>This guide follows a tutorial-like structure &amp; covers nearly all features that <a href="https://github.com/media-kit/media-kit" rel="ugc nofollow">package:media_kit</a> offers. However, it is <em>not complete</em> by any means. You are free to improve this page &amp; add more documentation, which newcomers may find helpful. The following places can help you learn more:</p>
+<ul>
+<li><a href="https://pub.dev/documentation/media_kit/latest/media_kit/media_kit-library.html" rel="ugc">API reference</a> can be helpful for diving into deeper specifics.</li>
+<li><a href="https://github.com/media-kit/media-kit/tree/main/media_kit_test/lib/tests" rel="ugc nofollow">source-code of the demo application</a> offers some complete code samples.</li>
+<li>In-code comments &amp; docstrings happen to be the most updated source of knowledge.</li>
+</ul>
+<h2 id="goals">Goals</h2>
+<p><a href="https://github.com/media-kit/media-kit" rel="ugc nofollow">package:media_kit</a> is a library for Flutter &amp; Dart which <strong>provides video &amp; audio playback</strong>.</p>
+<ul>
+<li><strong>Strong:</strong> Supports <em>most</em> video &amp; audio codecs.</li>
+<li><strong>Performant:</strong>
+<ul>
+<li>Handles multiple FHD videos flawlessly.</li>
+<li>Rendering is GPU-powered (hardware accelerated).</li>
+<li>4K / 8K 60 FPS is supported.</li>
+</ul>
+</li>
+<li><strong>Stable:</strong> Implementation is well-tested &amp; used across number of intensive media playback related apps.</li>
+<li><strong>Feature Proof:</strong> A simple usage API while offering a large number of features to target multitude of apps.</li>
+<li><strong>Modular:</strong> Project is split into a number of packages for reducing bundle size.</li>
+<li><strong>Cross Platform</strong>: Implementation works on all platforms supported by Flutter &amp; Dart:
+<ul>
+<li>Android</li>
+<li>iOS</li>
+<li>macOS</li>
+<li>Windows</li>
+<li>GNU/Linux</li>
+<li>Web</li>
+</ul>
+</li>
+<li><strong>Flexible Architecture:</strong>
+<ul>
+<li>Major part of implementation (80%+) is in 100% Dart (<a href="https://dart.dev/guides/libraries/c-interop" rel="ugc">FFI</a>) &amp; shared across platforms.
+<ul>
+<li>Makes the behavior of library same &amp; more predictable across platforms.</li>
+<li>Makes development &amp; implementation of new features easier &amp; faster.</li>
+<li>Avoids separate maintenance of native implementation for each platform.</li>
+</ul>
+</li>
+<li>Only video embedding code is platform-specific &amp; part of separate package.</li>
+</ul>
+</li>
+</ul>
+<p>You may see project's <a href="https://github.com/media-kit/media-kit#architecture" rel="ugc nofollow">architecture</a> &amp; <a href="https://github.com/media-kit/media-kit#implementation" rel="ugc nofollow">implementation</a> details for further information.</p>
+<p>The project aims to meet demands of the community, this includes:</p>
+<ol>
+<li>Holding accountability.</li>
+<li>Ensuring timely maintenance.</li>
+</ol>
+<h2 id="supported-formats">Supported Formats</h2>
+<p>A wide variety of formats &amp; codecs are supported. Complete list may be found below:</p>
+<details>
+<pre class="language-dart"><code>3dostr          3DO STR
+4xm             4X Technologies
+aa              Audible AA format files
+aac             raw ADTS AAC (Advanced Audio Coding)
+aax             CRI AAX
+ac3             raw AC-3
+ace             tri-Ace Audio Container
+acm             Interplay ACM
+act             ACT Voice file format
+adf             Artworx Data Format
+adp             ADP
+ads             Sony PS2 ADS
+adx             CRI ADX
+aea             MD STUDIO audio
+afc             AFC
+aiff            Audio IFF
+aix             CRI AIX
+alaw            PCM A-law
+alias_pix       Alias/Wavefront PIX image
+alp             LEGO Racers ALP
+amr             3GPP AMR
+amrnb           raw AMR-NB
+amrwb           raw AMR-WB
+anm             Deluxe Paint Animation
+apac            raw APAC
+apc             CRYO APC
+ape             Monkey's Audio
+apm             Ubisoft Rayman 2 APM
+apng            Animated Portable Network Graphics
+aptx            raw aptX
+aptx_hd         raw aptX HD
+aqtitle         AQTitle subtitles
+argo_asf        Argonaut Games ASF
+argo_brp        Argonaut Games BRP
+argo_cvg        Argonaut Games CVG
+asf             ASF (Advanced / Active Streaming Format)
+asf_o           ASF (Advanced / Active Streaming Format)
+ass             SSA (SubStation Alpha) subtitle
+ast             AST (Audio Stream)
+au              Sun AU
+av1             AV1 Annex B
+avi             AVI (Audio Video Interleaved)
+avr             AVR (Audio Visual Research)
+avs             Argonaut Games Creature Shock
+avs2            raw AVS2-P2/IEEE1857.4
+avs3            raw AVS3-P2/IEEE1857.10
+bethsoftvid     Bethesda Softworks VID
+bfi             Brute Force &amp; Ignorance
+bfstm           BFSTM (Binary Cafe Stream)
+bin             Binary text
+bink            Bink
+binka           Bink Audio
+bit             G.729 BIT file format
+bitpacked       Bitpacked
+bmp_pipe        piped bmp sequence
+bmv             Discworld II BMV
+boa             Black Ops Audio
+bonk            raw Bonk
+brender_pix     BRender PIX image
+brstm           BRSTM (Binary Revolution Stream)
+c93             Interplay C93
+caf             Apple CAF (Core Audio Format)
+cavsvideo       raw Chinese AVS (Audio Video Standard)
+cdg             CD Graphics
+cdxl            Commodore CDXL video
+cine            Phantom Cine
+codec2          codec2 .c2 demuxer
+codec2raw       raw codec2 demuxer
+concat          Virtual concatenation script
+cri_pipe        piped cri sequence
+dash            Dynamic Adaptive Streaming over HTTP
+data            raw data
+daud            D-Cinema audio
+dcstr           Sega DC STR
+dds_pipe        piped dds sequence
+derf            Xilam DERF
+dfa             Chronomaster DFA
+dfpwm           raw DFPWM1a
+dhav            Video DAV
+dirac           raw Dirac
+dnxhd           raw DNxHD (SMPTE VC-3)
+dpx_pipe        piped dpx sequence
+dsf             DSD Stream File (DSF)
+dshow           DirectShow capture
+dsicin          Delphine Software International CIN
+dss             Digital Speech Standard (DSS)
+dts             raw DTS
+dtshd           raw DTS-HD
+dv              DV (Digital Video)
+dvbsub          raw dvbsub
+dvbtxt          dvbtxt
+dxa             DXA
+ea              Electronic Arts Multimedia
+ea_cdata        Electronic Arts cdata
+eac3            raw E-AC-3
+epaf            Ensoniq Paris Audio File
+exr_pipe        piped exr sequence
+f32be           PCM 32-bit floating-point big-endian
+f32le           PCM 32-bit floating-point little-endian
+f64be           PCM 64-bit floating-point big-endian
+f64le           PCM 64-bit floating-point little-endian
+ffmetadata      FFmpeg metadata in text
+film_cpk        Sega FILM / CPK
+filmstrip       Adobe Filmstrip
+fits            Flexible Image Transport System
+flac            raw FLAC
+flic            FLI/FLC/FLX animation
+flv             FLV (Flash Video)
+frm             Megalux Frame
+fsb             FMOD Sample Bank
+fwse            Capcom's MT Framework sound
+g722            raw G.722
+g723_1          G.723.1
+g726            raw big-endian G.726 ("left aligned")
+g726le          raw little-endian G.726 ("right aligned")
+g729            G.729 raw format demuxer
+gdigrab         GDI API Windows frame grabber
+gdv             Gremlin Digital Video
+gem_pipe        piped gem sequence
+genh            GENeric Header
+gif             CompuServe Graphics Interchange Format (GIF)
+gif_pipe        piped gif sequence
+gsm             raw GSM
+gxf             GXF (General eXchange Format)
+h261            raw H.261
+h263            raw H.263
+h264            raw H.264 video
+hca             CRI HCA
+hcom            Macintosh HCOM
+hdr_pipe        piped hdr sequence
+hevc            raw HEVC video
+hls             Apple HTTP Live Streaming
+hnm             Cryo HNM v4
+ico             Microsoft Windows ICO
+idcin           id Cinematic
+idf             iCE Draw File
+iff             IFF (Interchange File Format)
+ifv             IFV CCTV DVR
+ilbc            iLBC storage
+image2          image2 sequence
+image2pipe      piped image2 sequence
+imf             IMF (Interoperable Master Format)
+ingenient       raw Ingenient MJPEG
+ipmovie         Interplay MVE
+ipu             raw IPU Video
+ircam           Berkeley/IRCAM/CARL Sound Format
+iss             Funcom ISS
+iv8             IndigoVision 8000 video
+ivf             On2 IVF
+ivr             IVR (Internet Video Recording)
+j2k_pipe        piped j2k sequence
+jacosub         JACOsub subtitle format
+jpeg_pipe       piped jpeg sequence
+jpegls_pipe     piped jpegls sequence
+jpegxl_pipe     piped jpegxl sequence
+jv              Bitmap Brothers JV
+kux             KUX (YouKu)
+kvag            Simon &amp; Schuster Interactive VAG
+laf             LAF (Limitless Audio Format)
+lavfi           Libavfilter virtual input device
+live_flv        live RTMP FLV (Flash Video)
+lmlm4           raw lmlm4
+loas            LOAS AudioSyncStream
+lrc             LRC lyrics
+luodat          Video CCTV DAT
+lvf             LVF
+lxf             VR native stream (LXF)
+m4v             raw MPEG-4 video
+matroska,webm   Matroska / WebM
+mca             MCA Audio Format
+mcc             MacCaption
+mgsts           Metal Gear Solid: The Twin Snakes
+microdvd        MicroDVD subtitle format
+mjpeg           raw MJPEG video
+mjpeg_2000      raw MJPEG 2000 video
+mlp             raw MLP
+mlv             Magic Lantern Video (MLV)
+mm              American Laser Games MM
+mmf             Yamaha SMAF
+mods            MobiClip MODS
+moflex          MobiClip MOFLEX
+mov,mp4,m4a,3gp,3g2,mj2 QuickTime / MOV
+mp3             MP2/3 (MPEG audio layer 2/3)
+mpc             Musepack
+mpc8            Musepack SV8
+mpeg            MPEG-PS (MPEG-2 Program Stream)
+mpegts          MPEG-TS (MPEG-2 Transport Stream)
+mpegtsraw       raw MPEG-TS (MPEG-2 Transport Stream)
+mpegvideo       raw MPEG video
+mpjpeg          MIME multipart JPEG
+mpl2            MPL2 subtitles
+mpsub           MPlayer subtitles
+msf             Sony PS3 MSF
+msnwctcp        MSN TCP Webcam stream
+msp             Microsoft Paint (MSP))
+mtaf            Konami PS2 MTAF
+mtv             MTV
+mulaw           PCM mu-law
+musx            Eurocom MUSX
+mv              Silicon Graphics Movie
+mvi             Motion Pixels MVI
+mxf             MXF (Material eXchange Format)
+mxg             MxPEG clip
+nc              NC camera feed
+nistsphere      NIST SPeech HEader REsources
+nsp             Computerized Speech Lab NSP
+nsv             Nullsoft Streaming Video
+nut             NUT
+nuv             NuppelVideo
+obu             AV1 low overhead OBU
+ogg             Ogg
+oma             Sony OpenMG audio
+paf             Amazing Studio Packed Animation File
+pam_pipe        piped pam sequence
+pbm_pipe        piped pbm sequence
+pcx_pipe        piped pcx sequence
+pfm_pipe        piped pfm sequence
+pgm_pipe        piped pgm sequence
+pgmyuv_pipe     piped pgmyuv sequence
+pgx_pipe        piped pgx sequence
+phm_pipe        piped phm sequence
+photocd_pipe    piped photocd sequence
+pictor_pipe     piped pictor sequence
+pjs             PJS (Phoenix Japanimation Society) subtitles
+pmp             Playstation Portable PMP
+png_pipe        piped png sequence
+pp_bnk          Pro Pinball Series Soundbank
+ppm_pipe        piped ppm sequence
+psd_pipe        piped psd sequence
+psxstr          Sony Playstation STR
+pva             TechnoTrend PVA
+pvf             PVF (Portable Voice Format)
+qcp             QCP
+qdraw_pipe      piped qdraw sequence
+qoi_pipe        piped qoi sequence
+r3d             REDCODE R3D
+rawvideo        raw video
+realtext        RealText subtitle format
+redspark        RedSpark
+rka             RKA (RK Audio)
+rl2             RL2
+rm              RealMedia
+roq             id RoQ
+rpl             RPL / ARMovie
+rsd             GameCube RSD
+rso             Lego Mindstorms RSO
+rtp             RTP input
+rtsp            RTSP input
+s16be           PCM signed 16-bit big-endian
+s16le           PCM signed 16-bit little-endian
+s24be           PCM signed 24-bit big-endian
+s24le           PCM signed 24-bit little-endian
+s32be           PCM signed 32-bit big-endian
+s32le           PCM signed 32-bit little-endian
+s337m           SMPTE 337M
+s8              PCM signed 8-bit
+sami            SAMI subtitle format
+sap             SAP input
+sbc             raw SBC (low-complexity subband codec)
+sbg             SBaGen binaural beats script
+scc             Scenarist Closed Captions
+scd             Square Enix SCD
+sdns            Xbox SDNS
+sdp             SDP
+sdr2            SDR2
+sds             MIDI Sample Dump Standard
+sdx             Sample Dump eXchange
+ser             SER (Simple uncompressed video format for astronomical capturing)
+sga             Digital Pictures SGA
+sgi_pipe        piped sgi sequence
+shn             raw Shorten
+siff            Beam Software SIFF
+simbiosis_imx   Simbiosis Interactive IMX
+sln             Asterisk raw pcm
+smjpeg          Loki SDL MJPEG
+smk             Smacker
+smush           LucasArts Smush
+sol             Sierra SOL
+sox             SoX native
+spdif           IEC 61937 (compressed data in S/PDIF)
+srt             SubRip subtitle
+stl             Spruce subtitle format
+subviewer       SubViewer subtitle format
+subviewer1      SubViewer v1 subtitle format
+sunrast_pipe    piped sunrast sequence
+sup             raw HDMV Presentation Graphic Stream subtitles
+svag            Konami PS2 SVAG
+svg_pipe        piped svg sequence
+svs             Square SVS
+swf             SWF (ShockWave Flash)
+tak             raw TAK
+tedcaptions     TED Talks captions
+thp             THP
+tiertexseq      Tiertex Limited SEQ
+tiff_pipe       piped tiff sequence
+tmv             8088flex TMV
+truehd          raw TrueHD
+tta             TTA (True Audio)
+tty             Tele-typewriter
+txd             Renderware TeXture Dictionary
+ty              TiVo TY Stream
+u16be           PCM unsigned 16-bit big-endian
+u16le           PCM unsigned 16-bit little-endian
+u24be           PCM unsigned 24-bit big-endian
+u24le           PCM unsigned 24-bit little-endian
+u32be           PCM unsigned 32-bit big-endian
+u32le           PCM unsigned 32-bit little-endian
+u8              PCM unsigned 8-bit
+v210            Uncompressed 4:2:2 10-bit
+v210x           Uncompressed 4:2:2 10-bit
+vag             Sony PS2 VAG
+vbn_pipe        piped vbn sequence
+vc1             raw VC-1
+vc1test         VC-1 test bitstream
+vfwcap          VfW video capture
+vidc            PCM Archimedes VIDC
+vividas         Vividas VIV
+vivo            Vivo
+vmd             Sierra VMD
+vobsub          VobSub subtitle format
+voc             Creative Voice
+vpk             Sony PS2 VPK
+vplayer         VPlayer subtitles
+vqf             Nippon Telegraph and Telephone Corporation (NTT) TwinVQ
+w64             Sony Wave64
+wady            Marble WADY
+wav             WAV / WAVE (Waveform Audio)
+wavarc          Waveform Archiver
+wc3movie        Wing Commander III movie
+webm_dash_manifest WebM DASH Manifest
+webp_pipe       piped webp sequence
+webvtt          WebVTT subtitle
+wsaud           Westwood Studios audio
+wsd             Wideband Single-bit Data (WSD)
+wsvqa           Westwood Studios VQA
+wtv             Windows Television (WTV)
+wv              WavPack
+wve             Psion 3 audio
+xa              Maxis XA
+xbin            eXtended BINary text (XBIN)
+xbm_pipe        piped xbm sequence
+xmd             Konami XMD
+xmv             Microsoft XMV
+xpm_pipe        piped xpm sequence
+xvag            Sony PS3 XVAG
+xwd_pipe        piped xwd sequence
+xwma            Microsoft xWMA
+yop             Psygnosis YOP
+yuv4mpegpipe    YUV4MPEG pipe
+</code></pre>
+</details>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>The list contains the supported formats (&amp; not containers).
+<ul>
+<li>A video/audio format may be present in a number of containers.</li>
+<li>e.g. an MP4 file generally contains H264 video stream.</li>
+</ul>
+</li>
+<li>On the web, format support depends upon the web browser.
+<ul>
+<li>It happens to be extremely limited as compared to native platforms.</li>
+</ul>
+</li>
+</ul>
+<h2 id="permissions">Permissions</h2>
+<p>You may need to declare &amp; request internet access or file-system permissions depending upon platform.</p>
+<h3 id="android">Android</h3>
+<p>Edit <code>android/app/src/main/AndroidManifest.xml</code> to add the following permissions inside <code>&lt;manifest&gt;</code> tag:</p>
+<pre class="language-xml"><code class="language-xml">&lt;manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app"&gt;
+    &lt;application
+      ...
+      /&gt;
+    &lt;/application&gt;
+    &lt;!--
+      Internet access permissions.
+      --&gt;
+    &lt;uses-permission android:name="android.permission.INTERNET" /&gt;
+    &lt;!--
+      Media access permissions.
+      Android 13 or higher.
+      https://developer.android.com/about/versions/13/behavior-changes-13#granular-media-permissions
+      --&gt;
+    &lt;uses-permission android:name="android.permission.READ_MEDIA_AUDIO" /&gt;
+    &lt;uses-permission android:name="android.permission.READ_MEDIA_VIDEO" /&gt;
+    &lt;!--
+      Storage access permissions.
+      Android 12 or lower.
+      --&gt;
+    &lt;uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" /&gt;
+    &lt;uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" /&gt;
+&lt;/manifest&gt;
+</code></pre>
+<p>Use <a href="https://pub.dev/packages/permission_handler" rel="ugc"><code>package:permission_handler</code></a> to request access at runtime:</p>
+<pre class="language-dart"><code class="language-dart">if (/* Android 13 or higher. */) {
+  // Video permissions.
+  if (await Permission.videos.isDenied || await Permission.videos.isPermanentlyDenied) {
+    final state = await Permission.videos.request();
+    if (!state.isGranted) {
+      await SystemNavigator.pop();
+    }
+  }
+  // Audio permissions.
+  if (await Permission.audio.isDenied || await Permission.audio.isPermanentlyDenied) {
+    final state = await Permission.audio.request();
+    if (!state.isGranted) {
+      await SystemNavigator.pop();
+    }
+  }
+} else {
+  if (await Permission.storage.isDenied || await Permission.storage.isPermanentlyDenied) {
+    final state = await Permission.storage.request();
+    if (!state.isGranted) {
+      await SystemNavigator.pop();
+    }
+  }
+}
+</code></pre>
+<h3 id="ios">iOS</h3>
+<p>Edit <code>ios/Runner/Info-Release.plist</code>, <code>ios/Runner/Info-Profile.plist</code>, <code>ios/Runner/Info-Debug.plist</code>:</p>
+<p><strong>Enable internet access</strong></p>
+<pre class="language-xml"><code class="language-xml">&lt;key&gt;NSAppTransportSecurity&lt;/key&gt;
+&lt;dict&gt;
+    &lt;key&gt;NSAllowsArbitraryLoads&lt;/key&gt;
+    &lt;true/&gt;
+&lt;/dict&gt;
+</code></pre>
+<h3 id="windows">Windows</h3>
+<p>N/A</p>
+<h3 id="macos">macOS</h3>
+<p>Edit <code>macos/Runner/Release.entitlements</code> &amp; <code>macos/Runner/DebugProfile.entitlements</code>:</p>
+<p><strong>Enable internet access</strong></p>
+<pre class="language-xml"><code class="language-xml">&lt;key&gt;com.apple.security.network.client&lt;/key&gt;
+&lt;true/&gt;
+</code></pre>
+<p><strong>Disable sand-box to access files</strong></p>
+<pre class="language-xml"><code class="language-xml">&lt;key&gt;com.apple.security.app-sandbox&lt;/key&gt;
+&lt;false/&gt;
+</code></pre>
+<h3 id="gnulinux">GNU/Linux</h3>
+<p>N/A</p>
+<h3 id="web">Web</h3>
+<p>N/A</p>
+<h2 id="notes">Notes</h2>
+<h3 id="android-2">Android</h3>
+<p>N/A</p>
+<h3 id="ios-2">iOS</h3>
+<p>N/A</p>
+<h3 id="windows-2">Windows</h3>
+<p>N/A</p>
+<h3 id="macos-2">macOS</h3>
+<p>During the build phase, the following warnings are not critical and cannot be silenced:</p>
+<pre class="language-log"><code class="language-log">#import "Headers/media_kit_video-Swift.h"
+        ^
+/path/to/media_kit/media_kit_test/build/macos/Build/Products/Debug/media_kit_video/media_kit_video.framework/Headers/media_kit_video-Swift.h:270:31: warning: 'objc_ownership' only applies to Objective-C object or block pointer types; type here is 'CVPixelBufferRef' (aka 'struct __CVBuffer *')
+- (CVPixelBufferRef _Nullable __unsafe_unretained)copyPixelBuffer SWIFT_WARN_UNUSED_RESULT;
+</code></pre>
+<pre class="language-log"><code class="language-log"># 1 "&lt;command line&gt;" 1
+ ^
+&lt;command line&gt;:20:9: warning: 'POD_CONFIGURATION_DEBUG' macro redefined
+#define POD_CONFIGURATION_DEBUG 1 DEBUG=1
+        ^
+#define POD_CONFIGURATION_DEBUG 1
+        ^
+</code></pre>
+<h3 id="gnulinux-2">GNU/Linux</h3>
+<h4 id="install-libmpv">Install libmpv</h4>
+<p>System shared libraries from distribution specific user-installed packages are used by-default. <strong>This is how GNU/Linux works.</strong> You can install these as follows:</p>
+<h5 id="ubuntudebian">Ubuntu/Debian</h5>
+<pre class="language-bash"><code class="language-bash">sudo apt install libmpv-dev mpv
+</code></pre>
+<h5 id="packaging">Packaging</h5>
+<p>There are other ways to bundle these within your app package e.g. within Snap or Flatpak. Few examples:</p>
+<ul>
+<li><a href="https://github.com/celluloid-player/celluloid/blob/master/flatpak/io.github.celluloid_player.Celluloid.json" rel="ugc nofollow">Celluloid</a></li>
+<li><a href="https://github.com/ozmartian/vidcutter/tree/master/_packaging" rel="ugc nofollow">VidCutter</a></li>
+</ul>
+<h4 id="utilize-mimallochttpsgithubcommicrosoftmimalloc">Utilize <a href="https://github.com/microsoft/mimalloc" rel="ugc nofollow">mimalloc</a></h4>
+<p>You should consider replacing the default memory allocator with <a href="https://github.com/microsoft/mimalloc" rel="ugc nofollow">mimalloc</a> for <a href="https://github.com/media-kit/media-kit/issues/68" rel="ugc nofollow">avoiding memory leaks</a>.</p>
+<p>This is as simple as <a href="https://github.com/media-kit/media-kit/blob/d02a97ce70b316207db024401fb99e3f4509a250/media_kit_test/linux/CMakeLists.txt#L92-L94" rel="ugc nofollow">adding one line to <code>linux/CMakeLists.txt</code></a>:</p>
+<pre class="language-cmake"><code class="language-cmake">target_link_libraries(${BINARY_NAME} PRIVATE ${MIMALLOC_LIB})
+</code></pre>
+<p>In case you prefer dynamic linking of mimalloc, you can additionally add the following line to your <code>linux/CMakeLists.txt</code>:</p>
+<pre class="language-cmake"><code class="language-cmake"># use dynamically linked mimalloc
+set(MIMALLOC_USE_STATIC_LIBS OFF)
+</code></pre>
+<p>In this case, please ensure you install <code>libmimalloc-dev</code> at compile time and <code>libmimalloc2.0</code> as runtime dependencies.</p>
+<h4 id="ubuntudebian-2">Ubuntu/Debian</h4>
+<pre class="language-bash"><code class="language-bash">sudo apt install libmimalloc-dev libmimalloc2.0
+</code></pre>
+<h3 id="web-2">Web</h3>
+<p>On the web, <strong>libmpv is not used</strong>. Video &amp; audio playback is handled by embedding <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video" rel="ugc nofollow">HTML <code>&lt;video&gt;</code> element</a>. The format support depends upon the web browser. It happens to be extremely limited as compared to native platforms.</p>
+<h2 id="license">License</h2>
+<p>Copyright © 2021 &amp; onwards, Hitesh Kumar Saini &lt;<a href="mailto:saini123hitesh@gmail.com">saini123hitesh@gmail.com</a>&gt;</p>
+<p>This project &amp; the work under this repository is governed by MIT license that can be found in the <a href="./LICENSE">LICENSE</a> file.</p>
+</div>
+
+
+      <div class="summary">
+          <h2>Libraries</h2>
+        <dl>
+          <dt id="ffi">
+  <span class="name"><a href="ffi_ffi/">ffi/ffi</a></span> 
+
+</dt>
+<dd>
+</dd>
+
+          <dt id="allocation">
+  <span class="name"><a href="ffi_src_allocation/">ffi/src/allocation</a></span> 
+
+</dt>
+<dd>
+</dd>
+
+          <dt id="arena">
+  <span class="name"><a href="ffi_src_arena/">ffi/src/arena</a></span> 
+
+</dt>
+<dd>
+</dd>
+
+          <dt id="utf8">
+  <span class="name"><a href="ffi_src_utf8/">ffi/src/utf8</a></span> 
+
+</dt>
+<dd>
+</dd>
+
+          <dt id="utf16">
+  <span class="name"><a href="ffi_src_utf16/">ffi/src/utf16</a></span> 
+
+</dt>
+<dd>
+</dd>
+
+          <dt id="bindings">
+  <span class="name"><a href="generated_libmpv_bindings/">generated/libmpv/bindings</a></span> 
+
+</dt>
+<dd>
+</dd>
+
+          <dt id="media_kit">
+  <span class="name"><a href="media_kit/">media_kit</a></span> 
+
+</dt>
+<dd>This file is a part of media_kit (<a href="https://github.com/media-kit/media-kit" rel="ugc nofollow">https://github.com/media-kit/media-kit</a>).
+</dd>
+
+        </dl>
+      </div>
+  </div><div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left"><header id="header-search-sidebar" class="hidden-l"><form class="search-sidebar" role="search"><input id="search-sidebar" class="form-control typeahead" type="text" placeholder="Loading search..." autocomplete="off"/></form></header><ol id="sidebar-nav" class="breadcrumbs gt-separated dark hidden-l"><li><a href="/packages/media_kit">media_kit package</a></li><li class="self-crumb">documentation</li></ol>
+    <!-- The search input and breadcrumbs below are only responsively visible at low resolutions. -->
+
+
+
+    <h5 class="hidden-xs"><span class="package-name">media_kit</span> <span class="package-kind">package</span></h5>
+    <ol>
+      <li class="section-title">Libraries</li>
+      <li><a href="ffi_ffi/">ffi/ffi</a></li>
+      <li><a href="ffi_src_allocation/">ffi/src/allocation</a></li>
+      <li><a href="ffi_src_arena/">ffi/src/arena</a></li>
+      <li><a href="ffi_src_utf8/">ffi/src/utf8</a></li>
+      <li><a href="ffi_src_utf16/">ffi/src/utf16</a></li>
+      <li><a href="generated_libmpv_bindings/">generated/libmpv/bindings</a></li>
+      <li><a href="media_kit/">media_kit</a></li>
+</ol>
+
+  </div><div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
+  </div></main><footer><span class="no-break">media_kit 1.2.0</span></footer><script src="/static/hash-44kmit6u/dartdoc/resources/highlight.pack.js"></script><script src="/static/hash-44kmit6u/dartdoc/resources/docs.dart.js"></script></body></html>

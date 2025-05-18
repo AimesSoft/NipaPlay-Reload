@@ -29,6 +29,7 @@ import '../widgets/seek_indicator.dart'; // Added import for SeekIndicator widge
 import 'subtitle_parser.dart'; // Added import for subtitle parser
 import 'subtitle_manager.dart'; // 导入字幕管理器
 import '../services/file_picker_service.dart'; // Added import for FilePickerService
+import 'package:nipaplay/utils/system_resource_monitor.dart';
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -190,7 +191,127 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 获取是否处于最终加载阶段
   bool get isInFinalLoadingPhase => _isInFinalLoadingPhase;
 
+  // 配置所有支持的解码器，按平台组织
+  Map<String, List<String>> _getAllSupportedDecoders() {
+    // 为所有平台准备解码器列表
+    final Map<String, List<String>> platformDecoders = {
+      // macOS解码器 - Apple平台不支持NVIDIA GPU
+      'macos': [
+        "VT", // Apple平台首选
+        "hap", // 对于HAP编码视频
+        "dav1d", // AV1解码
+        "FFmpeg" // 通用软件解码
+      ],
+      
+      // iOS解码器
+      'ios': [
+        "VT",
+        "hap",
+        "dav1d",
+        "FFmpeg"
+      ],
+      
+      // Windows解码器
+      'windows': [
+        "MFT:d3d=11", // Windows首选
+        "MFT:d3d=12", // D3D12支持
+        "D3D11", // FFmpeg D3D11
+        "D3D12", // FFmpeg D3D12
+        "DXVA", // 旧版支持
+        "CUDA", // NVIDIA GPU
+        "QSV", // Intel QuickSync
+        "NVDEC", // NVIDIA专用
+        "hap",
+        "dav1d",
+        "FFmpeg"
+      ],
+      
+      // Linux解码器
+      'linux': [
+        "VAAPI", // Intel/AMD GPU
+        "VDPAU", // NVIDIA
+        "CUDA",
+        "NVDEC",
+        "rkmpp", // RockChip
+        "V4L2M2M", // 视频硬件解码API
+        "hap",
+        "dav1d",
+        "FFmpeg"
+      ],
+      
+      // Android解码器
+      'android': [
+        "AMediaCodec", // 首选
+        "MediaCodec", // FFmpeg实现
+        "dav1d",
+        "FFmpeg"
+      ]
+    };
+    
+    return platformDecoders;
+  }
+
   Future<void> _initialize() async {
+    // 设置硬件解码器
+    final prefs = await SharedPreferences.getInstance();
+    final useHardwareDecoder = prefs.getBool('use_hardware_decoder') ?? true;
+    
+    if (useHardwareDecoder) {
+      final savedDecoders = prefs.getStringList('selected_decoders');
+      if (savedDecoders != null && savedDecoders.isNotEmpty) {
+        debugPrint('使用保存的解码器设置: $savedDecoders');
+        player.setDecoders(MediaType.video, savedDecoders);
+        // 更新活跃解码器信息
+        _updateActiveDecoderInfo(savedDecoders);
+      } else {
+        // 获取当前平台的所有解码器
+        List<String> decoders = [];
+        final allDecoders = _getAllSupportedDecoders();
+        
+        if (Platform.isMacOS) {
+          decoders = allDecoders['macos']!;
+          debugPrint('macOS平台默认解码器设置: $decoders');
+        } else if (Platform.isIOS) {
+          decoders = allDecoders['ios']!;
+          debugPrint('iOS平台默认解码器设置: $decoders');
+        } else if (Platform.isWindows) {
+          decoders = allDecoders['windows']!;
+          debugPrint('Windows平台默认解码器设置: $decoders');
+        } else if (Platform.isLinux) {
+          decoders = allDecoders['linux']!;
+          debugPrint('Linux平台默认解码器设置: $decoders');
+        } else if (Platform.isAndroid) {
+          decoders = allDecoders['android']!;
+          debugPrint('Android平台默认解码器设置: $decoders');
+        } else {
+          // 未知平台，使用FFmpeg作为兜底方案
+          decoders = ["FFmpeg"];
+          debugPrint('未知平台，使用FFmpeg解码器');
+        }
+        
+        // 如果解码器列表不为空，则设置解码器
+        if (decoders.isNotEmpty) {
+          debugPrint('设置平台解码器: $decoders');
+          player.setDecoders(MediaType.video, decoders);
+          _updateActiveDecoderInfo(decoders);
+          
+          // 保存设置的解码器列表
+          await prefs.setStringList('selected_decoders', decoders);
+        }
+      }
+      
+      // 设置全局解码属性
+      _setGlobalDecodingProperties();
+      
+      // 输出解码器相关属性
+      debugPrint('硬件解码已启用');
+    } else {
+      // 只使用软件解码
+      debugPrint('硬件解码已禁用，仅使用软件解码器');
+      player.setDecoders(MediaType.video, ["FFmpeg"]);
+      _updateActiveDecoderInfo(["FFmpeg"]);
+    }
+    
     if (globals.isPhone) {
       await _setPortrait();
       await _loadInitialBrightness(); // Load initial brightness for phone
@@ -222,6 +343,87 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } catch (e) {
       //debugPrint("Error disabling wakelock on init: $e");
     }
+  }
+  
+  // 根据平台设置全局解码属性
+  void _setGlobalDecodingProperties() {
+    // 通用设置
+    player.setProperty("video.decode.thread", "4"); // 使用4个解码线程
+    
+    // 平台特定设置
+    if (Platform.isMacOS || Platform.isIOS) {
+      // VideoToolbox优化
+      player.setProperty("videotoolbox.format", "nv12"); // 对于macOS和iOS优化
+      player.setProperty("vt.copy", "0"); // 无复制模式以获得最佳性能
+      player.setProperty("vt.async", "1"); // 启用异步解码
+      player.setProperty("vt.hardware", "1"); // 确保使用硬件加速
+      
+      // Apple Silicon特定优化
+      if (Platform.isMacOS) {
+        try {
+          // 检测是否为Apple Silicon
+          final result = Process.runSync('sysctl', ['hw.optional.arm64']);
+          if (result.stdout.toString().contains('hw.optional.arm64: 1')) {
+            // Apple Silicon特定设置
+            debugPrint('检测到Apple Silicon，应用特定优化');
+            player.setProperty("vt.realTime", "1"); // 实时模式
+          }
+        } catch (e) {
+          debugPrint('检测处理器架构时出错: $e');
+        }
+      }
+    } else if (Platform.isWindows) {
+      // Windows解码器优化
+      player.setProperty("avcodec.hw", "any"); // 尝试任何可用的硬件解码器
+      player.setProperty("mft.d3d", "11"); // 默认使用D3D11
+      player.setProperty("mft.low_latency", "1"); // 低延迟模式
+      player.setProperty("mft.feature_level", "12.1"); // D3D功能级别
+      player.setProperty("mft.shared", "1"); // 资源共享
+      player.setProperty("mft.pool", "1"); // 使用解码样本池
+      
+      // 检测是否有NVIDIA GPU
+      try {
+        final hasNvidiaGpu = _checkForNvidiaGpu();
+        if (hasNvidiaGpu) {
+          debugPrint('检测到NVIDIA GPU，添加CUDA优化');
+          player.setProperty("cuda.device", "0"); // 对于NVIDIA GPU设置CUDA设备
+        }
+      } catch (e) {
+        debugPrint('检测GPU时出错: $e');
+      }
+    } else if (Platform.isLinux) {
+      // Linux解码器优化
+      player.setProperty("vaapi.copy", "0"); // 无复制模式
+      player.setProperty("vdpau.copy", "0"); // 无复制模式
+      player.setProperty("avcodec.hw", "any"); // 尝试任何可用的硬件解码器
+    } else if (Platform.isAndroid) {
+      // Android解码器优化
+      player.setProperty("mediacodec.surface", "1"); // 使用Surface
+      player.setProperty("mediacodec.async", "1"); // 异步模式
+      player.setProperty("mediacodec.copy", "0"); // 无复制模式
+      player.setProperty("mediacodec.image", "1"); // 使用AImageReader
+      player.setProperty("mediacodec.dv", "1"); // 支持杜比视界
+    }
+    
+    // 通用高级设置
+    player.setProperty("video.decoder", "base=1"); // 使用基础层数据包
+    player.setProperty("video.decoder", "dovi=1"); // 支持杜比视界元数据传递
+    player.setProperty("video.decoder", "cc=1"); // 支持隐藏字幕
+    player.setProperty("video.decoder", "alpha=1"); // 支持Alpha通道
+  }
+  
+  // 检查是否有NVIDIA GPU（Windows平台）
+  bool _checkForNvidiaGpu() {
+    if (Platform.isWindows) {
+      try {
+        final result = Process.runSync('wmic', ['path', 'win32_VideoController', 'get', 'name']);
+        final output = result.stdout.toString().toLowerCase();
+        return output.contains('nvidia');
+      } catch (e) {
+        debugPrint('检查NVIDIA GPU时出错: $e');
+      }
+    }
+    return false;
   }
 
   Future<void> _loadInitialBrightness() async {
@@ -723,6 +925,25 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           _aspectRatio = videoTrack.codec.width / videoTrack.codec.height;
           //debugPrint('设置视频宽高比: $_aspectRatio');
         }
+        
+        // 更新当前解码器信息
+        final activeDecoder = getActiveDecoder();
+        SystemResourceMonitor().setActiveDecoder(activeDecoder);
+        debugPrint('当前视频解码器: $activeDecoder');
+        
+        // 如果检测到使用软解，但硬件解码开关已打开，尝试强制启用硬件解码
+        if (activeDecoder.contains("软解")) {
+          final prefs = await SharedPreferences.getInstance();
+          final useHardwareDecoder = prefs.getBool('use_hardware_decoder') ?? true;
+          
+          if (useHardwareDecoder) {
+            debugPrint('检测到使用软解但硬件解码已启用，尝试强制启用硬件解码...');
+            // 延迟执行以避免干扰视频初始化
+            Future.delayed(const Duration(seconds: 2), () {
+              forceEnableHardwareDecoding();
+            });
+          }
+        }
       }
 
       // 优先选择包含sm或中文相关的字幕轨道
@@ -994,6 +1215,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (_currentVideoPath != null) {
         await _updateWatchHistory();
       }
+      
+      // 重置解码器信息
+      SystemResourceMonitor().setActiveDecoder("未知");
 
       // 清除字幕设置（使用空字符串表示清除外部字幕）
       player.setMedia("", MediaType.subtitle);
@@ -1149,6 +1373,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _setStatus(PlayerStatus.playing, message: '开始播放');
       // debugPrint("[VideoPlayerState] play() called, starting screenshot timer."); // <--- REMOVED PRINT
       _startScreenshotTimer(); // <--- EXISTING CALL
+      // 视频开始播放后更新解码器信息
+      Future.delayed(const Duration(seconds: 1), () {
+        _updateCurrentActiveDecoder();
+      });
       // _resetHideControlsTimer(); // Temporarily commented out as the method name is uncertain.
       // Please provide the correct method if you want to show controls on play.
     }
@@ -2936,5 +3164,664 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _setStatus(PlayerStatus.loading, message: message);
     // 确保状态变更立即生效
     notifyListeners();
+  }
+
+  // 更新解码器设置
+  void updateDecoders(List<String> decoders) {
+    if (decoders.isNotEmpty) {
+      player.setDecoders(MediaType.video, decoders);
+      // 更新活跃解码器信息
+      _updateActiveDecoderInfo(decoders);
+    }
+    notifyListeners();
+  }
+  
+  // 获取当前活跃解码器
+  String getActiveDecoder() {
+    try {
+      // 首先检查用户设置是否禁用了硬件解码
+      SharedPreferences.getInstance().then((prefs) {
+        final useHardwareDecoder = prefs.getBool('use_hardware_decoder') ?? true;
+        if (!useHardwareDecoder) {
+          debugPrint('硬件解码已在设置中禁用，强制报告为软解');
+        }
+      });
+      
+      // 同步检查保存的解码器设置，如果只有FFmpeg，则视为软解
+      final currentDecoders = SharedPreferences.getInstance().then((prefs) {
+        return prefs.getStringList('selected_decoders') ?? [];
+      });
+      
+      if (currentDecoders is Future) {
+        currentDecoders.then((decoders) {
+          if (decoders.length == 1 && decoders[0] == "FFmpeg") {
+            debugPrint('当前仅使用FFmpeg解码器，强制报告为软解');
+          }
+        });
+      }
+      
+      // 检查媒体信息
+      if (player.mediaInfo.video == null || player.mediaInfo.video!.isEmpty) {
+        return "未知"; // 无视频轨道
+      }
+      
+      final videoTrack = player.mediaInfo.video![0];
+      
+      // 移除不存在的extras属性相关代码
+      debugPrint('准备获取解码器信息...');
+      
+      // 确定视频编码格式
+      final codecString = videoTrack.toString();
+      String format = "";
+      if (codecString.contains("h264") || codecString.contains("avc")) {
+        format = "H.264";
+      } else if (codecString.contains("hevc") || codecString.contains("h265")) {
+        format = "HEVC";
+      } else if (codecString.contains("av1")) {
+        format = "AV1";
+      } else if (codecString.contains("vp9")) {
+        format = "VP9";
+      } else if (codecString.contains("vp8")) {
+        format = "VP8";
+      } else if (codecString.contains("mpeg4") || codecString.contains("mp4v")) {
+        format = "MPEG-4";
+      } else if (codecString.contains("mpeg2") || codecString.contains("m2v")) {
+        format = "MPEG-2";
+      } else if (codecString.contains("vc1")) {
+        format = "VC-1";
+      } else if (codecString.contains("prores")) {
+        format = "ProRes";
+      } else if (codecString.contains("mjpeg")) {
+        format = "MJPEG";
+      } else if (codecString.contains("hap")) {
+        format = "HAP";
+      } else {
+        // 尝试从codec_name中提取格式
+        final formatMatch = RegExp(r'codec_name:\s*([^,\}]+)').firstMatch(codecString);
+        if (formatMatch != null && formatMatch.group(1) != null) {
+          format = formatMatch.group(1)!.toUpperCase();
+        } else {
+          format = "未知格式";
+        }
+      }
+      
+      // 异步强制检查硬件解码设置
+      SharedPreferences.getInstance().then((prefs) {
+        final useHardwareDecoder = prefs.getBool('use_hardware_decoder') ?? true;
+        if (!useHardwareDecoder) {
+          // 如果硬件解码被禁用，则强制使用软解，不考虑其他检测逻辑
+          SystemResourceMonitor().setActiveDecoder("软解($format) - FFmpeg");
+        }
+      });
+      
+      // 同步强制检查硬件解码设置
+      try {
+        // 同步方式无法获取SharedPreferences，所以这里先跳过
+        // 下面我们使用异步方式设置状态，只在异步回调中更新解码器状态
+      } catch (e) {
+        // 忽略错误，继续使用其他检测逻辑
+      }
+      
+      // 尝试从player直接获取当前解码器名称
+      String? currentDecoder;
+      try {
+        currentDecoder = player.getProperty('video.decoder.current');
+        if (currentDecoder != null && currentDecoder.isNotEmpty) {
+          debugPrint('当前解码器: $currentDecoder');
+        }
+      } catch (e) {
+        debugPrint('获取video.decoder.current属性失败: $e');
+      }
+      
+      // 获取解码器说明（如果有）
+      String? decoderDescription;
+      try {
+        decoderDescription = player.getProperty('decoder.description');
+        if (decoderDescription != null && decoderDescription.isNotEmpty) {
+          debugPrint('解码器说明: $decoderDescription');
+        }
+      } catch (e) {
+        debugPrint('获取decoder.description属性失败: $e');
+      }
+      
+      // 尝试直接从player获取解码器信息
+      String? decoderInfo;
+      try {
+        decoderInfo = player.getProperty('video.decoder');
+        debugPrint('从player属性中提取的解码器信息: $decoderInfo');
+      } catch (e) {
+        debugPrint('获取video.decoder属性失败: $e');
+      }
+      
+      // 从codecString中提取解码器信息
+      debugPrint('原始解码器信息: $codecString');
+      
+      // 如果从player直接获取到了解码器信息，优先使用
+      if (currentDecoder != null && currentDecoder.isNotEmpty) {
+        // 检查是否为硬件解码器
+        if (currentDecoder.contains("VT") || 
+            currentDecoder.contains("MFT") || 
+            currentDecoder.contains("D3D") || 
+            currentDecoder.contains("DXVA") ||
+            currentDecoder.contains("CUDA") ||
+            currentDecoder.contains("VAAPI") ||
+            currentDecoder.contains("VDPAU") ||
+            currentDecoder.contains("MediaCodec") ||
+            currentDecoder.contains("QSV") ||
+            currentDecoder.contains("NVDEC") ||
+            currentDecoder.contains("MMAL") ||
+            currentDecoder.contains("V4L2") ||
+            currentDecoder.contains("CedarX")) {
+          return "硬解($format) - $currentDecoder";
+        } else {
+          return "软解($format) - $currentDecoder";
+        }
+      }
+      
+      // 使用解码器说明判断
+      if (decoderDescription != null && decoderDescription.isNotEmpty) {
+        if (decoderDescription.contains("hardware") || 
+            decoderDescription.contains("accelerated") ||
+            decoderDescription.contains("GPU") ||
+            decoderDescription.contains("HW")) {
+          return "硬解($format) - $decoderDescription";
+        }
+      }
+      
+      // 尝试从MDK解码器信息判断
+      if (decoderInfo != null && decoderInfo.isNotEmpty) {
+        if (decoderInfo.contains("VT") || 
+            decoderInfo.contains("MFT") || 
+            decoderInfo.contains("D3D") || 
+            decoderInfo.contains("DXVA") ||
+            decoderInfo.contains("CUDA") ||
+            decoderInfo.contains("VAAPI") ||
+            decoderInfo.contains("VDPAU") ||
+            decoderInfo.contains("MediaCodec") ||
+            decoderInfo.contains("QSV") ||
+            decoderInfo.contains("NVDEC") ||
+            decoderInfo.contains("MMAL") ||
+            decoderInfo.contains("V4L2") ||
+            decoderInfo.contains("CedarX")) {
+          return "硬解($format) - $decoderInfo";
+        }
+      }
+      
+      // 判断codec信息中的硬件解码特征
+      if (codecString.contains("hwaccel") || 
+          codecString.contains("hw_frames_ctx") || 
+          codecString.contains("gpu") ||
+          codecString.contains("hardware") ||
+          codecString.contains("acceleration") ||
+          codecString.contains("vt_pixbuf") ||
+          codecString.contains("d3d") ||
+          codecString.contains("vaapi") ||
+          codecString.contains("vdpau") ||
+          codecString.contains("cuda")) {
+        // 是硬件解码，进一步确定类型
+        if (codecString.contains("VT") || codecString.contains("vt_pixbuf")) {
+          return "硬解($format) - VideoToolbox";
+        } else if (codecString.contains("MFT")) {
+          return "硬解($format) - MFT";
+        } else if (codecString.contains("D3D11")) {
+          return "硬解($format) - D3D11";
+        } else if (codecString.contains("D3D12")) {
+          return "硬解($format) - D3D12";
+        } else if (codecString.contains("DXVA")) {
+          return "硬解($format) - DXVA";
+        } else if (codecString.contains("CUDA")) {
+          return "硬解($format) - CUDA";
+        } else if (codecString.contains("VAAPI")) {
+          return "硬解($format) - VAAPI";
+        } else if (codecString.contains("VDPAU")) {
+          return "硬解($format) - VDPAU";
+        } else if (codecString.contains("MediaCodec")) {
+          return "硬解($format) - MediaCodec";
+        } else {
+          return "硬解($format) - 未知硬件解码器";
+        }
+      }
+      
+      // 判断是否为软件解码器
+      if (codecString.contains("FFmpeg")) {
+        return "软解($format) - FFmpeg";
+      } else if (codecString.contains("dav1d")) {
+        return "软解($format) - dav1d";
+      } else if (codecString.contains("libvpx")) {
+        return "软解($format) - libvpx";
+      }
+      
+      // 最后从像素格式推断解码器类型（某些平台的硬件解码有特定的输出格式）
+      String? pixelFormat;
+      try {
+        final formatMatch = RegExp(r'format:\s*([^,\}]+)').firstMatch(codecString);
+        if (formatMatch != null && formatMatch.group(1) != null) {
+          pixelFormat = formatMatch.group(1);
+          
+          // 修复：添加pixelFormat的null检查
+          if (pixelFormat != null) {
+            // 某些GPU特定格式通常意味着硬件解码
+            if (pixelFormat.contains("nv12") || 
+                pixelFormat.contains("p010") || 
+                pixelFormat.contains("bgra") || 
+                pixelFormat.contains("yuv420p") ||
+                pixelFormat.contains("d3d11")) {
+              if (Platform.isMacOS || Platform.isIOS) {
+                return "硬解($format) - VideoToolbox";
+              } else if (Platform.isWindows) {
+                return "硬解($format) - D3D/MFT";
+              } else if (Platform.isLinux) {
+                return "硬解($format) - VAAPI/VDPAU";
+              } else if (Platform.isAndroid) {
+                return "硬解($format) - MediaCodec";
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('提取像素格式失败: $e');
+      }
+      
+      // 如果所有判断都失败，只能根据平台猜测
+      if (format != "未知格式") {
+        return "软解($format) - FFmpeg";
+      }
+      
+      return "软解(未知格式) - 未知解码器";
+    } catch (e) {
+      debugPrint('获取解码器信息出错: $e');
+      return "未知";
+    }
+  }
+  
+  // 更新活跃解码器信息
+  void _updateActiveDecoderInfo(List<String> decoders) {
+    if (decoders.isEmpty) return;
+    
+    String decoderInfo;
+    if (decoders.length == 1 && decoders[0] == "FFmpeg") {
+      decoderInfo = "软解 - FFmpeg";
+    } else {
+      // 确定解码方式类型
+      bool isHardwareDecoding = false;
+      
+      // 第一个解码器通常是优先使用的解码器
+      String primaryDecoder = decoders[0];
+      
+      // 识别硬件解码器
+      if (primaryDecoder.contains("VT") || 
+          primaryDecoder.contains("D3D11") || 
+          primaryDecoder.contains("DXVA") || 
+          primaryDecoder.contains("MFT") || 
+          primaryDecoder.contains("CUDA") || 
+          primaryDecoder.contains("VAAPI") || 
+          primaryDecoder.contains("VDPAU") || 
+          primaryDecoder.contains("AMediaCodec") ||
+          primaryDecoder.contains("hap")) {
+        isHardwareDecoding = true;
+      }
+      
+      decoderInfo = isHardwareDecoding ? "硬解 - $primaryDecoder" : "软解 - $primaryDecoder";
+    }
+    
+    // 更新系统资源监视器中的解码器信息
+    SystemResourceMonitor().setActiveDecoder(decoderInfo);
+  }
+  
+  // 当视频播放开始后，尝试获取实际的活跃解码器
+  void _updateCurrentActiveDecoder() {
+    // 确保视频已经在播放
+    if (_status == PlayerStatus.playing && player.mediaInfo.video != null && player.mediaInfo.video!.isNotEmpty) {
+      // 首先检查硬件解码设置
+      SharedPreferences.getInstance().then((prefs) {
+        final useHardwareDecoder = prefs.getBool('use_hardware_decoder') ?? true;
+        final selectedDecoders = prefs.getStringList('selected_decoders') ?? [];
+        
+        // 如果硬件解码被禁用，或者只使用FFmpeg，则强制使用软解
+        if (!useHardwareDecoder || (selectedDecoders.length == 1 && selectedDecoders[0] == "FFmpeg")) {
+          // 获取视频格式
+          final videoTrack = player.mediaInfo.video![0];
+          final codecString = videoTrack.toString().toLowerCase();
+          String format = "未知格式";
+          
+          if (codecString.contains("h264") || codecString.contains("avc")) {
+            format = "H.264";
+          } else if (codecString.contains("hevc") || codecString.contains("h265")) {
+            format = "HEVC";
+          } else if (codecString.contains("av1")) {
+            format = "AV1";
+          } else if (codecString.contains("vp9")) {
+            format = "VP9";
+          } else if (codecString.contains("vp8")) {
+            format = "VP8";
+          } 
+          
+          // 设置为软解状态
+          final softwareDecoder = "软解($format) - FFmpeg";
+          SystemResourceMonitor().setActiveDecoder(softwareDecoder);
+          debugPrint('硬件解码已禁用，强制使用软解: $softwareDecoder');
+          return;
+        }
+      });
+      
+      // 先尝试获取当前解码器的更多属性
+      try {
+        // 尝试获取更多解码器相关属性
+        final hwaccels = player.getProperty('avcodec.hwaccels');
+        debugPrint('可用的硬件加速器: $hwaccels');
+      } catch (e) {
+        debugPrint('获取硬件加速器列表失败: $e');
+      }
+      
+      try {
+        // 尝试获取当前硬件加速状态
+        final hwaccel = player.getProperty('hwaccel');
+        debugPrint('当前硬件加速状态: $hwaccel');
+      } catch (e) {
+        debugPrint('获取当前硬件加速状态失败: $e');
+      }
+      
+      // 尝试获取所有解码器属性
+      Map<String, String> decoderProperties = {};
+      final propertyKeys = [
+        'video.decoder', 'video.decoder.current',
+        'decoder.description', 'hwaccel',
+        'hwaccel.copy', 'hwdevice',
+        'avcodec.hw', 'video.decode.thread',
+        'video.hardware'
+      ];
+      
+      for (final key in propertyKeys) {
+        try {
+          final value = player.getProperty(key);
+          if (value != null && value.isNotEmpty) {
+            decoderProperties[key] = value;
+          }
+        } catch (e) {
+          // 忽略不支持的属性
+        }
+      }
+      
+      // 输出所有收集到的解码器属性
+      if (decoderProperties.isNotEmpty) {
+        debugPrint('解码器相关属性:');
+        decoderProperties.forEach((key, value) {
+          debugPrint('  $key: $value');
+        });
+      } else {
+        debugPrint('未找到任何解码器相关属性');
+      }
+      
+      // 使用增强的解码器识别逻辑
+      final activeDecoder = getActiveDecoder();
+      
+      // 双重检查硬件解码设置
+      SharedPreferences.getInstance().then((prefs) {
+        final useHardwareDecoder = prefs.getBool('use_hardware_decoder') ?? true;
+        
+        if (!useHardwareDecoder && activeDecoder.contains("硬解")) {
+          // 如果硬件解码被禁用但报告为硬解，则修正为软解
+          final videoTrack = player.mediaInfo.video![0];
+          final codecString = videoTrack.toString().toLowerCase();
+          String format = "未知格式";
+          
+          if (codecString.contains("h264") || codecString.contains("avc")) {
+            format = "H.264";
+          } else if (codecString.contains("hevc") || codecString.contains("h265")) {
+            format = "HEVC";
+          } else if (codecString.contains("av1")) {
+            format = "AV1";
+          } else if (codecString.contains("vp9")) {
+            format = "VP9";
+          } else if (codecString.contains("vp8")) {
+            format = "VP8";
+          }
+          
+          final correctedDecoder = "软解($format) - FFmpeg";
+          SystemResourceMonitor().setActiveDecoder(correctedDecoder);
+          debugPrint('修正解码器状态: 硬件解码已禁用，但报告为硬解，修正为: $correctedDecoder');
+        } else {
+          SystemResourceMonitor().setActiveDecoder(activeDecoder);
+          debugPrint('更新当前解码器状态: $activeDecoder');
+        }
+      });
+      
+      // 如果视频编码是H.264或H.265，但使用软解，可能是硬件解码器配置问题
+      final videoTrack = player.mediaInfo.video![0];
+      final codecString = videoTrack.toString().toLowerCase();
+      final isSoftware = activeDecoder.contains("软解");
+      final isH264 = codecString.contains("h264") || codecString.contains("avc");
+      final isHEVC = codecString.contains("hevc") || codecString.contains("h265");
+      
+      if (isSoftware && (isH264 || isHEVC)) {
+        debugPrint('警告：检测到H.264/HEVC视频但使用软解码，尝试检查硬件解码器配置...');
+        
+        // 检查硬件解码配置状态
+        SharedPreferences.getInstance().then((prefs) {
+          final useHardwareDecoder = prefs.getBool('use_hardware_decoder') ?? true;
+          if (useHardwareDecoder) {
+            debugPrint('警告：硬件解码已启用但仍在使用软解，可能是以下原因：');
+            debugPrint('  1. 当前视频格式可能不受硬件解码器支持');
+            debugPrint('  2. 硬件解码器配置可能不正确');
+            debugPrint('  3. 系统硬件可能不支持此类视频的硬件解码');
+            
+            // 3秒后尝试重新应用硬件解码器设置
+            debugPrint('3秒后将尝试重新应用硬件解码器设置...');
+            Future.delayed(const Duration(seconds: 3), () {
+              forceEnableHardwareDecoding();
+            });
+          } else {
+            debugPrint('硬件解码当前已禁用，使用软解属于正常现象');
+          }
+        });
+      } else if (!isSoftware) {
+        debugPrint('当前已成功使用硬件解码: $activeDecoder');
+      }
+    }
+  }
+
+  // 强制重新启用硬件解码
+  Future<void> forceEnableHardwareDecoding() async {
+    try {
+      debugPrint('强制重新启用硬件解码...');
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 保存硬件解码启用状态
+      await prefs.setBool('use_hardware_decoder', true);
+      
+      // 根据平台获取最合适的解码器列表
+      final allDecoders = _getAllSupportedDecoders();
+      List<String> decoders = [];
+      
+      if (Platform.isMacOS) {
+        decoders = allDecoders['macos']!;
+        debugPrint('设置macOS硬件解码器: $decoders');
+        
+        // 针对macOS的额外设置
+        player.setProperty("vt.hardware", "1"); // 确保使用硬件加速
+        player.setProperty("vt.copy", "0");     // 无复制模式
+        player.setProperty("vt.async", "1");    // 异步模式
+        
+        // 尝试设置优化的输出格式
+        player.setProperty("videotoolbox.format", "nv12");
+        
+      } else if (Platform.isIOS) {
+        decoders = allDecoders['ios']!;
+        debugPrint('设置iOS硬件解码器: $decoders');
+        
+        // 针对iOS的额外设置
+        player.setProperty("vt.hardware", "1");
+        player.setProperty("vt.copy", "0");
+        player.setProperty("vt.async", "1");
+        player.setProperty("videotoolbox.format", "nv12");
+        
+      } else if (Platform.isWindows) {
+        decoders = allDecoders['windows']!;
+        debugPrint('设置Windows硬件解码器: $decoders');
+        
+        // 针对Windows的额外设置
+        player.setProperty("d3d.adapter", "0");     // 使用主GPU
+        player.setProperty("mft.low_latency", "1"); // 低延迟模式
+        player.setProperty("avcodec.hw", "any");    // 允许任何硬件加速
+        
+        // 检测是否有NVIDIA GPU
+        final hasNvidiaGpu = _checkForNvidiaGpu();
+        if (hasNvidiaGpu) {
+          debugPrint('检测到NVIDIA GPU，添加CUDA/NVDEC优化');
+          player.setProperty("cuda.device", "0");   // 使用主GPU
+        }
+        
+        // 设置D3D11相关属性
+        player.setProperty("d3d11.feature_level", "11.1");
+        player.setProperty("d3d11va.surface_share", "1"); // 启用表面共享
+        
+      } else if (Platform.isLinux) {
+        decoders = allDecoders['linux']!;
+        debugPrint('设置Linux硬件解码器: $decoders');
+        
+        // 针对Linux的额外设置
+        player.setProperty("vaapi.device", "/dev/dri/renderD128"); // 常用的VA-API设备
+        player.setProperty("vaapi.copy", "0");  // 无复制模式
+        player.setProperty("vdpau.copy", "0");  // 无复制模式
+        
+      } else if (Platform.isAndroid) {
+        decoders = allDecoders['android']!;
+        debugPrint('设置Android硬件解码器: $decoders');
+        
+        // 针对Android的额外设置
+        player.setProperty("mediacodec.surface", "1");
+        player.setProperty("mediacodec.async", "1");
+        player.setProperty("mediacodec.copy", "0");
+        
+      } else {
+        decoders = ["FFmpeg"];
+        debugPrint('未知平台，使用通用解码器');
+      }
+      
+      if (decoders.isNotEmpty) {
+        // 保存选择的解码器
+        await prefs.setStringList('selected_decoders', decoders);
+        
+        // 设置解码器之前先停止播放器
+        bool wasPlaying = false;
+        if (player.state == PlaybackState.playing) {
+          wasPlaying = true;
+          player.state = PlaybackState.paused;
+          debugPrint('暂停播放以重新配置解码器');
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        
+        // 应用解码器设置
+        debugPrint('应用解码器设置: $decoders');
+        player.setDecoders(MediaType.video, decoders);
+        
+        // 设置硬件解码相关全局属性
+        _setGlobalDecodingProperties();
+        
+        // 更新解码器信息显示
+        _updateActiveDecoderInfo(decoders);
+        
+        // 如果之前在播放，恢复播放
+        if (wasPlaying) {
+          await Future.delayed(const Duration(milliseconds: 300));
+          player.state = PlaybackState.playing;
+          debugPrint('恢复播放');
+        }
+        
+        // 如果视频正在播放，等待一会儿再检查解码器状态
+        if (_status == PlayerStatus.playing) {
+          debugPrint('等待1秒后检查解码器状态...');
+          Future.delayed(const Duration(seconds: 1), () {
+            _updateCurrentActiveDecoder();
+            
+            // 10秒后再次检查解码器状态（确保持续使用硬件解码）
+            Future.delayed(const Duration(seconds: 10), () {
+              _updateCurrentActiveDecoder();
+            });
+          });
+        }
+        
+        debugPrint('硬件解码强制启用成功');
+        return;
+      }
+    } catch (e) {
+      debugPrint('强制启用硬件解码失败: $e');
+    }
+  }
+  
+  // 切换硬件解码状态（可以在设置中调用）
+  Future<void> toggleHardwareDecoding(bool enable) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 当前解码器状态
+      String oldDecoderState = enable ? "禁用" : "启用";
+      String newDecoderState = enable ? "启用" : "禁用";
+      debugPrint('切换硬件解码状态：从$oldDecoderState到$newDecoderState');
+      
+      if (enable) {
+        // 启用硬件解码
+        await forceEnableHardwareDecoding();
+      } else {
+        // 禁用硬件解码，只使用软件解码
+        debugPrint('禁用硬件解码，启用软件解码');
+        await prefs.setBool('use_hardware_decoder', false);
+        
+        // 设置为仅使用FFmpeg解码器
+        player.setDecoders(MediaType.video, ["FFmpeg"]);
+        await prefs.setStringList('selected_decoders', ["FFmpeg"]);
+        
+        // 设置解码器相关属性
+        player.setProperty('avcodec.threads', '4'); // 使用4个线程进行软解
+        
+        if (Platform.isWindows) {
+          // 清除Windows特定的硬解属性
+          try {
+            player.setProperty('d3d.adapter', '');
+            player.setProperty('cuda.device', '');
+          } catch (e) {
+            // 忽略不支持的属性
+          }
+        } else if (Platform.isMacOS || Platform.isIOS) {
+          // 清除Apple平台特定的硬解属性
+          try {
+            player.setProperty('vt.hardware', '0');
+            player.setProperty('vt.copy', '1');
+          } catch (e) {
+            // 忽略不支持的属性
+          }
+        }
+        
+        // 更新解码器信息
+        _updateActiveDecoderInfo(["FFmpeg"]);
+        
+        // 如果当前有视频正在播放，尝试重新加载视频或重启播放器
+        if (_status == PlayerStatus.playing || _status == PlayerStatus.paused) {
+          final currentPath = _currentVideoPath;
+          final wasPlaying = _status == PlayerStatus.playing;
+          final currentPosition = _position.inMilliseconds;
+          
+          // 暂停播放
+          if (wasPlaying) {
+            player.state = PlaybackState.paused;
+          }
+          
+          // 等待一小段时间确保属性生效
+          await Future.delayed(const Duration(milliseconds: 300));
+          
+          // 重新设置解码器
+          player.setDecoders(MediaType.video, ["FFmpeg"]);
+          debugPrint('重新设置解码器为: ["FFmpeg"]');
+          
+          // 如果视频仍在播放，尝试检查解码器状态
+          _updateCurrentActiveDecoder();
+        }
+      }
+      
+      // 通知UI更新
+      notifyListeners();
+    } catch (e) {
+      debugPrint('切换硬件解码状态失败: $e');
+    }
   }
 }
