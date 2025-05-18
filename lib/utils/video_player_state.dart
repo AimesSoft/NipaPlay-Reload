@@ -195,7 +195,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 获取是否处于最终加载阶段
   bool get isInFinalLoadingPhase => _isInFinalLoadingPhase;
-  
+
   // 解码器管理器相关的getter
   DecoderManager get decoderManager => _decoderManager;
 
@@ -232,7 +232,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       //debugPrint("Error disabling wakelock on init: $e");
     }
   }
-  
+
   Future<void> _loadInitialBrightness() async {
     if (!globals.isPhone) return;
     try {
@@ -2981,7 +2981,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _decoderManager.updateDecoders(decoders);
     notifyListeners();
   }
-
+  
   // 获取当前活跃解码器，代理到解码器管理器
   Future<String> getActiveDecoder() async {
     final decoder = await _decoderManager.getActiveDecoder();
@@ -3006,7 +3006,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   
   // 强制启用硬件解码，代理到解码器管理器
   Future<void> forceEnableHardwareDecoder() async {
-    if (_status == PlayerStatus.playing || _status == PlayerStatus.paused) {
+        if (_status == PlayerStatus.playing || _status == PlayerStatus.paused) {
       await _decoderManager.forceEnableHardwareDecoder();
       // 稍后检查解码器状态
       await Future.delayed(const Duration(seconds: 1));

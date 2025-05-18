@@ -7,7 +7,8 @@ URL:        https://github.com/MCDFSteve/NipaPlay-Reload
 
 # Source0: %{name}-%{version}.tar.gz # If your source is a tarball
 BuildRequires: desktop-file-utils
-# Requires: # Add runtime dependencies here, e.g., libgtk-3-0, libmpv1
+Requires: sqlite-libs
+# Other runtime dependencies here, e.g., libgtk-3-0, libmpv1
 
 %description
 NipaPlay is a modern cross-platform media player built with Flutter.
