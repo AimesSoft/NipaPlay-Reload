@@ -136,6 +136,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 解码器管理器
   late DecoderManager _decoderManager;
 
+  bool _hasInitialScreenshot = false; // 添加标记跟踪是否已进行第一次播放截图
+
   VideoPlayerState() {
     _subtitleManager = SubtitleManager(player: player);
     _decoderManager = DecoderManager(player: player);
@@ -1170,6 +1172,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       player.state = PlaybackState.paused;
       _setStatus(PlayerStatus.paused, message: '已暂停');
       _saveCurrentPositionToHistory();
+      // 在暂停时触发截图
+      _captureConditionalScreenshot("暂停时");
       // WakelockPlus.disable(); // Already handled by _setStatus
     }
   }
@@ -1179,8 +1183,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
       player.state = PlaybackState.playing;
       _setStatus(PlayerStatus.playing, message: '开始播放');
-      // debugPrint("[VideoPlayerState] play() called, starting screenshot timer."); // <--- REMOVED PRINT
-      _startScreenshotTimer(); // <--- EXISTING CALL
+      
+      // 在首次播放时进行截图
+      if (!_hasInitialScreenshot) {
+        _hasInitialScreenshot = true;
+        // 延迟一秒再截图，确保视频已经开始显示
+        Future.delayed(const Duration(seconds: 1), () {
+          _captureConditionalScreenshot("首次播放时");
+        });
+      }
       // 视频开始播放后更新解码器信息
       Future.delayed(const Duration(seconds: 1), () {
         _updateCurrentActiveDecoder();
@@ -1423,11 +1434,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   @override
   void dispose() {
+    // 在销毁前进行一次截图
+    if (hasVideo) {
+      _captureConditionalScreenshot("销毁前");
+    }
+    
     player.dispose();
+    _focusNode.dispose();
     _positionUpdateTimer?.cancel();
     _hideControlsTimer?.cancel();
     _hideMouseTimer?.cancel();
-    _focusNode.dispose();
+    _autoHideTimer?.cancel();
     _screenshotTimer?.cancel();
     _brightnessIndicatorTimer?.cancel(); // Already cancelled here or in _hideBrightnessIndicator
     if (_brightnessOverlayEntry != null) { // ADDED THIS BLOCK
@@ -1933,47 +1950,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 启动截图定时器 - 每5秒截取一次视频帧
   void _startScreenshotTimer() {
-    _stopScreenshotTimer(); // 先停止现有定时器
-
-    if (_currentVideoPath != null && hasVideo) {
-      // debugPrint("[VideoPlayerState] _startScreenshotTimer: Timer initiated for path: $_currentVideoPath"); // <--- REMOVED PRINT
-      _screenshotTimer =
-          Timer.periodic(const Duration(seconds: 5), (timer) async {
-        if (_status == PlayerStatus.playing && !_isCapturingFrame) {
-          _isCapturingFrame = true; // 设置标志，防止并发截图
-          try {
-            // 使用异步操作减少主线程阻塞
-            final newThumbnailPath =
-                await Future(() => _captureVideoFrameWithoutPausing());
-
-            if (newThumbnailPath != null) {
-              _currentThumbnailPath = newThumbnailPath;
-              debugPrint('5秒定时截图完成: $_currentThumbnailPath');
-
-              // 立即更新观看记录中的缩略图
-              await _updateWatchHistoryWithNewThumbnail(newThumbnailPath);
-              
-              // 截图后检查解码器状态
-              await _decoderManager.checkDecoderAfterScreenshot();
-            }
-          } catch (e) {
-            debugPrint('定时截图失败: $e');
-          } finally {
-            _isCapturingFrame = false; // 重置标志
-          }
-        }
-      });
-      ////debugPrint('启动5秒定时截图');
-    }
+    // 移除定时截图功能，改为条件性截图
+    // 原先的定时截图代码已被删除
   }
 
   // 停止截图定时器
   void _stopScreenshotTimer() {
-    if (_screenshotTimer != null) {
-      _screenshotTimer!.cancel();
-      _screenshotTimer = null;
-      ////debugPrint('停止定时截图');
-    }
+    // 不再需要停止定时器，但保留方法以避免其他地方调用出错
   }
 
   // 不暂停视频的截图方法
@@ -3011,6 +2994,46 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 稍后检查解码器状态
       await Future.delayed(const Duration(seconds: 1));
       await _updateCurrentActiveDecoder();
+    }
+  }
+
+  // 添加返回按钮处理
+  Future<bool> handleBackButton() async {
+    if (_isFullscreen) {
+      await toggleFullscreen();
+      return false; // 不退出应用
+    } else {
+      // 在返回按钮点击时进行截图
+      _captureConditionalScreenshot("返回按钮时");
+      
+      // 等待截图完成
+      await Future.delayed(const Duration(milliseconds: 200));
+      
+      return true; // 允许返回
+    }
+  }
+
+  // 条件性截图方法
+  Future<void> _captureConditionalScreenshot(String triggerEvent) async {
+    if (_currentVideoPath == null || !hasVideo || _isCapturingFrame) return;
+    
+    _isCapturingFrame = true;
+    try {
+      final newThumbnailPath = await _captureVideoFrameWithoutPausing();
+      if (newThumbnailPath != null) {
+        _currentThumbnailPath = newThumbnailPath;
+        debugPrint('条件截图完成($triggerEvent): $_currentThumbnailPath');
+        
+        // 更新观看记录中的缩略图
+        await _updateWatchHistoryWithNewThumbnail(newThumbnailPath);
+        
+        // 截图后检查解码器状态
+        await _decoderManager.checkDecoderAfterScreenshot();
+      }
+    } catch (e) {
+      debugPrint('条件截图失败($triggerEvent): $e');
+    } finally {
+      _isCapturingFrame = false;
     }
   }
 }

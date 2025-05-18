@@ -29,6 +29,12 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   void initState() {
     super.initState();
   }
+  
+  // 处理系统返回键事件
+  Future<bool> _handleWillPop() async {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    return await videoState.handleBackButton();
+  }
 
   void _handleSideSwipeDragStart(DragStartDetails details) {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
@@ -101,7 +107,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        return AnimatedContainer(
+        return WillPopScope(
+          onWillPop: _handleWillPop,
+          child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
           color: videoState.hasVideo 
@@ -192,6 +200,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               ],
             ),
           ),
+        ),
         );
       },
     );

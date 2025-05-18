@@ -56,7 +56,9 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
                 onTapUp: (_) async {
                   setState(() => _isBackButtonPressed = false);
                   try {
-                    // 重置播放器状态
+                    // 先调用handleBackButton处理截图
+                    await widget.videoState.handleBackButton();
+                    // 然后重置播放器状态
                     await widget.videoState.resetPlayer();
                   } catch (e) {
                     if (mounted) {
