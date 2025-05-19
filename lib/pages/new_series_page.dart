@@ -18,12 +18,12 @@ import '../pages/anime_detail_page.dart';
 import '../widgets/transparent_page_route.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
-import '../utils/tab_change_notifier.dart';
 import '../widgets/loading_overlay.dart';
 import 'package:flutter/rendering.dart';
 import 'package:nipaplay/widgets/floating_action_glass_button.dart';
 import '../widgets/blur_snackbar.dart';
 import '../widgets/anime_card.dart';
+import 'package:nipaplay/main.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -487,14 +487,14 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
 
     setState(() {
       _isLoadingVideoFromDetail = true;
-      _loadingMessageForDetail = '正在初始化播放器...'; // Or more specific messages
+      _loadingMessageForDetail = '正在初始化播放器...';
     });
+
+    bool tabChangeLogicExecutedInDetail = false;
 
     try {
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      final tabNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
 
-      // Define the status listener
       late VoidCallback statusListener;
       statusListener = () {
         if (!mounted) {
@@ -502,34 +502,34 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           return;
         }
         
-        // Update loading messages from videoState if desired
-        // For simplicity, we use a static message here, but could be dynamic:
-        // if (videoState.statusMessages.isNotEmpty && 
-        //     videoState.statusMessages.last != _loadingMessageForDetail) {
-        //   WidgetsBinding.instance.addPostFrameCallback((_) {
-        //     if (mounted) {
-        //       setState(() {
-        //         _loadingMessageForDetail = videoState.statusMessages.last;
-        //       });
-        //     }
-        //   });
-        // }
-
-        if (videoState.status == PlayerStatus.ready || videoState.status == PlayerStatus.playing) {
-          videoState.removeListener(statusListener);
+        if ((videoState.status == PlayerStatus.ready || videoState.status == PlayerStatus.playing) && !tabChangeLogicExecutedInDetail) {
+          tabChangeLogicExecutedInDetail = true;
+          
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               setState(() {
                 _isLoadingVideoFromDetail = false;
               });
-              // Switch to the player tab (assuming index 0 for player)
-              // Attempt both methods for tab switching as seen in anime_page.dart
+              
+              debugPrint('[NewSeriesPage _handlePlayEpisode] Player ready/playing. Attempting to switch tab.');
               try {
-                DefaultTabController.of(context).animateTo(0);
+                MainPageState? mainPageState = MainPageState.of(context);
+                if (mainPageState != null && mainPageState.globalTabController != null) {
+                  if (mainPageState.globalTabController!.index != 0) {
+                    mainPageState.globalTabController!.animateTo(0);
+                    debugPrint('[NewSeriesPage _handlePlayEpisode] Directly called mainPageState.globalTabController.animateTo(0)');
+                  } else {
+                    debugPrint('[NewSeriesPage _handlePlayEpisode] mainPageState.globalTabController is already at index 0.');
+                  }
+                } else {
+                  debugPrint('[NewSeriesPage _handlePlayEpisode] Could not find MainPageState or globalTabController.');
+                }
               } catch (e) {
-                //debugPrint('[NewSeriesPage] Error switching tab with DefaultTabController: $e');
+                debugPrint("[NewSeriesPage _handlePlayEpisode] Error directly changing tab: $e");
               }
-              tabNotifier.changeTab(0); 
+              videoState.removeListener(statusListener);
+            } else {
+               videoState.removeListener(statusListener);
             }
           });
         } else if (videoState.status == PlayerStatus.error) {
@@ -538,25 +538,26 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
               if (mounted) {
                 setState(() {
                   _isLoadingVideoFromDetail = false;
-                  // Optionally show an error message to the user
-                  BlurSnackBar.show(context, '播放器加载失败: ${videoState.error ?? '未知错误'}');
                 });
+                BlurSnackBar.show(context, '播放器加载失败: ${videoState.error ?? '未知错误'}');
               }
             });
+        } else if (tabChangeLogicExecutedInDetail && (videoState.status == PlayerStatus.ready || videoState.status == PlayerStatus.playing)) {
+            debugPrint('[NewSeriesPage _handlePlayEpisode] Tab logic executed, player still ready/playing. Ensuring listener removed.');
+            videoState.removeListener(statusListener);
         }
       };
 
       videoState.addListener(statusListener);
-      await videoState.initializePlayer(historyItem.filePath);
+      await videoState.initializePlayer(historyItem.filePath, historyItem: historyItem);
 
     } catch (e) {
       if (mounted) {
         setState(() {
           _isLoadingVideoFromDetail = false;
-          _loadingMessageForDetail = '发生错误: $e'; // Show error in overlay or use a SnackBar
+          _loadingMessageForDetail = '发生错误: $e';
         });
         BlurSnackBar.show(context, '处理播放请求时出错: $e');
-        //debugPrint('[NewSeriesPage _handlePlayEpisode] Error: $e');
       }
     }
   }

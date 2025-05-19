@@ -34,6 +34,7 @@ import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/page_prewarmer.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -98,7 +99,8 @@ void main() async {
   // 检查网络连接
   _checkNetworkConnection();
 
-  // 注册 FVP
+  // 初始化播放器内核工厂
+  await PlayerFactory.initialize();
 
   // 并行执行初始化操作
   await Future.wait(<Future<dynamic>>[
@@ -139,13 +141,6 @@ void main() async {
     
     // 初始化观看记录管理器
     WatchHistoryManager.initialize(),
-    
-    // 初始化系统资源监控（仅桌面平台）
-    Future(() async {
-      if (globals.isDesktop) {
-        await SystemResourceMonitor.initialize();
-      }
-    }),
   ]).then((results) {
     // 处理主题模式设置
     String savedThemeMode = results[1] as String;
@@ -159,6 +154,11 @@ void main() async {
         break;
       default:
         initialThemeMode = ThemeMode.system;
+    }
+
+    // 初始化系统资源监控（仅桌面平台）
+    if (globals.isDesktop) {
+      SystemResourceMonitor.initialize();
     }
 
     if (globals.isDesktop) {
@@ -370,30 +370,63 @@ class MainPage extends StatefulWidget {
 
   @override
   // ignore: library_private_types_in_public_api
-  _MainPageState createState() => _MainPageState();
+  MainPageState createState() => MainPageState();
 }
 
-class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, WindowListener {
+class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, WindowListener {
   bool isMaximized = false;
   TabController? globalTabController;
 
-  // TabChangeNotifier监听
-  TabChangeNotifier? _tabChangeNotifier;
-  void _onTabChangeRequested() {
-    final index = _tabChangeNotifier?.targetTabIndex;
-    if (index != null && globalTabController != null) {
-      if (globalTabController!.index != index) {
-        globalTabController!.animateTo(index);
-      }
-      _tabChangeNotifier?.clear();
-    }
+  // Static method to find MainPageState from context
+  static MainPageState? of(BuildContext context) {
+    return context.findAncestorStateOfType<MainPageState>();
   }
+
+  // TabChangeNotifier监听 - Temporarily remove or comment out for Scheme 1
+  // TabChangeNotifier? _tabChangeNotifier;
+  // void _onTabChangeRequested() {
+  //   debugPrint('[_MainPageState] _onTabChangeRequested triggered.');
+  //   final index = _tabChangeNotifier?.targetTabIndex;
+  //   if (index != null && globalTabController != null) {
+  //     debugPrint('[_MainPageState] targetTabIndex: $index, current globalTabController.index: ${globalTabController!.index}');
+  //     if (globalTabController!.index != index) {
+  //       globalTabController!.animateTo(index);
+  //       debugPrint('[_MainPageState] Called globalTabController.animateTo($index)');
+  //     } else {
+  //       debugPrint('[_MainPageState] globalTabController.index is already $index. No animation needed.');
+  //     }
+  //     _tabChangeNotifier?.clear();
+  //   }
+  // }
 
   @override
   void initState() {
     super.initState();
     globalTabController = TabController(length: widget.pages.length, vsync: this);
+    globalTabController?.addListener(() {
+      if (globalTabController != null) { 
+        debugPrint('[MainPageState] globalTabController listener: index=${globalTabController!.index}, previousIndex=${globalTabController!.previousIndex}, indexIsChanging=${globalTabController!.indexIsChanging}, animationValue=${globalTabController!.animation?.value.toStringAsFixed(2)}');
+      }
+    });
+    debugPrint('[MainPageState] initState: globalTabController listener ADDED.');
     
+    // Try to trigger listener immediately after adding it
+    /* // Commenting out the test code for now
+    if (widget.pages.length > 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        debugPrint('[MainPageState] initState (postFrame): Attempting to animateTo(1) and then animateTo(0).');
+        globalTabController?.animateTo(1);
+        // Optionally, animate back to 0 immediately or after a short delay to see multiple events
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) { // Check if still mounted before delaying further
+             globalTabController?.animateTo(0);
+             debugPrint('[MainPageState] initState (postFrame delayed): Attempted to animateTo(0).');
+          }
+        });
+      });
+    }
+    */
+
     // 窗口管理器初始化
     if (globals.winLinDesktop) {
       windowManager.addListener(this);
@@ -416,15 +449,15 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 只添加一次监听
-    _tabChangeNotifier ??= Provider.of<TabChangeNotifier>(context);
-    _tabChangeNotifier?.removeListener(_onTabChangeRequested);
-    _tabChangeNotifier?.addListener(_onTabChangeRequested);
+    // 只添加一次监听 - Temporarily remove or comment out for Scheme 1
+    // _tabChangeNotifier ??= Provider.of<TabChangeNotifier>(context);
+    // _tabChangeNotifier?.removeListener(_onTabChangeRequested);
+    // _tabChangeNotifier?.addListener(_onTabChangeRequested);
   }
 
   @override
   void dispose() {
-    _tabChangeNotifier?.removeListener(_onTabChangeRequested);
+    // _tabChangeNotifier?.removeListener(_onTabChangeRequested); // Temporarily remove
     globalTabController?.dispose();
     if (globals.winLinDesktop) {
       windowManager.removeListener(this);
@@ -607,13 +640,20 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
       return;
     }
     
-    // 1. 切换到视频播放Tab（PlayVideoPage，索引0）
-    try {
+    // New logic for Scheme 1:
+    MainPageState? mainPageState = MainPageState.of(context);
+    if (mainPageState != null && mainPageState.globalTabController != null) {
+      if (mainPageState.globalTabController!.index != 0) {
+        mainPageState.globalTabController!.animateTo(0);
+        debugPrint('[Dart - _showGlobalUploadDialog] Directly called globalTabController.animateTo(0)');
+      } else {
+        debugPrint('[Dart - _showGlobalUploadDialog] globalTabController is already at index 0.');
+      }
+    } else {
+      debugPrint('[Dart - _showGlobalUploadDialog] Could not find MainPageState or globalTabController.');
+      // Fallback or error handling if direct access fails, maybe use TabChangeNotifier here as a backup
       Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
-      print('[Dart] 已请求切换到视频播放Tab');
-    } catch (e) {
-      print('[Dart] 切换Tab时出错: $e');
-      // 继续执行，不影响后续播放器初始化
+      debugPrint('[Dart - _showGlobalUploadDialog] Fallback: Used TabChangeNotifier to request tab change to 0.');
     }
     
     // 2. 初始化播放器

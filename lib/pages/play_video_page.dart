@@ -62,7 +62,18 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     //debugPrint("[PlayVideoPage] Accumulated Drag Distance: $_horizontalDragDistance");
     //debugPrint("[PlayVideoPage] Drag Velocity: ${details.primaryVelocity}");
 
-    final tabController = DefaultTabController.of(context);
+    // 先检查是否存在DefaultTabController，避免异常
+    final TabController? tabController = 
+        context.findAncestorWidgetOfExactType<DefaultTabController>() != null
+        ? DefaultTabController.of(context)
+        : null;
+        
+    if (tabController == null) {
+      // 如果不存在TabController，直接返回
+      _horizontalDragDistance = 0.0;
+      return;
+    }
+    
     final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
 
     final currentIndex = tabController.index;

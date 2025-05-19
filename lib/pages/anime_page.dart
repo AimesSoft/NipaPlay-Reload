@@ -23,6 +23,7 @@ import '../widgets/blur_snackbar.dart';
 import '../widgets/history_all_modal.dart';
 import '../widgets/switchable_view.dart';
 import 'package:flutter/rendering.dart';
+import 'package:nipaplay/main.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -122,6 +123,8 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     debugPrint('[AnimePage] item.filePath: ${item.filePath}');
     debugPrint('[AnimePage] item.episodeTitle: ${item.episodeTitle}');
   
+    bool tabChangeLogicExecuted = false; // Flag to ensure one-shot execution
+
     // 检查文件是否存在
     final videoFile = File(item.filePath);
     bool fileExists = videoFile.existsSync();
@@ -186,7 +189,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     late final VoidCallback playbackFinishListener;
 
     statusListener = () {
+      debugPrint('[AnimePage] statusListener triggered. Player status: ${videoState.status}, mounted: $mounted, tabChangeLogicExecuted: $tabChangeLogicExecuted');
       if (!mounted) {
+        debugPrint('[AnimePage] statusListener: Not mounted, removing listener.');
         videoState.removeListener(statusListener);
         return;
       }
@@ -200,22 +205,45 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           }
         });
       }
-      if (videoState.status == PlayerStatus.ready ||
-          videoState.status == PlayerStatus.playing) {
+      if ((videoState.status == PlayerStatus.ready ||
+          videoState.status == PlayerStatus.playing) && !tabChangeLogicExecuted) {
+        debugPrint('[AnimePage] statusListener: Player ready/playing AND tabChangeLogicExecuted is false.');
+        tabChangeLogicExecuted = true; // Set flag immediately
+        
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          debugPrint('[AnimePage] statusListener (postFrame): Executing tab change and UI update.');
           if (mounted) {
             setState(() {
               _loadingVideo = false;
             });
-            videoState.removeListener(statusListener);
-            final tabController = DefaultTabController.of(context);
-            tabController.animateTo(0);
+            debugPrint('[AnimePage] statusListener (postFrame): Calling changeTab(0).');
             try {
-              Provider.of<TabChangeNotifier>(context, listen: false)
-                  .changeTab(0);
-            } catch (e) {}
+              MainPageState? mainPageState = MainPageState.of(context);
+              if (mainPageState != null && mainPageState.globalTabController != null) {
+                if (mainPageState.globalTabController!.index != 0) {
+                  mainPageState.globalTabController!.animateTo(0);
+                  debugPrint('[AnimePage] statusListener (postFrame): Directly called mainPageState.globalTabController.animateTo(0)');
+                } else {
+                  debugPrint('[AnimePage] statusListener (postFrame): mainPageState.globalTabController is already at index 0.');
+                }
+              } else {
+                debugPrint('[AnimePage] statusListener (postFrame): Could not find MainPageState or globalTabController. Falling back to TabChangeNotifier.');
+                // Fallback if direct access fails for some reason
+                Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
+              }
+            } catch (e) {
+              debugPrint("[AnimePage] statusListener (postFrame): Error directly changing tab or using fallback: $e");
+            }
+            debugPrint('[AnimePage] statusListener (postFrame): Removing self (statusListener).');
+            videoState.removeListener(statusListener);
+          } else {
+            debugPrint('[AnimePage] statusListener (postFrame): Not mounted, removing listener only.');
+            videoState.removeListener(statusListener); // Also remove if not mounted here
           }
         });
+      } else if (tabChangeLogicExecuted && (videoState.status == PlayerStatus.ready || videoState.status == PlayerStatus.playing)) {
+        debugPrint('[AnimePage] statusListener: Player ready/playing BUT tabChangeLogicExecuted is true. Ensuring listener is removed.');
+        videoState.removeListener(statusListener);
       }
     };
 
@@ -234,6 +262,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
 
     videoState.addListener(statusListener);
     videoState.addListener(playbackFinishListener);
+    debugPrint('[AnimePage] _onWatchHistoryItemTap: Added statusListener and playbackFinishListener. Calling initializePlayer.');
     videoState.initializePlayer(item.filePath, historyItem: item);
   }
 
@@ -725,13 +754,19 @@ class _MediaLibraryTabs extends StatefulWidget {
 class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   int _currentIndex = 0;
+  // 添加一个固定的子组件数量常量
+  static const int TAB_COUNT = 2; // 固定为2个标签页：媒体库和库管理
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    _tabController = TabController(length: 2, vsync: this, initialIndex: _currentIndex);
+    // 使用固定的TAB_COUNT常量，避免后续变化
+    _tabController = TabController(length: TAB_COUNT, vsync: this, initialIndex: _currentIndex);
     _tabController.addListener(_handleTabChange);
+    
+    // 添加调试信息
+    print('_MediaLibraryTabs创建TabController：固定长度${_tabController.length}');
   }
 
   @override
@@ -756,6 +791,28 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerP
     // 获取外观设置，判断是否启用页面滑动动画
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final enableAnimation = appearanceSettings.enablePageAnimation;
+    
+    // 保存子组件为局部变量，确保长度一致性
+    final List<Widget> pageChildren = [
+      // 使用RepaintBoundary隔离绘制边界，减少重绘范围
+      RepaintBoundary(
+        child: MediaLibraryPage(
+          key: ValueKey('mediaLibrary_${widget.mediaLibraryVersion}'),
+          onPlayEpisode: widget.onPlayEpisode,
+        ),
+      ),
+      // 使用RepaintBoundary隔离绘制边界，减少重绘范围
+      RepaintBoundary(
+        child: LibraryManagementTab(
+          onPlayEpisode: widget.onPlayEpisode,
+        ),
+      ),
+    ];
+    
+    // 验证子组件数量与TabController长度是否匹配
+    if (pageChildren.length != TAB_COUNT) {
+      print('警告：子组件数量(${pageChildren.length})与TabController长度(${TAB_COUNT})不匹配');
+    }
     
     return Column(
       children: [
@@ -787,6 +844,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerP
           child: SwitchableView(
             enableAnimation: enableAnimation,
             currentIndex: _currentIndex,
+            controller: _tabController,
             // 使用更合适的物理滑动效果
             physics: enableAnimation 
                 ? const PageScrollPhysics() // 开启动画时使用页面滑动物理效果
@@ -803,21 +861,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerP
                 print('页面变更到: $index (启用动画: $enableAnimation)');
               }
             },
-            children: [
-              // 使用RepaintBoundary隔离绘制边界，减少重绘范围
-              RepaintBoundary(
-                child: MediaLibraryPage(
-                  key: ValueKey('mediaLibrary_${widget.mediaLibraryVersion}'),
-                  onPlayEpisode: widget.onPlayEpisode,
-                ),
-              ),
-              // 使用RepaintBoundary隔离绘制边界，减少重绘范围
-              RepaintBoundary(
-                child: LibraryManagementTab(
-                  onPlayEpisode: widget.onPlayEpisode,
-                ),
-              ),
-            ],
+            children: pageChildren,
           ),
         ),
       ],

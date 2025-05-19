@@ -68,35 +68,25 @@ class AudioTracksMenu extends StatelessWidget {
               if (videoState.player.mediaInfo.audio != null)
                 ...videoState.player.mediaInfo.audio!.asMap().entries.map((entry) {
                   final index = entry.key;
-                  final track = entry.value;
+                  final track = entry.value; // track is PlayerAudioStreamInfo
                   final isActive = videoState.player.activeAudioTracks.contains(index);
                   
-                  // 尝试从track中提取title和language
-                  String title = '轨道 $index';
-                  String language = '未知';
-                  
-                  final fullString = track.toString();
-                  if (fullString.contains('metadata: {')) {
-                    final metadataStart = fullString.indexOf('metadata: {') + 'metadata: {'.length;
-                    final metadataEnd = fullString.indexOf('}', metadataStart);
-                    
-                    if (metadataEnd > metadataStart) {
-                      final metadataStr = fullString.substring(metadataStart, metadataEnd);
-                      
-                      // 提取title
-                      final titleMatch = RegExp(r'title: ([^,}]+)').firstMatch(metadataStr);
-                      if (titleMatch != null) {
-                        title = titleMatch.group(1)?.trim() ?? title;
-                      }
-                      
-                      // 提取language
-                      final languageMatch = RegExp(r'language: ([^,}]+)').firstMatch(metadataStr);
-                      if (languageMatch != null) {
-                        language = languageMatch.group(1)?.trim() ?? language;
-                        // 获取映射后的语言名称
-                        language = _getLanguageName(language);
-                      }
-                    }
+                  // 从PlayerAudioStreamInfo获取标题和语言
+                  String title = track.title ?? '轨道 $index';
+                  String language = track.language ?? '未知';
+
+                  // 如果语言不是"未知"，则尝试获取更友好的名称
+                  if (language != '未知') {
+                    language = _getLanguageName(language);
+                  }
+                  // 如果标题是 "Audio track X" 并且元数据中有标题，优先使用元数据的标题
+                  if (title == '轨道 $index' && track.metadata['title'] != null && track.metadata['title']!.isNotEmpty) {
+                    title = track.metadata['title']!;
+                  }
+
+                  // 如果有编解码器名称，可以附加到标题上
+                  if (track.codec.name != null && track.codec.name!.isNotEmpty && track.codec.name != 'Unknown Audio Codec') {
+                    title += " (${track.codec.name})";
                   }
                   
                   return Material(

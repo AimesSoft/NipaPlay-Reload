@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:fvp/mdk.dart'; // 导入MDK库
+import 'package:nipaplay/player_abstraction/player_factory.dart'; // 导入播放器工厂
 
 /// 系统资源监控类
 /// 用于监控应用的CPU使用率、帧率和内存使用情况
@@ -24,6 +25,7 @@ class SystemResourceMonitor {
   double _fps = 0.0;
   String _activeDecoder = "未知"; // 添加当前活跃的解码器
   String _mdkVersion = "未知"; // 添加MDK版本号
+  String _playerKernelType = "未知"; // 添加播放器内核类型
 
   // 定时器
   Timer? _resourceTimer;
@@ -54,6 +56,9 @@ class SystemResourceMonitor {
   
   /// 获取MDK版本号
   String get mdkVersion => _mdkVersion;
+  
+  /// 获取播放器内核类型
+  String get playerKernelType => _playerKernelType;
 
   /// 初始化系统资源监控
   static Future<void> initialize() async {
@@ -63,6 +68,9 @@ class SystemResourceMonitor {
       
       // 获取并设置MDK版本号
       _instance._initMdkVersion();
+      
+      // 获取播放器内核类型
+      _instance._updatePlayerKernelType();
     }
   }
   
@@ -84,6 +92,34 @@ class SystemResourceMonitor {
       debugPrint('获取MDK版本号出错: $e');
       _mdkVersion = "未知";
     }
+  }
+
+  /// 更新播放器内核类型
+  void _updatePlayerKernelType() {
+    try {
+      // 从PlayerFactory获取当前内核类型
+      final kernelType = PlayerFactory.getKernelType();
+      switch (kernelType) {
+        case PlayerKernelType.mdk:
+          _playerKernelType = "MDK";
+          break;
+        case PlayerKernelType.videoPlayer:
+          _playerKernelType = "Video Player";
+          break;
+        default:
+          _playerKernelType = "未知";
+      }
+      debugPrint('当前播放器内核类型: $_playerKernelType');
+    } catch (e) {
+      debugPrint('获取播放器内核类型出错: $e');
+      _playerKernelType = "未知";
+    }
+  }
+
+  /// 设置播放器内核类型
+  void setPlayerKernelType(String kernelType) {
+    _playerKernelType = kernelType;
+    debugPrint('设置播放器内核类型: $_playerKernelType');
   }
 
   /// 释放资源
@@ -206,5 +242,10 @@ class SystemResourceMonitor {
   /// 设置当前活跃的解码器
   void setActiveDecoder(String decoder) {
     _activeDecoder = decoder;
+  }
+  
+  /// 更新播放器内核类型
+  void updatePlayerKernelType() {
+    _updatePlayerKernelType();
   }
 } 

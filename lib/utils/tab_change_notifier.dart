@@ -6,6 +6,7 @@ class TabChangeNotifier extends ChangeNotifier {
   int? get targetTabIndex => _targetTabIndex;
 
   void changeTab(int index) {
+    debugPrint('[TabChangeNotifier] changeTab called with index: $index');
     _targetTabIndex = index;
     notifyListeners();
   }

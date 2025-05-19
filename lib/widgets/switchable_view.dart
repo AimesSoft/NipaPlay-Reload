@@ -19,6 +19,9 @@ class SwitchableView extends StatefulWidget {
   /// 滚动物理效果
   final ScrollPhysics? physics;
 
+  /// 可选的 TabController
+  final TabController? controller;
+
   const SwitchableView({
     Key? key,
     required this.children,
@@ -26,6 +29,7 @@ class SwitchableView extends StatefulWidget {
     this.enableAnimation = false,
     this.onPageChanged,
     this.physics,
+    this.controller,
   }) : super(key: key);
 
   @override
@@ -57,10 +61,21 @@ class _SwitchableViewState extends State<SwitchableView> {
   @override
   Widget build(BuildContext context) {
     // 从作用域获取TabController
-    final TabController? tabController = TabControllerScope.of(context);
+    final TabController? tabController = widget.controller ?? TabControllerScope.of(context);
     
     // 如果启用了动画模式，则使用TabBarView
     if (widget.enableAnimation && tabController != null) {
+      // 检查TabController长度是否匹配子元素数量，如果不匹配则回退到非动画模式
+      if (tabController.length != widget.children.length) {
+        print('TabController长度(${tabController.length})与子元素数量(${widget.children.length})不匹配，降级为IndexedStack模式');
+        // 不匹配时使用IndexedStack
+        return IndexedStack(
+          index: _currentIndex,
+          sizing: StackFit.expand,
+          children: widget.children,
+        );
+      }
+      
       return NotificationListener<ScrollNotification>(
         onNotification: (ScrollNotification notification) {
           // 页面切换完成时通知父组件

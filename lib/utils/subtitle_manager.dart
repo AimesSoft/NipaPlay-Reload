@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'subtitle_parser.dart';
-import 'package:fvp/mdk.dart';
+import '../../player_abstraction/player_abstraction.dart';
 
 /// 字幕管理器类，负责处理与字幕相关的所有功能
 class SubtitleManager extends ChangeNotifier {
@@ -199,6 +199,16 @@ class SubtitleManager extends ChangeNotifier {
     try {
       if (_player == null) {
         debugPrint('SubtitleManager: 播放器未初始化，无法设置外部字幕');
+        return;
+      }
+
+      // NEW: Check if player supports external subtitles
+      if (!_player!.supportsExternalSubtitles) {
+        debugPrint('SubtitleManager: 当前播放器内核不支持加载外部字幕');
+        // TODO: Call your blur_snackbar here
+        // For example: globals.showBlurSnackbar('当前播放器内核不支持加载外部字幕');
+        // As a placeholder, I'll just print. Replace with your actual snackbar call.
+        print("USER_INFO: blur_snackbar should be called here: '当前播放器内核不支持加载外部字幕'");
         return;
       }
       

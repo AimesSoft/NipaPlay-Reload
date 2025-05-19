@@ -1,11 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:fvp/mdk.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/utils/theme_utils.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({Key? key}) : super(key: key);
@@ -15,18 +19,21 @@ class PlayerSettingsPage extends StatefulWidget {
 }
 
 class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
-  static const String _useHardwareDecoderKey = 'use_hardware_decoder';
   static const String _selectedDecodersKey = 'selected_decoders';
+  static const String _playerKernelTypeKey = 'player_kernel_type';
   
-  bool _useHardwareDecoder = true;
   List<String> _availableDecoders = [];
   List<String> _selectedDecoders = [];
   late DecoderManager _decoderManager;
+  String _playerCoreName = "MDK";
+  PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
+  
+  // 为BlurDropdown添加GlobalKey
+  final GlobalKey _playerKernelDropdownKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
   }
 
   @override
@@ -34,22 +41,99 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     super.didChangeDependencies();
     final playerState = Provider.of<VideoPlayerState>(context, listen: false);
     _decoderManager = playerState.decoderManager;
+    _playerCoreName = playerState.playerCoreName;
     
     _getAvailableDecoders();
+    _loadDecoderSettings();
+    _loadPlayerKernelSettings();
   }
 
-  Future<void> _loadSettings() async {
+  Future<void> _loadPlayerKernelSettings() async {
+    // 直接从PlayerFactory获取当前内核类型
+    setState(() {
+      _selectedKernelType = PlayerFactory.getKernelType();
+      _updatePlayerCoreName();
+    });
+  }
+  
+  void _updatePlayerCoreName() {
+    // 从当前选定的内核类型决定显示名称
+    switch (_selectedKernelType) {
+      case PlayerKernelType.mdk:
+        _playerCoreName = "MDK";
+        break;
+      case PlayerKernelType.videoPlayer:
+        _playerCoreName = "Video Player (试验性)";
+        break;
+      default:
+        _playerCoreName = "MDK";
+    }
+  }
+  
+  Future<void> _savePlayerKernelSettings(PlayerKernelType kernelType) async {
+    // 使用新的静态方法保存设置
+    await PlayerFactory.saveKernelType(kernelType);
+    
+    if (_selectedKernelType != kernelType && context.mounted) {
+      _showRestartDialog();
+    }
+    
+    setState(() {
+      _selectedKernelType = kernelType;
+      _updatePlayerCoreName();
+    });
+  }
+  
+  void _showRestartDialog() {
+    BlurDialog.show(
+      context: context,
+      title: '需要重启应用',
+      content: '更改播放器内核需要重启应用才能生效。点击确定退出应用。',
+      barrierDismissible: false,
+      actions: [
+        TextButton(
+          onPressed: () {
+            // 直接退出应用
+            if (Platform.isAndroid || Platform.isIOS) {
+              exit(0);
+            } else {
+              // 桌面平台
+              windowManager.close();
+            }
+          },
+          child: const Text('确定', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _loadDecoderSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true;
-      
       final savedDecoders = prefs.getStringList(_selectedDecodersKey);
       if (savedDecoders != null && savedDecoders.isNotEmpty) {
         _selectedDecoders = savedDecoders;
       } else {
-        _selectedDecoders = ["FFmpeg"];
+        _initializeSelectedDecodersWithPlatformDefaults();
       }
     });
+  }
+
+  void _initializeSelectedDecodersWithPlatformDefaults() {
+    final allDecoders = _decoderManager.getAllSupportedDecoders();
+    if (Platform.isMacOS) {
+      _selectedDecoders = List.from(allDecoders['macos']!);
+    } else if (Platform.isIOS) {
+      _selectedDecoders = List.from(allDecoders['ios']!);
+    } else if (Platform.isWindows) {
+      _selectedDecoders = List.from(allDecoders['windows']!);
+    } else if (Platform.isLinux) {
+      _selectedDecoders = List.from(allDecoders['linux']!);
+    } else if (Platform.isAndroid) {
+      _selectedDecoders = List.from(allDecoders['android']!);
+    } else {
+      _selectedDecoders = ["FFmpeg"];
+    }
   }
 
   void _getAvailableDecoders() {
@@ -57,78 +141,54 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     
     if (Platform.isMacOS) {
       _availableDecoders = allDecoders['macos']!;
-      if (_selectedDecoders.length <= 1) {
-        _selectedDecoders = List.from(allDecoders['macos']!);
-      }
     } else if (Platform.isIOS) {
       _availableDecoders = allDecoders['ios']!;
-      if (_selectedDecoders.length <= 1) {
-        _selectedDecoders = List.from(allDecoders['ios']!);
-      }
     } else if (Platform.isWindows) {
       _availableDecoders = allDecoders['windows']!;
-      if (_selectedDecoders.length <= 1) {
-        _selectedDecoders = List.from(allDecoders['windows']!);
-      }
     } else if (Platform.isLinux) {
       _availableDecoders = allDecoders['linux']!;
-      if (_selectedDecoders.length <= 1) {
-        _selectedDecoders = List.from(allDecoders['linux']!);
-      }
     } else if (Platform.isAndroid) {
       _availableDecoders = allDecoders['android']!;
-      if (_selectedDecoders.length <= 1) {
-        _selectedDecoders = List.from(allDecoders['android']!);
-      }
     } else {
       _availableDecoders = ["FFmpeg"];
-      if (_selectedDecoders.length <= 1) {
-        _selectedDecoders = ["FFmpeg"];
-      }
+    }
+    _selectedDecoders.retainWhere((decoder) => _availableDecoders.contains(decoder));
+    if (_selectedDecoders.isEmpty && _availableDecoders.isNotEmpty) {
+        _initializeSelectedDecodersWithPlatformDefaults();
     }
   }
 
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_useHardwareDecoderKey, _useHardwareDecoder);
     await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
     
     if (context.mounted) {
-      if (_useHardwareDecoder) {
-        // 应用新的解码器设置
-        await _decoderManager.updateDecoders(_selectedDecoders);
+      await _decoderManager.updateDecoders(_selectedDecoders);
         
-        // HEVC视频格式的特殊处理
-        final playerState = Provider.of<VideoPlayerState>(context, listen: false);
-        if (playerState.hasVideo && 
-            playerState.player.mediaInfo.video != null && 
-            playerState.player.mediaInfo.video!.isNotEmpty) {
+      final playerState = Provider.of<VideoPlayerState>(context, listen: false);
+      if (playerState.hasVideo && 
+          playerState.player.mediaInfo.video != null && 
+          playerState.player.mediaInfo.video!.isNotEmpty) {
+        
+        final videoTrack = playerState.player.mediaInfo.video![0];
+        final codecString = videoTrack.toString().toLowerCase();
+        if (codecString.contains('hevc') || codecString.contains('h265')) {
+          debugPrint('检测到设置变更时正在播放HEVC视频，应用特殊优化...');
           
-          final videoTrack = playerState.player.mediaInfo.video![0];
-          final codecString = videoTrack.toString().toLowerCase();
-          if (codecString.contains('hevc') || codecString.contains('h265')) {
-            debugPrint('检测到设置变更时正在播放HEVC视频，应用特殊优化...');
-            
-            if (Platform.isMacOS) {
-              // 确保VideoToolbox优先
-              if (_selectedDecoders.isNotEmpty && _selectedDecoders[0] != "VT") {
-                _selectedDecoders.remove("VT");
-                _selectedDecoders.insert(0, "VT");
-                
-                await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
-                await _decoderManager.updateDecoders(_selectedDecoders);
-                
-                // 提示用户
-                BlurSnackBar.show(context, '已优化解码器设置以支持HEVC硬件解码');
-              }
+          if (Platform.isMacOS) {
+            if (_selectedDecoders.isNotEmpty && _selectedDecoders[0] != "VT") {
+              _selectedDecoders.remove("VT");
+              _selectedDecoders.insert(0, "VT");
               
-              // 强制启用硬件解码
-              await playerState.forceEnableHardwareDecoder();
+              await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
+              await _decoderManager.updateDecoders(_selectedDecoders);
+              
+              BlurSnackBar.show(context, '已优化解码器设置以支持HEVC硬件解码');
             }
+            
+            await playerState.forceEnableHardwareDecoder();
           }
         }
-      } else {
-        await _decoderManager.updateDecoders(["FFmpeg"]);
       }
     }
   }
@@ -137,64 +197,32 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        SwitchListTile(
-          title: const Text('启用硬件解码', style: TextStyle(fontSize: 18)),
-          subtitle: const Text('提高视频播放性能，建议保持开启'),
-          value: _useHardwareDecoder,
-          onChanged: (value) {
-            setState(() {
-              _useHardwareDecoder = value;
-            });
-            _saveSettings();
-          },
+        ListTile(
+          title: Text("播放器内核", style: getTitleTextStyle(context)),
+          trailing: BlurDropdown<PlayerKernelType>(
+            dropdownKey: _playerKernelDropdownKey,
+            items: [
+              DropdownMenuItemData(
+                title: "MDK",
+                value: PlayerKernelType.mdk,
+                isSelected: _selectedKernelType == PlayerKernelType.mdk,
+              ),
+              DropdownMenuItemData(
+                title: "Video Player (试验性)",
+                value: PlayerKernelType.videoPlayer,
+                isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
+              ),
+            ],
+            onItemSelected: (kernelType) {
+              _savePlayerKernelSettings(kernelType);
+            },
+          ),
         ),
+        
         const Divider(),
-        if (_useHardwareDecoder) ...[
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text('解码器优先级', 
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text('拖动调整解码器的使用优先级，上面的优先使用', 
-              style: TextStyle(fontSize: 14, color: Colors.grey)),
-          ),
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _selectedDecoders.length,
-            itemBuilder: (context, index) {
-              return ListTile(
-                key: Key('decoder_$index'),
-                title: Text(_selectedDecoders[index]),
-                trailing: const Icon(Icons.drag_handle),
-              );
-            },
-            onReorder: (oldIndex, newIndex) {
-              setState(() {
-                if (oldIndex < newIndex) {
-                  newIndex -= 1;
-                }
-                final item = _selectedDecoders.removeAt(oldIndex);
-                _selectedDecoders.insert(newIndex, item);
-              });
-              _saveSettings();
-            },
-          ),
-          const SizedBox(height: 20),
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text('解码器说明', 
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              _getDecoderDescription(),
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
+        
+        if (_selectedKernelType == PlayerKernelType.mdk) ...[
+          // 这里可以添加解码器相关设置
         ],
       ],
     );

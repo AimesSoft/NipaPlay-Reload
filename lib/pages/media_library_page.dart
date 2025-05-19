@@ -52,6 +52,51 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     super.dispose();
   }
 
+  Future<void> _processAndSortHistory(List<WatchHistoryItem> watchHistory) async {
+    if (!mounted) return;
+
+    if (watchHistory.isEmpty) {
+      setState(() {
+        _uniqueLibraryItems = [];
+        _isLoadingInitial = false; 
+      });
+      return;
+    }
+
+    final Map<int, WatchHistoryItem> latestHistoryItemMap = {};
+    for (var item in watchHistory) {
+      if (item.animeId != null) {
+        if (latestHistoryItemMap.containsKey(item.animeId!)) {
+          if (item.lastWatchTime.isAfter(latestHistoryItemMap[item.animeId!]!.lastWatchTime)) {
+            latestHistoryItemMap[item.animeId!] = item;
+          }
+        } else {
+          latestHistoryItemMap[item.animeId!] = item;
+        }
+      }
+    }
+    final uniqueAnimeItemsFromHistory = latestHistoryItemMap.values.toList();
+    uniqueAnimeItemsFromHistory.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+
+    Map<int, String> loadedPersistedUrls = {};
+    final prefs = await SharedPreferences.getInstance();
+    for (var item in uniqueAnimeItemsFromHistory) {
+      if (item.animeId != null) {
+        String? persistedUrl = prefs.getString('$_prefsKeyPrefix${item.animeId}');
+        if (persistedUrl != null && persistedUrl.isNotEmpty) {
+          loadedPersistedUrls[item.animeId!] = persistedUrl;
+        }
+      }
+    }
+
+    setState(() {
+      _uniqueLibraryItems = uniqueAnimeItemsFromHistory;
+      _persistedImageUrls = loadedPersistedUrls;
+      _isLoadingInitial = false; 
+    });
+    _fetchAndPersistFullDetailsInBackground(); 
+  }
+
   Future<void> _loadInitialMediaLibraryData() async {
     if (!mounted) return;
     setState(() {
@@ -62,57 +107,18 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     try {
       final historyProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
       if (!historyProvider.isLoaded && !historyProvider.isLoading) {
-        await historyProvider.loadHistory();
+        await historyProvider.loadHistory(); 
       }
-      final watchHistory = historyProvider.history;
-
-      if (watchHistory.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _uniqueLibraryItems = [];
-            _isLoadingInitial = false;
-          });
-        }
-        return;
-      }
-
-      final Map<int, WatchHistoryItem> latestHistoryItemMap = {};
-      for (var item in watchHistory) {
-        if (item.animeId != null) {
-          if (latestHistoryItemMap.containsKey(item.animeId!)) {
-            if (item.lastWatchTime.isAfter(latestHistoryItemMap[item.animeId!]!.lastWatchTime)) {
-              latestHistoryItemMap[item.animeId!] = item;
-            }
-          } else {
-            latestHistoryItemMap[item.animeId!] = item;
-          }
-        }
-      }
-      final uniqueAnimeItemsFromHistory = latestHistoryItemMap.values.toList();
-      uniqueAnimeItemsFromHistory.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
       
-      // Load persisted image URLs
-      Map<int, String> loadedPersistedUrls = {};
-      final prefs = await SharedPreferences.getInstance();
-      for (var item in uniqueAnimeItemsFromHistory) {
-        if (item.animeId != null) {
-            String? persistedUrl = prefs.getString('$_prefsKeyPrefix${item.animeId}');
-            if (persistedUrl != null && persistedUrl.isNotEmpty) {
-                loadedPersistedUrls[item.animeId!] = persistedUrl;
-            }
-        }
+      if (historyProvider.isLoaded) { // If loaded, process immediately
+          await _processAndSortHistory(historyProvider.history);
       }
+      // If not loaded yet, the Consumer will pick it up once loaded.
+      // However, to prevent showing loading indefinitely if historyProvider never loads or is empty,
+      // we might need to adjust _isLoadingInitial in the Consumer as well.
+      // For now, this relies on historyProvider becoming loaded.
 
-      if (mounted) {
-        setState(() {
-          _uniqueLibraryItems = uniqueAnimeItemsFromHistory;
-          _persistedImageUrls = loadedPersistedUrls; 
-          _isLoadingInitial = false;
-        });
-        _fetchAndPersistFullDetailsInBackground();
-      }
     } catch (e) {
-      //debugPrint('[MediaLibraryPage] Error loading initial media library data: $e');
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -238,179 +244,209 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingInitial) {
-      return const SizedBox(
-        height: 200, 
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('加载媒体库失败: $_error', style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadInitialMediaLibraryData, // Changed to load initial data
-                child: const Text('重试'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_uniqueLibraryItems.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text(
-            '媒体库为空。\n观看过的动画将显示在这里。',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey, fontSize: 16),
-          ),
-        ),
-      );
-    }
-
-    // 使用RepaintBoundary包装整个GridView，优化重绘
-    return RepaintBoundary(
-      child: Platform.isAndroid || Platform.isIOS 
-      ? GridView.builder(
-          controller: _gridScrollController,
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 150, 
-            childAspectRatio: 7/12,   
-            crossAxisSpacing: 8,      
-            mainAxisSpacing: 8,       
-          ),
-          padding: const EdgeInsets.all(0),
-          // 增加cacheExtent以提升滚动流畅度
-          cacheExtent: 800, // 提高预缓存距离
-          // 优化GridView性能
-          clipBehavior: Clip.hardEdge,
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          // 添加更多GridView性能优化参数
-          addAutomaticKeepAlives: false, // 避免保持所有项目活动
-          addRepaintBoundaries: true, // 为每个项目添加绘制边界
-          // 只渲染两行之后的项目，控制同时显示的项目数量
-          // 通过key和index控制垂直方向的显示
-          itemCount: _uniqueLibraryItems.length,
-          itemBuilder: (context, index) {
-            // 判断是否超出当前屏幕过多，实现按需渲染
-            // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
-            final useOptimizedRendering = index > 11;
-            final historyItem = _uniqueLibraryItems[index];
-            final animeId = historyItem.animeId;
-
-            String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
-            String nameToDisplay = historyItem.animeName.isNotEmpty 
-                ? historyItem.animeName 
-                : (historyItem.episodeTitle ?? '未知动画');
-
-            if (animeId != null) {
-                if (_fetchedFullAnimeData.containsKey(animeId)) {
-                    final fetchedData = _fetchedFullAnimeData[animeId]!;
-                    if (fetchedData.imageUrl.isNotEmpty) {
-                        imageUrlToDisplay = fetchedData.imageUrl;
-                    }
-                    if (fetchedData.nameCn.isNotEmpty) {
-                        nameToDisplay = fetchedData.nameCn;
-                    } else if (fetchedData.name.isNotEmpty) {
-                        nameToDisplay = fetchedData.name;
-                    }
-                } else if (_persistedImageUrls.containsKey(animeId)) {
-                    imageUrlToDisplay = _persistedImageUrls[animeId]!;
-                    // Name remains from historyItem until full details are fetched in this session
-                }
-            }
-
-            return AnimeCard(
-              key: ValueKey(animeId ?? historyItem.filePath), 
-              name: nameToDisplay, 
-              imageUrl: imageUrlToDisplay,
-              onTap: () {
-                if (animeId != null) {
-                  _navigateToAnimeDetail(animeId);
-                } else {
-                  BlurSnackBar.show(context, '无法打开详情，动画ID未知');
-                }
-              },
+    return Consumer<WatchHistoryProvider>(
+      builder: (context, historyProvider, child) {
+        
+        if (!historyProvider.isLoaded && _isLoadingInitial) {
+            // Still relying on _loadInitialMediaLibraryData to kick off loading
+            // and for _isLoadingInitial to be true initially.
+            // This condition handles the very first load.
+             return const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator()),
             );
-          },
-        )
-      : Scrollbar(
-          controller: _gridScrollController,
-          thickness: 4,
-          radius: const Radius.circular(2),
-          child: GridView.builder(
-            controller: _gridScrollController,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 150, 
-              childAspectRatio: 7/12,   
-              crossAxisSpacing: 8,      
-              mainAxisSpacing: 8,       
+        }
+
+        // If provider is loaded or becomes loaded, process its history.
+        // This ensures that updates from the provider trigger a re-sort.
+        if (historyProvider.isLoaded) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                    // Check if the data is actually different or if _isLoadingInitial is true
+                    // to avoid unnecessary processing if _processAndSortHistory is heavy.
+                    // For simplicity, we call it; _processAndSortHistory's setState handles actual UI update.
+                    _processAndSortHistory(historyProvider.history);
+                }
+            });
+        }
+
+        // UI rendering logic based on _isLoadingInitial, _error, _uniqueLibraryItems
+        if (_isLoadingInitial) {
+          // This will be true until _processAndSortHistory sets it to false.
+          return const SizedBox(
+            height: 200, 
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (_error != null) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('加载媒体库失败: $_error', style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _loadInitialMediaLibraryData,
+                    child: const Text('重试'),
+                  ),
+                ],
+              ),
             ),
-            padding: const EdgeInsets.all(0),
-            // 增加cacheExtent以提升滚动流畅度
-            cacheExtent: 800, // 提高预缓存距离
-            // 优化GridView性能
-            clipBehavior: Clip.hardEdge,
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            // 添加更多GridView性能优化参数
-            addAutomaticKeepAlives: false, // 避免保持所有项目活动
-            addRepaintBoundaries: true, // 为每个项目添加绘制边界
-            // 只渲染两行之后的项目，控制同时显示的项目数量
-            // 通过key和index控制垂直方向的显示
-            itemCount: _uniqueLibraryItems.length,
-            itemBuilder: (context, index) {
-              // 判断是否超出当前屏幕过多，实现按需渲染
-              // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
-              final useOptimizedRendering = index > 11;
-              final historyItem = _uniqueLibraryItems[index];
-              final animeId = historyItem.animeId;
+          );
+        }
 
-              String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
-              String nameToDisplay = historyItem.animeName.isNotEmpty 
-                  ? historyItem.animeName 
-                  : (historyItem.episodeTitle ?? '未知动画');
+        if (_uniqueLibraryItems.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                '媒体库为空。\n观看过的动画将显示在这里。',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            ),
+          );
+        }
 
-              if (animeId != null) {
-                  if (_fetchedFullAnimeData.containsKey(animeId)) {
-                      final fetchedData = _fetchedFullAnimeData[animeId]!;
-                      if (fetchedData.imageUrl.isNotEmpty) {
-                          imageUrlToDisplay = fetchedData.imageUrl;
-                      }
-                      if (fetchedData.nameCn.isNotEmpty) {
-                          nameToDisplay = fetchedData.nameCn;
-                      } else if (fetchedData.name.isNotEmpty) {
-                          nameToDisplay = fetchedData.name;
-                      }
-                  } else if (_persistedImageUrls.containsKey(animeId)) {
-                      imageUrlToDisplay = _persistedImageUrls[animeId]!;
-                      // Name remains from historyItem until full details are fetched in this session
-                  }
-              }
+        // Using RepaintBoundary for the GridView
+        return RepaintBoundary(
+          child: Platform.isAndroid || Platform.isIOS 
+          ? GridView.builder(
+              controller: _gridScrollController,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 150, 
+                childAspectRatio: 7/12,   
+                crossAxisSpacing: 8,      
+                mainAxisSpacing: 8,       
+              ),
+              padding: const EdgeInsets.all(0),
+              // 增加cacheExtent以提升滚动流畅度
+              cacheExtent: 800, // 提高预缓存距离
+              // 优化GridView性能
+              clipBehavior: Clip.hardEdge,
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              // 添加更多GridView性能优化参数
+              addAutomaticKeepAlives: false, // 避免保持所有项目活动
+              addRepaintBoundaries: true, // 为每个项目添加绘制边界
+              // 只渲染两行之后的项目，控制同时显示的项目数量
+              // 通过key和index控制垂直方向的显示
+              itemCount: _uniqueLibraryItems.length,
+              itemBuilder: (context, index) {
+                // 判断是否超出当前屏幕过多，实现按需渲染
+                // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
+                final useOptimizedRendering = index > 11;
+                final historyItem = _uniqueLibraryItems[index];
+                final animeId = historyItem.animeId;
 
-              return AnimeCard(
-                key: ValueKey(animeId ?? historyItem.filePath), 
-                name: nameToDisplay, 
-                imageUrl: imageUrlToDisplay,
-                onTap: () {
+                String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
+                String nameToDisplay = historyItem.animeName.isNotEmpty 
+                    ? historyItem.animeName 
+                    : (historyItem.episodeTitle ?? '未知动画');
+
+                if (animeId != null) {
+                    if (_fetchedFullAnimeData.containsKey(animeId)) {
+                        final fetchedData = _fetchedFullAnimeData[animeId]!;
+                        if (fetchedData.imageUrl.isNotEmpty) {
+                            imageUrlToDisplay = fetchedData.imageUrl;
+                        }
+                        if (fetchedData.nameCn.isNotEmpty) {
+                            nameToDisplay = fetchedData.nameCn;
+                        } else if (fetchedData.name.isNotEmpty) {
+                            nameToDisplay = fetchedData.name;
+                        }
+                    } else if (_persistedImageUrls.containsKey(animeId)) {
+                        imageUrlToDisplay = _persistedImageUrls[animeId]!;
+                        // Name remains from historyItem until full details are fetched in this session
+                    }
+                }
+
+                return AnimeCard(
+                  key: ValueKey(animeId ?? historyItem.filePath), 
+                  name: nameToDisplay, 
+                  imageUrl: imageUrlToDisplay,
+                  onTap: () {
+                    if (animeId != null) {
+                      _navigateToAnimeDetail(animeId);
+                    } else {
+                      BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                    }
+                  },
+                );
+              },
+            )
+          : Scrollbar(
+              controller: _gridScrollController,
+              thickness: 4,
+              radius: const Radius.circular(2),
+              child: GridView.builder(
+                controller: _gridScrollController,
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 150, 
+                  childAspectRatio: 7/12,   
+                  crossAxisSpacing: 8,      
+                  mainAxisSpacing: 8,       
+                ),
+                padding: const EdgeInsets.all(0),
+                // 增加cacheExtent以提升滚动流畅度
+                cacheExtent: 800, // 提高预缓存距离
+                // 优化GridView性能
+                clipBehavior: Clip.hardEdge,
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                // 添加更多GridView性能优化参数
+                addAutomaticKeepAlives: false, // 避免保持所有项目活动
+                addRepaintBoundaries: true, // 为每个项目添加绘制边界
+                // 只渲染两行之后的项目，控制同时显示的项目数量
+                // 通过key和index控制垂直方向的显示
+                itemCount: _uniqueLibraryItems.length,
+                itemBuilder: (context, index) {
+                  // 判断是否超出当前屏幕过多，实现按需渲染
+                  // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
+                  final useOptimizedRendering = index > 11;
+                  final historyItem = _uniqueLibraryItems[index];
+                  final animeId = historyItem.animeId;
+
+                  String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
+                  String nameToDisplay = historyItem.animeName.isNotEmpty 
+                      ? historyItem.animeName 
+                      : (historyItem.episodeTitle ?? '未知动画');
+
                   if (animeId != null) {
-                    _navigateToAnimeDetail(animeId);
-                  } else {
-                    BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                      if (_fetchedFullAnimeData.containsKey(animeId)) {
+                          final fetchedData = _fetchedFullAnimeData[animeId]!;
+                          if (fetchedData.imageUrl.isNotEmpty) {
+                              imageUrlToDisplay = fetchedData.imageUrl;
+                          }
+                          if (fetchedData.nameCn.isNotEmpty) {
+                              nameToDisplay = fetchedData.nameCn;
+                          } else if (fetchedData.name.isNotEmpty) {
+                              nameToDisplay = fetchedData.name;
+                          }
+                      } else if (_persistedImageUrls.containsKey(animeId)) {
+                          imageUrlToDisplay = _persistedImageUrls[animeId]!;
+                          // Name remains from historyItem until full details are fetched in this session
+                      }
                   }
+
+                  return AnimeCard(
+                    key: ValueKey(animeId ?? historyItem.filePath), 
+                    name: nameToDisplay, 
+                    imageUrl: imageUrlToDisplay,
+                    onTap: () {
+                      if (animeId != null) {
+                        _navigateToAnimeDetail(animeId);
+                      } else {
+                        BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                      }
+                    },
+                  );
                 },
-              );
-            },
-          ),
-        ),
+              ),
+            ),
+        );
+      },
     );
   }
 } 

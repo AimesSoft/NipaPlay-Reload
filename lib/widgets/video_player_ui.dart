@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
+import 'blur_dialog.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -31,6 +32,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   bool _isMouseVisible = true;
   bool _isHorizontalDragging = false;
 
+  // <<< ADDED: Hold a reference to VideoPlayerState for managing the callback
+  VideoPlayerState? _videoPlayerStateInstance;
+
   double getFontSize() {
     if (globals.isPhone) {
       return 20.0;
@@ -46,6 +50,43 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     
     // 使用安全的方式初始化，避免在卸载后访问context
     _safeInitialize();
+
+    // <<< ADDED: Setup callback for serious errors
+    // We need to get the VideoPlayerState instance.
+    // Since this is initState, and Consumer is used in build,
+    // we use Provider.of with listen: false.
+    // It's often safer to do this in didChangeDependencies if context is needed
+    // more reliably, but for listen:false, initState is usually fine.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _videoPlayerStateInstance = Provider.of<VideoPlayerState>(context, listen: false);
+        _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop = () {
+          if (mounted) {
+            final String errorMessage = _videoPlayerStateInstance?.error ?? "发生未知播放错误，已停止播放。";
+            
+            // 使用 BlurDialog 替换 AlertDialog 以保持UI风格一致性
+            BlurDialog.show<void>(
+              context: context,
+              title: '播放错误',
+              content: errorMessage,
+              actions: [
+                TextButton(
+                  child: const Text('确定'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    if (mounted && Navigator.of(context).canPop()) { 
+                      Navigator.of(context).pop(); 
+                    }
+                  },
+                ),
+              ],
+            );
+          } else if (mounted) {
+            debugPrint("[VideoPlayerUI] Serious playback error: Cannot pop current route (already handled or not applicable).");
+          }
+        };
+      }
+    });
   }
   
   // 使用单独的方法进行安全初始化
@@ -231,6 +272,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
 
   @override
   void dispose() {
+    // <<< ADDED: Clear the callback to prevent memory leaks
+    _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop = null;
+
     // 确保清理所有资源
     _focusNode.dispose();
     _doubleTapTimer?.cancel();

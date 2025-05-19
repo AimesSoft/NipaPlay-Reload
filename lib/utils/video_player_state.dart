@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:fvp/mdk.dart';
+// import 'package:fvp/mdk.dart';  // Commented out
+import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
@@ -44,7 +45,7 @@ enum PlayerStatus {
 }
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
-  Player player = Player();
+  late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
   BuildContext? _context;
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
@@ -54,6 +55,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   String? _error;
+  bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
   Timer? _positionUpdateTimer;
@@ -138,7 +140,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   bool _hasInitialScreenshot = false; // 添加标记跟踪是否已进行第一次播放截图
 
+  // 新增回调：当发生严重播放错误且应弹出时调用
+  Function()? onSeriousPlaybackErrorAndShouldPop;
+
   VideoPlayerState() {
+    // 创建临时播放器实例，后续会被 _initialize 中的异步创建替换
+    player = Player();
     _subtitleManager = SubtitleManager(player: player);
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
@@ -200,6 +207,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 解码器管理器相关的getter
   DecoderManager get decoderManager => _decoderManager;
+
+  // 获取播放器内核名称
+  String get playerCoreName => player.getPlayerKernelName();
 
   Future<void> _initialize() async {
     if (globals.isPhone) {
@@ -477,62 +487,37 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       _isFullscreenTransitioning = true;
       notifyListeners();
-
-      // 记录当前播放状态
       final wasPlaying = _status == PlayerStatus.playing;
-
-      // 如果正在播放，先暂停
       if (wasPlaying) {
         player.state = PlaybackState.paused;
       }
-
-      // 先设置支持的方向
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
         DeviceOrientation.portraitUp,
       ]);
-
-      // 等待一小段时间
       await Future.delayed(const Duration(milliseconds: 100));
-
-      // 再设置当前方向
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
-
-      // 设置全屏模式
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-
-      // 等待方向切换完成
       await Future.delayed(const Duration(milliseconds: 500));
-
-      // 重新初始化纹理
-      //debugPrint('重新初始化纹理...');
-      player.textureId.value = null;
+      // player.textureId.value = null; // COMMENTED OUT - ValueListenable has no setter
       await Future.delayed(const Duration(milliseconds: 100));
       final textureId = await player.updateTexture();
-      //debugPrint('新的纹理ID: $textureId');
-
-      // 如果之前在播放，恢复播放
       if (wasPlaying) {
         player.state = PlaybackState.playing;
         _setStatus(PlayerStatus.playing, message: '继续播放');
       }
-
       _isFullscreen = true;
       _isFullscreenTransitioning = false;
       notifyListeners();
     } catch (e) {
-      //debugPrint('横屏切换出错: $e');
       _isFullscreenTransitioning = false;
-      // 如果出错，尝试恢复到竖屏
       try {
         await _setPortrait();
-      } catch (e2) {
-        //debugPrint('恢复竖屏也失败: $e2');
-      }
+      } catch (e2) {}
       notifyListeners();
     }
   }
@@ -540,58 +525,35 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 设置竖屏
   Future<void> _setPortrait() async {
     if (!globals.isPhone) return;
-
     try {
       _isFullscreenTransitioning = true;
       notifyListeners();
-
-      // 记录当前播放状态
       final wasPlaying = _status == PlayerStatus.playing;
-
-      // 如果正在播放，先暂停
       if (wasPlaying) {
         player.state = PlaybackState.paused;
       }
-
-      // 先设置支持的方向
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
         DeviceOrientation.portraitUp,
       ]);
-
-      // 等待一小段时间
       await Future.delayed(const Duration(milliseconds: 100));
-
-      // 再设置当前方向
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
       ]);
-
-      // 恢复系统UI
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-
-      // 等待方向切换完成
       await Future.delayed(const Duration(milliseconds: 500));
-
-      // 重新初始化纹理
-      //debugPrint('重新初始化纹理...');
-      player.textureId.value = null;
+      // player.textureId.value = null; // COMMENTED OUT
       await Future.delayed(const Duration(milliseconds: 100));
       final textureId = await player.updateTexture();
-      //debugPrint('新的纹理ID: $textureId');
-
-      // 如果之前在播放，恢复播放
       if (wasPlaying) {
         player.state = PlaybackState.playing;
         _setStatus(PlayerStatus.playing, message: '继续播放');
       }
-
       _isFullscreen = false;
       _isFullscreenTransitioning = false;
       notifyListeners();
     } catch (e) {
-      //debugPrint('竖屏切换出错: $e');
       _isFullscreenTransitioning = false;
       notifyListeners();
     }
@@ -689,8 +651,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       player.setMedia("", MediaType.video); // 使用空字符串和视频类型清除媒体
       
       // 释放旧纹理
-      if (player.textureId.value != null) {
-        player.textureId.value = null;
+      if (player.textureId.value != null) { // Keep the null check for reading
+        // player.textureId.value = null; // COMMENTED OUT - ValueListenable has no setter
       }
       // 等待纹理完全释放
       await Future.delayed(const Duration(milliseconds: 500));
@@ -718,6 +680,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 获取视频纹理
       final textureId = await player.updateTexture();
       //debugPrint('获取到纹理ID: $textureId');
+
+      // !!!!! 在这里启动或重启位置更新定时器 !!!!!
+      _startPositionUpdateTimer();
+      // !!!!! ----------------------------- !!!!!
 
       // 等待纹理初始化完成
       await Future.delayed(const Duration(milliseconds: 200));
@@ -1042,11 +1008,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       await Future.delayed(const Duration(milliseconds: 100));
 
       // 释放纹理，确保资源被正确释放
-      if (player.textureId.value != null) {
-        // 强制转换为null前，先解除与Flutter部分的绑定
+      if (player.textureId.value != null) { // Keep the null check for reading
         _disposeTextureResources();
-        // 释放播放器持有的纹理
-        player.textureId.value = null;
+        // player.textureId.value = null; // COMMENTED OUT
       }
 
       // 等待一小段时间确保纹理完全释放
@@ -1169,8 +1133,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void pause() {
     if (_status == PlayerStatus.playing) {
-      player.state = PlaybackState.paused;
-      _setStatus(PlayerStatus.paused, message: '已暂停');
+      // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
+      player.pauseDirectly().then((_) {
+        debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
+        _setStatus(PlayerStatus.paused, message: '已暂停');
+      }).catchError((e) {
+        debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
+        // 尝试使用传统方法
+        player.state = PlaybackState.paused;
+        _setStatus(PlayerStatus.paused, message: '已暂停');
+      });
+      
       _saveCurrentPositionToHistory();
       // 在暂停时触发截图
       _captureConditionalScreenshot("暂停时");
@@ -1179,10 +1152,25 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   void play() {
+    // <<< ADDED DEBUG LOG >>>
+    debugPrint('[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
     if (hasVideo &&
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
-      player.state = PlaybackState.playing;
-      _setStatus(PlayerStatus.playing, message: '开始播放');
+      
+      // 使用直接播放方法，确保VideoPlayer插件能够播放视频
+      player.playDirectly().then((_) {
+        debugPrint('[VideoPlayerState] playDirectly() 调用成功');
+        // 设置状态
+        _setStatus(PlayerStatus.playing, message: '开始播放');
+      }).catchError((e) {
+        debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
+        // 尝试使用传统方法
+        player.state = PlaybackState.playing;
+        _setStatus(PlayerStatus.playing, message: '开始播放');
+      });
+      
+      // <<< ADDED DEBUG LOG >>>
+      debugPrint('[VideoPlayerState] play() -> _status set to PlayerStatus.playing. Notifying listeners.');
       
       // 在首次播放时进行截图
       if (!_hasInitialScreenshot) {
@@ -1238,7 +1226,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _position = Duration.zero;
     _progress = 0.0;
     _duration = Duration.zero;
-    _error = null;
+    if (!_isErrorStopping) { // <<< MODIFIED HERE
+      _error = null;
+    }
     _currentVideoPath = null;
     _currentVideoHash = null;
     _currentThumbnailPath = null;
@@ -1366,49 +1356,82 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   void _startPositionUpdateTimer() {
+    // <<< REMOVE DEBUG LOG >>>
+    // debugPrint('[VideoPlayerState] _startPositionUpdateTimer CALLED.');
+    _positionUpdateTimer?.cancel(); 
     _positionUpdateTimer =
-        Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      if (!_isSeeking && hasVideo) {
+        Timer.periodic(const Duration(milliseconds: 16), (timer) { 
+      // <<< REMOVE EXISTING DEBUG LOG >>>
+      // debugPrint('[Timer] Tick. _isSeeking: $_isSeeking, hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
+      if (!_isSeeking && hasVideo) { 
         if (_status == PlayerStatus.playing) {
-          // 播放状态：从播放器获取位置
           final playerPosition = player.position;
           final playerDuration = player.mediaInfo.duration;
+          // <<< REMOVE ADDED DEBUG LOG >>>
+          // debugPrint('[Timer] PlayerStatus.playing. pos: $playerPosition, dur: $playerDuration');
           
-          // 检查值是否有效
           if (playerPosition >= 0 && playerDuration > 0) {
             _position = Duration(milliseconds: playerPosition);
             _duration = Duration(milliseconds: playerDuration);
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
             
-            // 保存当前播放位置
             _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
 
-            // 更新观看记录 - 每10秒更新一次，减少文件系统操作和历史刷新
-            if (_position.inMilliseconds % 10000 < 20) {
+            if (_position.inMilliseconds % 10000 < 20) { 
               _updateWatchHistory();
             }
 
-            // 检查是否播放结束
             if (_position.inMilliseconds >= _duration.inMilliseconds - 100) {
-              // 播放结束，暂停播放器并跳转到开头
               player.state = PlaybackState.paused;
               _setStatus(PlayerStatus.paused, message: '播放结束');
-
-              // 确保立即用0值保存，覆盖任何之前的播放位置
               if (_currentVideoPath != null) {
                 _saveVideoPosition(_currentVideoPath!, 0);
                 debugPrint(
                     'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
               }
-              notifyListeners();
+              notifyListeners(); 
             }
           } else {
-            debugPrint('VideoPlayerState: 播放器返回无效值 - position: $playerPosition, duration: $playerDuration');
+            // 当播放器返回无效的 position 或 duration 时
+            final String pathForErrorLog = _currentVideoPath ?? "未知路径";
+            final String baseName = p.basename(pathForErrorLog);
+            final String technicalDetail = '(pos: $playerPosition, dur: $playerDuration)';
+            final String userMessage = '视频文件 "$baseName" 可能已损坏或无法读取 $technicalDetail';
+
+            debugPrint('VideoPlayerState: 播放器返回无效的视频数据 (position: $playerPosition, duration: $playerDuration) 路径: $pathForErrorLog. 已停止播放并设置为错误状态.');
+            
+            _error = userMessage; 
+
+            player.state = PlaybackState.stopped; 
+            
+            if (_positionUpdateTimer?.isActive ?? false) { 
+              _positionUpdateTimer!.cancel();
+              _positionUpdateTimer = null; 
+            }
+            
+            _setStatus(PlayerStatus.error, message: userMessage); 
+
+            _position = Duration.zero;
+            _progress = 0.0;
+            _duration = Duration.zero; 
+            
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              // 1. 执行 handleBackButton 逻辑 (处理全屏、截图)
+              await handleBackButton(); 
+              // 2. 执行 resetPlayer 逻辑 (全面清理播放器状态)
+              await resetPlayer(); 
+
+              // 3. 通知UI层执行pop
+              onSeriousPlaybackErrorAndShouldPop?.call();
+            });
+
+            return; 
           }
-          _lastSeekPosition = null; // 清除最后seek位置
-          notifyListeners();
-        } else if (_status == PlayerStatus.paused &&
-            _lastSeekPosition != null) {
+          _lastSeekPosition = null; 
+          if (_status == PlayerStatus.playing) { 
+             notifyListeners(); 
+          }
+        } else if (_status == PlayerStatus.paused && _lastSeekPosition != null) {
           // 暂停状态：使用最后一次seek的位置
           _position = _lastSeekPosition!;
           if (_duration.inMilliseconds > 0) {
@@ -1423,6 +1446,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
     });
+    // <<< REMOVE DEBUG LOG >>>
+    // debugPrint('[VideoPlayerState] _startPositionUpdateTimer FINISHED. _positionUpdateTimer is active: ${_positionUpdateTimer?.isActive}');
   }
 
   bool shouldShowAppBar() {
@@ -1991,7 +2016,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         final image = img.Image.fromBytes(
           width: targetWidth,
           height: targetHeight,
-          bytes: videoFrame.buffer,
+          bytes: videoFrame.bytes.buffer, // CHANGED to get ByteBuffer
           numChannels: 4, // RGBA
         );
 
@@ -2380,10 +2405,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       try {
         // 从RGBA字节数据创建图像
         final image = img.Image.fromBytes(
-          width: targetWidth,
-          height: targetHeight,
-          bytes: videoFrame.buffer,
-          numChannels: 4, // RGBA
+          width: targetWidth, // Should be videoFrame.width
+          height: targetHeight, // Should be videoFrame.height
+          bytes: videoFrame.bytes.buffer, // CHANGED to get ByteBuffer
+          numChannels: 4, 
         );
 
         // 编码为PNG格式
@@ -2981,12 +3006,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
-  // 切换硬件解码状态，代理到解码器管理器
-  Future<void> toggleHardwareDecoder() async {
-    await _decoderManager.toggleHardwareDecoder();
-    notifyListeners();
-  }
-  
   // 强制启用硬件解码，代理到解码器管理器
   Future<void> forceEnableHardwareDecoder() async {
         if (_status == PlayerStatus.playing || _status == PlayerStatus.paused) {

@@ -58,6 +58,7 @@ dependencies:
   screen_brightness: ^2.1.3
   sqflite: ^2.3.2
   sqflite_common_ffi: ^2.3.3  # 用于桌面平台
+  video_player: ^2.9.5
 
 dev_dependencies:
   flutter_test:

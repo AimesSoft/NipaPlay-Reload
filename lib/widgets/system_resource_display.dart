@@ -26,6 +26,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   double _fps = 0.0;
   String _activeDecoder = "未知"; // 添加当前活跃的解码器
   String _mdkVersion = "未知"; // 添加MDK版本号
+  String _playerKernelType = "未知"; // 添加播放器内核类型
   
   @override
   void initState() {
@@ -55,6 +56,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
           _fps = SystemResourceMonitor().fps;
           _activeDecoder = SystemResourceMonitor().activeDecoder;
           _mdkVersion = SystemResourceMonitor().mdkVersion;
+          _playerKernelType = SystemResourceMonitor().playerKernelType;
         });
       }
     });
@@ -188,55 +190,55 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                   ),
                   const SizedBox(height: 4),
                   
-                  // 解码器和MDK版本信息
+                  // 播放器内核信息 (原解码器和MDK版本信息)
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 解码器信息
+                      // // 解码器信息 - REMOVED
+                      // Flexible(
+                      //   flex: 3,
+                      //   child: Row(
+                      //     mainAxisSize: MainAxisSize.min,
+                      //     children: [
+                      //       const Icon(Icons.video_library, size: 18, color: Colors.white70),
+                      //       const SizedBox(width: 4),
+                      //       Flexible(
+                      //         child: Text(
+                      //           _activeDecoder, // This would show hw/sw - ffmpeg etc.
+                      //           style: const TextStyle(
+                      //             fontSize: 14,
+                      //             fontWeight: FontWeight.bold,
+                      //             color: Colors.white,
+                      //             decoration: TextDecoration.none,
+                      //           ),
+                      //           overflow: TextOverflow.ellipsis,
+                      //         ),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ),
+                      
+                      // // 分隔符 - REMOVED as only one item now in this row part
+                      // Padding(
+                      //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      //   child: Container(
+                      //     height: 16,
+                      //     width: 1,
+                      //     color: Colors.white30,
+                      //   ),
+                      // ),
+                      
+                      // 播放器内核信息
                       Flexible(
-                        flex: 3,
+                        // flex: 2, // No longer needs flex if it's the only main item or make it 1 for full span if needed
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.video_library, size: 18, color: Colors.white70),
+                            const Icon(Icons.developer_board, size: 16, color: Colors.white70), // Changed Icon to a valid one
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
-                                _activeDecoder,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  decoration: TextDecoration.none,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      // 分隔符
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Container(
-                          height: 16,
-                          width: 1,
-                          color: Colors.white30,
-                        ),
-                      ),
-                      
-                      // MDK版本信息
-                      Flexible(
-                        flex: 2,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.info_outline, size: 16, color: Colors.white70),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                'MDK $_mdkVersion',
+                                '播放器内核: $_playerKernelType', // 使用变量显示当前播放器内核
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,

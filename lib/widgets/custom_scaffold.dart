@@ -26,35 +26,16 @@ class CustomScaffold extends StatefulWidget {
   State<CustomScaffold> createState() => _CustomScaffoldState();
 }
 
-class _CustomScaffoldState extends State<CustomScaffold> with TickerProviderStateMixin {
-  // 当前选中的页面索引
-  late int _currentIndex;
-  late TabController _tabController;
-  
+class _CustomScaffoldState extends State<CustomScaffold> {
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.tabController?.index ?? 0;
-    
-    // 创建自己的TabController以便双向控制
-    _tabController = TabController(
-      length: widget.pages.length,
-      initialIndex: _currentIndex,
-      vsync: this,
-    );
-    
-    // 监听TabController变化
-    _tabController.addListener(_handleTabChanged);
+    widget.tabController?.addListener(_handleExternalTabChanged);
   }
   
-  void _handleTabChanged() {
-    // 仅当索引真正变化时才更新
-    if (!_tabController.indexIsChanging) return;
-    
-    final int newIndex = _tabController.index;
-    if (_currentIndex != newIndex) {
+  void _handleExternalTabChanged() {
+    if (mounted) {
       setState(() {
-        _currentIndex = newIndex;
       });
     }
   }
@@ -63,58 +44,38 @@ class _CustomScaffoldState extends State<CustomScaffold> with TickerProviderStat
   void didUpdateWidget(CustomScaffold oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // 如果页面数量变化，重新创建TabController
-    if (widget.pages.length != oldWidget.pages.length) {
-      _tabController.dispose();
-      _tabController = TabController(
-        length: widget.pages.length,
-        initialIndex: _currentIndex < widget.pages.length ? _currentIndex : 0,
-        vsync: this,
-      );
-      _tabController.addListener(_handleTabChanged);
-    }
-    
-    // 如果外部TabController变化，同步状态
-    if (widget.tabController != null && 
-        widget.tabController != oldWidget.tabController &&
-        widget.tabController!.index != _currentIndex) {
-      _currentIndex = widget.tabController!.index;
-      _tabController.animateTo(_currentIndex);
+    if (widget.tabController != oldWidget.tabController) {
+      oldWidget.tabController?.removeListener(_handleExternalTabChanged);
+      widget.tabController?.addListener(_handleExternalTabChanged);
+      setState(() {});
     }
   }
   
   @override
   void dispose() {
-    _tabController.removeListener(_handleTabChanged);
-    _tabController.dispose();
+    widget.tabController?.removeListener(_handleExternalTabChanged);
     super.dispose();
   }
   
-  // 当页面通过滑动或其他方式变化时调用
-  void _handlePageChanged(int index) {
-    if (_currentIndex != index) {
-      setState(() {
-        _currentIndex = index;
-      });
-      
-      if (_tabController.index != index) {
-        _tabController.animateTo(index);
-      }
-      
-      // 同步到外部TabController
-      if (widget.tabController != null && widget.tabController!.index != index) {
-        widget.tabController!.animateTo(index);
-      }
+  void _handlePageChangedBySwitchableView(int index) {
+    if (widget.tabController != null && widget.tabController!.index != index) {
+      widget.tabController!.animateTo(index);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (widget.tabController == null) {
+      print('[CustomScaffold] CRITICAL: widget.tabController is null. Tabs will not work.');
+      return const Center(child: Text("Error: TabController not provided to CustomScaffold"));
+    }
+
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        // 获取外观设置，判断是否启用页面滑动动画
         final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
         final enableAnimation = appearanceSettings.enablePageAnimation;
+
+        final currentIndex = widget.tabController!.index;
 
         return BackgroundWithBlur(
           child: Scaffold(
@@ -123,7 +84,7 @@ class _CustomScaffoldState extends State<CustomScaffold> with TickerProviderStat
                 ? Colors.black.withOpacity(0.7)
                 : Colors.black.withOpacity(0.2),
             extendBodyBehindAppBar: false,
-            appBar: videoState.shouldShowAppBar() ? AppBar(
+            appBar: videoState.shouldShowAppBar() && widget.tabPage.isNotEmpty ? AppBar(
               toolbarHeight: !widget.pageIsHome && !globals.isDesktop
                   ? 100
                   : globals.isDesktop
@@ -141,7 +102,7 @@ class _CustomScaffoldState extends State<CustomScaffold> with TickerProviderStat
               backgroundColor: Colors.transparent,
               elevation: 0,
               bottom: TabBar(
-                controller: _tabController, // 使用内部控制器
+                controller: widget.tabController,
                 isScrollable: true,
                 tabs: widget.tabPage,
                 labelColor: Colors.white,
@@ -160,15 +121,15 @@ class _CustomScaffoldState extends State<CustomScaffold> with TickerProviderStat
               ),
             ) : null,
             body: TabControllerScope(
-              controller: _tabController,
-              enabled: true, // 始终启用
+              controller: widget.tabController!,
+              enabled: true,
               child: SwitchableView(
                 enableAnimation: enableAnimation,
-                currentIndex: _currentIndex,
+                currentIndex: currentIndex,
                 physics: enableAnimation
                     ? const PageScrollPhysics()
                     : const NeverScrollableScrollPhysics(),
-                onPageChanged: _handlePageChanged,
+                onPageChanged: _handlePageChangedBySwitchableView,
                 children: widget.pages.map((page) => 
                   RepaintBoundary(child: page)
                 ).toList(),
