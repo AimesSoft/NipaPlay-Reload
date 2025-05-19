@@ -26,42 +26,85 @@ class CustomScaffold extends StatefulWidget {
   State<CustomScaffold> createState() => _CustomScaffoldState();
 }
 
-class _CustomScaffoldState extends State<CustomScaffold> {
+class _CustomScaffoldState extends State<CustomScaffold> with TickerProviderStateMixin {
+  // 当前选中的页面索引
   late int _currentIndex;
+  late TabController _tabController;
   
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.tabController?.index ?? 0;
     
-    // 添加监听器以更新当前索引
-    widget.tabController?.addListener(_handleTabChange);
+    // 创建自己的TabController以便双向控制
+    _tabController = TabController(
+      length: widget.pages.length,
+      initialIndex: _currentIndex,
+      vsync: this,
+    );
+    
+    // 监听TabController变化
+    _tabController.addListener(_handleTabChanged);
+  }
+  
+  void _handleTabChanged() {
+    // 仅当索引真正变化时才更新
+    if (!_tabController.indexIsChanging) return;
+    
+    final int newIndex = _tabController.index;
+    if (_currentIndex != newIndex) {
+      setState(() {
+        _currentIndex = newIndex;
+      });
+    }
   }
   
   @override
   void didUpdateWidget(CustomScaffold oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // 当控制器改变时，更新监听器
-    if (oldWidget.tabController != widget.tabController) {
-      oldWidget.tabController?.removeListener(_handleTabChange);
-      widget.tabController?.addListener(_handleTabChange);
-      _currentIndex = widget.tabController?.index ?? 0;
+    // 如果页面数量变化，重新创建TabController
+    if (widget.pages.length != oldWidget.pages.length) {
+      _tabController.dispose();
+      _tabController = TabController(
+        length: widget.pages.length,
+        initialIndex: _currentIndex < widget.pages.length ? _currentIndex : 0,
+        vsync: this,
+      );
+      _tabController.addListener(_handleTabChanged);
+    }
+    
+    // 如果外部TabController变化，同步状态
+    if (widget.tabController != null && 
+        widget.tabController != oldWidget.tabController &&
+        widget.tabController!.index != _currentIndex) {
+      _currentIndex = widget.tabController!.index;
+      _tabController.animateTo(_currentIndex);
     }
   }
   
   @override
   void dispose() {
-    // 移除监听器
-    widget.tabController?.removeListener(_handleTabChange);
+    _tabController.removeListener(_handleTabChanged);
+    _tabController.dispose();
     super.dispose();
   }
   
-  void _handleTabChange() {
-    if (widget.tabController != null && _currentIndex != widget.tabController!.index) {
+  // 当页面通过滑动或其他方式变化时调用
+  void _handlePageChanged(int index) {
+    if (_currentIndex != index) {
       setState(() {
-        _currentIndex = widget.tabController!.index;
+        _currentIndex = index;
       });
+      
+      if (_tabController.index != index) {
+        _tabController.animateTo(index);
+      }
+      
+      // 同步到外部TabController
+      if (widget.tabController != null && widget.tabController!.index != index) {
+        widget.tabController!.animateTo(index);
+      }
     }
   }
 
@@ -69,84 +112,64 @@ class _CustomScaffoldState extends State<CustomScaffold> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        // 判断当前活动页面是否为视频播放页 (假定视频播放页索引为0)
-        final bool isVideoPlayerPageActive = _currentIndex == 0;
-        
         // 获取外观设置，判断是否启用页面滑动动画
         final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
         final enableAnimation = appearanceSettings.enablePageAnimation;
 
-        return DefaultTabController(
-          length: widget.pages.length,
-          initialIndex: _currentIndex,
-          child: BackgroundWithBlur(
-            child: Scaffold(
-              primary: false,
-              // ignore: deprecated_member_use
-              backgroundColor: Theme.of(context).brightness == Brightness.dark
-                  // ignore: deprecated_member_use
-                  ? Colors.black.withOpacity(0.7)
-                  // ignore: deprecated_member_use
-                  : Colors.black.withOpacity(0.2),
-              extendBodyBehindAppBar: false,
-              appBar: videoState.shouldShowAppBar() ? AppBar(
-                toolbarHeight: !widget.pageIsHome && !globals.isDesktop
-                    ? 100
-                    : globals.isDesktop
-                        ? 20
-                        : 60,
-                leading: widget.pageIsHome
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Ionicons.chevron_back_outline),
-                        color: Colors.white,
-                        onPressed: () {
-                          // 这里可以自定义返回按钮的逻辑
-                          Navigator.of(context).pop();
-                        },
-                      ),
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                bottom: TabBar(
-                  controller: widget.tabController,
-                  isScrollable: true,
-                  tabs: widget.tabPage, // 使用从 tab_labels.dart 中导入的标签
-                  labelColor: Colors.white,
-                  dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                  dividerHeight: 3.0,
-                  indicatorPadding:
-                      const EdgeInsets.only(top: 43, left: 15, right: 15),
-                  unselectedLabelColor: Colors.white60,
-                  labelPadding: const EdgeInsets.only(bottom: 15.0),
-                  tabAlignment: TabAlignment.start,
-                  indicator: BoxDecoration(
-                    color: Colors.white, // 设置指示器的颜色
-                    borderRadius: BorderRadius.circular(30), // 设置圆角矩形的圆角半径
-                  ),
-                  indicatorSize: TabBarIndicatorSize.tab,
+        return BackgroundWithBlur(
+          child: Scaffold(
+            primary: false,
+            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.7)
+                : Colors.black.withOpacity(0.2),
+            extendBodyBehindAppBar: false,
+            appBar: videoState.shouldShowAppBar() ? AppBar(
+              toolbarHeight: !widget.pageIsHome && !globals.isDesktop
+                  ? 100
+                  : globals.isDesktop
+                      ? 20
+                      : 60,
+              leading: widget.pageIsHome
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Ionicons.chevron_back_outline),
+                      color: Colors.white,
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                    ),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              bottom: TabBar(
+                controller: _tabController, // 使用内部控制器
+                isScrollable: true,
+                tabs: widget.tabPage,
+                labelColor: Colors.white,
+                dividerColor: const Color.fromARGB(59, 255, 255, 255),
+                dividerHeight: 3.0,
+                indicatorPadding:
+                    const EdgeInsets.only(top: 43, left: 15, right: 15),
+                unselectedLabelColor: Colors.white60,
+                labelPadding: const EdgeInsets.only(bottom: 15.0),
+                tabAlignment: TabAlignment.start,
+                indicator: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
                 ),
-              ) : null,
-              // 使用SwitchableView替代IndexedStack，可以根据设置切换是否启用动画
-              body: SwitchableView(
+                indicatorSize: TabBarIndicatorSize.tab,
+              ),
+            ) : null,
+            body: TabControllerScope(
+              controller: _tabController,
+              enabled: true, // 始终启用
+              child: SwitchableView(
                 enableAnimation: enableAnimation,
                 currentIndex: _currentIndex,
                 physics: enableAnimation
-                    ? const PageScrollPhysics() // 开启动画时使用页面滑动物理效果
-                    : const NeverScrollableScrollPhysics(), // 关闭动画时禁止滑动
-                onPageChanged: (index) {
-                  if (_currentIndex != index && widget.tabController != null) {
-                    setState(() {
-                      _currentIndex = index;
-                    });
-                    // 使用animateTo而不是直接设置index，保持动画效果
-                    widget.tabController!.animateTo(index);
-                    
-                    // 额外的调试信息，帮助排查问题
-                    print('主页面切换到: $index (启用动画: $enableAnimation)');
-                  }
-                },
+                    ? const PageScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                onPageChanged: _handlePageChanged,
                 children: widget.pages.map((page) => 
-                  // 为每个页面添加RepaintBoundary，限制重绘范围
                   RepaintBoundary(child: page)
                 ).toList(),
               ),
@@ -155,5 +178,28 @@ class _CustomScaffoldState extends State<CustomScaffold> {
         );
       },
     );
+  }
+}
+
+/// 提供TabController给子组件的作用域
+class TabControllerScope extends InheritedWidget {
+  final TabController controller;
+  final bool enabled;
+
+  const TabControllerScope({
+    Key? key,
+    required this.controller,
+    required this.enabled,
+    required Widget child,
+  }) : super(key: key, child: child);
+
+  static TabController? of(BuildContext context) {
+    final TabControllerScope? scope = context.dependOnInheritedWidgetOfExactType<TabControllerScope>();
+    return scope?.enabled == true ? scope?.controller : null;
+  }
+
+  @override
+  bool updateShouldNotify(TabControllerScope oldWidget) {
+    return enabled != oldWidget.enabled || controller != oldWidget.controller;
   }
 }

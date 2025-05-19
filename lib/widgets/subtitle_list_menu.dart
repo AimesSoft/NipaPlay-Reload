@@ -46,7 +46,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     debugPrint('SubtitleListMenu: initState - 开始加载字幕');
     
     // 延迟一点加载，确保VideoPlayerState已完全初始化
-    Future.delayed(Duration(milliseconds: 500), () {
+    Future.delayed(const Duration(milliseconds: 500), () {
       _loadSubtitles();
     });
     
@@ -456,12 +456,12 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                 ),
               )
             : !hasActiveSubtitles
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                   child: Center(
                     child: Text(
                       '没有激活的字幕轨道\n请在字幕轨道设置中激活字幕',
-                      style: const TextStyle(color: Colors.white70),
+                      style: TextStyle(color: Colors.white70),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -479,7 +479,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                   )
                 : Stack(
                     children: [
-                      Container(
+                      SizedBox(
                         height: listHeight,
                         child: globals.isPhone
                           ? ListView.builder(

@@ -65,8 +65,8 @@ class AudioTracksMenu extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (videoState.player.mediaInfo?.audio != null)
-                ...videoState.player.mediaInfo!.audio!.asMap().entries.map((entry) {
+              if (videoState.player.mediaInfo.audio != null)
+                ...videoState.player.mediaInfo.audio!.asMap().entries.map((entry) {
                   final index = entry.key;
                   final track = entry.value;
                   final isActive = videoState.player.activeAudioTracks.contains(index);

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/widgets/custom_scaffold.dart';
 
 /// 可切换的视图组件，支持在不同视图类型之间切换
-/// 目前支持切换IndexedStack（无动画）和TabBarView（有动画）
+/// 目前支持切换TabBarView（有动画）和IndexedStack（无动画）
 class SwitchableView extends StatefulWidget {
   /// 子组件列表
   final List<Widget> children;
@@ -31,65 +32,58 @@ class SwitchableView extends StatefulWidget {
   State<SwitchableView> createState() => _SwitchableViewState();
 }
 
-class _SwitchableViewState extends State<SwitchableView> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _SwitchableViewState extends State<SwitchableView> {
+  // 当禁用滑动动画时使用的索引
+  late int _currentIndex;
   
   @override
   void initState() {
     super.initState();
-    _initializeTabController();
-  }
-  
-  void _initializeTabController() {
-    _tabController = TabController(
-      length: widget.children.length,
-      vsync: this,
-      initialIndex: widget.currentIndex,
-    );
-    
-    _tabController.addListener(() {
-      // 仅在索引变化且不是动画中时触发回调
-      if (_tabController.indexIsChanging && widget.onPageChanged != null) {
-        widget.onPageChanged!(_tabController.index);
-      }
-    });
+    _currentIndex = widget.currentIndex;
   }
   
   @override
   void didUpdateWidget(SwitchableView oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // 检查子项数量是否变化，如果变化需要重新初始化控制器
-    if (widget.children.length != oldWidget.children.length) {
-      _tabController.dispose();
-      _initializeTabController();
-    }
-    
-    // 如果索引变化，更新控制器索引
-    if (oldWidget.currentIndex != widget.currentIndex && 
-        _tabController.index != widget.currentIndex) {
-      _tabController.animateTo(widget.currentIndex);
+    // 同步内部索引与传入的索引
+    if (widget.currentIndex != _currentIndex) {
+      setState(() {
+        _currentIndex = widget.currentIndex;
+      });
     }
   }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
+  
   @override
   Widget build(BuildContext context) {
-    // 根据是否启用动画决定使用TabBarView还是IndexedStack
-    if (widget.enableAnimation) {
-      return TabBarView(
-        controller: _tabController,
-        physics: widget.physics ?? const CustomTabScrollPhysics(),
-        children: widget.children,
+    // 从作用域获取TabController
+    final TabController? tabController = TabControllerScope.of(context);
+    
+    // 如果启用了动画模式，则使用TabBarView
+    if (widget.enableAnimation && tabController != null) {
+      return NotificationListener<ScrollNotification>(
+        onNotification: (ScrollNotification notification) {
+          // 页面切换完成时通知父组件
+          if (notification is ScrollEndNotification) {
+            final int currentPage = tabController.index;
+            if (currentPage != _currentIndex) {
+              _currentIndex = currentPage;
+              widget.onPageChanged?.call(currentPage);
+            }
+          }
+          return false;
+        },
+        child: TabBarView(
+          controller: tabController,
+          physics: widget.physics ?? const PageScrollPhysics(),
+          children: widget.children,
+        ),
       );
     } else {
+      // 禁用动画模式使用IndexedStack
       return IndexedStack(
-        index: widget.currentIndex,
+        index: _currentIndex,
+        sizing: StackFit.expand,
         children: widget.children,
       );
     }
