@@ -1395,10 +1395,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             // 当播放器返回无效的 position 或 duration 时
             final String pathForErrorLog = _currentVideoPath ?? "未知路径";
             final String baseName = p.basename(pathForErrorLog);
-            final String technicalDetail = '(pos: $playerPosition, dur: $playerDuration)';
-            final String userMessage = '视频文件 "$baseName" 可能已损坏或无法读取 $technicalDetail';
+            
+            // 优先使用来自播放器适配器的特定错误消息
+            String userMessage;
+            if (player.mediaInfo.specificErrorMessage != null && player.mediaInfo.specificErrorMessage!.isNotEmpty) {
+              userMessage = player.mediaInfo.specificErrorMessage!;
+            } else {
+              final String technicalDetail = '(pos: $playerPosition, dur: $playerDuration)';
+              userMessage = '视频文件 "$baseName" 可能已损坏或无法读取 $technicalDetail';
+            }
 
-            debugPrint('VideoPlayerState: 播放器返回无效的视频数据 (position: $playerPosition, duration: $playerDuration) 路径: $pathForErrorLog. 已停止播放并设置为错误状态.');
+            debugPrint('VideoPlayerState: 播放器返回无效的视频数据 (position: $playerPosition, duration: $playerDuration) 路径: $pathForErrorLog. 错误信息: $userMessage. 已停止播放并设置为错误状态.');
             
             _error = userMessage; 
 
@@ -1416,12 +1423,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             _duration = Duration.zero; 
             
             WidgetsBinding.instance.addPostFrameCallback((_) async {
-              // 1. 执行 handleBackButton 逻辑 (处理全屏、截图)
-              await handleBackButton(); 
-              // 2. 执行 resetPlayer 逻辑 (全面清理播放器状态)
-              await resetPlayer(); 
+              // 1. 执行 handleBackButton 逻辑 (处理全屏、截图等)
+              await handleBackButton(); // <--- 重新启用此行
+              
+              // 2. DO NOT call resetPlayer() here. The dialog's action will call it.
 
-              // 3. 通知UI层执行pop
+              // 3. 通知UI层执行pop/显示对话框等
               onSeriousPlaybackErrorAndShouldPop?.call();
             });
 

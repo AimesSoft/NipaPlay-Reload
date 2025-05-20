@@ -5,38 +5,156 @@ import FlutterMacOS
 class AppDelegate: FlutterAppDelegate {
   // 直接创建全局引用
   var uploadMenuItem: NSMenuItem?
+  var mediaLibraryMenuItem: NSMenuItem?
+  var newSeriesMenuItem: NSMenuItem?
+  var settingsMenuItem: NSMenuItem?
+  
+  // 连接到xib中定义的菜单 - 使用不同名称避免与基类冲突
+  @IBOutlet weak var playerMenu: NSMenu!
   
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
     print("[AppDelegate] 应用启动")
     
-    // 创建菜单
-    createUploadMenu()
+    // 延迟更新菜单项，确保应用完全初始化
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+      self.updateMenuItems()
+    }
   }
   
-  // 创建上传菜单项 - 直接启用
-  private func createUploadMenu() {
-    guard let mainMenu = NSApp.mainMenu else { return }
+  // 更新菜单项
+  private func updateMenuItems() {
+    print("[AppDelegate] 开始更新菜单项")
     
-    let customMenu = NSMenu(title: "播放器")
-    let uploadItem = NSMenuItem(title: "上传视频", action: #selector(uploadVideo(_:)), keyEquivalent: "u")
-    uploadItem.keyEquivalentModifierMask = [.command]
-    uploadItem.target = self
-    uploadItem.isEnabled = true // 直接启用
+    // 直接使用已连接的playerMenu
+    guard let menu = playerMenu else {
+      print("[AppDelegate] 错误: playerMenu未连接")
+      return
+    }
     
-    customMenu.addItem(uploadItem)
-    let mainItem = NSMenuItem()
-    mainItem.submenu = customMenu
-    mainMenu.addItem(mainItem)
+    // 查找已有的上传视频菜单项
+    var uploadItemExists = false
+    for item in menu.items {
+      if item.title == "上传视频" {
+        uploadItemExists = true
+        item.action = #selector(uploadVideo(_:))
+        item.target = self
+        uploadMenuItem = item
+        break
+      }
+    }
     
-    uploadMenuItem = uploadItem
-    print("[AppDelegate] 菜单已创建并启用")
+    // 如果不存在，则添加上传视频菜单项
+    if !uploadItemExists {
+      let uploadItem = NSMenuItem(title: "上传视频", action: #selector(uploadVideo(_:)), keyEquivalent: "u")
+      uploadItem.keyEquivalentModifierMask = [.command]
+      uploadItem.target = self
+      menu.addItem(uploadItem)
+      uploadMenuItem = uploadItem
+    }
+    
+    // 添加分隔线（如果不存在）
+    var hasSeparator = false
+    for (index, item) in menu.items.enumerated() {
+      if item.isSeparatorItem && index > 0 {
+        hasSeparator = true
+        break
+      }
+    }
+    
+    if !hasSeparator {
+      menu.addItem(NSMenuItem.separator())
+    }
+    
+    // 添加或更新媒体库菜单项
+    var hasMediaLibraryItem = false
+    for item in menu.items {
+      if item.title == "媒体库" {
+        hasMediaLibraryItem = true
+        item.action = #selector(openMediaLibrary(_:))
+        item.target = self
+        mediaLibraryMenuItem = item
+        break
+      }
+    }
+    
+    if !hasMediaLibraryItem {
+      let mediaLibraryItem = NSMenuItem(title: "媒体库", action: #selector(openMediaLibrary(_:)), keyEquivalent: "1")
+      mediaLibraryItem.keyEquivalentModifierMask = [.command]
+      mediaLibraryItem.target = self
+      menu.addItem(mediaLibraryItem)
+      mediaLibraryMenuItem = mediaLibraryItem
+    }
+    
+    // 添加或更新新番更新菜单项
+    var hasNewSeriesItem = false
+    for item in menu.items {
+      if item.title == "新番更新" {
+        hasNewSeriesItem = true
+        item.action = #selector(openNewSeries(_:))
+        item.target = self
+        newSeriesMenuItem = item
+        break
+      }
+    }
+    
+    if !hasNewSeriesItem {
+      let newSeriesItem = NSMenuItem(title: "新番更新", action: #selector(openNewSeries(_:)), keyEquivalent: "2")
+      newSeriesItem.keyEquivalentModifierMask = [.command]
+      newSeriesItem.target = self
+      menu.addItem(newSeriesItem)
+      newSeriesMenuItem = newSeriesItem
+    }
+    
+    // 添加或更新设置菜单项
+    var hasSettingsItem = false
+    for item in menu.items {
+      if item.title == "设置" {
+        hasSettingsItem = true
+        item.action = #selector(openSettings(_:))
+        item.target = self
+        settingsMenuItem = item
+        break
+      }
+    }
+    
+    if !hasSettingsItem {
+      let settingsItem = NSMenuItem(title: "设置", action: #selector(openSettings(_:)), keyEquivalent: "3")
+      settingsItem.keyEquivalentModifierMask = [.command]
+      settingsItem.target = self
+      menu.addItem(settingsItem)
+      settingsMenuItem = settingsItem
+    }
+    
+    print("[AppDelegate] 菜单已更新: \(menu.items.count) 个项目")
   }
   
   // 处理菜单点击，直接获取FlutterViewController并创建通道
   @objc func uploadVideo(_ sender: Any?) {
     print("[AppDelegate] 菜单点击: 上传视频")
-    
+    invokeFlutterMethod("uploadVideo")
+  }
+  
+  // 打开媒体库
+  @objc func openMediaLibrary(_ sender: Any?) {
+    print("[AppDelegate] 菜单点击: 媒体库")
+    invokeFlutterMethod("openMediaLibrary")
+  }
+  
+  // 打开新番更新
+  @objc func openNewSeries(_ sender: Any?) {
+    print("[AppDelegate] 菜单点击: 新番更新")
+    invokeFlutterMethod("openNewSeries")
+  }
+  
+  // 打开设置
+  @objc func openSettings(_ sender: Any?) {
+    print("[AppDelegate] 菜单点击: 设置")
+    invokeFlutterMethod("openSettings")
+  }
+  
+  // 封装调用Flutter方法的逻辑
+  private func invokeFlutterMethod(_ method: String, arguments: Any? = nil) {
     // 获取控制器和创建通道
     guard let controller = self.mainFlutterWindow?.contentViewController as? FlutterViewController else {
       print("[AppDelegate] 错误: 无法获取Flutter控制器")
@@ -48,8 +166,8 @@ class AppDelegate: FlutterAppDelegate {
     let channel = FlutterMethodChannel(name: "custom_menu_channel", binaryMessenger: controller.engine.binaryMessenger)
     
     // 调用方法
-    print("[AppDelegate] 调用uploadVideo方法")
-    channel.invokeMethod("uploadVideo", arguments: nil) { result in
+    print("[AppDelegate] 调用\(method)方法")
+    channel.invokeMethod(method, arguments: arguments) { result in
       if let error = result as? FlutterError {
         print("[AppDelegate] 调用失败: \(error.message ?? "未知错误")")
         self.showSimpleAlert(message: "操作失败: \(error.message ?? "未知错误")")

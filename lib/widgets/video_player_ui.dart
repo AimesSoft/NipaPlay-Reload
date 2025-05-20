@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
+import 'package:nipaplay/main.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -60,31 +61,41 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _videoPlayerStateInstance = Provider.of<VideoPlayerState>(context, listen: false);
-        _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop = () {
-          if (mounted) {
-            final String errorMessage = _videoPlayerStateInstance?.error ?? "发生未知播放错误，已停止播放。";
-            
-            // 使用 BlurDialog 替换 AlertDialog 以保持UI风格一致性
+        _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop = () async {
+          if (mounted && _videoPlayerStateInstance != null) {
+            // 获取当前的错误信息用于显示
+            final String errorMessage = _videoPlayerStateInstance!.error ?? "发生未知播放错误，已停止播放。";
+
+            // 显示 BlurDialog
             BlurDialog.show<void>(
-              context: context,
+              context: context, // 使用 VideoPlayerUI 的 context
               title: '播放错误',
               content: errorMessage,
               actions: [
                 TextButton(
                   child: const Text('确定'),
                   onPressed: () {
-                    Navigator.of(context).pop();
-                    if (mounted && Navigator.of(context).canPop()) { 
-                      Navigator.of(context).pop(); 
-                    }
+                    // 1. Pop the dialog
+                    //    这里的 context 是 BlurDialog.show 内部创建的用于对话框的 context
+                    Navigator.of(context).pop(); 
+
+                    // 2. Reset the player state.
+                    //    这将导致 VideoPlayerUI 重建并因 hasVideo 为 false 而显示 VideoUploadUI。
+                    _videoPlayerStateInstance!.resetPlayer();
                   },
                 ),
               ],
             );
-          } else if (mounted) {
-            debugPrint("[VideoPlayerUI] Serious playback error: Cannot pop current route (already handled or not applicable).");
+          } else {
+            print("[VideoPlayerUI] onSeriousPlaybackErrorAndShouldPop: Not mounted or _videoPlayerStateInstance is null.");
           }
         };
+
+        // 设置上下文，以便 VideoPlayerState 可以访问
+        _videoPlayerStateInstance?.setContext(context);
+
+        // 其他初始化逻辑...
+        // ...
       }
     });
   }

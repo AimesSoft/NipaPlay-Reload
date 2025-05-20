@@ -87,6 +87,57 @@ void main() async {
         print('[Dart] 错误: $e');
         return '错误: $e';
       }
+    } else if (call.method == 'openMediaLibrary') {
+      try {
+        final context = navigatorKey.currentState?.overlay?.context;
+        if (context == null) {
+          print('[Dart] 错误: 无法获取UI上下文');
+          return '错误: 无法获取UI上下文';
+        }
+        
+        Future.microtask(() {
+          _navigateToPage(context, 1); // 切换到媒体库页面（索引1）
+        });
+        
+        return '正在切换到媒体库页面';
+      } catch (e) {
+        print('[Dart] 错误: $e');
+        return '错误: $e';
+      }
+    } else if (call.method == 'openNewSeries') {
+      try {
+        final context = navigatorKey.currentState?.overlay?.context;
+        if (context == null) {
+          print('[Dart] 错误: 无法获取UI上下文');
+          return '错误: 无法获取UI上下文';
+        }
+        
+        Future.microtask(() {
+          _navigateToPage(context, 2); // 切换到新番更新页面（索引2）
+        });
+        
+        return '正在切换到新番更新页面';
+      } catch (e) {
+        print('[Dart] 错误: $e');
+        return '错误: $e';
+      }
+    } else if (call.method == 'openSettings') {
+      try {
+        final context = navigatorKey.currentState?.overlay?.context;
+        if (context == null) {
+          print('[Dart] 错误: 无法获取UI上下文');
+          return '错误: 无法获取UI上下文';
+        }
+        
+        Future.microtask(() {
+          _navigateToPage(context, 3); // 切换到设置页面（索引3）
+        });
+        
+        return '正在切换到设置页面';
+      } catch (e) {
+        print('[Dart] 错误: $e');
+        return '错误: $e';
+      }
     }
     
     // 默认返回空字符串
@@ -381,23 +432,23 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   static MainPageState? of(BuildContext context) {
     return context.findAncestorStateOfType<MainPageState>();
   }
-
+  
   // TabChangeNotifier监听 - Temporarily remove or comment out for Scheme 1
-  // TabChangeNotifier? _tabChangeNotifier;
-  // void _onTabChangeRequested() {
-  //   debugPrint('[_MainPageState] _onTabChangeRequested triggered.');
-  //   final index = _tabChangeNotifier?.targetTabIndex;
-  //   if (index != null && globalTabController != null) {
-  //     debugPrint('[_MainPageState] targetTabIndex: $index, current globalTabController.index: ${globalTabController!.index}');
-  //     if (globalTabController!.index != index) {
-  //       globalTabController!.animateTo(index);
-  //       debugPrint('[_MainPageState] Called globalTabController.animateTo($index)');
-  //     } else {
-  //       debugPrint('[_MainPageState] globalTabController.index is already $index. No animation needed.');
-  //     }
-  //     _tabChangeNotifier?.clear();
-  //   }
-  // }
+  TabChangeNotifier? _tabChangeNotifier;
+  void _onTabChangeRequested() {
+    debugPrint('[MainPageState] _onTabChangeRequested triggered.');
+    final index = _tabChangeNotifier?.targetTabIndex;
+    if (index != null && globalTabController != null) {
+      debugPrint('[MainPageState] targetTabIndex: $index, current globalTabController.index: ${globalTabController!.index}');
+      if (globalTabController!.index != index) {
+        globalTabController!.animateTo(index);
+        debugPrint('[MainPageState] Called globalTabController.animateTo($index)');
+      } else {
+        debugPrint('[MainPageState] globalTabController.index is already $index. No animation needed.');
+      }
+      _tabChangeNotifier?.clear();
+    }
+  }
 
   @override
   void initState() {
@@ -450,14 +501,14 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   void didChangeDependencies() {
     super.didChangeDependencies();
     // 只添加一次监听 - Temporarily remove or comment out for Scheme 1
-    // _tabChangeNotifier ??= Provider.of<TabChangeNotifier>(context);
-    // _tabChangeNotifier?.removeListener(_onTabChangeRequested);
-    // _tabChangeNotifier?.addListener(_onTabChangeRequested);
+    _tabChangeNotifier ??= Provider.of<TabChangeNotifier>(context);
+    _tabChangeNotifier?.removeListener(_onTabChangeRequested);
+    _tabChangeNotifier?.addListener(_onTabChangeRequested);
   }
 
   @override
   void dispose() {
-    // _tabChangeNotifier?.removeListener(_onTabChangeRequested); // Temporarily remove
+    _tabChangeNotifier?.removeListener(_onTabChangeRequested); // Temporarily remove
     globalTabController?.dispose();
     if (globals.winLinDesktop) {
       windowManager.removeListener(this);
@@ -675,5 +726,26 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
     if (context.mounted) {
       BlurSnackBar.show(context, '选择文件时出错: $e');
     }
+  }
+}
+
+// 导航到特定页面逻辑
+void _navigateToPage(BuildContext context, int pageIndex) {
+  print('[Dart] 准备导航到页面索引: $pageIndex');
+  
+  // 尝试获取MainPageState
+  MainPageState? mainPageState = MainPageState.of(context);
+  if (mainPageState != null && mainPageState.globalTabController != null) {
+    if (mainPageState.globalTabController!.index != pageIndex) {
+      mainPageState.globalTabController!.animateTo(pageIndex);
+      debugPrint('[Dart - _navigateToPage] 直接调用了globalTabController.animateTo($pageIndex)');
+    } else {
+      debugPrint('[Dart - _navigateToPage] globalTabController已经在索引$pageIndex，无需切换');
+    }
+  } else {
+    debugPrint('[Dart - _navigateToPage] 无法找到MainPageState或globalTabController');
+    // 如果直接访问失败，使用TabChangeNotifier作为备选方案
+    Provider.of<TabChangeNotifier>(context, listen: false).changeTab(pageIndex);
+    debugPrint('[Dart - _navigateToPage] 备选方案: 使用TabChangeNotifier请求切换到标签页$pageIndex');
   }
 }

@@ -15,7 +15,7 @@
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="NipaPlay" customModuleProvider="target">
             <connections>
-                <outlet property="applicationMenu" destination="uQy-DD-JDr" id="XBo-yE-nKs"/>
+                <outlet property="playerMenu" destination="uQy-DD-JDr" id="XBo-yE-nKs"/>
                 <outlet property="mainFlutterWindow" destination="QvC-M9-y7g" id="gIp-Ho-8D9"/>
             </connections>
         </customObject>
@@ -29,7 +29,26 @@
                             <menuItem title="上传视频" keyEquivalent="u" id="upload-video-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
-                                    <action selector="uploadVideo:" target="-1" id="upload-video-action"/>
+                                    <action selector="uploadVideo:" target="Voe-Tx-rLC" id="upload-video-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="menu-separator"/>
+                            <menuItem title="媒体库" keyEquivalent="1" id="media-library-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="openMediaLibrary:" target="Voe-Tx-rLC" id="media-library-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="新番更新" keyEquivalent="2" id="new-series-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="openNewSeries:" target="Voe-Tx-rLC" id="new-series-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="设置" keyEquivalent="3" id="settings-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="openSettings:" target="Voe-Tx-rLC" id="settings-action"/>
                                 </connections>
                             </menuItem>
                         </items>

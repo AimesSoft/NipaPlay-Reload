@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter/services.dart';
 
 import './abstract_player.dart';
 import './player_enums.dart';
@@ -309,6 +310,28 @@ class VideoPlayerAdapter implements AbstractPlayer {
         return _controller!.textureId;
       } catch (e) {
         print('[VideoPlayerAdapter] 初始化失败: $e');
+        if (e is PlatformException &&
+            (e.message?.contains('无法打开: 不支持此媒体的格式') == true ||
+             e.message?.contains('OSStatus错误-12847') == true ||
+             e.message?.contains('无法打开: 此媒体可能已损坏') == true ||
+             e.message?.contains('OSStatus错误-12848') == true 
+            )) {
+          String errMsg = "视频文件可能已损坏或无法读取。";
+          if (e.message?.contains('不支持此媒体的格式') == true || e.message?.contains('OSStatus错误-12847') == true) {
+            errMsg = "当前播放内核不支持此视频格式。";
+          }
+          print('[VideoPlayerAdapter] 特定视频错误(updateTexture). 设置mediaInfo.duration=0, specificErrorMessage: $errMsg, textureId=null.');
+          _mediaInfo = PlayerMediaInfo(
+            duration: 0,
+            video: [PlayerVideoStreamInfo(codec: PlayerVideoCodecParams(width: 0, height: 0, name: 'video_error'), codecName: 'video_error')],
+            audio: [],
+            subtitle: [],
+            specificErrorMessage: errMsg,
+          );
+          _textureIdNotifier.value = null;
+          return null; // 返回null，不向上抛出此特定异常
+        }
+        // 对于其他初始化错误，保持原有行为（返回null）
         return null;
       }
     }
@@ -319,6 +342,8 @@ class VideoPlayerAdapter implements AbstractPlayer {
   void _updateMediaInfo() {
     if (_controller == null || !_controller!.value.isInitialized) {
       print('[VideoPlayerAdapter] _updateMediaInfo: 控制器未初始化或为空');
+      // 如果控制器未初始化，也应该重置 specificErrorMessage
+      _mediaInfo = PlayerMediaInfo(duration: 0, specificErrorMessage: _mediaInfo.specificErrorMessage); // 保留可能已设置的错误信息
       return;
     }
     
@@ -366,6 +391,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
         video: [videoStreamInfo],
         audio: [audioStreamInfo],
         subtitle: [],
+        specificErrorMessage: null, // <--- 成功获取信息时，清除特定错误信息
       );
     } catch (e) {
       print('[VideoPlayerAdapter] 更新媒体信息时出错: $e');
@@ -380,6 +406,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
         ],
         audio: [],
         subtitle: [],
+        specificErrorMessage: "更新媒体信息时出错", // <--- 可以考虑在这里也设置一个错误
       );
     }
   }
@@ -404,39 +431,24 @@ class VideoPlayerAdapter implements AbstractPlayer {
   Future<void> prepare() async {
     if (_controller == null) {
       print('[VideoPlayerAdapter] prepare方法中发现控制器为空，尝试重新创建');
-      // 强制重新创建
       _disposeController();
-      
-      // 使用延迟确保资源完全释放
       await Future.delayed(Duration(milliseconds: 200));
-      
       if (!_createOrRebuildController()) {
         throw Exception('无法准备播放器: 控制器创建失败');
       }
-      
-      // 等待控制器创建完成
       await Future.delayed(Duration(milliseconds: 300));
     }
     
     try {
       print('[VideoPlayerAdapter] 开始prepare控制器');
-      
       if (_controller != null) {
-        // 确保先暂停，重置状态
         if (_controller!.value.isPlaying) {
           await _controller!.pause();
         }
-        
-        // 强制重置内部状态
         if (_controller!.value.isInitialized) {
-          // 尝试跳转到0位置重置内部状态
           await _controller!.seekTo(Duration.zero);
         }
-        
-        // 等待一段时间确保状态稳定
         await Future.delayed(Duration(milliseconds: 100));
-        
-        // 然后初始化
         await _controller!.initialize().timeout(const Duration(seconds: 15), onTimeout: () {
           print('[VideoPlayerAdapter] 初始化超时');
           throw Exception('视频初始化超时');
@@ -447,24 +459,38 @@ class VideoPlayerAdapter implements AbstractPlayer {
       
       _updateMediaInfo();
       _textureIdNotifier.value = _controller!.textureId;
-      
-      // 初始化后确保视频处于暂停状态，这样UI可以正确显示
       if (_controller != null) {
         await _controller!.pause();
         print('[VideoPlayerAdapter] 初始化后将视频设置为暂停状态');
       }
-      
     } catch (e) {
-      print('[VideoPlayerAdapter] 准备失败: $e');
+      if (e is PlatformException &&
+          (e.message?.contains('无法打开: 不支持此媒体的格式') == true ||
+           e.message?.contains('OSStatus错误-12847') == true ||
+           e.message?.contains('无法打开: 此媒体可能已损坏') == true ||
+           e.message?.contains('OSStatus错误-12848') == true 
+          )) {
+        String errMsg = "视频文件可能已损坏或无法读取。";
+        if (e.message?.contains('不支持此媒体的格式') == true || e.message?.contains('OSStatus错误-12847') == true) {
+          errMsg = "当前播放内核不支持此视频格式。";
+        }
+        print('[VideoPlayerAdapter] 特定视频错误(prepare). 设置mediaInfo.duration=0, specificErrorMessage: $errMsg, textureId=null.');
+        _mediaInfo = PlayerMediaInfo(
+          duration: 0,
+          video: [PlayerVideoStreamInfo(codec: PlayerVideoCodecParams(width: 0, height: 0, name: 'video_error'), codecName: 'video_error')],
+          audio: [],
+          subtitle: [],
+          specificErrorMessage: errMsg,
+        );
+        _textureIdNotifier.value = null;
+        return; // 直接返回，不向上抛出此特定异常，也不执行下面的恢复逻辑
+      }
       
-      // 尝试恢复 - 释放资源后重新创建
+      print('[VideoPlayerAdapter] 准备失败: $e');
       _disposeController();
       await Future.delayed(Duration(milliseconds: 200));
-      
-      // 重建控制器并尝试再初始化一次
       if (_mediaPath.isNotEmpty && _createOrRebuildController()) {
         await Future.delayed(Duration(milliseconds: 300));
-        
         try {
           if (_controller != null) {
             await _controller!.initialize();
@@ -479,7 +505,6 @@ class VideoPlayerAdapter implements AbstractPlayer {
           throw Exception('视频准备失败，恢复尝试也失败: $e2');
         }
       }
-      
       throw Exception('视频准备失败: $e');
     }
   }

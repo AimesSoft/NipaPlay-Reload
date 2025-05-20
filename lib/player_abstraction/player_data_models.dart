@@ -83,11 +83,13 @@ class PlayerMediaInfo {
   final List<PlayerVideoStreamInfo>? video;
   final List<PlayerAudioStreamInfo>? audio;
   final List<PlayerSubtitleStreamInfo>? subtitle;
+  final String? specificErrorMessage;
 
   PlayerMediaInfo({
     required this.duration,
     this.video,
     this.audio,
     this.subtitle,
+    this.specificErrorMessage,
   });
 } 

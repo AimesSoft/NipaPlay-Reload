@@ -193,6 +193,20 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         },
         child: LayoutBuilder(
           builder: (context, constraints) {
+            // 安全地计算进度值
+            double progress = 0.0;
+            if (widget.videoState.duration.inMilliseconds > 0) {
+              progress = (widget.videoState.position.inMilliseconds / widget.videoState.duration.inMilliseconds)
+                  .clamp(0.0, 1.0);
+            } else {
+              // 如果总时长为0或无效，则进度也为0
+              progress = 0.0;
+            }
+            // 确保 progress 值不会是 NaN 或 Infinity， clamp 已经处理了 Infinity，这里额外处理 NaN
+            if (progress.isNaN) {
+              progress = 0.0;
+            }
+
             return widget.isDragging 
                 ? Stack(
                     key: _sliderKey,
@@ -213,7 +227,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                         right: 0,
                         top: 20,
                         child: FractionallySizedBox(
-                          widthFactor: widget.videoState.progress,
+                          widthFactor: progress,
                           alignment: Alignment.centerLeft,
                           child: Container(
                             height: 4,
@@ -233,7 +247,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                       ),
                       // 滑块
                       Positioned(
-                        left: (widget.videoState.progress * constraints.maxWidth) - (_isThumbHovered || widget.isDragging ? 8 : 6),
+                        left: (progress * constraints.maxWidth) - (_isThumbHovered || widget.isDragging ? 8 : 6),
                         top: 22 - (_isThumbHovered || widget.isDragging ? 8 : 6),
                         child: MouseRegion(
                           cursor: SystemMouseCursors.click,
@@ -285,7 +299,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                           right: 0,
                           top: 20,
                           child: FractionallySizedBox(
-                            widthFactor: widget.videoState.progress,
+                            widthFactor: progress,
                             alignment: Alignment.centerLeft,
                             child: Container(
                               height: 4,
@@ -305,7 +319,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                         ),
                         // 滑块
                         Positioned(
-                          left: (widget.videoState.progress * constraints.maxWidth) - (_isThumbHovered || widget.isDragging ? 8 : 6),
+                          left: (progress * constraints.maxWidth) - (_isThumbHovered || widget.isDragging ? 8 : 6),
                           top: 22 - (_isThumbHovered || widget.isDragging ? 8 : 6),
                           child: MouseRegion(
                             cursor: SystemMouseCursors.click,
