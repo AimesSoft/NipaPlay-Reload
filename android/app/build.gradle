@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nipaplay"
+    namespace = "com.aimessoft.nipaplay"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,15 +19,41 @@ android {
         jvmTarget = JavaVersion.VERSION_1_8
     }
 
+    packagingOptions {
+        jniLibs {
+            pickFirsts += ["**/*.so"]
+        }
+        resources {
+            pickFirsts += ["META-INF/*.version"]
+            excludes += ["META-INF/*.kotlin_module", "META-INF/LICENSE*", "META-INF/NOTICE*"]
+        }
+    }
+    
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.aimessoft.nipaplay"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = Math.max(21, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        
+        // 启用MultiDex支持
+        multiDexEnabled = true
+        
+        // 设置低内存启动模式
+        manifestPlaceholders = [
+            usesCleartextTraffic:"true",
+            applicationName:"androidx.multidex.MultiDexApplication"
+        ]
+        
+        // 设置较大的Java堆内存
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments = ['room.incremental': 'true']
+            }
+        }
     }
 
     buildTypes {
@@ -35,10 +61,51 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.debug
+            
+            // 启用代码收缩
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+        
+        debug {
+            // 调试模式也启用代码收缩，减少内存占用
+            minifyEnabled = false
+            shrinkResources = false
+            // 调试模式启用MultiDex
+            multiDexEnabled = true
+        }
+    }
+    
+    // 配置aaptOptions减少资源内存消耗
+    aaptOptions {
+        cruncherEnabled = false
     }
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Kotlin标准库
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"
+    implementation "androidx.multidex:multidex:2.0.1"
+    
+    // 添加Kotlin协程库
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4"
+    
+    // 增加OpenGL ES库以支持硬件加速
+    implementation "androidx.core:core:1.10.1"
+    implementation "androidx.annotation:annotation:1.6.0"
+    
+    // 添加MediaKit需要的库
+    implementation "androidx.media:media:1.6.0"
+    implementation "androidx.media2:media2-session:1.2.1"
+    implementation "androidx.media2:media2-player:1.2.1"
+    
+    // GPU加速相关
+    implementation "androidx.core:core-ktx:1.10.1"
+    implementation "com.google.android.material:material:1.8.0"
 }

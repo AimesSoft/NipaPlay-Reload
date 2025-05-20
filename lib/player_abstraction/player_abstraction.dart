@@ -11,6 +11,7 @@ import './player_data_models.dart';
 import './player_factory.dart'; // Import PlayerFactory directly
 import './mdk_player_adapter.dart'; // 导入具体适配器类
 import './video_player_adapter.dart'; // 导入具体适配器类
+import './media_kit_player_adapter.dart'; // 导入MediaKit适配器类
 
 /// MDK-compatible PlaybackState. 
 /// Code using the abstraction layer can use `PlaybackState.paused`.
@@ -136,6 +137,8 @@ class Player {
       return "MDK";
     } else if (_delegate is VideoPlayerAdapter) {
       return "Video Player";
+    } else if (_delegate is MediaKitPlayerAdapter) {
+      return "Media Kit";
     } else {
       return "未知";
     }

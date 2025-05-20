@@ -92,4 +92,21 @@ class PlayerMediaInfo {
     this.subtitle,
     this.specificErrorMessage,
   });
+  
+  // 添加copyWith方法以便更新个别字段
+  PlayerMediaInfo copyWith({
+    int? duration,
+    List<PlayerVideoStreamInfo>? video,
+    List<PlayerAudioStreamInfo>? audio,
+    List<PlayerSubtitleStreamInfo>? subtitle,
+    String? specificErrorMessage,
+  }) {
+    return PlayerMediaInfo(
+      duration: duration ?? this.duration,
+      video: video ?? this.video,
+      audio: audio ?? this.audio,
+      subtitle: subtitle ?? this.subtitle,
+      specificErrorMessage: specificErrorMessage ?? this.specificErrorMessage,
+    );
+  }
 } 

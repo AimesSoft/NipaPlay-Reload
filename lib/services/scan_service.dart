@@ -82,6 +82,7 @@ class ScanService with ChangeNotifier {
     if (scanning != null && _isScanning != scanning) {
       _isScanning = scanning;
       changed = true;
+      debugPrint("扫描状态变更: isScanning=$_isScanning");
     }
     if (progress != null && _scanProgress != progress) {
       _scanProgress = progress;
@@ -93,11 +94,15 @@ class ScanService with ChangeNotifier {
     }
     if (completed != null && completed && !_scanJustCompleted) {
       _scanJustCompleted = true;
+      changed = true; // 确保完成事件被标记为"changed"
+      debugPrint("扫描完成标志已设置: _scanJustCompleted=$_scanJustCompleted");
       // This will also be caught by 'changed' if scanning is set to false
     }
 
     if (changed || (completed != null && completed) ) { // Ensure listener notification on completion
+      debugPrint("准备通知监听器状态变化: isScanning=$_isScanning, justFinishedScanning=$_justFinishedScanning, totalFilesFound=$_totalFilesFound");
       notifyListeners();
+      debugPrint("已通知监听器状态变化");
     }
   }
   
@@ -219,7 +224,15 @@ class ScanService with ChangeNotifier {
 
     if (videoFiles.isEmpty) {
       if (!isPartOfBatch) {
+        // 更新找到的文件总数为0
+        _totalFilesFound = 0;
+        
+        // 设置刚完成扫描的标志，用于UI检查
+        _justFinishedScanning = true;
+        
         _updateScanState(scanning: false, message: "在 $directoryPath 中没有找到 mp4 或 mkv 文件。", completed: true);
+        
+        debugPrint("扫描结束，没有找到文件，已设置 _justFinishedScanning=$_justFinishedScanning, _totalFilesFound=$_totalFilesFound");
       } else {
         // For batch, just update message, overall completion handled by rescanAllFolders
         _updateScanMessage("在 ${p.basename(directoryPath)} 中无视频文件。"); 

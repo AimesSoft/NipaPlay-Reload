@@ -4,10 +4,17 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:crypto/crypto.dart' show md5, sha256;
+import 'dart:convert';
+import 'package:image/image.dart' as img;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import './abstract_player.dart';
 import './player_enums.dart';
 import './player_data_models.dart';
+import '../models/watch_history_model.dart';
+import '../models/watch_history_database.dart';
 
 /// video_player 插件的适配器，实现 AbstractPlayer 接口
 class VideoPlayerAdapter implements AbstractPlayer {
@@ -552,28 +559,211 @@ class VideoPlayerAdapter implements AbstractPlayer {
       return PlayerFrame(width: width, height: height, bytes: blackBytes);
     }
     
-    // video_player 不直接支持帧截取，这里返回一个空实现
-    // 实际应用中可以考虑使用其他方式实现截图功能
-    print("[VideoPlayerAdapter] 不支持截图功能");
+    // video_player 不直接支持帧截取
+    print("[VideoPlayerAdapter] 尝试查找媒体库缓存的封面图...");
     
-    // 返回一个彩色测试帧
+    // 首先尝试查找与当前媒体文件关联的观看记录，看看是否有animeId
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final videoFileName = _mediaPath.split('/').last;
+      
+      // 1. 首先尝试从WatchHistoryDatabase获取animeId
+      WatchHistoryItem? watchHistoryItem;
+      try {
+        watchHistoryItem = await WatchHistoryDatabase.instance.getHistoryByFilePath(_mediaPath);
+      } catch (e) {
+        print("[VideoPlayerAdapter] 获取观看记录时出错: $e");
+      }
+      
+      // 2. 如果有animeId，尝试找到对应的番剧封面
+      if (watchHistoryItem != null && watchHistoryItem.animeId != null) {
+        final animeId = watchHistoryItem.animeId!;
+        print("[VideoPlayerAdapter] 找到该视频的animeId: $animeId，尝试使用番剧封面");
+        
+        // 从SharedPreferences获取封面URL，使用MediaLibraryPage的键名格式
+        final prefs = await SharedPreferences.getInstance();
+        final String? imageUrl = prefs.getString('media_library_image_url_$animeId');
+        
+        if (imageUrl != null && imageUrl.isNotEmpty && imageUrl.startsWith('http')) {
+          print("[VideoPlayerAdapter] 找到番剧封面URL: $imageUrl");
+          // 生成该URL的SHA-256哈希值
+          final String imageHash = sha256.convert(utf8.encode(imageUrl)).toString();
+          print("[VideoPlayerAdapter] 生成SHA-256哈希值: $imageHash");
+          
+          // 检查是否存在该哈希值对应的封面图文件
+          final coverImagePath = '${appDir.path}/compressed_images/$imageHash.jpg';
+          final coverImageFile = File(coverImagePath);
+          
+          if (coverImageFile.existsSync()) {
+            print("[VideoPlayerAdapter] 找到番剧封面图: $coverImagePath");
+            
+            // 读取封面图并转换为PlayerFrame
+            final Uint8List imageBytes = await coverImageFile.readAsBytes();
+            
+            // 解析图像获取尺寸
+            final img.Image? image = img.decodeImage(imageBytes);
+            if (image != null) {
+              // 如果提供了目标尺寸，则调整图像大小并保持纵横比
+              img.Image resizedImage;
+              if (width > 0 && height > 0) {
+                // 计算原始图像和目标尺寸的纵横比
+                final double sourceRatio = image.width / image.height;
+                final double targetRatio = width / height;
+                
+                if (sourceRatio > targetRatio) {
+                  // 图像比目标更宽，基于高度调整尺寸并裁剪宽度
+                  final int newWidth = (height * sourceRatio).toInt();
+                  resizedImage = img.copyResize(image, width: newWidth, height: height);
+                  
+                  // 居中裁剪
+                  final int cropStartX = (newWidth - width) ~/ 2;
+                  resizedImage = img.copyCrop(resizedImage, 
+                    x: cropStartX, y: 0, 
+                    width: width, height: height);
+                } else {
+                  // 图像比目标更高，基于宽度调整尺寸并裁剪高度
+                  final int newHeight = (width / sourceRatio).toInt();
+                  resizedImage = img.copyResize(image, width: width, height: newHeight);
+                  
+                  // 居中裁剪
+                  final int cropStartY = (newHeight - height) ~/ 2;
+                  resizedImage = img.copyCrop(resizedImage, 
+                    x: 0, y: cropStartY, 
+                    width: width, height: height);
+                }
+              } else {
+                width = image.width;
+                height = image.height;
+                resizedImage = image;
+              }
+              
+              // 将图像转换为RGBA格式的字节
+              final Uint8List rgbaBytes = Uint8List(width * height * 4);
+              int byteIndex = 0;
+              
+              for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                  final pixel = resizedImage.getPixel(x, y);
+                  rgbaBytes[byteIndex++] = pixel.r.toInt(); // R
+                  rgbaBytes[byteIndex++] = pixel.g.toInt(); // G
+                  rgbaBytes[byteIndex++] = pixel.b.toInt(); // B
+                  rgbaBytes[byteIndex++] = pixel.a.toInt(); // A
+                }
+              }
+              
+              return PlayerFrame(width: width, height: height, bytes: rgbaBytes);
+            }
+          } else {
+            print("[VideoPlayerAdapter] 找不到番剧封面图文件: $coverImagePath");
+            print("[VideoPlayerAdapter] 尝试列出compressed_images目录内容...");
+            try {
+              final compressedImagesDir = Directory('${appDir.path}/compressed_images');
+              if (compressedImagesDir.existsSync()) {
+                final files = compressedImagesDir.listSync();
+                print("[VideoPlayerAdapter] compressed_images目录中有 ${files.length} 个文件");
+                if (files.length > 0) {
+                  print("[VideoPlayerAdapter] 示例文件: ${files.first.path}");
+                }
+              } else {
+                print("[VideoPlayerAdapter] compressed_images目录不存在");
+              }
+            } catch (e) {
+              print("[VideoPlayerAdapter] 列出compressed_images目录出错: $e");
+            }
+          }
+        } else {
+          print("[VideoPlayerAdapter] 未找到番剧封面URL，键: 'media_library_image_url_$animeId'");
+        }
+      }
+      
+      // 3. 如果没有找到animeId或无法使用番剧封面，继续尝试使用观看记录缩略图
+      // 计算当前视频文件的哈希值（与VideoPlayerState中_calculateFileHash相同逻辑）
+      final String videoHash = md5.convert(utf8.encode(_mediaPath.split('/').last)).toString();
+      
+      // 查找可能存在的缩略图文件
+      final thumbnailPath = '${appDir.path}/thumbnails/$videoHash.png';
+      final thumbnailFile = File(thumbnailPath);
+      
+      if (thumbnailFile.existsSync()) {
+        print("[VideoPlayerAdapter] 找到媒体库缓存的封面图: $thumbnailPath");
+        
+        // 读取封面图并转换为PlayerFrame
+        final Uint8List imageBytes = await thumbnailFile.readAsBytes();
+        
+        // 解析图像获取尺寸
+        final img.Image? image = img.decodeImage(imageBytes);
+        if (image != null) {
+          // 如果提供了目标尺寸，则调整图像大小并保持纵横比
+          img.Image resizedImage;
+          if (width > 0 && height > 0) {
+            // 计算原始图像和目标尺寸的纵横比
+            final double sourceRatio = image.width / image.height;
+            final double targetRatio = width / height;
+            
+            if (sourceRatio > targetRatio) {
+              // 图像比目标更宽，基于高度调整尺寸并裁剪宽度
+              final int newWidth = (height * sourceRatio).toInt();
+              resizedImage = img.copyResize(image, width: newWidth, height: height);
+              
+              // 居中裁剪
+              final int cropStartX = (newWidth - width) ~/ 2;
+              resizedImage = img.copyCrop(resizedImage, 
+                x: cropStartX, y: 0, 
+                width: width, height: height);
+            } else {
+              // 图像比目标更高，基于宽度调整尺寸并裁剪高度
+              final int newHeight = (width / sourceRatio).toInt();
+              resizedImage = img.copyResize(image, width: width, height: newHeight);
+              
+              // 居中裁剪
+              final int cropStartY = (newHeight - height) ~/ 2;
+              resizedImage = img.copyCrop(resizedImage, 
+                x: 0, y: cropStartY, 
+                width: width, height: height);
+            }
+          } else {
+            width = image.width;
+            height = image.height;
+            resizedImage = image;
+          }
+          
+          // 将图像转换为RGBA格式的字节
+          final Uint8List rgbaBytes = Uint8List(width * height * 4);
+          int byteIndex = 0;
+          
+          for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+              final pixel = resizedImage.getPixel(x, y);
+              // 使用image包的颜色通道访问方法
+              rgbaBytes[byteIndex++] = pixel.r.toInt(); // R
+              rgbaBytes[byteIndex++] = pixel.g.toInt(); // G
+              rgbaBytes[byteIndex++] = pixel.b.toInt(); // B
+              rgbaBytes[byteIndex++] = pixel.a.toInt(); // A
+            }
+          }
+          
+          return PlayerFrame(width: width, height: height, bytes: rgbaBytes);
+        }
+      }
+    } catch (e) {
+      print("[VideoPlayerAdapter] 读取媒体库封面图失败: $e");
+    }
+    
+    // 如果无法获取媒体库封面，则返回一个深灰色单色帧
     if (width <= 0) width = 128;
     if (height <= 0) height = 72;
     final int numBytes = width * height * 4; // RGBA
-    final Uint8List colorBytes = Uint8List(numBytes);
+    final Uint8List grayBytes = Uint8List(numBytes);
     
-    // 生成一个红色渐变测试图像
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        final int index = (y * width + x) * 4;
-        colorBytes[index] = 255; // R
-        colorBytes[index + 1] = (255 * x / width).toInt(); // G
-        colorBytes[index + 2] = (255 * y / height).toInt(); // B
-        colorBytes[index + 3] = 255; // Alpha
-      }
+    // 生成深灰色图像 (RGB: 64, 64, 64)
+    for (int i = 0; i < numBytes; i += 4) {
+      grayBytes[i] = 64;     // R = 64 (深灰色)
+      grayBytes[i + 1] = 64; // G = 64
+      grayBytes[i + 2] = 64; // B = 64
+      grayBytes[i + 3] = 255; // Alpha = 完全不透明
     }
     
-    return PlayerFrame(width: width, height: height, bytes: colorBytes);
+    return PlayerFrame(width: width, height: height, bytes: grayBytes);
   }
 
   @override

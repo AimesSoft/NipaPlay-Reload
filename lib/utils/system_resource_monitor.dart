@@ -62,8 +62,8 @@ class SystemResourceMonitor {
 
   /// 初始化系统资源监控
   static Future<void> initialize() async {
-    // 只在桌面平台上初始化
-    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+    // 移除桌面平台限制，改为在所有平台上初始化
+    if (!kIsWeb) {
       await _instance._startMonitoring();
       
       // 获取并设置MDK版本号
@@ -105,6 +105,9 @@ class SystemResourceMonitor {
           break;
         case PlayerKernelType.videoPlayer:
           _playerKernelType = "Video Player";
+          break;
+        case PlayerKernelType.mediaKit:
+          _playerKernelType = "Media Kit";
           break;
         default:
           _playerKernelType = "未知";

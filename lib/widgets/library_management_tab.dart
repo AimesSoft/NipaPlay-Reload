@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'dart:async';
+import 'dart:math';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:glassmorphism/glassmorphism.dart';
@@ -12,6 +13,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
 import '../services/file_picker_service.dart';
 import '../utils/globals.dart' as globals;
+import '../utils/storage_service.dart'; // 导入StorageService
+import 'package:permission_handler/permission_handler.dart'; // 导入权限处理库
+import '../utils/android_storage_helper.dart'; // 导入Android存储辅助类
+import 'package:flutter/services.dart'; // Import MethodChannel
 
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -50,7 +55,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       try {
         final scanService = Provider.of<ScanService>(context, listen: false);
         _scanService = scanService; // 保存引用
+        print('初始化ScanService监听器开始');
         scanService.addListener(_checkScanResults);
+        print('ScanService监听器添加成功');
       } catch (e) {
         print('初始化ScanService监听器失败: $e');
       }
@@ -74,72 +81,166 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       return;
     }
 
-    // --- Mobile Platform Logic (iOS & Android) ---
-    if (globals.isPhone) {
-      final Directory appDocDir = await getApplicationDocumentsDirectory();
-      await scanService.startDirectoryScan(appDocDir.path, skipPreviouslyMatchedUnwatched: false); // Ensure full scan for new folder
+    // --- iOS平台逻辑 ---
+    if (Platform.isIOS) {
+      // 使用StorageService获取应用存储目录
+      final Directory appDir = await StorageService.getAppStorageDirectory();
+      await scanService.startDirectoryScan(appDir.path, skipPreviouslyMatchedUnwatched: false); // Ensure full scan for new folder
       return; 
     }
-    // --- End Mobile Platform Logic ---
-
-    // 使用FilePickerService选择目录（桌面平台）
-    final filePickerService = FilePickerService();
-    final selectedDirectory = await filePickerService.pickDirectory();
-
-    if (selectedDirectory == null) {
-      if (mounted) {
-        BlurSnackBar.show(context, "未选择文件夹。");
+    // --- End iOS平台逻辑 ---
+    
+    // Android和桌面平台分开处理
+    if (Platform.isAndroid) {
+      // 获取Android版本
+      final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
+      
+      // Android 13+：使用媒体API扫描视频文件
+      if (sdkVersion >= 33) {
+        await _scanAndroidMediaFolders();
+        return;
       }
-      return;
+      
+      // Android 13以下：允许自由选择文件夹
+      // 检查并请求所有必要的权限...
+      // 保留原来的权限请求代码
     }
-
-    final Directory appDocDir = await getApplicationDocumentsDirectory();
-    final String appDocPath = appDocDir.path;
-
-    // Normalize paths to handle potential '/private' prefix discrepancy on iOS
-    String effectiveSelectedDir = selectedDirectory;
-    if (selectedDirectory.startsWith('/private') && !appDocPath.startsWith('/private')) {
-      // If selected has /private but appDocPath doesn't, selected might be /private/var... and appDocPath /var...
-      // No change needed for selectedDirectory here, comparison logic will handle it.
-    } else if (!selectedDirectory.startsWith('/private') && appDocPath.startsWith('/private')) {
-      // If selected doesn't have /private but appDocPath does, this is unusual, but we adapt.
-      // This case is less likely if appDocDir.path is from path_provider.
-    }
-
-    // The core comparison: selected path must start with appDocPath OR /private + appDocPath
-    bool isInternalPath = selectedDirectory.startsWith(appDocPath) || 
-                          (appDocPath.startsWith('/var') && selectedDirectory.startsWith('/private$appDocPath'));
-
-    if (globals.isPhone && !isInternalPath) {
-      if (mounted) {
-        String dialogContent = "您选择的文件夹位于应用外部。\n\n";
-        dialogContent += "为了正常扫描和管理媒体文件，请将文件或文件夹拷贝到应用的专属文件夹中。\n\n";
-        
-        if (Platform.isIOS) {
-          dialogContent += "您可以在\"文件\"应用中，导航至\"我的 iPhone / iPad\" > \"NipaPlay\"找到此文件夹。\n\n";
-        } else if (Platform.isAndroid) {
-          dialogContent += "您可以将文件复制到 Android/data/com.aimessoft.nipaplay 文件夹中。\n\n";
+    
+    // Android 13以下和桌面平台继续使用原来的文件选择器逻辑
+    // 使用FilePickerService选择目录（适用于Android和桌面平台）
+    String? selectedDirectory;
+    try {
+      final filePickerService = FilePickerService();
+      selectedDirectory = await filePickerService.pickDirectory();
+      
+      if (selectedDirectory == null) {
+        if (mounted) {
+          BlurSnackBar.show(context, "未选择文件夹。");
         }
-        
-        dialogContent += "这是由于移动平台的安全和权限机制，确保应用仅能访问您明确置于其管理区域内的数据。";
-
+        return;
+      }
+      
+             // 验证选择的目录是否可访问
+      bool accessCheck = false;
+      if (Platform.isAndroid) {
+        // 使用原生方法检查目录权限
+        final dirCheck = await AndroidStorageHelper.checkDirectoryPermissions(selectedDirectory);
+        accessCheck = dirCheck['canRead'] == true && dirCheck['canWrite'] == true;
+        debugPrint('Android目录权限检查结果: $dirCheck');
+      } else {
+        // 非Android平台使用Flutter方法检查
+        accessCheck = await StorageService.isValidStorageDirectory(selectedDirectory);
+      }
+      if (!accessCheck && mounted) {
         BlurDialog.show<void>(
           context: context,
-          title: "访问提示 ",
-          content: dialogContent,
+          title: "文件夹访问受限",
+          content: "无法访问您选择的文件夹，可能是权限问题。\n\n如果您使用的是Android 11或更高版本，请考虑在设置中开启「管理所有文件」权限。",
           actions: <Widget>[
             TextButton(
-              child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
+              child: const Text("知道了", style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
+            TextButton(
+              child: const Text("打开设置", style: TextStyle(color: Colors.lightBlueAccent)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                openAppSettings();
+              },
+            ),
           ],
         );
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, "选择文件夹时出错: $e");
       }
       return;
     }
+    
+    // 确保选择了有效的文件夹
+    if (selectedDirectory == null) {
+      return;
+    }
 
+    // 仅iOS平台需要检查是否为内部路径
+    if (Platform.isIOS) {
+      final Directory appDir = await StorageService.getAppStorageDirectory();
+      final String appPath = appDir.path;
+  
+      // Normalize paths to handle potential '/private' prefix discrepancy on iOS
+      String effectiveSelectedDir = selectedDirectory;
+      if (selectedDirectory.startsWith('/private') && !appPath.startsWith('/private')) {
+        // If selected has /private but appPath doesn't, selected might be /private/var... and appPath /var...
+        // No change needed for selectedDirectory here, comparison logic will handle it.
+      } else if (!selectedDirectory.startsWith('/private') && appPath.startsWith('/private')) {
+        // If selected doesn't have /private but appPath does, this is unusual, but we adapt.
+        // This case is less likely if appDir.path is from StorageService.
+      }
+  
+      // The core comparison: selected path must start with appPath OR /private + appPath
+      bool isInternalPath = selectedDirectory.startsWith(appPath) || 
+                            (appPath.startsWith('/var') && selectedDirectory.startsWith('/private$appPath'));
+  
+      if (!isInternalPath) {
+        if (mounted) {
+          String dialogContent = "您选择的文件夹位于应用外部。\n\n";
+          dialogContent += "为了正常扫描和管理媒体文件，请将文件或文件夹拷贝到应用的专属文件夹中。\n\n";
+          dialogContent += "您可以在\"文件\"应用中，导航至\"我的 iPhone / iPad\" > \"NipaPlay\"找到此文件夹。\n\n";
+          dialogContent += "这是由于iOS的安全和权限机制，确保应用仅能访问您明确置于其管理区域内的数据。";
+  
+          BlurDialog.show<void>(
+            context: context,
+            title: "访问提示 ",
+            content: dialogContent,
+            actions: <Widget>[
+              TextButton(
+                child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        }
+        return;
+      }
+    }
+    
+    // Android平台检查是否有访问所选文件夹的权限
+    if (Platform.isAndroid) {
+      try {
+        // 尝试读取文件夹内容以检查权限
+        final dir = Directory(selectedDirectory);
+        await dir.list().first.timeout(const Duration(seconds: 2), onTimeout: () {
+          throw TimeoutException('无法访问文件夹');
+        });
+      } catch (e) {
+        if (mounted) {
+          BlurDialog.show<void>(
+            context: context,
+            title: "访问错误",
+            content: "无法访问所选文件夹，可能是权限问题。\n\n建议选择您的个人文件夹或媒体文件夹，如Pictures、Download或Movies。\n\n错误: ${e.toString().substring(0, min(e.toString().length, 100))}",
+            actions: <Widget>[
+              TextButton(
+                child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        }
+        return;
+      }
+    }
+
+    // 保存用户选择的自定义路径
+    await StorageService.saveCustomStoragePath(selectedDirectory);
+    // 开始扫描目录
     await scanService.startDirectoryScan(selectedDirectory, skipPreviouslyMatchedUnwatched: false); // Ensure full scan for new folder
   }
 
@@ -293,15 +394,22 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     try {
       final scanService = Provider.of<ScanService>(context, listen: false);
       
+      print('检查扫描结果: isScanning=${scanService.isScanning}, justFinishedScanning=${scanService.justFinishedScanning}, totalFilesFound=${scanService.totalFilesFound}, scannedFolders.isEmpty=${scanService.scannedFolders.isEmpty}');
+      
       // 只在扫描刚结束时检查
       if (!scanService.isScanning && scanService.justFinishedScanning) {
-        // 重置标志
-        scanService.resetJustFinishedScanning();
+        print('扫描刚结束，准备检查是否显示指导弹窗');
         
         // 如果没有文件，或者扫描文件夹为空，显示指导弹窗
         if ((scanService.totalFilesFound == 0 || scanService.scannedFolders.isEmpty) && mounted) {
+          print('符合条件，即将显示文件导入指导弹窗');
           _showFileImportGuideDialog();
+        } else {
+          print('不符合显示条件: totalFilesFound=${scanService.totalFilesFound}, scannedFolders.isEmpty=${scanService.scannedFolders.isEmpty}');
         }
+        
+        // 重置标志
+        scanService.resetJustFinishedScanning();
       }
     } catch (e) {
       print('检查扫描结果时出错: $e');
@@ -323,17 +431,20 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       dialogContent += "1. 通过iTunes文件共享功能\n";
       dialogContent += "2. 从电脑直接拷贝视频到NipaPlay文件夹\n";
     } else if (Platform.isAndroid) {
-      dialogContent += "1. 使用文件管理器应用\n";
-      dialogContent += "2. 浏览到您的视频文件所在位置\n";
-      dialogContent += "3. 复制视频文件\n";
-      dialogContent += "4. 导航到「内部存储 > Android > data > com.aimessoft.nipaplay > files」\n";
-      dialogContent += "5. 粘贴文件到此文件夹中\n\n";
-      dialogContent += "或者：\n";
-      dialogContent += "1. 将手机连接到电脑\n";
-      dialogContent += "2. 通过USB传输模式复制视频到应用文件夹\n";
+      dialogContent += "1. 确保将视频文件存放在易于访问的文件夹中\n";
+      dialogContent += "2. 您可以创建专门的文件夹，如「Movies」或「Anime」\n";
+      dialogContent += "3. 确保文件夹权限设置正确，应用可以访问\n";
+      dialogContent += "4. 点击上方「添加并扫描文件夹」选择您的视频文件夹\n\n";
+      dialogContent += "常见问题：\n";
+      dialogContent += "- 如果无法选择某个文件夹，可能是权限问题\n";
+      dialogContent += "- 建议使用标准的媒体文件夹如Pictures、Movies或Documents\n";
     }
     
-    dialogContent += "\n添加完文件后，点击上方的「扫描NipaPlay文件夹」按钮刷新媒体库。";
+    if (Platform.isIOS) {
+      dialogContent += "\n添加完文件后，点击上方的「扫描NipaPlay文件夹」按钮刷新媒体库。";
+    } else {
+      dialogContent += "\n添加完文件后，点击上方的「添加并扫描文件夹」按钮选择您存放视频的文件夹。";
+    }
     
     BlurDialog.show<void>(
       context: context,
@@ -348,6 +459,255 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         ),
       ],
     );
+  }
+
+  // 清除自定义存储路径
+  Future<void> _clearCustomStoragePath() async {
+    final scanService = Provider.of<ScanService>(context, listen: false);
+    if (scanService.isScanning) {
+      BlurSnackBar.show(context, '已有扫描任务在进行中，请稍后操作。');
+      return;
+    }
+
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '重置存储路径',
+      content: '确定要重置存储路径吗？这将清除您之前设置的自定义路径，并使用系统默认位置。\n\n注意：这不会删除您已添加到媒体库的视频文件。',
+      actions: <Widget>[
+        TextButton(
+          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          onPressed: () {
+            Navigator.of(context).pop(false);
+          },
+        ),
+        TextButton(
+          child: const Text('重置', style: TextStyle(color: Colors.redAccent)),
+          onPressed: () {
+            Navigator.of(context).pop(true);
+          },
+        ),
+      ],
+    );
+
+    if (confirm == true && mounted) {
+      final success = await StorageService.clearCustomStoragePath();
+      if (success && mounted) {
+        BlurSnackBar.show(context, '存储路径已重置为默认设置');
+      } else if (mounted) {
+        BlurSnackBar.show(context, '重置存储路径失败');
+      }
+    }
+  }
+
+  // 检查并显示权限状态
+  Future<void> _checkAndShowPermissionStatus() async {
+    if (!Platform.isAndroid) return;
+    
+    // 显示加载提示
+    if (mounted) {
+      BlurSnackBar.show(context, '正在检查权限状态...');
+    }
+    
+    try {
+      // 获取权限状态
+      final status = await AndroidStorageHelper.getAllStoragePermissionStatus();
+      final int sdkVersion = status['androidVersion'] as int;
+      
+      // 构建状态信息
+      final StringBuffer content = StringBuffer();
+      content.writeln('Android 版本: ${sdkVersion}');
+      content.writeln('基本存储权限: ${status['storage']}');
+      
+      if (sdkVersion >= 30) { // Android 11+
+        content.writeln('\n管理所有文件权限:');
+        content.writeln('- 系统API: ${status['manageExternalStorageNative']}');
+        content.writeln('- permission_handler: ${status['manageExternalStorage']}');
+      }
+      
+      if (sdkVersion >= 33) { // Android 13+
+        content.writeln('\nAndroid 13+ 分类媒体权限:');
+        content.writeln('- 照片访问: ${status['mediaImages']}');
+        content.writeln('- 视频访问: ${status['mediaVideo']}');
+        content.writeln('- 音频访问: ${status['mediaAudio']}');
+      }
+      
+      // 显示权限状态对话框
+      if (mounted) {
+        BlurDialog.show<void>(
+          context: context,
+          title: 'Android存储权限状态',
+          content: content.toString(),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('关闭', style: TextStyle(color: Colors.white70)),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('申请权限', style: TextStyle(color: Colors.lightBlueAccent)),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await AndroidStorageHelper.requestAllRequiredPermissions();
+                // 延迟后再次检查权限状态
+                Future.delayed(const Duration(seconds: 2), () {
+                  if (mounted) {
+                    _checkAndShowPermissionStatus();
+                  }
+                });
+              },
+            ),
+          ],
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '检查权限状态失败: $e');
+      }
+    }
+  }
+
+  // 新增：用于Android 13+扫描媒体文件夹的方法
+  Future<void> _scanAndroidMediaFolders() async {
+    try {
+      // 请求媒体权限
+      await Permission.photos.request();
+      await Permission.videos.request();
+      await Permission.audio.request();
+      
+      bool hasMediaPermissions = 
+          await Permission.photos.isGranted && 
+          await Permission.videos.isGranted && 
+          await Permission.audio.isGranted;
+      
+      if (!hasMediaPermissions && mounted) {
+        BlurDialog.show<void>(
+          context: context,
+          title: "需要媒体权限",
+          content: "NipaPlay需要访问媒体文件权限才能扫描视频文件。\n\n请在系统设置中允许NipaPlay访问照片、视频和音频权限。",
+          actions: <Widget>[
+            TextButton(
+              child: const Text("稍后再说", style: TextStyle(color: Colors.white70)),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text("打开设置", style: TextStyle(color: Colors.lightBlueAccent)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                openAppSettings();
+              },
+            ),
+          ],
+        );
+        return;
+      }
+      
+      // 显示加载提示
+      if (mounted) {
+        BlurSnackBar.show(context, '正在扫描视频文件夹，请稍候...');
+      }
+      
+      // 获取系统媒体文件夹
+      final scanService = Provider.of<ScanService>(context, listen: false);
+      String? moviesPath;
+      
+      // 尝试获取Movies目录路径
+      try {
+        final externalDirs = await getExternalStorageDirectories();
+        if (externalDirs != null && externalDirs.isNotEmpty) {
+          String baseDir = externalDirs[0].path;
+          baseDir = baseDir.substring(0, baseDir.indexOf('Android'));
+          final moviesDir = Directory('${baseDir}Movies');
+          
+          if (await moviesDir.exists()) {
+            moviesPath = moviesDir.path;
+            debugPrint('找到Movies目录: $moviesPath');
+          }
+        }
+      } catch (e) {
+        debugPrint('无法获取Movies目录: $e');
+      }
+      
+      // 如果没有找到Movies目录，尝试其他常用媒体目录
+      if (moviesPath == null) {
+        try {
+          final externalDirs = await getExternalStorageDirectories();
+          if (externalDirs != null && externalDirs.isNotEmpty) {
+            String baseDir = externalDirs[0].path;
+            baseDir = baseDir.substring(0, baseDir.indexOf('Android'));
+            
+            // 检查DCIM目录
+            final dcimDir = Directory('${baseDir}DCIM');
+            if (await dcimDir.exists()) {
+              moviesPath = dcimDir.path;
+              debugPrint('找到DCIM目录: $moviesPath');
+            } else {
+              // 尝试Download目录
+              final downloadDir = Directory('${baseDir}Download');
+              if (await downloadDir.exists()) {
+                moviesPath = downloadDir.path;
+                debugPrint('找到Download目录: $moviesPath');
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('无法获取备选媒体目录: $e');
+        }
+      }
+      
+      // 如果仍然没有找到任何媒体目录，提示用户
+      if (moviesPath == null && mounted) {
+        BlurDialog.show<void>(
+          context: context,
+          title: "未找到视频文件夹",
+          content: "无法找到系统视频文件夹。建议使用\"管理所有文件\"权限或手动选择文件夹。",
+          actions: <Widget>[
+            TextButton(
+              child: const Text("取消", style: TextStyle(color: Colors.white70)),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text("开启完整权限", style: TextStyle(color: Colors.lightBlueAccent)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                AndroidStorageHelper.requestManageExternalStoragePermission();
+              },
+            ),
+          ],
+        );
+        return;
+      }
+      
+      // 扫描找到的文件夹
+      if (moviesPath != null) {
+        try {
+          // 检查目录权限
+          final dirPerms = await AndroidStorageHelper.checkDirectoryPermissions(moviesPath);
+          if (dirPerms['canRead'] == true) {
+            await scanService.startDirectoryScan(moviesPath, skipPreviouslyMatchedUnwatched: false);
+            if (mounted) {
+              BlurSnackBar.show(context, '已扫描视频文件夹: ${p.basename(moviesPath)}');
+            }
+          } else {
+            if (mounted) {
+              BlurSnackBar.show(context, '无法读取视频文件夹，请检查权限设置');
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            BlurSnackBar.show(context, '扫描视频文件夹失败: ${e.toString().substring(0, min(e.toString().length, 50))}');
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '扫描视频文件夹时出错: ${e.toString().substring(0, min(e.toString().length, 50))}');
+      }
+    }
   }
 
   @override
@@ -365,32 +725,50 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Text("媒体文件夹", style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
-              IconButton(
-                icon: const Icon(Ionicons.refresh_outline),
-                tooltip: '刷新所有媒体库',
-                color: Colors.white70,
-                onPressed: scanService.isScanning 
-                    ? null 
-                    : () async {
-                        final confirm = await BlurDialog.show<bool>(
-                          context: context,
-                          title: '确认刷新',
-                          content: '将重新扫描所有已添加的媒体文件夹（跳过已匹配且未观看的），这可能需要一些时间。',
-                          actions: <Widget>[
-                            TextButton(
-                              child: const Text('取消', style: TextStyle(color: Colors.white70)),
-                              onPressed: () => Navigator.of(context).pop(false),
-                            ),
-                            TextButton(
-                              child: const Text('全部刷新', style: TextStyle(color: Colors.lightBlueAccent)),
-                              onPressed: () => Navigator.of(context).pop(true),
-                            ),
-                          ],
-                        );
-                        if (confirm == true) {
-                          await scanService.rescanAllFolders(); // skipPreviouslyMatchedUnwatched defaults to true
-                        }
-                      },
+              Row(
+                children: [
+                  if (Platform.isAndroid)
+                    IconButton(
+                      icon: const Icon(Icons.settings_backup_restore),
+                      tooltip: '重置存储路径',
+                      color: Colors.white70,
+                      onPressed: scanService.isScanning ? null : _clearCustomStoragePath,
+                    ),
+                  if (Platform.isAndroid)
+                    IconButton(
+                      icon: const Icon(Icons.security),
+                      tooltip: '检查权限状态',
+                      color: Colors.white70,
+                      onPressed: scanService.isScanning ? null : _checkAndShowPermissionStatus,
+                    ),
+                  IconButton(
+                    icon: const Icon(Ionicons.refresh_outline),
+                    tooltip: '刷新所有媒体库',
+                    color: Colors.white70,
+                    onPressed: scanService.isScanning 
+                        ? null 
+                        : () async {
+                            final confirm = await BlurDialog.show<bool>(
+                              context: context,
+                              title: '确认刷新',
+                              content: '将重新扫描所有已添加的媒体文件夹（跳过已匹配且未观看的），这可能需要一些时间。',
+                              actions: <Widget>[
+                                TextButton(
+                                  child: const Text('取消', style: TextStyle(color: Colors.white70)),
+                                  onPressed: () => Navigator.of(context).pop(false),
+                                ),
+                                TextButton(
+                                  child: const Text('全部刷新', style: TextStyle(color: Colors.lightBlueAccent)),
+                                  onPressed: () => Navigator.of(context).pop(true),
+                                ),
+                              ],
+                            );
+                            if (confirm == true) {
+                              await scanService.rescanAllFolders(); // skipPreviouslyMatchedUnwatched defaults to true
+                            }
+                          },
+                  ),
+                ],
               ),
             ],
           ),
@@ -426,9 +804,27 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 onTap: scanService.isScanning ? null : _pickAndScanDirectory,
                 borderRadius: BorderRadius.circular(12),
                 child: Center(
-                  child: Text(
-                    globals.isPhone ? '扫描NipaPlay文件夹' : '添加并扫描文件夹',
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  child: FutureBuilder<bool>(
+                    future: Platform.isAndroid ? _isAndroid13Plus() : Future.value(false),
+                    builder: (context, snapshot) {
+                      String buttonText = '添加并扫描文件夹'; // 默认文本
+                      
+                      if (Platform.isIOS) {
+                        buttonText = '扫描NipaPlay文件夹';
+                      } else if (Platform.isAndroid) {
+                        // 如果future完成且为true，说明是Android 13+
+                        if (snapshot.hasData && snapshot.data == true) {
+                          buttonText = '扫描视频文件夹';
+                        } else {
+                          buttonText = '添加并扫描文件夹';
+                        }
+                      }
+                      
+                      return Text(
+                        buttonText,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -632,5 +1028,12 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         ),
       ],
     );
+  }
+
+  // 辅助方法：检查是否为Android 13+
+  Future<bool> _isAndroid13Plus() async {
+    if (!Platform.isAndroid) return false;
+    final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
+    return sdkVersion >= 33;
   }
 } 

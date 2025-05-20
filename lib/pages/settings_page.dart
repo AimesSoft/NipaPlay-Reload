@@ -22,18 +22,28 @@ class SettingsPage extends StatefulWidget {
   _SettingsPageState createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
   // currentPage 状态现在用于桌面端的右侧面板
   // 也可以考虑给它一个初始值，这样桌面端一进来右侧不是空的
   Widget? currentPage; // 初始可以为 null
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    // 初始化TabController
+    _tabController = TabController(length: 1, vsync: this);
+    
     // 可以在这里为桌面端设置一个默认显示的页面
     if (globals.isDesktop) {
       currentPage = const AboutPage(); // 例如默认显示 AboutPage
     }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   // 封装导航或更新状态的逻辑
@@ -64,6 +74,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   pages: pages,
                   tabPage: settingsTabLabels(),
                   pageIsHome: false,
+                  tabController: _tabController,
                 )),
       );
     }

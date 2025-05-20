@@ -1,7 +1,28 @@
 allprojects {
     repositories {
-        google()
+        mavenLocal()
         mavenCentral()
+        google()
+        jcenter()
+        maven { url "https://jitpack.io" }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/jcenter") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+    }
+}
+
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        google()
+        jcenter()
+        maven { url "https://jitpack.io" }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/jcenter") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
     }
 }
 

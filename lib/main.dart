@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -35,6 +37,8 @@ import 'services/file_picker_service.dart';
 import 'widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/page_prewarmer.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/utils/storage_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -44,6 +48,33 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 增加Flutter引擎内存限制，减少OOM风险
+  if (Platform.isAndroid) {
+    // 为隔离区和图像解码设置更高的内存限制
+    const int maxMemoryMB = 256; // 设置为256MB
+    try {
+      // 增加VM内存限制
+      await SystemChannels.platform.invokeMethod('VMService.setFlag', {
+        'name': 'max_old_space_size',
+        'value': maxMemoryMB.toString(),
+      });
+      debugPrint('已设置Flutter隔离区最大内存为 ${maxMemoryMB}MB');
+    } catch (e) {
+      debugPrint('设置内存限制失败: $e');
+    }
+  }
+
+  // 初始化MediaKit
+  MediaKit.ensureInitialized();
+
+  // 添加全局异常捕获
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    // 记录错误
+    debugPrint('应用发生错误: ${details.exception}');
+    debugPrint('错误堆栈: ${details.stack}');
+  };
 
   // 在应用启动时为iOS请求相册权限
   // if (Platform.isIOS) {
@@ -63,6 +94,62 @@ void main() async {
   //   }
   // }
 
+  // 请求Android存储权限
+  if (Platform.isAndroid) {
+    debugPrint("正在请求Android存储权限...");
+    
+    // 先检查当前权限状态
+    var storageStatus = await Permission.storage.status;
+    debugPrint("当前存储权限状态: $storageStatus");
+    
+    // 如果权限被拒绝，请求权限
+    if (storageStatus.isDenied) {
+      storageStatus = await Permission.storage.request();
+      debugPrint("请求后存储权限状态: $storageStatus");
+    }
+    
+    // 对于Android 10+，请求READ_EXTERNAL_STORAGE
+    if (await Permission.photos.isRestricted || await Permission.photos.isDenied) {
+      final photoStatus = await Permission.photos.request();
+      debugPrint("媒体访问权限状态: $photoStatus");
+    }
+    
+    // 对于Android 11+，尝试请求管理外部存储权限
+    try {
+      bool needManageStorage = false;
+      
+      try {
+        // 检查是否需要特殊管理权限 - Android 11+
+        final sdkVersion = int.tryParse(Platform.operatingSystemVersion.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        needManageStorage = sdkVersion >= 30; // Android 11 是 API 30
+        debugPrint("Android SDK版本: $sdkVersion, 需要请求管理存储权限: $needManageStorage");
+      } catch (e) {
+        debugPrint("无法确定Android版本: $e, 将尝试请求管理存储权限");
+        needManageStorage = true;
+      }
+      
+      if (needManageStorage) {
+        final manageStatus = await Permission.manageExternalStorage.status;
+        debugPrint("当前管理存储权限状态: $manageStatus");
+        
+        if (manageStatus.isDenied) {
+          final newStatus = await Permission.manageExternalStorage.request();
+          debugPrint("请求后管理存储权限状态: $newStatus");
+          
+          if (newStatus.isDenied || newStatus.isPermanentlyDenied) {
+            debugPrint("警告: 未获得管理存储权限，某些功能可能受限");
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("请求管理存储权限失败: $e");
+    }
+    
+    // 重新检查权限并打印最终状态
+    final finalStatus = await Permission.storage.status;
+    final manageStatus = await Permission.manageExternalStorage.status;
+    debugPrint("最终存储权限状态: $finalStatus, 管理存储权限状态: $manageStatus");
+  }
   // 设置方法通道处理器
   menuChannel.setMethodCallHandler((call) async {
     print('[Dart] 收到方法调用: ${call.method}');
@@ -144,13 +231,13 @@ void main() async {
     return '';
   });
 
-  // 创建应用所需的临时目录，解决macOS沙盒模式下的目录访问问题
-  await _ensureTemporaryDirectoryExists();
+  // 创建应用所需的目录结构
+  await _initializeAppDirectories();
 
   // 检查网络连接
   _checkNetworkConnection();
 
-  // 初始化播放器内核工厂
+  // 预加载播放器内核设置
   await PlayerFactory.initialize();
 
   // 并行执行初始化操作
@@ -174,7 +261,6 @@ void main() async {
 
       return results[0] as String;
     }),
-    
     // 加载并保存默认快捷键设置
     Future(() async {
       await KeyboardShortcuts.loadShortcuts();
@@ -207,10 +293,8 @@ void main() async {
         initialThemeMode = ThemeMode.system;
     }
 
-    // 初始化系统资源监控（仅桌面平台）
-    if (globals.isDesktop) {
-      SystemResourceMonitor.initialize();
-    }
+    // 初始化系统资源监控（所有平台）
+    SystemResourceMonitor.initialize();
 
     if (globals.isDesktop) {
       windowManager.ensureInitialized();
@@ -265,30 +349,49 @@ void main() async {
   });
 }
 
+// 初始化应用所需的所有目录
+Future<void> _initializeAppDirectories() async {
+  try {
+    // 创建所有常用目录
+    await StorageService.getAppStorageDirectory();
+    await StorageService.getTempDirectory();
+    await StorageService.getCacheDirectory();
+    await StorageService.getDownloadsDirectory();
+    await StorageService.getVideosDirectory();
+    
+    // 创建临时目录
+    await _ensureTemporaryDirectoryExists();
+    
+    debugPrint('应用目录结构初始化完成');
+  } catch (e) {
+    debugPrint('创建应用目录结构失败: $e');
+  }
+}
+
 // 检查网络连接
 Future<void> _checkNetworkConnection() async {
-  //debugPrint('==================== 网络连接诊断开始 ====================');
-  //debugPrint('设备系统: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
-  //debugPrint('设备类型: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : Platform.isMacOS ? 'macOS' : '其他'}');
+  debugPrint('==================== 网络连接诊断开始 ====================');
+  debugPrint('设备系统: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
+  debugPrint('设备类型: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : Platform.isMacOS ? 'macOS' : '其他'}');
   
   // 检查代理设置
   final proxySettings = NetworkChecker.checkProxySettings();
-  //debugPrint('代理设置检查结果:');
+  debugPrint('代理设置检查结果:');
   if (proxySettings['hasProxy']) {
-    //debugPrint('系统存在代理设置:');
+    debugPrint('系统存在代理设置:');
     final settings = proxySettings['proxySettings'] as Map<String, dynamic>;
     settings.forEach((key, value) {
-      //debugPrint(' - $key: $value');
+      debugPrint(' - $key: $value');
     });
   } else {
-    //debugPrint('未检测到系统代理设置');
+    debugPrint('未检测到系统代理设置');
     if (proxySettings['error'] != null) {
-      //debugPrint('检测代理时出错: ${proxySettings['error']}');
+      debugPrint('检测代理时出错: ${proxySettings['error']}');
     }
   }
   
   try {
-    //debugPrint('\n测试百度连接:');
+    debugPrint('\n测试百度连接:');
     // 检查百度网络连接 (详细模式)
     final baiduResult = await NetworkChecker.checkConnection(
       url: 'https://www.baidu.com',
@@ -296,16 +399,16 @@ Future<void> _checkNetworkConnection() async {
       verbose: true,
     );
     
-    //debugPrint('\n百度连接状态: ${baiduResult['connected'] ? '成功' : '失败'}');
+    debugPrint('\n百度连接状态: ${baiduResult['connected'] ? '成功' : '失败'}');
     if (baiduResult['connected']) {
-      //debugPrint('响应时间: ${baiduResult['duration']}ms');
-      //debugPrint('响应大小: ${baiduResult['responseSize']} 字节');
+      debugPrint('响应时间: ${baiduResult['duration']}ms');
+      debugPrint('响应大小: ${baiduResult['responseSize']} 字节');
     }
     
     // 等待一下再测试下一个地址
     await Future.delayed(const Duration(seconds: 1));
     
-    //debugPrint('\n测试Google连接(对比测试):');
+    debugPrint('\n测试Google连接(对比测试):');
     // 检查谷歌网络连接（对比测试）
     final googleResult = await NetworkChecker.checkConnection(
       url: 'https://www.google.com',
@@ -313,76 +416,75 @@ Future<void> _checkNetworkConnection() async {
       verbose: true,
     );
     
-    //debugPrint('\nGoogle连接状态: ${googleResult['connected'] ? '成功' : '失败'}');
+    debugPrint('\nGoogle连接状态: ${googleResult['connected'] ? '成功' : '失败'}');
     if (googleResult['connected']) {
-      //debugPrint('响应时间: ${googleResult['duration']}ms');
-      //debugPrint('响应大小: ${googleResult['responseSize']} 字节');
+      debugPrint('响应时间: ${googleResult['duration']}ms');
+      debugPrint('响应大小: ${googleResult['responseSize']} 字节');
     }
     
     // 再测试一个国内的站点
     await Future.delayed(const Duration(seconds: 1));
-    //debugPrint('\n测试腾讯连接:');
+    debugPrint('\n测试腾讯连接:');
     final tencentResult = await NetworkChecker.checkConnection(
       url: 'https://www.qq.com',
       timeout: 5,
       verbose: true,
     );
     
-    //debugPrint('\n腾讯连接状态: ${tencentResult['connected'] ? '成功' : '失败'}');
+    debugPrint('\n腾讯连接状态: ${tencentResult['connected'] ? '成功' : '失败'}');
     if (tencentResult['connected']) {
-      //debugPrint('响应时间: ${tencentResult['duration']}ms');
-      //debugPrint('响应大小: ${tencentResult['responseSize']} 字节');
+      debugPrint('响应时间: ${tencentResult['duration']}ms');
+      debugPrint('响应大小: ${tencentResult['responseSize']} 字节');
     }
     
     // 诊断结果总结
-    //debugPrint('\n==================== 网络诊断结果总结 ====================');
+    debugPrint('\n==================== 网络诊断结果总结 ====================');
     if (baiduResult['connected'] || tencentResult['connected']) {
-      //debugPrint('✅ 国内网络连接正常');
+      debugPrint('✅ 国内网络连接正常');
     } else {
-      //debugPrint('❌ 国内网络连接异常，请检查网络设置');
+      debugPrint('❌ 国内网络连接异常，请检查网络设置');
     }
     
     if (googleResult['connected']) {
-      //debugPrint('✅ 国外网络连接正常');
+      debugPrint('✅ 国外网络连接正常');
     } else {
-      //debugPrint('❌ 国外网络连接异常，如果只有国外连接异常可能是正常的');
+      debugPrint('❌ 国外网络连接异常，如果只有国外连接异常可能是正常的');
     }
     
     if (Platform.isIOS && !baiduResult['connected'] && !tencentResult['connected']) {
-      //debugPrint('\n⚠️ iOS设备网络问题排查建议:');
-      //debugPrint('1. 请确保应用有网络访问权限');
-      //debugPrint('2. 检查是否启用了VPN或代理');
-      //debugPrint('3. 尝试重启设备或重置网络设置');
-      //debugPrint('4. 确认Info.plist中已添加ATS例外配置');
+      debugPrint('\n⚠️ iOS设备网络问题排查建议:');
+      debugPrint('1. 请确保应用有网络访问权限');
+      debugPrint('2. 检查是否启用了VPN或代理');
+      debugPrint('3. 尝试重启设备或重置网络设置');
+      debugPrint('4. 确认Info.plist中已添加ATS例外配置');
     }
   } catch (e) {
-    //debugPrint('网络检查过程中发生异常: $e');
+    debugPrint('网络检查过程中发生异常: $e');
   }
   
-  //debugPrint('==================== 网络连接诊断结束 ====================');
+  debugPrint('==================== 网络连接诊断结束 ====================');
 }
 
 // 确保临时目录存在
 Future<void> _ensureTemporaryDirectoryExists() async {
   try {
-    // 获取应用文档目录
-    final docsDir = await getApplicationDocumentsDirectory();
-    final appDir = Directory(path.join(docsDir.path));
+    // 使用StorageService获取应用目录
+    final appDir = await StorageService.getAppStorageDirectory();
     
     // 创建tmp目录路径
     final tmpDir = Directory(path.join(appDir.path, 'tmp'));
     
     // 确保tmp目录存在
     if (!tmpDir.existsSync()) {
-      ////debugPrint('创建应用临时目录: ${tmpDir.path}');
+      debugPrint('创建应用临时目录: ${tmpDir.path}');
       tmpDir.createSync(recursive: true);
     }
     
     // 输出目录信息用于调试
-    ////debugPrint('应用文档目录: ${appDir.path}');
-    ////debugPrint('应用临时目录: ${tmpDir.path}');
+    debugPrint('应用文档目录: ${appDir.path}');
+    debugPrint('应用临时目录: ${tmpDir.path}');
   } catch (e) {
-    ////debugPrint('创建临时目录失败: $e');
+    debugPrint('创建临时目录失败: $e');
   }
 }
 
@@ -514,10 +616,8 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       windowManager.removeListener(this);
     }
     
-    // 释放系统资源监控
-    if (globals.isDesktop) {
-      SystemResourceMonitor.dispose();
-    }
+    // 释放系统资源监控，移除桌面平台限制
+    SystemResourceMonitor.dispose();
     
     super.dispose();
   }
@@ -626,12 +726,11 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
         ),
         
         // 系统资源监控显示
-        if (globals.isDesktop)
-          Positioned(
-            top: 4,
-            right: 110,
-            child: const SystemResourceDisplay(),
-          ),
+        Positioned(
+          top: 4,
+          right: globals.isPhone ? 10 : 110,
+          child: const SystemResourceDisplay(),
+        ),
       ],
     );
   }

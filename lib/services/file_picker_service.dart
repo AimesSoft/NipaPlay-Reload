@@ -3,6 +3,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 class FilePickerService {
   // 单例模式
@@ -202,6 +204,34 @@ class FilePickerService {
     return false;
   }
 
+  // 内存优化：限制文件大小读取
+  Future<List<int>?> _readFileSafely(String path, {int maxSizeInMb = 10}) async {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      
+      // 检查文件大小
+      final fileSize = await file.length();
+      final maxSize = maxSizeInMb * 1024 * 1024; // 转换为字节
+      
+      if (fileSize > maxSize) {
+        print('文件过大，跳过元数据读取: ${fileSize ~/ (1024 * 1024)}MB > ${maxSizeInMb}MB');
+        return null;
+      }
+      
+      // 使用compute在隔离区(isolate)中读取文件以避免阻塞主线程
+      return await compute(_isolatedReadFile, path);
+    } catch (e) {
+      print('读取文件失败: $e');
+      return null;
+    }
+  }
+  
+  // 在隔离区中读取文件
+  static List<int> _isolatedReadFile(String path) {
+    return File(path).readAsBytesSync();
+  }
+
   // 选择视频文件
   Future<String?> pickVideoFile({String? initialDirectory}) async {
     try {
@@ -227,7 +257,13 @@ class FilePickerService {
             : null,
       );
       
-      // 打开文件选择器
+      // OOM问题修复：Android平台使用不同的文件选择方式
+      if (Platform.isAndroid) {
+        // 使用自定义方法选择文件，避免file_selector插件的内存问题
+        return await _pickVideoFileAndroid();
+      }
+      
+      // 其他平台正常使用file_selector
       final XFile? file = await openFile(
         acceptedTypeGroups: [videoGroup],
         initialDirectory: initialDirectory,
@@ -240,60 +276,60 @@ class FilePickerService {
       
       // 获取文件路径
       String filePath = file.path;
+
+      // 内存优化：不读取文件元数据，只返回路径
+      // 优化前：file.readAsBytes(); 这可能导致大文件内存溢出
+      // 注：现在直接返回路径，由播放器处理文件读取
       
-      // 在iOS上检测是否是临时文件，如果是则主动复制
-      if (Platform.isIOS && _isIOSTemporaryPath(filePath)) {
-        print('检测到iOS临时文件路径: $filePath');
-        
-        // 尝试直接复制文件到文档目录
-        try {
-          final Directory appDocDir = await getApplicationDocumentsDirectory();
-          final videosDir = Directory('${appDocDir.path}/Videos');
-          if (!videosDir.existsSync()) {
-            videosDir.createSync(recursive: true);
-          }
-          
-          final fileName = p.basename(filePath);
-          final destinationPath = '${videosDir.path}/$fileName';
-          
-          // 确保源文件存在
-          if (!File(filePath).existsSync() && !File('/private$filePath').existsSync()) {
-            print('警告: 源文件不存在: $filePath');
-            // 仍然保存路径，但返回原路径
-          } else {
-            // 确定正确的源文件路径
-            final sourceFilePath = File(filePath).existsSync() ? filePath : '/private$filePath';
-            final sourceFile = File(sourceFilePath);
-            final destinationFile = File(destinationPath);
-            
-            // 检查文件是否已存在，避免重复复制
-            if (!destinationFile.existsSync() || 
-                destinationFile.lengthSync() != sourceFile.lengthSync()) {
-              print('复制文件到持久存储中...');
-              sourceFile.copySync(destinationPath);
-              print('已复制文件到持久存储: $destinationPath');
-              
-              // 更新文件路径为持久化存储路径
-              filePath = destinationPath;
-            } else {
-              print('文件已存在于持久存储中: $destinationPath');
-              filePath = destinationPath;
-            }
-          }
-        } catch (e) {
-          print('复制文件到持久存储失败: $e');
-          // 出错时仍使用原路径
-        }
-      }
-      
-      // 保存目录位置
-      _saveLastDirectory(p.dirname(file.path), _lastVideoDirKey);
-      _saveLastDirectory(p.dirname(file.path), _lastDirKey);
+      // 存储目录信息
+      _saveLastDirectory(filePath, _lastVideoDirKey, _lastDirKey);
       
       return _normalizePath(filePath);
     } catch (e) {
-      print('选择视频文件失败: $e');
+      print('选择视频文件时出错: $e');
       return null;
+    }
+  }
+
+  // Android平台特定的视频文件选择方法
+  Future<String?> _pickVideoFileAndroid() async {
+    try {
+      // 使用Intent获取文件路径而不是内容
+      final result = await const MethodChannel('plugins.flutter.io/file_selector')
+          .invokeMethod<String>('pickFilePathOnly', {
+        'acceptedTypeGroups': [
+          {
+            'label': '视频文件',
+            'extensions': ['mp4', 'mkv', 'avi', 'wmv', 'mov'],
+          }
+        ],
+        'confirmButtonText': '选择视频文件',
+      });
+      
+      if (result == null || result.isEmpty) {
+        return null;
+      }
+      
+      // 存储目录信息
+      _saveLastDirectory(result, _lastVideoDirKey, _lastDirKey);
+      
+      return _normalizePath(result);
+    } catch (e) {
+      print('Android选择视频文件时出错: $e');
+      
+      // 如果自定义方法失败，回退到默认方法
+      final intent = await const MethodChannel('android/intent')
+          .invokeMethod<Map<dynamic, dynamic>>('createChooser', {
+        'action': 'android.intent.action.GET_CONTENT',
+        'type': 'video/*',
+        'title': '选择视频文件',
+      });
+      
+      if (intent == null || intent['data'] == null) {
+        return null;
+      }
+      
+      return intent['data'].toString();
     }
   }
 
@@ -312,7 +348,7 @@ class FilePickerService {
             : null,
       );
       
-      // 打开文件选择器
+      // 字幕文件通常很小，可以继续使用默认方法
       final XFile? file = await openFile(
         acceptedTypeGroups: [subtitleGroup],
         initialDirectory: initialDirectory,
@@ -373,23 +409,31 @@ class FilePickerService {
     }
   }
   
-  // 保存上次目录
-  Future<void> _saveLastDirectory(String path, String key) async {
+  // 存储上次选择的目录
+  Future<void> _saveLastDirectory(String filePath, String primaryKey, [String? secondaryKey]) async {
     try {
+      final directory = p.dirname(filePath);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(key, path);
+      
+      // 保存主键
+      await prefs.setString(primaryKey, directory);
+      
+      // 如果提供了次键，也保存
+      if (secondaryKey != null) {
+        await prefs.setString(secondaryKey, directory);
+      }
     } catch (e) {
-      print('保存上次目录失败: $e');
+      print('保存目录失败: $e');
     }
   }
   
-  // 获取上次目录
+  // 获取上次选择的目录
   Future<String?> _getLastDirectory(String key) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getString(key);
     } catch (e) {
-      print('获取上次目录失败: $e');
+      print('获取目录失败: $e');
       return null;
     }
   }
