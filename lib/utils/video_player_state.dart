@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import 'dart:async';
+import 'package:http/http.dart' as http;
 import 'keyboard_shortcuts.dart';
 import 'globals.dart' as globals;
 import 'dart:convert';
@@ -568,53 +569,83 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _clearPreviousVideoState(); // 清理旧状态
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
     
-    // 首先检查文件是否存在
-    bool fileExists = false;
+    // 检查是否为网络URL (HTTP或HTTPS)
+    bool isNetworkUrl = videoPath.startsWith('http://') || videoPath.startsWith('https://');
     
-    // 使用FilePickerService处理文件路径问题
-    if (Platform.isIOS) {
-      final filePickerService = FilePickerService();
-      
-      // 首先检查文件是否存在
-      fileExists = filePickerService.checkFileExists(videoPath);
-      
-      // 如果文件不存在，尝试获取有效的文件路径
-      if (!fileExists) {
-        final validPath = await filePickerService.getValidFilePath(videoPath);
-        if (validPath != null) {
-          debugPrint('找到有效路径: $validPath (原路径: $videoPath)');
-          videoPath = validPath;
-          fileExists = true;
-        } else {
-          // 检查是否是iOS临时文件路径
-          if (videoPath.contains('/tmp/') || 
-              videoPath.contains('-Inbox/') || 
-              videoPath.contains('/Inbox/')) {
-            debugPrint('检测到iOS临时文件路径: $videoPath');
-            // 尝试从原始路径获取文件名，然后检查是否在持久化目录中
-            final fileName = p.basename(videoPath);
-            final docDir = await getApplicationDocumentsDirectory();
-            final persistentPath = '${docDir.path}/Videos/$fileName';
-            
-            if (File(persistentPath).existsSync()) {
-              debugPrint('找到持久化存储中的文件: $persistentPath');
-              videoPath = persistentPath;
-              fileExists = true;
+    // 对于本地文件才检查存在性
+    bool fileExists = isNetworkUrl; // 网络URL默认认为"存在"
+    
+    // 为网络URL添加特定日志
+    if (isNetworkUrl) {
+      debugPrint('检测到流媒体URL: $videoPath');
+      _statusMessages.add('正在准备流媒体播放...');
+      notifyListeners();
+    }
+    
+    if (!isNetworkUrl) {
+      // 使用FilePickerService处理文件路径问题
+      if (Platform.isIOS) {
+        final filePickerService = FilePickerService();
+        
+        // 首先检查文件是否存在
+        fileExists = filePickerService.checkFileExists(videoPath);
+        
+        // 如果文件不存在，尝试获取有效的文件路径
+        if (!fileExists) {
+          final validPath = await filePickerService.getValidFilePath(videoPath);
+          if (validPath != null) {
+            debugPrint('找到有效路径: $validPath (原路径: $videoPath)');
+            videoPath = validPath;
+            fileExists = true;
+          } else {
+            // 检查是否是iOS临时文件路径
+            if (videoPath.contains('/tmp/') || 
+                videoPath.contains('-Inbox/') || 
+                videoPath.contains('/Inbox/')) {
+              debugPrint('检测到iOS临时文件路径: $videoPath');
+              // 尝试从原始路径获取文件名，然后检查是否在持久化目录中
+              final fileName = p.basename(videoPath);
+              final docDir = await getApplicationDocumentsDirectory();
+              final persistentPath = '${docDir.path}/Videos/$fileName';
+              
+              if (File(persistentPath).existsSync()) {
+                debugPrint('找到持久化存储中的文件: $persistentPath');
+                videoPath = persistentPath;
+                fileExists = true;
+              }
             }
           }
         }
+      } else {
+        // 非iOS平台直接检查文件是否存在
+        final File videoFile = File(videoPath);
+        fileExists = videoFile.existsSync();
       }
     } else {
-      // 非iOS平台直接检查文件是否存在
-      final File videoFile = File(videoPath);
-      fileExists = videoFile.existsSync();
+      debugPrint('检测到网络URL: $videoPath');
     }
     
     if (!fileExists) {
-      debugPrint('VideoPlayerState: 文件不存在: $videoPath');
-      _setStatus(PlayerStatus.error, message: '找不到文件: ${p.basename(videoPath)}');
+      debugPrint('VideoPlayerState: 文件不存在或无法访问: $videoPath');
+      _setStatus(PlayerStatus.error, message: '找不到文件或无法访问: ${p.basename(videoPath)}');
       _error = '文件不存在或无法访问';
       return;
+    }
+    
+    // 对网络URL进行特殊处理
+    if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
+      debugPrint('VideoPlayerState: 准备流媒体URL: $videoPath');
+      // 可以在这里添加特殊的网络流处理逻辑
+      
+      // 添加网络错误处理的尝试/捕获块
+      try {
+        // 测试网络连接
+        await http.head(Uri.parse(videoPath));
+      } catch (e) {
+        // 如果网络请求失败，使用专门的错误处理逻辑
+        await _handleStreamUrlLoadingError(videoPath, e is Exception ? e : Exception(e.toString()));
+        return; // 避免继续处理
+      }
     }
     
     // 更新字幕管理器的视频路径
@@ -1724,8 +1755,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 }
 
                 notifyListeners();
-                _setStatus(PlayerStatus.recognizing,
-                    message: '弹幕加载完成 (${_danmakuList.length}条)');
+                _setStatus(PlayerStatus.recognizing, message: '弹幕加载完成 (${_danmakuList.length}条)');
               } catch (e) {
                 //debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
@@ -3061,5 +3091,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } finally {
       _isCapturingFrame = false;
     }
+  }
+
+  // 处理流媒体URL的加载错误
+  Future<void> _handleStreamUrlLoadingError(String videoPath, Exception e) async {
+    debugPrint('流媒体URL加载失败: $videoPath, 错误: $e');
+    
+    // 检查是否为Jellyfin URL
+    if (videoPath.contains('jellyfin') || videoPath.contains('/Videos/')) {
+      _setStatus(PlayerStatus.error, message: 'Jellyfin流媒体加载失败，请检查网络连接');
+      _error = '无法连接到Jellyfin服务器，请确保网络连接正常';
+    } else {
+      _setStatus(PlayerStatus.error, message: '流媒体加载失败，请检查网络连接');
+      _error = '无法加载流媒体，请检查URL和网络连接';
+    }
+    
+    // 通知监听器
+    notifyListeners();
   }
 }

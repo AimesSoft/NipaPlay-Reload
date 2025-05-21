@@ -9,7 +9,8 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/switchable_view.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'dart:io';
+import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 
 class JellyfinDetailPage extends StatefulWidget {
   final String jellyfinId;
@@ -143,7 +144,17 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
     
     try {
       final jellyfinService = JellyfinService.instance;
-      final episodes = await jellyfinService.getSeasonEpisodes(seasonId);
+      // Ensure _mediaDetail is not null and has a valid id before calling getSeasonEpisodes
+      if (_mediaDetail?.id == null) {
+        if (mounted) {
+          setState(() {
+            _error = '无法获取剧集详情，无法加载剧集列表。';
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+      final episodes = await jellyfinService.getSeasonEpisodes(_mediaDetail!.id, seasonId);
       
       if (mounted) {
         setState(() {
@@ -161,9 +172,18 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
     }
   }
   
-  WatchHistoryItem? _createWatchHistoryItem(JellyfinEpisodeInfo episode) {
-    // 将来这里可以加入播放逻辑，现在只是返回WatchHistoryItem
-    return episode.toWatchHistoryItem();
+  Future<WatchHistoryItem?> _createWatchHistoryItem(JellyfinEpisodeInfo episode) async {
+    // 使用JellyfinDandanplayMatcher来创建可播放的历史记录项
+    try {
+      final matcher = JellyfinDandanplayMatcher.instance;
+      final playableItem = await matcher.createPlayableHistoryItem(context, episode);
+      debugPrint('成功创建可播放历史项: ${playableItem?.animeName} - ${playableItem?.episodeTitle}, animeId=${playableItem?.animeId}, episodeId=${playableItem?.episodeId}');
+      return playableItem;
+    } catch (e) {
+      debugPrint('创建可播放历史记录项失败: $e');
+      // 出现错误时仍然返回基本的WatchHistoryItem，确保播放功能不会完全失败
+      return episode.toWatchHistoryItem();
+    }
   }
   
   String _formatRuntime(int? runTimeTicks) {
@@ -883,6 +903,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
               borderRadius: BorderRadius.circular(4),
               child: episodeImageUrl.isNotEmpty
                   ? CachedNetworkImageWidget(
+                      key: ValueKey(episode.id), // 为 CachedNetworkImageWidget 添加 Key
                       imageUrl: episodeImageUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error) {
@@ -940,15 +961,59 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
             ],
           ),
           trailing: const Icon(Ionicons.play_circle_outline, color: Colors.white70, size: 22), // 添加播放按钮指示
-          onTap: () {
-            final historyItem = _createWatchHistoryItem(episode);
-            if (historyItem != null) {
-              // 这里将来会处理播放逻辑，现在只是返回 WatchHistoryItem
-              // 对于Jellyfin，可能需要直接传递播放信息给播放器，而不是依赖本地文件路径
+          onTap: () async {
+            try {
               BlurSnackBar.show(context, '准备播放: ${episode.name}');
-              // Navigator.of(context).pop(historyItem); // 如果需要返回给调用者
-            } else {
-              BlurSnackBar.show(context, '无法处理该剧集');
+              
+              // 获取Jellyfin流媒体URL
+              final streamUrl = JellyfinDandanplayMatcher.instance.getPlayUrl(episode);
+              debugPrint('获取到流媒体URL: $streamUrl');
+              
+              // 使用JellyfinDandanplayMatcher创建增强的WatchHistoryItem
+              final historyItem = await _createWatchHistoryItem(episode);
+              if (historyItem != null) {
+                debugPrint('成功获取历史记录项: ${historyItem.animeName} - ${historyItem.episodeTitle}, animeId=${historyItem.animeId}, episodeId=${historyItem.episodeId}');
+                
+                // 使用VideoPlayerState初始化并开始播放
+                final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
+                
+                // 关闭详情页面前先释放对上下文的引用
+                final currentContext = context;
+                Navigator.of(currentContext).pop(); // 先关闭详情页面
+                
+                debugPrint('开始初始化播放器...');
+                // 使用VideoPlayerStateExtension的playStreamUrl方法播放流媒体
+                try {
+                  // 创建一个专门用于流媒体播放的历史记录项
+                  final playableHistoryItem = WatchHistoryItem(
+                    filePath: streamUrl, // 直接使用流媒体URL而非jellyfin://协议
+                    animeName: historyItem.animeName,
+                    episodeTitle: historyItem.episodeTitle,
+                    episodeId: historyItem.episodeId,
+                    animeId: historyItem.animeId,
+                    watchProgress: historyItem.watchProgress,
+                    lastPosition: historyItem.lastPosition,
+                    duration: historyItem.duration,
+                    lastWatchTime: historyItem.lastWatchTime,
+                    thumbnailPath: historyItem.thumbnailPath, 
+                    isFromScan: false,
+                  );
+                  
+                  // 使用基本方法初始化播放器 - 基础播放器已经可以处理流媒体URL
+                  await videoPlayerState.initializePlayer(streamUrl, historyItem: playableHistoryItem);
+                  videoPlayerState.play();
+                  
+                  debugPrint('成功开始播放: ${playableHistoryItem.animeName} - ${playableHistoryItem.episodeTitle}');
+                } catch (playError) {
+                  debugPrint('播放流媒体时出错: $playError');
+                  BlurSnackBar.show(currentContext, '播放时出错: $playError');
+                }
+              } else {
+                BlurSnackBar.show(context, '无法处理该剧集');
+              }
+            } catch (e) {
+              BlurSnackBar.show(context, '播放出错: $e');
+              debugPrint('播放Jellyfin媒体出错: $e');
             }
           },
         );

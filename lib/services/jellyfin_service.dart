@@ -267,13 +267,13 @@ class JellyfinService {
     }
   }
   
-  Future<List<JellyfinEpisodeInfo>> getSeasonEpisodes(String seasonId) async {
+  Future<List<JellyfinEpisodeInfo>> getSeasonEpisodes(String seriesId, String seasonId) async {
     if (!_isConnected) {
       throw Exception('未连接到Jellyfin服务器');
     }
     
     final response = await _makeAuthenticatedRequest(
-      '/Shows/Seasons/$seasonId/Episodes?userId=$_userId'
+      '/Shows/$seriesId/Episodes?userId=$_userId&seasonId=$seasonId'
     );
     
     if (response.statusCode == 200) {
@@ -291,6 +291,28 @@ class JellyfinService {
     } else {
       throw Exception('无法获取季节剧集信息');
     }
+  }
+  
+  // 获取单个剧集的详细信息
+  Future<JellyfinEpisodeInfo?> getEpisodeDetails(String episodeId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+    
+    try {
+      final response = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$episodeId'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return JellyfinEpisodeInfo.fromJson(data);
+      }
+    } catch (e) {
+      throw Exception('无法获取剧集详情: $e');
+    }
+    
+    return null;
   }
   
   // 获取流媒体URL

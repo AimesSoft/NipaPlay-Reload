@@ -250,15 +250,19 @@ class JellyfinEpisodeInfo {
   
   // 将JellyfinEpisodeInfo转换为WatchHistoryItem，用于与现有系统兼容
   WatchHistoryItem toWatchHistoryItem({int? lastPosition = 0, int? duration = 0}) {
+    String safeName = seriesName ?? '';
+    if (safeName.isEmpty) safeName = "未知剧集";
+    
     return WatchHistoryItem(
-      filePath: 'jellyfin://$id', // 使用jellyfin://协议来区分本地文件
-      animeName: seriesName ?? '',
-      episodeTitle: name,
+      filePath: 'jellyfin://$id', // 使用jellyfin://协议来区分本地文件，实际播放时需要替换为真实的流媒体URL
+      animeName: safeName,
+      episodeTitle: name ?? '未知',
       watchProgress: 0.0,
       lastPosition: lastPosition ?? 0,
       duration: duration ?? 0,
       lastWatchTime: DateTime.now(),
-      animeId: null, // Jellyfin不使用animeId系统
+      animeId: null, // 初始值为null，但会通过JellyfinDandanplayMatcher更新
+      episodeId: null, // 初始值为null，但会通过JellyfinDandanplayMatcher更新
       isFromScan: false,
     );
   }
