@@ -139,21 +139,40 @@ class JellyfinService {
   
   Future<void> loadAvailableLibraries() async {
     if (!_isConnected || _userId == null) return;
-    
+
     try {
       final response = await _makeAuthenticatedRequest('/UserViews?userId=$_userId');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List<dynamic> items = data['Items'];
-        
-        _availableLibraries = items
-            .where((item) => item['CollectionType'] == 'tvshows')
-            .map((item) => JellyfinLibrary.fromJson(item))
-            .toList();
+
+        List<JellyfinLibrary> tempLibraries = [];
+        for (var item in items) {
+          if (item['CollectionType'] == 'tvshows') {
+            final String libraryId = item['Id'];
+            final countResponse = await _makeAuthenticatedRequest(
+                '/Items?parentId=$libraryId&IncludeItemTypes=Series&Recursive=true&Limit=0&Fields=ParentId');
+            
+            int seriesCount = 0;
+            if (countResponse.statusCode == 200) {
+              final countData = json.decode(countResponse.body);
+              seriesCount = countData['TotalRecordCount'] ?? 0;
+            }
+            
+            tempLibraries.add(JellyfinLibrary(
+              id: item['Id'],
+              name: item['Name'],
+              type: item['CollectionType'], // Assuming 'CollectionType' maps to 'type'
+              imageTagsPrimary: item['ImageTags']?['Primary'], // Safely access ImageTags
+              totalItems: seriesCount, 
+            ));
+          }
+        }
+        _availableLibraries = tempLibraries;
       }
     } catch (e) {
-      // 处理错误
+      print('Error loading available libraries: $e');
     }
   }
   

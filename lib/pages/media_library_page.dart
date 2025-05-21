@@ -389,6 +389,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
     }
     
     return DefaultTabController(
+      key: ValueKey<int>(tabs.length), // Add this key
       length: tabs.length, // 使用 tabs 列表的实际长度
       child: Column(
         children: [
@@ -481,11 +482,12 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                   ),
                   const SizedBox(height: 16),
                   // 添加Jellyfin服务器按钮
-                  ElevatedButton.icon(
-                    onPressed: _showJellyfinServerDialog,
-                    icon: const Icon(Icons.cloud),
-                    label: const Text('添加Jellyfin服务器'),
-                  ),
+                  if (!_isJellyfinConnected) // Only show if not connected
+                    ElevatedButton.icon(
+                      onPressed: _showJellyfinServerDialog,
+                      icon: const Icon(Icons.cloud),
+                      label: const Text('添加Jellyfin服务器'),
+                    ),
                 ],
               ),
             ),

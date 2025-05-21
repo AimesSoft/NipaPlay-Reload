@@ -22,7 +22,7 @@ class JellyfinLibrary {
       name: json['Name'],
       type: json['CollectionType'],
       imageTagsPrimary: json['ImageTags']?['Primary'],
-      totalItems: json['ChildCount'],
+      totalItems: json['ChildCount'], // Reverted to use ChildCount
     );
   }
 }

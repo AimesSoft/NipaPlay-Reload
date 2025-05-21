@@ -160,19 +160,40 @@ class _JellyfinServerDialogState extends State<JellyfinServerDialog> {
             const SizedBox(height: 24),
             TextFormField(
               controller: _serverController,
-              // ... 其他属性和校验 ...
+              decoration: const InputDecoration(
+                labelText: '服务器地址',
+                hintText: '例如：http://192.168.1.100:8096',
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return '请输入服务器地址';
+                }
+                return null;
+              },
               enabled: !_isConnecting,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _usernameController,
-              // ... 其他属性 ...
+              decoration: const InputDecoration(
+                labelText: '用户名',
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return '请输入用户名';
+                }
+                return null;
+              },
               enabled: !_isConnecting,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _passwordController,
-              // ... 其他属性 ...
+              decoration: const InputDecoration(
+                labelText: '密码',
+              ),
+              obscureText: true,
+              // 密码通常不需要校验是否为空，因为有些服务器可能允许匿名登录或密码为空
               enabled: !_isConnecting,
             ),
             const SizedBox(height: 24),
