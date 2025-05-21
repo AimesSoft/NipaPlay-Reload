@@ -10,6 +10,14 @@ allprojects {
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
     }
+
+    configurations.all {
+        resolutionStrategy {
+            force 'org.bouncycastle:bcprov-jdk18on:1.77'
+            force 'org.bouncycastle:bcpkix-jdk18on:1.77'
+            force 'org.bouncycastle:bcutil-jdk18on:1.77'
+        }
+    }
 }
 
 buildscript {
