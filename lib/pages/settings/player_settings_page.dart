@@ -63,10 +63,10 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         _playerCoreName = "MDK";
         break;
       case PlayerKernelType.videoPlayer:
-        _playerCoreName = "Video Player (试验性)";
+        _playerCoreName = "Video Player";
         break;
       case PlayerKernelType.mediaKit:
-        _playerCoreName = "Media Kit";
+        _playerCoreName = "Libmpv";
         break;
       default:
         _playerCoreName = "MDK";
@@ -216,7 +216,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
               ),
               DropdownMenuItemData(
-                title: "Media Kit (试验性)",
+                title: "Libmpv (试验性)",
                 value: PlayerKernelType.mediaKit,
                 isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
               ),

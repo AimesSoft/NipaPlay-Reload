@@ -37,6 +37,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     
     // 设置自动加载字幕的回调
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return; // Add mounted check
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       videoState.onExternalSubtitleAutoLoaded = _handleAutoLoadedSubtitle;
       
@@ -48,19 +49,27 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   @override
   void dispose() {
     // 清除回调
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    videoState.onExternalSubtitleAutoLoaded = null;
+    // It's safer to check if context is still valid or if the provider can be accessed.
+    // However, typically, VideoPlayerState might outlive this menu.
+    // If VideoPlayerState is disposed before this, it could lead to errors.
+    // For now, let's assume VideoPlayerState is still valid.
+    // Consider adding a mounted check before accessing Provider if issues persist.
+    if (mounted) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.onExternalSubtitleAutoLoaded = null;
+    }
     super.dispose();
   }
   
   // 从SharedPreferences加载已保存的外部字幕信息
   Future<void> _loadExternalSubtitles() async {
+    if (!mounted) return; // Add mounted check
     setState(() => _isLoading = true);
     
     try {
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       if (videoState.currentVideoPath == null) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false); // Add mounted check
         return;
       }
       
@@ -81,6 +90,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
             if (File(path).existsSync()) {
               // 延迟加载，避免初始化冲突
               Future.delayed(const Duration(milliseconds: 500), () {
+                if (!mounted) return; // Add mounted check
                 _applyExternalSubtitle(path, lastActiveIndex);
               });
             }
@@ -91,7 +101,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       // print('加载外部字幕失败: $e');
       debugPrint('加载外部字幕失败: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false); // Add mounted check
     }
   }
   
@@ -231,6 +241,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   // 应用外部字幕
   void _applyExternalSubtitle(String filePath, int index) {
     try {
+      if (!mounted) return; // Add mounted check
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       
       // 将所有字幕设为非激活
@@ -246,7 +257,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       // 使用强制设置外部字幕的方法，确保它会被标记为手动设置，优先于内嵌字幕
       videoState.forceSetExternalSubtitle(filePath);
       
-      setState(() {});
+      if (mounted) setState(() {}); // Add mounted check
     } catch (e) {
       // print('应用外部字幕失败: $e');
       debugPrint('应用外部字幕失败: $e');
@@ -256,92 +267,60 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   // 切换到内嵌字幕
   Future<void> _switchToEmbeddedSubtitle(BuildContext context, int trackIndex) async {
     try {
+      if (!mounted) return; // Add mounted check
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       
-      // 禁用外部字幕
-      videoState.setExternalSubtitle("");
+      // 禁用外部字幕 (如果之前有外部字幕激活)
+      // This ensures that if an external subtitle was active, turning on an embedded one
+      // correctly signals that the external one is no longer the primary.
+      // The player adapter and subtitle manager should handle the state changes.
+      videoState.setExternalSubtitle(""); // Clears external subtitle path in manager
       
-      // 将所有外部字幕设为非激活
+      // 将所有外部字幕设为非激活 (UI state for external subtitles list)
       for (var subtitle in _externalSubtitles) {
         subtitle['isActive'] = false;
       }
       
       // 如果指定了轨道索引，切换到该内嵌字幕
       if (trackIndex >= 0) {
+        // 核心：告诉播放器切换到指定的内嵌字幕轨道索引
+        // Note: `activeSubtitleTracks` in `MediaKitPlayerAdapter` expects an index
+        // that corresponds to its `_mediaInfo.subtitle` list.
         videoState.player.activeSubtitleTracks = [trackIndex];
-        
-        // 获取内嵌字幕信息
-        if (videoState.player.mediaInfo.subtitle != null && 
-            trackIndex < videoState.player.mediaInfo.subtitle!.length) {
-          final track = videoState.player.mediaInfo.subtitle![trackIndex];
-          // 尝试从track中提取title和language
-          String title = '轨道 $trackIndex';
-          String language = '未知';
-          
-          final fullString = track.toString();
-          if (fullString.contains('metadata: {')) {
-            final metadataStart = fullString.indexOf('metadata: {') + 'metadata: {'.length;
-            final metadataEnd = fullString.indexOf('}', metadataStart);
-            
-            if (metadataEnd > metadataStart) {
-              final metadataStr = fullString.substring(metadataStart, metadataEnd);
-              
-              // 提取title
-              final titleMatch = RegExp(r'title: ([^,}]+)').firstMatch(metadataStr);
-              if (titleMatch != null) {
-                title = titleMatch.group(1)?.trim() ?? title;
-              }
-              
-              // 提取language
-              final languageMatch = RegExp(r'language: ([^,}]+)').firstMatch(metadataStr);
-              if (languageMatch != null) {
-                language = languageMatch.group(1)?.trim() ?? language;
-                // 获取映射后的语言名称
-                language = _getLanguageName(language);
-              }
-            }
-          }
-          
-          // 更新VideoPlayerState的字幕轨道信息
-          videoState.updateDanmakuTrackInfo('embedded_subtitle_$trackIndex', {
-            'index': trackIndex,
-            'title': title,
-            'language': language,
-            'isActive': true
-          });
-          
-          // 清除外部字幕信息
-          videoState.updateDanmakuTrackInfo('external_subtitle', {
-            'isActive': false,
-            'isManualSet': false
-          });
-        }
+        debugPrint('_SubtitleTracksMenu: Switched to embedded subtitle, player instructed with mediaInfo index: $trackIndex');
+
+        // 不需要在此处手动更新SubtitleManager的title/language或调用updateDanmakuTrackInfo。
+        // MediaKitPlayerAdapter监听到播放器轨道变化后，会更新其_mediaInfo，
+        // 进而触发SubtitleManager通过Player实例的mediaInfo更新其_subtitleTrackInfo。
+        // UI应该响应SubtitleManager通过ChangeNotifier发出的更新。
+
       } else {
-        // 否则关闭字幕
-        videoState.player.activeSubtitleTracks = [];
+        // 关闭字幕 (trackIndex is -1 or invalid)
+        videoState.player.activeSubtitleTracks = []; // Tell player to use "no" subtitle
+        debugPrint('_SubtitleTracksMenu: Turned off subtitles, player instructed.');
         
-        // 清除所有字幕轨道信息
-        videoState.clearDanmakuTrackInfo();
+        // 清除所有字幕轨道信息 (这部分可能需要审视，是否真的需要清除所有"Danmaku"信息)
+        // videoState.clearDanmakuTrackInfo(); // Commenting out for now, as it might be too broad.
         
-        // 明确清除外部字幕的手动设置标记
-        videoState.updateDanmakuTrackInfo('external_subtitle', {
-          'isActive': false,
-          'isManualSet': false
-        });
+        // 明确清除外部字幕的手动设置标记 (这应该由SubtitleManager内部逻辑处理)
+        // videoState.updateDanmakuTrackInfo('external_subtitle', {
+        //   'isActive': false,
+        //   'isManualSet': false
+        // });
       }
       
-      setState(() {});
+      if (mounted) setState(() {}); // UI update for external list, and potentially for embedded list selection state
       
-      // 保存设置
-      if (context.mounted) {
+      // 保存设置 (主要是保存外部字幕列表的状态，例如哪个是激活的)
+      if (context.mounted) { // Re-check mounted as it's an async gap
         await _saveExternalSubtitles(context);
       }
       
-      // 通知字幕轨道变化
-      videoState.onSubtitleTrackChanged();
+      // 通知字幕轨道变化 (This might be redundant if player events drive everything)
+      // videoState.onSubtitleTrackChanged(); // Commenting out for now
     } catch (e) {
       // print('切换到内嵌字幕失败: $e');
-      debugPrint('切换到内嵌字幕失败: $e');
+      debugPrint('_SubtitleTracksMenu: Error switching to embedded subtitle: $e');
     }
   }
   
@@ -420,6 +399,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     final existingIndex = _externalSubtitles.indexWhere((s) => s['path'] == path);
     if (existingIndex >= 0) {
       // 已存在，直接更新激活状态
+      if (!mounted) return; // Add mounted check
       setState(() {
         for (var subtitle in _externalSubtitles) {
           subtitle['isActive'] = false;
@@ -439,6 +419,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     };
     
     // 添加到列表并更新UI
+    if (!mounted) return; // Add mounted check
     setState(() {
       // 将所有字幕设为非激活
       for (var subtitle in _externalSubtitles) {
@@ -448,7 +429,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     });
     
     // 保存字幕列表
-    if (context.mounted) {
+    if (context.mounted) { // Re-check mounted as it's an async gap
       _saveExternalSubtitles(context);
     }
   }
@@ -496,8 +477,24 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        final hasEmbeddedSubtitles = videoState.player.mediaInfo.subtitle != null && 
-                                    videoState.player.mediaInfo.subtitle!.isNotEmpty;
+        // Access SubtitleManager through VideoPlayerState
+        final subtitleManager = videoState.subtitleManager;
+        
+        // `videoState.player.mediaInfo.subtitle` contains the raw PlayerSubtitleStreamInfo list from the adapter.
+        // We iterate this list to get the number of tracks and their original indices.
+        final embeddedSubtitleTracksFromPlayer = videoState.player.mediaInfo.subtitle;
+        final hasEmbeddedSubtitles = embeddedSubtitleTracksFromPlayer != null && 
+                                    embeddedSubtitleTracksFromPlayer.isNotEmpty;
+        
+        // debugPrint('_SubtitleTracksMenu: Build method running. Has embedded subtitles: $hasEmbeddedSubtitles. External subtitles count: ${_externalSubtitles.length}');
+        if (subtitleManager == null) {
+            // debugPrint('_SubtitleTracksMenu: SubtitleManager is NULL in build method!');
+            return const Center(child: Text("字幕管理器错误", style: TextStyle(color: Colors.white)));
+        }
+        // For debugging: Print all known tracks in SubtitleManager
+        // subtitleManager.subtitleTrackInfo.forEach((key, value) {
+        //   debugPrint('_SubtitleTracksMenu: SubtitleManager track cache for key "$key": title="${value['title']}", lang="${value['language']}"');
+        // });
         
         return BaseSettingsMenu(
           title: '字幕轨道',
@@ -640,40 +637,36 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                     ),
                   ),
                 ),
-                ...videoState.player.mediaInfo.subtitle!.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final track = entry.value;
-                  // 只有当没有外部字幕激活时，内嵌字幕才可能是激活的
+                // Use embeddedSubtitleTracksFromPlayer for iteration count and original index
+                ...embeddedSubtitleTracksFromPlayer!.asMap().entries.map((entry) {
+                  final index = entry.key; // This is the original index from player.mediaInfo.subtitle
+                  // final track = entry.value; // This is PlayerSubtitleStreamInfo, we don't need to parse it here.
+                  
+                  // Determine if this track is active.
+                  // Active state is based on player's active tracks and no external subtitle being active.
                   final bool hasActiveExternal = _externalSubtitles.any((s) => s['isActive'] == true);
                   final isActive = !hasActiveExternal && videoState.player.activeSubtitleTracks.contains(index);
                   
-                  // 尝试从track中提取title和language
-                  String title = '轨道 $index';
-                  String language = '未知';
+                  // --- Get Title and Language from SubtitleManager ---
+                  // The key in subtitleManager.subtitleTrackInfo should match how SubtitleManager stores it.
+                  // SubtitleManager.updateEmbeddedSubtitleTrack uses 'embedded_subtitle_$trackIndex'
+                  final String managerTrackKey = 'embedded_subtitle_$index';
+                  final Map<String, dynamic>? trackDataFromManager = subtitleManager.subtitleTrackInfo[managerTrackKey];
                   
-                  final fullString = track.toString();
-                  if (fullString.contains('metadata: {')) {
-                    final metadataStart = fullString.indexOf('metadata: {') + 'metadata: {'.length;
-                    final metadataEnd = fullString.indexOf('}', metadataStart);
-                    
-                    if (metadataEnd > metadataStart) {
-                      final metadataStr = fullString.substring(metadataStart, metadataEnd);
-                      
-                      // 提取title
-                      final titleMatch = RegExp(r'title: ([^,}]+)').firstMatch(metadataStr);
-                      if (titleMatch != null) {
-                        title = titleMatch.group(1)?.trim() ?? title;
-                      }
-                      
-                      // 提取language
-                      final languageMatch = RegExp(r'language: ([^,}]+)').firstMatch(metadataStr);
-                      if (languageMatch != null) {
-                        language = languageMatch.group(1)?.trim() ?? language;
-                        // 获取映射后的语言名称
-                        language = _getLanguageName(language);
-                      }
-                    }
+                  String title = '轨道 ${index + 1}'; // Fallback title
+                  String language = '未知';    // Fallback language
+
+                  if (trackDataFromManager != null) {
+                    title = trackDataFromManager['title'] as String? ?? title;
+                    language = trackDataFromManager['language'] as String? ?? language;
+                    // debugPrint('_SubtitleTracksMenu: For embedded track index $index (key: $managerTrackKey): Using title="$title", language="$language" FROM SubtitleManager.');
+                  } else {
+                    // This case means SubtitleManager doesn't have info for this track index yet, or an issue with keys.
+                    // This can happen if SubtitleManager hasn't processed updates from the adapter yet.
+                    // The UI should reactively update when SubtitleManager notifies its listeners.
+                    // debugPrint('_SubtitleTracksMenu: For embedded track index $index (key: $managerTrackKey): No data in SubtitleManager. Using fallbacks: title="$title", language="$language".');
                   }
+                  // --- End Get Title and Language ---
                   
                   return Material(
                     color: Colors.transparent,
@@ -716,14 +709,14 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    title,
+                                    title, // Display title from SubtitleManager (or fallback)
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 14,
                                     ),
                                   ),
                                   Text(
-                                    '语言: $language',
+                                    '语言: $language', // Display language from SubtitleManager (or fallback)
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.7),
                                       fontSize: 12,

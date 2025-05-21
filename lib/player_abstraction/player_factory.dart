@@ -31,14 +31,14 @@ class PlayerFactory {
         _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
         debugPrint('[PlayerFactory] 预加载内核设置: ${_cachedKernelType.toString()}');
       } else {
-        _cachedKernelType = PlayerKernelType.mdk;
-        debugPrint('[PlayerFactory] 无内核设置，使用默认: MDK');
+        _cachedKernelType = PlayerKernelType.mediaKit;
+        debugPrint('[PlayerFactory] 无内核设置，使用默认: MediaKit');
       }
       
       _hasLoadedSettings = true;
     } catch (e) {
       debugPrint('[PlayerFactory] 初始化读取设置出错: $e');
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType = PlayerKernelType.mediaKit;
       _hasLoadedSettings = true;
     }
   }
@@ -47,7 +47,7 @@ class PlayerFactory {
   static void _loadSettingsSync() {
     try {
       // 这里没有真正同步，仅使用默认值，确保后续异步加载会更新缓存值
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType = PlayerKernelType.mediaKit;
       _hasLoadedSettings = true;
       
       // 异步加载正确设置并更新缓存
@@ -59,10 +59,10 @@ class PlayerFactory {
         }
       });
       
-      debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
+      debugPrint('[PlayerFactory] 同步设置临时默认值: MediaKit');
     } catch (e) {
       debugPrint('[PlayerFactory] 同步加载设置出错: $e');
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType = PlayerKernelType.mediaKit;
     }
   }
   
@@ -71,7 +71,7 @@ class PlayerFactory {
     if (!_hasLoadedSettings) {
       _loadSettingsSync();
     }
-    return _cachedKernelType ?? PlayerKernelType.mdk;
+    return _cachedKernelType ?? PlayerKernelType.mediaKit;
   }
   
   // 创建播放器实例
@@ -96,8 +96,8 @@ class PlayerFactory {
       //   throw UnimplementedError('Other player types not yet supported.');
       default:
         // Fallback or throw error
-        debugPrint('[PlayerFactory] 未知播放器内核类型，默认使用 MDK');
-        return MdkPlayerAdapter(mdk.Player());
+        debugPrint('[PlayerFactory] 未知播放器内核类型，默认使用 MediaKit');
+        return MediaKitPlayerAdapter();
     }
   }
   
@@ -119,7 +119,7 @@ class PlayerFactory {
           kernelTypeName = "Video Player";
           break;
         case PlayerKernelType.mediaKit:
-          kernelTypeName = "Media Kit";
+          kernelTypeName = "Libmpv";
           break;
         default:
           kernelTypeName = "未知";

@@ -107,7 +107,7 @@ class SystemResourceMonitor {
           _playerKernelType = "Video Player";
           break;
         case PlayerKernelType.mediaKit:
-          _playerKernelType = "Media Kit";
+          _playerKernelType = "Libmpv";
           break;
         default:
           _playerKernelType = "未知";
