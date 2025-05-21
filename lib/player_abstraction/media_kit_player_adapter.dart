@@ -63,8 +63,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   
   void _initializeHardwareDecoding() {
     try {
-      (_player.platform as dynamic)?.setProperty('hwdec', 'auto-copy');
-      debugPrint('MediaKit: 设置硬件解码模式为 auto-copy');
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        (_player.platform as dynamic)?.setProperty('hwdec', 'mediacodec-copy');
+        debugPrint('MediaKit: Android: 设置硬件解码模式为 mediacodec-copy');
+      } else {
+        // 对于其他平台，'auto-copy' 仍然是一个好的通用选择
+        (_player.platform as dynamic)?.setProperty('hwdec', 'auto-copy');
+        debugPrint('MediaKit: Non-Android: 设置硬件解码模式为 auto-copy');
+      }
     } catch (e) {
       debugPrint('MediaKit: 设置硬件解码模式失败: $e');
     }

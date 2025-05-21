@@ -48,7 +48,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
   void _startPositionTimer() {
     // 每20毫秒更新一次位置，相当于50fps的更新率
     _positionTimer?.cancel();
-    _positionTimer = Timer.periodic(const Duration(milliseconds: 12), (timer) {
+    _positionTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       _updateInterpolatedPosition();
     });
   }
