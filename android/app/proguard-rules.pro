@@ -63,8 +63,11 @@
 
 # 文件选择器优化
 -keep class androidx.core.content.FileProvider { *; }
--keep class androidx.core.content.FileProvider$SimplePathStrategy { *; }
+-keep class androidx.core.content.FileProvider$SimplePathStrategy { *; } 
 
 # Keep rules for Google Play Core Library
 -keep class com.google.android.play.core.** { *; }
 -keep interface com.google.android.play.core.** { *; } 
+
+# 忽略 Google Play Core 相关缺失类的警告（适用于不分发到 Google Play 的应用）
+-dontwarn com.google.android.play.core.** 
