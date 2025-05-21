@@ -30,6 +30,7 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'widgets/blur_snackbar.dart';
@@ -244,6 +245,11 @@ void main() async {
           ChangeNotifierProvider(create: (_) => ScanService()),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider(create: (context) { // 修改 JellyfinProvider 的创建方式
+            final jellyfinProvider = JellyfinProvider();
+            jellyfinProvider.initialize(); // 在创建后立即调用 initialize
+            return jellyfinProvider;
+          }),
         ],
         child: const NipaPlayApp(),
       ),
