@@ -876,7 +876,24 @@ class JellyfinDandanplayMatcher {
   /// [episode] Jellyfin剧集信息
   /// 
   /// 返回包含哈希值、原始文件名和文件大小的Map
+  /// 
+  /// 注意：此功能暂时被禁用，通过弹窗和关键词搜索匹配弹幕库已经足够使用
   Future<Map<String, dynamic>> calculateVideoHash(JellyfinEpisodeInfo episode) async {
+    // 返回一个基于剧集信息的临时哈希值，而不是实际计算
+    final String seriesName = episode.seriesName ?? '未知剧集';
+    final String episodeName = episode.name.isNotEmpty ? episode.name : '未知标题';
+    debugPrint('哈希值计算已禁用，返回基于剧集信息的模拟哈希值');
+    
+    final String fallbackString = '$seriesName$episodeName${episode.id}${DateTime.now()}';
+    final String tempHash = md5.convert(utf8.encode(fallbackString)).toString();
+    
+    return {
+      'hash': tempHash,
+      'fileName': '$seriesName - $episodeName.mp4',
+      'fileSize': 0
+    };
+    
+    /* 原始哈希值计算代码（已禁用）
     try {
       final String seriesName = episode.seriesName ?? '未知剧集';
       final String episodeName = episode.name.isNotEmpty ? episode.name : '未知标题';
@@ -951,6 +968,7 @@ class JellyfinDandanplayMatcher {
         'fileSize': 0                                // 默认文件大小
       };
     }
+    */
   }
 }
 
