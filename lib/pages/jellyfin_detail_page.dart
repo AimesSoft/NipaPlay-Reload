@@ -58,6 +58,10 @@ class JellyfinDetailPage extends StatefulWidget {
 }
 
 class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTickerProviderStateMixin {
+  // 静态Map，用于存储Jellyfin视频的哈希值（ID -> 哈希值）
+  static final Map<String, String> _jellyfinVideoHashes = {};
+  static final Map<String, Map<String, dynamic>> _jellyfinVideoInfos = {};
+  
   JellyfinMediaItemDetail? _mediaDetail;
   List<JellyfinSeasonInfo> _seasons = [];
   Map<String, List<JellyfinEpisodeInfo>> _episodesBySeasonId = {};
@@ -176,7 +180,61 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
     // 使用JellyfinDandanplayMatcher来创建可播放的历史记录项
     try {
       final matcher = JellyfinDandanplayMatcher.instance;
+      
+      // 先进行预计算和预匹配，不阻塞主流程
+      matcher.precomputeVideoInfoAndMatch(context, episode).then((preMatchResult) {
+        final String? videoHash = preMatchResult['videoHash'] as String?;
+        final String? fileName = preMatchResult['fileName'] as String?;
+        final int? fileSize = preMatchResult['fileSize'] as int?;
+        
+        if (videoHash != null && videoHash.isNotEmpty) {
+          debugPrint('预计算哈希值成功: $videoHash');
+          
+          // 需要在播放器创建或历史项创建时使用这个哈希值
+          // 由于JellyfinEpisodeInfo没有videoHash属性，我们暂时存储在全局变量中
+          _jellyfinVideoHashes[episode.id] = videoHash;
+          debugPrint('视频哈希值已缓存: ${episode.id} -> $videoHash');
+          
+          // 同时保存文件名和文件大小信息
+          Map<String, dynamic> videoInfo = {
+            'hash': videoHash,
+            'fileName': fileName ?? '',
+            'fileSize': fileSize ?? 0
+          };
+          _jellyfinVideoInfos[episode.id] = videoInfo;
+          debugPrint('视频信息已缓存: ${episode.id} -> $videoInfo');
+        }
+        
+        if (preMatchResult['success'] == true) {
+          debugPrint('预匹配成功: animeId=${preMatchResult['animeId']}, episodeId=${preMatchResult['episodeId']}');
+        } else {
+          debugPrint('预匹配未成功: ${preMatchResult['message']}');
+        }
+      }).catchError((e) {
+        debugPrint('预计算过程中出错: $e');
+      });
+      
+      // 继续常规匹配流程
       final playableItem = await matcher.createPlayableHistoryItem(context, episode);
+      
+      // 如果我们有这个视频的信息，添加到历史项中
+      if (playableItem != null) {
+        // 添加哈希值
+        if (_jellyfinVideoHashes.containsKey(episode.id)) {
+          final videoHash = _jellyfinVideoHashes[episode.id];
+          playableItem.videoHash = videoHash;
+          debugPrint('成功将哈希值 $videoHash 添加到历史记录项');
+        }
+        
+        // 存储完整的视频信息，可用于后续弹幕匹配
+        if (_jellyfinVideoInfos.containsKey(episode.id)) {
+          final videoInfo = _jellyfinVideoInfos[episode.id]!;
+          // 将视频信息存储到tag字段（如果必要）
+          // 或者在播放时单独传递
+          debugPrint('已准备视频信息: ${videoInfo['fileName']}, 文件大小: ${videoInfo['fileSize']} 字节');
+        }
+      }
+      
       debugPrint('成功创建可播放历史项: ${playableItem?.animeName} - ${playableItem?.episodeTitle}, animeId=${playableItem?.animeId}, episodeId=${playableItem?.episodeId}');
       return playableItem;
     } catch (e) {
@@ -965,14 +1023,27 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
             try {
               BlurSnackBar.show(context, '准备播放: ${episode.name}');
               
-              // 获取Jellyfin流媒体URL
+              // 获取Jellyfin流媒体URL但暂不播放
               final streamUrl = JellyfinDandanplayMatcher.instance.getPlayUrl(episode);
               debugPrint('获取到流媒体URL: $streamUrl');
               
+              // 显示加载指示器
+              if (mounted) {
+                BlurSnackBar.show(context, '正在匹配弹幕信息...');
+              }
+              
               // 使用JellyfinDandanplayMatcher创建增强的WatchHistoryItem
+              // 这一步会显示匹配对话框，阻塞直到用户完成选择或跳过
               final historyItem = await _createWatchHistoryItem(episode);
+              
+              // 用户已完成匹配选择，现在可以继续播放流程
               if (historyItem != null) {
                 debugPrint('成功获取历史记录项: ${historyItem.animeName} - ${historyItem.episodeTitle}, animeId=${historyItem.animeId}, episodeId=${historyItem.episodeId}');
+                
+                // 显示开始播放的提示
+                if (mounted) {
+                  BlurSnackBar.show(context, '开始播放: ${historyItem.episodeTitle}');
+                }
                 
                 // 使用VideoPlayerState初始化并开始播放
                 final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
@@ -984,7 +1055,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                 debugPrint('开始初始化播放器...');
                 // 使用VideoPlayerStateExtension的playStreamUrl方法播放流媒体
                 try {
-                  // 创建一个专门用于流媒体播放的历史记录项
+                  // 创建一个专门用于流媒体播放的历史记录项，确保包含匹配信息
                   final playableHistoryItem = WatchHistoryItem(
                     filePath: streamUrl, // 直接使用流媒体URL而非jellyfin://协议
                     animeName: historyItem.animeName,
@@ -997,6 +1068,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                     lastWatchTime: historyItem.lastWatchTime,
                     thumbnailPath: historyItem.thumbnailPath, 
                     isFromScan: false,
+                    videoHash: historyItem.videoHash, // 确保包含视频哈希值
                   );
                   
                   // 使用基本方法初始化播放器 - 基础播放器已经可以处理流媒体URL

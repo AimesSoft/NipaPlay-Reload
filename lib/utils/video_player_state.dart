@@ -842,14 +842,26 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       await _initializeWatchHistory(videoPath);
 
       //debugPrint('10. 开始识别视频和加载弹幕...');
-      // 尝试识别视频和加载弹幕
+      // 针对Jellyfin流媒体视频的特殊处理
+      bool jellyfinDanmakuHandled = false;
       try {
-        await _recognizeVideo(videoPath);
+        // 检查是否是Jellyfin视频并尝试使用historyItem中的IDs直接加载弹幕
+        jellyfinDanmakuHandled = await _checkAndLoadJellyfinDanmaku(videoPath, historyItem);
       } catch (e) {
-        //debugPrint('弹幕加载失败: $e');
-        // 设置空弹幕列表，确保播放不受影响
-        _danmakuList = [];
-        _addStatusMessage('无法连接服务器，跳过加载弹幕');
+        debugPrint('检查Jellyfin弹幕时出错: $e');
+        // 错误处理时不设置jellyfinDanmakuHandled为true，下面会继续常规处理
+      }
+      
+      // 如果不是Jellyfin视频或者Jellyfin视频没有预设的弹幕IDs，则使用常规方式识别和加载弹幕
+      if (!jellyfinDanmakuHandled) {
+        try {
+          await _recognizeVideo(videoPath);
+        } catch (e) {
+          //debugPrint('弹幕加载失败: $e');
+          // 设置空弹幕列表，确保播放不受影响
+          _danmakuList = [];
+          _addStatusMessage('无法连接服务器，跳过加载弹幕');
+        }
       }
       
       // 设置进入最终加载阶段，以优化动画性能
@@ -2235,24 +2247,43 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void loadDanmaku(String episodeId, String animeIdStr) async {
     try {
+      debugPrint('尝试为episodeId=$episodeId, animeId=$animeIdStr加载弹幕');
       _setStatus(PlayerStatus.recognizing, message: '正在加载弹幕...');
+
+      if (episodeId.isEmpty) {
+        debugPrint('无效的episodeId，无法加载弹幕');
+        _setStatus(PlayerStatus.recognizing, message: '无效的弹幕ID，跳过加载');
+        return;
+      }
 
       // 从缓存加载弹幕
       final cachedDanmaku =
           await DanmakuCacheManager.getDanmakuFromCache(episodeId);
       if (cachedDanmaku != null) {
+        debugPrint('从缓存中找到弹幕数据，共${cachedDanmaku.length}条');
         _setStatus(PlayerStatus.recognizing, message: '正在从缓存加载弹幕...');
         
         // 设置最终加载阶段标志，减少动画性能消耗
         _isInFinalLoadingPhase = true;
         notifyListeners();
         
+        // 加载弹幕到控制器
         danmakuController?.loadDanmaku(cachedDanmaku);
         _setStatus(PlayerStatus.playing,
             message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
+        
+        // 同时更新_danmakuList，保持状态一致
+        _danmakuList = await compute(parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
+        _danmakuList.sort((a, b) {
+          final timeA = (a['time'] as double?) ?? 0.0;
+          final timeB = (b['time'] as double?) ?? 0.0;
+          return timeA.compareTo(timeB);
+        });
+        notifyListeners();
         return;
       }
 
+      debugPrint('缓存中没有找到弹幕，从网络加载中...');
       // 从网络加载弹幕
       final animeId = int.tryParse(animeIdStr) ?? 0;
       
@@ -2260,13 +2291,34 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _isInFinalLoadingPhase = true;
       notifyListeners();
       
-      final danmakuData =
-          await DandanplayService.getDanmaku(episodeId, animeId);
-      danmakuController?.loadDanmaku(danmakuData['comments']);
-      _setStatus(PlayerStatus.playing,
-          message: '弹幕加载完成 (${danmakuData['count']}条)');
+      final danmakuData = await DandanplayService.getDanmaku(episodeId, animeId)
+                              .timeout(const Duration(seconds: 15), onTimeout: () {
+        throw TimeoutException('加载弹幕超时');
+      });
+      
+      if (danmakuData['comments'] != null && danmakuData['comments'] is List) {
+        debugPrint('成功从网络加载弹幕，共${danmakuData['count']}条');
+        
+        // 加载弹幕到控制器
+        danmakuController?.loadDanmaku(danmakuData['comments']);
+        
+        // 同时更新_danmakuList，保持状态一致
+        _danmakuList = await compute(parseDanmakuListInBackground, danmakuData['comments'] as List<dynamic>?);
+        _danmakuList.sort((a, b) {
+          final timeA = (a['time'] as double?) ?? 0.0;
+          final timeB = (b['time'] as double?) ?? 0.0;
+          return timeA.compareTo(timeB);
+        });
+        
+        _setStatus(PlayerStatus.playing,
+            message: '弹幕加载完成 (${danmakuData['count']}条)');
+        notifyListeners();
+      } else {
+        debugPrint('网络返回的弹幕数据无效');
+        _setStatus(PlayerStatus.playing, message: '弹幕数据无效，跳过加载');
+      }
     } catch (e) {
-      //////debugPrint('加载弹幕失败: $e');
+      debugPrint('加载弹幕失败: $e');
       _setStatus(PlayerStatus.playing, message: '弹幕加载失败');
     }
   }
@@ -3108,5 +3160,39 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 通知监听器
     notifyListeners();
+  }
+
+  // 检查是否是Jellyfin视频并使用现有的IDs直接加载弹幕
+  Future<bool> _checkAndLoadJellyfinDanmaku(String videoPath, WatchHistoryItem? historyItem) async {
+    // 检查是否是Jellyfin视频URL (多种可能格式)
+    bool isJellyfinStream = videoPath.startsWith('jellyfin://') || 
+                           (videoPath.contains('jellyfin') && videoPath.startsWith('http')) ||
+                           (videoPath.contains('/Videos/') && videoPath.contains('/stream')) ||
+                           (videoPath.contains('MediaSourceId=') && videoPath.contains('api_key='));
+                           
+    if (isJellyfinStream && historyItem != null) {
+      debugPrint('检测到Jellyfin流媒体视频URL: $videoPath');
+      
+      // 检查historyItem是否包含所需的danmaku IDs
+      if (historyItem.episodeId != null && historyItem.animeId != null) {
+        debugPrint('使用historyItem的IDs直接加载Jellyfin弹幕: episodeId=${historyItem.episodeId}, animeId=${historyItem.animeId}');
+        
+        try {
+          // 使用已有的episodeId和animeId直接加载弹幕，跳过文件哈希计算
+          _setStatus(PlayerStatus.recognizing, message: '正在为Jellyfin流媒体加载弹幕...');
+          loadDanmaku(historyItem.episodeId.toString(), historyItem.animeId.toString());
+          return true; // 表示已处理
+        } catch (e) {
+          debugPrint('Jellyfin流媒体弹幕加载失败: $e');
+          _danmakuList = [];
+          _setStatus(PlayerStatus.recognizing, message: 'Jellyfin弹幕加载失败，跳过');
+          return true; // 尽管失败，但仍标记为已处理
+        }
+      } else {
+        debugPrint('Jellyfin流媒体historyItem缺少弹幕IDs: episodeId=${historyItem.episodeId}, animeId=${historyItem.animeId}');
+        _setStatus(PlayerStatus.recognizing, message: 'Jellyfin视频匹配数据不完整，跳过弹幕');
+      }
+    }
+    return false; // 表示未处理
   }
 }

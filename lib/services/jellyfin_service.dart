@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/jellyfin_model.dart';
@@ -313,6 +314,93 @@ class JellyfinService {
     }
     
     return null;
+  }
+  
+  // 获取媒体源信息（包含文件名、大小等信息）
+  Future<Map<String, dynamic>> getMediaInfo(String itemId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+    
+    try {
+      // 首先尝试使用File接口获取详细信息
+      final response = await _makeAuthenticatedRequest(
+        '/Items/$itemId/File'
+      );
+      
+      final contentType = response.headers['content-type'];
+      bool isJsonResponse = contentType != null && (contentType.contains('application/json') || contentType.contains('text/json'));
+      
+      if (response.statusCode == 200 && isJsonResponse) {
+        final data = json.decode(response.body);
+        debugPrint('媒体文件信息API响应 (JSON): $data');
+        
+        final fileName = data['Name'] ?? '';
+        final fileSize = data['Size'] ?? 0;
+        
+        // 确保获取到有效数据
+        if (fileName.isNotEmpty || fileSize > 0) {
+          debugPrint('成功获取到媒体文件信息: 文件名=$fileName, 大小=$fileSize');
+          return {
+            'fileName': fileName,
+            'path': data['Path'] ?? '',
+            'size': fileSize,
+            'dateCreated': data['DateCreated'] ?? '',
+            'dateModified': data['DateModified'] ?? ''
+          };
+        }
+      } else if (response.statusCode == 200 && !isJsonResponse) {
+        debugPrint('媒体文件信息API响应 (non-JSON, status 200): Content-Type: $contentType. 将回退。');
+        // 表明端点返回了文件本身，而不是元数据。
+        // 无法从此获取文件名/文件大小，因此我们将继续回退。
+      } else if (response.statusCode != 200) {
+        debugPrint('媒体文件信息API请求失败: HTTP ${response.statusCode}. 将回退。');
+      }
+      // 如果File接口无法获取有效信息，尝试使用普通的Items接口
+      final itemResponse = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$itemId'
+      );
+      
+      if (itemResponse.statusCode == 200) {
+        final itemData = json.decode(itemResponse.body);
+        debugPrint('媒体项目API响应获取到部分信息');
+        
+        String fileName = '';
+        if (itemData['Name'] != null) {
+          fileName = itemData['Name'];
+          // 添加合适的文件扩展名
+          if (!fileName.toLowerCase().endsWith('.mp4') && 
+              !fileName.toLowerCase().endsWith('.mkv') &&
+              !fileName.toLowerCase().endsWith('.avi')) {
+            fileName += '.mp4';
+          }
+        }
+        
+        // 尝试从MediaSource获取文件大小
+        int fileSize = 0;
+        if (itemData['MediaSources'] != null && 
+            itemData['MediaSources'] is List && 
+            itemData['MediaSources'].isNotEmpty) {
+          final mediaSource = itemData['MediaSources'][0];
+          fileSize = mediaSource['Size'] ?? 0;
+        }
+        
+        debugPrint('通过备选方法获取到媒体信息: 文件名=$fileName, 大小=$fileSize');
+        return {
+          'fileName': fileName,
+          'path': itemData['Path'] ?? '',
+          'size': fileSize,
+          'dateCreated': itemData['DateCreated'] ?? '',
+          'dateModified': itemData['DateModified'] ?? ''
+        };
+      }
+      
+      debugPrint('获取媒体信息失败: HTTP ${response.statusCode}');
+      return {};
+    } catch (e) {
+      debugPrint('获取媒体信息错误: $e');
+      return {};
+    }
   }
   
   // 获取流媒体URL
