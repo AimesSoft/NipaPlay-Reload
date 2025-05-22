@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 外部存储路径 -->
+    <external-path name="external_files" path="." />
+    <!-- 外部下载路径 -->
+    <external-path name="downloads" path="Download" />
+    <!-- 外部图片路径 -->
+    <external-path name="pictures" path="Pictures" />
+    <!-- 外部视频路径 -->
+    <external-path name="movies" path="Movies" />
+    <!-- 应用外部存储路径 -->
+    <external-files-path name="external_app_files" path="." />
+    <!-- 应用缓存路径 -->
+    <cache-path name="cache" path="." />
+    <!-- 应用内部存储路径 -->
+    <files-path name="files" path="." />
+    <!-- 临时文件路径 -->
+    <root-path name="root" path="." />
+</paths> 

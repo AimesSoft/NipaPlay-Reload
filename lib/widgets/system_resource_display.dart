@@ -32,8 +32,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   void initState() {
     super.initState();
     
-    // 只在桌面平台启用
-    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+    // 移除桌面平台限制，在所有平台启用
+    if (!kIsWeb) {
       _startUpdating();
     }
   }
@@ -97,8 +97,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
 
   @override
   Widget build(BuildContext context) {
-    // 仅在桌面平台显示
-    if (kIsWeb || (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)) {
+    // 移除桌面平台限制，允许在所有平台显示
+    if (kIsWeb) {
       return const SizedBox.shrink();
     }
     

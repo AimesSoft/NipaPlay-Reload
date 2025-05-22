@@ -348,7 +348,7 @@ class BangumiService {
 
     // 从API获取
     final detailUrl = '$_bangumiDetailUrl$animeId';
-    debugPrint('[番剧服务] 从API获取番剧 $animeId 的详情: $detailUrl');
+    //debugPrint('[番剧服务] 从API获取番剧 $animeId 的详情: $detailUrl');
     try {
       final response = await _makeRequest(detailUrl);
       
@@ -361,11 +361,11 @@ class BangumiService {
           _detailsCache[animeId] = anime;
           _detailsCacheTime[animeId] = DateTime.now();
           final cacheDuration = _getCacheDurationForAnime(animeId);
-          debugPrint('[番剧服务] 成功从API获取番剧 $animeId 的详情并缓存到内存 (缓存时间: ${cacheDuration.inHours}小时)');
+          //debugPrint('[番剧服务] 成功从API获取番剧 $animeId 的详情并缓存到内存 (缓存时间: ${cacheDuration.inHours}小时)');
           
           // 异步保存到磁盘缓存
           _saveDetailToCache(animeId, anime).then((_) {
-            debugPrint('[番剧服务] 番剧 $animeId 详情已异步保存到磁盘缓存');
+            //debugPrint('[番剧服务] 番剧 $animeId 详情已异步保存到磁盘缓存');
           });
           
           return anime;
@@ -450,7 +450,7 @@ class BangumiService {
       final cacheKey = '$_detailsCacheKeyPrefix$animeId';
       await prefs.setString(cacheKey, json.encode(data));
       final cacheDuration = _getCacheDurationForAnime(animeId);
-      debugPrint('[番剧服务] 番剧 $animeId 详情已保存到磁盘缓存 (缓存时间: ${cacheDuration.inHours}小时)');
+      //debugPrint('[番剧服务] 番剧 $animeId 详情已保存到磁盘缓存 (缓存时间: ${cacheDuration.inHours}小时)');
     } catch (e) {
       debugPrint('[番剧服务] 保存番剧详情到磁盘缓存失败: $e');
     }

@@ -2038,68 +2038,101 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_currentVideoPath == null || !hasVideo) return null;
 
     try {
-      // 计算保持原始宽高比的图像尺寸
-      const int targetHeight = 256;
-      int targetWidth = 256; // 默认值
+      // 使用适当的宽高比计算图像尺寸
+      const int targetWidth = 0; // 使用0表示使用原始宽度
+      const int targetHeight = 0; // 使用0表示使用原始高度
 
-      // 从视频媒体信息获取宽高比
-      if (player.mediaInfo.video != null &&
-          player.mediaInfo.video!.isNotEmpty) {
-        final videoTrack = player.mediaInfo.video![0];
-        if (videoTrack.codec.width > 0 && videoTrack.codec.height > 0) {
-          final aspectRatio = videoTrack.codec.width / videoTrack.codec.height;
-          targetWidth = (targetHeight * aspectRatio).round();
-        }
-      }
-
-      // 使用Player的snapshot方法获取当前帧，保持宽高比，但不暂停视频
-      final videoFrame =
-          await player.snapshot(width: targetWidth, height: targetHeight);
+      // 使用Player的snapshot方法获取当前帧，保留原始宽高比
+      final videoFrame = await player.snapshot(width: targetWidth, height: targetHeight);
       if (videoFrame == null) {
+        debugPrint('截图失败: 播放器返回了null');
         return null;
       }
+      
+      // 检查截图尺寸
+      debugPrint('获取到的截图尺寸: ${videoFrame.width}x${videoFrame.height}, 字节数: ${videoFrame.bytes.length}');
 
-      // 直接使用image包将RGBA数据转换为PNG
-      try {
-        // 从RGBA字节数据创建图像
-        final image = img.Image.fromBytes(
-          width: targetWidth,
-          height: targetHeight,
-          bytes: videoFrame.bytes.buffer, // CHANGED to get ByteBuffer
-          numChannels: 4, // RGBA
-        );
+      // 使用缓存的哈希值或重新计算哈希值
+      String videoFileHash;
+      if (_currentVideoHash != null) {
+        videoFileHash = _currentVideoHash!;
+      } else {
+        videoFileHash = await _calculateFileHash(_currentVideoPath!);
+        _currentVideoHash = videoFileHash; // 缓存哈希值
+      }
 
-        // 编码为PNG格式
-        final pngBytes = img.encodePng(image);
+      // 创建缩略图目录
+      final appDir = await getApplicationDocumentsDirectory();
+      final thumbnailDir = Directory('${appDir.path}/thumbnails');
+      if (!thumbnailDir.existsSync()) {
+        thumbnailDir.createSync(recursive: true);
+      }
 
-        // 使用缓存的哈希值或重新计算哈希值
-        String videoFileHash;
-        if (_currentVideoHash != null) {
-          videoFileHash = _currentVideoHash!;
-        } else {
-          videoFileHash = await _calculateFileHash(_currentVideoPath!);
-          _currentVideoHash = videoFileHash; // 缓存哈希值
-        }
+      // 保存缩略图文件路径
+      final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.png';
+      final thumbnailFile = File(thumbnailPath);
 
-        // 创建缩略图目录
-        final appDir = await getApplicationDocumentsDirectory();
-        final thumbnailDir = Directory('${appDir.path}/thumbnails');
-        if (!thumbnailDir.existsSync()) {
-          thumbnailDir.createSync(recursive: true);
-        }
+      // 检查截图数据是否已经是PNG格式 (检查PNG文件头 - 89 50 4E 47)
+      bool isPngFormat = false;
+      if (videoFrame.bytes.length > 8) {
+        isPngFormat = videoFrame.bytes[0] == 0x89 && 
+                      videoFrame.bytes[1] == 0x50 && 
+                      videoFrame.bytes[2] == 0x4E && 
+                      videoFrame.bytes[3] == 0x47;
+      }
 
-        // 保存缩略图文件
-        final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.png';
-        final thumbnailFile = File(thumbnailPath);
-        await thumbnailFile.writeAsBytes(pngBytes);
-
+      if (isPngFormat) {
+        // 如果已经是PNG格式，直接保存
+        debugPrint('检测到PNG格式的截图数据，直接保存');
+        await thumbnailFile.writeAsBytes(videoFrame.bytes);
+        debugPrint('成功保存PNG截图，大小: ${videoFrame.bytes.length} 字节');
         return thumbnailPath;
-      } catch (e) {
-        //debugPrint('处理图像数据时出错: $e');
-        return null;
+      } else {
+        // 如果不是PNG格式，使用原有处理逻辑
+        debugPrint('检测到非PNG格式的截图数据，进行转换处理');
+        try {
+          // 确定图像尺寸
+          final width = videoFrame.width > 0 ? videoFrame.width : 1920; // 如果宽度为0，使用默认宽度
+          final height = videoFrame.height > 0 ? videoFrame.height : 1080; // 如果高度为0，使用默认高度
+          
+          debugPrint('创建图像使用尺寸: ${width}x${height}');
+          
+          // 从bytes创建图像
+          final image = img.Image.fromBytes(
+            width: width,
+            height: height,
+            bytes: videoFrame.bytes.buffer,
+            numChannels: 4, // RGBA
+          );
+
+          // 检查图像是否成功创建
+          if (image.width != width || image.height != height) {
+            debugPrint('警告: 创建的图像尺寸(${image.width}x${image.height})与预期(${width}x${height})不符');
+          }
+
+          // 编码为PNG格式
+          final pngBytes = img.encodePng(image);
+          await thumbnailFile.writeAsBytes(pngBytes);
+          
+          debugPrint('成功保存转换后的截图，保留了${width}x${height}的原始比例');
+          return thumbnailPath;
+        } catch (e) {
+          debugPrint('处理图像数据时出错: $e');
+          
+          // 转换失败，尝试直接保存原始数据
+          try {
+            debugPrint('尝试直接保存原始截图数据');
+            await thumbnailFile.writeAsBytes(videoFrame.bytes);
+            debugPrint('成功保存原始截图数据');
+            return thumbnailPath;
+          } catch (e2) {
+            debugPrint('直接保存原始数据也失败: $e2');
+            return null;
+          }
+        }
       }
     } catch (e) {
-      //debugPrint('无暂停截图时出错: $e');
+      debugPrint('无暂停截图时出错: $e');
       return null;
     }
   }

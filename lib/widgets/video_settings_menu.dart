@@ -9,6 +9,7 @@ import 'danmaku_settings_menu.dart';
 import 'audio_tracks_menu.dart';
 import 'danmaku_list_menu.dart';
 import 'subtitle_list_menu.dart';
+import '../player_abstraction/player_factory.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -40,49 +41,69 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
 
   late final List<SettingsItem> _settingsItems;
   late final VideoPlayerState videoState;
+  late final PlayerKernelType _currentKernelType;
 
   @override
   void initState() {
     super.initState();
     videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    _settingsItems = [
-      SettingsItem(
+    // 获取当前播放器内核类型
+    _currentKernelType = PlayerFactory.getKernelType();
+    
+    // 根据当前播放器内核类型决定显示哪些菜单项
+    _settingsItems = [];
+    
+    // 字幕轨道 - 当内核为MDK时显示
+    if (_currentKernelType != PlayerKernelType.videoPlayer) {
+      _settingsItems.add(SettingsItem(
         icon: Icons.subtitles,
         title: '字幕轨道',
         onTap: _toggleSubtitleTracksMenu,
         isActive: () => _showSubtitleTracks,
-      ),
-      SettingsItem(
+      ));
+    }
+    
+    // 字幕列表 - 当内核为MDK时显示
+    if (_currentKernelType != PlayerKernelType.videoPlayer) {
+      _settingsItems.add(SettingsItem(
         icon: Icons.list,
         title: '字幕列表',
         onTap: _toggleSubtitleListMenu,
         isActive: () => _showSubtitleList,
-      ),
-      SettingsItem(
+      ));
+    }
+    
+    // 音频轨道 - 当内核为MDK时显示
+    if (_currentKernelType != PlayerKernelType.videoPlayer) {
+      _settingsItems.add(SettingsItem(
         icon: Icons.audiotrack,
         title: '音频轨道',
         onTap: _toggleAudioTracksMenu,
         isActive: () => _showAudioTracks,
-      ),
-      SettingsItem(
-        icon: Icons.text_fields,
-        title: '弹幕设置',
-        onTap: _toggleDanmakuSettingsMenu,
-        isActive: () => _showDanmakuSettings,
-      ),
-      SettingsItem(
-        icon: Icons.list_alt_outlined,
-        title: '弹幕列表',
-        onTap: _toggleDanmakuListMenu,
-        isActive: () => _showDanmakuList,
-      ),
-      SettingsItem(
-        icon: Icons.height,
-        title: '控制栏设置',
-        onTap: _toggleControlBarSettingsMenu,
-        isActive: () => _showControlBarSettings,
-      ),
-    ];
+      ));
+    }
+    
+    // 以下菜单项无论什么内核都显示
+    _settingsItems.add(SettingsItem(
+      icon: Icons.text_fields,
+      title: '弹幕设置',
+      onTap: _toggleDanmakuSettingsMenu,
+      isActive: () => _showDanmakuSettings,
+    ));
+    
+    _settingsItems.add(SettingsItem(
+      icon: Icons.list_alt_outlined,
+      title: '弹幕列表',
+      onTap: _toggleDanmakuListMenu,
+      isActive: () => _showDanmakuList,
+    ));
+    
+    _settingsItems.add(SettingsItem(
+      icon: Icons.height,
+      title: '控制栏设置',
+      onTap: _toggleControlBarSettingsMenu,
+      isActive: () => _showControlBarSettings,
+    ));
   }
 
   void _toggleSubtitleTracksMenu() {
