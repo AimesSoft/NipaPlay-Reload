@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart'; // 导入TabChangeNotifier
 
 class JellyfinDetailPage extends StatefulWidget {
   final String jellyfinId;
@@ -1045,40 +1046,66 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                   BlurSnackBar.show(context, '开始播放: ${historyItem.episodeTitle}');
                 }
                 
-                // 使用VideoPlayerState初始化并开始播放
+                // 获取必要的服务引用
                 final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
                 
-                // 关闭详情页面前先释放对上下文的引用
-                final currentContext = context;
-                Navigator.of(currentContext).pop(); // 先关闭详情页面
+                // 在页面关闭前，获取TabChangeNotifier
+                // 注意：通过listen: false方式获取，避免建立依赖关系
+                TabChangeNotifier? tabChangeNotifier;
+                try {
+                  tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+                } catch (e) {
+                  debugPrint('无法获取TabChangeNotifier: $e');
+                }
+                
+                // 创建一个专门用于流媒体播放的历史记录项，确保包含匹配信息
+                final playableHistoryItem = WatchHistoryItem(
+                  filePath: streamUrl, // 直接使用流媒体URL而非jellyfin://协议
+                  animeName: historyItem.animeName,
+                  episodeTitle: historyItem.episodeTitle,
+                  episodeId: historyItem.episodeId,
+                  animeId: historyItem.animeId,
+                  watchProgress: historyItem.watchProgress,
+                  lastPosition: historyItem.lastPosition,
+                  duration: historyItem.duration,
+                  lastWatchTime: historyItem.lastWatchTime,
+                  thumbnailPath: historyItem.thumbnailPath, 
+                  isFromScan: false,
+                  videoHash: historyItem.videoHash, // 确保包含视频哈希值
+                );
                 
                 debugPrint('开始初始化播放器...');
-                // 使用VideoPlayerStateExtension的playStreamUrl方法播放流媒体
+                
                 try {
-                  // 创建一个专门用于流媒体播放的历史记录项，确保包含匹配信息
-                  final playableHistoryItem = WatchHistoryItem(
-                    filePath: streamUrl, // 直接使用流媒体URL而非jellyfin://协议
-                    animeName: historyItem.animeName,
-                    episodeTitle: historyItem.episodeTitle,
-                    episodeId: historyItem.episodeId,
-                    animeId: historyItem.animeId,
-                    watchProgress: historyItem.watchProgress,
-                    lastPosition: historyItem.lastPosition,
-                    duration: historyItem.duration,
-                    lastWatchTime: historyItem.lastWatchTime,
-                    thumbnailPath: historyItem.thumbnailPath, 
-                    isFromScan: false,
-                    videoHash: historyItem.videoHash, // 确保包含视频哈希值
-                  );
-                  
-                  // 使用基本方法初始化播放器 - 基础播放器已经可以处理流媒体URL
+                  // *** 关键修改：先初始化播放器，在导航前 ***
+                  debugPrint('初始化播放器 - 步骤1：开始');
                   await videoPlayerState.initializePlayer(streamUrl, historyItem: playableHistoryItem);
-                  videoPlayerState.play();
+                  debugPrint('初始化播放器 - 步骤1：完成');
                   
-                  debugPrint('成功开始播放: ${playableHistoryItem.animeName} - ${playableHistoryItem.episodeTitle}');
+                  // 先提前通知TabChangeNotifier
+                  if (tabChangeNotifier != null) {
+                    debugPrint('初始化播放器 - 步骤2：使用TabChangeNotifier切换到播放页面');
+                    tabChangeNotifier.changeTab(0); // 提前通知切换到播放页面
+                  } else {
+                    debugPrint('初始化播放器 - 步骤2：TabChangeNotifier为空，无法切换页面');
+                  }
+                  
+                  // 关闭详情页面 - 页面关闭后不再访问context相关内容
+                  debugPrint('初始化播放器 - 步骤3：准备关闭详情页面');
+                  Navigator.of(context).pop();
+                  debugPrint('初始化播放器 - 步骤3：详情页面已关闭');
+                  
+                  // 开始播放 - 此时页面已关闭，但播放器已初始化
+                  debugPrint('初始化播放器 - 步骤4：开始播放视频');
+                  videoPlayerState.play();
+                  debugPrint('初始化播放器 - 步骤4：成功开始播放: ${playableHistoryItem.animeName} - ${playableHistoryItem.episodeTitle}');
                 } catch (playError) {
                   debugPrint('播放流媒体时出错: $playError');
-                  BlurSnackBar.show(currentContext, '播放时出错: $playError');
+                  
+                  // 确保context还挂载着才显示提示
+                  if (context.mounted) {
+                    BlurSnackBar.show(context, '播放时出错: $playError');
+                  }
                 }
               } else {
                 BlurSnackBar.show(context, '无法处理该剧集');

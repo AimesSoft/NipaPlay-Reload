@@ -444,15 +444,31 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   void _onTabChangeRequested() {
     debugPrint('[MainPageState] _onTabChangeRequested triggered.');
     final index = _tabChangeNotifier?.targetTabIndex;
-    if (index != null && globalTabController != null) {
-      debugPrint('[MainPageState] targetTabIndex: $index, current globalTabController.index: ${globalTabController!.index}');
-      if (globalTabController!.index != index) {
-        globalTabController!.animateTo(index);
-        debugPrint('[MainPageState] Called globalTabController.animateTo($index)');
+    debugPrint('[MainPageState] targetTabIndex: $index');
+    
+    if (index != null) {
+      if (globalTabController != null) {
+        debugPrint('[MainPageState] globalTabController可用，当前索引: ${globalTabController!.index}');
+        if (globalTabController!.index != index) {
+          try {
+            debugPrint('[MainPageState] 尝试切换到标签: $index');
+            globalTabController!.animateTo(index);
+            debugPrint('[MainPageState] 成功调用animateTo($index)');
+          } catch (e) {
+            debugPrint('[MainPageState] 切换标签失败: $e');
+          }
+        } else {
+          debugPrint('[MainPageState] 已经是目标标签: $index，无需切换');
+        }
       } else {
-        debugPrint('[MainPageState] globalTabController.index is already $index. No animation needed.');
+        debugPrint('[MainPageState] globalTabController为空，无法切换标签');
       }
+      
+      // 清除标记，避免多次触发
+      debugPrint('[MainPageState] 正在清除targetTabIndex');
       _tabChangeNotifier?.clear();
+    } else {
+      debugPrint('[MainPageState] targetTabIndex为空，不进行任何操作');
     }
   }
 
