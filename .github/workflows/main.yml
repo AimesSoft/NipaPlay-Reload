@@ -346,6 +346,21 @@ jobs:
           echo "Copying application files to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
           cp -r "${BUILD_OUTPUT_DIR}/"* "${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
           
+          # 复制 mdk-sdk 中的 libmpv 库到 .deb 包
+          echo "Copying mdk-sdk libraries to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
+          MDK_SDK_DIR="linux/flutter/ephemeral/.plugin_symlinks/fvp"
+          if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
+            echo "Finding libmpv.so in mdk-sdk..."
+            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmpv*.so*" -type f -exec cp -v {} "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" \;
+            # 复制其他可能需要的 mdk 相关库
+            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmdk*.so*" -type f -exec cp -v {} "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" \;
+          else
+            echo "WARNING: mdk-sdk directory not found at ${MDK_SDK_DIR}/mdk-sdk"
+            # 尝试从系统中查找 libmpv 并复制
+            echo "Attempting to find system libmpv..."
+            find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" \;
+          fi
+          
           # Create DEBIAN/control from template
           echo "Creating DEBIAN/control"
           sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
@@ -392,6 +407,21 @@ jobs:
           # Copy contents of bundle/data to AppDir/data
           echo "Copying data/* to AppDir/data/"
           cp -r "${BUILD_OUTPUT_DIR}/data/." "${APPDIR}/data/"
+          
+          # 复制 mdk-sdk 中的 libmpv 库到 AppImage
+          echo "Copying mdk-sdk libraries to AppImage"
+          MDK_SDK_DIR="linux/flutter/ephemeral/.plugin_symlinks/fvp"
+          if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
+            echo "Finding libmpv.so in mdk-sdk for AppImage..."
+            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmpv*.so*" -type f -exec cp -v {} "${APPDIR}/lib/" \;
+            # 复制其他可能需要的 mdk 相关库
+            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmdk*.so*" -type f -exec cp -v {} "${APPDIR}/lib/" \;
+          else
+            echo "WARNING: mdk-sdk directory not found at ${MDK_SDK_DIR}/mdk-sdk"
+            # 尝试从系统中查找 libmpv 并复制
+            echo "Attempting to find system libmpv for AppImage..."
+            find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${APPDIR}/lib/" \;
+          fi
           
           # Copy desktop file and icon to AppDir root
           echo "Copying desktop file and icon to AppDir root"
@@ -449,6 +479,21 @@ jobs:
           echo "Copying application files to archive directory"
           cp -r "${BUILD_OUTPUT_DIR}/"* "${ARCHIVE_CONTENT_DIR}/"
           
+          # 复制 mdk-sdk 中的 libmpv 库到 tar.gz 归档
+          echo "Copying mdk-sdk libraries to tar.gz archive"
+          MDK_SDK_DIR="linux/flutter/ephemeral/.plugin_symlinks/fvp"
+          if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
+            echo "Finding libmpv.so in mdk-sdk for tar.gz..."
+            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmpv*.so*" -type f -exec cp -v {} "${ARCHIVE_CONTENT_DIR}/lib/" \;
+            # 复制其他可能需要的 mdk 相关库
+            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmdk*.so*" -type f -exec cp -v {} "${ARCHIVE_CONTENT_DIR}/lib/" \;
+          else
+            echo "WARNING: mdk-sdk directory not found at ${MDK_SDK_DIR}/mdk-sdk"
+            # 尝试从系统中查找 libmpv 并复制
+            echo "Attempting to find system libmpv for tar.gz..."
+            find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${ARCHIVE_CONTENT_DIR}/lib/" \;
+          fi
+          
           # Add a simple run script using echo commands
           RUN_SCRIPT_PATH="${ARCHIVE_CONTENT_DIR}/run.sh"
           echo "Creating run.sh script at ${RUN_SCRIPT_PATH}"
@@ -460,6 +505,12 @@ jobs:
           echo 'export GTK_PATH="$DIR/usr/lib/gtk-3.0"' >> "${RUN_SCRIPT_PATH}"
           echo 'export GTK_CSD=0' >> "${RUN_SCRIPT_PATH}"
           echo 'export GTK3_NOCSD=1' >> "${RUN_SCRIPT_PATH}"
+          echo '# Set MPV_HOME to help find mpv configuration' >> "${RUN_SCRIPT_PATH}"
+          echo 'export MPV_HOME="$DIR"' >> "${RUN_SCRIPT_PATH}"
+          echo '# Print library path for debugging' >> "${RUN_SCRIPT_PATH}"
+          echo 'echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
+          echo 'echo "Checking for libmpv.so:"' >> "${RUN_SCRIPT_PATH}"
+          echo 'find "$DIR/lib" -name "libmpv*.so*" || echo "libmpv not found in $DIR/lib!"' >> "${RUN_SCRIPT_PATH}"
           echo '# Execute the main binary' >> "${RUN_SCRIPT_PATH}"
           echo "\"\$DIR/${APP_NAME}\" \"\$@\"" >> "${RUN_SCRIPT_PATH}"
           chmod +x "${RUN_SCRIPT_PATH}"
