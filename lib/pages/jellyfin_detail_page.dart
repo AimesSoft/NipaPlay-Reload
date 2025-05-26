@@ -1041,6 +1041,17 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
               if (historyItem != null) {
                 debugPrint('成功获取历史记录项: ${historyItem.animeName} - ${historyItem.episodeTitle}, animeId=${historyItem.animeId}, episodeId=${historyItem.episodeId}');
                 
+                // 调试：检查 historyItem 的弹幕 ID
+                if (historyItem.animeId == null || historyItem.episodeId == null) {
+                  debugPrint('警告: 从 JellyfinDandanplayMatcher 获得的 historyItem 缺少弹幕 ID');
+                  debugPrint('  animeId: ${historyItem.animeId}');
+                  debugPrint('  episodeId: ${historyItem.episodeId}');
+                } else {
+                  debugPrint('确认: historyItem 包含有效的弹幕 ID');
+                  debugPrint('  animeId: ${historyItem.animeId}');
+                  debugPrint('  episodeId: ${historyItem.episodeId}');
+                }
+                
                 // 显示开始播放的提示
                 if (mounted) {
                   BlurSnackBar.show(context, '开始播放: ${historyItem.episodeTitle}');
@@ -1058,9 +1069,9 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                   debugPrint('无法获取TabChangeNotifier: $e');
                 }
                 
-                // 创建一个专门用于流媒体播放的历史记录项，确保包含匹配信息
+                // 创建一个专门用于流媒体播放的历史记录项，使用稳定的jellyfin://协议
                 final playableHistoryItem = WatchHistoryItem(
-                  filePath: streamUrl, // 直接使用流媒体URL而非jellyfin://协议
+                  filePath: historyItem.filePath, // 保持稳定的jellyfin://协议URL
                   animeName: historyItem.animeName,
                   episodeTitle: historyItem.episodeTitle,
                   episodeId: historyItem.episodeId,
@@ -1079,7 +1090,12 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                 try {
                   // *** 关键修改：先初始化播放器，在导航前 ***
                   debugPrint('初始化播放器 - 步骤1：开始');
-                  await videoPlayerState.initializePlayer(streamUrl, historyItem: playableHistoryItem);
+                  // 使用稳定的jellyfin://协议URL作为标识符，临时HTTP URL作为实际播放源
+                  await videoPlayerState.initializePlayer(
+                    historyItem.filePath, // 使用稳定的jellyfin://协议
+                    historyItem: playableHistoryItem,
+                    actualPlayUrl: streamUrl, // 临时HTTP流媒体URL仅用于播放
+                  );
                   debugPrint('初始化播放器 - 步骤1：完成');
                   
                   // 先提前通知TabChangeNotifier

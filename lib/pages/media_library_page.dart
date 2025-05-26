@@ -110,8 +110,14 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
       return;
     }
 
+    // 过滤掉Jellyfin媒体项（使用jellyfin://协议的项目）
+    // 让它们只出现在专门的Jellyfin媒体库标签页中
+    final filteredHistory = watchHistory.where((item) => 
+      !item.filePath.startsWith('jellyfin://')
+    ).toList();
+
     final Map<int, WatchHistoryItem> latestHistoryItemMap = {};
-    for (var item in watchHistory) {
+    for (var item in filteredHistory) {
       if (item.animeId != null) {
         if (latestHistoryItemMap.containsKey(item.animeId!)) {
           if (item.lastWatchTime.isAfter(latestHistoryItemMap[item.animeId!]!.lastWatchTime)) {

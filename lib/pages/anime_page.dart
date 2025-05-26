@@ -24,6 +24,7 @@ import '../widgets/history_all_modal.dart';
 import '../widgets/switchable_view.dart';
 import 'package:flutter/rendering.dart';
 import 'package:nipaplay/main.dart';
+import '../services/jellyfin_service.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -117,7 +118,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  void _onWatchHistoryItemTap(WatchHistoryItem item) {
+  void _onWatchHistoryItemTap(WatchHistoryItem item) async {
     debugPrint('[AnimePage] _onWatchHistoryItemTap: Received item: $item');
     debugPrint('[AnimePage] item.animeName: ${item.animeName}');
     debugPrint('[AnimePage] item.filePath: ${item.filePath}');
@@ -125,47 +126,82 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   
     bool tabChangeLogicExecuted = false; // Flag to ensure one-shot execution
 
-    // 检查文件是否存在
-    final videoFile = File(item.filePath);
-    bool fileExists = videoFile.existsSync();
+    // 检查是否为网络URL或Jellyfin协议URL
+    final isNetworkUrl = item.filePath.startsWith('http://') || item.filePath.startsWith('https://');
+    final isJellyfinProtocol = item.filePath.startsWith('jellyfin://');
     
-    // 在iOS系统上，有时文件路径可能会有/private前缀，或者没有这个前缀，尝试两种路径
+    bool fileExists = false;
     String filePath = item.filePath;
-    if (!fileExists && Platform.isIOS) {
-      String altPath = filePath;
-      if (filePath.startsWith('/private')) {
-        // 尝试去掉/private前缀
-        altPath = filePath.replaceFirst('/private', '');
-      } else {
-        // 尝试添加/private前缀
-        altPath = '/private$filePath';
-      }
+    String? actualPlayUrl;
+    
+    if (isNetworkUrl || isJellyfinProtocol) {
+      // 对于网络URL和Jellyfin协议，跳过本地文件检查
+      fileExists = true;
+      debugPrint('[AnimePage] 检测到流媒体URL，跳过文件存在性检查: ${item.filePath}');
       
-      final File altFile = File(altPath);
-      fileExists = altFile.existsSync();
-      if (fileExists) {
-        // 如果找到了文件，更新路径
-        filePath = altPath;
-        // 创建新的项目以便传递更新后的路径
-        item = WatchHistoryItem(
-          filePath: filePath,
-          animeName: item.animeName,
-          episodeTitle: item.episodeTitle,
-          episodeId: item.episodeId,
-          animeId: item.animeId,
-          watchProgress: item.watchProgress,
-          lastPosition: item.lastPosition,
-          duration: item.duration,
-          lastWatchTime: item.lastWatchTime,
-          thumbnailPath: item.thumbnailPath,
-          isFromScan: item.isFromScan,
-        );
+      // 如果是Jellyfin协议，需要获取实际的HTTP流媒体URL
+      if (isJellyfinProtocol) {
+        try {
+          // 从jellyfin://协议URL中提取itemId
+          final jellyfinId = item.filePath.replaceFirst('jellyfin://', '');
+          debugPrint('[AnimePage] 解析Jellyfin ID: $jellyfinId');
+          
+          // 使用JellyfinService获取实际的HTTP流媒体URL
+          final jellyfinService = JellyfinService.instance;
+          if (jellyfinService.isConnected) {
+            actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            debugPrint('[AnimePage] 获取到Jellyfin流媒体URL: $actualPlayUrl');
+          } else {
+            BlurSnackBar.show(context, '未连接到Jellyfin服务器');
+            return;
+          }
+        } catch (e) {
+          debugPrint('[AnimePage] 获取Jellyfin流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取流媒体URL失败: $e');
+          return;
+        }
+      }
+    } else {
+      // 对于本地文件进行存在性检查
+      final videoFile = File(item.filePath);
+      fileExists = videoFile.existsSync();
+      
+      // 在iOS系统上，有时文件路径可能会有/private前缀，或者没有这个前缀，尝试两种路径
+      if (!fileExists && Platform.isIOS) {
+        String altPath = filePath;
+        if (filePath.startsWith('/private')) {
+          // 尝试去掉/private前缀
+          altPath = filePath.replaceFirst('/private', '');
+        } else {
+          // 尝试添加/private前缀
+          altPath = '/private$filePath';
+        }
+        
+        final File altFile = File(altPath);
+        fileExists = altFile.existsSync();
+        if (fileExists) {
+          // 如果找到了文件，更新路径
+          filePath = altPath;
+          // 创建新的项目以便传递更新后的路径
+          item = WatchHistoryItem(
+            filePath: filePath,
+            animeName: item.animeName,
+            episodeTitle: item.episodeTitle,
+            episodeId: item.episodeId,
+            animeId: item.animeId,
+            watchProgress: item.watchProgress,
+            lastPosition: item.lastPosition,
+            duration: item.duration,
+            lastWatchTime: item.lastWatchTime,
+            thumbnailPath: item.thumbnailPath,
+            isFromScan: item.isFromScan,
+          );
+        }
       }
     }
     
     if (!fileExists) {
       BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(item.filePath)}');
-      // 考虑从历史记录中移除这个项目，或标记为不可用
       return;
     }
 
@@ -263,7 +299,14 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     videoState.addListener(statusListener);
     videoState.addListener(playbackFinishListener);
     debugPrint('[AnimePage] _onWatchHistoryItemTap: Added statusListener and playbackFinishListener. Calling initializePlayer.');
-    videoState.initializePlayer(item.filePath, historyItem: item);
+    
+    // 根据是否是Jellyfin流媒体决定传递参数
+    if (isJellyfinProtocol && actualPlayUrl != null) {
+      debugPrint('[AnimePage] 使用Jellyfin流媒体URL播放: $actualPlayUrl');
+      videoState.initializePlayer(item.filePath, historyItem: item, actualPlayUrl: actualPlayUrl);
+    } else {
+      videoState.initializePlayer(item.filePath, historyItem: item);
+    }
   }
 
   String _formatDuration(Duration duration) {
@@ -599,9 +642,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                         children: [
                           // 显示动画名称，如果没有则显示文件名
                           Text(
-                            item.animeName.isEmpty
-                                ? path.basename(item.filePath)
-                                : item.animeName,
+                            item.animeName.isNotEmpty ? item.animeName : path.basename(item.filePath),
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
