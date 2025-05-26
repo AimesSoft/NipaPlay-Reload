@@ -742,23 +742,49 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       onPressed: scanService.isScanning ? null : _checkAndShowPermissionStatus,
                     ),
                   IconButton(
+                    icon: const Icon(Icons.cleaning_services),
+                    color: Colors.white70,
+                    onPressed: scanService.isScanning ? null : () async {
+                      final confirm = await BlurDialog.show<bool>(
+                        context: context,
+                        title: '清理智能扫描缓存',
+                        content: '这将清理所有文件夹的变化检测缓存，下次扫描时将重新检查所有文件夹。\n\n适用于：\n• 怀疑智能扫描遗漏了某些变化\n• 想要强制重新扫描所有文件夹\n\n确定要清理缓存吗？',
+                        actions: <Widget>[
+                          TextButton(
+                            child: const Text('取消', style: TextStyle(color: Colors.white70)),
+                            onPressed: () => Navigator.of(context).pop(false),
+                          ),
+                          TextButton(
+                            child: const Text('清理', style: TextStyle(color: Colors.orangeAccent)),
+                            onPressed: () => Navigator.of(context).pop(true),
+                          ),
+                        ],
+                      );
+                      if (confirm == true) {
+                        await scanService.clearAllFolderHashCache();
+                        if (mounted) {
+                          BlurSnackBar.show(context, '智能扫描缓存已清理');
+                        }
+                      }
+                    },
+                  ),
+                  IconButton(
                     icon: const Icon(Ionicons.refresh_outline),
-                    tooltip: '刷新所有媒体库',
                     color: Colors.white70,
                     onPressed: scanService.isScanning 
                         ? null 
                         : () async {
                             final confirm = await BlurDialog.show<bool>(
                               context: context,
-                              title: '确认刷新',
-                              content: '将重新扫描所有已添加的媒体文件夹（跳过已匹配且未观看的），这可能需要一些时间。',
+                              title: '智能刷新确认',
+                              content: '将使用智能扫描技术重新检查所有已添加的媒体文件夹：\n\n• 自动检测文件夹内容变化\n• 只扫描有新增、删除或修改文件的文件夹\n• 跳过无变化的文件夹，大幅提升扫描速度\n• 可选择跳过已匹配且未观看的文件\n\n这可能需要一些时间，但比传统全量扫描快很多。',
                               actions: <Widget>[
                                 TextButton(
                                   child: const Text('取消', style: TextStyle(color: Colors.white70)),
                                   onPressed: () => Navigator.of(context).pop(false),
                                 ),
                                 TextButton(
-                                  child: const Text('全部刷新', style: TextStyle(color: Colors.lightBlueAccent)),
+                                  child: const Text('智能刷新', style: TextStyle(color: Colors.lightBlueAccent)),
                                   onPressed: () => Navigator.of(context).pop(true),
                                 ),
                               ],
@@ -850,6 +876,122 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               ],
             ),
           ),
+        // 显示启动时检测到的变化
+        if (scanService.detectedChanges.isNotEmpty && !scanService.isScanning)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: GlassmorphicContainer(
+              width: double.infinity,
+              height: 50,
+              borderRadius: 12,
+              blur: 10,
+              alignment: Alignment.centerLeft,
+              border: 1,
+              linearGradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.orange.withOpacity(0.15),
+                  Colors.orange.withOpacity(0.05),
+                ],
+              ),
+              borderGradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.orange.withOpacity(0.3),
+                  Colors.orange.withOpacity(0.1),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.notification_important, color: Colors.orange, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          "检测到文件夹变化",
+                          style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => scanService.clearDetectedChanges(),
+                          child: const Text("忽略", style: TextStyle(color: Colors.white70)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      scanService.getChangeDetectionSummary(),
+                      style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                    const SizedBox(height: 12),
+                    ...scanService.detectedChanges.map((change) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  change.displayName,
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                                ),
+                                Text(
+                                  change.changeDescription,
+                                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              // 扫描这个有变化的文件夹
+                              await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
+                              if (mounted) {
+                                BlurSnackBar.show(context, '已开始扫描: ${change.displayName}');
+                              }
+                            },
+                            child: const Text("扫描", style: TextStyle(color: Colors.lightBlueAccent)),
+                          ),
+                        ],
+                      ),
+                    )).toList(),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              // 扫描所有有变化的文件夹
+                              for (final change in scanService.detectedChanges) {
+                                if (change.changeType != 'deleted') {
+                                  await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
+                                }
+                              }
+                              scanService.clearDetectedChanges();
+                              if (mounted) {
+                                BlurSnackBar.show(context, '已开始扫描所有有变化的文件夹');
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.lightBlueAccent.withOpacity(0.2),
+                              foregroundColor: Colors.lightBlueAccent,
+                            ),
+                            child: const Text("扫描所有变化"),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         Expanded(
           child: scanService.scannedFolders.isEmpty && !scanService.isScanning
               ? const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)))
@@ -904,7 +1046,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                       final confirm = await BlurDialog.show<bool>(
                                         context: context,
                                         title: '确认扫描',
-                                        content: '将对文件夹 "${p.basename(folderPath)}" 进行全面扫描，这可能需要一些时间。',
+                                        content: '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n• 检测文件夹内容是否有变化\n• 如无变化将快速跳过\n• 如有变化将进行全面扫描\n\n开始扫描？',
                                         actions: <Widget>[
                                           TextButton(
                                             child: const Text('取消', style: TextStyle(color: Colors.white70)),
@@ -919,7 +1061,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                       if (confirm == true) {
                                         await scanService.startDirectoryScan(folderPath, skipPreviouslyMatchedUnwatched: false);
                                         if (mounted) {
-                                          BlurSnackBar.show(context, '已开始全面扫描: ${p.basename(folderPath)}');
+                                          BlurSnackBar.show(context, '已开始智能扫描: ${p.basename(folderPath)}');
                                         }
                                       }
                                     },
@@ -991,7 +1133,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                         final confirm = await BlurDialog.show<bool>(
                                           context: context,
                                           title: '确认扫描',
-                                          content: '将对文件夹 "${p.basename(folderPath)}" 进行全面扫描，这可能需要一些时间。',
+                                          content: '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n• 检测文件夹内容是否有变化\n• 如无变化将快速跳过\n• 如有变化将进行全面扫描\n\n开始扫描？',
                                           actions: <Widget>[
                                             TextButton(
                                               child: const Text('取消', style: TextStyle(color: Colors.white70)),
@@ -1006,7 +1148,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                         if (confirm == true) {
                                           await scanService.startDirectoryScan(folderPath, skipPreviouslyMatchedUnwatched: false);
                                           if (mounted) {
-                                            BlurSnackBar.show(context, '已开始全面扫描: ${p.basename(folderPath)}');
+                                            BlurSnackBar.show(context, '已开始智能扫描: ${p.basename(folderPath)}');
                                           }
                                         }
                                       },
