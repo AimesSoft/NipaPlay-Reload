@@ -278,7 +278,16 @@ void main() async {
     
     // 初始化观看记录管理器
     WatchHistoryManager.initialize(),
-  ]).then((results) {
+  ]).then((results) async {
+    // BangumiService初始化完成后，检查并刷新缺少标签的缓存
+    Future.microtask(() async {
+      try {
+        await BangumiService.instance.checkAndRefreshCacheWithoutTags();
+      } catch (e) {
+        debugPrint('检查缓存标签失败: $e');
+      }
+    });
+    
     // 处理主题模式设置
     String savedThemeMode = results[1] as String;
     ThemeMode initialThemeMode;
