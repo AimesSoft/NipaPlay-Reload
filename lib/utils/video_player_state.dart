@@ -407,7 +407,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                   duration: const Duration(milliseconds: 150),
                   left: videoState.isVolumeUIVisible ? 35.0 : 0.0, // Position on left, slide out left
                   top: globals.isPhone ? 100.0 : 250.0,
-                  bottom: globals.isPhone ? 100.0 : 250.0,
+                  bottom: globals.isPhone ? 100.0 : null,
                   child: const VolumeIndicator(), // Uses isVolumeUIVisible internally for opacity
                 );
               },
