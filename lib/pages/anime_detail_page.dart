@@ -16,6 +16,7 @@ import 'dart:io'; // Added for File operations
 // import '../utils/tab_change_notifier.dart'; // Removed from here
 import '../providers/appearance_settings_provider.dart'; // 添加外观设置Provider
 import '../widgets/switchable_view.dart'; // 添加SwitchableView组件
+import '../widgets/tag_search_widget.dart'; // 添加标签搜索组件
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -437,24 +438,31 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           ...titlesWidgets,
           if (anime.tags != null && anime.tags!.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text('标签:', style: sectionTitleStyle),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('标签:', style: sectionTitleStyle),
+                IconButton(
+                  onPressed: () => _openTagSearch(),
+                  icon: const Icon(
+                    Ionicons.search,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             Wrap(
                 spacing: 8.0,
                 runSpacing: 4.0,
                 children: anime.tags!
-                    .map((tag) => Chip(
-                        label: Text(tag,
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.white70)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        visualDensity: VisualDensity.compact,
-                        backgroundColor: Colors.white.withOpacity(0.15),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(
-                                color: Colors.white.withOpacity(0.3)))))
+                    .map((tag) => _HoverableTag(
+                          tag: tag,
+                          onTap: () => _searchByTag(tag),
+                        ))
                     .toList())
           ],
           const SizedBox(height: 20),
@@ -730,6 +738,131 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             ],
           ),
           child: _buildContent(),
+        ),
+      ),
+    );
+  }
+
+  // 打开标签搜索页面
+  void _openTagSearch() {
+    // 获取当前番剧的标签列表
+    final currentTags = _detailedAnime?.tags ?? [];
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => TagSearchModal(
+        preselectedTags: currentTags,
+        onBeforeOpenAnimeDetail: () {
+          // 关闭当前的番剧详情页面
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
+  // 通过单个标签搜索
+  void _searchByTag(String tag) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => TagSearchModal(
+        prefilledTag: tag,
+        onBeforeOpenAnimeDetail: () {
+          // 关闭当前的番剧详情页面
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+}
+
+// 可悬浮的标签widget
+class _HoverableTag extends StatefulWidget {
+  final String tag;
+  final VoidCallback onTap;
+
+  const _HoverableTag({
+    required this.tag,
+    required this.onTap,
+  });
+
+  @override
+  State<_HoverableTag> createState() => _HoverableTagState();
+}
+
+class _HoverableTagState extends State<_HoverableTag> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          child: IntrinsicWidth(
+            child: IntrinsicHeight(
+              child: GlassmorphicContainer(
+                width: double.infinity,
+                height: double.infinity,
+                borderRadius: 20,
+                blur: 20,
+                alignment: Alignment.center,
+                border: 1,
+                linearGradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: _isHovered 
+                      ? [
+                          Colors.white.withOpacity(0.25),
+                          Colors.white.withOpacity(0.15),
+                        ]
+                      : [
+                          Colors.white.withOpacity(0.1),
+                          Colors.white.withOpacity(0.05),
+                        ],
+                ),
+                borderGradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: _isHovered
+                      ? [
+                          Colors.white.withOpacity(0.8),
+                          Colors.white.withOpacity(0.4),
+                        ]
+                      : [
+                          Colors.white.withOpacity(0.5),
+                          Colors.white.withOpacity(0.2),
+                        ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  child: Text(
+                    widget.tag,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _isHovered 
+                          ? Colors.white 
+                          : Colors.white.withOpacity(0.9),
+                      fontWeight: _isHovered 
+                          ? FontWeight.w600 
+                          : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

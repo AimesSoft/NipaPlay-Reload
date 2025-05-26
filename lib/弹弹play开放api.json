@@ -1196,13 +1196,13 @@
           "搜索"
         ],
         "summary": "根据标签搜索最匹配的作品",
-        "description": "### 接口说明\n根据用户提供的标签列表搜索到对应的作品信息，搜索结果中不包含剧集信息。\n\n### 权限需求\n不需要登录状态即可使用。返回中的`isFavorited`属性目前都为`false`。\n            \n### 返回值\n将返回根据提供的标签列表最匹配的作品列表。\n\n### 参数说明\n`tags`参数必须为标签ID使用逗号连接起来，例如想查询拥有 15、20、66、108 标签的作品，需要传入 `15,20,66,108`。\n参数不能包含除数字与逗号之外其他的字符。",
+        "description": "### 接口说明\n根据用户提供的标签列表搜索到对应的作品信息，搜索结果中不包含剧集信息。\n\n### 权限需求\n不需要登录状态即可使用。返回中的`isFavorited`属性目前都为`false`。\n            \n### 返回值\n将返回根据提供的标签列表最匹配的作品列表。\n            \n### 标签说明\n支持查询多个标签，标签之间用英文逗号分隔。每个标签的长度不超过50个字符。标签数量不超过10个。\n标签将区分大小写，且不支持模糊查询。",
         "operationId": "Search_SearchAnimeByTag",
         "parameters": [
           {
             "name": "tags",
             "in": "query",
-            "description": "标签列表。格式请见接口说明。",
+            "description": "标签列表。",
             "schema": {
               "type": "string"
             },
@@ -1215,7 +1215,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchAnimeResponse"
+                  "$ref": "#/components/schemas/SearchBangumiResponse"
                 }
               }
             }
@@ -3398,6 +3398,63 @@
           }
         }
       },
+      "SearchBangumiResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponseBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "bangumis": {
+                "type": "array",
+                "description": "搜索结果",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/SearchBangumiDetails"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SearchBangumiDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SearchAnimeDetails"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rank": {
+                "type": "integer",
+                "description": "搜索结果中的排名，用于界面中排序展示，从1开始递增",
+                "format": "int32"
+              },
+              "searchKeyword": {
+                "type": "string",
+                "description": "搜索关键词",
+                "nullable": true
+              },
+              "isOnAir": {
+                "type": "boolean",
+                "description": "是否正在连载中"
+              },
+              "isRestricted": {
+                "type": "boolean",
+                "description": "是否为限制级别的内容（例如属于R18分级）"
+              },
+              "intro": {
+                "type": "string",
+                "description": "短简介（剧情简介或Staff简介）",
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
       "SearchAdvancedConfigResponse": {
         "allOf": [
           {
@@ -3461,58 +3518,6 @@
             "nullable": true
           }
         }
-      },
-      "SearchBangumiResponse": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ResponseBase"
-          },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "bangumis": {
-                "type": "array",
-                "description": "搜索结果",
-                "nullable": true,
-                "items": {
-                  "$ref": "#/components/schemas/SearchBangumiDetails"
-                }
-              }
-            }
-          }
-        ]
-      },
-      "SearchBangumiDetails": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/SearchAnimeDetails"
-          },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "rank": {
-                "type": "integer",
-                "description": "搜索结果中的排名，用于界面中排序展示，从1开始递增",
-                "format": "int32"
-              },
-              "searchKeyword": {
-                "type": "string",
-                "description": "搜索关键词",
-                "nullable": true
-              },
-              "isOnAir": {
-                "type": "boolean",
-                "description": "是否正在连载中"
-              },
-              "isRestricted": {
-                "type": "boolean",
-                "description": "是否为限制级别的内容（例如属于R18分级）"
-              }
-            }
-          }
-        ]
       },
       "UserUpdateProfileResponseV2": {
         "allOf": [
