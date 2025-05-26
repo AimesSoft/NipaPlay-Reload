@@ -24,6 +24,7 @@ import 'package:nipaplay/widgets/floating_action_glass_button.dart';
 import '../widgets/blur_snackbar.dart';
 import '../widgets/anime_card.dart';
 import 'package:nipaplay/main.dart';
+import '../widgets/tag_search_widget.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -62,6 +63,16 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     setState(() {
       _isReversed = !_isReversed;
     });
+  }
+
+  // 显示搜索模态框
+  void _showSearchModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const TagSearchModal(),
+    );
   }
 
   // 添加星期几的映射
@@ -405,9 +416,21 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         Positioned(
           right: 16,
           bottom: 16,
-          child: FloatingActionGlassButton(
-            iconData: _isReversed ? Ionicons.chevron_up_outline : Ionicons.chevron_down_outline,
-            onPressed: _toggleSort,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 搜索按钮
+              FloatingActionGlassButton(
+                iconData: Ionicons.search_outline,
+                onPressed: _showSearchModal,
+              ),
+              const SizedBox(height: 16), // 按钮之间的间距
+              // 排序按钮
+              FloatingActionGlassButton(
+                iconData: _isReversed ? Ionicons.chevron_up_outline : Ionicons.chevron_down_outline,
+                onPressed: _toggleSort,
+              ),
+            ],
           ),
         ),
       ],
