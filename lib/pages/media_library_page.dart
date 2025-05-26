@@ -11,13 +11,11 @@ import 'package:shared_preferences/shared_preferences.dart'; // For image URL pe
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/services/jellyfin_service.dart'; // 添加Jellyfin服务
-import 'package:nipaplay/models/jellyfin_model.dart'; // 添加Jellyfin模型
-import 'package:nipaplay/pages/jellyfin_detail_page.dart'; // 添加Jellyfin详情页面
-import 'package:nipaplay/widgets/jellyfin_server_dialog.dart'; // 添加Jellyfin服务器设置对话框
-import 'dart:io'; // 添加Platform导入
-import 'dart:async'; // 添加异步支持
-import 'package:nipaplay/providers/jellyfin_provider.dart'; // 确保此导入存在
+import 'package:nipaplay/widgets/jellyfin_server_dialog.dart'; 
+import 'dart:io'; 
+import 'dart:async'; 
+import 'package:nipaplay/providers/jellyfin_provider.dart'; 
+import 'package:nipaplay/widgets/jellyfin_media_library_view.dart'; // Import the new widget
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -38,21 +36,21 @@ class MediaLibraryPage extends StatefulWidget {
 
 class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepAliveClientMixin {
   List<WatchHistoryItem> _uniqueLibraryItems = []; 
-  Map<int, String> _persistedImageUrls = {}; // Loaded from SharedPreferences
-  final Map<int, BangumiAnime> _fetchedFullAnimeData = {}; // Freshly fetched in this session
-  bool _isLoadingInitial = true; // For the initial list from history
+  Map<int, String> _persistedImageUrls = {}; 
+  final Map<int, BangumiAnime> _fetchedFullAnimeData = {}; 
+  bool _isLoadingInitial = true; 
   String? _error;
-  // No longer a single _isLoading; initial load and background fetches are separate concerns.
+  
   final ScrollController _gridScrollController = ScrollController();
 
   static const String _prefsKeyPrefix = 'media_library_image_url_';
   
   // Jellyfin相关状态
-  List<JellyfinMediaItem> _jellyfinMediaItems = [];
-  bool _isLoadingJellyfin = false;
-  String? _jellyfinError;
-  bool _isJellyfinConnected = false;
-  Timer? _jellyfinRefreshTimer;
+  // List<JellyfinMediaItem> _jellyfinMediaItems = []; // MOVED to JellyfinMediaLibraryView
+  // bool _isLoadingJellyfin = false; // MOVED to JellyfinMediaLibraryView
+  // String? _jellyfinError; // MOVED to JellyfinMediaLibraryView
+  bool _isJellyfinConnected = false; // KEEP - to control tab visibility
+  // Timer? _jellyfinRefreshTimer; // MOVED to JellyfinMediaLibraryView
 
   @override
   bool get wantKeepAlive => true;
@@ -63,10 +61,10 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadInitialMediaLibraryData();
-        _loadJellyfinData(); // 初始加载
+        // _loadJellyfinData(); // REMOVED - JellyfinMediaLibraryView handles its own loading
 
-        // 添加对JellyfinProvider的监听
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+        _isJellyfinConnected = jellyfinProvider.isConnected; // Initialize
         jellyfinProvider.addListener(_onJellyfinProviderChanged);
       }
     });
@@ -74,28 +72,30 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
 
   @override
   void dispose() {
-    // 移除JellyfinProvider的监听器
-    // 使用try-catch是一个好习惯，以防Provider在Widget之前被销毁
     try {
-      if (mounted) { // 确保widget仍然挂载
+      if (mounted) { 
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
         jellyfinProvider.removeListener(_onJellyfinProviderChanged);
       }
     } catch (e) {
+      // ignore: avoid_print
       print("移除JellyfinProvider监听器时出错: $e");
     }
 
     _gridScrollController.dispose();
-    _jellyfinRefreshTimer?.cancel();
+    // _jellyfinRefreshTimer?.cancel(); // REMOVED
     super.dispose();
   }
 
-  // 当JellyfinProvider状态改变时调用
   void _onJellyfinProviderChanged() {
     if (mounted) {
-      // 当JellyfinProvider通知更改时（例如连接状态、选择的库），
-      // 重新加载Jellyfin数据。
-      _loadJellyfinData();
+      final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+      if (_isJellyfinConnected != jellyfinProvider.isConnected) {
+        setState(() {
+          _isJellyfinConnected = jellyfinProvider.isConnected;
+        });
+      }
+      // _loadJellyfinData(); // REMOVED - JellyfinMediaLibraryView handles its own loading
     }
   }
 
@@ -181,76 +181,14 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
     }
   }
   
-  // 加载Jellyfin数据
-  Future<void> _loadJellyfinData() async {
-    // 使用 Provider 的状态来决定是否加载，因为 Provider 是我们监听的源头
-    // listen: false 因为我们是通过 addListener 手动监听，而不是在 build 方法中依赖它
-    final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-    final jellyfinService = JellyfinService.instance; // Service 仍然是获取媒体项的实际执行者
-
-    // 根据Provider的状态来判断
-    if (!jellyfinProvider.isConnected || jellyfinProvider.selectedLibraryIds.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _isJellyfinConnected = false; // 更新UI状态以反映Provider的状态
-          _jellyfinMediaItems = [];
-          _isLoadingJellyfin = false; // 确保停止加载指示器
-          _jellyfinError = null; // 清除之前的错误
-        });
-      }
-      return;
-    }
-
-    // 如果执行到这里，说明Provider已连接并且有选中的媒体库
-    if (mounted) {
-      setState(() {
-        _isJellyfinConnected = true; // 确保UI状态与Provider一致
-        _isLoadingJellyfin = true;
-        _jellyfinError = null;
-      });
-    }
-
-    try {
-      // 使用Service获取数据。Service中的selectedLibraryIds应该已经被Provider更新过了。
-      final mediaItems = await jellyfinService.getLatestMediaItems(limit: 200);
-
-      if (mounted) {
-        setState(() {
-          _jellyfinMediaItems = mediaItems;
-          _isLoadingJellyfin = false;
-        });
-      }
-
-      _setupJellyfinRefreshTimer();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _jellyfinError = e.toString();
-          _isLoadingJellyfin = false;
-          // 发生错误时，也可以考虑根据错误类型更新 _isJellyfinConnected 状态
-        });
-      }
-    }
-  }
-  
-  void _setupJellyfinRefreshTimer() {
-    // 取消现有的定时器
-    _jellyfinRefreshTimer?.cancel();
-    
-    // 每60分钟刷新一次
-    _jellyfinRefreshTimer = Timer.periodic(const Duration(minutes: 60), (timer) {
-      _loadJellyfinData();
-    });
-  }
-  
-  // 显示Jellyfin服务器设置对话框
   Future<void> _showJellyfinServerDialog() async {
-    final result = await JellyfinServerDialog.show(context);
-    
-    if (result == true) {
-      // 如果对话框返回true，表示已进行更改，需要刷新数据
-      _loadJellyfinData();
-    }
+    // This dialog might change JellyfinProvider state.
+    // The _onJellyfinProviderChanged listener will update _isJellyfinConnected if needed.
+    // The JellyfinMediaLibraryView will also listen to JellyfinProvider for its own updates.
+    await JellyfinServerDialog.show(context);
+    // If JellyfinServerDialog.show(context) returns a value indicating change,
+    // you could use it to explicitly call _onJellyfinProviderChanged or setState,
+    // but relying on the provider listener is generally cleaner.
   }
 
   Future<void> _fetchAndPersistFullDetailsInBackground() async {
@@ -367,31 +305,20 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
     }
   }
   
-  // 导航到Jellyfin媒体详情页
-  void _navigateToJellyfinDetail(String jellyfinId) {
-    JellyfinDetailPage.show(context, jellyfinId).then((WatchHistoryItem? result) {
-      if (result != null && result.filePath.isNotEmpty) {
-        // 调用播放回调
-        widget.onPlayEpisode?.call(result);
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    super.build(context); // 需要调用super.build用于AutomaticKeepAliveClientMixin
+    super.build(context); 
     
     final List<Tab> tabs = [];
     final List<Widget> tabViews = [];
 
-    // 始终包含本地媒体库
     tabs.add(Tab(text: _isJellyfinConnected ? '本地媒体库' : '媒体库'));
     tabViews.add(_buildLocalMediaLibrary());
 
-    // 如果Jellyfin已连接，则添加Jellyfin标签页
     if (_isJellyfinConnected) {
       tabs.add(const Tab(text: 'Jellyfin'));
-      tabViews.add(_buildJellyfinMediaLibrary());
+      // tabViews.add(_buildJellyfinMediaLibrary()); // REPLACE THIS
+      tabViews.add(JellyfinMediaLibraryView(onPlayEpisode: widget.onPlayEpisode)); // USE THE NEW WIDGET
     }
     
     return DefaultTabController(
@@ -661,148 +588,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
           ],
         );
       },
-    );
-  }
-  
-  Widget _buildJellyfinMediaLibrary() {
-    final jellyfinService = JellyfinService.instance;
-    
-    if (_isLoadingJellyfin) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-    
-    if (_jellyfinError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('加载Jellyfin媒体库失败: $_jellyfinError', style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadJellyfinData,
-                child: const Text('重试'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    
-    if (_jellyfinMediaItems.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Jellyfin媒体库为空。\n请确保已选择媒体库并且包含内容。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 16),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _showJellyfinServerDialog,
-                icon: const Icon(Icons.settings),
-                label: const Text('设置Jellyfin服务器'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    
-    // 显示Jellyfin媒体列表
-    return Stack(
-      children: [
-        RepaintBoundary(
-          child: Platform.isAndroid || Platform.isIOS 
-          ? GridView.builder(
-              controller: _gridScrollController,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 150, 
-                childAspectRatio: 7/12,   
-                crossAxisSpacing: 8,      
-                mainAxisSpacing: 8,       
-              ),
-              padding: const EdgeInsets.all(0),
-              cacheExtent: 800,
-              clipBehavior: Clip.hardEdge,
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: true,
-              itemCount: _jellyfinMediaItems.length,
-              itemBuilder: (context, index) {
-                // 保留优化渲染逻辑，与本地媒体库一致
-                final useOptimizedRendering = index > 11;
-                final mediaItem = _jellyfinMediaItems[index];
-                final imageUrl = mediaItem.imagePrimaryTag != null
-                  ? jellyfinService.getImageUrl(mediaItem.id, width: 300)
-                  : '';
-                
-                return AnimeCard(
-                  key: ValueKey('jellyfin_${mediaItem.id}'), 
-                  name: mediaItem.name, 
-                  imageUrl: imageUrl,
-                  onTap: () {
-                    _navigateToJellyfinDetail(mediaItem.id);
-                  },
-                );
-              },
-            )
-          : Scrollbar(
-              controller: _gridScrollController,
-              thickness: 4,
-              radius: const Radius.circular(2),
-              child: GridView.builder(
-                controller: _gridScrollController,
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 150, 
-                  childAspectRatio: 7/12,   
-                  crossAxisSpacing: 8,      
-                  mainAxisSpacing: 8,       
-                ),
-                padding: const EdgeInsets.all(0),
-                cacheExtent: 800,
-                clipBehavior: Clip.hardEdge,
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                addAutomaticKeepAlives: false,
-                addRepaintBoundaries: true,
-                itemCount: _jellyfinMediaItems.length,
-                itemBuilder: (context, index) {
-                  final mediaItem = _jellyfinMediaItems[index];
-                  final imageUrl = mediaItem.imagePrimaryTag != null
-                    ? jellyfinService.getImageUrl(mediaItem.id, width: 300)
-                    : '';
-                  
-                  return AnimeCard(
-                    key: ValueKey('jellyfin_${mediaItem.id}'), 
-                    name: mediaItem.name, 
-                    imageUrl: imageUrl,
-                    onTap: () {
-                      _navigateToJellyfinDetail(mediaItem.id);
-                    },
-                  );
-                },
-              ),
-            ),
-        ),
-        
-        // 右下角悬浮按钮，用于设置Jellyfin服务器
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton(
-            onPressed: _showJellyfinServerDialog,
-            tooltip: '设置Jellyfin服务器',
-            child: const Icon(Icons.settings),
-          ),
-        ),
-      ],
     );
   }
 }
