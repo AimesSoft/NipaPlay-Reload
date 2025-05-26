@@ -385,7 +385,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
     final List<Widget> tabViews = [];
 
     // 始终包含本地媒体库
-    tabs.add(const Tab(text: '媒体库'));
+    tabs.add(Tab(text: _isJellyfinConnected ? '本地媒体库' : '媒体库'));
     tabViews.add(_buildLocalMediaLibrary());
 
     // 如果Jellyfin已连接，则添加Jellyfin标签页
@@ -403,9 +403,19 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
           if (tabs.length > 1) 
             TabBar(
               tabs: tabs, // 使用构建好的 tabs 列表
+              isScrollable: true,
               labelColor: Colors.white,
-              unselectedLabelColor: Colors.white60,
-              indicatorColor: Colors.blue,
+              dividerHeight: 3.0,
+              dividerColor: const Color.fromARGB(59, 255, 255, 255),
+              indicatorPadding: const EdgeInsets.only(
+                top: 45, left: 0, right: 0),
+              indicator: BoxDecoration(
+                color: const Color.fromRGBO(39, 157, 245, 1),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              unselectedLabelColor: Colors.white.withOpacity(0.7),
+              tabAlignment: TabAlignment.start,
+              padding: EdgeInsets.zero,
             ),
           
           Expanded(
