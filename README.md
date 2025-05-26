@@ -36,8 +36,10 @@
 ## 下载
 - **Windows（x86 64）/Linux（amd64）/macOS（Intel&Apple Silicon）/Android（arm32&arm64&x86 64）/IOS（arm64）**
   - [GitHub Releases](https://github.com/mcdfsteve/nipaplay-reload/releases)
-- **Arch Linux（amd64）**
-  - [AUR](https://aur.archlinux.org/packages/nipaplay-reload-bin)
+- **Arch Linux**
+  ```
+  paru -S nipaplay-reload-bin
+  ```
 ## 应用截图
 <div align="center">
   <p><strong>主界面</strong></p>
