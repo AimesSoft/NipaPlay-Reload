@@ -4,6 +4,7 @@ import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
+import 'subtitle_parser.dart'; // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
@@ -28,7 +29,7 @@ import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brigh
 import '../widgets/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
 import '../widgets/volume_indicator.dart'; // Added import for VolumeIndicator widget
 import '../widgets/seek_indicator.dart'; // Added import for SeekIndicator widget
-import 'subtitle_parser.dart'; // Added import for subtitle parser
+
 import 'subtitle_manager.dart'; // 导入字幕管理器
 import '../services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
@@ -70,7 +71,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const String _lastVideoKey = 'last_video_path';
   static const String _lastPositionKey = 'last_video_position';
   static const String _videoPositionsKey = 'video_positions';
-  static const int _textureIdCounter = 0;
+
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   List<Map<String, dynamic>> _danmakuList = [];
   static const String _controlBarHeightKey = 'control_bar_height';
@@ -105,6 +106,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final List<VoidCallback> _thumbnailUpdateListeners = []; // 缩略图更新监听器列表
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性
+  
+  // 从 historyItem 传入的弹幕 ID（用于保持弹幕关联）
+  int? _episodeId; // 存储从 historyItem 传入的 episodeId
+  int? _animeId; // 存储从 historyItem 传入的 animeId
   
   // 字幕管理器
   late SubtitleManager _subtitleManager;
@@ -561,7 +566,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   Future<void> initializePlayer(String videoPath,
-      {WatchHistoryItem? historyItem}) async {
+      {WatchHistoryItem? historyItem, String? historyFilePath, String? actualPlayUrl}) async {
     if (_status == PlayerStatus.loading ||
         _status == PlayerStatus.recognizing) {
       _setStatus(PlayerStatus.idle, message: "取消了之前的加载任务", clearPreviousMessages: true);
@@ -569,20 +574,40 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _clearPreviousVideoState(); // 清理旧状态
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
     
+    // 从 historyItem 中获取弹幕 ID
+    if (historyItem != null) {
+      _episodeId = historyItem.episodeId;
+      _animeId = historyItem.animeId;
+      debugPrint('VideoPlayerState: 从 historyItem 获取弹幕 ID - episodeId: $_episodeId, animeId: $_animeId');
+    } else {
+      _episodeId = null;
+      _animeId = null;
+      debugPrint('VideoPlayerState: 没有 historyItem，重置弹幕 ID');
+    }
+    
     // 检查是否为网络URL (HTTP或HTTPS)
     bool isNetworkUrl = videoPath.startsWith('http://') || videoPath.startsWith('https://');
     
-    // 对于本地文件才检查存在性
-    bool fileExists = isNetworkUrl; // 网络URL默认认为"存在"
+    // 检查是否是Jellyfin流媒体（jellyfin://协议或有actualPlayUrl参数且为HTTP URL）
+    bool isJellyfinStream = videoPath.startsWith('jellyfin://') || 
+                           (actualPlayUrl != null && 
+                           (actualPlayUrl.startsWith('http://') || actualPlayUrl.startsWith('https://')));
+    
+    // 对于本地文件才检查存在性，网络URL和Jellyfin流媒体默认认为"存在"
+    bool fileExists = isNetworkUrl || isJellyfinStream;
     
     // 为网络URL添加特定日志
     if (isNetworkUrl) {
       debugPrint('检测到流媒体URL: $videoPath');
       _statusMessages.add('正在准备流媒体播放...');
       notifyListeners();
+    } else if (isJellyfinStream) {
+      debugPrint('检测到Jellyfin流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
+      _statusMessages.add('正在准备Jellyfin流媒体播放...');
+      notifyListeners();
     }
     
-    if (!isNetworkUrl) {
+    if (!isNetworkUrl && !isJellyfinStream) {
       // 使用FilePickerService处理文件路径问题
       if (Platform.isIOS) {
         final filePickerService = FilePickerService();
@@ -622,7 +647,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         fileExists = videoFile.existsSync();
       }
     } else {
-      debugPrint('检测到网络URL: $videoPath');
+      debugPrint('检测到网络URL或Jellyfin流媒体: $videoPath');
     }
     
     if (!fileExists) {
@@ -632,11 +657,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       return;
     }
     
-    // 对网络URL进行特殊处理
+    // 对网络URL和Jellyfin流媒体进行特殊处理
     if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
       debugPrint('VideoPlayerState: 准备流媒体URL: $videoPath');
-      // 可以在这里添加特殊的网络流处理逻辑
-      
       // 添加网络错误处理的尝试/捕获块
       try {
         // 测试网络连接
@@ -644,6 +667,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       } catch (e) {
         // 如果网络请求失败，使用专门的错误处理逻辑
         await _handleStreamUrlLoadingError(videoPath, e is Exception ? e : Exception(e.toString()));
+        return; // 避免继续处理
+      }
+    } else if (isJellyfinStream && actualPlayUrl != null) {
+      debugPrint('VideoPlayerState: 准备Jellyfin流媒体URL: $actualPlayUrl');
+      // 对Jellyfin流媒体测试实际播放URL的连接
+      try {
+        await http.head(Uri.parse(actualPlayUrl));
+      } catch (e) {
+        // 如果网络请求失败，使用专门的错误处理逻辑
+        await _handleStreamUrlLoadingError(actualPlayUrl, e is Exception ? e : Exception(e.toString()));
         return; // 避免继续处理
       }
     }
@@ -655,6 +688,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     print('historyItem: $historyItem');
     _animeTitle = historyItem?.animeName; // 从历史记录获取动画标题
     _episodeTitle = historyItem?.episodeTitle; // 从历史记录获取集数标题
+    _episodeId = historyItem?.episodeId; // 保存从历史记录传入的 episodeId
+    _animeId = historyItem?.animeId; // 保存从历史记录传入的 animeId
     String message = '正在初始化播放器: ${p.basename(videoPath)}';
     if (_animeTitle != null) {
       message = '正在初始化播放器: $_animeTitle $_episodeTitle';
@@ -700,8 +735,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _setStatus(PlayerStatus.idle);
 
       //debugPrint('3. 设置媒体源...');
-      // 设置媒体源
-      player.media = videoPath;
+      // 设置媒体源 - 如果提供了actualPlayUrl则使用它，否则使用videoPath
+      String playUrl = actualPlayUrl ?? videoPath;
+      player.media = playUrl;
 
       //debugPrint('4. 准备播放器...');
       // 准备播放器
@@ -964,14 +1000,27 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final existingHistory = await WatchHistoryManager.getHistoryItem(path);
 
       if (existingHistory != null) {
-        // 如果已存在记录，只更新播放进度和时间相关信息，不更改动画信息
+        // 如果已存在记录，只更新播放进度和时间相关信息
+        // 对于Jellyfin流媒体，如果有友好名称，则使用友好名称
+        String finalAnimeName = existingHistory.animeName;
+        String? finalEpisodeTitle = existingHistory.episodeTitle;
+        
+        bool isJellyfinStream = path.startsWith('jellyfin://');
+        if (isJellyfinStream && _animeTitle != null && _animeTitle!.isNotEmpty) {
+          finalAnimeName = _animeTitle!;
+          if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
+            finalEpisodeTitle = _episodeTitle!;
+          }
+          debugPrint('_initializeWatchHistory: 使用Jellyfin友好名称: $finalAnimeName - $finalEpisodeTitle');
+        }
+        
         debugPrint(
-            '已有观看记录存在，只更新播放进度: 动画=${existingHistory.animeName}, 集数=${existingHistory.episodeTitle}');
+            '已有观看记录存在，只更新播放进度: 动画=$finalAnimeName, 集数=$finalEpisodeTitle');
 
         final updatedHistory = WatchHistoryItem(
           filePath: existingHistory.filePath,
-          animeName: existingHistory.animeName,
-          episodeTitle: existingHistory.episodeTitle,
+          animeName: finalAnimeName,
+          episodeTitle: finalEpisodeTitle,
           episodeId: existingHistory.episodeId,
           animeId: existingHistory.animeId,
           watchProgress: _progress,
@@ -1011,6 +1060,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final item = WatchHistoryItem(
         filePath: path,
         animeName: initialAnimeName,
+        episodeId: _episodeId, // 使用从 historyItem 传入的 episodeId
+        animeId: _animeId, // 使用从 historyItem 传入的 animeId
         lastPosition: _position.inMilliseconds,
         duration: _duration.inMilliseconds,
         watchProgress: _progress,
@@ -1247,6 +1298,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _currentThumbnailPath = null;
     _animeTitle = null;
     _episodeTitle = null;
+    _episodeId = null; // 清除弹幕ID
+    _animeId = null; // 清除弹幕ID
     _danmakuList.clear();
     _subtitleManager.clearSubtitleTrackInfo();
     danmakuController
@@ -1277,6 +1330,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _currentThumbnailPath = null;
     _animeTitle = null;
     _episodeTitle = null;
+    _episodeId = null; // 清除弹幕ID
+    _animeId = null; // 清除弹幕ID
     _danmakuList.clear();
     _subtitleManager.clearSubtitleTrackInfo();
     danmakuController
@@ -1849,7 +1904,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         final fileName = path.split('/').last;
         String extractedName = fileName.replaceAll(
             RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$', caseSensitive: false), '');
-        extractedName = extractedName.replaceAll(RegExp(r'[_\.-]'), ' ');
+        extractedName = extractedName.replaceAll(RegExp(r'[_\.-]'), ' ').trim();
+
         resolvedAnimeName = extractedName.trim().isNotEmpty
             ? extractedName
             : "未知动画"; // 确保不会是空字符串
@@ -1970,8 +2026,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           filePath: existingHistory.filePath,
           animeName: existingHistory.animeName,
           episodeTitle: existingHistory.episodeTitle,
-          episodeId: existingHistory.episodeId,
-          animeId: existingHistory.animeId,
+          episodeId: _episodeId ?? existingHistory.episodeId, // 优先使用存储的 episodeId
+          animeId: _animeId ?? existingHistory.animeId, // 优先使用存储的 animeId
           watchProgress: _progress, // 更新当前进度
           lastPosition: _position.inMilliseconds, // 更新当前位置
           duration: _duration.inMilliseconds,
@@ -2399,12 +2455,27 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
 
         // 更新现有记录
+        // 对于Jellyfin流媒体，优先使用当前实例变量中的友好名称（如果有的话）
+        String finalAnimeName = existingHistory.animeName;
+        String? finalEpisodeTitle = existingHistory.episodeTitle;
+        
+        // 检查是否是Jellyfin流媒体并且当前有更好的名称
+        bool isJellyfinStream = _currentVideoPath!.startsWith('jellyfin://');
+        if (isJellyfinStream && _animeTitle != null && _animeTitle!.isNotEmpty) {
+          // 对于Jellyfin流媒体，如果当前有友好的动漫名称，则使用它
+          finalAnimeName = _animeTitle!;
+          if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
+            finalEpisodeTitle = _episodeTitle!;
+          }
+          debugPrint('VideoPlayerState: 使用Jellyfin友好名称更新记录: $finalAnimeName - $finalEpisodeTitle');
+        }
+        
         final updatedHistory = WatchHistoryItem(
           filePath: existingHistory.filePath,
-          animeName: existingHistory.animeName,
-          episodeTitle: existingHistory.episodeTitle,
-          episodeId: existingHistory.episodeId,
-          animeId: existingHistory.animeId,
+          animeName: finalAnimeName,
+          episodeTitle: finalEpisodeTitle,
+          episodeId: _episodeId ?? existingHistory.episodeId, // 优先使用存储的 episodeId
+          animeId: _animeId ?? existingHistory.animeId, // 优先使用存储的 animeId
           watchProgress: _progress,
           lastPosition: _position.inMilliseconds,
           duration: _duration.inMilliseconds,
@@ -2451,6 +2522,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         final newHistory = WatchHistoryItem(
           filePath: _currentVideoPath!,
           animeName: initialAnimeName,
+          episodeId: _episodeId, // 使用从 historyItem 传入的 episodeId
+          animeId: _animeId, // 使用从 historyItem 传入的 animeId
           watchProgress: _progress,
           lastPosition: _position.inMilliseconds,
           duration: _duration.inMilliseconds,
@@ -2554,7 +2627,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
 
         debugPrint(
-            '视频帧缩略图已保存: $thumbnailPath, 尺寸: ${targetWidth}x$targetHeight');
+            '视频帧缩略图已保存: $thumbnailPath, 尺寸: ${targetWidth}x${targetHeight}');
 
         // 更新当前缩略图路径
         _currentThumbnailPath = thumbnailPath;
@@ -2635,6 +2708,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         "Volume drag ended. Current volume: $_currentVolume");
   }
 
+  static const int _textureIdCounter = 0;
   static const double _volumeStep = 0.05; // 5% volume change per key press
 
   void increaseVolume({double? step}) {
