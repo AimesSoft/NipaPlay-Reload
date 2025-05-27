@@ -9,6 +9,8 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/widgets/jellyfin_server_dialog.dart';
+import 'package:nipaplay/widgets/floating_action_glass_button.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 class JellyfinMediaLibraryView extends StatefulWidget {
   final void Function(WatchHistoryItem item)? onPlayEpisode;
@@ -282,10 +284,9 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
         Positioned(
           right: 16,
           bottom: 16,
-          child: FloatingActionButton(
+          child: FloatingActionGlassButton(
+            iconData: Ionicons.settings_outline,
             onPressed: _showJellyfinServerDialog,
-            tooltip: '设置Jellyfin服务器',
-            child: const Icon(Icons.settings),
           ),
         ),
       ],

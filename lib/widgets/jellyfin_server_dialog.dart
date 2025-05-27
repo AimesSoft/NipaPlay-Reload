@@ -4,9 +4,11 @@ import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/widgets/blur_login_dialog.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'dart:ui';
 
 class JellyfinServerDialog extends StatefulWidget {
   const JellyfinServerDialog({super.key});
@@ -15,23 +17,59 @@ class JellyfinServerDialog extends StatefulWidget {
   State<JellyfinServerDialog> createState() => _JellyfinServerDialogState();
 
   static Future<bool?> show(BuildContext context) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.5),
-      builder: (dialogContext) => const JellyfinServerDialog(),
-    );
+    final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+    
+    if (jellyfinProvider.isConnected) {
+      // 如果已连接，显示设置对话框
+      return showDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black.withOpacity(0.5),
+        builder: (dialogContext) => const JellyfinServerDialog(),
+      );
+    } else {
+      // 如果未连接，显示登录对话框
+      return BlurLoginDialog.show(
+        context,
+        title: '连接到Jellyfin服务器',
+        fields: [
+          LoginField(
+            key: 'server',
+            label: '服务器地址',
+            hint: '例如：http://192.168.1.100:8096',
+            initialValue: jellyfinProvider.serverUrl,
+          ),
+          LoginField(
+            key: 'username',
+            label: '用户名',
+            initialValue: jellyfinProvider.username,
+          ),
+          LoginField(
+            key: 'password',
+            label: '密码',
+            isPassword: true,
+            required: false, // 密码可以为空
+          ),
+        ],
+        loginButtonText: '连接',
+        onLogin: (values) async {
+          final success = await jellyfinProvider.connectToServer(
+            values['server']!,
+            values['username']!,
+            values['password']!,
+          );
+          
+          return LoginResult(
+            success: success,
+            message: success ? '连接成功' : (jellyfinProvider.errorMessage ?? '连接失败，请检查服务器地址和登录信息'),
+          );
+        },
+      );
+    }
   }
 }
 
 class _JellyfinServerDialogState extends State<JellyfinServerDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _serverController = TextEditingController();
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-
-  bool _isConnecting = false; // 用于连接过程中的加载指示
-
   // 本地状态，用于UI交互，与Provider同步
   Set<String> _currentSelectedLibraryIds = {};
   List<JellyfinLibrary> _currentAvailableLibraries = [];
@@ -44,11 +82,6 @@ class _JellyfinServerDialogState extends State<JellyfinServerDialog> {
     // 在这里安全地访问Provider
     _jellyfinProvider = Provider.of<JellyfinProvider>(context); // listen: true 默认
 
-    // 从Provider初始化UI相关的状态
-    _serverController.text = _jellyfinProvider.serverUrl ?? '';
-    _usernameController.text = _jellyfinProvider.username ?? '';
-    _passwordController.text = ''; // 密码不预填
-
     if (_jellyfinProvider.isConnected) {
       // 直接从provider获取最新的库信息
       _currentAvailableLibraries = List.from(_jellyfinProvider.availableLibraries);
@@ -59,41 +92,11 @@ class _JellyfinServerDialogState extends State<JellyfinServerDialog> {
     }
   }
 
-  @override
-  void dispose() {
-    _serverController.dispose();
-    _usernameController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _connectToServer() async {
-    if (_formKey.currentState?.validate() != true) return;
-
-    setState(() { _isConnecting = true; });
-
-    final success = await _jellyfinProvider.connectToServer(
-      _serverController.text.trim(),
-      _usernameController.text.trim(),
-      _passwordController.text,
-    );
-
-    if (mounted) {
-      setState(() { _isConnecting = false; });
-      if (success) {
-        BlurSnackBar.show(context, '连接成功');
-        // UI会自动更新因为Provider会notifyListeners
-      } else {
-        BlurSnackBar.show(context, _jellyfinProvider.errorMessage ?? '连接失败，请检查服务器地址和登录信息');
-      }
-    }
-  }
-
   Future<void> _disconnectFromServer() async {
     await _jellyfinProvider.disconnectFromServer();
     if (mounted) {
       BlurSnackBar.show(context, '已断开连接');
-      // UI会自动更新
+      Navigator.of(context).pop(false); // 关闭对话框
     }
   }
 
@@ -107,14 +110,11 @@ class _JellyfinServerDialogState extends State<JellyfinServerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // 使用 Consumer 或者直接在 build 方法中读取 Provider.of 来响应状态变化
-    // JellyfinProvider _provider = Provider.of<JellyfinProvider>(context); // 可以在这里获取最新的状态
-
     return Dialog(
       backgroundColor: Colors.transparent,
       child: GlassmorphicContainer(
         width: 400,
-        height: _jellyfinProvider.isConnected ? 500 : 350, // 根据Provider状态调整高度
+        height: 500,
         borderRadius: 20,
         blur: 20,
         alignment: Alignment.center,
@@ -138,80 +138,7 @@ class _JellyfinServerDialogState extends State<JellyfinServerDialog> {
         ),
         child: Padding(
           padding: const EdgeInsets.all(24.0),
-          // 直接根据Provider的连接状态来决定显示哪个视图
-          child: _jellyfinProvider.isConnected 
-                 ? _buildConnectedView() 
-                 : _buildConnectionForm(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConnectionForm() {
-    // 表单的控制器 (_serverController, _usernameController) 已在 didChangeDependencies 中
-    // 根据 provider 的 serverUrl 和 username (即使未连接也可能存在上次保存的值) 进行了初始化。
-    return Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('连接到Jellyfin服务器', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 24),
-            TextFormField(
-              controller: _serverController,
-              decoration: const InputDecoration(
-                labelText: '服务器地址',
-                hintText: '例如：http://192.168.1.100:8096',
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '请输入服务器地址';
-                }
-                return null;
-              },
-              enabled: !_isConnecting,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: '用户名',
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '请输入用户名';
-                }
-                return null;
-              },
-              enabled: !_isConnecting,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: '密码',
-              ),
-              obscureText: true,
-              // 密码通常不需要校验是否为空，因为有些服务器可能允许匿名登录或密码为空
-              enabled: !_isConnecting,
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: ElevatedButton(
-                onPressed: _isConnecting ? null : _connectToServer,
-                child: _isConnecting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('连接'),
-              ),
-            ),
-          ],
+          child: _buildConnectedView(),
         ),
       ),
     );

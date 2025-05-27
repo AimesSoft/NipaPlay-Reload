@@ -15,6 +15,21 @@ import 'package:nipaplay/widgets/jellyfin_server_dialog.dart';
 import 'dart:io'; 
 import 'dart:async'; 
 import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/widgets/floating_action_glass_button.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:glassmorphism/glassmorphism.dart';
+import 'package:path/path.dart' as path;
+import 'package:provider/provider.dart';
+import 'dart:math';
+import 'package:flutter/gestures.dart';
+import '../pages/media_library_page.dart';
+import '../widgets/library_management_tab.dart';
+import 'package:nipaplay/services/scan_service.dart';
+import '../widgets/history_all_modal.dart';
+import '../widgets/switchable_view.dart';
+import 'package:flutter/rendering.dart';
+import 'package:nipaplay/main.dart';
+import '../services/jellyfin_service.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -536,10 +551,9 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
             Positioned(
               right: 16,
               bottom: 16,
-              child: FloatingActionButton(
+              child: FloatingActionGlassButton(
+                iconData: Ionicons.cloud_outline,
                 onPressed: _showJellyfinServerDialog,
-                tooltip: '添加Jellyfin服务器',
-                child: const Icon(Icons.cloud),
               ),
             ),
           ],

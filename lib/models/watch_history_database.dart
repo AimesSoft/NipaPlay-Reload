@@ -414,7 +414,7 @@ class WatchHistoryDatabase {
     );
     
     // 添加调试日志
-    debugPrint('数据库读取历史记录: filePath=${item.filePath}, animeName=${item.animeName}, episodeId=${item.episodeId}, animeId=${item.animeId}');
+    //debugPrint('数据库读取历史记录: filePath=${item.filePath}, animeName=${item.animeName}, episodeId=${item.episodeId}, animeId=${item.animeId}');
     
     return item;
   }
