@@ -50,7 +50,7 @@ class _VerticalIndicatorState extends State<VerticalIndicator> {
                       width: globals.isPhone ? 6 : 8,
                       height: MediaQuery.of(context).size.height * value,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.transparent,
                         borderRadius: BorderRadius.circular(globals.isPhone ? 3 : 4),
                       ),
                     );
