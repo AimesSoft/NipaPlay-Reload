@@ -25,6 +25,8 @@ import '../widgets/switchable_view.dart';
 import 'package:flutter/rendering.dart';
 import 'package:nipaplay/main.dart';
 import '../services/jellyfin_service.dart';
+import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/widgets/jellyfin_media_library_view.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -792,22 +794,32 @@ class _MediaLibraryTabs extends StatefulWidget {
   State<_MediaLibraryTabs> createState() => _MediaLibraryTabsState();
 }
 
-class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerProviderStateMixin {
+class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProviderStateMixin {
   late TabController _tabController;
   int _currentIndex = 0;
-  // 添加一个固定的子组件数量常量
-  static const int TAB_COUNT = 2; // 固定为2个标签页：媒体库和库管理
+  bool _isJellyfinConnected = false;
+  
+  // 动态计算标签页数量
+  int get _tabCount => _isJellyfinConnected ? 3 : 2;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    // 使用固定的TAB_COUNT常量，避免后续变化
-    _tabController = TabController(length: TAB_COUNT, vsync: this, initialIndex: _currentIndex);
+    _checkJellyfinConnectionState();
+    _tabController = TabController(
+      length: _tabCount, 
+      vsync: this, 
+      initialIndex: _currentIndex
+    );
     _tabController.addListener(_handleTabChange);
     
-    // 添加调试信息
-    print('_MediaLibraryTabs创建TabController：固定长度${_tabController.length}');
+    print('_MediaLibraryTabs创建TabController：动态长度${_tabController.length}');
+  }
+
+  void _checkJellyfinConnectionState() {
+    final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+    _isJellyfinConnected = jellyfinProvider.isConnected;
   }
 
   @override
@@ -829,83 +841,142 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with SingleTickerP
 
   @override
   Widget build(BuildContext context) {
-    // 获取外观设置，判断是否启用页面滑动动画
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final enableAnimation = appearanceSettings.enablePageAnimation;
     
-    // 保存子组件为局部变量，确保长度一致性
-    final List<Widget> pageChildren = [
-      // 使用RepaintBoundary隔离绘制边界，减少重绘范围
-      RepaintBoundary(
-        child: MediaLibraryPage(
-          key: ValueKey('mediaLibrary_${widget.mediaLibraryVersion}'),
-          onPlayEpisode: widget.onPlayEpisode,
-        ),
-      ),
-      // 使用RepaintBoundary隔离绘制边界，减少重绘范围
-      RepaintBoundary(
-        child: LibraryManagementTab(
-          onPlayEpisode: widget.onPlayEpisode,
-        ),
-      ),
-    ];
+    return Consumer<JellyfinProvider>(
+      builder: (context, jellyfinProvider, child) {
+        final currentConnectionState = jellyfinProvider.isConnected;
+        if (_isJellyfinConnected != currentConnectionState) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _updateTabController(currentConnectionState);
+            }
+          });
+        }
+        
+        // 动态生成标签页内容
+        final List<Widget> pageChildren = [
+          RepaintBoundary(
+            child: MediaLibraryPage(
+              key: ValueKey('mediaLibrary_${widget.mediaLibraryVersion}'),
+              onPlayEpisode: widget.onPlayEpisode,
+            ),
+          ),
+          RepaintBoundary(
+            child: LibraryManagementTab(
+              onPlayEpisode: widget.onPlayEpisode,
+            ),
+          ),
+        ];
+        
+        if (_isJellyfinConnected) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: JellyfinMediaLibraryView(
+                onPlayEpisode: widget.onPlayEpisode,
+              ),
+            ),
+          );
+        }
+        
+        // 动态生成标签
+        final List<Tab> tabs = [
+          const Tab(text: "媒体库"),
+          const Tab(text: "库管理"),
+        ];
+        
+        if (_isJellyfinConnected) {
+          tabs.add(const Tab(text: "Jellyfin"));
+        }
+        
+        // 验证标签数量与内容数量是否匹配
+        if (tabs.length != pageChildren.length || tabs.length != _tabCount) {
+          print('警告：标签数量(${tabs.length})、内容数量(${pageChildren.length})与预期数量($_tabCount)不匹配');
+        }
+        
+        return Column(
+          children: [
+            TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabs: tabs,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              labelStyle: const TextStyle(
+                fontSize: 24, 
+                fontWeight: FontWeight.bold
+              ),
+              indicatorPadding: const EdgeInsets.only(
+                top: 45, 
+                left: 0, 
+                right: 0
+              ),
+              indicator: BoxDecoration(
+                color: Colors.greenAccent,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              tabAlignment: TabAlignment.start,
+              dividerColor: const Color.fromARGB(59, 255, 255, 255),
+              dividerHeight: 3.0,
+              indicatorSize: TabBarIndicatorSize.tab,
+            ),
+            Expanded(
+              child: SwitchableView(
+                enableAnimation: enableAnimation,
+                currentIndex: _currentIndex,
+                controller: _tabController,
+                physics: enableAnimation 
+                    ? const PageScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                onPageChanged: (index) {
+                  if (_currentIndex != index) {
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                    _tabController.animateTo(index);
+                    print('页面变更到: $index (启用动画: $enableAnimation)');
+                  }
+                },
+                children: pageChildren,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  void _updateTabController(bool isConnected) {
+    if (_isJellyfinConnected == isConnected) return;
     
-    // 验证子组件数量与TabController长度是否匹配
-    if (pageChildren.length != TAB_COUNT) {
-      print('警告：子组件数量(${pageChildren.length})与TabController长度(${TAB_COUNT})不匹配');
+    final oldIndex = _currentIndex;
+    _isJellyfinConnected = isConnected;
+    
+    // 创建新的TabController
+    final newController = TabController(
+      length: _tabCount, 
+      vsync: this, 
+      initialIndex: oldIndex >= _tabCount ? 0 : oldIndex
+    );
+    
+    // 移除旧监听器并释放资源
+    _tabController.removeListener(_handleTabChange);
+    _tabController.dispose();
+    
+    // 更新到新的控制器
+    _tabController = newController;
+    _tabController.addListener(_handleTabChange);
+    
+    // 调整当前索引
+    if (_currentIndex >= _tabCount) {
+      _currentIndex = 0;
     }
     
-    return Column(
-      children: [
-        // Tab控制器
-        TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: "媒体库"),
-            Tab(text: "库管理"),
-          ],
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          labelStyle: const TextStyle(
-              fontSize: 24, fontWeight: FontWeight.bold),
-          indicatorPadding: const EdgeInsets.only(
-              top: 45, left: 0, right: 0),
-          indicator: BoxDecoration(
-            color: Colors.greenAccent,
-            borderRadius: BorderRadius.circular(30),
-          ),
-          tabAlignment: TabAlignment.start,
-          dividerColor: const Color.fromARGB(59, 255, 255, 255),
-          dividerHeight: 3.0,
-          indicatorSize: TabBarIndicatorSize.tab,
-        ),
-        // 内容区域 - 使用SwitchableView替代直接使用IndexedStack
-        Expanded(
-          child: SwitchableView(
-            enableAnimation: enableAnimation,
-            currentIndex: _currentIndex,
-            controller: _tabController,
-            // 使用更合适的物理滑动效果
-            physics: enableAnimation 
-                ? const PageScrollPhysics() // 开启动画时使用页面滑动物理效果
-                : const NeverScrollableScrollPhysics(), // 关闭动画时禁止滑动
-            onPageChanged: (index) {
-              if (_currentIndex != index) {
-                setState(() {
-                  _currentIndex = index;
-                });
-                // 使用animateTo而不是直接设置index，这样可以保持动画效果
-                _tabController.animateTo(index);
-                
-                // 额外的调试信息，帮助排查问题
-                print('页面变更到: $index (启用动画: $enableAnimation)');
-              }
-            },
-            children: pageChildren,
-          ),
-        ),
-      ],
-    );
+    setState(() {
+      // 触发重建以使用新的TabController
+    });
+    
+    print('TabController已更新：新长度=$_tabCount, 当前索引=$_currentIndex');
   }
 }

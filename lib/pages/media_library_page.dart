@@ -14,8 +14,7 @@ import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/jellyfin_server_dialog.dart'; 
 import 'dart:io'; 
 import 'dart:async'; 
-import 'package:nipaplay/providers/jellyfin_provider.dart'; 
-import 'package:nipaplay/widgets/jellyfin_media_library_view.dart'; // Import the new widget
+import 'package:nipaplay/providers/jellyfin_provider.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -309,50 +308,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
   Widget build(BuildContext context) {
     super.build(context); 
     
-    final List<Tab> tabs = [];
-    final List<Widget> tabViews = [];
-
-    tabs.add(Tab(text: _isJellyfinConnected ? '本地媒体库' : '媒体库'));
-    tabViews.add(_buildLocalMediaLibrary());
-
-    if (_isJellyfinConnected) {
-      tabs.add(const Tab(text: 'Jellyfin'));
-      // tabViews.add(_buildJellyfinMediaLibrary()); // REPLACE THIS
-      tabViews.add(JellyfinMediaLibraryView(onPlayEpisode: widget.onPlayEpisode)); // USE THE NEW WIDGET
-    }
-    
-    return DefaultTabController(
-      key: ValueKey<int>(tabs.length), // Add this key
-      length: tabs.length, // 使用 tabs 列表的实际长度
-      child: Column(
-        children: [
-          // 仅当有多个标签页时显示 TabBar，或者根据您的UI设计决定
-          if (tabs.length > 1) 
-            TabBar(
-              tabs: tabs, // 使用构建好的 tabs 列表
-              isScrollable: true,
-              labelColor: Colors.white,
-              dividerHeight: 3.0,
-              dividerColor: const Color.fromARGB(59, 255, 255, 255),
-              indicatorPadding: const EdgeInsets.only(
-                top: 45, left: 0, right: 0),
-              indicator: BoxDecoration(
-                color: const Color.fromRGBO(39, 157, 245, 1),
-                borderRadius: BorderRadius.circular(30),
-              ),
-              unselectedLabelColor: Colors.white.withOpacity(0.7),
-              tabAlignment: TabAlignment.start,
-              padding: EdgeInsets.zero,
-            ),
-          
-          Expanded(
-            child: TabBarView(
-              children: tabViews, // 使用构建好的 tabViews 列表
-            ),
-          ),
-        ],
-      ),
-    );
+    // 现在MediaLibraryPage只显示本地媒体库，移除Jellyfin标签页
+    return _buildLocalMediaLibrary();
   }
   
   Widget _buildLocalMediaLibrary() {
