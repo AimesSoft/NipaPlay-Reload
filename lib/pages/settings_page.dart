@@ -12,6 +12,7 @@ import 'package:nipaplay/utils/globals.dart' as globals; // 导入包含 isDeskt
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:nipaplay/pages/settings/account_page.dart';
 import 'package:nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
+import 'package:nipaplay/pages/settings/remote_media_library_page.dart'; // 导入远程媒体库设置页面
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -127,6 +128,19 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               _handleItemTap(
                   const GeneralPage(),
                   "通用设置"
+                  );
+            },
+          ),
+          ListTile(
+            title: const Text("远程媒体库",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(
+                  const RemoteMediaLibraryPage(),
+                  "远程媒体库"
                   );
             },
           ),

@@ -17,6 +17,7 @@ class WatchHistoryItem {
   DateTime lastWatchTime;
   String? thumbnailPath;
   bool isFromScan;
+  String? videoHash; // 添加视频哈希值字段，用于弹幕匹配
 
   WatchHistoryItem({
     required this.filePath,
@@ -30,6 +31,7 @@ class WatchHistoryItem {
     required this.lastWatchTime,
     this.thumbnailPath,
     this.isFromScan = false,
+    this.videoHash,  // 添加哈希值参数
   });
 
   Map<String, dynamic> toJson() {
@@ -45,6 +47,7 @@ class WatchHistoryItem {
       'lastWatchTime': lastWatchTime.toIso8601String(),
       'thumbnailPath': thumbnailPath,
       'isFromScan': isFromScan,
+      'videoHash': videoHash, // 添加视频哈希值
     };
   }
 
@@ -63,6 +66,7 @@ class WatchHistoryItem {
           : DateTime.now(),
       thumbnailPath: json['thumbnailPath'],
       isFromScan: json['isFromScan'] ?? false,
+      videoHash: json['videoHash'], // 添加视频哈希值
     );
   }
 }

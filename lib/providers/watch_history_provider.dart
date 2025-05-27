@@ -57,6 +57,20 @@ class WatchHistoryProvider extends ChangeNotifier {
         continue;  // 直接跳过已知无效的路径，不输出重复日志
       }
       
+      // 跳过Jellyfin协议URL的文件存在性验证
+      if (originalPath.startsWith('jellyfin://')) {
+        debugPrint('跳过Jellyfin协议URL的文件验证: $originalPath');
+        validItems.add(item);
+        continue;
+      }
+      
+      // 跳过HTTP/HTTPS流媒体URL的文件存在性验证
+      if (originalPath.startsWith('http://') || originalPath.startsWith('https://')) {
+        debugPrint('跳过流媒体URL的文件验证: $originalPath');
+        validItems.add(item);
+        continue;
+      }
+      
       // 1. 直接检查文件是否存在
       fileExists = File(originalPath).existsSync();
       

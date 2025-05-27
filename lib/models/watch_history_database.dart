@@ -223,6 +223,9 @@ class WatchHistoryDatabase {
   Future<void> insertOrUpdateWatchHistory(WatchHistoryItem item) async {
     final db = await database;
     
+    // 添加调试日志
+    debugPrint('数据库保存历史记录: filePath=${item.filePath}, animeName=${item.animeName}, episodeId=${item.episodeId}, animeId=${item.animeId}');
+    
     try {
       await db.insert(
         'watch_history',
@@ -396,7 +399,7 @@ class WatchHistoryDatabase {
   
   // 将数据库行映射为WatchHistoryItem对象
   WatchHistoryItem _mapToWatchHistoryItem(Map<String, dynamic> map) {
-    return WatchHistoryItem(
+    final item = WatchHistoryItem(
       filePath: map['file_path'],
       animeName: map['anime_name'],
       episodeTitle: map['episode_title'],
@@ -409,5 +412,10 @@ class WatchHistoryDatabase {
       thumbnailPath: map['thumbnail_path'],
       isFromScan: map['is_from_scan'] == 1,
     );
+    
+    // 添加调试日志
+    debugPrint('数据库读取历史记录: filePath=${item.filePath}, animeName=${item.animeName}, episodeId=${item.episodeId}, animeId=${item.animeId}');
+    
+    return item;
   }
 } 

@@ -11,30 +11,48 @@ import 'package:shared_preferences/shared_preferences.dart'; // For image URL pe
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'dart:io'; // 添加Platform导入
+import 'package:nipaplay/widgets/jellyfin_server_dialog.dart'; 
+import 'dart:io'; 
+import 'dart:async'; 
+import 'package:nipaplay/providers/jellyfin_provider.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
 
 class MediaLibraryPage extends StatefulWidget {
   final OnPlayEpisodeCallback? onPlayEpisode; // Add this callback
+  final bool jellyfinMode; // 是否为Jellyfin媒体库模式
 
-  const MediaLibraryPage({super.key, this.onPlayEpisode}); // Modify constructor
+  const MediaLibraryPage({
+    super.key, 
+    this.onPlayEpisode,
+    this.jellyfinMode = false,
+  }); // Modify constructor
 
   @override
   State<MediaLibraryPage> createState() => _MediaLibraryPageState();
 }
 
-class _MediaLibraryPageState extends State<MediaLibraryPage> {
+class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepAliveClientMixin {
   List<WatchHistoryItem> _uniqueLibraryItems = []; 
-  Map<int, String> _persistedImageUrls = {}; // Loaded from SharedPreferences
-  final Map<int, BangumiAnime> _fetchedFullAnimeData = {}; // Freshly fetched in this session
-  bool _isLoadingInitial = true; // For the initial list from history
+  Map<int, String> _persistedImageUrls = {}; 
+  final Map<int, BangumiAnime> _fetchedFullAnimeData = {}; 
+  bool _isLoadingInitial = true; 
   String? _error;
-  // No longer a single _isLoading; initial load and background fetches are separate concerns.
+  
   final ScrollController _gridScrollController = ScrollController();
 
   static const String _prefsKeyPrefix = 'media_library_image_url_';
+  
+  // Jellyfin相关状态
+  // List<JellyfinMediaItem> _jellyfinMediaItems = []; // MOVED to JellyfinMediaLibraryView
+  // bool _isLoadingJellyfin = false; // MOVED to JellyfinMediaLibraryView
+  // String? _jellyfinError; // MOVED to JellyfinMediaLibraryView
+  bool _isJellyfinConnected = false; // KEEP - to control tab visibility
+  // Timer? _jellyfinRefreshTimer; // MOVED to JellyfinMediaLibraryView
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -42,14 +60,42 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadInitialMediaLibraryData();
+        // _loadJellyfinData(); // REMOVED - JellyfinMediaLibraryView handles its own loading
+
+        final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+        _isJellyfinConnected = jellyfinProvider.isConnected; // Initialize
+        jellyfinProvider.addListener(_onJellyfinProviderChanged);
       }
     });
   }
 
   @override
   void dispose() {
+    try {
+      if (mounted) { 
+        final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+        jellyfinProvider.removeListener(_onJellyfinProviderChanged);
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print("移除JellyfinProvider监听器时出错: $e");
+    }
+
     _gridScrollController.dispose();
+    // _jellyfinRefreshTimer?.cancel(); // REMOVED
     super.dispose();
+  }
+
+  void _onJellyfinProviderChanged() {
+    if (mounted) {
+      final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+      if (_isJellyfinConnected != jellyfinProvider.isConnected) {
+        setState(() {
+          _isJellyfinConnected = jellyfinProvider.isConnected;
+        });
+      }
+      // _loadJellyfinData(); // REMOVED - JellyfinMediaLibraryView handles its own loading
+    }
   }
 
   Future<void> _processAndSortHistory(List<WatchHistoryItem> watchHistory) async {
@@ -63,8 +109,14 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       return;
     }
 
+    // 过滤掉Jellyfin媒体项（使用jellyfin://协议的项目）
+    // 让它们只出现在专门的Jellyfin媒体库标签页中
+    final filteredHistory = watchHistory.where((item) => 
+      !item.filePath.startsWith('jellyfin://')
+    ).toList();
+
     final Map<int, WatchHistoryItem> latestHistoryItemMap = {};
-    for (var item in watchHistory) {
+    for (var item in filteredHistory) {
       if (item.animeId != null) {
         if (latestHistoryItemMap.containsKey(item.animeId!)) {
           if (item.lastWatchTime.isAfter(latestHistoryItemMap[item.animeId!]!.lastWatchTime)) {
@@ -126,6 +178,16 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         });
       }
     }
+  }
+  
+  Future<void> _showJellyfinServerDialog() async {
+    // This dialog might change JellyfinProvider state.
+    // The _onJellyfinProviderChanged listener will update _isJellyfinConnected if needed.
+    // The JellyfinMediaLibraryView will also listen to JellyfinProvider for its own updates.
+    await JellyfinServerDialog.show(context);
+    // If JellyfinServerDialog.show(context) returns a value indicating change,
+    // you could use it to explicitly call _onJellyfinProviderChanged or setState,
+    // but relying on the provider listener is generally cleaner.
   }
 
   Future<void> _fetchAndPersistFullDetailsInBackground() async {
@@ -241,9 +303,16 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       _preloadAnimeDetail(animeId);
     }
   }
-
+  
   @override
   Widget build(BuildContext context) {
+    super.build(context); 
+    
+    // 现在MediaLibraryPage只显示本地媒体库，移除Jellyfin标签页
+    return _buildLocalMediaLibrary();
+  }
+  
+  Widget _buildLocalMediaLibrary() {
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {
         
@@ -258,6 +327,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         }
 
         // If provider is loaded or becomes loaded, process its history.
+        // This ensures that updates from the provider trigger a re-sort.
         // This ensures that updates from the provider trigger a re-sort.
         if (historyProvider.isLoaded) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -299,154 +369,182 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         }
 
         if (_uniqueLibraryItems.isEmpty) {
-          return const Center(
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                '媒体库为空。\n观看过的动画将显示在这里。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    '媒体库为空。\n观看过的动画将显示在这里。',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                  ),
+                  const SizedBox(height: 16),
+                  // 添加Jellyfin服务器按钮
+                  if (!_isJellyfinConnected) // Only show if not connected
+                    ElevatedButton.icon(
+                      onPressed: _showJellyfinServerDialog,
+                      icon: const Icon(Icons.cloud),
+                      label: const Text('添加Jellyfin服务器'),
+                    ),
+                ],
               ),
             ),
           );
         }
 
         // Using RepaintBoundary for the GridView
-        return RepaintBoundary(
-          child: Platform.isAndroid || Platform.isIOS 
-          ? GridView.builder(
-              controller: _gridScrollController,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 150, 
-                childAspectRatio: 7/12,   
-                crossAxisSpacing: 8,      
-                mainAxisSpacing: 8,       
-              ),
-              padding: const EdgeInsets.all(0),
-              // 增加cacheExtent以提升滚动流畅度
-              cacheExtent: 800, // 提高预缓存距离
-              // 优化GridView性能
-              clipBehavior: Clip.hardEdge,
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              // 添加更多GridView性能优化参数
-              addAutomaticKeepAlives: false, // 避免保持所有项目活动
-              addRepaintBoundaries: true, // 为每个项目添加绘制边界
-              // 只渲染两行之后的项目，控制同时显示的项目数量
-              // 通过key和index控制垂直方向的显示
-              itemCount: _uniqueLibraryItems.length,
-              itemBuilder: (context, index) {
-                // 判断是否超出当前屏幕过多，实现按需渲染
-                // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
-                final useOptimizedRendering = index > 11;
-                final historyItem = _uniqueLibraryItems[index];
-                final animeId = historyItem.animeId;
+        return Stack(
+          children: [
+            RepaintBoundary(
+              child: Platform.isAndroid || Platform.isIOS 
+              ? GridView.builder(
+                  controller: _gridScrollController,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 150, 
+                    childAspectRatio: 7/12,   
+                    crossAxisSpacing: 8,      
+                    mainAxisSpacing: 8,       
+                  ),
+                  padding: const EdgeInsets.all(0),
+                  // 增加cacheExtent以提升滚动流畅度
+                  cacheExtent: 800, // 提高预缓存距离
+                  // 优化GridView性能
+                  clipBehavior: Clip.hardEdge,
+                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  // 添加更多GridView性能优化参数
+                  addAutomaticKeepAlives: false, // 避免保持所有项目活动
+                  addRepaintBoundaries: true, // 为每个项目添加绘制边界
+                  // 只渲染两行之后的项目，控制同时显示的项目数量
+                  // 通过key和index控制垂直方向的显示
+                  itemCount: _uniqueLibraryItems.length,
+                  itemBuilder: (context, index) {
+                    // 判断是否超出当前屏幕过多，实现按需渲染
+                    // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
+                    final useOptimizedRendering = index > 11;
+                    final historyItem = _uniqueLibraryItems[index];
+                    final animeId = historyItem.animeId;
 
-                String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
-                String nameToDisplay = historyItem.animeName.isNotEmpty 
-                    ? historyItem.animeName 
-                    : (historyItem.episodeTitle ?? '未知动画');
+                    String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
+                    String nameToDisplay = historyItem.animeName.isNotEmpty 
+                        ? historyItem.animeName 
+                        : (historyItem.episodeTitle ?? '未知动画');
 
-                if (animeId != null) {
-                    if (_fetchedFullAnimeData.containsKey(animeId)) {
-                        final fetchedData = _fetchedFullAnimeData[animeId]!;
-                        if (fetchedData.imageUrl.isNotEmpty) {
-                            imageUrlToDisplay = fetchedData.imageUrl;
-                        }
-                        if (fetchedData.nameCn.isNotEmpty) {
-                            nameToDisplay = fetchedData.nameCn;
-                        } else if (fetchedData.name.isNotEmpty) {
-                            nameToDisplay = fetchedData.name;
-                        }
-                    } else if (_persistedImageUrls.containsKey(animeId)) {
-                        imageUrlToDisplay = _persistedImageUrls[animeId]!;
-                        // Name remains from historyItem until full details are fetched in this session
-                    }
-                }
-
-                return AnimeCard(
-                  key: ValueKey(animeId ?? historyItem.filePath), 
-                  name: nameToDisplay, 
-                  imageUrl: imageUrlToDisplay,
-                  onTap: () {
                     if (animeId != null) {
-                      _navigateToAnimeDetail(animeId);
-                    } else {
-                      BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                        if (_fetchedFullAnimeData.containsKey(animeId)) {
+                            final fetchedData = _fetchedFullAnimeData[animeId]!;
+                            if (fetchedData.imageUrl.isNotEmpty) {
+                                imageUrlToDisplay = fetchedData.imageUrl;
+                            }
+                            if (fetchedData.nameCn.isNotEmpty) {
+                                nameToDisplay = fetchedData.nameCn;
+                            } else if (fetchedData.name.isNotEmpty) {
+                                nameToDisplay = fetchedData.name;
+                            }
+                        } else if (_persistedImageUrls.containsKey(animeId)) {
+                            imageUrlToDisplay = _persistedImageUrls[animeId]!;
+                            // Name remains from historyItem until full details are fetched in this session
+                        }
                     }
+
+                    return AnimeCard(
+                      key: ValueKey(animeId ?? historyItem.filePath), 
+                      name: nameToDisplay, 
+                      imageUrl: imageUrlToDisplay,
+                      onTap: () {
+                        if (animeId != null) {
+                          _navigateToAnimeDetail(animeId);
+                        } else {
+                          BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                        }
+                      },
+                    );
                   },
-                );
-              },
-            )
-          : Scrollbar(
-              controller: _gridScrollController,
-              thickness: 4,
-              radius: const Radius.circular(2),
-              child: GridView.builder(
-                controller: _gridScrollController,
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 150, 
-                  childAspectRatio: 7/12,   
-                  crossAxisSpacing: 8,      
-                  mainAxisSpacing: 8,       
-                ),
-                padding: const EdgeInsets.all(0),
-                // 增加cacheExtent以提升滚动流畅度
-                cacheExtent: 800, // 提高预缓存距离
-                // 优化GridView性能
-                clipBehavior: Clip.hardEdge,
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                // 添加更多GridView性能优化参数
-                addAutomaticKeepAlives: false, // 避免保持所有项目活动
-                addRepaintBoundaries: true, // 为每个项目添加绘制边界
-                // 只渲染两行之后的项目，控制同时显示的项目数量
-                // 通过key和index控制垂直方向的显示
-                itemCount: _uniqueLibraryItems.length,
-                itemBuilder: (context, index) {
-                  // 判断是否超出当前屏幕过多，实现按需渲染
-                  // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
-                  final useOptimizedRendering = index > 11;
-                  final historyItem = _uniqueLibraryItems[index];
-                  final animeId = historyItem.animeId;
+                )
+              : Scrollbar(
+                  controller: _gridScrollController,
+                  thickness: 4,
+                  radius: const Radius.circular(2),
+                  child: GridView.builder(
+                    controller: _gridScrollController,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 150, 
+                      childAspectRatio: 7/12,   
+                      crossAxisSpacing: 8,      
+                      mainAxisSpacing: 8,       
+                    ),
+                    padding: const EdgeInsets.all(0),
+                    // 增加cacheExtent以提升滚动流畅度
+                    cacheExtent: 800, // 提高预缓存距离
+                    // 优化GridView性能
+                    clipBehavior: Clip.hardEdge,
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    // 添加更多GridView性能优化参数
+                    addAutomaticKeepAlives: false, // 避免保持所有项目活动
+                    addRepaintBoundaries: true, // 为每个项目添加绘制边界
+                    // 只渲染两行之后的项目，控制同时显示的项目数量
+                    // 通过key和index控制垂直方向的显示
+                    itemCount: _uniqueLibraryItems.length,
+                    itemBuilder: (context, index) {
+                      // 判断是否超出当前屏幕过多，实现按需渲染
+                      // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
+                      final useOptimizedRendering = index > 11;
+                      final historyItem = _uniqueLibraryItems[index];
+                      final animeId = historyItem.animeId;
 
-                  String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
-                  String nameToDisplay = historyItem.animeName.isNotEmpty 
-                      ? historyItem.animeName 
-                      : (historyItem.episodeTitle ?? '未知动画');
+                      String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
+                      String nameToDisplay = historyItem.animeName.isNotEmpty 
+                          ? historyItem.animeName 
+                          : (historyItem.episodeTitle ?? '未知动画');
 
-                  if (animeId != null) {
-                      if (_fetchedFullAnimeData.containsKey(animeId)) {
-                          final fetchedData = _fetchedFullAnimeData[animeId]!;
-                          if (fetchedData.imageUrl.isNotEmpty) {
-                              imageUrlToDisplay = fetchedData.imageUrl;
-                          }
-                          if (fetchedData.nameCn.isNotEmpty) {
-                              nameToDisplay = fetchedData.nameCn;
-                          } else if (fetchedData.name.isNotEmpty) {
-                              nameToDisplay = fetchedData.name;
-                          }
-                      } else if (_persistedImageUrls.containsKey(animeId)) {
-                          imageUrlToDisplay = _persistedImageUrls[animeId]!;
-                          // Name remains from historyItem until full details are fetched in this session
-                      }
-                  }
-
-                  return AnimeCard(
-                    key: ValueKey(animeId ?? historyItem.filePath), 
-                    name: nameToDisplay, 
-                    imageUrl: imageUrlToDisplay,
-                    onTap: () {
                       if (animeId != null) {
-                        _navigateToAnimeDetail(animeId);
-                      } else {
-                        BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                          if (_fetchedFullAnimeData.containsKey(animeId)) {
+                              final fetchedData = _fetchedFullAnimeData[animeId]!;
+                              if (fetchedData.imageUrl.isNotEmpty) {
+                                  imageUrlToDisplay = fetchedData.imageUrl;
+                              }
+                              if (fetchedData.nameCn.isNotEmpty) {
+                                  nameToDisplay = fetchedData.nameCn;
+                              } else if (fetchedData.name.isNotEmpty) {
+                                  nameToDisplay = fetchedData.name;
+                              }
+                          } else if (_persistedImageUrls.containsKey(animeId)) {
+                              imageUrlToDisplay = _persistedImageUrls[animeId]!;
+                              // Name remains from historyItem until full details are fetched in this session
+                          }
                       }
+
+                      return AnimeCard(
+                        key: ValueKey(animeId ?? historyItem.filePath), 
+                        name: nameToDisplay, 
+                        imageUrl: imageUrlToDisplay,
+                        onTap: () {
+                          if (animeId != null) {
+                            _navigateToAnimeDetail(animeId);
+                          } else {
+                            BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                          }
+                        },
+                      );
                     },
-                  );
-                },
+                  ),
+                ),
+            ),
+            
+            // 右下角悬浮按钮，用于添加Jellyfin服务器
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: FloatingActionButton(
+                onPressed: _showJellyfinServerDialog,
+                tooltip: '添加Jellyfin服务器',
+                child: const Icon(Icons.cloud),
               ),
             ),
+          ],
         );
       },
     );
   }
-} 
+}

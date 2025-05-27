@@ -32,6 +32,7 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'widgets/blur_snackbar.dart';
@@ -337,6 +338,11 @@ void main() async {
           ChangeNotifierProvider(create: (_) => ScanService()),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider(create: (context) { // 修改 JellyfinProvider 的创建方式
+            final jellyfinProvider = JellyfinProvider();
+            jellyfinProvider.initialize(); // 在创建后立即调用 initialize
+            return jellyfinProvider;
+          }),
         ],
         child: const NipaPlayApp(),
       ),
@@ -549,15 +555,31 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   void _onTabChangeRequested() {
     debugPrint('[MainPageState] _onTabChangeRequested triggered.');
     final index = _tabChangeNotifier?.targetTabIndex;
-    if (index != null && globalTabController != null) {
-      debugPrint('[MainPageState] targetTabIndex: $index, current globalTabController.index: ${globalTabController!.index}');
-      if (globalTabController!.index != index) {
-        globalTabController!.animateTo(index);
-        debugPrint('[MainPageState] Called globalTabController.animateTo($index)');
+    debugPrint('[MainPageState] targetTabIndex: $index');
+    
+    if (index != null) {
+      if (globalTabController != null) {
+        debugPrint('[MainPageState] globalTabController可用，当前索引: ${globalTabController!.index}');
+        if (globalTabController!.index != index) {
+          try {
+            debugPrint('[MainPageState] 尝试切换到标签: $index');
+            globalTabController!.animateTo(index);
+            debugPrint('[MainPageState] 成功调用animateTo($index)');
+          } catch (e) {
+            debugPrint('[MainPageState] 切换标签失败: $e');
+          }
+        } else {
+          debugPrint('[MainPageState] 已经是目标标签: $index，无需切换');
+        }
       } else {
-        debugPrint('[MainPageState] globalTabController.index is already $index. No animation needed.');
+        debugPrint('[MainPageState] globalTabController为空，无法切换标签');
       }
+      
+      // 清除标记，避免多次触发
+      debugPrint('[MainPageState] 正在清除targetTabIndex');
       _tabChangeNotifier?.clear();
+    } else {
+      debugPrint('[MainPageState] targetTabIndex为空，不进行任何操作');
     }
   }
 
