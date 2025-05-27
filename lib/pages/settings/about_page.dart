@@ -128,7 +128,7 @@ class _AboutPageState extends State<AboutPage> {
                   ),
                   const SizedBox(height: 16),
                   GestureDetector(
-                    onTap: () => _launchURL('https://www.github.com/MCFsteve/NipaPlay-Reload'),
+                    onTap: () => _launchURL('https://www.github.com/MCDFsteve/NipaPlay-Reload'),
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: Row(
