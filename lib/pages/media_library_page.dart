@@ -124,10 +124,11 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
       return;
     }
 
-    // 过滤掉Jellyfin媒体项（使用jellyfin://协议的项目）
-    // 让它们只出现在专门的Jellyfin媒体库标签页中
+    // 过滤掉Jellyfin和Emby媒体项（使用jellyfin://和emby://协议的项目）
+    // 让它们只出现在专门的流媒体库标签页中
     final filteredHistory = watchHistory.where((item) => 
-      !item.filePath.startsWith('jellyfin://')
+      !item.filePath.startsWith('jellyfin://') &&
+      !item.filePath.startsWith('emby://')
     ).toList();
 
     final Map<int, WatchHistoryItem> latestHistoryItemMap = {};

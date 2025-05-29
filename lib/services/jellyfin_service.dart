@@ -185,7 +185,7 @@ class JellyfinService {
     await prefs.setStringList('jellyfin_selected_libraries', _selectedLibraryIds);
   }
   
-  Future<List<JellyfinMediaItem>> getLatestMediaItems({int limit = 50}) async {
+  Future<List<JellyfinMediaItem>> getLatestMediaItems({int limit = 99999}) async {
     if (!_isConnected || _selectedLibraryIds.isEmpty) {
       return [];
     }

@@ -57,9 +57,9 @@ class WatchHistoryProvider extends ChangeNotifier {
         continue;  // 直接跳过已知无效的路径，不输出重复日志
       }
       
-      // 跳过Jellyfin协议URL的文件存在性验证
-      if (originalPath.startsWith('jellyfin://')) {
-        debugPrint('跳过Jellyfin协议URL的文件验证: $originalPath');
+      // 跳过Jellyfin和Emby协议URL的文件存在性验证
+      if (originalPath.startsWith('jellyfin://') || originalPath.startsWith('emby://')) {
+        debugPrint('跳过流媒体协议URL的文件验证: $originalPath');
         validItems.add(item);
         continue;
       }

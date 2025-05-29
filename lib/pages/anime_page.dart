@@ -25,8 +25,11 @@ import '../widgets/switchable_view.dart';
 import 'package:flutter/rendering.dart';
 import 'package:nipaplay/main.dart';
 import '../services/jellyfin_service.dart';
+import '../services/emby_service.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/widgets/jellyfin_media_library_view.dart';
+import 'package:nipaplay/widgets/emby_media_library_view.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -128,16 +131,17 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   
     bool tabChangeLogicExecuted = false; // Flag to ensure one-shot execution
 
-    // 检查是否为网络URL或Jellyfin协议URL
+    // 检查是否为网络URL或流媒体协议URL
     final isNetworkUrl = item.filePath.startsWith('http://') || item.filePath.startsWith('https://');
     final isJellyfinProtocol = item.filePath.startsWith('jellyfin://');
+    final isEmbyProtocol = item.filePath.startsWith('emby://');
     
     bool fileExists = false;
     String filePath = item.filePath;
     String? actualPlayUrl;
     
-    if (isNetworkUrl || isJellyfinProtocol) {
-      // 对于网络URL和Jellyfin协议，跳过本地文件检查
+    if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol) {
+      // 对于网络URL和流媒体协议，跳过本地文件检查
       fileExists = true;
       debugPrint('[AnimePage] 检测到流媒体URL，跳过文件存在性检查: ${item.filePath}');
       
@@ -159,6 +163,29 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           }
         } catch (e) {
           debugPrint('[AnimePage] 获取Jellyfin流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取流媒体URL失败: $e');
+          return;
+        }
+      }
+      
+      // 如果是Emby协议，需要获取实际的HTTP流媒体URL
+      if (isEmbyProtocol) {
+        try {
+          // 从emby://协议URL中提取itemId
+          final embyId = item.filePath.replaceFirst('emby://', '');
+          debugPrint('[AnimePage] 解析Emby ID: $embyId');
+          
+          // 使用EmbyService获取实际的HTTP流媒体URL
+          final embyService = EmbyService.instance;
+          if (embyService.isConnected) {
+            actualPlayUrl = embyService.getStreamUrl(embyId);
+            debugPrint('[AnimePage] 获取到Emby流媒体URL: $actualPlayUrl');
+          } else {
+            BlurSnackBar.show(context, '未连接到Emby服务器');
+            return;
+          }
+        } catch (e) {
+          debugPrint('[AnimePage] 获取Emby流媒体URL失败: $e');
           BlurSnackBar.show(context, '获取流媒体URL失败: $e');
           return;
         }
@@ -302,9 +329,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     videoState.addListener(playbackFinishListener);
     debugPrint('[AnimePage] _onWatchHistoryItemTap: Added statusListener and playbackFinishListener. Calling initializePlayer.');
     
-    // 根据是否是Jellyfin流媒体决定传递参数
-    if (isJellyfinProtocol && actualPlayUrl != null) {
-      debugPrint('[AnimePage] 使用Jellyfin流媒体URL播放: $actualPlayUrl');
+    // 根据是否是流媒体协议决定传递参数
+    if ((isJellyfinProtocol || isEmbyProtocol) && actualPlayUrl != null) {
+      debugPrint('[AnimePage] 使用流媒体URL播放: $actualPlayUrl');
       videoState.initializePlayer(item.filePath, historyItem: item, actualPlayUrl: actualPlayUrl);
     } else {
       videoState.initializePlayer(item.filePath, historyItem: item);
@@ -798,15 +825,21 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   late TabController _tabController;
   int _currentIndex = 0;
   bool _isJellyfinConnected = false;
+  bool _isEmbyConnected = false;
   
   // 动态计算标签页数量
-  int get _tabCount => _isJellyfinConnected ? 3 : 2;
+  int get _tabCount {
+    int count = 2; // 基础标签: 媒体库, 库管理
+    if (_isJellyfinConnected) count++;
+    if (_isEmbyConnected) count++;
+    return count;
+  }
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    _checkJellyfinConnectionState();
+    _checkConnectionStates();
     _tabController = TabController(
       length: _tabCount, 
       vsync: this, 
@@ -817,9 +850,11 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     print('_MediaLibraryTabs创建TabController：动态长度${_tabController.length}');
   }
 
-  void _checkJellyfinConnectionState() {
+  void _checkConnectionStates() {
     final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+    final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
     _isJellyfinConnected = jellyfinProvider.isConnected;
+    _isEmbyConnected = embyProvider.isConnected;
   }
 
   @override
@@ -844,13 +879,17 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final enableAnimation = appearanceSettings.enablePageAnimation;
     
-    return Consumer<JellyfinProvider>(
-      builder: (context, jellyfinProvider, child) {
-        final currentConnectionState = jellyfinProvider.isConnected;
-        if (_isJellyfinConnected != currentConnectionState) {
+    return Consumer2<JellyfinProvider, EmbyProvider>(
+      builder: (context, jellyfinProvider, embyProvider, child) {
+        final currentJellyfinConnectionState = jellyfinProvider.isConnected;
+        final currentEmbyConnectionState = embyProvider.isConnected;
+        
+        // 检查连接状态是否改变
+        if (_isJellyfinConnected != currentJellyfinConnectionState || 
+            _isEmbyConnected != currentEmbyConnectionState) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _updateTabController(currentConnectionState);
+              _updateTabController(currentJellyfinConnectionState, currentEmbyConnectionState);
             }
           });
         }
@@ -880,6 +919,16 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           );
         }
         
+        if (_isEmbyConnected) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: EmbyMediaLibraryView(
+                onPlayEpisode: widget.onPlayEpisode,
+              ),
+            ),
+          );
+        }
+        
         // 动态生成标签
         final List<Tab> tabs = [
           const Tab(text: "媒体库"),
@@ -888,6 +937,10 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         
         if (_isJellyfinConnected) {
           tabs.add(const Tab(text: "Jellyfin"));
+        }
+        
+        if (_isEmbyConnected) {
+          tabs.add(const Tab(text: "Emby"));
         }
         
         // 验证标签数量与内容数量是否匹配
@@ -947,11 +1000,12 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     );
   }
   
-  void _updateTabController(bool isConnected) {
-    if (_isJellyfinConnected == isConnected) return;
+  void _updateTabController(bool isJellyfinConnected, bool isEmbyConnected) {
+    if (_isJellyfinConnected == isJellyfinConnected && _isEmbyConnected == isEmbyConnected) return;
     
     final oldIndex = _currentIndex;
-    _isJellyfinConnected = isConnected;
+    _isJellyfinConnected = isJellyfinConnected;
+    _isEmbyConnected = isEmbyConnected;
     
     // 创建新的TabController
     final newController = TabController(

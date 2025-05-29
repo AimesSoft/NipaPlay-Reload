@@ -588,13 +588,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 检查是否为网络URL (HTTP或HTTPS)
     bool isNetworkUrl = videoPath.startsWith('http://') || videoPath.startsWith('https://');
     
-    // 检查是否是Jellyfin流媒体（jellyfin://协议或有actualPlayUrl参数且为HTTP URL）
+    // 检查是否是流媒体（jellyfin://协议、emby://协议或有actualPlayUrl参数且为HTTP URL）
     bool isJellyfinStream = videoPath.startsWith('jellyfin://') || 
                            (actualPlayUrl != null && 
                            (actualPlayUrl.startsWith('http://') || actualPlayUrl.startsWith('https://')));
+    bool isEmbyStream = videoPath.startsWith('emby://') || 
+                       (actualPlayUrl != null && 
+                       (actualPlayUrl.startsWith('http://') || actualPlayUrl.startsWith('https://')));
     
-    // 对于本地文件才检查存在性，网络URL和Jellyfin流媒体默认认为"存在"
-    bool fileExists = isNetworkUrl || isJellyfinStream;
+    // 对于本地文件才检查存在性，网络URL和流媒体默认认为"存在"
+    bool fileExists = isNetworkUrl || isJellyfinStream || isEmbyStream;
     
     // 为网络URL添加特定日志
     if (isNetworkUrl) {
@@ -669,8 +672,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         await _handleStreamUrlLoadingError(videoPath, e is Exception ? e : Exception(e.toString()));
         return; // 避免继续处理
       }
-    } else if (isJellyfinStream && actualPlayUrl != null) {
-      debugPrint('VideoPlayerState: 准备Jellyfin流媒体URL: $actualPlayUrl');
+    } else if ((isJellyfinStream || isEmbyStream) && actualPlayUrl != null) {
+      debugPrint('VideoPlayerState: 准备流媒体URL: $actualPlayUrl');
       // 对Jellyfin流媒体测试实际播放URL的连接
       try {
         await http.head(Uri.parse(actualPlayUrl));
@@ -882,7 +885,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       bool jellyfinDanmakuHandled = false;
       try {
         // 检查是否是Jellyfin视频并尝试使用historyItem中的IDs直接加载弹幕
-        jellyfinDanmakuHandled = await _checkAndLoadJellyfinDanmaku(videoPath, historyItem);
+        jellyfinDanmakuHandled = await _checkAndLoadStreamingDanmaku(videoPath, historyItem);
       } catch (e) {
         debugPrint('检查Jellyfin弹幕时出错: $e');
         // 错误处理时不设置jellyfinDanmakuHandled为true，下面会继续常规处理
@@ -1006,12 +1009,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         String? finalEpisodeTitle = existingHistory.episodeTitle;
         
         bool isJellyfinStream = path.startsWith('jellyfin://');
-        if (isJellyfinStream && _animeTitle != null && _animeTitle!.isNotEmpty) {
+        bool isEmbyStream = path.startsWith('emby://');
+        if ((isJellyfinStream || isEmbyStream) && _animeTitle != null && _animeTitle!.isNotEmpty) {
           finalAnimeName = _animeTitle!;
           if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
             finalEpisodeTitle = _episodeTitle!;
           }
-          debugPrint('_initializeWatchHistory: 使用Jellyfin友好名称: $finalAnimeName - $finalEpisodeTitle');
+          debugPrint('_initializeWatchHistory: 使用流媒体友好名称: $finalAnimeName - $finalEpisodeTitle');
         }
         
         debugPrint(
@@ -2459,15 +2463,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         String finalAnimeName = existingHistory.animeName;
         String? finalEpisodeTitle = existingHistory.episodeTitle;
         
-        // 检查是否是Jellyfin流媒体并且当前有更好的名称
+        // 检查是否是流媒体并且当前有更好的名称
         bool isJellyfinStream = _currentVideoPath!.startsWith('jellyfin://');
-        if (isJellyfinStream && _animeTitle != null && _animeTitle!.isNotEmpty) {
-          // 对于Jellyfin流媒体，如果当前有友好的动漫名称，则使用它
+        bool isEmbyStream = _currentVideoPath!.startsWith('emby://');
+        if ((isJellyfinStream || isEmbyStream) && _animeTitle != null && _animeTitle!.isNotEmpty) {
+          // 对于流媒体，如果当前有友好的动漫名称，则使用它
           finalAnimeName = _animeTitle!;
           if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
             finalEpisodeTitle = _episodeTitle!;
           }
-          debugPrint('VideoPlayerState: 使用Jellyfin友好名称更新记录: $finalAnimeName - $finalEpisodeTitle');
+          debugPrint('VideoPlayerState: 使用流媒体友好名称更新记录: $finalAnimeName - $finalEpisodeTitle');
         }
         
         final updatedHistory = WatchHistoryItem(
@@ -3256,10 +3261,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> _handleStreamUrlLoadingError(String videoPath, Exception e) async {
     debugPrint('流媒体URL加载失败: $videoPath, 错误: $e');
     
-    // 检查是否为Jellyfin URL
+    // 检查是否为流媒体 URL
     if (videoPath.contains('jellyfin') || videoPath.contains('/Videos/')) {
       _setStatus(PlayerStatus.error, message: 'Jellyfin流媒体加载失败，请检查网络连接');
       _error = '无法连接到Jellyfin服务器，请确保网络连接正常';
+    } else if (videoPath.contains('emby') || videoPath.contains('/emby/Videos/')) {
+      _setStatus(PlayerStatus.error, message: 'Emby流媒体加载失败，请检查网络连接');
+      _error = '无法连接到Emby服务器，请确保网络连接正常';
     } else {
       _setStatus(PlayerStatus.error, message: '流媒体加载失败，请检查网络连接');
       _error = '无法加载流媒体，请检查URL和网络连接';
@@ -3269,16 +3277,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     notifyListeners();
   }
 
-  // 检查是否是Jellyfin视频并使用现有的IDs直接加载弹幕
-  Future<bool> _checkAndLoadJellyfinDanmaku(String videoPath, WatchHistoryItem? historyItem) async {
+  // 检查是否是流媒体视频并使用现有的IDs直接加载弹幕
+  Future<bool> _checkAndLoadStreamingDanmaku(String videoPath, WatchHistoryItem? historyItem) async {
     // 检查是否是Jellyfin视频URL (多种可能格式)
     bool isJellyfinStream = videoPath.startsWith('jellyfin://') || 
                            (videoPath.contains('jellyfin') && videoPath.startsWith('http')) ||
                            (videoPath.contains('/Videos/') && videoPath.contains('/stream')) ||
                            (videoPath.contains('MediaSourceId=') && videoPath.contains('api_key='));
+    
+    // 检查是否是Emby视频URL (多种可能格式)
+    bool isEmbyStream = videoPath.startsWith('emby://') || 
+                       (videoPath.contains('emby') && videoPath.startsWith('http')) ||
+                       (videoPath.contains('/emby/Videos/') && videoPath.contains('/stream')) ||
+                       (videoPath.contains('api_key=') && videoPath.contains('emby'));
                            
-    if (isJellyfinStream && historyItem != null) {
-      debugPrint('检测到Jellyfin流媒体视频URL: $videoPath');
+    if ((isJellyfinStream || isEmbyStream) && historyItem != null) {
+      debugPrint('检测到流媒体视频URL: $videoPath (Jellyfin: $isJellyfinStream, Emby: $isEmbyStream)');
       
       // 检查historyItem是否包含所需的danmaku IDs
       if (historyItem.episodeId != null && historyItem.animeId != null) {
