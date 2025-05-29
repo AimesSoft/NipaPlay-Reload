@@ -137,7 +137,7 @@ class _AboutPageState extends State<AboutPage> {
                           Icon(Ionicons.logo_github, color: Colors.white.withOpacity(0.8), size: 20),
                           const SizedBox(width: 8),
                           Text(
-                            'MCFsteve/NipaPlay-Reload',
+                            'MCDFsteve/NipaPlay-Reload',
                             style: TextStyle(
                               color: Colors.cyanAccent[100],
                               decoration: TextDecoration.underline,
