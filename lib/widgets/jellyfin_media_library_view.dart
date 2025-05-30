@@ -93,7 +93,7 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
     }
 
     try {
-      final mediaItems = await jellyfinService.getLatestMediaItems(limit: 200);
+      final mediaItems = await jellyfinService.getLatestMediaItems(limit: 99999);
       if (mounted) {
         setState(() {
           _jellyfinMediaItems = mediaItems;

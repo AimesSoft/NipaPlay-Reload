@@ -33,6 +33,7 @@ import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/providers/emby_provider.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'widgets/blur_snackbar.dart';
@@ -342,6 +343,11 @@ void main() async {
             final jellyfinProvider = JellyfinProvider();
             jellyfinProvider.initialize(); // 在创建后立即调用 initialize
             return jellyfinProvider;
+          }),
+          ChangeNotifierProvider(create: (context) { // 添加 EmbyProvider
+            final embyProvider = EmbyProvider();
+            embyProvider.initialize(); // 在创建后立即调用 initialize
+            return embyProvider;
           }),
         ],
         child: const NipaPlayApp(),

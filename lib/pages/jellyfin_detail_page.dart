@@ -1069,9 +1069,9 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                   debugPrint('无法获取TabChangeNotifier: $e');
                 }
                 
-                // 创建一个专门用于流媒体播放的历史记录项，使用稳定的jellyfin://协议
+                // 创建一个专门用于流媒体播放的历史记录项，使用稳定的jellyfin://或emby://协议
                 final playableHistoryItem = WatchHistoryItem(
-                  filePath: historyItem.filePath, // 保持稳定的jellyfin://协议URL
+                  filePath: historyItem.filePath, // 保持稳定的jellyfin://或emby://协议URL
                   animeName: historyItem.animeName,
                   episodeTitle: historyItem.episodeTitle,
                   episodeId: historyItem.episodeId,
@@ -1090,9 +1090,9 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                 try {
                   // *** 关键修改：先初始化播放器，在导航前 ***
                   debugPrint('初始化播放器 - 步骤1：开始');
-                  // 使用稳定的jellyfin://协议URL作为标识符，临时HTTP URL作为实际播放源
+                  // 使用稳定的jellyfin://或emby://协议URL作为标识符，临时HTTP URL作为实际播放源
                   await videoPlayerState.initializePlayer(
-                    historyItem.filePath, // 使用稳定的jellyfin://协议
+                    historyItem.filePath, // 使用稳定的jellyfin://或emby://协议
                     historyItem: playableHistoryItem,
                     actualPlayUrl: streamUrl, // 临时HTTP流媒体URL仅用于播放
                   );

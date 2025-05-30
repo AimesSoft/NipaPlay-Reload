@@ -188,7 +188,7 @@ class JellyfinDandanplayMatcher {
         
         // 使用转换后的数据更新WatchHistoryItem
         final updatedItem = WatchHistoryItem(
-          filePath: historyItem.filePath, // 保持原始的jellyfin://协议路径，实际播放时再替换
+          filePath: historyItem.filePath, // 保持原始的jellyfin://或emby://协议路径，实际播放时再替换
           animeName: dummyVideoInfo['animeTitle'] ?? historyItem.animeName,
           episodeTitle: dummyVideoInfo['episodeTitle'] ?? historyItem.episodeTitle,
           episodeId: episodeId,
