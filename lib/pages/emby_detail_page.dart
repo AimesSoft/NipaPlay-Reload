@@ -405,18 +405,29 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
 
     final embyService = EmbyService.instance;
     final backdropUrl = _mediaDetail!.imageBackdropTag != null
-        ? embyService.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 800)
+        ? embyService.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95)
         : '';
 
     return Stack(
       children: [
-        // 背景图片
+        // 背景图片 - 直接使用网络图片，跳过压缩缓存
         if (backdropUrl.isNotEmpty)
           Positioned.fill(
-            child: CachedNetworkImageWidget(
-              imageUrl: backdropUrl,
+            child: Image.network(
+              backdropUrl,
               fit: BoxFit.cover,
-              errorBuilder: (context, error) => Container(color: Colors.grey[900]),
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: Colors.grey[900],
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white54),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(color: Colors.grey[900]);
+              },
             ),
           ),
         
