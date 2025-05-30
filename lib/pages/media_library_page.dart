@@ -30,6 +30,9 @@ import '../widgets/switchable_view.dart';
 import 'package:flutter/rendering.dart';
 import 'package:nipaplay/main.dart';
 import '../services/jellyfin_service.dart';
+import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/widgets/emby_server_dialog.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -197,13 +200,56 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
   }
   
   Future<void> _showJellyfinServerDialog() async {
-    // This dialog might change JellyfinProvider state.
-    // The _onJellyfinProviderChanged listener will update _isJellyfinConnected if needed.
-    // The JellyfinMediaLibraryView will also listen to JellyfinProvider for its own updates.
-    await JellyfinServerDialog.show(context);
-    // If JellyfinServerDialog.show(context) returns a value indicating change,
-    // you could use it to explicitly call _onJellyfinProviderChanged or setState,
-    // but relying on the provider listener is generally cleaner.
+    final result = await JellyfinServerDialog.show(context);
+    if (result == true && mounted) {
+      // 可以在这里添加刷新逻辑
+    }
+  }
+
+  Future<void> _showServerSelectionDialog() async {
+    final result = await BlurDialog.show<String>(
+      context: context,
+      title: '选择媒体服务器',
+      content: '请选择要连接的媒体服务器类型：',
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('jellyfin'),
+          child: const Text(
+            'Jellyfin',
+            style: TextStyle(color: Colors.lightBlueAccent),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('emby'),
+          child: const Text(
+            'Emby',
+            style: TextStyle(color: Colors.green),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text(
+            '取消',
+            style: TextStyle(color: Colors.white70),
+          ),
+        ),
+      ],
+    );
+
+    if (result != null && mounted) {
+      if (result == 'jellyfin') {
+        await _showJellyfinServerDialog();
+      } else if (result == 'emby') {
+        await _showEmbyServerDialog();
+      }
+    }
+  }
+
+  Future<void> _showEmbyServerDialog() async {
+    final result = await EmbyServerDialog.show(context);
+    if (result == true && mounted) {
+      // 可以在这里添加刷新逻辑
+    }
   }
 
   Future<void> _fetchAndPersistFullDetailsInBackground() async {
@@ -400,9 +446,9 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                   // 添加Jellyfin服务器按钮
                   if (!_isJellyfinConnected) // Only show if not connected
                     ElevatedButton.icon(
-                      onPressed: _showJellyfinServerDialog,
+                      onPressed: _showServerSelectionDialog,
                       icon: const Icon(Icons.cloud),
-                      label: const Text('添加Jellyfin服务器'),
+                      label: const Text('添加媒体服务器'),
                     ),
                 ],
               ),
@@ -554,7 +600,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
               bottom: 16,
               child: FloatingActionGlassButton(
                 iconData: Ionicons.cloud_outline,
-                onPressed: _showJellyfinServerDialog,
+                onPressed: _showServerSelectionDialog,
               ),
             ),
           ],

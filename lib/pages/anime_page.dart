@@ -582,9 +582,15 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       },
     );
 
+    // 添加鼠标拖动功能的包装器
+    Widget draggableHistoryList = _MouseDragScrollWrapper(
+      scrollController: _watchHistoryListScrollController,
+      child: historyListView,
+    );
+
     // 根据平台决定是否使用Scrollbar
     if (Platform.isAndroid || Platform.isIOS) {
-      return historyListView; // 移动平台不显示滚动条
+      return draggableHistoryList; // 移动平台不显示滚动条
     } else {
       // 创建适用于桌面平台的Scrollbar
       return Scrollbar(
@@ -592,7 +598,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         radius: const Radius.circular(2),
         thickness: 4, 
         thumbVisibility: false,
-        child: historyListView,
+        child: draggableHistoryList,
       );
     }
   }
@@ -1032,5 +1038,65 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     });
     
     print('TabController已更新：新长度=$_tabCount, 当前索引=$_currentIndex');
+  }
+}
+
+// 鼠标拖动滚动包装器
+class _MouseDragScrollWrapper extends StatefulWidget {
+  final ScrollController scrollController;
+  final Widget child;
+
+  const _MouseDragScrollWrapper({
+    required this.scrollController,
+    required this.child,
+  });
+
+  @override
+  State<_MouseDragScrollWrapper> createState() => _MouseDragScrollWrapperState();
+}
+
+class _MouseDragScrollWrapperState extends State<_MouseDragScrollWrapper> {
+  bool _isDragging = false;
+  double _lastPanPosition = 0.0;
+  
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (PointerDownEvent event) {
+        // 只响应鼠标左键
+        if (event.buttons == 1) {
+          _isDragging = true;
+          _lastPanPosition = event.position.dx;
+        }
+      },
+      onPointerMove: (PointerMoveEvent event) {
+        if (_isDragging && widget.scrollController.hasClients) {
+          final double delta = _lastPanPosition - event.position.dx;
+          _lastPanPosition = event.position.dx;
+          
+          // 计算新的滚动位置
+          final double newScrollOffset = widget.scrollController.offset + delta;
+          
+          // 限制滚动范围
+          final double maxScrollExtent = widget.scrollController.position.maxScrollExtent;
+          final double minScrollExtent = widget.scrollController.position.minScrollExtent;
+          
+          final double clampedOffset = newScrollOffset.clamp(minScrollExtent, maxScrollExtent);
+          
+          // 应用滚动
+          widget.scrollController.jumpTo(clampedOffset);
+        }
+      },
+      onPointerUp: (PointerUpEvent event) {
+        _isDragging = false;
+      },
+      onPointerCancel: (PointerCancelEvent event) {
+        _isDragging = false;
+      },
+      child: MouseRegion(
+        cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
+        child: widget.child,
+      ),
+    );
   }
 }

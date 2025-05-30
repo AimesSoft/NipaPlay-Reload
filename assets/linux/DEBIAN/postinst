@@ -1,6 +1,32 @@
 #!/usr/bin/env sh
-ln -sf /opt/fnipaplay/fnipaplay /usr/bin/fnipaplay
-chmod +x /usr/bin/fnipaplay
+
+# 创建应用程序的符号链接到 /usr/bin
+ln -sf /opt/nipaplay/NipaPlay /usr/bin/nipaplay-reload
+chmod +x /usr/bin/nipaplay-reload
+
+# 检查并创建 libmpv 兼容性符号链接
+echo "Checking libmpv compatibility..."
+if [ ! -e "/usr/lib/libmpv.so.1" ] && [ -e "/usr/lib/libmpv.so.2" ]; then
+    echo "Creating libmpv.so.1 compatibility symlink..."
+    ln -sf /usr/lib/libmpv.so.2 /usr/lib/libmpv.so.1
+    echo "Created symlink: /usr/lib/libmpv.so.1 -> /usr/lib/libmpv.so.2"
+elif [ ! -e "/usr/lib/libmpv.so.1" ]; then
+    # 查找任何版本的 libmpv
+    LIBMPV_PATH=$(find /usr/lib -name "libmpv.so.*" -type f | head -1)
+    if [ -n "$LIBMPV_PATH" ]; then
+        echo "Creating libmpv.so.1 compatibility symlink to $LIBMPV_PATH..."
+        ln -sf "$LIBMPV_PATH" /usr/lib/libmpv.so.1
+        echo "Created symlink: /usr/lib/libmpv.so.1 -> $LIBMPV_PATH"
+    else
+        echo "Warning: No libmpv library found. Application may not work properly."
+    fi
+fi
+
+# 更新系统数据库
 update-mime-database /usr/share/mime || true
 update-desktop-database /usr/share/applications || true
+
+# 更新动态链接器缓存
+ldconfig || true
+
 exit 0

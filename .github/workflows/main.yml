@@ -281,9 +281,18 @@ jobs:
             
             if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
               echo "mdk-sdk extracted successfully"
+              echo "Listing mdk-sdk contents:"
+              find "${MDK_SDK_DIR}/mdk-sdk" -name "*mpv*" -type f || echo "No mpv files found in mdk-sdk"
             else
               echo "WARNING: Extraction failed or directory structure is unexpected"
             fi
+          fi
+          
+          # Fallback: try to use system libmpv if mdk-sdk fails
+          if [ ! -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
+            echo "mdk-sdk not available, will use system libmpv as fallback"
+            echo "System libmpv libraries:"
+            find /usr/lib -name "*mpv*" -type f || echo "No system libmpv found"
           fi
 
       - name: Build Linux
@@ -361,6 +370,32 @@ jobs:
             find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" \;
           fi
           
+          # 创建 libmpv 兼容性符号链接
+          echo "Creating libmpv compatibility symlinks in ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
+          cd "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
+          
+          # 如果存在 libmpv.so.2，创建 libmpv.so.1 的符号链接
+          if [ -f "libmpv.so.2" ]; then
+            ln -sf libmpv.so.2 libmpv.so.1
+            echo "Created symlink: libmpv.so.1 -> libmpv.so.2"
+          elif [ -f "libmpv.so.2.5.0" ]; then
+            ln -sf libmpv.so.2.5.0 libmpv.so.1
+            ln -sf libmpv.so.2.5.0 libmpv.so.2
+            echo "Created symlinks: libmpv.so.1 -> libmpv.so.2.5.0, libmpv.so.2 -> libmpv.so.2.5.0"
+          else
+            # 查找任何版本的 libmpv 并创建链接
+            LIBMPV_FILE=$(find . -name "libmpv.so.*" -type f | head -1)
+            if [ -n "$LIBMPV_FILE" ]; then
+              ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
+              echo "Created symlink: libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
+            else
+              echo "WARNING: No libmpv library found to create compatibility symlink"
+            fi
+          fi
+          
+          # 返回到构建根目录
+          cd - > /dev/null
+          
           # Create DEBIAN/control from template
           echo "Creating DEBIAN/control"
           sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
@@ -423,10 +458,36 @@ jobs:
             find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${APPDIR}/lib/" \;
           fi
           
+          # 创建 libmpv 兼容性符号链接
+          echo "Creating libmpv compatibility symlinks in ${APPDIR}/lib/"
+          cd "${APPDIR}/lib/"
+          
+          # 如果存在 libmpv.so.2，创建 libmpv.so.1 的符号链接
+          if [ -f "libmpv.so.2" ]; then
+            ln -sf libmpv.so.2 libmpv.so.1
+            echo "Created symlink: libmpv.so.1 -> libmpv.so.2"
+          elif [ -f "libmpv.so.2.5.0" ]; then
+            ln -sf libmpv.so.2.5.0 libmpv.so.1
+            ln -sf libmpv.so.2.5.0 libmpv.so.2
+            echo "Created symlinks: libmpv.so.1 -> libmpv.so.2.5.0, libmpv.so.2 -> libmpv.so.2.5.0"
+          else
+            # 查找任何版本的 libmpv 并创建链接
+            LIBMPV_FILE=$(find . -name "libmpv.so.*" -type f | head -1)
+            if [ -n "$LIBMPV_FILE" ]; then
+              ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
+              echo "Created symlink: libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
+            else
+              echo "WARNING: No libmpv library found to create compatibility symlink"
+            fi
+          fi
+          
+          # 返回到构建根目录
+          cd - > /dev/null
+          
           # Copy desktop file and icon to AppDir root
           echo "Copying desktop file and icon to AppDir root"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${APPDIR}/"
-          cp "${ICON_SOURCE_PATH}" "${APPDIR}/${ICON_NAME}" 
+          cp "${ICON_SOURCE_PATH}" "${APPDIR}/${ICON_NAME}"
           
           # Download linuxdeployqt
           echo "Downloading linuxdeployqt..."
@@ -493,6 +554,32 @@ jobs:
             echo "Attempting to find system libmpv for tar.gz..."
             find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${ARCHIVE_CONTENT_DIR}/lib/" \;
           fi
+          
+          # 创建 libmpv 兼容性符号链接
+          echo "Creating libmpv compatibility symlinks in ${ARCHIVE_CONTENT_DIR}/lib/"
+          cd "${ARCHIVE_CONTENT_DIR}/lib/"
+          
+          # 如果存在 libmpv.so.2，创建 libmpv.so.1 的符号链接
+          if [ -f "libmpv.so.2" ]; then
+            ln -sf libmpv.so.2 libmpv.so.1
+            echo "Created symlink: libmpv.so.1 -> libmpv.so.2"
+          elif [ -f "libmpv.so.2.5.0" ]; then
+            ln -sf libmpv.so.2.5.0 libmpv.so.1
+            ln -sf libmpv.so.2.5.0 libmpv.so.2
+            echo "Created symlinks: libmpv.so.1 -> libmpv.so.2.5.0, libmpv.so.2 -> libmpv.so.2.5.0"
+          else
+            # 查找任何版本的 libmpv 并创建链接
+            LIBMPV_FILE=$(find . -name "libmpv.so.*" -type f | head -1)
+            if [ -n "$LIBMPV_FILE" ]; then
+              ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
+              echo "Created symlink: libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
+            else
+              echo "WARNING: No libmpv library found to create compatibility symlink"
+            fi
+          fi
+          
+          # 返回到构建根目录
+          cd - > /dev/null
           
           # Add a simple run script using echo commands
           RUN_SCRIPT_PATH="${ARCHIVE_CONTENT_DIR}/run.sh"

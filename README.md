@@ -79,6 +79,7 @@
 
 - **视频播放**
   - 支持本地视频文件播放
+  - 支持Emby，Jellyfin视频播放
   - 支持弹幕显示（集成弹弹play）
     - 滚动弹幕、顶部弹幕、底部弹幕
     - 弹幕记忆运动轨迹
@@ -119,7 +120,7 @@
 - **功能扩展**
   - Bangumi同步观看记录
   - 评论区功能
-  - 云媒体库挂载（WebDAV、FTP、SMB、Emby）
+  - 云媒体库挂载（WebDAV、FTP、SMB）
   - 视频截图
   - 视频导出单独片段为gif
   - 倍速功能
@@ -128,6 +129,10 @@
 
 - **核心功能库**
   - [fvp](https://pub.dev/packages/fvp) - 高性能视频播放器
+  - [video_player](https://pub.dev/packages/video_player) - Flutter官方视频播放器
+  - [media_kit](https://pub.dev/packages/media_kit) - 跨平台媒体播放框架
+  - [media_kit_video](https://pub.dev/packages/media_kit_video) - media_kit视频组件
+  - [media_kit_libs_video](https://pub.dev/packages/media_kit_libs_video) - media_kit视频库
   - [http](https://pub.dev/packages/http) - HTTP 请求处理
   - [crypto](https://pub.dev/packages/crypto) - 加密功能
 
@@ -135,9 +140,10 @@
   - [glassmorphism](https://pub.dev/packages/glassmorphism) - 毛玻璃效果
   - [hugeicons](https://pub.dev/packages/hugeicons) - 图标库
   - [kmbal_ionicons](https://pub.dev/packages/kmbal_ionicons) - 图标库
+  - [transparent_image](https://pub.dev/packages/transparent_image) - 透明图片占位符
 
 - **文件处理**
-  - [file_picker](https://pub.dev/packages/file_picker) - 文件选择器
+  - [file_selector](https://pub.dev/packages/file_selector) - 文件选择器
   - [path_provider](https://pub.dev/packages/path_provider) - 路径提供
   - [path](https://pub.dev/packages/path) - 路径处理
   - [image_picker](https://pub.dev/packages/image_picker) - 图片选择器
@@ -149,6 +155,8 @@
 
 - **数据存储**
   - [shared_preferences](https://pub.dev/packages/shared_preferences) - 本地存储
+  - [sqflite](https://pub.dev/packages/sqflite) - SQLite数据库
+  - [sqflite_common_ffi](https://pub.dev/packages/sqflite_common_ffi) - 桌面平台SQLite支持
 
 - **网络相关**
   - [cached_network_image](https://pub.dev/packages/cached_network_image) - 网络图片缓存
@@ -157,17 +165,59 @@
   - [window_manager](https://pub.dev/packages/window_manager) - 窗口管理
   - [package_info_plus](https://pub.dev/packages/package_info_plus) - 包信息
   - [url_launcher](https://pub.dev/packages/url_launcher) - URL 启动器
+  - [permission_handler](https://pub.dev/packages/permission_handler) - 权限管理
+  - [wakelock_plus](https://pub.dev/packages/wakelock_plus) - 屏幕常亮
+  - [screen_brightness](https://pub.dev/packages/screen_brightness) - 屏幕亮度控制
+
+- **工具库**
+  - [intl](https://pub.dev/packages/intl) - 国际化支持
+  - [uuid](https://pub.dev/packages/uuid) - UUID生成器
 
 - **开发工具**
   - [flutter_lints](https://pub.dev/packages/flutter_lints) - 代码检查
 
 ## 技术栈
 
-- Flutter
-- Dart
-- fvp 播放器
-- 弹弹play API
-- Bangumi API
+### 🎯 **核心框架**
+- **Flutter** - 跨平台UI框架
+- **Dart** - 编程语言
+
+### 🎬 **视频播放引擎**
+- **FVP (Flutter Video Player)** - 基于libmdk的高性能视频播放器
+- **Media Kit** - 跨平台媒体播放框架
+- **Video Player** - Flutter官方视频播放器
+- **libmpv** - 底层媒体播放库
+
+### 🗄️ **数据存储**
+- **SQLite** - 本地数据库存储
+- **SharedPreferences** - 轻量级键值存储
+- **文件系统** - 本地文件管理
+
+### 🌐 **网络与API**
+- **HTTP** - 网络请求处理
+- **弹弹play API** - 弹幕数据源
+- **Bangumi API** - 番剧信息源
+- **Emby/Jellyfin API** - 媒体服务器集成
+
+### 🎨 **UI/UX技术**
+- **Material Design** - 设计语言
+- **Glassmorphism** - 毛玻璃视觉效果
+- **Provider** - 状态管理
+- **自适应布局** - 响应式设计
+
+### 🔧 **系统集成**
+- **Window Manager** - 桌面窗口管理
+- **Permission Handler** - 权限管理
+- **Wakelock** - 屏幕常亮控制
+- **Screen Brightness** - 亮度控制
+
+### 📱 **平台支持**
+- **Windows** - 桌面应用
+- **macOS** - 桌面应用
+- **Linux** - 桌面应用
+- **Android** - 移动应用
+- **iOS** - 移动应用
+
 ## 关于看板娘
 
 - https://www.pixiv.net/artworks/130349456 （作者MCDFsteve）

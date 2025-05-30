@@ -8,5 +8,5 @@ Installed-Size: 34648
 Maintainer: madoka773 <valigarmanda55@gmail.com>
 Description: A cross platform danmaku video player.
 Homepage: https://github.com/MCDFsteve/NipaPlay-Reload
-Depends: ffmpeg, libass9, libsqlite3-0, libcanberra-gtk3-module, gtk3-nocsd, libgtk3-nocsd0
+Depends: ffmpeg, libass9, libsqlite3-0, libcanberra-gtk3-module, gtk3-nocsd, libgtk3-nocsd0, libmpv1 | libmpv2
  

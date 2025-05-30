@@ -1,5 +1,22 @@
 #!/usr/bin/env sh
-rm /usr/bin/fnipaplay
+
+# 移除应用程序符号链接
+rm -f /usr/bin/nipaplay-reload
+
+# 清理我们创建的 libmpv 兼容性符号链接（仅当它指向 libmpv.so.2 时）
+if [ -L "/usr/lib/libmpv.so.1" ]; then
+    LINK_TARGET=$(readlink /usr/lib/libmpv.so.1)
+    if [ "$LINK_TARGET" = "/usr/lib/libmpv.so.2" ] || [ "$LINK_TARGET" = "libmpv.so.2" ]; then
+        echo "Removing libmpv.so.1 compatibility symlink..."
+        rm -f /usr/lib/libmpv.so.1
+    fi
+fi
+
+# 更新系统数据库
 update-mime-database /usr/share/mime || true
 update-desktop-database /usr/share/applications || true
+
+# 更新动态链接器缓存
+ldconfig || true
+
 exit 0
