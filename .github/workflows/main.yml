@@ -295,6 +295,7 @@ jobs:
           # 创建一个专用函数来确保libmpv.so.1的存在
           create_libmpv_so1() {
             local TARGET_DIR="$1"
+            local ORIGINAL_DIR=$(pwd)
             echo "=== Ensuring libmpv.so.1 exists in ${TARGET_DIR} ==="
             
             cd "${TARGET_DIR}"
@@ -374,10 +375,11 @@ jobs:
               echo "❌ CRITICAL: Failed to create libmpv.so.1 using all strategies!"
               echo "Available files:"
               ls -la . | grep -i mpv || echo "No mpv files found"
+              cd "$ORIGINAL_DIR"
               return 1
             fi
             
-            cd - > /dev/null
+            cd "$ORIGINAL_DIR"
             return 0
           }
           
@@ -408,6 +410,7 @@ jobs:
           # 重新定义libmpv.so.1创建函数（确保在打包阶段可用）
           create_libmpv_so1() {
             local TARGET_DIR="$1"
+            local ORIGINAL_DIR=$(pwd)
             echo "=== Ensuring libmpv.so.1 exists in ${TARGET_DIR} ==="
             
             cd "${TARGET_DIR}"
@@ -487,10 +490,11 @@ jobs:
               echo "❌ CRITICAL: Failed to create libmpv.so.1 using all strategies!"
               echo "Available files:"
               ls -la . | grep -i mpv || echo "No mpv files found"
+              cd "$ORIGINAL_DIR"
               return 1
             fi
             
-            cd - > /dev/null
+            cd "$ORIGINAL_DIR"
             return 0
           }
           
@@ -588,6 +592,9 @@ jobs:
           
           # Copy desktop file and icon
           echo "Copying desktop file and icon"
+          echo "Current working directory: $(pwd)"
+          echo "Checking if desktop file exists: ${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}"
+          ls -la "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" || echo "Desktop file not found!"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${DEB_ROOT}/usr/share/applications/"
           cp "${ICON_SOURCE_PATH}" "${DEB_ROOT}/usr/share/icons/hicolor/512x512/apps/${ICON_NAME}"
           
@@ -642,6 +649,9 @@ jobs:
           
           # Copy desktop file and icon to AppDir root
           echo "Copying desktop file and icon to AppDir root"
+          echo "Current working directory: $(pwd)"
+          echo "Checking if desktop file exists: ${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}"
+          ls -la "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" || echo "Desktop file not found!"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${APPDIR}/"
           cp "${ICON_SOURCE_PATH}" "${APPDIR}/${ICON_NAME}"
           
