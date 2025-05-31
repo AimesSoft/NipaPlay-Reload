@@ -283,8 +283,110 @@ jobs:
               echo "mdk-sdk extracted successfully"
               echo "Listing mdk-sdk contents:"
               find "${MDK_SDK_DIR}/mdk-sdk" -name "*mpv*" -type f || echo "No mpv files found in mdk-sdk"
+              
+              # 详细列出所有libmpv相关文件
+              echo "Detailed libmpv files in mdk-sdk:"
+              find "${MDK_SDK_DIR}/mdk-sdk" -name "*mpv*" -type f -exec ls -la {} \; || echo "No detailed libmpv files found"
             else
               echo "WARNING: Extraction failed or directory structure is unexpected"
+            fi
+          fi
+          
+          # 创建一个专用函数来确保libmpv.so.1的存在
+          create_libmpv_so1() {
+            local TARGET_DIR="$1"
+            echo "=== Ensuring libmpv.so.1 exists in ${TARGET_DIR} ==="
+            
+            cd "${TARGET_DIR}"
+            
+            # 详细列出所有mpv相关文件
+            echo "Current mpv files in ${TARGET_DIR}:"
+            find . -name "*mpv*" -type f -exec ls -la {} \; || echo "No mpv files found"
+            
+            # 强制创建libmpv.so.1的多种策略
+            LIBMPV_SO1_CREATED=false
+            
+            # 策略1: 如果存在libmpv.so.2，创建符号链接
+            if [ -f "libmpv.so.2" ]; then
+              ln -sf libmpv.so.2 libmpv.so.1
+              echo "✓ Strategy 1: Created symlink libmpv.so.1 -> libmpv.so.2"
+              LIBMPV_SO1_CREATED=true
+            fi
+            
+            # 策略2: 如果存在具体版本号的libmpv.so文件
+            if [ ! -f "libmpv.so.1" ]; then
+              for mpv_file in libmpv.so.2.* libmpv.so.*; do
+                if [ -f "$mpv_file" ]; then
+                  ln -sf "$mpv_file" libmpv.so.1
+                  ln -sf "$mpv_file" libmpv.so.2 2>/dev/null || true
+                  echo "✓ Strategy 2: Created symlink libmpv.so.1 -> $mpv_file"
+                  LIBMPV_SO1_CREATED=true
+                  break
+                fi
+              done
+            fi
+            
+            # 策略3: 查找任何libmpv.*文件并创建链接
+            if [ ! -f "libmpv.so.1" ]; then
+              LIBMPV_FILE=$(find . -name "libmpv.*" -type f | head -1)
+              if [ -n "$LIBMPV_FILE" ]; then
+                ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
+                echo "✓ Strategy 3: Created symlink libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
+                LIBMPV_SO1_CREATED=true
+              fi
+            fi
+            
+            # 策略4: 从系统复制libmpv并重命名为.so.1
+            if [ ! -f "libmpv.so.1" ]; then
+              echo "Searching system for libmpv libraries..."
+              SYSTEM_LIBMPV=$(find /usr/lib* -name "libmpv.so*" -type f 2>/dev/null | head -1)
+              if [ -n "$SYSTEM_LIBMPV" ]; then
+                cp "$SYSTEM_LIBMPV" ./libmpv.so.1
+                chmod 755 ./libmpv.so.1
+                echo "✓ Strategy 4: Copied system libmpv ($SYSTEM_LIBMPV) as libmpv.so.1"
+                LIBMPV_SO1_CREATED=true
+              fi
+            fi
+            
+            # 策略5: 强制下载最新的libmpv.so.1（最后手段）
+            if [ ! -f "libmpv.so.1" ]; then
+              echo "All strategies failed, trying to download compatible libmpv.so.1..."
+              # 尝试下载一个已知兼容的libmpv.so.1版本
+              wget -q --tries=2 "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20231015/mpv-dev-x86_64-20231015-git-d678618.7z" -O temp_mpv.7z 2>/dev/null || true
+              if [ -f "temp_mpv.7z" ]; then
+                echo "Downloaded backup mpv package, but 7z extraction not implemented in this strategy"
+                rm -f temp_mpv.7z
+              fi
+            fi
+            
+            # 最终验证
+            if [ -f "libmpv.so.1" ]; then
+              echo "✅ SUCCESS: libmpv.so.1 is now available!"
+              ls -la libmpv.so*
+              # 验证文件是否可执行/可链接
+              if file libmpv.so.1 | grep -q "ELF.*shared object"; then
+                echo "✅ libmpv.so.1 appears to be a valid shared library"
+              else
+                echo "⚠️  WARNING: libmpv.so.1 may not be a valid shared library"
+                file libmpv.so.1
+              fi
+            else
+              echo "❌ CRITICAL: Failed to create libmpv.so.1 using all strategies!"
+              echo "Available files:"
+              ls -la . | grep -i mpv || echo "No mpv files found"
+              return 1
+            fi
+            
+            cd - > /dev/null
+            return 0
+          }
+          
+          # 如果mdk-sdk可用，预先处理libmpv.so.1
+          if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
+            echo "Pre-processing libmpv.so.1 in mdk-sdk..."
+            MDK_LIB_DIR=$(find "${MDK_SDK_DIR}/mdk-sdk" -type d -name "*lib*" | head -1)
+            if [ -n "$MDK_LIB_DIR" ]; then
+              create_libmpv_so1 "$MDK_LIB_DIR" || echo "Warning: Could not create libmpv.so.1 in mdk-sdk"
             fi
           fi
           
@@ -303,6 +405,95 @@ jobs:
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
         run: |
+          # 重新定义libmpv.so.1创建函数（确保在打包阶段可用）
+          create_libmpv_so1() {
+            local TARGET_DIR="$1"
+            echo "=== Ensuring libmpv.so.1 exists in ${TARGET_DIR} ==="
+            
+            cd "${TARGET_DIR}"
+            
+            # 详细列出所有mpv相关文件
+            echo "Current mpv files in ${TARGET_DIR}:"
+            find . -name "*mpv*" -type f -exec ls -la {} \; || echo "No mpv files found"
+            
+            # 强制创建libmpv.so.1的多种策略
+            LIBMPV_SO1_CREATED=false
+            
+            # 策略1: 如果存在libmpv.so.2，创建符号链接
+            if [ -f "libmpv.so.2" ]; then
+              ln -sf libmpv.so.2 libmpv.so.1
+              echo "✓ Strategy 1: Created symlink libmpv.so.1 -> libmpv.so.2"
+              LIBMPV_SO1_CREATED=true
+            fi
+            
+            # 策略2: 如果存在具体版本号的libmpv.so文件
+            if [ ! -f "libmpv.so.1" ]; then
+              for mpv_file in libmpv.so.2.* libmpv.so.*; do
+                if [ -f "$mpv_file" ]; then
+                  ln -sf "$mpv_file" libmpv.so.1
+                  ln -sf "$mpv_file" libmpv.so.2 2>/dev/null || true
+                  echo "✓ Strategy 2: Created symlink libmpv.so.1 -> $mpv_file"
+                  LIBMPV_SO1_CREATED=true
+                  break
+                fi
+              done
+            fi
+            
+            # 策略3: 查找任何libmpv.*文件并创建链接
+            if [ ! -f "libmpv.so.1" ]; then
+              LIBMPV_FILE=$(find . -name "libmpv.*" -type f | head -1)
+              if [ -n "$LIBMPV_FILE" ]; then
+                ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
+                echo "✓ Strategy 3: Created symlink libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
+                LIBMPV_SO1_CREATED=true
+              fi
+            fi
+            
+            # 策略4: 从系统复制libmpv并重命名为.so.1
+            if [ ! -f "libmpv.so.1" ]; then
+              echo "Searching system for libmpv libraries..."
+              SYSTEM_LIBMPV=$(find /usr/lib* -name "libmpv.so*" -type f 2>/dev/null | head -1)
+              if [ -n "$SYSTEM_LIBMPV" ]; then
+                cp "$SYSTEM_LIBMPV" ./libmpv.so.1
+                chmod 755 ./libmpv.so.1
+                echo "✓ Strategy 4: Copied system libmpv ($SYSTEM_LIBMPV) as libmpv.so.1"
+                LIBMPV_SO1_CREATED=true
+              fi
+            fi
+            
+            # 策略5: 强制下载最新的libmpv.so.1（最后手段）
+            if [ ! -f "libmpv.so.1" ]; then
+              echo "All strategies failed, trying to download compatible libmpv.so.1..."
+              # 尝试下载一个已知兼容的libmpv.so.1版本
+              wget -q --tries=2 "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20231015/mpv-dev-x86_64-20231015-git-d678618.7z" -O temp_mpv.7z 2>/dev/null || true
+              if [ -f "temp_mpv.7z" ]; then
+                echo "Downloaded backup mpv package, but 7z extraction not implemented in this strategy"
+                rm -f temp_mpv.7z
+              fi
+            fi
+            
+            # 最终验证
+            if [ -f "libmpv.so.1" ]; then
+              echo "✅ SUCCESS: libmpv.so.1 is now available!"
+              ls -la libmpv.so*
+              # 验证文件是否可执行/可链接
+              if file libmpv.so.1 | grep -q "ELF.*shared object"; then
+                echo "✅ libmpv.so.1 appears to be a valid shared library"
+              else
+                echo "⚠️  WARNING: libmpv.so.1 may not be a valid shared library"
+                file libmpv.so.1
+              fi
+            else
+              echo "❌ CRITICAL: Failed to create libmpv.so.1 using all strategies!"
+              echo "Available files:"
+              ls -la . | grep -i mpv || echo "No mpv files found"
+              return 1
+            fi
+            
+            cd - > /dev/null
+            return 0
+          }
+          
           # AMD64 build - Install dependencies
           echo "Updating package lists..."
           sudo apt-get update -y
@@ -370,31 +561,12 @@ jobs:
             find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" \;
           fi
           
-          # 创建 libmpv 兼容性符号链接
-          echo "Creating libmpv compatibility symlinks in ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
-          cd "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
-          
-          # 如果存在 libmpv.so.2，创建 libmpv.so.1 的符号链接
-          if [ -f "libmpv.so.2" ]; then
-            ln -sf libmpv.so.2 libmpv.so.1
-            echo "Created symlink: libmpv.so.1 -> libmpv.so.2"
-          elif [ -f "libmpv.so.2.5.0" ]; then
-            ln -sf libmpv.so.2.5.0 libmpv.so.1
-            ln -sf libmpv.so.2.5.0 libmpv.so.2
-            echo "Created symlinks: libmpv.so.1 -> libmpv.so.2.5.0, libmpv.so.2 -> libmpv.so.2.5.0"
-          else
-            # 查找任何版本的 libmpv 并创建链接
-            LIBMPV_FILE=$(find . -name "libmpv.so.*" -type f | head -1)
-            if [ -n "$LIBMPV_FILE" ]; then
-              ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
-              echo "Created symlink: libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
-            else
-              echo "WARNING: No libmpv library found to create compatibility symlink"
-            fi
-          fi
-          
-          # 返回到构建根目录
-          cd - > /dev/null
+          # 创建 libmpv 兼容性符号链接 - 使用增强的函数
+          echo "Ensuring libmpv.so.1 availability in .deb package..."
+          create_libmpv_so1 "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" || {
+            echo "ERROR: Failed to ensure libmpv.so.1 in .deb package"
+            exit 1
+          }
           
           # Create DEBIAN/control from template
           echo "Creating DEBIAN/control"
@@ -458,28 +630,12 @@ jobs:
             find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${APPDIR}/lib/" \;
           fi
           
-          # 创建 libmpv 兼容性符号链接
-          echo "Creating libmpv compatibility symlinks in ${APPDIR}/lib/"
-          cd "${APPDIR}/lib/"
-          
-          # 如果存在 libmpv.so.2，创建 libmpv.so.1 的符号链接
-          if [ -f "libmpv.so.2" ]; then
-            ln -sf libmpv.so.2 libmpv.so.1
-            echo "Created symlink: libmpv.so.1 -> libmpv.so.2"
-          elif [ -f "libmpv.so.2.5.0" ]; then
-            ln -sf libmpv.so.2.5.0 libmpv.so.1
-            ln -sf libmpv.so.2.5.0 libmpv.so.2
-            echo "Created symlinks: libmpv.so.1 -> libmpv.so.2.5.0, libmpv.so.2 -> libmpv.so.2.5.0"
-          else
-            # 查找任何版本的 libmpv 并创建链接
-            LIBMPV_FILE=$(find . -name "libmpv.so.*" -type f | head -1)
-            if [ -n "$LIBMPV_FILE" ]; then
-              ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
-              echo "Created symlink: libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
-            else
-              echo "WARNING: No libmpv library found to create compatibility symlink"
-            fi
-          fi
+          # 创建 libmpv 兼容性符号链接 - 使用增强的函数
+          echo "Ensuring libmpv.so.1 availability in AppImage..."
+          create_libmpv_so1 "${APPDIR}/lib/" || {
+            echo "ERROR: Failed to ensure libmpv.so.1 in AppImage"
+            exit 1
+          }
           
           # 返回到构建根目录
           cd - > /dev/null
@@ -555,37 +711,18 @@ jobs:
             find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${ARCHIVE_CONTENT_DIR}/lib/" \;
           fi
           
-          # 创建 libmpv 兼容性符号链接
-          echo "Creating libmpv compatibility symlinks in ${ARCHIVE_CONTENT_DIR}/lib/"
-          cd "${ARCHIVE_CONTENT_DIR}/lib/"
-          
-          # 如果存在 libmpv.so.2，创建 libmpv.so.1 的符号链接
-          if [ -f "libmpv.so.2" ]; then
-            ln -sf libmpv.so.2 libmpv.so.1
-            echo "Created symlink: libmpv.so.1 -> libmpv.so.2"
-          elif [ -f "libmpv.so.2.5.0" ]; then
-            ln -sf libmpv.so.2.5.0 libmpv.so.1
-            ln -sf libmpv.so.2.5.0 libmpv.so.2
-            echo "Created symlinks: libmpv.so.1 -> libmpv.so.2.5.0, libmpv.so.2 -> libmpv.so.2.5.0"
-          else
-            # 查找任何版本的 libmpv 并创建链接
-            LIBMPV_FILE=$(find . -name "libmpv.so.*" -type f | head -1)
-            if [ -n "$LIBMPV_FILE" ]; then
-              ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
-              echo "Created symlink: libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
-            else
-              echo "WARNING: No libmpv library found to create compatibility symlink"
-            fi
-          fi
-          
-          # 返回到构建根目录
-          cd - > /dev/null
+          # 创建 libmpv 兼容性符号链接 - 使用增强的函数
+          echo "Ensuring libmpv.so.1 availability in tar.gz archive..."
+          create_libmpv_so1 "${ARCHIVE_CONTENT_DIR}/lib/" || {
+            echo "ERROR: Failed to ensure libmpv.so.1 in tar.gz archive"
+            exit 1
+          }
           
           # Add a simple run script using echo commands
           RUN_SCRIPT_PATH="${ARCHIVE_CONTENT_DIR}/run.sh"
           echo "Creating run.sh script at ${RUN_SCRIPT_PATH}"
           echo '#!/bin/sh' > "${RUN_SCRIPT_PATH}"
-          echo '# Simple run script for NipaPlay binary archive' >> "${RUN_SCRIPT_PATH}"
+          echo '# Enhanced run script for NipaPlay binary archive with libmpv.so.1 support' >> "${RUN_SCRIPT_PATH}"
           echo 'DIR="$(dirname "$(readlink -f "$0")")"' >> "${RUN_SCRIPT_PATH}"
           echo 'export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
           echo '# Set GTK_MODULES to ensure proper loading of required modules' >> "${RUN_SCRIPT_PATH}"
@@ -594,10 +731,43 @@ jobs:
           echo 'export GTK3_NOCSD=1' >> "${RUN_SCRIPT_PATH}"
           echo '# Set MPV_HOME to help find mpv configuration' >> "${RUN_SCRIPT_PATH}"
           echo 'export MPV_HOME="$DIR"' >> "${RUN_SCRIPT_PATH}"
+          echo '' >> "${RUN_SCRIPT_PATH}"
+          echo '# Runtime libmpv.so.1 check and fix function' >> "${RUN_SCRIPT_PATH}"
+          echo 'ensure_libmpv_so1() {' >> "${RUN_SCRIPT_PATH}"
+          echo '  cd "$DIR/lib"' >> "${RUN_SCRIPT_PATH}"
+          echo '  if [ ! -f "libmpv.so.1" ]; then' >> "${RUN_SCRIPT_PATH}"
+          echo '    echo "⚠️  libmpv.so.1 not found! Attempting to create it..."' >> "${RUN_SCRIPT_PATH}"
+          echo '    # Try to find any libmpv.so.* file and create symlink' >> "${RUN_SCRIPT_PATH}"
+          echo '    for mpv_file in libmpv.so.2 libmpv.so.2.* libmpv.so.*; do' >> "${RUN_SCRIPT_PATH}"
+          echo '      if [ -f "$mpv_file" ]; then' >> "${RUN_SCRIPT_PATH}"
+          echo '        ln -sf "$mpv_file" libmpv.so.1' >> "${RUN_SCRIPT_PATH}"
+          echo '        echo "✓ Created symlink: libmpv.so.1 -> $mpv_file"' >> "${RUN_SCRIPT_PATH}"
+          echo '        break' >> "${RUN_SCRIPT_PATH}"
+          echo '      fi' >> "${RUN_SCRIPT_PATH}"
+          echo '    done' >> "${RUN_SCRIPT_PATH}"
+          echo '    # If still not found, try system libmpv' >> "${RUN_SCRIPT_PATH}"
+          echo '    if [ ! -f "libmpv.so.1" ]; then' >> "${RUN_SCRIPT_PATH}"
+          echo '      SYSTEM_LIBMPV=$(find /usr/lib* -name "libmpv.so*" -type f 2>/dev/null | head -1)' >> "${RUN_SCRIPT_PATH}"
+          echo '      if [ -n "$SYSTEM_LIBMPV" ]; then' >> "${RUN_SCRIPT_PATH}"
+          echo '        cp "$SYSTEM_LIBMPV" libmpv.so.1' >> "${RUN_SCRIPT_PATH}"
+          echo '        echo "✓ Copied system libmpv as libmpv.so.1"' >> "${RUN_SCRIPT_PATH}"
+          echo '      else' >> "${RUN_SCRIPT_PATH}"
+          echo '        echo "❌ ERROR: Could not find any libmpv library!"' >> "${RUN_SCRIPT_PATH}"
+          echo '        echo "Please install libmpv-dev or mpv package on your system."' >> "${RUN_SCRIPT_PATH}"
+          echo '        exit 1' >> "${RUN_SCRIPT_PATH}"
+          echo '      fi' >> "${RUN_SCRIPT_PATH}"
+          echo '    fi' >> "${RUN_SCRIPT_PATH}"
+          echo '  fi' >> "${RUN_SCRIPT_PATH}"
+          echo '}' >> "${RUN_SCRIPT_PATH}"
+          echo '' >> "${RUN_SCRIPT_PATH}"
           echo '# Print library path for debugging' >> "${RUN_SCRIPT_PATH}"
           echo 'echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
           echo 'echo "Checking for libmpv.so:"' >> "${RUN_SCRIPT_PATH}"
           echo 'find "$DIR/lib" -name "libmpv*.so*" || echo "libmpv not found in $DIR/lib!"' >> "${RUN_SCRIPT_PATH}"
+          echo '' >> "${RUN_SCRIPT_PATH}"
+          echo '# Ensure libmpv.so.1 exists before launching' >> "${RUN_SCRIPT_PATH}"
+          echo 'ensure_libmpv_so1' >> "${RUN_SCRIPT_PATH}"
+          echo '' >> "${RUN_SCRIPT_PATH}"
           echo '# Execute the main binary' >> "${RUN_SCRIPT_PATH}"
           echo "\"\$DIR/${APP_NAME}\" \"\$@\"" >> "${RUN_SCRIPT_PATH}"
           chmod +x "${RUN_SCRIPT_PATH}"
@@ -648,6 +818,72 @@ jobs:
           fi
           echo "Listing contents of build/linux directory after RPM build:"
           ls -la "${LINUX_BUILD_DIR}/"
+          
+          # --- Verify libmpv.so.1 in all packages ---
+          echo "=== Verifying libmpv.so.1 presence in all Linux packages ==="
+          
+          # Check .deb package
+          echo "Checking .deb package for libmpv.so.1..."
+          if [ -f "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" ]; then
+            if dpkg -c "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" | grep -q "libmpv\.so\.1"; then
+              echo "✅ libmpv.so.1 found in .deb package"
+            else
+              echo "❌ libmpv.so.1 NOT found in .deb package"
+              echo "Contents related to libmpv:"
+              dpkg -c "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" | grep -i mpv || echo "No mpv files in .deb"
+            fi
+          fi
+          
+          # Check AppImage
+          echo "Checking AppImage for libmpv.so.1..."
+          if [ -f "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" ]; then
+            # Extract and check AppImage contents
+            TEMP_APPIMAGE_DIR="/tmp/appimage_check"
+            mkdir -p "$TEMP_APPIMAGE_DIR"
+            cd "$TEMP_APPIMAGE_DIR"
+            "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" --appimage-extract > /dev/null 2>&1 || echo "AppImage extraction failed, trying alternative method"
+            if [ -d "squashfs-root" ]; then
+              if find squashfs-root -name "libmpv.so.1" | grep -q .; then
+                echo "✅ libmpv.so.1 found in AppImage"
+              else
+                echo "❌ libmpv.so.1 NOT found in AppImage"
+                echo "MPV files in AppImage:"
+                find squashfs-root -name "*mpv*" -type f || echo "No mpv files in AppImage"
+              fi
+              rm -rf squashfs-root
+            else
+              echo "⚠️  Could not extract AppImage for verification"
+            fi
+            cd - > /dev/null
+            rm -rf "$TEMP_APPIMAGE_DIR"
+          fi
+          
+          # Check tar.gz archive
+          echo "Checking tar.gz archive for libmpv.so.1..."
+          if [ -f "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" ]; then
+            if tar -tzf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" | grep -q "libmpv\.so\.1"; then
+              echo "✅ libmpv.so.1 found in tar.gz archive"
+            else
+              echo "❌ libmpv.so.1 NOT found in tar.gz archive"
+              echo "MPV files in tar.gz:"
+              tar -tzf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" | grep -i mpv || echo "No mpv files in tar.gz"
+            fi
+          fi
+          
+          # Check RPM package
+          echo "Checking RPM package for libmpv.so.1..."
+          DESIRED_RPM_NAME_FOR_VERIFY="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
+          if [ -f "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_VERIFY}" ]; then
+            if rpm -qlp "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_VERIFY}" 2>/dev/null | grep -q "libmpv\.so\.1"; then
+              echo "✅ libmpv.so.1 found in RPM package"
+            else
+              echo "❌ libmpv.so.1 NOT found in RPM package"
+              echo "MPV files in RPM:"
+              rpm -qlp "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_VERIFY}" 2>/dev/null | grep -i mpv || echo "No mpv files in RPM"
+            fi
+          fi
+          
+          echo "=== libmpv.so.1 verification complete ==="
           
           # --- Final Check before Cleanup ---
           echo "Checking if all required Linux packages exist..."

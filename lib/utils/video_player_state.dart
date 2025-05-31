@@ -1260,11 +1260,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('[VideoPlayerState] playDirectly() 调用成功');
         // 设置状态
         _setStatus(PlayerStatus.playing, message: '开始播放');
+        
+        // 播放开始时提交观看记录到弹弹play
+        _submitWatchHistoryToDandanplay();
       }).catchError((e) {
         debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
         // 尝试使用传统方法
         player.state = PlaybackState.playing;
         _setStatus(PlayerStatus.playing, message: '开始播放');
+        
+        // 播放开始时提交观看记录到弹弹play
+        _submitWatchHistoryToDandanplay();
       });
       
       // <<< ADDED DEBUG LOG >>>
@@ -2467,7 +2473,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         bool isJellyfinStream = _currentVideoPath!.startsWith('jellyfin://');
         bool isEmbyStream = _currentVideoPath!.startsWith('emby://');
         if ((isJellyfinStream || isEmbyStream) && _animeTitle != null && _animeTitle!.isNotEmpty) {
-          // 对于流媒体，如果当前有友好的动漫名称，则使用它
+          // 对于流媒体，如果有友好名称，则使用友好名称
           finalAnimeName = _animeTitle!;
           if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
             finalEpisodeTitle = _episodeTitle!;
@@ -3315,5 +3321,37 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
     }
     return false; // 表示未处理
+  }
+
+  // 播放完成时回传观看记录到弹弹play
+  Future<void> _submitWatchHistoryToDandanplay() async {
+    // 检查是否已登录弹弹play账号
+    if (!DandanplayService.isLoggedIn) {
+      debugPrint('[观看记录] 未登录弹弹play账号，跳过回传观看记录');
+      return;
+    }
+    
+    if (_currentVideoPath == null || _episodeId == null) {
+      debugPrint('[观看记录] 缺少必要信息（视频路径或episodeId），跳过回传观看记录');
+      return;
+    }
+
+    try {
+      debugPrint('[观看记录] 开始向弹弹play提交观看记录: episodeId=$_episodeId');
+      
+      final result = await DandanplayService.addPlayHistory(
+        episodeIdList: [_episodeId!],
+        addToFavorite: false,
+        rating: 0,
+      );
+      
+      if (result['success'] == true) {
+        debugPrint('[观看记录] 观看记录提交成功');
+      } else {
+        debugPrint('[观看记录] 观看记录提交失败: ${result['errorMessage']}');
+      }
+    } catch (e) {
+      debugPrint('[观看记录] 提交观看记录时出错: $e');
+    }
   }
 }

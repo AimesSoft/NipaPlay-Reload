@@ -221,3 +221,44 @@
 ## 关于看板娘
 
 - https://www.pixiv.net/artworks/130349456 （作者MCDFsteve）
+
+## Linux版本libmpv.so.1兼容性修复
+
+本项目已经加强了Linux版本的构建和打包流程，确保`libmpv.so.1`的可用性：
+
+### 自动修复机制
+
+1. **构建时修复**：GitHub Actions会自动确保所有Linux包（.deb、AppImage、.tar.gz、.rpm）都包含`libmpv.so.1`
+2. **运行时修复**：tar.gz包中的`run.sh`脚本包含智能检测，如果发现缺少`libmpv.so.1`会自动创建
+
+### 多层保障策略
+
+构建系统采用以下策略确保libmpv.so.1的存在：
+
+1. **策略1**：如果找到`libmpv.so.2`，创建符号链接`libmpv.so.1 -> libmpv.so.2`
+2. **策略2**：搜索具体版本号的libmpv文件（如`libmpv.so.2.5.0`），创建对应链接
+3. **策略3**：查找任何`libmpv.*`文件并创建适当的符号链接
+4. **策略4**：从系统复制libmpv库并重命名为`libmpv.so.1`
+
+### 使用tar.gz包
+
+如果你下载的是tar.gz包，只需运行：
+```bash
+./run.sh
+```
+
+该脚本会自动：
+- 设置正确的库路径
+- 检查并修复libmpv.so.1缺失问题
+- 启动应用程序
+
+### 手动修复（如果需要）
+
+如果遇到libmpv.so.1相关错误，可以手动创建符号链接：
+```bash
+cd /path/to/nipaplay/lib
+# 查找现有的libmpv文件
+ls -la libmpv*
+# 创建符号链接（以libmpv.so.2为例）
+ln -sf libmpv.so.2 libmpv.so.1
+```

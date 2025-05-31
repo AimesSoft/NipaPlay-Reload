@@ -8,7 +8,7 @@ import '../widgets/cached_network_image_widget.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 // import 'dart:convert'; // No longer needed for local translation state
 // import 'package:http/http.dart' as http; // No longer needed for local translation state
-// import '../services/dandanplay_service.dart'; // No longer needed for local translation state
+import '../services/dandanplay_service.dart'; // 重新添加DandanplayService导入
 import '../widgets/blur_snackbar.dart'; // Added for blur snackbar
 import 'package:provider/provider.dart'; // 重新添加
 // import '../utils/video_player_state.dart'; // Removed from here
@@ -17,6 +17,7 @@ import 'dart:io'; // Added for File operations
 import '../providers/appearance_settings_provider.dart'; // 添加外观设置Provider
 import '../widgets/switchable_view.dart'; // 添加SwitchableView组件
 import '../widgets/tag_search_widget.dart'; // 添加标签搜索组件
+import '../widgets/rating_dialog.dart'; // 添加评分对话框
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -77,6 +78,20 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   TabController? _tabController;
   // 添加外观设置
   AppearanceSettingsProvider? _appearanceSettings;
+  
+  // 弹弹play观看状态相关
+  Map<int, bool> _dandanplayWatchStatus = {}; // 存储弹弹play的观看状态
+  bool _isLoadingDandanplayStatus = false; // 是否正在加载弹弹play状态
+  
+  // 弹弹play收藏状态相关
+  bool _isFavorited = false; // 是否已收藏
+  bool _isLoadingFavoriteStatus = false; // 是否正在加载收藏状态
+  bool _isTogglingFavorite = false; // 是否正在切换收藏状态
+
+  // 弹弹play用户评分相关
+  int _userRating = 0; // 用户评分（0-10，0代表未评分）
+  bool _isLoadingUserRating = false; // 是否正在加载用户评分
+  bool _isSubmittingRating = false; // 是否正在提交评分
 
   // 新增：评分到评价文本的映射
   static const Map<int, String> _ratingEvaluationMap = {
@@ -124,6 +139,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   // 处理标签切换
   void _handleTabChange() {
     if (_tabController!.indexIsChanging) {
+      // 当切换到剧集列表标签（索引1）时，刷新观看状态
+      if (_tabController!.index == 1 && _detailedAnime != null && DandanplayService.isLoggedIn) {
+        _fetchDandanplayWatchStatus(_detailedAnime!);
+      }
       setState(() {
         // 更新UI以显示新的页面
       });
@@ -143,12 +162,70 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           _detailedAnime = anime;
           _isLoading = false;
         });
+        
+        // 获取弹弹play观看状态
+        _fetchDandanplayWatchStatus(anime);
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _error = e.toString();
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // 获取弹弹play观看状态
+  Future<void> _fetchDandanplayWatchStatus(BangumiAnime anime) async {
+    // 如果未登录弹弹play或没有剧集信息，跳过
+    if (!DandanplayService.isLoggedIn || anime.episodeList == null || anime.episodeList!.isEmpty) {
+      return;
+    }
+    
+    setState(() {
+      _isLoadingDandanplayStatus = true;
+      _isLoadingFavoriteStatus = true;
+      _isLoadingUserRating = true;
+    });
+    
+    try {
+      // 提取所有剧集的episodeId（使用id属性）
+      final List<int> episodeIds = anime.episodeList!
+          .where((episode) => episode.id > 0) // 确保id有效
+          .map((episode) => episode.id)
+          .toList();
+      
+      // 并行获取观看状态、收藏状态和用户评分
+      final Future<Map<int, bool>> watchStatusFuture = episodeIds.isNotEmpty 
+          ? DandanplayService.getEpisodesWatchStatus(episodeIds)
+          : Future.value(<int, bool>{});
+          
+      final Future<bool> favoriteStatusFuture = DandanplayService.isAnimeFavorited(anime.id);
+      final Future<int> userRatingFuture = DandanplayService.getUserRatingForAnime(anime.id);
+      
+      final results = await Future.wait([watchStatusFuture, favoriteStatusFuture, userRatingFuture]);
+      final watchStatus = results[0] as Map<int, bool>;
+      final isFavorited = results[1] as bool;
+      final userRating = results[2] as int;
+      
+      if (mounted) {
+        setState(() {
+          _dandanplayWatchStatus = watchStatus;
+          _isFavorited = isFavorited;
+          _userRating = userRating;
+          _isLoadingDandanplayStatus = false;
+          _isLoadingFavoriteStatus = false;
+          _isLoadingUserRating = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[番剧详情] 获取弹弹play状态失败: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingDandanplayStatus = false;
+          _isLoadingFavoriteStatus = false;
+          _isLoadingUserRating = false;
         });
       }
     }
@@ -338,6 +415,86 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   style: TextStyle(
                       color: Colors.white.withOpacity(0.7), fontSize: 12))
             ])),
+            const SizedBox(height: 6),
+          ],
+          
+          // 弹弹play用户评分区域（仅在登录时显示）
+          if (DandanplayService.isLoggedIn) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 我的打分显示
+                if (_userRating > 0) ...[
+                  RichText(
+                    text: TextSpan(children: [
+                      TextSpan(text: '我的打分: ', style: boldWhiteKeyStyle.copyWith(color: Colors.blue)),
+                      TextSpan(
+                        text: '$_userRating 分 ',
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '(${_ratingEvaluationMap[_userRating] ?? ''})',
+                        style: TextStyle(
+                          color: Colors.blue.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                
+                // 我要打分按钮
+                GestureDetector(
+                  onTap: _isSubmittingRating ? null : _showRatingDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.2),
+                      border: Border.all(
+                        color: Colors.blue.withOpacity(0.6),
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isLoadingUserRating || _isSubmittingRating) ...[
+                          const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: Colors.blue,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ] else
+                          Icon(
+                            _userRating > 0 ? Ionicons.star : Ionicons.star_outline,
+                            color: Colors.blue,
+                            size: 14,
+                          ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _userRating > 0 ? '修改评分' : '我要打分',
+                          style: TextStyle(
+                            color: Colors.blue,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 6),
           ],
           if (anime.ratingDetails != null &&
@@ -542,11 +699,43 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               child: ListTile(
                 dense: true,
                 leading: leadingIcon,
-                title: Text(episode.title,
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.9), fontSize: 13),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(episode.title,
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.9), fontSize: 13),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    // 显示弹弹play观看状态标注
+                    if (DandanplayService.isLoggedIn && _dandanplayWatchStatus.containsKey(episode.id))
+                      Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _dandanplayWatchStatus[episode.id] == true 
+                              ? Colors.green.withOpacity(0.2)
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: _dandanplayWatchStatus[episode.id] == true 
+                                ? Colors.green.withOpacity(0.6)
+                                : Colors.transparent,
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
+                          style: TextStyle(
+                            color: Colors.green.withOpacity(0.9),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 trailing: progressText != null
                     ? Text(progressText,
                         style: TextStyle(
@@ -655,6 +844,27 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              
+              // 收藏按钮（仅当登录弹弹play时显示）
+              if (DandanplayService.isLoggedIn) ...[
+                IconButton(
+                  icon: _isTogglingFavorite
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white70,
+                          ),
+                        )
+                      : Icon(
+                          _isFavorited ? Ionicons.heart : Ionicons.heart_outline,
+                          color: _isFavorited ? Colors.red : Colors.white70,
+                          size: 24,
+                        ),
+                  onPressed: _isTogglingFavorite ? null : _toggleFavorite,
+                ),
+              ],
               
               IconButton(
                 icon: const Icon(Ionicons.close_circle_outline,
@@ -776,6 +986,98 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         },
       ),
     );
+  }
+
+  // 切换收藏状态
+  Future<void> _toggleFavorite() async {
+    if (!DandanplayService.isLoggedIn) {
+      _showBlurSnackBar(context, '请先登录弹弹play账号');
+      return;
+    }
+
+    if (_detailedAnime == null || _isTogglingFavorite) {
+      return;
+    }
+
+    setState(() {
+      _isTogglingFavorite = true;
+    });
+
+    try {
+      if (_isFavorited) {
+        // 取消收藏
+        await DandanplayService.removeFavorite(_detailedAnime!.id);
+        _showBlurSnackBar(context, '已取消收藏');
+      } else {
+        // 添加收藏
+        await DandanplayService.addFavorite(
+          animeId: _detailedAnime!.id,
+          favoriteStatus: 'favorited',
+        );
+        _showBlurSnackBar(context, '已添加到收藏');
+      }
+
+      // 更新本地状态
+      setState(() {
+        _isFavorited = !_isFavorited;
+      });
+    } catch (e) {
+      debugPrint('[番剧详情] 切换收藏状态失败: $e');
+      _showBlurSnackBar(context, '操作失败: ${e.toString()}');
+    } finally {
+      setState(() {
+        _isTogglingFavorite = false;
+      });
+    }
+  }
+
+  // 显示模糊Snackbar
+  void _showBlurSnackBar(BuildContext context, String message) {
+    BlurSnackBar.show(context, message);
+  }
+
+  // 显示评分对话框
+  void _showRatingDialog() {
+    if (_detailedAnime == null) return;
+    
+    RatingDialog.show(
+      context: context,
+      animeTitle: _detailedAnime!.nameCn,
+      initialRating: _userRating,
+      onRatingSubmitted: _handleRatingSubmitted,
+    );
+  }
+
+  // 处理评分提交
+  Future<void> _handleRatingSubmitted(int rating) async {
+    if (_detailedAnime == null) return;
+    
+    setState(() {
+      _isSubmittingRating = true;
+    });
+
+    try {
+      await DandanplayService.submitUserRating(
+        animeId: _detailedAnime!.id,
+        rating: rating,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _userRating = rating;
+          _isSubmittingRating = false;
+        });
+        _showBlurSnackBar(context, '评分提交成功');
+      }
+    } catch (e) {
+      debugPrint('[番剧详情] 提交评分失败: $e');
+      if (mounted) {
+        setState(() {
+          _isSubmittingRating = false;
+        });
+        _showBlurSnackBar(context, '评分提交失败: ${e.toString()}');
+      }
+    }
   }
 }
 
