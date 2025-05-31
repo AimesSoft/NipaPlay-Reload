@@ -644,9 +644,6 @@ jobs:
             exit 1
           }
           
-          # 返回到构建根目录
-          cd - > /dev/null
-          
           # Copy desktop file and icon to AppDir root
           echo "Copying desktop file and icon to AppDir root"
           echo "Current working directory: $(pwd)"
