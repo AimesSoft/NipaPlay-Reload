@@ -606,4 +606,445 @@ class DandanplayService {
       ////debugPrint('确保标题完整性: 动画=${videoInfo['animeTitle']}, 集数=${videoInfo['episodeTitle']}');
     }
   }
+
+  // 获取用户播放历史
+  static Future<Map<String, dynamic>> getUserPlayHistory({DateTime? fromDate, DateTime? toDate}) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能获取播放历史');
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/playhistory';
+      
+      // 构建查询参数
+      final queryParams = <String, String>{};
+      if (fromDate != null) {
+        queryParams['fromDate'] = fromDate.toUtc().toIso8601String();
+      }
+      if (toDate != null) {
+        queryParams['toDate'] = toDate.toUtc().toIso8601String();
+      }
+      
+      final uri = Uri.https('api.dandanplay.net', apiPath, queryParams.isNotEmpty ? queryParams : null);
+      
+      debugPrint('[弹弹play服务] 获取播放历史: $uri');
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      debugPrint('[弹弹play服务] 播放历史响应: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return data;
+        } else {
+          throw Exception(data['errorMessage'] ?? '获取播放历史失败');
+        }
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        throw Exception('获取播放历史失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 获取播放历史时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 提交播放历史记录
+  static Future<Map<String, dynamic>> addPlayHistory({
+    required List<int> episodeIdList,
+    bool addToFavorite = false,
+    int rating = 0,
+  }) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能提交播放历史');
+    }
+
+    if (episodeIdList.isEmpty) {
+      throw Exception('集数ID列表不能为空');
+    }
+
+    if (episodeIdList.length > 100) {
+      throw Exception('单次最多只能提交100条播放历史');
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/playhistory';
+      
+      final requestBody = {
+        'episodeIdList': episodeIdList,
+        'addToFavorite': addToFavorite,
+        'rating': rating,
+      };
+      
+      debugPrint('[弹弹play服务] 提交播放历史: $episodeIdList');
+      
+      final response = await http.post(
+        Uri.parse('https://api.dandanplay.net$apiPath'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+        body: json.encode(requestBody),
+      );
+
+      debugPrint('[弹弹play服务] 提交播放历史响应: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          debugPrint('[弹弹play服务] 播放历史提交成功');
+          return data;
+        } else {
+          throw Exception(data['errorMessage'] ?? '提交播放历史失败');
+        }
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        throw Exception('提交播放历史失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 提交播放历史时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 获取番剧详情（包含用户观看状态）
+  static Future<Map<String, dynamic>> getBangumiDetails(int bangumiId) async {
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final apiPath = '/api/v2/bangumi/$bangumiId';
+      
+      final headers = {
+        'Accept': 'application/json',
+        'X-AppId': appId,
+        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+        'X-Timestamp': '$timestamp',
+      };
+      
+      // 如果已登录，添加认证头
+      if (_isLoggedIn && _token != null) {
+        headers['Authorization'] = 'Bearer $_token';
+      }
+      
+      debugPrint('[弹弹play服务] 获取番剧详情: $bangumiId');
+      
+      final response = await http.get(
+        Uri.parse('https://api.dandanplay.net$apiPath'),
+        headers: headers,
+      );
+
+      debugPrint('[弹弹play服务] 番剧详情响应: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data;
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        throw Exception('获取番剧详情失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 获取番剧详情时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 获取用户对特定剧集的观看状态
+  static Future<Map<int, bool>> getEpisodesWatchStatus(List<int> episodeIds) async {
+    final Map<int, bool> watchStatus = {};
+    
+    // 如果未登录，返回空状态
+    if (!_isLoggedIn || _token == null) {
+      debugPrint('[弹弹play服务] 未登录，无法获取观看状态');
+      for (final episodeId in episodeIds) {
+        watchStatus[episodeId] = false;
+      }
+      return watchStatus;
+    }
+
+    try {
+      // 获取用户播放历史
+      final historyData = await getUserPlayHistory();
+      
+      if (historyData['success'] == true && historyData['playHistoryAnimes'] != null) {
+        final List<dynamic> animes = historyData['playHistoryAnimes'];
+        
+        // 遍历所有动画的观看历史
+        for (final anime in animes) {
+          if (anime['episodes'] != null) {
+            final List<dynamic> episodes = anime['episodes'];
+            
+            // 检查每个剧集的观看状态
+            for (final episode in episodes) {
+              final episodeId = episode['episodeId'] as int?;
+              final lastWatched = episode['lastWatched'] as String?;
+              
+              if (episodeId != null && episodeIds.contains(episodeId)) {
+                // 如果有lastWatched时间，说明已看过
+                watchStatus[episodeId] = lastWatched != null && lastWatched.isNotEmpty;
+              }
+            }
+          }
+        }
+      }
+      
+      // 确保所有请求的episodeId都有状态
+      for (final episodeId in episodeIds) {
+        watchStatus.putIfAbsent(episodeId, () => false);
+      }
+      
+      debugPrint('[弹弹play服务] 获取观看状态完成: ${watchStatus.length}个剧集');
+      return watchStatus;
+    } catch (e) {
+      debugPrint('[弹弹play服务] 获取观看状态失败: $e');
+      // 出错时返回默认状态（未看）
+      for (final episodeId in episodeIds) {
+        watchStatus[episodeId] = false;
+      }
+      return watchStatus;
+    }
+  }
+
+  // 获取用户收藏列表
+  static Future<Map<String, dynamic>> getUserFavorites({bool onlyOnAir = false}) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能获取收藏列表');
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/favorite';
+      
+      final queryParams = <String, String>{};
+      if (onlyOnAir) {
+        queryParams['onlyOnAir'] = 'true';
+      }
+      
+      final uri = Uri.https('api.dandanplay.net', apiPath, queryParams.isNotEmpty ? queryParams : null);
+      
+      debugPrint('[弹弹play服务] 获取用户收藏列表: $uri');
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      debugPrint('[弹弹play服务] 收藏列表响应: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return data;
+        } else {
+          throw Exception(data['errorMessage'] ?? '获取收藏列表失败');
+        }
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        throw Exception('获取收藏列表失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 获取收藏列表时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 添加收藏
+  static Future<Map<String, dynamic>> addFavorite({
+    required int animeId,
+    String? favoriteStatus, // 'favorited', 'finished', 'abandoned'
+    int rating = 0, // 1-10分，0代表不修改
+    String? comment,
+  }) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能添加收藏');
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/favorite';
+      
+      final requestBody = {
+        'animeId': animeId,
+        if (favoriteStatus != null) 'favoriteStatus': favoriteStatus,
+        'rating': rating,
+        if (comment != null) 'comment': comment,
+      };
+      
+      debugPrint('[弹弹play服务] 添加收藏: animeId=$animeId, status=$favoriteStatus');
+      
+      final response = await http.post(
+        Uri.parse('https://api.dandanplay.net$apiPath'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+        body: json.encode(requestBody),
+      );
+
+      debugPrint('[弹弹play服务] 添加收藏响应: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          debugPrint('[弹弹play服务] 收藏添加成功');
+          return data;
+        } else {
+          throw Exception(data['errorMessage'] ?? '添加收藏失败');
+        }
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        throw Exception('添加收藏失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 添加收藏时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 取消收藏
+  static Future<Map<String, dynamic>> removeFavorite(int animeId) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能取消收藏');
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final apiPath = '/api/v2/favorite/$animeId';
+      
+      debugPrint('[弹弹play服务] 取消收藏: animeId=$animeId');
+      
+      final response = await http.delete(
+        Uri.parse('https://api.dandanplay.net$apiPath'),
+        headers: {
+          'Accept': 'application/json',
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      debugPrint('[弹弹play服务] 取消收藏响应: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          debugPrint('[弹弹play服务] 收藏取消成功');
+          return data;
+        } else {
+          throw Exception(data['errorMessage'] ?? '取消收藏失败');
+        }
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        throw Exception('取消收藏失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 取消收藏时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 检查动画是否已收藏
+  static Future<bool> isAnimeFavorited(int animeId) async {
+    if (!_isLoggedIn || _token == null) {
+      return false; // 未登录时返回false
+    }
+
+    try {
+      final favoritesData = await getUserFavorites();
+      
+      if (favoritesData['success'] == true && favoritesData['favorites'] != null) {
+        final List<dynamic> favorites = favoritesData['favorites'];
+        
+        // 检查列表中是否包含指定的animeId
+        for (final favorite in favorites) {
+          if (favorite['animeId'] == animeId) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('[弹弹play服务] 检查收藏状态失败: $e');
+      return false; // 出错时返回false
+    }
+  }
+
+  // 获取用户对番剧的评分
+  static Future<int> getUserRatingForAnime(int animeId) async {
+    if (!_isLoggedIn || _token == null) {
+      return 0; // 未登录时返回0
+    }
+
+    try {
+      final bangumiDetails = await getBangumiDetails(animeId);
+      
+      if (bangumiDetails['success'] == true && bangumiDetails['bangumi'] != null) {
+        final bangumi = bangumiDetails['bangumi'];
+        return bangumi['userRating'] as int? ?? 0;
+      }
+      
+      return 0;
+    } catch (e) {
+      debugPrint('[弹弹play服务] 获取用户评分失败: $e');
+      return 0; // 出错时返回0
+    }
+  }
+
+  // 提交用户评分（不影响收藏状态）
+  static Future<Map<String, dynamic>> submitUserRating({
+    required int animeId,
+    required int rating, // 1-10分
+  }) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能评分');
+    }
+
+    if (rating < 1 || rating > 10) {
+      throw Exception('评分必须在1-10分之间');
+    }
+
+    try {
+      // 使用addFavorite接口提交评分，但不修改收藏状态
+      return await addFavorite(
+        animeId: animeId,
+        rating: rating,
+        // 不传favoriteStatus参数，这样不会影响现有的收藏状态
+      );
+    } catch (e) {
+      debugPrint('[弹弹play服务] 提交用户评分失败: $e');
+      rethrow;
+    }
+  }
 } 
