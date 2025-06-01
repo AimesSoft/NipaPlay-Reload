@@ -644,6 +644,9 @@ jobs:
             exit 1
           }
           
+          # 确保返回到项目根目录
+          cd "${GITHUB_WORKSPACE}" || cd "$(pwd | sed 's|/build/linux.*||')" || cd /home/runner/work/NipaPlay-Reload/NipaPlay-Reload
+          
           # Copy desktop file and icon to AppDir root
           echo "Copying desktop file and icon to AppDir root"
           echo "Current working directory: $(pwd)"
@@ -724,6 +727,9 @@ jobs:
             echo "ERROR: Failed to ensure libmpv.so.1 in tar.gz archive"
             exit 1
           }
+          
+          # 确保返回到项目根目录
+          cd "${GITHUB_WORKSPACE}" || cd "$(pwd | sed 's|/build/linux.*||')" || cd /home/runner/work/NipaPlay-Reload/NipaPlay-Reload
           
           # Add a simple run script using echo commands
           RUN_SCRIPT_PATH="${ARCHIVE_CONTENT_DIR}/run.sh"
