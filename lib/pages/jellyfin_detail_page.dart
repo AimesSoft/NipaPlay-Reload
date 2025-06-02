@@ -415,18 +415,30 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
 
     final jellyfinService = JellyfinService.instance;
     final backdropUrl = _mediaDetail!.imageBackdropTag != null
-        ? jellyfinService.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 1280, height: 720)
+        ? jellyfinService.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95)
         : '';
 
     // 注意：这里的返回按钮逻辑需要调整或移除，因为顶部已经有了全局关闭按钮
     return Stack(
       children: [
-        // 背景图
+        // 背景图 - 直接使用网络图片，跳过压缩缓存
         if (backdropUrl.isNotEmpty)
           Positioned.fill(
-            child: CachedNetworkImageWidget(
-              imageUrl: backdropUrl,
+            child: Image.network(
+              backdropUrl,
               fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: Colors.grey[900],
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white54),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(color: Colors.grey[900]);
+              },
             ),
           ),
 
@@ -508,7 +520,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                                   radius: 30,
                                   backgroundColor: Colors.grey.shade800,
                                   backgroundImage: actor.primaryImageTag != null
-                                      ? NetworkImage(jellyfinService.getImageUrl(actor.id, type: 'Primary', width: 100))
+                                      ? NetworkImage(jellyfinService.getImageUrl(actor.id, type: 'Primary', width: 100, quality: 90))
                                       : null,
                                   child: actor.primaryImageTag == null
                                       ? const Icon(Icons.person, color: Colors.white54)
@@ -547,7 +559,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
     
     final jellyfinService = JellyfinService.instance;
     final posterUrl = _mediaDetail!.imagePrimaryTag != null
-        ? jellyfinService.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300)
+        ? jellyfinService.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300, quality: 95)
         : '';
     
     return Column(
@@ -638,7 +650,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
     
     final jellyfinService = JellyfinService.instance;
     final posterUrl = _mediaDetail!.imagePrimaryTag != null
-        ? jellyfinService.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300)
+        ? jellyfinService.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300, quality: 95)
         : '';
     
     return Row(
@@ -950,7 +962,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
       itemBuilder: (context, index) {
         final episode = episodes[index];
         final episodeImageUrl = episode.imagePrimaryTag != null
-            ? jellyfinService.getImageUrl(episode.id, type: 'Primary', width: 300) // 调整图片宽度以适应列表项
+            ? jellyfinService.getImageUrl(episode.id, type: 'Primary', width: 300, quality: 90) // 调整图片宽度以适应列表项
             : '';
         
         return ListTile(

@@ -7,6 +7,8 @@ import 'dart:ui';
 import 'settings_slider.dart';
 import 'blur_dialog.dart';
 import 'blur_button.dart';
+import '../services/manual_danmaku_matcher.dart';
+import '../utils/danmaku_history_sync.dart';
 
 class DanmakuSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -161,6 +163,76 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       ],
                     ),
                     const SettingsHintText('开启后在视频上显示弹幕内容'),
+                  ],
+                ),
+              ),
+              // 手动匹配弹幕
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    BlurButton(
+                      text: '手动匹配弹幕',
+                      icon: Icons.search,
+                      onTap: () async {
+                        debugPrint('开始手动弹幕匹配...');
+                        final result = await ManualDanmakuMatcher.instance.showManualMatchDialog(context);
+                        debugPrint('手动弹幕匹配对话框结果: $result');
+                        debugPrint('result是否为null: ${result == null}');
+                        debugPrint('组件是否已挂载: $mounted');
+                        
+                        if (result != null) {
+                          debugPrint('对话框返回有效结果，开始处理...');
+                          
+                          // 如果用户选择了弹幕，重新加载弹幕
+                          final episodeId = result['episodeId']?.toString() ?? '';
+                          final animeId = result['animeId']?.toString() ?? '';
+                          
+                          debugPrint('提取的ID信息: episodeId="$episodeId", animeId="$animeId"');
+                          
+                          if (episodeId.isNotEmpty && animeId.isNotEmpty) {
+                            debugPrint('开始调用 loadDanmaku 方法...');
+                            
+                            // 调用新的弹幕历史同步方法来更新历史记录
+                            try {
+                              final currentVideoPath = widget.videoState.currentVideoPath;
+                              if (currentVideoPath != null) {
+                                await DanmakuHistorySync.instance.updateHistoryWithDanmakuInfoDirect(
+                                  currentVideoPath,
+                                  episodeId: int.tryParse(episodeId) ?? 0,
+                                  animeId: int.tryParse(animeId) ?? 0,
+                                  animeTitle: result['animeTitle']?.toString(),
+                                  episodeTitle: result['episodeTitle']?.toString(),
+                                );
+                                debugPrint('历史记录同步完成');
+                                
+                                // 立即更新视频播放器状态中的动漫和剧集标题
+                                widget.videoState.setAnimeTitle(result['animeTitle']?.toString());
+                                widget.videoState.setEpisodeTitle(result['episodeTitle']?.toString());
+                                debugPrint('动漫标题已更新: ${result['animeTitle']?.toString()}');
+                                debugPrint('剧集标题已更新: ${result['episodeTitle']?.toString()}');
+                              } else {
+                                debugPrint('警告: 当前视频路径为空，无法更新历史记录');
+                              }
+                            } catch (e) {
+                              debugPrint('历史记录同步失败: $e');
+                              // 即使历史记录同步失败，也要继续加载弹幕
+                            }
+                            
+                            // 直接调用 loadDanmaku，不检查 mounted 状态
+                            // 因为 videoState 是独立的状态管理对象，不依赖于当前组件的生命周期
+                            widget.videoState.loadDanmaku(episodeId, animeId);
+                          } else {
+                            debugPrint('警告: episodeId或animeId为空，无法加载弹幕');
+                          }
+                        } else {
+                          debugPrint('对话框返回null结果（用户可能取消了选择）');
+                        }
+                      },
+                      expandHorizontally: true,
+                    ),
+                    const SettingsHintText('手动搜索并选择匹配的弹幕文件'),
                   ],
                 ),
               ),
