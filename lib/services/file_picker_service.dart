@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'security_bookmark_service.dart';
 
 class FilePickerService {
   // 单例模式
@@ -248,6 +249,14 @@ class FilePickerService {
         }
       }
       
+      // macOS上尝试恢复之前的书签访问
+      if (Platform.isMacOS && initialDirectory != null) {
+        final resolvedPath = await SecurityBookmarkService.resolveBookmark(initialDirectory);
+        if (resolvedPath != null) {
+          initialDirectory = resolvedPath;
+        }
+      }
+      
       // 定义视频文件类型组
       XTypeGroup videoGroup = XTypeGroup(
         label: '视频文件',
@@ -280,6 +289,14 @@ class FilePickerService {
       // 内存优化：不读取文件元数据，只返回路径
       // 优化前：file.readAsBytes(); 这可能导致大文件内存溢出
       // 注：现在直接返回路径，由播放器处理文件读取
+      
+      // macOS沙盒下创建安全书签
+      if (Platform.isMacOS) {
+        await SecurityBookmarkService.createBookmark(filePath);
+        // 同时为父目录创建书签，便于下次文件选择
+        final parentDir = p.dirname(filePath);
+        await SecurityBookmarkService.createBookmark(parentDir);
+      }
       
       // 存储目录信息
       _saveLastDirectory(filePath, _lastVideoDirKey, _lastDirKey);
@@ -339,6 +356,14 @@ class FilePickerService {
       // 获取上次目录
       initialDirectory ??= await _getLastDirectory(_lastSubtitleDirKey);
       
+      // macOS上尝试恢复之前的书签访问
+      if (Platform.isMacOS && initialDirectory != null) {
+        final resolvedPath = await SecurityBookmarkService.resolveBookmark(initialDirectory);
+        if (resolvedPath != null) {
+          initialDirectory = resolvedPath;
+        }
+      }
+      
       // 定义字幕文件类型组
       XTypeGroup subtitleGroup = XTypeGroup(
         label: '字幕文件',
@@ -359,6 +384,14 @@ class FilePickerService {
         return null;
       }
       
+      // macOS沙盒下创建安全书签
+      if (Platform.isMacOS) {
+        await SecurityBookmarkService.createBookmark(file.path);
+        // 同时为父目录创建书签
+        final parentDir = p.dirname(file.path);
+        await SecurityBookmarkService.createBookmark(parentDir);
+      }
+      
       // 保存目录位置
       _saveLastDirectory(p.dirname(file.path), _lastSubtitleDirKey);
       _saveLastDirectory(p.dirname(file.path), _lastDirKey);
@@ -375,6 +408,14 @@ class FilePickerService {
     try {
       // 获取上次目录
       initialDirectory ??= await _getLastDirectory(_lastDirKey);
+      
+      // macOS上尝试恢复之前的书签访问
+      if (Platform.isMacOS && initialDirectory != null) {
+        final resolvedPath = await SecurityBookmarkService.resolveBookmark(initialDirectory);
+        if (resolvedPath != null) {
+          initialDirectory = resolvedPath;
+        }
+      }
       
       // iOS上的特殊处理
       if (Platform.isIOS) {
@@ -396,6 +437,11 @@ class FilePickerService {
         
         if (selectedDirectory == null) {
           return null;
+        }
+        
+        // macOS沙盒下创建安全书签
+        if (Platform.isMacOS) {
+          await SecurityBookmarkService.createBookmark(selectedDirectory);
         }
         
         // 保存选择的目录
@@ -440,6 +486,14 @@ class FilePickerService {
   
   // 获取文件的有效路径(处理iOS路径问题)
   Future<String?> getValidFilePath(String originalPath) async {
+    // macOS沙盒下首先尝试恢复书签访问
+    if (Platform.isMacOS) {
+      final resolvedPath = await SecurityBookmarkService.resolveBookmark(originalPath);
+      if (resolvedPath != null && File(resolvedPath).existsSync()) {
+        return resolvedPath;
+      }
+    }
+    
     // 首先检查原始路径是否可访问
     if (File(originalPath).existsSync()) {
       return originalPath;

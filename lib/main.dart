@@ -36,6 +36,7 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
+import 'services/security_bookmark_service.dart';
 import 'widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/page_prewarmer.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
@@ -241,6 +242,16 @@ void main() async {
 
   // 预加载播放器内核设置
   await PlayerFactory.initialize();
+
+  // 初始化安全书签服务 (仅限 macOS)
+  if (Platform.isMacOS) {
+    try {
+      await SecurityBookmarkService.restoreAllBookmarks();
+      debugPrint('SecurityBookmarkService 书签恢复完成');
+    } catch (e) {
+      debugPrint('SecurityBookmarkService 书签恢复失败: $e');
+    }
+  }
 
   // 并行执行初始化操作
   await Future.wait(<Future<dynamic>>[
@@ -651,6 +662,16 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     globalTabController?.dispose();
     if (globals.winLinDesktop) {
       windowManager.removeListener(this);
+    }
+    
+    // 清理安全书签资源 (仅限 macOS)
+    if (Platform.isMacOS) {
+      try {
+        SecurityBookmarkService.cleanup();
+        debugPrint('SecurityBookmarkService 清理完成');
+      } catch (e) {
+        debugPrint('SecurityBookmarkService 清理失败: $e');
+      }
     }
     
     // 释放系统资源监控，移除桌面平台限制
