@@ -185,6 +185,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get animeTitle => _animeTitle; // 添加动画标题getter
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
   
+  // 添加setter方法以支持手动匹配后立即更新标题
+  void setAnimeTitle(String? title) {
+    _animeTitle = title;
+    notifyListeners();
+  }
+  
+  void setEpisodeTitle(String? title) {
+    _episodeTitle = title;
+    notifyListeners();
+  }
+  
   // 字幕管理器相关的getter
   SubtitleManager get subtitleManager => _subtitleManager;
   String? get currentExternalSubtitlePath => _subtitleManager.currentExternalSubtitlePath;
@@ -891,15 +902,30 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 错误处理时不设置jellyfinDanmakuHandled为true，下面会继续常规处理
       }
       
-      // 如果不是Jellyfin视频或者Jellyfin视频没有预设的弹幕IDs，则使用常规方式识别和加载弹幕
+      // 如果不是Jellyfin视频或者Jellyfin视频没有预设的弹幕IDs，则检查是否有手动匹配的弹幕
       if (!jellyfinDanmakuHandled) {
-        try {
-          await _recognizeVideo(videoPath);
-        } catch (e) {
-          //debugPrint('弹幕加载失败: $e');
-          // 设置空弹幕列表，确保播放不受影响
-          _danmakuList = [];
-          _addStatusMessage('无法连接服务器，跳过加载弹幕');
+        // 检查是否有手动匹配的弹幕ID
+        if (_episodeId != null && _animeId != null && _episodeId! > 0 && _animeId! > 0) {
+          debugPrint('检测到手动匹配的弹幕ID，直接加载: episodeId=$_episodeId, animeId=$_animeId');
+          try {
+            _setStatus(PlayerStatus.recognizing, message: '正在加载手动匹配的弹幕...');
+            loadDanmaku(_episodeId.toString(), _animeId.toString());
+          } catch (e) {
+            debugPrint('加载手动匹配的弹幕失败: $e');
+            // 如果手动匹配的弹幕加载失败，清空弹幕列表但不重新识别
+            _danmakuList = [];
+            _addStatusMessage('手动匹配的弹幕加载失败');
+          }
+        } else {
+          // 没有手动匹配的弹幕ID，使用常规方式识别和加载弹幕
+          try {
+            await _recognizeVideo(videoPath);
+          } catch (e) {
+            //debugPrint('弹幕加载失败: $e');
+            // 设置空弹幕列表，确保播放不受影响
+            _danmakuList = [];
+            _addStatusMessage('无法连接服务器，跳过加载弹幕');
+          }
         }
       }
       
@@ -2353,6 +2379,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('无效的episodeId，无法加载弹幕');
         _setStatus(PlayerStatus.recognizing, message: '无效的弹幕ID，跳过加载');
         return;
+      }
+
+      // 清除之前的弹幕数据
+      debugPrint('清除之前的弹幕数据');
+      _danmakuList.clear();
+      danmakuController?.clearDanmaku();
+      notifyListeners();
+
+      // 更新内部状态变量，确保新的弹幕ID被保存
+      final parsedAnimeId = int.tryParse(animeIdStr) ?? 0;
+      final episodeIdInt = int.tryParse(episodeId) ?? 0;
+      
+      if (episodeIdInt > 0 && parsedAnimeId > 0) {
+        _episodeId = episodeIdInt;
+        _animeId = parsedAnimeId;
+        debugPrint('更新内部弹幕ID状态: episodeId=$_episodeId, animeId=$_animeId');
       }
 
       // 从缓存加载弹幕
