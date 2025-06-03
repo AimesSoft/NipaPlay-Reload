@@ -7,6 +7,9 @@ Essential: no
 Installed-Size: 34648
 Maintainer: madoka773 <valigarmanda55@gmail.com>
 Description: A cross platform danmaku video player.
+ 支持多种视频格式和弹幕显示的跨平台视频播放器。
+ 需要系统安装 libmpv 以支持视频播放功能。
 Homepage: https://github.com/MCDFsteve/NipaPlay-Reload
-Depends: ffmpeg, libass9, libsqlite3-0, libcanberra-gtk3-module, gtk3-nocsd, libgtk3-nocsd0, libmpv1 | libmpv2
+Depends: libgtk-3-0, libmpv1 | libmpv2, libmimalloc2.0, ffmpeg, libass9, libsqlite3-0, libcanberra-gtk3-module, gtk3-nocsd, libgtk3-nocsd0
+Recommends: mpv
  

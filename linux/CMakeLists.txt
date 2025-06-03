@@ -54,6 +54,14 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
+# Find libmpv for video playback support
+pkg_check_modules(MPV QUIET IMPORTED_TARGET mpv)
+if(MPV_FOUND)
+  message(STATUS "Found libmpv: ${MPV_VERSION}")
+else()
+  message(WARNING "libmpv not found via pkg-config, will rely on runtime linking")
+endif()
+
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
 # Define the application target. To change its name, change BINARY_NAME above,
@@ -73,6 +81,26 @@ apply_standard_settings(${BINARY_NAME})
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
+
+# Link libmpv if found
+if(MPV_FOUND)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::MPV)
+  message(STATUS "Linking with libmpv")
+endif()
+
+# Add mimalloc for better memory management (as recommended by player documentation)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MIMALLOC mimalloc QUIET)
+if(MIMALLOC_FOUND)
+  # use dynamically linked mimalloc
+  set(MIMALLOC_USE_STATIC_LIBS OFF)
+  target_link_libraries(${BINARY_NAME} PRIVATE ${MIMALLOC_LIBRARIES})
+  target_include_directories(${BINARY_NAME} PRIVATE ${MIMALLOC_INCLUDE_DIRS})
+  target_compile_options(${BINARY_NAME} PRIVATE ${MIMALLOC_CFLAGS_OTHER})
+  message(STATUS "Using mimalloc for better memory management")
+else()
+  message(WARNING "mimalloc not found - using default allocator")
+endif()
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

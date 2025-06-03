@@ -243,161 +243,16 @@ jobs:
         if: matrix.target == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils libsqlite3-dev libcanberra-gtk3-module gtk3-nocsd libgtk3-nocsd0
-
-      - name: Ensure mdk-sdk is available for Linux build
-        if: matrix.target == 'Linux'
-        run: |
-          echo "Ensuring mdk-sdk is available for Linux build..."
-          # Attempt to download mdk-sdk directly and verify it
-          MDK_SDK_DIR="linux/flutter/ephemeral/.plugin_symlinks/fvp"
-          mkdir -p "${MDK_SDK_DIR}"
-          
-          # First try SourceForge
-          echo "Trying to download mdk-sdk from SourceForge..."
-          SF_MDK_URL="https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-linux-x64.tar.xz"
-          wget -q --tries=3 ${SF_MDK_URL} -O "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz"
-          
-          # Check if download succeeded
-          if [ -s "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz" ]; then
-            echo "Successfully downloaded mdk-sdk from SourceForge"
-          else
-            # Fallback to GitHub
-            echo "SourceForge download failed, trying GitHub..."
-            GITHUB_MDK_URL="https://github.com/wang-bin/mdk-sdk/releases/latest/download/mdk-sdk-linux-x64.tar.xz"
-            wget -q --tries=3 ${GITHUB_MDK_URL} -O "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz"
-            
-            if [ ! -s "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz" ]; then
-              echo "WARNING: Both SourceForge and GitHub downloads failed. Build might fail later."
-            else
-              echo "Successfully downloaded mdk-sdk from GitHub"
-            fi
-          fi
-          
-          # If we have a valid tarball, extract it
-          if [ -s "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz" ]; then
-            echo "Extracting mdk-sdk..."
-            tar -xf "${MDK_SDK_DIR}/mdk-sdk-linux-x64.tar.xz" -C "${MDK_SDK_DIR}"
-            
-            if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
-              echo "mdk-sdk extracted successfully"
-              echo "Listing mdk-sdk contents:"
-              find "${MDK_SDK_DIR}/mdk-sdk" -name "*mpv*" -type f || echo "No mpv files found in mdk-sdk"
-              
-              # 详细列出所有libmpv相关文件
-              echo "Detailed libmpv files in mdk-sdk:"
-              find "${MDK_SDK_DIR}/mdk-sdk" -name "*mpv*" -type f -exec ls -la {} \; || echo "No detailed libmpv files found"
-            else
-              echo "WARNING: Extraction failed or directory structure is unexpected"
-            fi
-          fi
-          
-          # 创建一个专用函数来确保libmpv.so.1的存在
-          create_libmpv_so1() {
-            local TARGET_DIR="$1"
-            local ORIGINAL_DIR=$(pwd)
-            echo "=== Ensuring libmpv.so.1 exists in ${TARGET_DIR} ==="
-            
-            cd "${TARGET_DIR}"
-            
-            # 详细列出所有mpv相关文件
-            echo "Current mpv files in ${TARGET_DIR}:"
-            find . -name "*mpv*" -type f -exec ls -la {} \; || echo "No mpv files found"
-            
-            # 强制创建libmpv.so.1的多种策略
-            LIBMPV_SO1_CREATED=false
-            
-            # 策略1: 如果存在libmpv.so.2，创建符号链接
-            if [ -f "libmpv.so.2" ]; then
-              ln -sf libmpv.so.2 libmpv.so.1
-              echo "✓ Strategy 1: Created symlink libmpv.so.1 -> libmpv.so.2"
-              LIBMPV_SO1_CREATED=true
-            fi
-            
-            # 策略2: 如果存在具体版本号的libmpv.so文件
-            if [ ! -f "libmpv.so.1" ]; then
-              for mpv_file in libmpv.so.2.* libmpv.so.*; do
-                if [ -f "$mpv_file" ]; then
-                  ln -sf "$mpv_file" libmpv.so.1
-                  ln -sf "$mpv_file" libmpv.so.2 2>/dev/null || true
-                  echo "✓ Strategy 2: Created symlink libmpv.so.1 -> $mpv_file"
-                  LIBMPV_SO1_CREATED=true
-                  break
-                fi
-              done
-            fi
-            
-            # 策略3: 查找任何libmpv.*文件并创建链接
-            if [ ! -f "libmpv.so.1" ]; then
-              LIBMPV_FILE=$(find . -name "libmpv.*" -type f | head -1)
-              if [ -n "$LIBMPV_FILE" ]; then
-                ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
-                echo "✓ Strategy 3: Created symlink libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
-                LIBMPV_SO1_CREATED=true
-              fi
-            fi
-            
-            # 策略4: 从系统复制libmpv并重命名为.so.1
-            if [ ! -f "libmpv.so.1" ]; then
-              echo "Searching system for libmpv libraries..."
-              SYSTEM_LIBMPV=$(find /usr/lib* -name "libmpv.so*" -type f 2>/dev/null | head -1)
-              if [ -n "$SYSTEM_LIBMPV" ]; then
-                cp "$SYSTEM_LIBMPV" ./libmpv.so.1
-                chmod 755 ./libmpv.so.1
-                echo "✓ Strategy 4: Copied system libmpv ($SYSTEM_LIBMPV) as libmpv.so.1"
-                LIBMPV_SO1_CREATED=true
-              fi
-            fi
-            
-            # 策略5: 强制下载最新的libmpv.so.1（最后手段）
-            if [ ! -f "libmpv.so.1" ]; then
-              echo "All strategies failed, trying to download compatible libmpv.so.1..."
-              # 尝试下载一个已知兼容的libmpv.so.1版本
-              wget -q --tries=2 "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20231015/mpv-dev-x86_64-20231015-git-d678618.7z" -O temp_mpv.7z 2>/dev/null || true
-              if [ -f "temp_mpv.7z" ]; then
-                echo "Downloaded backup mpv package, but 7z extraction not implemented in this strategy"
-                rm -f temp_mpv.7z
-              fi
-            fi
-            
-            # 最终验证
-            if [ -f "libmpv.so.1" ]; then
-              echo "✅ SUCCESS: libmpv.so.1 is now available!"
-              ls -la libmpv.so*
-              # 验证文件是否可执行/可链接
-              if file libmpv.so.1 | grep -q "ELF.*shared object"; then
-                echo "✅ libmpv.so.1 appears to be a valid shared library"
-              else
-                echo "⚠️  WARNING: libmpv.so.1 may not be a valid shared library"
-                file libmpv.so.1
-              fi
-            else
-              echo "❌ CRITICAL: Failed to create libmpv.so.1 using all strategies!"
-              echo "Available files:"
-              ls -la . | grep -i mpv || echo "No mpv files found"
-              cd "$ORIGINAL_DIR"
-              return 1
-            fi
-            
-            cd "$ORIGINAL_DIR"
-            return 0
-          }
-          
-          # 如果mdk-sdk可用，预先处理libmpv.so.1
-          if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
-            echo "Pre-processing libmpv.so.1 in mdk-sdk..."
-            MDK_LIB_DIR=$(find "${MDK_SDK_DIR}/mdk-sdk" -type d -name "*lib*" | head -1)
-            if [ -n "$MDK_LIB_DIR" ]; then
-              create_libmpv_so1 "$MDK_LIB_DIR" || echo "Warning: Could not create libmpv.so.1 in mdk-sdk"
-            fi
-          fi
-          
-          # Fallback: try to use system libmpv if mdk-sdk fails
-          if [ ! -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
-            echo "mdk-sdk not available, will use system libmpv as fallback"
-            echo "System libmpv libraries:"
-            find /usr/lib -name "*mpv*" -type f || echo "No system libmpv found"
-          fi
+          # Install core build dependencies
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+          # Install mpv dependencies for media_kit (必需，即使系统没有也要安装用于构建)
+          sudo apt-get install -y libmpv-dev mpv
+          # Install mimalloc for better memory management
+          sudo apt-get install -y libmimalloc-dev libmimalloc2.0
+          # Install packaging tools
+          sudo apt-get install -y fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
+          # Install additional libs that might be needed
+          sudo apt-get install -y libasound2-dev libass-dev
 
       - name: Build Linux
         if: matrix.target == 'Linux'
@@ -407,113 +262,6 @@ jobs:
         if: matrix.target == 'Linux'
         shell: /usr/bin/bash -e {0}
         run: |
-          # 重新定义libmpv.so.1创建函数（确保在打包阶段可用）
-          create_libmpv_so1() {
-            local TARGET_DIR="$1"
-            local ORIGINAL_DIR=$(pwd)
-            echo "=== Ensuring libmpv.so.1 exists in ${TARGET_DIR} ==="
-            
-            cd "${TARGET_DIR}"
-            
-            # 详细列出所有mpv相关文件
-            echo "Current mpv files in ${TARGET_DIR}:"
-            find . -name "*mpv*" -type f -exec ls -la {} \; || echo "No mpv files found"
-            
-            # 强制创建libmpv.so.1的多种策略
-            LIBMPV_SO1_CREATED=false
-            
-            # 策略1: 如果存在libmpv.so.2，创建符号链接
-            if [ -f "libmpv.so.2" ]; then
-              ln -sf libmpv.so.2 libmpv.so.1
-              echo "✓ Strategy 1: Created symlink libmpv.so.1 -> libmpv.so.2"
-              LIBMPV_SO1_CREATED=true
-            fi
-            
-            # 策略2: 如果存在具体版本号的libmpv.so文件
-            if [ ! -f "libmpv.so.1" ]; then
-              for mpv_file in libmpv.so.2.* libmpv.so.*; do
-                if [ -f "$mpv_file" ]; then
-                  ln -sf "$mpv_file" libmpv.so.1
-                  ln -sf "$mpv_file" libmpv.so.2 2>/dev/null || true
-                  echo "✓ Strategy 2: Created symlink libmpv.so.1 -> $mpv_file"
-                  LIBMPV_SO1_CREATED=true
-                  break
-                fi
-              done
-            fi
-            
-            # 策略3: 查找任何libmpv.*文件并创建链接
-            if [ ! -f "libmpv.so.1" ]; then
-              LIBMPV_FILE=$(find . -name "libmpv.*" -type f | head -1)
-              if [ -n "$LIBMPV_FILE" ]; then
-                ln -sf "$(basename "$LIBMPV_FILE")" libmpv.so.1
-                echo "✓ Strategy 3: Created symlink libmpv.so.1 -> $(basename "$LIBMPV_FILE")"
-                LIBMPV_SO1_CREATED=true
-              fi
-            fi
-            
-            # 策略4: 从系统复制libmpv并重命名为.so.1
-            if [ ! -f "libmpv.so.1" ]; then
-              echo "Searching system for libmpv libraries..."
-              SYSTEM_LIBMPV=$(find /usr/lib* -name "libmpv.so*" -type f 2>/dev/null | head -1)
-              if [ -n "$SYSTEM_LIBMPV" ]; then
-                cp "$SYSTEM_LIBMPV" ./libmpv.so.1
-                chmod 755 ./libmpv.so.1
-                echo "✓ Strategy 4: Copied system libmpv ($SYSTEM_LIBMPV) as libmpv.so.1"
-                LIBMPV_SO1_CREATED=true
-              fi
-            fi
-            
-            # 策略5: 强制下载最新的libmpv.so.1（最后手段）
-            if [ ! -f "libmpv.so.1" ]; then
-              echo "All strategies failed, trying to download compatible libmpv.so.1..."
-              # 尝试下载一个已知兼容的libmpv.so.1版本
-              wget -q --tries=2 "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20231015/mpv-dev-x86_64-20231015-git-d678618.7z" -O temp_mpv.7z 2>/dev/null || true
-              if [ -f "temp_mpv.7z" ]; then
-                echo "Downloaded backup mpv package, but 7z extraction not implemented in this strategy"
-                rm -f temp_mpv.7z
-              fi
-            fi
-            
-            # 最终验证
-            if [ -f "libmpv.so.1" ]; then
-              echo "✅ SUCCESS: libmpv.so.1 is now available!"
-              ls -la libmpv.so*
-              # 验证文件是否可执行/可链接
-              if file libmpv.so.1 | grep -q "ELF.*shared object"; then
-                echo "✅ libmpv.so.1 appears to be a valid shared library"
-              else
-                echo "⚠️  WARNING: libmpv.so.1 may not be a valid shared library"
-                file libmpv.so.1
-              fi
-            else
-              echo "❌ CRITICAL: Failed to create libmpv.so.1 using all strategies!"
-              echo "Available files:"
-              ls -la . | grep -i mpv || echo "No mpv files found"
-              cd "$ORIGINAL_DIR"
-              return 1
-            fi
-            
-            cd "$ORIGINAL_DIR"
-            return 0
-          }
-          
-          # AMD64 build - Install dependencies
-          echo "Updating package lists..."
-          sudo apt-get update -y
-          if [ $? -ne 0 ]; then echo "apt-get update failed!"; exit 1; fi
-          
-          echo "Installing core dependencies..."
-          # Install dependencies including fuse for AppImage, qt for linuxdeployqt, rpm tools, and desktop-file-utils for RPM build
-          sudo apt-get install -y mpv libmpv-dev pkg-config clang cmake libgtk-3-dev ninja-build libasound2-dev libass-dev fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils libsqlite3-dev libcanberra-gtk3-module gtk3-nocsd libgtk3-nocsd0
-          if [ $? -ne 0 ]; then echo "apt-get install failed!"; exit 1; fi
-          
-          echo "Verifying core tools installation (especially desktop-file-utils)..."
-          which desktop-file-install || (echo "desktop-file-install command not found! Check desktop-file-utils installation." && exit 1)
-          which rpmbuild || (echo "rpmbuild command not found! Check rpm package installation." && exit 1)
-          rpmbuild --version || (echo "rpmbuild --version failed!" && exit 1)
-          echo "Core tools verified."
-
           # Define variables
           APP_NAME="NipaPlay" # Change if your app name is different
           APP_NAME_LOWER="nipaplay" # Lowercase for paths/executable
@@ -550,27 +298,19 @@ jobs:
           echo "Copying application files to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
           cp -r "${BUILD_OUTPUT_DIR}/"* "${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
           
-          # 复制 mdk-sdk 中的 libmpv 库到 .deb 包
-          echo "Copying mdk-sdk libraries to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
-          MDK_SDK_DIR="linux/flutter/ephemeral/.plugin_symlinks/fvp"
-          if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
-            echo "Finding libmpv.so in mdk-sdk..."
-            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmpv*.so*" -type f -exec cp -v {} "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" \;
-            # 复制其他可能需要的 mdk 相关库
-            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmdk*.so*" -type f -exec cp -v {} "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" \;
-          else
-            echo "WARNING: mdk-sdk directory not found at ${MDK_SDK_DIR}/mdk-sdk"
-            # 尝试从系统中查找 libmpv 并复制
-            echo "Attempting to find system libmpv..."
-            find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" \;
+          # Copy system libmpv libraries to ensure availability
+          echo "Copying system libmpv libraries to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
+          mkdir -p "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib"
+          # Copy system libmpv and create compatibility symlinks
+          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+            cp "$mpv_lib" "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" 2>/dev/null || true
+          done
+          # Create compatibility symlinks for libmpv.so.1 if needed
+          cd "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib"
+          if [ ! -f "libmpv.so.1" ] && [ -f "libmpv.so.2" ]; then
+            ln -sf libmpv.so.2 libmpv.so.1
           fi
-          
-          # 创建 libmpv 兼容性符号链接 - 使用增强的函数
-          echo "Ensuring libmpv.so.1 availability in .deb package..."
-          create_libmpv_so1 "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" || {
-            echo "ERROR: Failed to ensure libmpv.so.1 in .deb package"
-            exit 1
-          }
+          cd - >/dev/null
           
           # Create DEBIAN/control from template
           echo "Creating DEBIAN/control"
@@ -592,9 +332,6 @@ jobs:
           
           # Copy desktop file and icon
           echo "Copying desktop file and icon"
-          echo "Current working directory: $(pwd)"
-          echo "Checking if desktop file exists: ${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}"
-          ls -la "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" || echo "Desktop file not found!"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${DEB_ROOT}/usr/share/applications/"
           cp "${ICON_SOURCE_PATH}" "${DEB_ROOT}/usr/share/icons/hicolor/512x512/apps/${ICON_NAME}"
           
@@ -622,36 +359,20 @@ jobs:
           echo "Copying data/* to AppDir/data/"
           cp -r "${BUILD_OUTPUT_DIR}/data/." "${APPDIR}/data/"
           
-          # 复制 mdk-sdk 中的 libmpv 库到 AppImage
-          echo "Copying mdk-sdk libraries to AppImage"
-          MDK_SDK_DIR="linux/flutter/ephemeral/.plugin_symlinks/fvp"
-          if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
-            echo "Finding libmpv.so in mdk-sdk for AppImage..."
-            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmpv*.so*" -type f -exec cp -v {} "${APPDIR}/lib/" \;
-            # 复制其他可能需要的 mdk 相关库
-            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmdk*.so*" -type f -exec cp -v {} "${APPDIR}/lib/" \;
-          else
-            echo "WARNING: mdk-sdk directory not found at ${MDK_SDK_DIR}/mdk-sdk"
-            # 尝试从系统中查找 libmpv 并复制
-            echo "Attempting to find system libmpv for AppImage..."
-            find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${APPDIR}/lib/" \;
+          # Copy system libmpv libraries to AppImage
+          echo "Copying system libmpv libraries to AppImage"
+          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+            cp "$mpv_lib" "${APPDIR}/lib/" 2>/dev/null || true
+          done
+          # Create compatibility symlinks for libmpv.so.1 if needed
+          cd "${APPDIR}/lib"
+          if [ ! -f "libmpv.so.1" ] && [ -f "libmpv.so.2" ]; then
+            ln -sf libmpv.so.2 libmpv.so.1
           fi
-          
-          # 创建 libmpv 兼容性符号链接 - 使用增强的函数
-          echo "Ensuring libmpv.so.1 availability in AppImage..."
-          create_libmpv_so1 "${APPDIR}/lib/" || {
-            echo "ERROR: Failed to ensure libmpv.so.1 in AppImage"
-            exit 1
-          }
-          
-          # 确保返回到项目根目录
-          cd "${GITHUB_WORKSPACE}" || cd "$(pwd | sed 's|/build/linux.*||')" || cd /home/runner/work/NipaPlay-Reload/NipaPlay-Reload
+          cd - >/dev/null
           
           # Copy desktop file and icon to AppDir root
           echo "Copying desktop file and icon to AppDir root"
-          echo "Current working directory: $(pwd)"
-          echo "Checking if desktop file exists: ${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}"
-          ls -la "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" || echo "Desktop file not found!"
           cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${APPDIR}/"
           cp "${ICON_SOURCE_PATH}" "${APPDIR}/${ICON_NAME}"
           
@@ -665,19 +386,6 @@ jobs:
           export LD_LIBRARY_PATH="${APPDIR}/lib:${LD_LIBRARY_PATH}"
           chmod +x "${APPDIR}/${APP_NAME}"
           
-          # 确保GTK模块在AppImage中可用
-          echo "确保GTK模块可用..."
-          mkdir -p "${APPDIR}/usr/lib/gtk-3.0/modules/"
-          if [ -f "/usr/lib/x86_64-linux-gnu/gtk-3.0/modules/libcanberra-gtk-module.so" ]; then
-            cp /usr/lib/x86_64-linux-gnu/gtk-3.0/modules/libcanberra-gtk-module.so "${APPDIR}/usr/lib/gtk-3.0/modules/"
-          fi
-          if [ -f "/usr/lib/gtk-3.0/modules/libcanberra-gtk-module.so" ]; then
-            cp /usr/lib/gtk-3.0/modules/libcanberra-gtk-module.so "${APPDIR}/usr/lib/gtk-3.0/modules/"
-          fi
-          if [ -f "/usr/lib/x86_64-linux-gnu/gtk-3.0/modules/libgtk3-nocsd.so" ]; then
-            cp /usr/lib/x86_64-linux-gnu/gtk-3.0/modules/libgtk3-nocsd.so "${APPDIR}/usr/lib/gtk-3.0/modules/"
-          fi
-          
           ./linuxdeployqt "${APPDIR}/${APP_NAME}" -appimage -bundle-non-qt-libs
           
           echo "Listing *.AppImage files in current directory after linuxdeployqt:"
@@ -690,8 +398,6 @@ jobs:
             echo "Found generated AppImage: $GENERATED_APPIMAGE"
             mv "$GENERATED_APPIMAGE" "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
             echo "AppImage created at ${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
-            echo "Checking if AppImage exists in build/linux:"
-            ls -la "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" || echo "AppImage move failed or file not found in build/linux."
           else
             echo "AppImage generation failed or file not found by find command!"
           fi
@@ -706,91 +412,135 @@ jobs:
           echo "Copying application files to archive directory"
           cp -r "${BUILD_OUTPUT_DIR}/"* "${ARCHIVE_CONTENT_DIR}/"
           
-          # 复制 mdk-sdk 中的 libmpv 库到 tar.gz 归档
-          echo "Copying mdk-sdk libraries to tar.gz archive"
-          MDK_SDK_DIR="linux/flutter/ephemeral/.plugin_symlinks/fvp"
-          if [ -d "${MDK_SDK_DIR}/mdk-sdk" ]; then
-            echo "Finding libmpv.so in mdk-sdk for tar.gz..."
-            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmpv*.so*" -type f -exec cp -v {} "${ARCHIVE_CONTENT_DIR}/lib/" \;
-            # 复制其他可能需要的 mdk 相关库
-            find "${MDK_SDK_DIR}/mdk-sdk" -name "libmdk*.so*" -type f -exec cp -v {} "${ARCHIVE_CONTENT_DIR}/lib/" \;
-          else
-            echo "WARNING: mdk-sdk directory not found at ${MDK_SDK_DIR}/mdk-sdk"
-            # 尝试从系统中查找 libmpv 并复制
-            echo "Attempting to find system libmpv for tar.gz..."
-            find /usr/lib -name "libmpv*.so*" -type f -exec cp -v {} "${ARCHIVE_CONTENT_DIR}/lib/" \;
+          # Copy system libmpv libraries to tar.gz archive
+          echo "Copying system libmpv libraries to tar.gz archive"
+          mkdir -p "${ARCHIVE_CONTENT_DIR}/lib"
+          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+            cp "$mpv_lib" "${ARCHIVE_CONTENT_DIR}/lib/" 2>/dev/null || true
+          done
+          # Create compatibility symlinks for libmpv.so.1 if needed
+          cd "${ARCHIVE_CONTENT_DIR}/lib"
+          if [ ! -f "libmpv.so.1" ] && [ -f "libmpv.so.2" ]; then
+            ln -sf libmpv.so.2 libmpv.so.1
           fi
+          cd - >/dev/null
           
-          # 创建 libmpv 兼容性符号链接 - 使用增强的函数
-          echo "Ensuring libmpv.so.1 availability in tar.gz archive..."
-          create_libmpv_so1 "${ARCHIVE_CONTENT_DIR}/lib/" || {
-            echo "ERROR: Failed to ensure libmpv.so.1 in tar.gz archive"
-            exit 1
-          }
-          
-          # 确保返回到项目根目录
-          cd "${GITHUB_WORKSPACE}" || cd "$(pwd | sed 's|/build/linux.*||')" || cd /home/runner/work/NipaPlay-Reload/NipaPlay-Reload
-          
-          # Add a simple run script using echo commands
+          # Add a simple run script
           RUN_SCRIPT_PATH="${ARCHIVE_CONTENT_DIR}/run.sh"
           echo "Creating run.sh script at ${RUN_SCRIPT_PATH}"
           echo '#!/bin/sh' > "${RUN_SCRIPT_PATH}"
-          echo '# Enhanced run script for NipaPlay binary archive with libmpv.so.1 support' >> "${RUN_SCRIPT_PATH}"
+          echo '# Run script for NipaPlay binary archive' >> "${RUN_SCRIPT_PATH}"
           echo 'DIR="$(dirname "$(readlink -f "$0")")"' >> "${RUN_SCRIPT_PATH}"
           echo 'export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
-          echo '# Set GTK_MODULES to ensure proper loading of required modules' >> "${RUN_SCRIPT_PATH}"
-          echo 'export GTK_PATH="$DIR/usr/lib/gtk-3.0"' >> "${RUN_SCRIPT_PATH}"
           echo 'export GTK_CSD=0' >> "${RUN_SCRIPT_PATH}"
           echo 'export GTK3_NOCSD=1' >> "${RUN_SCRIPT_PATH}"
-          echo '# Set MPV_HOME to help find mpv configuration' >> "${RUN_SCRIPT_PATH}"
-          echo 'export MPV_HOME="$DIR"' >> "${RUN_SCRIPT_PATH}"
           echo '' >> "${RUN_SCRIPT_PATH}"
-          echo '# Runtime libmpv.so.1 check and fix function' >> "${RUN_SCRIPT_PATH}"
-          echo 'ensure_libmpv_so1() {' >> "${RUN_SCRIPT_PATH}"
-          echo '  cd "$DIR/lib"' >> "${RUN_SCRIPT_PATH}"
-          echo '  if [ ! -f "libmpv.so.1" ]; then' >> "${RUN_SCRIPT_PATH}"
-          echo '    echo "⚠️  libmpv.so.1 not found! Attempting to create it..."' >> "${RUN_SCRIPT_PATH}"
-          echo '    # Try to find any libmpv.so.* file and create symlink' >> "${RUN_SCRIPT_PATH}"
-          echo '    for mpv_file in libmpv.so.2 libmpv.so.2.* libmpv.so.*; do' >> "${RUN_SCRIPT_PATH}"
-          echo '      if [ -f "$mpv_file" ]; then' >> "${RUN_SCRIPT_PATH}"
-          echo '        ln -sf "$mpv_file" libmpv.so.1' >> "${RUN_SCRIPT_PATH}"
-          echo '        echo "✓ Created symlink: libmpv.so.1 -> $mpv_file"' >> "${RUN_SCRIPT_PATH}"
-          echo '        break' >> "${RUN_SCRIPT_PATH}"
-          echo '      fi' >> "${RUN_SCRIPT_PATH}"
-          echo '    done' >> "${RUN_SCRIPT_PATH}"
-          echo '    # If still not found, try system libmpv' >> "${RUN_SCRIPT_PATH}"
-          echo '    if [ ! -f "libmpv.so.1" ]; then' >> "${RUN_SCRIPT_PATH}"
-          echo '      SYSTEM_LIBMPV=$(find /usr/lib* -name "libmpv.so*" -type f 2>/dev/null | head -1)' >> "${RUN_SCRIPT_PATH}"
-          echo '      if [ -n "$SYSTEM_LIBMPV" ]; then' >> "${RUN_SCRIPT_PATH}"
-          echo '        cp "$SYSTEM_LIBMPV" libmpv.so.1' >> "${RUN_SCRIPT_PATH}"
-          echo '        echo "✓ Copied system libmpv as libmpv.so.1"' >> "${RUN_SCRIPT_PATH}"
-          echo '      else' >> "${RUN_SCRIPT_PATH}"
-          echo '        echo "❌ ERROR: Could not find any libmpv library!"' >> "${RUN_SCRIPT_PATH}"
-          echo '        echo "Please install libmpv-dev or mpv package on your system."' >> "${RUN_SCRIPT_PATH}"
-          echo '        exit 1' >> "${RUN_SCRIPT_PATH}"
-          echo '      fi' >> "${RUN_SCRIPT_PATH}"
-          echo '    fi' >> "${RUN_SCRIPT_PATH}"
-          echo '  fi' >> "${RUN_SCRIPT_PATH}"
-          echo '}' >> "${RUN_SCRIPT_PATH}"
+          echo '# Check for libmpv (required by media_kit)' >> "${RUN_SCRIPT_PATH}"
+          echo 'if ! ldconfig -p | grep -q libmpv; then' >> "${RUN_SCRIPT_PATH}"
+          echo '  echo "警告: 系统未找到 libmpv 库"' >> "${RUN_SCRIPT_PATH}"
+          echo '  echo "NipaPlay 需要 libmpv 支持视频播放"' >> "${RUN_SCRIPT_PATH}"
+          echo '  echo "请安装: sudo apt install libmpv1 mpv (Ubuntu/Debian)"' >> "${RUN_SCRIPT_PATH}"
+          echo '  echo "或者:   sudo dnf install mpv-libs mpv (Fedora)"' >> "${RUN_SCRIPT_PATH}"
+          echo '  echo "或者:   sudo pacman -S mpv (Arch)"' >> "${RUN_SCRIPT_PATH}"
+          echo '  echo ""' >> "${RUN_SCRIPT_PATH}"
+          echo 'fi' >> "${RUN_SCRIPT_PATH}"
           echo '' >> "${RUN_SCRIPT_PATH}"
           echo '# Print library path for debugging' >> "${RUN_SCRIPT_PATH}"
           echo 'echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
-          echo 'echo "Checking for libmpv.so:"' >> "${RUN_SCRIPT_PATH}"
-          echo 'find "$DIR/lib" -name "libmpv*.so*" || echo "libmpv not found in $DIR/lib!"' >> "${RUN_SCRIPT_PATH}"
-          echo '' >> "${RUN_SCRIPT_PATH}"
-          echo '# Ensure libmpv.so.1 exists before launching' >> "${RUN_SCRIPT_PATH}"
-          echo 'ensure_libmpv_so1' >> "${RUN_SCRIPT_PATH}"
           echo '' >> "${RUN_SCRIPT_PATH}"
           echo '# Execute the main binary' >> "${RUN_SCRIPT_PATH}"
           echo "\"\$DIR/${APP_NAME}\" \"\$@\"" >> "${RUN_SCRIPT_PATH}"
           chmod +x "${RUN_SCRIPT_PATH}"
           
+          # Add an install helper script
+          INSTALL_SCRIPT_PATH="${ARCHIVE_CONTENT_DIR}/install-deps.sh"
+          echo "Creating install-deps.sh script at ${INSTALL_SCRIPT_PATH}"
+          echo '#!/bin/bash' > "${INSTALL_SCRIPT_PATH}"
+          echo '# 依赖安装脚本 for NipaPlay' >> "${INSTALL_SCRIPT_PATH}"
+          echo '' >> "${INSTALL_SCRIPT_PATH}"
+          echo 'echo "NipaPlay 依赖安装助手"' >> "${INSTALL_SCRIPT_PATH}"
+          echo 'echo "========================"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '' >> "${INSTALL_SCRIPT_PATH}"
+          echo '# 检测发行版' >> "${INSTALL_SCRIPT_PATH}"
+          echo 'if [ -f /etc/debian_version ]; then' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "检测到 Debian/Ubuntu 系统"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  sudo apt update' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  sudo apt install -y libmpv1 mpv libgtk-3-0 ffmpeg libass9' >> "${INSTALL_SCRIPT_PATH}"
+          echo 'elif [ -f /etc/fedora-release ]; then' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "检测到 Fedora 系统"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  sudo dnf install -y mpv-libs mpv gtk3 ffmpeg libass' >> "${INSTALL_SCRIPT_PATH}"
+          echo 'elif [ -f /etc/arch-release ]; then' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "检测到 Arch Linux 系统"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  sudo pacman -S --needed mpv gtk3 ffmpeg libass' >> "${INSTALL_SCRIPT_PATH}"
+          echo 'else' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "未识别的 Linux 发行版"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "请手动安装以下依赖:"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "- libmpv (mpv 媒体播放器库)"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "- gtk3 (GUI 工具包)"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "- ffmpeg (媒体处理)"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '  echo "- libass (字幕渲染)"' >> "${INSTALL_SCRIPT_PATH}"
+          echo 'fi' >> "${INSTALL_SCRIPT_PATH}"
+          echo '' >> "${INSTALL_SCRIPT_PATH}"
+          echo 'echo "依赖安装完成！现在可以运行 ./run.sh 启动 NipaPlay"' >> "${INSTALL_SCRIPT_PATH}"
+          chmod +x "${INSTALL_SCRIPT_PATH}"
+          
+          # Add README file
+          README_PATH="${ARCHIVE_CONTENT_DIR}/README-Linux.md"
+          echo "Creating README-Linux.md at ${README_PATH}"
+          echo '# NipaPlay Linux 版本使用说明' > "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '## 快速开始' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '1. **安装依赖**（首次使用必需）：' >> "${README_PATH}"
+          echo '   ```bash' >> "${README_PATH}"
+          echo '   ./install-deps.sh' >> "${README_PATH}"
+          echo '   ```' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '2. **运行程序**：' >> "${README_PATH}"
+          echo '   ```bash' >> "${README_PATH}"
+          echo '   ./run.sh' >> "${README_PATH}"
+          echo '   ```' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '## 依赖说明' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo 'NipaPlay 需要以下系统库才能正常运行：' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '- **libmpv** - 核心视频播放支持（media_kit 需要）' >> "${README_PATH}"
+          echo '- **gtk3** - 图形界面' >> "${README_PATH}"
+          echo '- **ffmpeg** - 视频解码' >> "${README_PATH}"
+          echo '- **libass** - 字幕渲染' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '## 手动安装依赖' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '### Ubuntu/Debian' >> "${README_PATH}"
+          echo '```bash' >> "${README_PATH}"
+          echo 'sudo apt update' >> "${README_PATH}"
+          echo 'sudo apt install libmpv1 mpv libgtk-3-0 ffmpeg libass9' >> "${README_PATH}"
+          echo '```' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '### Fedora' >> "${README_PATH}"
+          echo '```bash' >> "${README_PATH}"
+          echo 'sudo dnf install mpv-libs mpv gtk3 ffmpeg libass' >> "${README_PATH}"
+          echo '```' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '### Arch Linux' >> "${README_PATH}"
+          echo '```bash' >> "${README_PATH}"
+          echo 'sudo pacman -S mpv gtk3 ffmpeg libass' >> "${README_PATH}"
+          echo '```' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '## 故障排除' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '如果遇到 "Cannot find libmpv" 错误：' >> "${README_PATH}"
+          echo '1. 确保已安装 libmpv：`ldconfig -p | grep libmpv`' >> "${README_PATH}"
+          echo '2. 如果没有，运行 `./install-deps.sh` 或手动安装上述依赖' >> "${README_PATH}"
+          echo '' >> "${README_PATH}"
+          echo '如果遇到其他问题，请访问：' >> "${README_PATH}"
+          echo 'https://github.com/MCDFsteve/NipaPlay-Reload/issues' >> "${README_PATH}"
+          
           # Create the tarball
           echo "Creating tarball..."
           tar -czvf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" -C "${ARCHIVE_CONTENT_DIR}" .
           echo ".tar.gz archive created at ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
-          echo "Listing contents of build/linux directory after tar:"
-          ls -la "${LINUX_BUILD_DIR}/"
           
           # --- Create RPM package ---
           echo "--- Creating RPM package ---"
@@ -808,14 +558,8 @@ jobs:
           sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
               "${RPM_SPEC_TEMPLATE}" > "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}"
           
-          echo "Contents of spec file:"
-          cat "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}"
-          
           # Build RPM
           echo "Building RPM..."
-          echo "Verifying desktop-file-install command..."
-          which desktop-file-install || (echo "desktop-file-install command not found! Check desktop-file-utils installation." && exit 1)
-          echo "desktop-file-utils seems to be installed correctly."
           rpmbuild -ba "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}" --define "_topdir ${RPM_BUILD_ROOT}" --define "_sourcedir ${RPM_BUILD_ROOT}/SOURCES" --nodeps
           
           # Move the generated RPM to the final artifact directory
@@ -829,76 +573,8 @@ jobs:
           else
             echo "Error: RPM file not found in ${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/"
           fi
-          echo "Listing contents of build/linux directory after RPM build:"
-          ls -la "${LINUX_BUILD_DIR}/"
           
-          # --- Verify libmpv.so.1 in all packages ---
-          echo "=== Verifying libmpv.so.1 presence in all Linux packages ==="
-          
-          # Check .deb package
-          echo "Checking .deb package for libmpv.so.1..."
-          if [ -f "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" ]; then
-            if dpkg -c "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" | grep -q "libmpv\.so\.1"; then
-              echo "✅ libmpv.so.1 found in .deb package"
-            else
-              echo "❌ libmpv.so.1 NOT found in .deb package"
-              echo "Contents related to libmpv:"
-              dpkg -c "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" | grep -i mpv || echo "No mpv files in .deb"
-            fi
-          fi
-          
-          # Check AppImage
-          echo "Checking AppImage for libmpv.so.1..."
-          if [ -f "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" ]; then
-            # Extract and check AppImage contents
-            TEMP_APPIMAGE_DIR="/tmp/appimage_check"
-            mkdir -p "$TEMP_APPIMAGE_DIR"
-            cd "$TEMP_APPIMAGE_DIR"
-            "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" --appimage-extract > /dev/null 2>&1 || echo "AppImage extraction failed, trying alternative method"
-            if [ -d "squashfs-root" ]; then
-              if find squashfs-root -name "libmpv.so.1" | grep -q .; then
-                echo "✅ libmpv.so.1 found in AppImage"
-              else
-                echo "❌ libmpv.so.1 NOT found in AppImage"
-                echo "MPV files in AppImage:"
-                find squashfs-root -name "*mpv*" -type f || echo "No mpv files in AppImage"
-              fi
-              rm -rf squashfs-root
-            else
-              echo "⚠️  Could not extract AppImage for verification"
-            fi
-            cd - > /dev/null
-            rm -rf "$TEMP_APPIMAGE_DIR"
-          fi
-          
-          # Check tar.gz archive
-          echo "Checking tar.gz archive for libmpv.so.1..."
-          if [ -f "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" ]; then
-            if tar -tzf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" | grep -q "libmpv\.so\.1"; then
-              echo "✅ libmpv.so.1 found in tar.gz archive"
-            else
-              echo "❌ libmpv.so.1 NOT found in tar.gz archive"
-              echo "MPV files in tar.gz:"
-              tar -tzf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" | grep -i mpv || echo "No mpv files in tar.gz"
-            fi
-          fi
-          
-          # Check RPM package
-          echo "Checking RPM package for libmpv.so.1..."
-          DESIRED_RPM_NAME_FOR_VERIFY="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
-          if [ -f "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_VERIFY}" ]; then
-            if rpm -qlp "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_VERIFY}" 2>/dev/null | grep -q "libmpv\.so\.1"; then
-              echo "✅ libmpv.so.1 found in RPM package"
-            else
-              echo "❌ libmpv.so.1 NOT found in RPM package"
-              echo "MPV files in RPM:"
-              rpm -qlp "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_VERIFY}" 2>/dev/null | grep -i mpv || echo "No mpv files in RPM"
-            fi
-          fi
-          
-          echo "=== libmpv.so.1 verification complete ==="
-          
-          # --- Final Check before Cleanup ---
+          # --- Final Check ---
           echo "Checking if all required Linux packages exist..."
           MISSING_FILES=false
           if [ ! -f "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" ]; then
@@ -915,11 +591,7 @@ jobs:
           fi
           DESIRED_RPM_NAME_FOR_CHECK="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
           if [ ! -f "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}" ]; then
-             if [ -z "${GENERATED_RPM_PATH}" ]; then
-                echo "Error: RPM generation failed, so RPM file (${DESIRED_RPM_NAME_FOR_CHECK}) is missing."
-             else
-                echo "Error: RPM file not found in final destination! Expected: ${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}"
-             fi
+             echo "Error: RPM file not found! Expected: ${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}"
              MISSING_FILES=true
           fi
 
