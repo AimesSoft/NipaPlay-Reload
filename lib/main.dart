@@ -42,6 +42,7 @@ import 'package:nipaplay/utils/page_prewarmer.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:nipaplay/services/debug_log_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -51,6 +52,29 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化调试日志服务（在最前面初始化，这样可以收集启动过程的日志）
+  final debugLogService = DebugLogService();
+  debugLogService.initialize();
+
+  // 加载开发者选项设置，决定是否启用日志收集
+  Future.microtask(() async {
+    try {
+      final enableLogCollection = await SettingsStorage.loadBool(
+        'enable_debug_log_collection',
+        defaultValue: true
+      );
+      
+      if (!enableLogCollection) {
+        debugLogService.stopCollecting();
+        debugLogService.addLog('根据用户设置，日志收集已禁用', level: 'INFO', tag: 'LogService');
+      } else {
+        debugLogService.addLog('根据用户设置，日志收集已启用', level: 'INFO', tag: 'LogService');
+      }
+    } catch (e) {
+      debugLogService.addError('加载日志收集设置失败: $e', tag: 'LogService');
+    }
+  });
 
   // 增加Flutter引擎内存限制，减少OOM风险
   if (Platform.isAndroid) {
@@ -350,6 +374,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => ScanService()),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider.value(value: debugLogService),
           ChangeNotifierProvider(create: (context) { // 修改 JellyfinProvider 的创建方式
             final jellyfinProvider = JellyfinProvider();
             jellyfinProvider.initialize(); // 在创建后立即调用 initialize
@@ -376,6 +401,14 @@ void main() async {
         PagePrewarmer().initialize().then((_) {
           PagePrewarmer().startPrewarm(context);
         });
+        
+        // 添加一些测试日志，验证终端输出功能
+        final debugLogService = Provider.of<DebugLogService>(context, listen: false);
+        debugLogService.addLog('NipaPlay 应用启动完成', level: 'INFO', tag: 'App');
+        debugLogService.addLog('终端输出功能已加载，可在设置 -> 开发者选项中查看', level: 'INFO', tag: 'LogService');
+        debugLogService.addLog('这是一条调试信息示例', level: 'DEBUG', tag: 'Demo');
+        debugLogService.addWarning('这是一条警告信息示例', tag: 'Demo');
+        debugLogService.addError('这是一条错误信息示例（仅用于演示）', tag: 'Demo');
       }
     });
   });

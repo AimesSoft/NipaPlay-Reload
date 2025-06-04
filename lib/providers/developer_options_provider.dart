@@ -7,8 +7,14 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   // 是否显示系统资源监控
   bool _showSystemResources = false;
   
+  // 是否启用终端输出日志收集
+  bool _enableDebugLogCollection = true;
+  
   // 获取显示系统资源监控状态
   bool get showSystemResources => _showSystemResources;
+  
+  // 获取调试日志收集状态
+  bool get enableDebugLogCollection => _enableDebugLogCollection;
   
   // 构造函数
   DeveloperOptionsProvider() {
@@ -21,6 +27,12 @@ class DeveloperOptionsProvider extends ChangeNotifier {
       'show_system_resources', 
       defaultValue: false
     );
+    
+    _enableDebugLogCollection = await SettingsStorage.loadBool(
+      'enable_debug_log_collection',
+      defaultValue: true
+    );
+    
     notifyListeners();
   }
   
@@ -36,6 +48,15 @@ class DeveloperOptionsProvider extends ChangeNotifier {
     if (_showSystemResources != value) {
       _showSystemResources = value;
       await SettingsStorage.saveBool('show_system_resources', _showSystemResources);
+      notifyListeners();
+    }
+  }
+  
+  // 设置调试日志收集状态
+  Future<void> setEnableDebugLogCollection(bool value) async {
+    if (_enableDebugLogCollection != value) {
+      _enableDebugLogCollection = value;
+      await SettingsStorage.saveBool('enable_debug_log_collection', _enableDebugLogCollection);
       notifyListeners();
     }
   }
