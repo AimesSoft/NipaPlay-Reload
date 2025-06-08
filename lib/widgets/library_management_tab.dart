@@ -37,6 +37,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   // 存储ScanService引用
   ScanService? _scanService;
 
+  // 排序相关状态
+  int _sortOption = 0; // 0: 文件名升序, 1: 文件名降序, 2: 修改时间升序, 3: 修改时间降序, 4: 大小升序, 5: 大小降序
+
   @override
   void initState() {
     super.initState();
@@ -158,11 +161,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       if (mounted) {
         BlurSnackBar.show(context, "选择文件夹时出错: $e");
       }
-      return;
-    }
-    
-    // 确保选择了有效的文件夹
-    if (selectedDirectory == null) {
       return;
     }
 
@@ -305,12 +303,74 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         }
       }
     }
+    // 应用选择的排序方式
+    _sortContents(contents);
+    return contents;
+  }
+
+  // 排序内容的方法
+  void _sortContents(List<FileSystemEntity> contents) {
     contents.sort((a, b) {
+      // 总是优先显示文件夹
       if (a is Directory && b is File) return -1;
       if (a is File && b is Directory) return 1;
-      return p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
+      
+      // 同种类型文件按选择的排序方式排序
+      int result = 0;
+      
+      switch (_sortOption) {
+        case 0: // 文件名升序
+          result = p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
+          break;
+        case 1: // 文件名降序
+          result = p.basename(b.path).toLowerCase().compareTo(p.basename(a.path).toLowerCase());
+          break;
+        case 2: // 修改时间升序（旧到新）
+          try {
+            final aModified = a.statSync().modified;
+            final bModified = b.statSync().modified;
+            result = aModified.compareTo(bModified);
+          } catch (e) {
+            // 如果获取修改时间失败，回退到文件名排序
+            result = p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
+          }
+          break;
+        case 3: // 修改时间降序（新到旧）
+          try {
+            final aModified = a.statSync().modified;
+            final bModified = b.statSync().modified;
+            result = bModified.compareTo(aModified);
+          } catch (e) {
+            // 如果获取修改时间失败，回退到文件名排序
+            result = p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
+          }
+          break;
+        case 4: // 大小升序（小到大）
+          try {
+            final aSize = a is File ? a.lengthSync() : 0;
+            final bSize = b is File ? b.lengthSync() : 0;
+            result = aSize.compareTo(bSize);
+          } catch (e) {
+            // 如果获取大小失败，回退到文件名排序
+            result = p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
+          }
+          break;
+        case 5: // 大小降序（大到小）
+          try {
+            final aSize = a is File ? a.lengthSync() : 0;
+            final bSize = b is File ? b.lengthSync() : 0;
+            result = bSize.compareTo(aSize);
+          } catch (e) {
+            // 如果获取大小失败，回退到文件名排序
+            result = p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
+          }
+          break;
+        default:
+          result = p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
+      }
+      
+      return result;
     });
-    return contents;
   }
 
   Future<void> _loadFolderChildren(String folderPath) async {
@@ -384,6 +444,55 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       }
       return const SizedBox.shrink();
     }).toList();
+  }
+
+  // 显示排序选择对话框
+  Future<void> _showSortOptionsDialog() async {
+    final List<String> sortOptions = [
+      '文件名 (A→Z)',
+      '文件名 (Z→A)',
+      '修改时间 (旧→新)',
+      '修改时间 (新→旧)',
+      '文件大小 (小→大)',
+      '文件大小 (大→小)',
+    ];
+
+    final result = await BlurDialog.show<int>(
+      context: context,
+      title: '选择排序方式',
+      content: '选择文件夹中文件和子文件夹的排序方式：',
+      actions: [
+        ...sortOptions.asMap().entries.map((entry) {
+          final index = entry.key;
+          final option = entry.value;
+          final isSelected = _sortOption == index;
+          return TextButton(
+            onPressed: () => Navigator.of(context).pop(index),
+            child: Text(
+              isSelected ? '✓ $option' : option,
+              style: TextStyle(
+                color: isSelected ? Colors.lightBlueAccent : Colors.white70,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          );
+        }).toList(),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消', style: TextStyle(color: Colors.white54)),
+        ),
+      ],
+    );
+
+    if (result != null && result != _sortOption && mounted) {
+      setState(() {
+        _sortOption = result;
+        // 清空已展开的文件夹内容，强制重新加载和排序
+        _expandedFolderContents.clear();
+      });
+      
+      BlurSnackBar.show(context, '排序方式已更改为：${sortOptions[result]}');
+    }
   }
 
   // 检查扫描结果，如果没有找到视频文件，显示指导弹窗
@@ -515,7 +624,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       
       // 构建状态信息
       final StringBuffer content = StringBuffer();
-      content.writeln('Android 版本: ${sdkVersion}');
+      content.writeln('Android 版本: $sdkVersion');
       content.writeln('基本存储权限: ${status['storage']}');
       
       if (sdkVersion >= 30) { // Android 11+
@@ -960,7 +1069,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                           ),
                         ],
                       ),
-                    )).toList(),
+                    )),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -990,6 +1099,36 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                   ],
                 ),
               ),
+            ),
+          ),
+        // 排序选项按钮
+        if (scanService.scannedFolders.isNotEmpty || scanService.isScanning)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              children: [
+                const Text('排序方式：', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: _showSortOptionsDialog,
+                  icon: const Icon(Icons.sort, color: Colors.white, size: 18),
+                  label: Text(
+                    [
+                      '文件名 (A→Z)',
+                      '文件名 (Z→A)',
+                      '修改时间 (旧→新)',
+                      '修改时间 (新→旧)',
+                      '文件大小 (小→大)',
+                      '文件大小 (大→小)',
+                    ][_sortOption],
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                  ),
+                ),
+              ],
             ),
           ),
         Expanded(
