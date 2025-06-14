@@ -24,6 +24,8 @@ class KeyboardShortcuts {
       'toggle_danmaku': 'D',
       'volume_up': '↑',
       'volume_down': '↓',
+      'previous_episode': 'Shift+←',
+      'next_episode': 'Shift+→',
     });
     _updateKeyBindings();
   }
@@ -67,7 +69,28 @@ class KeyboardShortcuts {
         continue;
       }
 
-      if (event.logicalKey == key) {
+      // 检查是否匹配当前键盘事件
+      bool keyMatches = false;
+      
+      // 检查组合键
+      if (action == 'previous_episode' && _shortcuts[action] == 'Shift+←') {
+        keyMatches = event.logicalKey == LogicalKeyboardKey.arrowLeft && 
+                    (event.data.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                     (HardwareKeyboard.instance.isShiftPressed || 
+                      RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+                      RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight)));
+      } else if (action == 'next_episode' && _shortcuts[action] == 'Shift+→') {
+        keyMatches = event.logicalKey == LogicalKeyboardKey.arrowRight && 
+                    (event.data.logicalKey == LogicalKeyboardKey.arrowRight &&
+                     (HardwareKeyboard.instance.isShiftPressed || 
+                      RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+                      RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight)));
+      } else {
+        // 普通单键检查
+        keyMatches = event.logicalKey == key;
+      }
+
+      if (keyMatches) {
         final handler = _actionHandlers[action];
         if (handler == null) {
           debugPrint('[KeyboardShortcuts] Handler for $action is NULL');
@@ -142,6 +165,8 @@ class KeyboardShortcuts {
       'toggle_danmaku': 'D',
       'volume_up': '↑',
       'volume_down': '↓',
+      'previous_episode': 'Shift+←',
+      'next_episode': 'Shift+→',
     });
 
     if (savedShortcutsString != null) {

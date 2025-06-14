@@ -680,7 +680,6 @@ class WatchHistoryManager {
       final file = File(_historyFilePath);
       await file.writeAsString(jsonString);
       _lastWriteTime = DateTime.now();
-    } catch (e) {
     } finally {
       _isWriting = false;
     }
@@ -808,7 +807,6 @@ class WatchHistoryManager {
         await file.writeAsString(jsonString);
         _lastWriteTime = DateTime.now();
       }
-    } catch (e) {
     } finally {
       _isWriting = false;
     }
@@ -843,5 +841,102 @@ class WatchHistoryManager {
   // 判断是否已迁移到数据库
   static bool isMigratedToDatabase() {
     return _migratedToDatabase;
+  }
+
+  // 根据文件路径获取历史记录项
+  static Future<WatchHistoryItem?> getHistoryItemByPath(String filePath) async {
+    await initialize();
+    
+    if (_migratedToDatabase) {
+      // 如果已迁移到数据库，使用数据库查询
+      final db = WatchHistoryDatabase.instance;
+      return await db.getHistoryByFilePath(filePath);
+    } else {
+      // 使用原有的JSON逻辑
+      final items = await getAllHistory();
+      try {
+        return items.firstWhere((item) => item.filePath == filePath);
+      } catch (e) {
+        // 如果在iOS上没找到，尝试使用替代路径
+        if (Platform.isIOS) {
+          String alternativePath;
+          if (filePath.startsWith('/private')) {
+            alternativePath = filePath.replaceFirst('/private', '');
+          } else {
+            alternativePath = '/private$filePath';
+          }
+          
+          try {
+            return items.firstWhere((item) => item.filePath == alternativePath);
+          } catch (e) {
+            return null;
+          }
+        }
+        return null;
+      }
+    }
+  }
+  
+  // 根据动画ID获取该动画的所有剧集历史记录
+  static Future<List<WatchHistoryItem>> getHistoryItemsByAnimeId(int animeId) async {
+    await initialize();
+    
+    if (_migratedToDatabase) {
+      // 如果已迁移到数据库，使用数据库查询
+      final db = WatchHistoryDatabase.instance;
+      return await db.getHistoryByAnimeId(animeId);
+    } else {
+      // 使用原有的JSON逻辑
+      final items = await getAllHistory();
+      return items.where((item) => 
+        item.animeId == animeId && item.episodeId != null).toList()
+        ..sort((a, b) => (a.episodeId ?? 0).compareTo(b.episodeId ?? 0));
+    }
+  }
+  
+  // 获取指定动画的上一集
+  static Future<WatchHistoryItem?> getPreviousEpisode(int animeId, int currentEpisodeId) async {
+    await initialize();
+    
+    if (_migratedToDatabase) {
+      // 如果已迁移到数据库，使用数据库查询
+      final db = WatchHistoryDatabase.instance;
+      return await db.getPreviousEpisode(animeId, currentEpisodeId);
+    } else {
+      // 使用原有的JSON逻辑
+      final episodes = await getHistoryItemsByAnimeId(animeId);
+      final previousEpisodes = episodes
+          .where((episode) => episode.episodeId != null && episode.episodeId! < currentEpisodeId)
+          .toList();
+      
+      if (previousEpisodes.isEmpty) return null;
+      
+      // 按集数降序排列，取第一个（最接近当前集的上一集）
+      previousEpisodes.sort((a, b) => (b.episodeId ?? 0).compareTo(a.episodeId ?? 0));
+      return previousEpisodes.first;
+    }
+  }
+  
+  // 获取指定动画的下一集
+  static Future<WatchHistoryItem?> getNextEpisode(int animeId, int currentEpisodeId) async {
+    await initialize();
+    
+    if (_migratedToDatabase) {
+      // 如果已迁移到数据库，使用数据库查询
+      final db = WatchHistoryDatabase.instance;
+      return await db.getNextEpisode(animeId, currentEpisodeId);
+    } else {
+      // 使用原有的JSON逻辑
+      final episodes = await getHistoryItemsByAnimeId(animeId);
+      final nextEpisodes = episodes
+          .where((episode) => episode.episodeId != null && episode.episodeId! > currentEpisodeId)
+          .toList();
+      
+      if (nextEpisodes.isEmpty) return null;
+      
+      // 按集数升序排列，取第一个（最接近当前集的下一集）
+      nextEpisodes.sort((a, b) => (a.episodeId ?? 0).compareTo(b.episodeId ?? 0));
+      return nextEpisodes.first;
+    }
   }
 } 

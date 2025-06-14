@@ -10,6 +10,7 @@ import 'audio_tracks_menu.dart';
 import 'danmaku_list_menu.dart';
 import 'subtitle_list_menu.dart';
 import '../player_abstraction/player_factory.dart';
+import 'playlist_menu.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -31,6 +32,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   bool _showAudioTracks = false;
   bool _showDanmakuList = false;
   bool _showSubtitleList = false;
+  bool _showPlaylist = false;
 
   OverlayEntry? _subtitleTracksOverlay;
   OverlayEntry? _controlBarSettingsOverlay;
@@ -38,6 +40,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   OverlayEntry? _audioTracksOverlay;
   OverlayEntry? _danmakuListOverlay;
   OverlayEntry? _subtitleListOverlay;
+  OverlayEntry? _playlistOverlay;
 
   late final List<SettingsItem> _settingsItems;
   late final VideoPlayerState videoState;
@@ -104,6 +107,16 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       onTap: _toggleControlBarSettingsMenu,
       isActive: () => _showControlBarSettings,
     ));
+    
+    // 剧集列表 - 当有视频文件时显示（整合了API、数据库、文件系统三种模式）
+    if (videoState.currentVideoPath != null || videoState.animeId != null) {
+      _settingsItems.add(SettingsItem(
+        icon: Icons.playlist_play,
+        title: '播放列表',
+        onTap: _togglePlaylistMenu,
+        isActive: () => _showPlaylist,
+      ));
+    }
   }
 
   void _toggleSubtitleTracksMenu() {
@@ -119,6 +132,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
       });
       
       _subtitleTracksOverlay = OverlayEntry(
@@ -148,6 +163,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showControlBarSettings = false;
         _showDanmakuSettings = false;
         _showDanmakuList = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
       });
       
       _audioTracksOverlay = OverlayEntry(
@@ -177,6 +194,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
       });
 
       _controlBarSettingsOverlay = OverlayEntry(
@@ -207,6 +226,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showControlBarSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
       });
 
       _danmakuSettingsOverlay = OverlayEntry(
@@ -238,6 +259,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showSubtitleList = false;
+        _showPlaylist = false;
       });
 
       _danmakuListOverlay = OverlayEntry(
@@ -268,6 +290,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showPlaylist = false;
       });
 
       _subtitleListOverlay = OverlayEntry(
@@ -284,6 +307,37 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     }
   }
 
+  void _togglePlaylistMenu() {
+    if (_showPlaylist) {
+      _playlistOverlay?.remove();
+      _playlistOverlay = null;
+      setState(() => _showPlaylist = false);
+    } else {
+      _closeAllOverlays();
+      setState(() {
+        _showPlaylist = true;
+        _showSubtitleTracks = false;
+        _showControlBarSettings = false;
+        _showDanmakuSettings = false;
+        _showAudioTracks = false;
+        _showDanmakuList = false;
+        _showSubtitleList = false;
+      });
+
+      _playlistOverlay = OverlayEntry(
+        builder: (context) => PlaylistMenu(
+          onClose: () {
+            _playlistOverlay?.remove();
+            _playlistOverlay = null;
+            setState(() => _showPlaylist = false);
+          },
+        ),
+      );
+
+      Overlay.of(context).insert(_playlistOverlay!);
+    }
+  }
+
   void _closeAllOverlays() {
     _subtitleTracksOverlay?.remove();
     _subtitleTracksOverlay = null;
@@ -297,6 +351,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _danmakuListOverlay = null;
     _subtitleListOverlay?.remove();
     _subtitleListOverlay = null;
+    _playlistOverlay?.remove();
+    _playlistOverlay = null;
     
     // 只有在组件仍然挂载时才调用setState
     if (mounted) {
@@ -307,6 +363,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showAudioTracks = false;
         _showDanmakuList = false;
         _showSubtitleList = false;
+        _showPlaylist = false;
       });
     } else {
       // 如果组件已经被销毁，直接更新值而不调用setState
@@ -316,6 +373,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _showAudioTracks = false;
       _showDanmakuList = false;
       _showSubtitleList = false;
+      _showPlaylist = false;
     }
   }
 
@@ -328,6 +386,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _audioTracksOverlay?.remove();
     _danmakuListOverlay?.remove();
     _subtitleListOverlay?.remove();
+    _playlistOverlay?.remove();
     
     for (var entry in _overlayEntries) {
       entry.remove();

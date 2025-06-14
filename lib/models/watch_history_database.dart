@@ -353,6 +353,69 @@ class WatchHistoryDatabase {
     }
   }
   
+  // 根据动画ID获取该动画的所有剧集历史记录，按集数排序
+  Future<List<WatchHistoryItem>> getHistoryByAnimeId(int animeId) async {
+    final db = await database;
+    
+    try {
+      final List<Map<String, dynamic>> maps = await db.query(
+        'watch_history',
+        where: 'anime_id = ? AND episode_id IS NOT NULL',
+        whereArgs: [animeId],
+        orderBy: 'episode_id ASC',
+      );
+      
+      return maps.map((map) => _mapToWatchHistoryItem(map)).toList();
+    } catch (e) {
+      debugPrint('按动画ID获取剧集历史失败: $e');
+      return [];
+    }
+  }
+  
+  // 获取指定动画的上一集
+  Future<WatchHistoryItem?> getPreviousEpisode(int animeId, int currentEpisodeId) async {
+    final db = await database;
+    
+    try {
+      final List<Map<String, dynamic>> maps = await db.query(
+        'watch_history',
+        where: 'anime_id = ? AND episode_id < ? AND episode_id IS NOT NULL',
+        whereArgs: [animeId, currentEpisodeId],
+        orderBy: 'episode_id DESC',
+        limit: 1,
+      );
+      
+      if (maps.isEmpty) return null;
+      
+      return _mapToWatchHistoryItem(maps.first);
+    } catch (e) {
+      debugPrint('获取上一集失败: $e');
+      return null;
+    }
+  }
+  
+  // 获取指定动画的下一集
+  Future<WatchHistoryItem?> getNextEpisode(int animeId, int currentEpisodeId) async {
+    final db = await database;
+    
+    try {
+      final List<Map<String, dynamic>> maps = await db.query(
+        'watch_history',
+        where: 'anime_id = ? AND episode_id > ? AND episode_id IS NOT NULL',
+        whereArgs: [animeId, currentEpisodeId],
+        orderBy: 'episode_id ASC',
+        limit: 1,
+      );
+      
+      if (maps.isEmpty) return null;
+      
+      return _mapToWatchHistoryItem(maps.first);
+    } catch (e) {
+      debugPrint('获取下一集失败: $e');
+      return null;
+    }
+  }
+  
   // 删除单个历史记录
   Future<void> deleteHistory(String filePath) async {
     final db = await database;

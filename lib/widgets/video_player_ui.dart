@@ -12,7 +12,6 @@ import 'package:flutter/services.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
-import 'package:nipaplay/main.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -167,6 +166,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     KeyboardShortcuts.registerActionHandler('volume_down', () {
       if (videoState.hasVideo) {
         videoState.decreaseVolume();
+      }
+    });
+    
+    // 注册上一话/下一话的动作处理器
+    KeyboardShortcuts.registerActionHandler('previous_episode', () {
+      if (videoState.canPlayPreviousEpisode) {
+        videoState.playPreviousEpisode();
+      }
+    });
+
+    KeyboardShortcuts.registerActionHandler('next_episode', () {
+      if (videoState.canPlayNextEpisode) {
+        videoState.playNextEpisode();
       }
     });
   }

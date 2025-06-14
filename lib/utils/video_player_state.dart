@@ -34,6 +34,8 @@ import 'subtitle_manager.dart'; // 导入字幕管理器
 import '../services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'decoder_manager.dart'; // 导入解码器管理器
+import '../services/episode_navigation_service.dart'; // 导入剧集导航服务
+import '../services/auto_next_episode_service.dart';
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -57,7 +59,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   String? _error;
-  bool _isErrorStopping = false; // <<< ADDED THIS FIELD
+  final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
   Timer? _positionUpdateTimer;
@@ -184,6 +186,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get currentVideoPath => _currentVideoPath;
   String? get animeTitle => _animeTitle; // 添加动画标题getter
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
+  int? get animeId => _animeId; // 添加动画ID getter
+  int? get episodeId => _episodeId; // 添加剧集ID getter
   
   // 添加setter方法以支持手动匹配后立即更新标题
   void setAnimeTitle(String? title) {
@@ -1255,6 +1259,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
+  // 取消自动播放下一话
+  void cancelAutoNextEpisode() {
+    AutoNextEpisodeService.instance.cancelAutoNext();
+  }
+
   void pause() {
     if (_status == PlayerStatus.playing) {
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
@@ -1522,6 +1531,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 _saveVideoPosition(_currentVideoPath!, 0);
                 debugPrint(
                     'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
+                
+                // 触发自动播放下一话
+                if (_context != null && _context!.mounted) {
+                  AutoNextEpisodeService.instance.startAutoNextEpisode(_context!, _currentVideoPath!);
+                }
               }
               notifyListeners(); 
             }
@@ -2187,7 +2201,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           final width = videoFrame.width > 0 ? videoFrame.width : 1920; // 如果宽度为0，使用默认宽度
           final height = videoFrame.height > 0 ? videoFrame.height : 1080; // 如果高度为0，使用默认高度
           
-          debugPrint('创建图像使用尺寸: ${width}x${height}');
+          debugPrint('创建图像使用尺寸: ${width}x$height');
           
           // 从bytes创建图像
           final image = img.Image.fromBytes(
@@ -2199,14 +2213,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
           // 检查图像是否成功创建
           if (image.width != width || image.height != height) {
-            debugPrint('警告: 创建的图像尺寸(${image.width}x${image.height})与预期(${width}x${height})不符');
+            debugPrint('警告: 创建的图像尺寸(${image.width}x${image.height})与预期(${width}x$height)不符');
           }
 
           // 编码为PNG格式
           final pngBytes = img.encodePng(image);
           await thumbnailFile.writeAsBytes(pngBytes);
           
-          debugPrint('成功保存转换后的截图，保留了${width}x${height}的原始比例');
+          debugPrint('成功保存转换后的截图，保留了${width}x$height的原始比例');
           return thumbnailPath;
         } catch (e) {
           debugPrint('处理图像数据时出错: $e');
@@ -2680,7 +2694,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
 
         debugPrint(
-            '视频帧缩略图已保存: $thumbnailPath, 尺寸: ${targetWidth}x${targetHeight}');
+            '视频帧缩略图已保存: $thumbnailPath, 尺寸: ${targetWidth}x$targetHeight');
 
         // 更新当前缩略图路径
         _currentThumbnailPath = thumbnailPath;
@@ -3394,6 +3408,158 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
     } catch (e) {
       debugPrint('[观看记录] 提交观看记录时出错: $e');
+    }
+  }
+  
+  // 检查是否可以播放上一话
+  bool get canPlayPreviousEpisode {
+    if (_currentVideoPath == null) return false;
+    
+    final navigationService = EpisodeNavigationService.instance;
+    
+    // 如果有剧集信息，可以使用数据库导航
+    if (navigationService.canUseDatabaseNavigation(_animeId, _episodeId)) {
+      return true;
+    }
+    
+    // 如果是本地文件，可以使用文件系统导航
+    if (navigationService.canUseFileSystemNavigation(_currentVideoPath!)) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // 检查是否可以播放下一话
+  bool get canPlayNextEpisode {
+    if (_currentVideoPath == null) return false;
+    
+    final navigationService = EpisodeNavigationService.instance;
+    
+    // 如果有剧集信息，可以使用数据库导航
+    if (navigationService.canUseDatabaseNavigation(_animeId, _episodeId)) {
+      return true;
+    }
+    
+    // 如果是本地文件，可以使用文件系统导航
+    if (navigationService.canUseFileSystemNavigation(_currentVideoPath!)) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // 播放上一话
+  Future<void> playPreviousEpisode() async {
+    if (!canPlayPreviousEpisode || _currentVideoPath == null) {
+      debugPrint('[上一话] 无法播放上一话：检查条件不满足');
+      return;
+    }
+    
+    try {
+      debugPrint('[上一话] 开始使用剧集导航服务查找上一话');
+      
+      // 暂停当前视频
+      if (_status == PlayerStatus.playing) {
+        togglePlayPause();
+      }
+      
+      // 使用剧集导航服务
+      final navigationService = EpisodeNavigationService.instance;
+      final result = await navigationService.getPreviousEpisode(
+        currentFilePath: _currentVideoPath!,
+        animeId: _animeId,
+        episodeId: _episodeId,
+      );
+      
+      if (result.success) {
+        debugPrint('[上一话] ${result.message}');
+        
+        // 根据结果类型调用不同的播放逻辑
+        if (result.historyItem != null) {
+          // 从数据库找到的剧集，包含完整的历史信息
+          await initializePlayer(result.historyItem!.filePath, historyItem: result.historyItem!);
+        } else if (result.filePath != null) {
+          // 从文件系统找到的文件，需要创建基本的历史记录
+          await initializePlayer(result.filePath!);
+        }
+      } else {
+        debugPrint('[上一话] ${result.message}');
+        _showEpisodeNotFoundMessage('上一话');
+      }
+    } catch (e) {
+      debugPrint('[上一话] 播放上一话时出错：$e');
+      _showEpisodeErrorMessage('上一话', e.toString());
+    }
+  }
+  
+  // 播放下一话
+  Future<void> playNextEpisode() async {
+    if (!canPlayNextEpisode || _currentVideoPath == null) {
+      debugPrint('[下一话] 无法播放下一话：检查条件不满足');
+      return;
+    }
+    
+    try {
+      debugPrint('[下一话] 开始使用剧集导航服务查找下一话');
+      
+      // 暂停当前视频
+      if (_status == PlayerStatus.playing) {
+        togglePlayPause();
+      }
+      
+      // 使用剧集导航服务
+      final navigationService = EpisodeNavigationService.instance;
+      final result = await navigationService.getNextEpisode(
+        currentFilePath: _currentVideoPath!,
+        animeId: _animeId,
+        episodeId: _episodeId,
+      );
+      
+      if (result.success) {
+        debugPrint('[下一话] ${result.message}');
+        
+        // 根据结果类型调用不同的播放逻辑
+        if (result.historyItem != null) {
+          // 从数据库找到的剧集，包含完整的历史信息
+          await initializePlayer(result.historyItem!.filePath, historyItem: result.historyItem!);
+        } else if (result.filePath != null) {
+          // 从文件系统找到的文件，需要创建基本的历史记录
+          await initializePlayer(result.filePath!);
+        }
+      } else {
+        debugPrint('[下一话] ${result.message}');
+        _showEpisodeNotFoundMessage('下一话');
+      }
+    } catch (e) {
+      debugPrint('[下一话] 播放下一话时出错：$e');
+      _showEpisodeErrorMessage('下一话', e.toString());
+    }
+  }
+  
+
+  
+  // 显示剧集未找到的消息
+  void _showEpisodeNotFoundMessage(String episodeType) {
+    if (_context != null) {
+      final message = '没有找到可播放的$episodeType';
+      debugPrint('[剧集切换] $message');
+      // 这里可以添加SnackBar或其他UI提示
+      // ScaffoldMessenger.of(_context!).showSnackBar(
+      //   SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+      // );
+    }
+  }
+  
+  // 显示剧集错误消息
+  void _showEpisodeErrorMessage(String episodeType, String error) {
+    if (_context != null) {
+      final message = '播放$episodeType时出错：$error';
+      debugPrint('[剧集切换] $message');
+      // 这里可以添加SnackBar或其他UI提示
+      // ScaffoldMessenger.of(_context!).showSnackBar(
+      //   SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+      // );
     }
   }
 }
