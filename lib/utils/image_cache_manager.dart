@@ -186,8 +186,16 @@ class ImageCacheManager {
       if (_refCount[url]! <= 0) {
         _refCount.remove(url);
         if (_cache.containsKey(url)) {
-          _cache[url]!.dispose();
-          _cache.remove(url);
+          try {
+            // 安全地dispose图片资源
+            final image = _cache[url]!;
+            image.dispose();
+          } catch (e) {
+            // 图片已经被dispose或其他错误，忽略
+            //////debugPrint('释放图片资源时出错: $e');
+          } finally {
+            _cache.remove(url);
+          }
         }
       }
     }

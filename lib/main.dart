@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -24,7 +23,6 @@ import 'services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'models/watch_history_model.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:nipaplay/utils/network_checker.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';

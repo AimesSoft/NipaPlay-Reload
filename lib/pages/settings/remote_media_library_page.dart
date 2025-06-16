@@ -500,15 +500,15 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              const Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Ionicons.cloud_outline,
                     color: Colors.white,
                     size: 24,
                   ),
-                  const SizedBox(width: 12),
-                  const Text(
+                  SizedBox(width: 12),
+                  Text(
                     '其他媒体服务',
                     style: TextStyle(
                       fontSize: 18,

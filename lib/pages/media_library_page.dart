@@ -4,33 +4,17 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/bangumi_service.dart'; // Needed for getAnimeDetails
 import 'package:nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
-import 'package:nipaplay/widgets/transparent_page_route.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
-import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/jellyfin_server_dialog.dart'; 
 import 'dart:io'; 
-import 'dart:async'; 
+import 'dart:async';
+import 'dart:ui'; 
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:glassmorphism/glassmorphism.dart';
-import 'package:path/path.dart' as path;
-import 'package:provider/provider.dart';
-import 'dart:math';
-import 'package:flutter/gestures.dart';
-import '../pages/media_library_page.dart';
-import '../widgets/library_management_tab.dart';
-import 'package:nipaplay/services/scan_service.dart';
-import '../widgets/history_all_modal.dart';
-import '../widgets/switchable_view.dart';
-import 'package:flutter/rendering.dart';
-import 'package:nipaplay/main.dart';
-import '../services/jellyfin_service.dart';
-import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/emby_server_dialog.dart';
 
@@ -443,12 +427,12 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                     style: TextStyle(color: Colors.grey, fontSize: 16),
                   ),
                   const SizedBox(height: 16),
-                  // 添加Jellyfin服务器按钮
+                  // 添加媒体服务器按钮 - 使用毛玻璃效果
                   if (!_isJellyfinConnected) // Only show if not connected
-                    ElevatedButton.icon(
+                    _buildGlassButton(
                       onPressed: _showServerSelectionDialog,
-                      icon: const Icon(Icons.cloud),
-                      label: const Text('添加媒体服务器'),
+                      icon: Icons.cloud,
+                      label: '添加媒体服务器',
                     ),
                 ],
               ),
@@ -604,6 +588,72 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildGlassButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    bool isDestructive = false,
+  }) {
+    return StatefulBuilder(
+      builder: (context, setState) {
+        bool isHovered = false;
+        
+        return MouseRegion(
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          cursor: SystemMouseCursors.click,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(isHovered ? 0.2 : 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(isHovered ? 0.4 : 0.2),
+                    width: 0.5,
+                  ),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onPressed,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            icon,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         );
       },
     );

@@ -78,7 +78,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   final ScrollController _watchHistoryListScrollController = ScrollController();
   
   // 仅保留当前标签页索引用于初始化_MediaLibraryTabs
-  int _currentTabIndex = 0;
+  final int _currentTabIndex = 0;
 
   int _mediaLibraryVersion = 0;
 
@@ -106,8 +106,11 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
 
   void _onThumbnailUpdated() {
     if (!mounted) return;
-    PaintingBinding.instance.imageCache.clear();
-    PaintingBinding.instance.imageCache.clearLiveImages();
+    // 不再清理所有图片缓存，避免影响番剧卡片的封面显示
+    // 只触发UI重建来显示新的缩略图
+    setState(() {
+      // 触发UI重建，让新的缩略图能够显示
+    });
   }
 
   @override
@@ -409,9 +412,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                         ),
                       ),
                       const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                      SliverToBoxAdapter(
+                      const SliverToBoxAdapter(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          padding: EdgeInsets.symmetric(horizontal: 16.0),
                           child: Text("媒体内容",
                               style: TextStyle(
                                   fontSize: 28,
@@ -484,7 +487,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     
     // 计算屏幕能显示的卡片数量（每个卡片宽度为150+16=166像素）
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardWidth = 166.0; // 卡片宽度 + 右侧padding
+    const cardWidth = 166.0; // 卡片宽度 + 右侧padding
     // 现在最多显示计算得到的卡片数量，不再保留一个位置给"查看更多"按钮
     final visibleCards = (screenWidth / cardWidth).floor();
     
@@ -817,11 +820,11 @@ class _MediaLibraryTabs extends StatefulWidget {
   final int mediaLibraryVersion;
 
   const _MediaLibraryTabs({
-    Key? key,
+    super.key,
     this.initialIndex = 0,
     required this.onPlayEpisode,
     required this.mediaLibraryVersion,
-  }) : super(key: key);
+  });
 
   @override
   State<_MediaLibraryTabs> createState() => _MediaLibraryTabsState();

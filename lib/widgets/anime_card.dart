@@ -2,7 +2,7 @@ import 'dart:io'; // Required for File
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/widgets/cached_network_image_widget.dart'; // Using package import
+import 'package:nipaplay/widgets/cached_network_image_widget.dart';
 
 class AnimeCard extends StatelessWidget {
   final String name;
@@ -38,8 +38,9 @@ class AnimeCard extends StatelessWidget {
       // 没有图片URL，使用占位符
       return _buildPlaceholder(context);
     } else if (imageUrl.startsWith('http')) {
-      // 网络图片，使用缓存组件
+      // 网络图片，使用缓存组件，为背景图和主图使用不同的key
       return CachedNetworkImageWidget(
+        key: ValueKey('${imageUrl}_${isBackground ? 'bg' : 'main'}'),
         imageUrl: imageUrl,
         fit: BoxFit.cover,
         width: double.infinity,
@@ -49,9 +50,10 @@ class AnimeCard extends StatelessWidget {
         },
       );
     } else {
-      // 本地文件
+      // 本地文件 - 为每个实例创建独立的key
       return Image.file(
         File(imageUrl),
+        key: ValueKey('${imageUrl}_${isBackground ? 'bg' : 'main'}'),
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,

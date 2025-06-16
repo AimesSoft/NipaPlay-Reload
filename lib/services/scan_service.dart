@@ -70,7 +70,7 @@ class ScanService with ChangeNotifier {
   Map<String, Map<String, String>> _subFolderHashCache = {};
   
   // 启动时检测到的变化信息
-  List<FolderChangeInfo> _detectedChanges = [];
+  final List<FolderChangeInfo> _detectedChanges = [];
   List<FolderChangeInfo> get detectedChanges => List.unmodifiable(_detectedChanges);
 
   bool _isScanning = false;
