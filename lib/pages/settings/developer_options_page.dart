@@ -123,6 +123,22 @@ class DeveloperOptionsPage extends StatelessWidget {
               
               const Divider(color: Colors.white12, height: 1),
               
+              // 紧急恢复个人文件
+              ListTile(
+                title: const Text(
+                  '🚨 紧急恢复个人文件',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text(
+                  '将误迁移的个人文件恢复到Documents目录',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                trailing: const Icon(Ionicons.medical_outline, color: Colors.red),
+                onTap: () => _emergencyRestorePersonalFiles(context),
+              ),
+              
+              const Divider(color: Colors.white12, height: 1),
+              
               // 显示存储目录信息
               ListTile(
                 title: const Text(
@@ -410,6 +426,89 @@ XDG_CACHE_HOME: $xdgCacheHome
     } catch (e) {
       if (!context.mounted) return;
       BlurSnackBar.show(context, '获取目录信息失败: $e');
+    }
+  }
+  
+  // 紧急恢复个人文件
+  Future<void> _emergencyRestorePersonalFiles(BuildContext context) async {
+    if (!Platform.isLinux) return;
+    
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: "🚨 紧急恢复个人文件",
+      content: """
+这个功能将把误迁移到 ~/.local/share/NipaPlay 的个人文件恢复到 ~/Documents 目录。
+
+⚠️ 注意事项：
+• 只恢复非应用相关的文件
+• 应用数据（如数据库、缓存等）会保留在新位置
+• 这是一个紧急修复功能
+
+是否继续？
+      """.trim(),
+      actions: <Widget>[
+        TextButton(
+          child: const Text("取消", style: TextStyle(color: Colors.white70)),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        TextButton(
+          child: const Text("确认恢复", style: TextStyle(color: Colors.red)),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+    
+    if (confirm == true && context.mounted) {
+      BlurSnackBar.show(context, '开始恢复个人文件...');
+      
+      try {
+        final result = await LinuxStorageMigration.emergencyRestorePersonalFiles();
+        
+        if (!context.mounted) return;
+        
+        if (result.success) {
+          BlurDialog.show<void>(
+            context: context,
+            title: "恢复成功",
+            content: """
+${result.message}
+
+恢复详情:
+- 总文件数: ${result.totalItems}
+- 成功恢复: ${result.migratedItems}
+- 失败项目: ${result.failedItems}
+
+您的个人文件已恢复到 ~/Documents 目录。
+            """.trim(),
+            actions: <Widget>[
+              TextButton(
+                child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          );
+        } else {
+          BlurDialog.show<void>(
+            context: context,
+            title: "恢复失败",
+            content: """
+${result.message}
+
+错误信息:
+${result.errors.join('\n')}
+            """.trim(),
+            actions: <Widget>[
+              TextButton(
+                child: const Text("知道了", style: TextStyle(color: Colors.orange)),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          );
+        }
+      } catch (e) {
+        if (!context.mounted) return;
+        BlurSnackBar.show(context, '恢复过程出错: $e');
+      }
     }
   }
 } 

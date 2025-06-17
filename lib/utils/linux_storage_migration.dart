@@ -107,16 +107,22 @@ class LinuxStorageMigration {
     }
   }
   
-    /// 检查旧目录是否有数据需要迁移
+  /// 检查旧目录是否有数据需要迁移
   static Future<bool> _hasDataToMigrate(Directory oldDir) async {
     try {
+      // 检查是否有应用相关的文件需要迁移
       final entities = await oldDir.list().toList();
       
-      // 只检查应用相关的文件和目录
       for (final entity in entities) {
         final name = path.basename(entity.path);
         if (_isAppRelatedItem(name)) {
-          return true;
+          if (entity is Directory) {
+            final hasContent = await entity.list().isEmpty;
+            if (!hasContent) return true;
+          } else if (entity is File) {
+            final size = await entity.length();
+            if (size > 0) return true;
+          }
         }
       }
       
@@ -143,6 +149,7 @@ class LinuxStorageMigration {
       'watch_history.db',
       'watch_history.json',
       'backgrounds',
+      'shared_preferences.json',
     ];
     
     return appItems.contains(name) || 
@@ -173,12 +180,15 @@ class LinuxStorageMigration {
       // 获取所有文件和目录
       final entities = await oldDataDir.list().toList();
       
-      // 只迁移应用相关的内容到新的数据目录
+      // 只迁移应用相关的内容
       for (final entity in entities) {
         final name = path.basename(entity.path);
         
         // 跳过非应用相关的文件
-        if (!_isAppRelatedItem(name)) continue;
+        if (!_isAppRelatedItem(name)) {
+          debugPrint('跳过非应用文件: ${entity.path}');
+          continue;
+        }
         
         totalItems++;
         final targetPath = path.join(newDataDir, name);
@@ -203,9 +213,9 @@ class LinuxStorageMigration {
         }
       }
       
-      // 迁移完成后，删除旧目录的应用相关文件
+      // 迁移完成后，只删除已迁移的应用相关文件
       if (failedItems == 0) {
-        await _cleanupOldData(oldDataDir);
+        await _cleanupOldAppData(oldDataDir);
       }
       
       // 标记迁移完成
@@ -262,8 +272,8 @@ class LinuxStorageMigration {
     await source.copy(target.path);
   }
   
-  /// 清理旧数据
-  static Future<void> _cleanupOldData(Directory oldDataDir) async {
+  /// 清理旧的应用数据（只删除应用相关文件，保留用户个人文件）
+  static Future<void> _cleanupOldAppData(Directory oldDataDir) async {
     try {
       final entities = await oldDataDir.list().toList();
       
@@ -277,13 +287,13 @@ class LinuxStorageMigration {
           } else if (entity is File) {
             await entity.delete();
           }
-          debugPrint('已删除旧文件: ${entity.path}');
+          debugPrint('已删除旧的应用文件: ${entity.path}');
         }
       }
       
-      debugPrint('旧数据清理完成');
+      debugPrint('应用相关的旧数据清理完成，用户个人文件已保留');
     } catch (e) {
-      debugPrint('清理旧数据失败: $e');
+      debugPrint('清理旧应用数据失败: $e');
       // 清理失败不影响迁移结果
     }
   }
@@ -309,6 +319,85 @@ class LinuxStorageMigration {
       debugPrint('已重置Linux存储迁移状态');
     } catch (e) {
       debugPrint('重置迁移状态失败: $e');
+    }
+  }
+  
+  /// 紧急恢复功能：将个人文件从XDG目录移回Documents
+  static Future<MigrationResult> emergencyRestorePersonalFiles() async {
+    if (!Platform.isLinux) {
+      return const MigrationResult(false, '非Linux平台，无需恢复');
+    }
+    
+    debugPrint('开始紧急恢复个人文件...');
+    
+    try {
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final xdgDataDir = await getXDGDataDirectory();
+      final xdgDir = Directory(xdgDataDir);
+      
+      if (!await xdgDir.exists()) {
+        return const MigrationResult(false, 'XDG数据目录不存在');
+      }
+      
+      int totalItems = 0;
+      int restoredItems = 0;
+      int failedItems = 0;
+      final List<String> errors = [];
+      
+      // 获取XDG目录中的所有文件
+      final entities = await xdgDir.list().toList();
+      
+      // 只恢复非应用相关的文件（即用户个人文件）
+      for (final entity in entities) {
+        final name = path.basename(entity.path);
+        
+        // 跳过应用相关的文件
+        if (_isAppRelatedItem(name)) {
+          debugPrint('保留应用文件: ${entity.path}');
+          continue;
+        }
+        
+        totalItems++;
+        final targetPath = path.join(documentsDir.path, name);
+        
+        try {
+          if (entity is Directory) {
+            // 恢复目录
+            await _migrateDirectory(entity, Directory(targetPath));
+            await entity.delete(recursive: true);
+          } else if (entity is File) {
+            // 恢复文件
+            await _migrateFile(entity, File(targetPath));
+            await entity.delete();
+          }
+          
+          restoredItems++;
+          debugPrint('已恢复个人文件: ${entity.path} -> $targetPath');
+          
+        } catch (e) {
+          failedItems++;
+          final errorMsg = '恢复 ${entity.path} 失败: $e';
+          errors.add(errorMsg);
+          debugPrint(errorMsg);
+        }
+      }
+      
+      final message = '个人文件恢复完成: 总数 $totalItems, 成功 $restoredItems, 失败 $failedItems';
+      debugPrint(message);
+      
+      return MigrationResult(
+        failedItems == 0,
+        message,
+        totalItems: totalItems,
+        migratedItems: restoredItems,
+        failedItems: failedItems,
+        errors: errors,
+      );
+      
+    } catch (e) {
+      final errorMsg = '恢复过程出错: $e';
+      debugPrint(errorMsg);
+      return MigrationResult(false, errorMsg);
     }
   }
 }

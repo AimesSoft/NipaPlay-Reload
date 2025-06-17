@@ -242,16 +242,41 @@ class StorageService {
           debugPrint('Linux数据迁移成功: ${result.message}');
         } else {
           debugPrint('Linux数据迁移失败: ${result.message}');
-          // 即使迁移失败，也继续使用新目录
+          // 即使迁移失败，也继续使用新目录，不要回退到Documents
         }
       }
       
-      // 使用XDG规范的数据目录
+      // 强制使用XDG规范的数据目录，确保目录存在
       final xdgDataDir = await LinuxStorageMigration.getXDGDataDirectory();
-      return Directory(xdgDataDir);
+      final dir = Directory(xdgDataDir);
+      
+      // 确保目录存在
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+        debugPrint('已创建XDG数据目录: $xdgDataDir');
+      }
+      
+      return dir;
     } catch (e) {
-      debugPrint('Linux存储目录处理失败，回退到默认目录: $e');
-      // 回退到传统的应用文档目录
+      debugPrint('Linux存储目录处理出错: $e');
+      
+      // 即使出错也不回退到Documents，强制使用XDG目录
+      try {
+        final homeDir = Platform.environment['HOME'];
+        if (homeDir != null && homeDir.isNotEmpty) {
+          final fallbackDir = Directory('$homeDir/.local/share/NipaPlay');
+          if (!await fallbackDir.exists()) {
+            await fallbackDir.create(recursive: true);
+          }
+          debugPrint('使用回退XDG目录: ${fallbackDir.path}');
+          return fallbackDir;
+        }
+      } catch (e2) {
+        debugPrint('创建回退XDG目录也失败: $e2');
+      }
+      
+      // 最后的最后才考虑Documents，但要警告
+      debugPrint('⚠️ 警告：无法创建XDG目录，临时使用Documents目录');
       return getApplicationDocumentsDirectory();
     }
   }
