@@ -110,13 +110,46 @@ class LinuxStorageMigration {
     /// 检查旧目录是否有数据需要迁移
   static Future<bool> _hasDataToMigrate(Directory oldDir) async {
     try {
-      // 简单检查：只要目录存在且不为空就需要迁移
-      final hasContent = await oldDir.list().isEmpty;
-      return !hasContent;
+      final entities = await oldDir.list().toList();
+      
+      // 只检查应用相关的文件和目录
+      for (final entity in entities) {
+        final name = path.basename(entity.path);
+        if (_isAppRelatedItem(name)) {
+          return true;
+        }
+      }
+      
+      return false;
     } catch (e) {
       debugPrint('检查旧目录数据失败: $e');
       return false;
     }
+  }
+  
+  /// 判断是否是应用相关的文件或目录
+  static bool _isAppRelatedItem(String name) {
+    // 应用相关的文件和目录名
+    const appItems = [
+      'nipaplay',
+      'cache',
+      'compressed_images',
+      'danmaku_cache_139000001.json',
+      'downloads',
+      'temp',
+      'thumbnails',
+      'tmp',
+      'videos',
+      'watch_history.db',
+      'watch_history.json',
+      'backgrounds',
+    ];
+    
+    return appItems.contains(name) || 
+           name.endsWith('.jpg') && name.length == 68 || // 压缩图片文件
+           name.endsWith('.png') && name.length == 32 || // 缩略图文件
+           name.startsWith('danmaku_cache_') ||
+           name.startsWith('custom_background_');
   }
   
   /// 执行迁移
@@ -139,11 +172,15 @@ class LinuxStorageMigration {
       
       // 获取所有文件和目录
       final entities = await oldDataDir.list().toList();
-      totalItems = entities.length;
       
-      // 直接迁移所有内容到新的数据目录
+      // 只迁移应用相关的内容到新的数据目录
       for (final entity in entities) {
         final name = path.basename(entity.path);
+        
+        // 跳过非应用相关的文件
+        if (!_isAppRelatedItem(name)) continue;
+        
+        totalItems++;
         final targetPath = path.join(newDataDir, name);
         
         try {
@@ -166,7 +203,7 @@ class LinuxStorageMigration {
         }
       }
       
-      // 迁移完成后，删除旧目录的所有内容
+      // 迁移完成后，删除旧目录的应用相关文件
       if (failedItems == 0) {
         await _cleanupOldData(oldDataDir);
       }
@@ -230,14 +267,18 @@ class LinuxStorageMigration {
     try {
       final entities = await oldDataDir.list().toList();
       
-      // 删除所有文件和目录
+      // 只删除应用相关的文件和目录
       for (final entity in entities) {
-        if (entity is Directory) {
-          await entity.delete(recursive: true);
-        } else if (entity is File) {
-          await entity.delete();
+        final name = path.basename(entity.path);
+        
+        if (_isAppRelatedItem(name)) {
+          if (entity is Directory) {
+            await entity.delete(recursive: true);
+          } else if (entity is File) {
+            await entity.delete();
+          }
+          debugPrint('已删除旧文件: ${entity.path}');
         }
-        debugPrint('已删除旧文件: ${entity.path}');
       }
       
       debugPrint('旧数据清理完成');
