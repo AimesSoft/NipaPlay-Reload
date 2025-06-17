@@ -1,11 +1,12 @@
 import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'security_bookmark_service.dart';
+import '../utils/storage_service.dart';
 
 class FilePickerService {
   // 单例模式
@@ -154,7 +155,7 @@ class FilePickerService {
         }
         
         // 如果上述方法都失败，使用异步方法但不等待结果
-        getApplicationDocumentsDirectory().then((docDir) {
+        StorageService.getAppStorageDirectory().then((docDir) {
           final vDir = Directory('${docDir.path}/Videos');
           if (!vDir.existsSync()) {
             vDir.createSync();
@@ -242,7 +243,7 @@ class FilePickerService {
       // iOS上初始目录处理
       if (Platform.isIOS && (initialDirectory == null || initialDirectory.isEmpty)) {
         try {
-          final Directory appDocDir = await getApplicationDocumentsDirectory();
+          final Directory appDocDir = await StorageService.getAppStorageDirectory();
           initialDirectory = appDocDir.path;
         } catch (e) {
           print("Error getting documents directory for iOS: $e");
@@ -422,7 +423,7 @@ class FilePickerService {
         // iOS上目前file_selector的getDirectoryPath功能受限
         // 仅返回文档目录
         try {
-          final Directory appDocDir = await getApplicationDocumentsDirectory();
+          final Directory appDocDir = await StorageService.getAppStorageDirectory();
           _saveLastDirectory(appDocDir.path, _lastDirKey);
           return _normalizePath(appDocDir.path);
         } catch (e) {
@@ -514,7 +515,7 @@ class FilePickerService {
       
       // 检查文件是否可能在文档目录中
       try {
-        final Directory appDocDir = await getApplicationDocumentsDirectory();
+        final Directory appDocDir = await StorageService.getAppStorageDirectory();
         final fileName = p.basename(originalPath);
         final docPath = '${appDocDir.path}/Videos/$fileName';
         

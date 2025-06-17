@@ -8,13 +8,13 @@ import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:glassmorphism/glassmorphism.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 
 class ThemeModePage extends StatefulWidget {
   final ThemeNotifier themeNotifier;
@@ -110,7 +110,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
         final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
         final String uniqueFileName = 'custom_background_$timestamp$extension'; 
 
-        final appDir = await getApplicationDocumentsDirectory();
+        final appDir = await StorageService.getAppStorageDirectory();
         final String backgroundDirectoryPath = path.join(appDir.path, 'backgrounds');
         final targetPath = path.join(backgroundDirectoryPath, uniqueFileName); 
         

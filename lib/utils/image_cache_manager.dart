@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'dart:io';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'storage_service.dart';
 
 // 用于在 isolate 中处理图片的函数
 Future<Uint8List> _processImageInIsolate(Uint8List imageData) async {
@@ -52,7 +53,7 @@ class ImageCacheManager {
     if (_isInitialized) return;
     
     try {
-      final appDir = await getApplicationDocumentsDirectory();
+      final appDir = await StorageService.getAppStorageDirectory();
       _cacheDir = Directory('${appDir.path}/compressed_images');
       if (!await _cacheDir!.exists()) {
         await _cacheDir!.create(recursive: true);

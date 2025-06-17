@@ -17,7 +17,7 @@ import '../services/danmaku_cache_manager.dart';
 import '../models/watch_history_model.dart';
 import '../models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
-import 'package:path_provider/path_provider.dart';
+
 import 'package:path/path.dart' as p; // Added import for path package
 import 'package:crypto/crypto.dart';
 import 'package:provider/provider.dart';
@@ -36,6 +36,7 @@ import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'decoder_manager.dart'; // 导入解码器管理器
 import '../services/episode_navigation_service.dart'; // 导入剧集导航服务
 import '../services/auto_next_episode_service.dart';
+import 'storage_service.dart'; // Added import for StorageService
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -648,7 +649,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               debugPrint('检测到iOS临时文件路径: $videoPath');
               // 尝试从原始路径获取文件名，然后检查是否在持久化目录中
               final fileName = p.basename(videoPath);
-              final docDir = await getApplicationDocumentsDirectory();
+              final docDir = await StorageService.getAppStorageDirectory();
               final persistentPath = '${docDir.path}/Videos/$fileName';
               
               if (File(persistentPath).existsSync()) {
@@ -2168,7 +2169,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
 
       // 创建缩略图目录
-      final appDir = await getApplicationDocumentsDirectory();
+      final appDir = await StorageService.getAppStorageDirectory();
       final thumbnailDir = Directory('${appDir.path}/thumbnails');
       if (!thumbnailDir.existsSync()) {
         thumbnailDir.createSync(recursive: true);
@@ -2677,7 +2678,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         final pngBytes = img.encodePng(image);
 
         // 创建缩略图目录
-        final appDir = await getApplicationDocumentsDirectory();
+        final appDir = await StorageService.getAppStorageDirectory();
         final thumbnailDir = Directory('${appDir.path}/thumbnails');
         if (!thumbnailDir.existsSync()) {
           thumbnailDir.createSync(recursive: true);

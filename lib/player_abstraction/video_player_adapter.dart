@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:crypto/crypto.dart' show md5, sha256;
 import 'dart:convert';
 import 'package:image/image.dart' as img;
@@ -15,6 +15,7 @@ import './player_enums.dart';
 import './player_data_models.dart';
 import '../models/watch_history_model.dart';
 import '../models/watch_history_database.dart';
+import '../utils/storage_service.dart';
 
 /// video_player 插件的适配器，实现 AbstractPlayer 接口
 class VideoPlayerAdapter implements AbstractPlayer {
@@ -165,7 +166,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
           pauseDirectly();
           
           // 暂停后更新一次准确位置
-          Future.delayed(Duration(milliseconds: 50), () {
+          Future.delayed(const Duration(milliseconds: 50), () {
             _updateActualPosition();
           });
           break;
@@ -238,7 +239,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
         _positionNotifier.value = 0;
         
         // 强制GC（Flutter没有直接调用GC的API，但可以用一些辅助操作）
-        Future.delayed(Duration(milliseconds: 200), () {
+        Future.delayed(const Duration(milliseconds: 200), () {
           oldController?.dispose();
         });
       }
@@ -429,7 +430,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
     _mediaPath = path;
     
     // 不要立即创建控制器，使用Future.delayed确保前一个控制器完全释放
-    Future.delayed(Duration(milliseconds: 200), () {
+    Future.delayed(const Duration(milliseconds: 200), () {
       _createOrRebuildController();
     });
   }
@@ -439,11 +440,11 @@ class VideoPlayerAdapter implements AbstractPlayer {
     if (_controller == null) {
       print('[VideoPlayerAdapter] prepare方法中发现控制器为空，尝试重新创建');
       _disposeController();
-      await Future.delayed(Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 200));
       if (!_createOrRebuildController()) {
         throw Exception('无法准备播放器: 控制器创建失败');
       }
-      await Future.delayed(Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 300));
     }
     
     try {
@@ -455,7 +456,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
         if (_controller!.value.isInitialized) {
           await _controller!.seekTo(Duration.zero);
         }
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         await _controller!.initialize().timeout(const Duration(seconds: 15), onTimeout: () {
           print('[VideoPlayerAdapter] 初始化超时');
           throw Exception('视频初始化超时');
@@ -495,9 +496,9 @@ class VideoPlayerAdapter implements AbstractPlayer {
       
       print('[VideoPlayerAdapter] 准备失败: $e');
       _disposeController();
-      await Future.delayed(Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 200));
       if (_mediaPath.isNotEmpty && _createOrRebuildController()) {
-        await Future.delayed(Duration(milliseconds: 300));
+        await Future.delayed(const Duration(milliseconds: 300));
         try {
           if (_controller != null) {
             await _controller!.initialize();
@@ -529,7 +530,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
     _lastPositionUpdateTime = DateTime.now();
     
     // 延迟更新一次以确保准确
-    Future.delayed(Duration(milliseconds: 50), () {
+    Future.delayed(const Duration(milliseconds: 50), () {
       _updateActualPosition();
     });
   }
@@ -555,7 +556,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
       for (int i = 3; i < numBytes; i += 4) {
         blackBytes[i] = 255; // Alpha 通道设为完全不透明
       }
-      print("[VideoPlayerAdapter] 截图失败，返回黑色帧 ${width}x${height}");
+      print("[VideoPlayerAdapter] 截图失败，返回黑色帧 ${width}x$height");
       return PlayerFrame(width: width, height: height, bytes: blackBytes);
     }
     
@@ -564,7 +565,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
     
     // 首先尝试查找与当前媒体文件关联的观看记录，看看是否有animeId
     try {
-      final appDir = await getApplicationDocumentsDirectory();
+      final appDir = await StorageService.getAppStorageDirectory();
       final videoFileName = _mediaPath.split('/').last;
       
       // 1. 首先尝试从WatchHistoryDatabase获取animeId
@@ -661,7 +662,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
               if (compressedImagesDir.existsSync()) {
                 final files = compressedImagesDir.listSync();
                 print("[VideoPlayerAdapter] compressed_images目录中有 ${files.length} 个文件");
-                if (files.length > 0) {
+                if (files.isNotEmpty) {
                   print("[VideoPlayerAdapter] 示例文件: ${files.first.path}");
                 }
               } else {
@@ -805,7 +806,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
         _disposeController();
         
         // 添加延迟再创建新的，以确保资源释放
-        Future.delayed(Duration(milliseconds: 300), () {
+        Future.delayed(const Duration(milliseconds: 300), () {
           _actuallyCreateController();
         });
         return true;
@@ -841,7 +842,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
       _controller!.addListener(_controllerListener);
       
       // 等待一小段时间让控制器准备好
-      Future.delayed(Duration(milliseconds: 50), () {
+      Future.delayed(const Duration(milliseconds: 50), () {
         if (_controller != null && !_controller!.value.isInitialized) {
           // 尝试预初始化但不等待结果，以提高用户体验
           _controller!.initialize().then((_) {
@@ -923,7 +924,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
       // 必须的延迟确认
       bool playStarted = false;
       for (int i = 0; i < 5; i++) {
-        await Future.delayed(Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: 200));
         if (_controller != null && _controller!.value.isPlaying) {
           playStarted = true;
           break;
@@ -960,7 +961,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
         if (_controller != null && _controller!.value.isInitialized) {
           // 先暂停再播放，完全重置状态
           await _controller!.pause();
-          await Future.delayed(Duration(milliseconds: 200));
+          await Future.delayed(const Duration(milliseconds: 200));
           await _controller!.play();
         }
       } catch (e2) {
@@ -985,7 +986,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
       await _controller!.pause();
       
       // 验证暂停是否生效
-      await Future.delayed(Duration(milliseconds: 200), () async {
+      await Future.delayed(const Duration(milliseconds: 200), () async {
         if (_controller != null && _controller!.value.isPlaying) {
           print('[VideoPlayerAdapter] 暂停验证失败，重试');
           try {
@@ -995,7 +996,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
           }
           
           // 再次检查
-          await Future.delayed(Duration(milliseconds: 100));
+          await Future.delayed(const Duration(milliseconds: 100));
           if (_controller != null && _controller!.value.isPlaying) {
             print('[VideoPlayerAdapter] 警告: 多次尝试后暂停仍未生效');
           }
@@ -1007,7 +1008,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
       // 尝试恢复
       if (_controller != null && _controller!.value.isInitialized) {
         try {
-          await Future.delayed(Duration(milliseconds: 300));
+          await Future.delayed(const Duration(milliseconds: 300));
           await _controller!.pause();
         } catch (e2) {
           print('[VideoPlayerAdapter] 错误恢复后重试暂停仍然失败: $e2');
@@ -1059,7 +1060,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
     _pauseDirectly();
     
     // 暂停后更新一次准确位置
-    Future.delayed(Duration(milliseconds: 50), () {
+    Future.delayed(const Duration(milliseconds: 50), () {
       _updateActualPosition();
     });
   }

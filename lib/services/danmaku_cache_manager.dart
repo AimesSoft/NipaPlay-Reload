@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+
+import '../utils/storage_service.dart';
 
 class DanmakuCacheManager {
   static const String _cacheKeyPrefix = 'danmaku_cache_';
@@ -10,7 +11,7 @@ class DanmakuCacheManager {
   static final Map<String, Map<String, dynamic>> _memoryCache = {};
 
   static Future<String> _getCacheFilePath(String episodeId) async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await StorageService.getAppStorageDirectory();
     return '${directory.path}/$_cacheKeyPrefix$episodeId.json';
   }
 
@@ -149,7 +150,7 @@ class DanmakuCacheManager {
       });
 
       // 清理文件缓存
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = await StorageService.getAppStorageDirectory();
       final files = await directory.list().where((entity) => 
         entity.path.contains(_cacheKeyPrefix)).toList();
 
