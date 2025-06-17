@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'android_storage_helper.dart'; // 导入Android存储帮助类
+import 'linux_storage_migration.dart'; // 导入Linux存储迁移
 
 class StorageService {
   // 用户自定义存储路径的SharedPreferences键
@@ -137,6 +137,11 @@ class StorageService {
 
   // 主应用存储目录
   static Future<Directory> getAppStorageDirectory() async {
+    // Linux平台特殊处理 - 使用XDG规范目录并处理迁移
+    if (Platform.isLinux) {
+      return _getLinuxStorageDirectory();
+    }
+    
     // 首先检查是否有自定义路径
     final customPath = await getCustomStoragePath();
     if (customPath != null && customPath.isNotEmpty) {
@@ -222,6 +227,31 @@ class StorageService {
       return internalDir;
     } else {
       // 其他平台使用应用文档目录
+      return getApplicationDocumentsDirectory();
+    }
+  }
+  
+  // Linux平台存储目录处理
+  static Future<Directory> _getLinuxStorageDirectory() async {
+    try {
+      // 先检查是否需要迁移
+      if (await LinuxStorageMigration.needsMigration()) {
+        debugPrint('检测到Linux平台需要数据迁移，开始迁移...');
+        final result = await LinuxStorageMigration.performMigration();
+        if (result.success) {
+          debugPrint('Linux数据迁移成功: ${result.message}');
+        } else {
+          debugPrint('Linux数据迁移失败: ${result.message}');
+          // 即使迁移失败，也继续使用新目录
+        }
+      }
+      
+      // 使用XDG规范的数据目录
+      final xdgDataDir = await LinuxStorageMigration.getXDGDataDirectory();
+      return Directory(xdgDataDir);
+    } catch (e) {
+      debugPrint('Linux存储目录处理失败，回退到默认目录: $e');
+      // 回退到传统的应用文档目录
       return getApplicationDocumentsDirectory();
     }
   }

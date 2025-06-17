@@ -415,7 +415,8 @@ void main() async {
 // 初始化应用所需的所有目录
 Future<void> _initializeAppDirectories() async {
   try {
-    // 创建所有常用目录
+    // Linux平台先处理数据迁移，然后创建目录
+    // 其他平台直接创建目录（getAppStorageDirectory内部会处理Linux迁移）
     await StorageService.getAppStorageDirectory();
     await StorageService.getTempDirectory();
     await StorageService.getCacheDirectory();
