@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'dart:convert';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'watch_history_database.dart'; // 添加引入数据库类
+import '../utils/storage_service.dart';
 
 class WatchHistoryItem {
   String filePath;
@@ -85,13 +85,8 @@ class WatchHistoryManager {
     if (_initialized) return;
 
     try {
-      final docsDir = await getApplicationDocumentsDirectory();
-      final appDir = Directory(path.join(docsDir.path, 'nipaplay'));
-      
-      // 确保应用目录存在
-      if (!appDir.existsSync()) {
-        appDir.createSync(recursive: true);
-      }
+      // 使用StorageService获取正确的存储目录
+      final Directory appDir = await StorageService.getAppStorageDirectory();
 
       // 设置历史文件路径
       _historyFilePath = path.join(appDir.path, _historyFileName);

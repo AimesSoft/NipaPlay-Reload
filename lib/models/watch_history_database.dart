@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'watch_history_model.dart';
+import '../utils/storage_service.dart';
 
 class WatchHistoryDatabase {
   static Database? _database;
@@ -31,8 +31,9 @@ class WatchHistoryDatabase {
       databaseFactory = databaseFactoryFfi;
     }
     
-    final Directory documentsDir = await getApplicationDocumentsDirectory();
-    final String dbPath = path.join(documentsDir.path, 'nipaplay', _dbName);
+    // 使用StorageService获取正确的存储目录
+    final Directory storageDir = await StorageService.getAppStorageDirectory();
+    final String dbPath = path.join(storageDir.path, _dbName);
     
     // 确保目录存在
     final dbDir = Directory(path.dirname(dbPath));
@@ -205,14 +206,10 @@ class WatchHistoryDatabase {
   // 获取JSON文件路径
   Future<String?> _getJsonFilePath() async {
     try {
-      final docsDir = await getApplicationDocumentsDirectory();
-      final appDir = Directory(path.join(docsDir.path, 'nipaplay'));
+      // 使用StorageService获取正确的存储目录
+      final Directory storageDir = await StorageService.getAppStorageDirectory();
       
-      if (!appDir.existsSync()) {
-        return null;
-      }
-      
-      return path.join(appDir.path, 'watch_history.json');
+      return path.join(storageDir.path, 'watch_history.json');
     } catch (e) {
       debugPrint('获取JSON文件路径失败: $e');
       return null;
