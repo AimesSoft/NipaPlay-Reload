@@ -7,6 +7,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 
 /// 负责将Jellyfin媒体与DandanPlay的内容匹配，以获取弹幕和元数据
 class JellyfinDandanplayMatcher {
@@ -504,6 +505,13 @@ class JellyfinDandanplayMatcher {
           debugPrint('严重错误: 匹配过程结束但episodeId仍为空，弹幕功能可能无法正常工作');
         } else {
           debugPrint('匹配成功: animeId=${selectedMatch['animeId']}, episodeId=$episodeId, 标题=${selectedMatch['animeTitle']} - $episodeTitle');
+          
+          // 自动保存映射关系到智能映射系统
+          try {
+            await _saveMappingToDatabase(episode, selectedMatch, episodeId);
+          } catch (e) {
+            debugPrint('保存映射关系失败: $e');
+          }
         }
         
         // 返回格式化为videoInfo的结构
@@ -969,6 +977,43 @@ class JellyfinDandanplayMatcher {
       };
     }
     */
+  }
+  
+  /// 保存映射关系到数据库
+  /// 
+  /// 在成功匹配后自动保存 Jellyfin 剧集与 DandanPlay 的映射关系
+  Future<void> _saveMappingToDatabase(
+    JellyfinEpisodeInfo episode, 
+    Map<String, dynamic> selectedMatch, 
+    dynamic episodeId
+  ) async {
+    try {
+      final mappingService = JellyfinEpisodeMappingService();
+      
+      // 保存动画级别的映射
+      final mappingId = await mappingService.createOrUpdateAnimeMapping(
+        jellyfinSeriesId: episode.seriesId ?? '',
+        jellyfinSeriesName: episode.seriesName ?? '',
+        jellyfinSeasonId: episode.seasonId,
+        dandanplayAnimeId: selectedMatch['animeId'],
+        dandanplayAnimeTitle: selectedMatch['animeTitle'] ?? '',
+      );
+      
+      // 保存剧集级别的映射
+      if (episode.indexNumber != null && episodeId != null && mappingId > 0) {
+        await mappingService.recordEpisodeMapping(
+          jellyfinEpisodeId: episode.id,
+          jellyfinIndexNumber: episode.indexNumber!,
+          dandanplayEpisodeId: episodeId,
+          mappingId: mappingId,
+          confirmed: true,
+        );
+        
+        debugPrint('成功保存映射关系: 剧集 ${episode.indexNumber} -> DandanPlay episodeId: $episodeId');
+      }
+    } catch (e) {
+      debugPrint('保存映射关系时出错: $e');
+    }
   }
 }
 
