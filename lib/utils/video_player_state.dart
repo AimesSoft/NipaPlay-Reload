@@ -12,6 +12,8 @@ import 'keyboard_shortcuts.dart';
 import 'globals.dart' as globals;
 import 'dart:convert';
 import '../services/dandanplay_service.dart';
+import '../services/jellyfin_service.dart';
+import '../services/emby_service.dart';
 import 'media_info_helper.dart';
 import '../services/danmaku_cache_manager.dart';
 import '../models/watch_history_model.dart';
@@ -3479,7 +3481,53 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 根据结果类型调用不同的播放逻辑
         if (result.historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
-          await initializePlayer(result.historyItem!.filePath, historyItem: result.historyItem!);
+          final historyItem = result.historyItem!;
+          
+          // 检查是否为Jellyfin或Emby流媒体，如果是则需要获取实际的HTTP URL
+          if (historyItem.filePath.startsWith('jellyfin://')) {
+            try {
+              // 从jellyfin://协议URL中提取episodeId（简单格式：jellyfin://episodeId）
+              final episodeId = historyItem.filePath.replaceFirst('jellyfin://', '');
+              // 获取实际的HTTP流媒体URL
+              final actualPlayUrl = JellyfinService.instance.getStreamUrl(episodeId);
+              debugPrint('[上一话] 获取Jellyfin流媒体URL: $actualPlayUrl');
+              
+              // 使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
+              await initializePlayer(
+                historyItem.filePath, 
+                historyItem: historyItem, 
+                actualPlayUrl: actualPlayUrl
+              );
+            } catch (e) {
+              debugPrint('[上一话] 获取Jellyfin流媒体URL失败: $e');
+              _showEpisodeErrorMessage('上一话', '获取流媒体URL失败: $e');
+              return;
+            }
+          } else if (historyItem.filePath.startsWith('emby://')) {
+            try {
+              // 从emby://协议URL中提取episodeId（只取最后一部分）
+              final embyPath = historyItem.filePath.replaceFirst('emby://', '');
+              final pathParts = embyPath.split('/');
+              final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
+              // 获取实际的HTTP流媒体URL
+              final actualPlayUrl = EmbyService.instance.getStreamUrl(episodeId);
+              debugPrint('[上一话] 获取Emby流媒体URL: $actualPlayUrl');
+              
+              // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
+              await initializePlayer(
+                historyItem.filePath, 
+                historyItem: historyItem, 
+                actualPlayUrl: actualPlayUrl
+              );
+            } catch (e) {
+              debugPrint('[上一话] 获取Emby流媒体URL失败: $e');
+              _showEpisodeErrorMessage('上一话', '获取流媒体URL失败: $e');
+              return;
+            }
+          } else {
+            // 本地文件或其他类型
+            await initializePlayer(historyItem.filePath, historyItem: historyItem);
+          }
         } else if (result.filePath != null) {
           // 从文件系统找到的文件，需要创建基本的历史记录
           await initializePlayer(result.filePath!);
@@ -3523,7 +3571,53 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 根据结果类型调用不同的播放逻辑
         if (result.historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
-          await initializePlayer(result.historyItem!.filePath, historyItem: result.historyItem!);
+          final historyItem = result.historyItem!;
+          
+          // 检查是否为Jellyfin或Emby流媒体，如果是则需要获取实际的HTTP URL
+          if (historyItem.filePath.startsWith('jellyfin://')) {
+            try {
+              // 从jellyfin://协议URL中提取episodeId（简单格式：jellyfin://episodeId）
+              final episodeId = historyItem.filePath.replaceFirst('jellyfin://', '');
+              // 获取实际的HTTP流媒体URL
+              final actualPlayUrl = JellyfinService.instance.getStreamUrl(episodeId);
+              debugPrint('[下一话] 获取Jellyfin流媒体URL: $actualPlayUrl');
+              
+              // 使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
+              await initializePlayer(
+                historyItem.filePath, 
+                historyItem: historyItem, 
+                actualPlayUrl: actualPlayUrl
+              );
+            } catch (e) {
+              debugPrint('[下一话] 获取Jellyfin流媒体URL失败: $e');
+              _showEpisodeErrorMessage('下一话', '获取流媒体URL失败: $e');
+              return;
+            }
+          } else if (historyItem.filePath.startsWith('emby://')) {
+            try {
+              // 从emby://协议URL中提取episodeId（只取最后一部分）
+              final embyPath = historyItem.filePath.replaceFirst('emby://', '');
+              final pathParts = embyPath.split('/');
+              final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
+              // 获取实际的HTTP流媒体URL
+              final actualPlayUrl = EmbyService.instance.getStreamUrl(episodeId);
+              debugPrint('[下一话] 获取Emby流媒体URL: $actualPlayUrl');
+              
+              // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
+              await initializePlayer(
+                historyItem.filePath, 
+                historyItem: historyItem, 
+                actualPlayUrl: actualPlayUrl
+              );
+            } catch (e) {
+              debugPrint('[下一话] 获取Emby流媒体URL失败: $e');
+              _showEpisodeErrorMessage('下一话', '获取流媒体URL失败: $e');
+              return;
+            }
+          } else {
+            // 本地文件或其他类型
+            await initializePlayer(historyItem.filePath, historyItem: historyItem);
+          }
         } else if (result.filePath != null) {
           // 从文件系统找到的文件，需要创建基本的历史记录
           await initializePlayer(result.filePath!);
