@@ -214,7 +214,30 @@ jobs:
         run: |
           brew install create-dmg imagemagick
           chmod +x dmg.sh
-          ./dmg.sh
+          
+          # Set up environment for GUI operations in CI
+          export DISPLAY=:99
+          
+          # Try to create DMG with timeout and retry mechanism
+          timeout 300 ./dmg.sh || {
+            echo "DMG creation timed out or failed, trying simplified approach..."
+            
+            # Fallback: Create DMG without fancy GUI customization
+            version=$(head -n 19 pubspec.yaml | tail -n 1 | cut -d ' ' -f 2)
+            dmg_name="NipaPlay_${version}_macOS_Universal.dmg"
+            
+            # Create a simple DMG without AppleScript customization
+            create-dmg \
+              --volname "NipaPlay-${version}" \
+              --window-size 800 450 \
+              --icon-size 100 \
+              --app-drop-link 600 185 \
+              --no-internet-enable \
+              --skip-jenkins \
+              "${dmg_name}" \
+              "build/macos/Build/Products/Release/NipaPlay.app"
+          }
+          
           echo "Listing final DMG:"
           ls -la *.dmg
       
