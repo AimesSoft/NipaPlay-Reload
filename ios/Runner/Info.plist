@@ -122,6 +122,11 @@
 	<string>NipaPlay 需要访问文稿目录以管理您的文件。</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>需要访问本地网络以获取新番更新和弹幕信息</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp.</string>
+		<string>_https._tcp.</string>
+	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>NipaPlay需要访问您的相册以上传和选择视频文件。</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
