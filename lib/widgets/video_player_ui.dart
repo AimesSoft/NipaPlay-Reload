@@ -361,7 +361,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
           return const SizedBox.shrink();
         }
 
-        if (textureId != null && textureId > 0) {
+        if (textureId != null && textureId >= 0) {
           return MouseRegion(
             onHover: _handleMouseMove,
             cursor: _isMouseVisible ? SystemMouseCursors.basic : SystemMouseCursors.none,
