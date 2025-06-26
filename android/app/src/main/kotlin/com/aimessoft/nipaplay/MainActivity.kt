@@ -28,6 +28,7 @@ import android.view.WindowManager
 class MainActivity: FlutterActivity() {
     private val STORAGE_CHANNEL = "custom_storage_channel"
     private val FILE_SELECTOR_CHANNEL = "plugins.flutter.io/file_selector"
+    private val FILE_ASSOCIATION_CHANNEL = "file_association_channel"
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -175,6 +176,28 @@ class MainActivity: FlutterActivity() {
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error launching file picker", e)
                         result.error("FILE_PICKER_ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // 文件关联通道 - 处理从系统传入的文件
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILE_ASSOCIATION_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getOpenFileUri" -> {
+                    val uri = intent?.data
+                    if (uri != null) {
+                        val filePath = getPathFromUri(this@MainActivity, uri)
+                        if (filePath != null) {
+                            Log.d("MainActivity", "File association: $filePath")
+                            result.success(filePath)
+                        } else {
+                            Log.e("MainActivity", "Failed to resolve file path from URI: $uri")
+                            result.error("PATH_RESOLUTION_FAILED", "Failed to resolve file path", null)
+                        }
+                    } else {
+                        result.success(null)
                     }
                 }
                 else -> result.notImplemented()

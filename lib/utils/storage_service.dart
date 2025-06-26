@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'android_storage_helper.dart'; // 导入Android存储帮助类
 import 'linux_storage_migration.dart'; // 导入Linux存储迁移
+import 'macos_storage_migration.dart'; // 导入macOS存储迁移
 
 class StorageService {
   // 用户自定义存储路径的SharedPreferences键
@@ -142,13 +143,40 @@ class StorageService {
       return _getLinuxStorageDirectory();
     }
     
-    // 首先检查是否有自定义路径
+    // 其他所有平台（iOS、Android、macOS、Windows）使用统一逻辑
+    return _getUniversalStorageDirectory();
+  }
+  
+  // 通用存储目录处理（除Linux外的所有平台）
+  static Future<Directory> _getUniversalStorageDirectory() async {
+    try {
+      // macOS平台需要处理数据迁移
+      if (Platform.isMacOS) {
+        // 清除任何现有的自定义存储路径设置
     final customPath = await getCustomStoragePath();
     if (customPath != null && customPath.isNotEmpty) {
-      final customDir = Directory(customPath);
+          debugPrint('检测到自定义存储路径: $customPath，将清除并使用默认路径');
+          await clearCustomStoragePath();
+        }
       
-      // 检查自定义目录是否可访问
+        // 检查是否需要迁移
+        if (await MacOSStorageMigration.needsMigration()) {
+          debugPrint('检测到macOS平台需要数据迁移，开始迁移...');
+          final result = await MacOSStorageMigration.performMigration();
+          if (result.success) {
+            debugPrint('macOS数据迁移成功: ${result.message}');
+          } else {
+            debugPrint('macOS数据迁移失败: ${result.message}');
+          }
+        }
+      }
+      
+      // Android平台先检查自定义路径和外部存储
       if (Platform.isAndroid) {
+        // 检查是否有自定义路径
+        final customPath = await getCustomStoragePath();
+        if (customPath != null && customPath.isNotEmpty) {
+          final customDir = Directory(customPath);
         final dirPerms = await AndroidStorageHelper.checkDirectoryPermissions(customPath);
         final canAccess = dirPerms['exists'] == true && dirPerms['canRead'] == true;
         
@@ -157,76 +185,59 @@ class StorageService {
           return customDir;
         } else {
           debugPrint('自定义路径存在但无法访问: ${customDir.path}, 权限状态: $dirPerms');
-          // 此处不清除自定义路径，因为它可能是用户选择的路径，而只是当前无法访问
         }
-      } else if (await customDir.exists()) {
-        debugPrint('使用自定义存储目录: ${customDir.path}');
-        return customDir;
-      } else {
-        try {
-          // 尝试创建目录
-          await customDir.create(recursive: true);
-          debugPrint('已创建自定义存储目录: ${customDir.path}');
-          return customDir;
-        } catch (e) {
-          debugPrint('无法使用自定义存储目录，回退到默认路径: $e');
         }
-      }
-    }
-  
-    // iOS始终使用应用文档目录
-    if (Platform.isIOS) {
-      return getApplicationDocumentsDirectory();
-    } 
-    // Android优先使用外部存储
-    else if (Platform.isAndroid) {
-      try {
-        // 获取SDK版本
-        final sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
         
-        // 获取外部存储目录，即使没有权限也尝试
+        // 尝试外部存储
+        try {
         final dirs = await getExternalStorageDirectories();
         if (dirs != null && dirs.isNotEmpty) {
-          // 创建自定义目录名
           final customDir = Directory('${dirs[0].path}/NipaPlay');
           
-          // 检查目录是否可用
           bool isAccessible = false;
           if (await customDir.exists()) {
-            // 存在时验证权限
             final dirPerms = await AndroidStorageHelper.checkDirectoryPermissions(customDir.path);
             isAccessible = dirPerms['canRead'] == true; 
             debugPrint('外部存储目录已存在，权限检查: $dirPerms');
           } else {
-            // 尝试创建并验证权限
             try {
               await customDir.create(recursive: true);
               isAccessible = true;
               debugPrint('已创建外部存储目录: ${customDir.path}');
             } catch (e) {
               debugPrint('无法创建外部存储目录: $e');
-              isAccessible = false;
             }
           }
           
           if (isAccessible) {
             return customDir;
-          } else {
-            debugPrint('无法访问外部存储目录，降级到内部存储');
+            }
           }
-        } else {
-          debugPrint('无法获取外部存储目录，降级到内部存储');
-        }
-      } catch (e) {
-        debugPrint('访问外部存储失败: $e，降级到内部存储');
+        } catch (e) {
+          debugPrint('访问外部存储失败: $e');
+          }
       }
       
-      // 降级到应用文档目录
-      final internalDir = await getApplicationDocumentsDirectory();
-      debugPrint('使用内部存储目录: ${internalDir.path}');
-      return internalDir;
-    } else {
-      // 其他平台使用应用文档目录
+      // 所有平台的最终默认路径：Documents/nipaplay
+      final documentsDir = await getApplicationDocumentsDirectory();
+      
+      // iOS直接使用Documents目录
+      if (Platform.isIOS) {
+        return documentsDir;
+      }
+      
+      // 其他平台使用Documents/nipaplay子目录
+      final nipaplayDir = Directory('${documentsDir.path}/nipaplay');
+      if (!await nipaplayDir.exists()) {
+        await nipaplayDir.create(recursive: true);
+        debugPrint('已创建应用子目录: ${nipaplayDir.path}');
+      }
+      
+      return nipaplayDir;
+      
+    } catch (e) {
+      debugPrint('通用存储目录处理出错: $e');
+      // 最后的回退
       return getApplicationDocumentsDirectory();
     }
   }

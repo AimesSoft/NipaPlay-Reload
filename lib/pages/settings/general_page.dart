@@ -3,6 +3,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/widgets/file_association_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Define the key for SharedPreferences
@@ -42,6 +43,8 @@ class _GeneralPageState extends State<GeneralPage> {
   Widget build(BuildContext context) {
     return ListView(
       children: [
+        // 文件关联设置
+        const FileAssociationSettings(),
         SwitchListTile(
           title: const Text(
             "过滤成人内容 (全局)",

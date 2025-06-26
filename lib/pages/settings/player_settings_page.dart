@@ -12,7 +12,7 @@ import 'package:nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
-  const PlayerSettingsPage({Key? key}) : super(key: key);
+  const PlayerSettingsPage({super.key});
 
   @override
   _PlayerSettingsPageState createState() => _PlayerSettingsPageState();
@@ -216,7 +216,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
               ),
               DropdownMenuItemData(
-                title: "Libmpv (试验性)",
+                title: "Libmpv",
                 value: PlayerKernelType.mediaKit,
                 isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
               ),

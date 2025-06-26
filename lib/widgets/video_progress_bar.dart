@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/video_player_state.dart';
+import '../utils/globals.dart' as globals;
 import 'tooltip_bubble.dart';
 import 'dart:ui';
 
@@ -126,11 +127,17 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
           );
           
           final progressRect = Rect.fromLTWH(0, 0, width, sliderBox.size.height);
+          final thumbSize = globals.isPhone ? 20.0 : 12.0;
+          final thumbSizeHovered = globals.isPhone ? 24.0 : 16.0;
+          final currentThumbSize = _isThumbHovered ? thumbSizeHovered : thumbSize;
+          final halfThumbSize = currentThumbSize / 2;
+          final verticalMargin = globals.isPhone ? 24.0 : 20.0;
+          final trackHeight = globals.isPhone ? 6.0 : 4.0;
           final thumbRect = Rect.fromLTWH(
-            (widget.videoState.progress * width) - 8,
-            16,
-            16,
-            16
+            (widget.videoState.progress * width) - halfThumbSize,
+            verticalMargin + (trackHeight / 2) - halfThumbSize,
+            currentThumbSize,
+            currentThumbSize
           );
           
           setState(() {
@@ -207,6 +214,14 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
               progress = 0.0;
             }
 
+            // 根据设备类型调整尺寸
+            final trackHeight = globals.isPhone ? 6.0 : 4.0;
+            final verticalMargin = globals.isPhone ? 24.0 : 20.0;
+            final thumbSize = globals.isPhone ? 20.0 : 12.0;
+            final thumbSizeHovered = globals.isPhone ? 24.0 : 16.0;
+            final currentThumbSize = _isThumbHovered || widget.isDragging ? thumbSizeHovered : thumbSize;
+            final halfThumbSize = currentThumbSize / 2;
+            
             return widget.isDragging 
                 ? Stack(
                     key: _sliderKey,
@@ -214,26 +229,26 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                     children: [
                       // 背景轨道
                       Container(
-                        height: 4,
-                        margin: const EdgeInsets.symmetric(vertical: 20),
+                        height: trackHeight,
+                        margin: EdgeInsets.symmetric(vertical: verticalMargin),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(trackHeight / 2),
                         ),
                       ),
                       // 进度轨道
                       Positioned(
                         left: 0,
                         right: 0,
-                        top: 20,
+                        top: verticalMargin,
                         child: FractionallySizedBox(
                           widthFactor: progress,
                           alignment: Alignment.centerLeft,
                           child: Container(
-                            height: 4,
+                            height: trackHeight,
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(2),
+                              borderRadius: BorderRadius.circular(trackHeight / 2),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.white.withOpacity(0.3),
@@ -247,15 +262,15 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                       ),
                       // 滑块
                       Positioned(
-                        left: (progress * constraints.maxWidth) - (_isThumbHovered || widget.isDragging ? 8 : 6),
-                        top: 22 - (_isThumbHovered || widget.isDragging ? 8 : 6),
+                        left: (progress * constraints.maxWidth) - halfThumbSize,
+                        top: verticalMargin + (trackHeight / 2) - halfThumbSize,
                         child: MouseRegion(
                           cursor: SystemMouseCursors.click,
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             curve: Curves.easeOutBack,
-                            width: _isThumbHovered || widget.isDragging ? 16 : 12,
-                            height: _isThumbHovered || widget.isDragging ? 16 : 12,
+                            width: currentThumbSize,
+                            height: currentThumbSize,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
@@ -286,26 +301,26 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                       children: [
                         // 背景轨道
                         Container(
-                          height: 4,
-                          margin: const EdgeInsets.symmetric(vertical: 20),
+                          height: trackHeight,
+                          margin: EdgeInsets.symmetric(vertical: verticalMargin),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(2),
+                            borderRadius: BorderRadius.circular(trackHeight / 2),
                           ),
                         ),
                         // 进度轨道
                         Positioned(
                           left: 0,
                           right: 0,
-                          top: 20,
+                          top: verticalMargin,
                           child: FractionallySizedBox(
                             widthFactor: progress,
                             alignment: Alignment.centerLeft,
                             child: Container(
-                              height: 4,
+                              height: trackHeight,
                               decoration: BoxDecoration(
                                 color: Colors.white.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(2),
+                                borderRadius: BorderRadius.circular(trackHeight / 2),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.white.withOpacity(0.3),
@@ -319,15 +334,15 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                         ),
                         // 滑块
                         Positioned(
-                          left: (progress * constraints.maxWidth) - (_isThumbHovered || widget.isDragging ? 8 : 6),
-                          top: 22 - (_isThumbHovered || widget.isDragging ? 8 : 6),
+                          left: (progress * constraints.maxWidth) - halfThumbSize,
+                          top: verticalMargin + (trackHeight / 2) - halfThumbSize,
                           child: MouseRegion(
                             cursor: SystemMouseCursors.click,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               curve: Curves.easeOutBack,
-                              width: _isThumbHovered || widget.isDragging ? 16 : 12,
-                              height: _isThumbHovered || widget.isDragging ? 16 : 12,
+                              width: currentThumbSize,
+                              height: currentThumbSize,
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 shape: BoxShape.circle,

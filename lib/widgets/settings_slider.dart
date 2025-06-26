@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import '../utils/globals.dart' as globals;
 
 class SettingsSlider extends StatefulWidget {
   final double value;
@@ -122,6 +123,14 @@ class _SettingsSliderState extends State<SettingsSlider> {
 
   @override
   Widget build(BuildContext context) {
+    // 根据isPhone调整尺寸
+    final trackHeight = globals.isPhone ? 6.0 : 4.0;
+    final verticalMargin = globals.isPhone ? 24.0 : 20.0;
+    final thumbSize = globals.isPhone ? 20.0 : 12.0;
+    final thumbSizeHovered = globals.isPhone ? 24.0 : 16.0;
+    final thumbHitArea = globals.isPhone ? 12.0 : 8.0;
+    final thumbHitAreaHovered = globals.isPhone ? 12.0 : 8.0;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -153,10 +162,10 @@ class _SettingsSliderState extends State<SettingsSlider> {
               final width = sliderBox.size.width;
               final progress = (localPosition.dx / width).clamp(0.0, 1.0);
               final thumbRect = Rect.fromLTWH(
-                (_progress * width) - 8,
-                16,
-                16,
-                16
+                (_progress * width) - thumbHitArea,
+                verticalMargin - thumbHitArea,
+                thumbHitArea * 2,
+                thumbHitArea * 2
               );
               setState(() {
                 _isThumbHovered = thumbRect.contains(localPosition);
@@ -190,32 +199,35 @@ class _SettingsSliderState extends State<SettingsSlider> {
             },
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final currentThumbSize = _isThumbHovered || _isDragging ? thumbSizeHovered : thumbSize;
+                final halfThumbSize = currentThumbSize / 2;
+                
                 return Stack(
                   key: _sliderKey,
                   clipBehavior: Clip.none,
                   children: [
                     // 背景轨道
                     Container(
-                      height: 4,
-                      margin: const EdgeInsets.symmetric(vertical: 20),
+                      height: trackHeight,
+                      margin: EdgeInsets.symmetric(vertical: verticalMargin),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: BorderRadius.circular(trackHeight / 2),
                       ),
                     ),
                     // 进度轨道
                     Positioned(
                       left: 0,
                       right: 0,
-                      top: 20,
+                      top: verticalMargin,
                       child: FractionallySizedBox(
                         widthFactor: _progress,
                         alignment: Alignment.centerLeft,
                         child: Container(
-                          height: 4,
+                          height: trackHeight,
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(2),
+                            borderRadius: BorderRadius.circular(trackHeight / 2),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.white.withOpacity(0.3),
@@ -229,15 +241,15 @@ class _SettingsSliderState extends State<SettingsSlider> {
                     ),
                     // 滑块
                     Positioned(
-                      left: (_progress * constraints.maxWidth) - (_isThumbHovered || _isDragging ? 8 : 6),
-                      top: 22 - (_isThumbHovered || _isDragging ? 8 : 6),
+                      left: (_progress * constraints.maxWidth) - halfThumbSize,
+                      top: verticalMargin + (trackHeight / 2) - halfThumbSize,
                       child: MouseRegion(
                         cursor: SystemMouseCursors.click,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           curve: Curves.easeOutBack,
-                          width: _isThumbHovered || _isDragging ? 16 : 12,
-                          height: _isThumbHovered || _isDragging ? 16 : 12,
+                          width: currentThumbSize,
+                          height: currentThumbSize,
                           decoration: BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,

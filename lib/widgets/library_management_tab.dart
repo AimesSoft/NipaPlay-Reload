@@ -17,6 +17,7 @@ import '../utils/storage_service.dart'; // 导入StorageService
 import 'package:permission_handler/permission_handler.dart'; // 导入权限处理库
 import '../utils/android_storage_helper.dart'; // 导入Android存储辅助类
 import 'package:flutter/services.dart'; // Import MethodChannel
+import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -29,6 +30,7 @@ class LibraryManagementTab extends StatefulWidget {
 
 class _LibraryManagementTabState extends State<LibraryManagementTab> {
   static const String _lastScannedDirectoryPickerPathKey = 'last_scanned_dir_picker_path';
+  static const String _librarySortOptionKey = 'library_sort_option'; // 新增键用于保存排序选项
 
   final Map<String, List<FileSystemEntity>> _expandedFolderContents = {};
   final Set<String> _loadingFolders = {};
@@ -46,6 +48,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     
     // 延迟初始化，确保挂载完成
     _initScanServiceListener();
+    
+    // 加载保存的排序选项
+    _loadSortOption();
   }
   
   // 提取为单独的方法，方便管理生命周期
@@ -476,7 +481,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               ),
             ),
           );
-        }).toList(),
+        }),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消', style: TextStyle(color: Colors.white54)),
@@ -490,6 +495,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         // 清空已展开的文件夹内容，强制重新加载和排序
         _expandedFolderContents.clear();
       });
+      
+      // 保存排序选项
+      _saveSortOption(result);
       
       BlurSnackBar.show(context, '排序方式已更改为：${sortOptions[result]}');
     }
@@ -819,6 +827,31 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
   }
 
+  // 加载保存的排序选项
+  Future<void> _loadSortOption() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedSortOption = prefs.getInt(_librarySortOptionKey) ?? 0;
+      if (mounted) {
+        setState(() {
+          _sortOption = savedSortOption;
+        });
+      }
+    } catch (e) {
+      debugPrint('加载排序选项失败: $e');
+    }
+  }
+  
+  // 保存排序选项
+  Future<void> _saveSortOption(int sortOption) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_librarySortOptionKey, sortOption);
+    } catch (e) {
+      debugPrint('保存排序选项失败: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scanService = Provider.of<ScanService>(context);
@@ -836,6 +869,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               const Text("媒体文件夹", style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
               Row(
                 children: [
+                  // 重置存储路径按钮 - 只在Android平台显示，macOS平台不支持自定义存储路径
                   if (Platform.isAndroid)
                     IconButton(
                       icon: const Icon(Icons.settings_backup_restore),

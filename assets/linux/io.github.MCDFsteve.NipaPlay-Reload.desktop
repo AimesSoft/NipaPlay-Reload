@@ -2,8 +2,9 @@
 Name=NipaPlay
 Comment=A cross platform danmaku video player.
 Comment[zh_CN]=一款跨平台本地弹幕视频播放器。
-Exec=nipaplay
+Exec=nipaplay %f
 Icon=io.github.MCDFsteve.NipaPlay-Reload
 Terminal=false
 Type=Application
-Categories=AudioVideo;Audio;Video;
+Categories=AudioVideo;Audio;Video;Player;
+MimeType=video/mp4;video/x-matroska;video/avi;video/quicktime;video/webm;video/x-ms-wmv;video/x-msvideo;video/ogg;video/3gpp;video/mp2t;video/x-flv;

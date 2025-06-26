@@ -41,6 +41,8 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/services/file_association_service.dart';
+import 'package:nipaplay/services/drag_drop_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -48,12 +50,33 @@ const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 bool _channelHandlerRegistered = false;
 final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<DefaultTabController>>();
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 初始化调试日志服务（在最前面初始化，这样可以收集启动过程的日志）
   final debugLogService = DebugLogService();
   debugLogService.initialize();
+
+  // 检查是否有文件路径参数传入
+  String? launchFilePath;
+  
+  // 桌面平台通过命令行参数传入
+  if (args.isNotEmpty && globals.isDesktop) {
+    final filePath = args.first;
+    if (await File(filePath).exists()) {
+      launchFilePath = filePath;
+      debugLogService.addLog('应用启动时收到命令行文件路径: $filePath', level: 'INFO', tag: 'FileAssociation');
+    }
+  }
+  
+  // Android平台通过Intent传入
+  if (Platform.isAndroid) {
+    final intentFilePath = await FileAssociationService.getOpenFileUri();
+    if (intentFilePath != null && await FileAssociationService.validateFilePath(intentFilePath)) {
+      launchFilePath = intentFilePath;
+      debugLogService.addLog('应用启动时收到Intent文件路径: $intentFilePath', level: 'INFO', tag: 'FileAssociation');
+    }
+  }
 
   // 加载开发者选项设置，决定是否启用日志收集
   Future.microtask(() async {
@@ -275,6 +298,16 @@ void main() async {
     }
   }
 
+  // 初始化拖拽功能 (桌面平台)
+  if (globals.isDesktop) {
+    try {
+      await DragDropService.initialize();
+      debugPrint('DragDropService 初始化完成');
+    } catch (e) {
+      debugPrint('DragDropService 初始化失败: $e');
+    }
+  }
+
   // 并行执行初始化操作
   await Future.wait(<Future<dynamic>>[
     // 初始化弹弹play服务
@@ -384,7 +417,7 @@ void main() async {
             return embyProvider;
           }),
         ],
-        child: const NipaPlayApp(),
+        child: NipaPlayApp(launchFilePath: launchFilePath),
       ),
     );
     // 启动后全局加载一次观看记录
@@ -553,7 +586,9 @@ Future<void> _ensureTemporaryDirectoryExists() async {
 }
 
 class NipaPlayApp extends StatelessWidget {
-  const NipaPlayApp({super.key});
+  final String? launchFilePath;
+  
+  const NipaPlayApp({super.key, this.launchFilePath});
 
   @override
   Widget build(BuildContext context) {
@@ -568,7 +603,7 @@ class NipaPlayApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme,
           themeMode: themeNotifier.themeMode,
           navigatorKey: navigatorKey,
-          home: MainPage(),
+          home: MainPage(launchFilePath: launchFilePath),
         );
       },
     );
@@ -576,6 +611,7 @@ class NipaPlayApp extends StatelessWidget {
 }
 
 class MainPage extends StatefulWidget {
+  final String? launchFilePath;
   final List<Widget> pages = [
     const PlayVideoPage(),
     const AnimePage(),
@@ -583,7 +619,7 @@ class MainPage extends StatefulWidget {
     const SettingsPage(),
   ];
 
-  MainPage({super.key});
+  MainPage({super.key, this.launchFilePath});
 
   @override
   // ignore: library_private_types_in_public_api
@@ -643,27 +679,78 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     });
     debugPrint('[MainPageState] initState: globalTabController listener ADDED.');
     
-    // Try to trigger listener immediately after adding it
-    /* // Commenting out the test code for now
-    if (widget.pages.length > 1) {
+    // 处理启动时的文件路径
+    if (widget.launchFilePath != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        debugPrint('[MainPageState] initState (postFrame): Attempting to animateTo(1) and then animateTo(0).');
-        globalTabController?.animateTo(1);
-        // Optionally, animate back to 0 immediately or after a short delay to see multiple events
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) { // Check if still mounted before delaying further
-             globalTabController?.animateTo(0);
-             debugPrint('[MainPageState] initState (postFrame delayed): Attempted to animateTo(0).');
-          }
-        });
+        _handleLaunchFile(widget.launchFilePath!);
       });
     }
-    */
+
+    // 设置拖拽回调 (桌面平台)
+    if (globals.isDesktop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        DragDropService.setDropCallback(_handleDroppedFiles);
+      });
+    }
 
     // 窗口管理器初始化
     if (globals.winLinDesktop) {
       windowManager.addListener(this);
       _checkWindowMaximizedState();
+    }
+  }
+
+  // 处理启动文件
+  Future<void> _handleLaunchFile(String filePath) async {
+    try {
+      debugPrint('[FileAssociation] 处理启动文件: $filePath');
+      
+      // 切换到播放页面
+      if (globalTabController != null && globalTabController!.index != 0) {
+        globalTabController!.animateTo(0);
+      }
+      
+      // 获取VideoPlayerState并初始化播放器
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      await videoState.initializePlayer(filePath);
+      
+      debugPrint('[FileAssociation] 启动文件播放成功');
+    } catch (e) {
+      debugPrint('[FileAssociation] 启动文件播放失败: $e');
+      if (mounted) {
+        BlurSnackBar.show(context, '无法播放启动文件: $e');
+      }
+    }
+  }
+
+  // 处理拖拽文件
+  Future<void> _handleDroppedFiles(List<String> filePaths) async {
+    try {
+      debugPrint('[DragDrop] 收到拖拽文件: $filePaths');
+      
+      final selectedFile = await DragDropService.handleDroppedFiles(filePaths);
+      if (selectedFile == null) {
+        if (mounted) {
+          BlurSnackBar.show(context, '拖拽的文件中没有支持的视频格式');
+        }
+        return;
+      }
+      
+      // 切换到播放页面
+      if (globalTabController != null && globalTabController!.index != 0) {
+        globalTabController!.animateTo(0);
+      }
+      
+      // 获取VideoPlayerState并初始化播放器
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      await videoState.initializePlayer(selectedFile);
+      
+      debugPrint('[DragDrop] 拖拽文件播放成功: $selectedFile');
+    } catch (e) {
+      debugPrint('[DragDrop] 拖拽文件播放失败: $e');
+      if (mounted) {
+        BlurSnackBar.show(context, '无法播放拖拽的文件: $e');
+      }
     }
   }
 

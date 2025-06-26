@@ -57,8 +57,8 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
         DandanplayService.getUserFavorites(),
       ]);
 
-      final playHistory = results[0] as Map<String, dynamic>;
-      final favorites = results[1] as Map<String, dynamic>;
+      final playHistory = results[0];
+      final favorites = results[1];
 
       debugPrint('[用户活动] 播放历史响应: ${playHistory['success']}');
       debugPrint('[用户活动] 收藏列表响应: ${favorites['success']}');
@@ -173,7 +173,6 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
         
         // 标题和刷新按钮
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
               '我的活动记录',
@@ -183,6 +182,7 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
                 color: Colors.white,
               ),
             ),
+            const Spacer(),
             IconButton(
               onPressed: _isLoading ? null : _loadUserActivity,
               icon: Icon(
@@ -192,19 +192,6 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
               ),
               padding: const EdgeInsets.all(4),
               constraints: const BoxConstraints(),
-              tooltip: '刷新数据',
-            ),
-            // 调试按钮 - 显示原始数据
-            IconButton(
-              onPressed: _isLoading ? null : () => _showDebugInfo(),
-              icon: Icon(
-                Ionicons.bug_outline,
-                color: _isLoading ? Colors.white30 : Colors.white70,
-                size: 20,
-              ),
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(),
-              tooltip: '调试信息',
             ),
           ],
         ),
@@ -262,7 +249,7 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             Ionicons.warning_outline,
                             color: Colors.white60,
                             size: 48,
@@ -594,14 +581,5 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
     } else {
       debugPrint('[用户活动] 无效的animeId: $animeId');
     }
-  }
-
-  void _showDebugInfo() {
-    // 实现显示原始数据的功能
-    // 这里可以根据需要添加更多的调试信息
-    debugPrint('当前数据:');
-    debugPrint('观看历史: $_recentWatched');
-    debugPrint('收藏列表: $_favorites');
-    debugPrint('评分列表: $_rated');
   }
 } 

@@ -28,7 +28,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
   List<String> _fileSystemEpisodes = [];
   
   // Jellyfin剧集信息缓存 (episodeId -> episode info)
-  Map<String, dynamic> _jellyfinEpisodeCache = {};
+  final Map<String, dynamic> _jellyfinEpisodeCache = {};
   
   bool _isLoading = true;
   String? _error;
@@ -251,7 +251,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
         final indexNumber = cachedInfo['indexNumber'] as int?;
         final name = cachedInfo['name'] as String?;
         if (indexNumber != null && name != null) {
-          return '第${indexNumber}话 - $name';
+          return '第$indexNumber话 - $name';
         } else if (name != null) {
           return name;
         }
@@ -382,12 +382,6 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
   @override
   Widget build(BuildContext context) {
-    // 计算播放列表的适当高度
-    final screenHeight = MediaQuery.of(context).size.height;
-    final listHeight = globals.isPhone
-        ? screenHeight - 150 // 手机屏幕减去标题栏高度
-        : screenHeight - 200; // 桌面屏幕减去标题栏高度
-    
     return BaseSettingsMenu(
       title: '播放列表',
       onClose: widget.onClose,
@@ -412,11 +406,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               ),
             ),
           
-          // 内容区域  
-          SizedBox(
-            height: listHeight,
-            child: _buildContent(),
-          ),
+          // 内容区域 - 移除固定高度限制
+          _buildContent(),
         ],
       ),
     );
@@ -487,54 +478,62 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _fileSystemEpisodes.length,
-      itemBuilder: (context, index) {
-        final filePath = _fileSystemEpisodes[index];
-        final isCurrentEpisode = _isCurrentEpisode(filePath);
-        final displayName = _getEpisodeDisplayName(filePath);
+    return Column(
+      children: [
+        // 添加顶部边距
+        const SizedBox(height: 8),
+        // 使用Column和多个Container替代ListView.builder
+        for (int index = 0; index < _fileSystemEpisodes.length; index++)
+          Builder(
+            builder: (context) {
+              final filePath = _fileSystemEpisodes[index];
+              final isCurrentEpisode = _isCurrentEpisode(filePath);
+              final displayName = _getEpisodeDisplayName(filePath);
 
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: isCurrentEpisode 
-                ? Colors.white.withValues(alpha: 0.2)
-                : Colors.transparent,
-            border: isCurrentEpisode
-                ? Border.all(color: Colors.white.withValues(alpha: 0.5), width: 1)
-                : null,
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: isCurrentEpisode 
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : Colors.transparent,
+                  border: isCurrentEpisode
+                      ? Border.all(color: Colors.white.withValues(alpha: 0.5), width: 1)
+                      : null,
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  title: Text(
+                    displayName,
+                    style: TextStyle(
+                      color: isCurrentEpisode ? Colors.white : Colors.white.withValues(alpha: 0.87),
+                      fontSize: 14,
+                      fontWeight: isCurrentEpisode ? FontWeight.bold : FontWeight.normal,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: isCurrentEpisode
+                      ? const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                          size: 20,
+                        )
+                      : null,
+                  onTap: isCurrentEpisode
+                      ? null // 当前剧集不可点击
+                      : () => _playEpisode(filePath),
+                  enabled: !isCurrentEpisode,
+                ),
+              );
+            },
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 8,
-            ),
-            title: Text(
-              displayName,
-              style: TextStyle(
-                color: isCurrentEpisode ? Colors.white : Colors.white.withValues(alpha: 0.87),
-                fontSize: 14,
-                fontWeight: isCurrentEpisode ? FontWeight.bold : FontWeight.normal,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: isCurrentEpisode
-                ? const Icon(
-                    Icons.play_arrow,
-                    color: Colors.white,
-                    size: 20,
-                  )
-                : null,
-            onTap: isCurrentEpisode
-                ? null // 当前剧集不可点击
-                : () => _playEpisode(filePath),
-            enabled: !isCurrentEpisode,
-          ),
-        );
-      },
+        // 添加底部边距，确保最后一项不被遮挡
+        const SizedBox(height: 16),
+      ],
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:nipaplay/widgets/video_player_widget.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../widgets/vertical_indicator.dart';
-import '../widgets/danmaku_overlay.dart';
 import '../utils/globals.dart' as globals;
 import '../widgets/video_controls_overlay.dart';
 import '../widgets/back_button_widget.dart';
@@ -135,23 +134,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                   child: VideoPlayerWidget(),
                 ),
                 if (videoState.hasVideo) ...[
-                  Positioned.fill(
-                    child: Consumer<VideoPlayerState>(
-                      builder: (context, videoState, _) {
-                        if (!videoState.danmakuVisible) {
-                          return const SizedBox.shrink();
-                        }
-                        return DanmakuOverlay(
-                          currentPosition: videoState.position.inMilliseconds.toDouble(),
-                          videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
-                          isPlaying: videoState.status == PlayerStatus.playing,
-                          fontSize: getFontSize(),
-                          isVisible: videoState.danmakuVisible,
-                          opacity: videoState.mappedDanmakuOpacity,
-                        );
-                      },
-                    ),
-                  ),
+                  // 弹幕已经在VideoPlayerWidget内部处理，这里不需要重复创建
                   Consumer<VideoPlayerState>(
                     builder: (context, videoState, _) {
                       return VerticalIndicator(videoState: videoState);

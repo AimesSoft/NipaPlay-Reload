@@ -40,6 +40,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           fontSize: widget.fontSize,
           isVisible: widget.isVisible,
           opacity: widget.opacity,
+          status: videoState.status, // 传递播放状态
         );
       },
     );

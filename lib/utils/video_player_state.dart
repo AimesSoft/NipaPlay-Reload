@@ -4,7 +4,7 @@ import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
-import 'subtitle_parser.dart'; // Added import for subtitle parser
+// Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
@@ -1506,7 +1506,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // debugPrint('[VideoPlayerState] _startPositionUpdateTimer CALLED.');
     _positionUpdateTimer?.cancel(); 
     _positionUpdateTimer =
-        Timer.periodic(const Duration(milliseconds: 16), (timer) { 
+        Timer.periodic(const Duration(milliseconds: 300), (timer) { 
       // <<< REMOVE EXISTING DEBUG LOG >>>
       // debugPrint('[Timer] Tick. _isSeeking: $_isSeeking, hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
       if (!_isSeeking && hasVideo) { 
@@ -1544,6 +1544,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             }
           } else {
             // 当播放器返回无效的 position 或 duration 时
+            // 增加额外检查以避免在字幕操作等特殊情况下误报
+            
+            // 如果之前已经有有效的时长信息，而现在临时返回0，可能是正常的操作过程
+            final bool hasValidDurationBefore = _duration.inMilliseconds > 0;
+            final bool isTemporaryInvalid = hasValidDurationBefore && playerPosition == 0 && playerDuration == 0;
+            
+            if (isTemporaryInvalid) {
+              // 临时的无效状态，跳过本次更新，不报错
+              debugPrint('VideoPlayerState: 检测到临时的无效播放器数据 (position: $playerPosition, duration: $playerDuration)，可能是字幕操作等导致，跳过本次更新');
+              return;
+            }
+            
             final String pathForErrorLog = _currentVideoPath ?? "未知路径";
             final String baseName = p.basename(pathForErrorLog);
             

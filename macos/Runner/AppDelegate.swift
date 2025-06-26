@@ -199,4 +199,89 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
   }
+  
+  // 处理单个文件拖拽到Dock图标
+  override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+    print("[AppDelegate] 收到文件拖拽: \(filename)")
+    handleOpenFile(filename)
+    return true
+  }
+  
+  // 处理多个文件拖拽到Dock图标
+  override func application(_ sender: NSApplication, openFiles filenames: [String]) {
+    print("[AppDelegate] 收到多个文件拖拽: \(filenames)")
+    // 处理第一个支持的视频文件
+    for filename in filenames {
+      if isSupportedVideoFile(filename) {
+        handleOpenFile(filename)
+        break
+      }
+    }
+  }
+  
+  // 处理文件打开
+  private func handleOpenFile(_ filename: String) {
+    print("[AppDelegate] 处理文件: \(filename)")
+    
+    // 检查文件是否为支持的视频格式
+    guard isSupportedVideoFile(filename) else {
+      print("[AppDelegate] 不支持的文件格式: \(filename)")
+      showSimpleAlert(message: "不支持的文件格式")
+      return
+    }
+    
+    // 如果应用未启动，保存文件路径供后续处理
+    if !isFlutterReady() {
+      print("[AppDelegate] Flutter未准备好，保存文件路径")
+      pendingFilePath = filename
+      
+      // 延迟处理，等待Flutter初始化
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        if let savedPath = self.pendingFilePath {
+          self.sendFileToFlutter(savedPath)
+          self.pendingFilePath = nil
+        }
+      }
+    } else {
+      sendFileToFlutter(filename)
+    }
+  }
+  
+  // 检查是否为支持的视频文件
+  private func isSupportedVideoFile(_ filename: String) -> Bool {
+    let supportedExtensions = ["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "3gp", "flv", "ts", "m2ts"]
+    let fileExtension = (filename as NSString).pathExtension.lowercased()
+    return supportedExtensions.contains(fileExtension)
+  }
+  
+  // 检查Flutter是否准备好
+  private func isFlutterReady() -> Bool {
+    guard let controller = self.mainFlutterWindow?.contentViewController as? FlutterViewController else {
+      return false
+    }
+    return controller.engine.binaryMessenger != nil
+  }
+  
+  // 发送文件路径到Flutter
+  private func sendFileToFlutter(_ filename: String) {
+    print("[AppDelegate] 发送文件到Flutter: \(filename)")
+    
+    guard let controller = self.mainFlutterWindow?.contentViewController as? FlutterViewController else {
+      print("[AppDelegate] 错误: 无法获取Flutter控制器")
+      return
+    }
+    
+    let channel = FlutterMethodChannel(name: "drag_drop_channel", binaryMessenger: controller.engine.binaryMessenger)
+    
+    channel.invokeMethod("onFilesDropped", arguments: ["files": [filename]]) { result in
+      if let error = result as? FlutterError {
+        print("[AppDelegate] 发送文件到Flutter失败: \(error.message ?? "未知错误")")
+      } else {
+        print("[AppDelegate] 文件已发送到Flutter")
+      }
+    }
+  }
+  
+  // 保存待处理的文件路径
+  private var pendingFilePath: String?
 }

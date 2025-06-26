@@ -1,5 +1,9 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_selector/file_selector.dart';
+import 'package:intl/intl.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
@@ -11,7 +15,7 @@ import 'package:glassmorphism/glassmorphism.dart';
 /// 调试日志查看器页面
 /// 提供日志查看、搜索、过滤和导出功能
 class DebugLogViewerPage extends StatefulWidget {
-  const DebugLogViewerPage({Key? key}) : super(key: key);
+  const DebugLogViewerPage({super.key});
 
   @override
   State<DebugLogViewerPage> createState() => _DebugLogViewerPageState();
@@ -28,7 +32,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
   String _selectedLevel = '全部';
   String _selectedTag = '全部';
   String _searchQuery = '';
-  bool _autoScroll = true;
+  bool _autoScroll = false;
   bool _showTimestamp = true;
   
   final List<String> _logLevels = ['全部', 'DEBUG', 'INFO', 'WARN', 'ERROR'];
@@ -149,6 +153,43 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
     BlurSnackBar.show(context, '日志已复制到剪贴板');
   }
 
+  Future<void> _exportLogsToFile() async {
+    try {
+      final logService = DebugLogService();
+      final exportText = logService.exportLogs();
+      
+      // 生成文件名：NipaPlay_YYYY-MM-DD_HH-mm-ss.txt
+      final now = DateTime.now();
+      final formatter = DateFormat('yyyy-MM-dd_HH-mm-ss');
+      final fileName = 'NipaPlay_${formatter.format(now)}.txt';
+      
+      // 使用file_selector弹出保存对话框
+      final savePath = await getSaveLocation(
+        suggestedName: fileName,
+        acceptedTypeGroups: [
+          const XTypeGroup(
+            label: '文本文件',
+            extensions: ['txt'],
+          ),
+        ],
+      );
+      
+      if (savePath != null) {
+        // 写入文件
+        final file = File(savePath.path);
+        await file.writeAsString(exportText, encoding: utf8);
+        
+        if (mounted) {
+          BlurSnackBar.show(context, '日志已导出到: ${savePath.path}');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '导出失败: $e');
+      }
+    }
+  }
+
   void _copyLogEntry(LogEntry entry) {
     Clipboard.setData(ClipboardData(text: entry.toFormattedString()));
     BlurSnackBar.show(context, '日志条目已复制');
@@ -249,7 +290,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
               
               // 选项列表
               Expanded(
-                child: Padding(
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
@@ -263,6 +304,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                           setState(() {
                             _showTimestamp = value;
                           });
+                          Navigator.pop(context);
                         },
                       ),
                       
@@ -278,6 +320,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                           setState(() {
                             _autoScroll = value;
                           });
+                          Navigator.pop(context);
                         },
                       ),
                       
@@ -303,12 +346,31 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                       // 导出全部
                       _buildOptionItem(
                         icon: Icons.copy_all,
-                        title: '导出全部',
+                        title: Platform.isWindows || Platform.isMacOS || Platform.isLinux 
+                            ? '导出到文件' 
+                            : '导出全部',
                         onTap: () {
                           Navigator.pop(context);
-                          _exportLogs();
+                          if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+                            _exportLogsToFile();
+                          } else {
+                            _exportLogs();
+                          }
                         },
                       ),
+                      
+                      // PC端额外显示复制到剪贴板选项
+                      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) ...[
+                        const SizedBox(height: 12),
+                        _buildOptionItem(
+                          icon: Icons.content_copy,
+                          title: '复制到剪贴板',
+                          onTap: () {
+                            Navigator.pop(context);
+                            _exportLogs();
+                          },
+                        ),
+                      ],
                       
                       const SizedBox(height: 12),
                       
@@ -323,6 +385,9 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                           _clearLogs();
                         },
                       ),
+                      
+                      // 添加底部边距，确保最后一项可以完全显示
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -400,7 +465,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                     inactiveThumbColor: Colors.white70,
                   )
                 else
-                  Icon(
+                  const Icon(
                     Icons.chevron_right,
                     color: Colors.white54,
                     size: 20,
@@ -417,117 +482,119 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: DebugLogService(),
-      child: Consumer<DebugLogService>(
-        builder: (context, logService, child) {
-          final filteredLogs = _getFilteredLogs();
-          
-          // 更新可用标签
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _updateAvailableTags();
-          });
-
-          // 自动滚动到底部
-          if (_autoScroll && filteredLogs.isNotEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _scrollToBottom();
-            });
-          }
-
-          return Column(
-            children: [
-              // 工具栏
-              Container(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // 搜索框
-                    TextField(
-                      controller: _searchController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: '搜索日志内容...',
-                        hintStyle: TextStyle(color: Colors.white54),
-                        prefixIcon: Icon(Icons.search, color: Colors.white54),
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.white30),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.white),
-                        ),
-                      ),
+      child: Column(
+        children: [
+          // 工具栏
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // 搜索框
+                TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: '搜索日志内容...',
+                    hintStyle: TextStyle(color: Colors.white54),
+                    prefixIcon: Icon(Icons.search, color: Colors.white54),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white30),
                     ),
-                    const SizedBox(height: 12),
-                    
-                    // 过滤器和控制按钮
-                    Row(
-                      children: [
-                        // 级别过滤
-                        Expanded(
-                          child: Row(
-                            children: [
-                              const Text(
-                                '级别: ',
-                                style: TextStyle(color: Colors.white70, fontSize: 14),
-                              ),
-                              BlurDropdown<String>(
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                // 过滤器和控制按钮
+                Row(
+                  children: [
+                    // 级别过滤
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Text(
+                            '级别: ',
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          Consumer<DebugLogService>(
+                            builder: (context, logService, child) {
+                              return BlurDropdown<String>(
                                 dropdownKey: _levelDropdownKey,
                                 items: _logLevels.map((level) => DropdownMenuItemData(
                                   title: level,
                                   value: level,
                                   isSelected: _selectedLevel == level,
                                 )).toList(),
-                                onItemSelected: (value) {
+                                onItemSelected: (level) {
                                   setState(() {
-                                    _selectedLevel = value;
+                                    _selectedLevel = level;
                                   });
                                 },
-                              ),
-                            ],
+                              );
+                            },
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        
-                        // 标签过滤
-                        Expanded(
-                          child: Row(
-                            children: [
-                              const Text(
-                                '标签: ',
-                                style: TextStyle(color: Colors.white70, fontSize: 14),
-                              ),
-                              BlurDropdown<String>(
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 16),
+                    
+                    // 标签过滤
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Text(
+                            '标签: ',
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          Consumer<DebugLogService>(
+                            builder: (context, logService, child) {
+                              // 更新可用标签
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _updateAvailableTags();
+                              });
+                              
+                              return BlurDropdown<String>(
                                 dropdownKey: _tagDropdownKey,
                                 items: _availableTags.map((tag) => DropdownMenuItemData(
                                   title: tag,
                                   value: tag,
                                   isSelected: _selectedTag == tag,
                                 )).toList(),
-                                onItemSelected: (value) {
+                                onItemSelected: (tag) {
                                   setState(() {
-                                    _selectedTag = value;
+                                    _selectedTag = tag;
                                   });
                                 },
-                              ),
-                            ],
+                              );
+                            },
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        
-                        // 更多选项按钮
-                        IconButton(
-                          icon: const Icon(Icons.more_vert, color: Colors.white),
-                          onPressed: () {
-                            _showMoreOptions(context);
-                          },
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 16),
+                    
+                    // 选项按钮
+                    IconButton(
+                      onPressed: () => _showMoreOptions(context),
+                      icon: const Icon(Ionicons.ellipsis_vertical, color: Colors.white),
+                      tooltip: '更多选项',
                     ),
                   ],
                 ),
-              ),
+              ],
+            ),
+          ),
 
-              // 日志状态栏
-              Container(
+          // 日志状态栏 - 使用Consumer监听状态
+          Consumer<DebugLogService>(
+            builder: (context, logService, child) {
+              final filteredLogs = _getFilteredLogs();
+              
+              return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 color: Colors.black26,
                 child: Row(
@@ -549,11 +616,24 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                     ),
                   ],
                 ),
-              ),
+              );
+            },
+          ),
 
-              // 日志列表
-              Expanded(
-                child: filteredLogs.isEmpty
+          // 日志列表 - 使用Consumer监听内容变化
+          Expanded(
+            child: Consumer<DebugLogService>(
+              builder: (context, logService, child) {
+                final filteredLogs = _getFilteredLogs();
+                
+                // 自动滚动到底部
+                if (_autoScroll && filteredLogs.isNotEmpty) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _scrollToBottom();
+                  });
+                }
+                
+                return filteredLogs.isEmpty
                     ? const Center(
                         child: Text(
                           '暂无日志',
@@ -572,24 +652,24 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                               // 显示详细信息
                               final detailsContent = '时间: ${entry.timestamp}\n'
                                   '级别: ${entry.level}\n'
-                                  '标签: ${entry.tag}\n\n'
-                                  '内容:\n${entry.message}';
+                                  '标签: ${entry.tag}\n'
+                                  '内容: ${entry.message}';
                               
                               BlurDialog.show(
                                 context: context,
-                                title: '日志详情',
+                                title: '日志详细信息',
                                 content: detailsContent,
                                 actions: [
                                   TextButton(
-                                    onPressed: () {
-                                      _copyLogEntry(entry);
-                                      Navigator.pop(context);
-                                    },
-                                    child: const Text('复制', style: TextStyle(color: Colors.white)),
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('关闭', style: TextStyle(color: Colors.white)),
                                   ),
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: const Text('关闭', style: TextStyle(color: Colors.white70)),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      _copyLogEntry(entry);
+                                    },
+                                    child: const Text('复制', style: TextStyle(color: Colors.white)),
                                   ),
                                 ],
                               );
@@ -598,15 +678,18 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               decoration: BoxDecoration(
                                 border: Border(
-                                  bottom: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                  bottom: BorderSide(
+                                    color: Colors.white.withOpacity(0.1),
+                                    width: 0.5,
+                                  ),
                                 ),
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // 时间戳（可选）
-                                  if (_showTimestamp) ...[
-                                    SizedBox(
+                                  // 时间戳
+                                  if (_showTimestamp)
+                                    Container(
                                       width: 80,
                                       child: Text(
                                         '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
@@ -614,13 +697,13 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                                         '${entry.timestamp.second.toString().padLeft(2, '0')}',
                                         style: const TextStyle(
                                           color: Colors.white54,
-                                          fontSize: 11,
-                                          fontFamily: 'Courier',
+                                          fontSize: 12,
+                                          fontFamily: 'monospace',
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                  ],
+                                  
+                                  if (_showTimestamp) const SizedBox(width: 8),
                                   
                                   // 级别标签
                                   Container(
@@ -638,13 +721,14 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                                       ),
                                     ),
                                   ),
+                                  
                                   const SizedBox(width: 8),
                                   
                                   // 标签
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: Colors.white24,
+                                      color: Colors.white.withOpacity(0.2),
                                       borderRadius: BorderRadius.circular(3),
                                     ),
                                     child: Text(
@@ -655,6 +739,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                                       ),
                                     ),
                                   ),
+                                  
                                   const SizedBox(width: 8),
                                   
                                   // 消息内容
@@ -664,7 +749,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 13,
-                                        fontFamily: 'Courier',
+                                        fontFamily: 'monospace',
                                       ),
                                     ),
                                   ),
@@ -673,11 +758,11 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                             ),
                           );
                         },
-                      ),
-              ),
-            ],
-          );
-        },
+                      );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
