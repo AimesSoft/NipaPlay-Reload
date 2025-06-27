@@ -463,7 +463,7 @@ class JellyfinDandanplayMatcher {
       }
         
         // 确保成功提取episodeId
-        int? episodeId = null;
+        int? episodeId;
         if (matchedEpisode.containsKey('episodeId')) {
           episodeId = matchedEpisode['episodeId'];
           debugPrint('成功获取episodeId: $episodeId');
@@ -621,7 +621,7 @@ class JellyfinDandanplayMatcher {
       // 获取DandanPlay的appSecret
       final appSecret = await DandanplayService.getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      final apiPath = '/api/v2/search/anime';
+      const apiPath = '/api/v2/search/anime';
       
       final url = 'https://api.dandanplay.net/api/v2/search/anime?keyword=${Uri.encodeComponent(title)}';
       debugPrint('请求URL: $url');
@@ -715,7 +715,7 @@ class JellyfinDandanplayMatcher {
       // 使用获取到的动画标题搜索剧集
       final appSecret = await DandanplayService.getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      final apiPath = '/api/v2/search/episodes';
+      const apiPath = '/api/v2/search/episodes';
       
       final url = 'https://api.dandanplay.net/api/v2/search/episodes?anime=${Uri.encodeComponent(animeTitle)}';
       debugPrint('请求URL (使用标题搜索剧集): $url');
@@ -1025,10 +1025,10 @@ class AnimeMatchDialog extends StatefulWidget {
   final JellyfinEpisodeInfo episodeInfo;
   
   const AnimeMatchDialog({
-    Key? key,
+    super.key,
     required this.matches,
     required this.episodeInfo,
-  }) : super(key: key);
+  });
   
   @override
   State<AnimeMatchDialog> createState() => _AnimeMatchDialogState();
@@ -1294,7 +1294,7 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             if (widget.episodeInfo.indexNumber != null)
               Text('第 ${widget.episodeInfo.indexNumber} 集',
-                  style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             
             // 显示当前选择的动画（在剧集选择视图中）
@@ -1465,24 +1465,24 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
           ),
         if (_showEpisodesView) ...[
           TextButton(
-            child: const Text('返回动画选择'),
             onPressed: _backToAnimeSelection,
             style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
+            child: const Text('返回动画选择'),
           ),
           TextButton(
-            child: const Text('跳过匹配'),
             onPressed: () => Navigator.of(context).pop(),
             style: TextButton.styleFrom(foregroundColor: Colors.grey),
+            child: const Text('跳过匹配'),
           ),
           if (_currentEpisodes.isNotEmpty) 
             ElevatedButton(
-              child: _selectedEpisode != null 
-                ? const Text('确认选择剧集') 
-                : const Text('使用第一集'),
               onPressed: _completeSelection,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _selectedEpisode != null ? Colors.green : Colors.amber,
               ),
+              child: _selectedEpisode != null 
+                ? const Text('确认选择剧集') 
+                : const Text('使用第一集'),
             ),
         ],
       ],

@@ -864,9 +864,9 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
         Positioned(
           top: 0,
           left: 0,
-          right: globals.winLinDesktop ? 100 : 0,
+          right: globals.winLinDesktop ? 120 : 0,
           child: SizedBox(
-            height: 30,
+            height: 40,
             child: GestureDetector(
               onDoubleTap: _toggleWindowSize,
               onPanStart: (details) async {
@@ -888,8 +888,8 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
               top: 0,
               right: 0,
               child: Container(
-                width: 100,
-                height: globals.isPhone && globals.isMobile ? 55 : 30,
+                width: 120,
+                height: globals.isPhone && globals.isMobile ? 55 : 40,
                 color: Colors.transparent,
                 child: WindowControlButtons(
                   isMaximized: isMaximized,
@@ -905,7 +905,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
         // 系统资源监控显示
         Positioned(
           top: 4,
-          right: globals.isPhone ? 10 : 110,
+          right: globals.isPhone ? 10 : 130,
           child: const SystemResourceDisplay(),
         ),
       ],

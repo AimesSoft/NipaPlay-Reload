@@ -855,10 +855,10 @@ class AnimeMatchDialog extends StatefulWidget {
   final EmbyEpisodeInfo episodeInfo;
   
   const AnimeMatchDialog({
-    Key? key,
+    super.key,
     required this.matches,
     required this.episodeInfo,
-  }) : super(key: key);
+  });
   
   @override
   State<AnimeMatchDialog> createState() => _AnimeMatchDialogState();
@@ -1149,7 +1149,7 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             if (widget.episodeInfo.indexNumber != null)
               Text('第 ${widget.episodeInfo.indexNumber} 集',
-                  style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             
             // 显示当前选择的动画（在剧集选择视图中）
@@ -1320,24 +1320,24 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
           ),
         if (_showEpisodesView) ...[
           TextButton(
-            child: const Text('返回动画选择'),
             onPressed: _backToAnimeSelection,
             style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
+            child: const Text('返回动画选择'),
           ),
           TextButton(
-            child: const Text('跳过匹配'),
             onPressed: () => Navigator.of(context).pop(),
             style: TextButton.styleFrom(foregroundColor: Colors.grey),
+            child: const Text('跳过匹配'),
           ),
           if (_currentEpisodes.isNotEmpty) 
             ElevatedButton(
-              child: _selectedEpisode != null 
-                ? const Text('确认选择剧集') 
-                : const Text('使用第一集'),
               onPressed: _completeSelection,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _selectedEpisode != null ? Colors.green : Colors.amber,
               ),
+              child: _selectedEpisode != null 
+                ? const Text('确认选择剧集') 
+                : const Text('使用第一集'),
             ),
         ],
       ],

@@ -1,66 +1,71 @@
 // ignore: file_names
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/widgets/image_assets.dart';
 import 'package:window_manager/window_manager.dart';
-// 导入 system_theme.dart
+import 'dart:ui';
 
-const double iconSize = 15.0; // 图标大小
-const double horizontalSpacing = 5.0; // 按钮之间的左右间距
-const double buttonPadding = 7.0; // 按钮的上下左右内边距（默认5）
+const double iconSize = 25.0; // 图标大小
+const double buttonSize = 28.0; // 按钮大小
+const double containerHeight = 32.0; // 容器高度
+const double containerPadding = 2.0; // 容器内边距
+const double borderRadius = 8.0; // 圆角半径
 
 class WindowControlButton extends StatefulWidget {
-  final String imagePath;
+  final IconData icon;
   final VoidCallback onPressed;
+  final bool isCloseButton;
+  final double? customIconSize;
 
   const WindowControlButton({
     super.key,
-    required this.imagePath,
+    required this.icon,
     required this.onPressed,
+    this.isCloseButton = false,
+    this.customIconSize,
   });
 
   @override
-  // ignore: library_private_types_in_public_api
   _WindowControlButtonState createState() => _WindowControlButtonState();
 }
 
-class _WindowControlButtonState extends State<WindowControlButton> {
+class _WindowControlButtonState extends State<WindowControlButton>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
-  final bool _isPressed = false;
+  bool _isPressed = false;
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 100),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.9,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    String imagePathToDisplay;
-
-    // 根据日间模式和悬浮状态切换图片
-      imagePathToDisplay = _isPressed
-          ? widget.imagePath // 按下时仍显示普通图片
-          : widget.imagePath.replaceFirst(
-              '.png', ImageAssets.lightSuffix); // 默认显示带 Light 后缀的图片
-
-    // 悬浮时反转图标
-    if (_isHovered && widget.imagePath != ImageAssets.closeButton) {
-      imagePathToDisplay = imagePathToDisplay.replaceFirst('Light.png', '.png');
-    }
-
-    // 悬浮时关闭按钮背景颜色变为 #FF3535 并强制使用 Light 图标
-    Color backgroundColor = Colors.transparent;
+    // 悬停时的背景颜色 - 参考blur_snackbar的设计
+    Color hoverColor = Colors.transparent;
     if (_isHovered) {
-      if (widget.imagePath == ImageAssets.closeButton) {
-        backgroundColor = const Color(0xFFFF3535); // 红色背景
-        imagePathToDisplay = widget.imagePath
-            .replaceFirst('.png', ImageAssets.lightSuffix); // 永远显示 Light 后缀
+      if (widget.isCloseButton) {
+        hoverColor = const Color(0x40FF4444); // 红色悬停
       } else {
-        backgroundColor =
-            Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black; // 根据模式切换背景色
-        // 悬浮时切换为 Light 图标（除了关闭按钮）
-        if (Theme.of(context).brightness == Brightness.dark) {
-          imagePathToDisplay =
-              imagePathToDisplay.replaceFirst(ImageAssets.lightSuffix, '.png');
-        } else {
-          imagePathToDisplay =
-              imagePathToDisplay.replaceFirst('.png', ImageAssets.lightSuffix);
-        }
+        hoverColor = Colors.white.withOpacity(0.1); // 白色悬停
       }
     }
 
@@ -76,12 +81,45 @@ class _WindowControlButtonState extends State<WindowControlButton> {
         });
       },
       child: GestureDetector(
-        onTap: widget.onPressed,
-        child: Container(
-          color: backgroundColor, // 悬浮时背景颜色
-          padding: const EdgeInsets.all(buttonPadding), // 设置按钮内边距
-          child: Image.asset(imagePathToDisplay,
-              width: iconSize, height: iconSize),
+        onTapDown: (_) {
+          setState(() {
+            _isPressed = true;
+          });
+          _animationController.forward();
+        },
+        onTapUp: (_) {
+          setState(() {
+            _isPressed = false;
+          });
+          _animationController.reverse();
+          widget.onPressed();
+        },
+        onTapCancel: () {
+          setState(() {
+            _isPressed = false;
+          });
+          _animationController.reverse();
+        },
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _isPressed ? _scaleAnimation.value : 1.0,
+              child: Container(
+                width: buttonSize,
+                height: buttonSize,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4.0),
+                  color: hoverColor,
+                ),
+                child: Icon(
+                  widget.icon,
+                  size: widget.customIconSize ?? iconSize,
+                  color: Colors.white,
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -142,27 +180,60 @@ class _WindowControlButtonsState extends State<WindowControlButtons> with Window
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        // 使用统一的图片路径
-        WindowControlButton(
-          imagePath: ImageAssets.minButton, // 最小化按钮
-          onPressed: widget.onMinimize,
+    // 参考system_resource_display的毛玻璃设计
+    return Container(
+      margin: const EdgeInsets.all(4.0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+          child: Container(
+            height: containerHeight,
+            padding: const EdgeInsets.symmetric(
+              horizontal: containerPadding * 2,
+              vertical: containerPadding,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(borderRadius),
+              color: const Color.fromARGB(255, 253, 253, 253).withOpacity(0.2),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 0.5,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 最小化按钮
+                WindowControlButton(
+                  icon: Icons.horizontal_rule_rounded,
+                  onPressed: widget.onMinimize,
+                ),
+                const SizedBox(width: 8),
+                
+                // 最大化/恢复按钮
+                WindowControlButton(
+                  icon: widget.isMaximized 
+                      ? Icons.filter_none_rounded 
+                      : Icons.crop_square_rounded,
+                  onPressed: widget.onMaximizeRestore,
+                  customIconSize: widget.isMaximized ? 18.0 : null,
+                ),
+                const SizedBox(width: 8),
+                
+                // 关闭按钮
+                WindowControlButton(
+                  icon: Icons.close_rounded,
+                  onPressed: widget.onClose,
+                  isCloseButton: true,
+                ),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(width: horizontalSpacing), // 使用 SizedBox 来设置按钮之间的间距
-        WindowControlButton(
-          imagePath: widget.isMaximized
-              ? ImageAssets.unMaxButton
-              : ImageAssets.maxButton, // 最大化/恢复按钮
-          onPressed: widget.onMaximizeRestore,
-        ),
-        const SizedBox(width: horizontalSpacing), // 使用 SizedBox 来设置按钮之间的间距
-        WindowControlButton(
-          imagePath: ImageAssets.closeButton, // 关闭按钮
-          onPressed: widget.onClose,
-        ),
-      ],
+      ),
     );
   }
 }

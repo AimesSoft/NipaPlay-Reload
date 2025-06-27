@@ -1,10 +1,24 @@
 // ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
+import 'dart:io';
 
 class AppTheme {
+  // 获取适合当前平台的默认字体
+  static String? get _platformDefaultFont {
+    if (Platform.isWindows) {
+      return "微软雅黑"; // Windows中文系统默认字体：直接使用中文名称
+    } else if (Platform.isMacOS) {
+      return null; // 让Flutter自动选择macOS系统默认字体 (San Francisco)
+    } else if (Platform.isLinux) {
+      return null; // 让Flutter自动选择Linux系统默认字体
+    }
+    return null; // 其他平台使用默认
+  }
+
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light, // 设置亮度为浅色模式
+    fontFamily: _platformDefaultFont, // 使用平台默认字体
     colorScheme: ColorScheme(
       brightness: Brightness.light, // 设置颜色方案的亮度为浅色模式
       primary: Colors.white.withOpacity(0.35), // 主要颜色，用于应用的主要交互元素，如选中的标签、按钮等。这里使用了带透明度的白色。
@@ -20,6 +34,7 @@ class AppTheme {
 
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark, // 设置亮度为深色模式
+    fontFamily: _platformDefaultFont, // 使用平台默认字体
     colorScheme: ColorScheme(
       brightness: Brightness.dark, // 设置颜色方案的亮度为深色模式
       primary: Colors.grey[500]!.withOpacity(0.4), // 主要颜色，在深色模式下使用深灰色，带透明度。

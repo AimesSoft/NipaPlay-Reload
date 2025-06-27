@@ -401,7 +401,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           if (bangumiRatingValue is num && bangumiRatingValue > 0) ...[
             RichText(
                 text: TextSpan(children: [
-              TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
+              const TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
               WidgetSpan(
                   child: _buildRatingStars(bangumiRatingValue.toDouble())),
               TextSpan(
@@ -430,7 +430,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       TextSpan(text: '我的打分: ', style: boldWhiteKeyStyle.copyWith(color: Colors.blue)),
                       TextSpan(
                         text: '$_userRating 分 ',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.blue,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -483,7 +483,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                         const SizedBox(width: 4),
                         Text(
                           _userRating > 0 ? '修改评分' : '我要打分',
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.blue,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -537,7 +537,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               padding: const EdgeInsets.only(bottom: 4.0),
               child: RichText(
                   text: TextSpan(style: valueStyle, children: [
-                TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
+                const TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
                 TextSpan(text: '${_formatDate(anime.airDate)} ($weekdayString)')
               ]))),
           if (anime.typeDescription != null)
@@ -545,7 +545,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 padding: const EdgeInsets.only(bottom: 4.0),
                 child: RichText(
                     text: TextSpan(style: valueStyle, children: [
-                  TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
+                  const TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
                   TextSpan(text: anime.typeDescription)
                 ]))),
           if (anime.totalEpisodes != null)
@@ -553,7 +553,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 padding: const EdgeInsets.only(bottom: 4.0),
                 child: RichText(
                     text: TextSpan(style: valueStyle, children: [
-                  TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
+                  const TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
                   TextSpan(text: '${anime.totalEpisodes}话')
                 ]))),
           if (anime.isOnAir != null)
@@ -561,7 +561,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 padding: const EdgeInsets.only(bottom: 4.0),
                 child: RichText(
                     text: TextSpan(style: valueStyle, children: [
-                  TextSpan(text: '状态: ', style: boldWhiteKeyStyle),
+                  const TextSpan(text: '状态: ', style: boldWhiteKeyStyle),
                   TextSpan(text: anime.isOnAir! ? '连载中' : '已完结')
                 ]))),
           Padding(

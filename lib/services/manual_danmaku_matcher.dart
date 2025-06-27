@@ -28,7 +28,7 @@ class ManualDanmakuMatcher {
       
       final appSecret = await DandanplayService.getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      final apiPath = '/api/v2/search/anime';
+      const apiPath = '/api/v2/search/anime';
       
       final url = 'https://api.dandanplay.net/api/v2/search/anime?keyword=${Uri.encodeComponent(keyword)}';
       debugPrint('搜索请求URL: $url');
@@ -95,7 +95,7 @@ class ManualDanmakuMatcher {
     try {
       final appSecret = await DandanplayService.getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      final apiPath = '/api/v2/search/episodes';
+      const apiPath = '/api/v2/search/episodes';
       
       final url = 'https://api.dandanplay.net/api/v2/search/episodes?anime=${Uri.encodeComponent(animeTitle)}';
       debugPrint('剧集请求URL: $url');
@@ -211,9 +211,9 @@ class ManualDanmakuMatchDialog extends StatefulWidget {
   final String initialSearchText;
   
   const ManualDanmakuMatchDialog({
-    Key? key,
+    super.key,
     required this.initialSearchText,
-  }) : super(key: key);
+  });
   
   @override
   State<ManualDanmakuMatchDialog> createState() => _ManualDanmakuMatchDialogState();
@@ -557,7 +557,6 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
                           child: Text(_searchMessage, 
                             style: TextStyle(
                               color: _searchMessage.contains('出错') ? Colors.redAccent : Colors.white70,
-                              fontStyle: FontStyle.italic,
                             ),
                           ),
                         ),
@@ -678,7 +677,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
                                       ),
                                       child: ListTile(
                                         title: Text(
-                                          '第${episode['episodeIndex'] ?? '?'}集: ${episode['episodeTitle'] ?? '未知剧集'}',
+                                          '${episode['episodeTitle'] ?? '未知剧集'}',
                                           style: const TextStyle(color: Colors.white),
                                         ),
                                         trailing: isSelected 
@@ -708,8 +707,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
                               ? '请选择一个剧集来获取正确的弹幕'
                               : '已选择剧集，点击"确认选择"继续',
                             style: TextStyle(
-                              fontStyle: FontStyle.italic, 
-                              color: _selectedEpisode == null ? Colors.redAccent : Colors.green
+                              color: _selectedEpisode == null ? Colors.white70 : Colors.green
                             ),
                           ),
                         ),
@@ -721,40 +719,46 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
               // 操作按钮区域
               const Divider(color: Colors.white24),
               const SizedBox(height: 8),
-              Row(
+                              Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   if (_showEpisodesView) ...[
                     TextButton(
                       onPressed: _backToAnimeSelection,
                       style: TextButton.styleFrom(
-                        foregroundColor: Colors.lightBlueAccent,
+                        foregroundColor: Colors.white70,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       ),
                       child: const Text('返回动画选择'),
                     ),
                     const SizedBox(width: 8),
                   ],
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    ),
-                    child: const Text('取消'),
-                  ),
                   if (_showEpisodesView && _currentEpisodes.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _completeSelection,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _selectedEpisode != null ? Colors.green : Colors.amber,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: TextButton(
+                            onPressed: _completeSelection,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            ),
+                            child: Text(_selectedEpisode != null 
+                              ? '确认选择剧集' 
+                              : '使用第一集'),
+                          ),
+                        ),
                       ),
-                      child: Text(_selectedEpisode != null 
-                        ? '确认选择剧集' 
-                        : '使用第一集'),
                     ),
                   ],
                 ],
