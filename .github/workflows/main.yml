@@ -273,10 +273,10 @@ jobs:
                   --window-size 800 450 \
                   --icon-size 100 \
                   --app-drop-link 600 185 \
-                  --no-internet-enable \
-                  --skip-jenkins \
-                  "${dmg_name}" \
-                  "build/macos/Build/Products/Release/NipaPlay.app"
+              --no-internet-enable \
+              --skip-jenkins \
+              "${dmg_name}" \
+              "build/macos/Build/Products/Release/NipaPlay.app"
               }
             
             # Clean up
@@ -294,7 +294,7 @@ jobs:
           if ("${{ matrix.arch }}" -eq "arm64") {
             flutter build windows --release --target-platform windows-arm64
           } else {
-            flutter build windows --release
+          flutter build windows --release
           }
           $arch = "${{ matrix.arch }}"
           $version = "${{ steps.get_version.outputs.version }}"
