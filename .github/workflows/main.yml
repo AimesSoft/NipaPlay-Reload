@@ -345,17 +345,17 @@ jobs:
           if (!(Test-Path "installer_assets\\installer_banner.bmp")) { throw "Failed to create large banner" }
           
           # Copy installer script and assets to build directory
-          Copy-Item -Path "windows\\nipaplay_installer.iss" -Destination "$BuildDir\\"
+          Copy-Item -Path "windows\\nipaplay_installer.nsi" -Destination "$BuildDir\\"
           Copy-Item -Path "installer_assets\\*" -Destination "$BuildDir\\" -Recurse -Force
           Copy-Item -Path "LICENSE" -Destination "$BuildDir\\" -ErrorAction SilentlyContinue
 
-      # Create Windows installer
-      - name: Create Windows installer
+      # Create Windows installer with NSIS
+      - name: Create Windows installer with NSIS
         if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
         shell: pwsh
         run: |
-          # Install Inno Setup
-          choco install innosetup -y
+          # Install NSIS
+          choco install nsis -y
           
           $arch = "${{ matrix.arch }}"
           $version = "${{ steps.get_version.outputs.version }}"
@@ -365,35 +365,65 @@ jobs:
             $BuildDir = "build\\windows\\x64\\runner\\Release"
           }
           
-          # Update Inno Setup script with architecture info
-          $issContent = Get-Content "$BuildDir\\nipaplay_installer.iss" -Raw
-          $issContent = $issContent -replace 'OutputBaseFilename=NipaPlay_.*_Windows_Setup', "OutputBaseFilename=NipaPlay_${version}_Windows_${arch}_Setup"
+          # Update NSIS script with version and architecture info
+          $nsiContent = Get-Content "$BuildDir\\nipaplay_installer.nsi" -Raw
           
-          # Set architecture restrictions
+          # Update version information
+          $nsiContent = $nsiContent -replace 'VIProductVersion "1\.0\.0\.0"', "VIProductVersion `"${version}.0`""
+          $nsiContent = $nsiContent -replace 'VIAddVersionKey "FileVersion" "1\.0\.0\.0"', "VIAddVersionKey `"FileVersion`" `"${version}.0`""
+          $nsiContent = $nsiContent -replace 'VIAddVersionKey "ProductVersion" "1\.0\.0\.0"', "VIAddVersionKey `"ProductVersion`" `"${version}.0`""
+          
+          # Update output filename
+          $nsiContent = $nsiContent -replace 'OutFile "NipaPlay_Setup\.exe"', "OutFile `"NipaPlay_${version}_Windows_${arch}_Setup.exe`""
+          
+          # Add architecture-specific logic for ARM64
           if ($arch -eq "arm64") {
-            $issContent = $issContent -replace 'ArchitecturesInstallIn64BitMode=x64 arm64', 'ArchitecturesInstallIn64BitMode=arm64'
-            $issContent = $issContent -replace 'ArchitecturesAllowed=x64 arm64', 'ArchitecturesAllowed=arm64'
-          } else {
-            $issContent = $issContent -replace 'ArchitecturesInstallIn64BitMode=x64 arm64', 'ArchitecturesInstallIn64BitMode=x64'
-            $issContent = $issContent -replace 'ArchitecturesAllowed=x64 arm64', 'ArchitecturesAllowed=x64'
+            # For ARM64, replace the initialization function
+            $nsiContent = $nsiContent -replace 'Function \.onInit', 'Function .onInitOld'
+            $nsiContent = $nsiContent -replace 'Function \.onInitARM64', 'Function .onInit'
           }
           
-          Set-Content -Path "$BuildDir\\nipaplay_installer.iss" -Value $issContent -Encoding UTF8
+          Set-Content -Path "$BuildDir\\nipaplay_installer.nsi" -Value $nsiContent -Encoding UTF8
           
-          # Compile installer
+          # Download FileAssociation plugin for NSIS
+          $pluginUrl = "https://nsis.sourceforge.io/mediawiki/images/7/7f/FileAssociation.nsh"
+          $pluginPath = "$BuildDir\\FileAssociation.nsh"
+          try {
+            Invoke-WebRequest -Uri $pluginUrl -OutFile $pluginPath -UseBasicParsing
+            Write-Host "Downloaded FileAssociation.nsh plugin"
+          } catch {
+            Write-Host "Warning: Could not download FileAssociation.nsh plugin, using fallback"
+            # Create a basic fallback version
+            $fallbackContent = "; Basic FileAssociation fallback`r`n"
+            $fallbackContent += "!define RegisterExtension `"!insertmacro RegisterExtension`"`r`n"
+            $fallbackContent += "!define UnRegisterExtension `"!insertmacro UnRegisterExtension`"`r`n`r`n"
+            $fallbackContent += "!macro RegisterExtension executable extension description`r`n"
+            $fallbackContent += "  WriteRegStr HKCR `"`${extension}`" `"`" `"`${description}`"`r`n"
+            $fallbackContent += "  WriteRegStr HKCR `"`${description}`" `"`" `"`${description}`"`r`n"
+            $fallbackContent += "  WriteRegStr HKCR `"`${description}\shell`" `"`" `"open`"`r`n"
+            $fallbackContent += "  WriteRegStr HKCR `"`${description}\shell\open\command`" `"`" '`"`${executable}`" `"%1`"'`r`n"
+            $fallbackContent += "!macroend`r`n`r`n"
+            $fallbackContent += "!macro UnRegisterExtension extension description`r`n"
+            $fallbackContent += "  DeleteRegKey HKCR `"`${extension}`"`r`n"
+            $fallbackContent += "  DeleteRegKey HKCR `"`${description}`"`r`n"
+            $fallbackContent += "!macroend"
+            Set-Content -Path $pluginPath -Value $fallbackContent -Encoding UTF8
+          }
+          
+          # Compile installer with NSIS
           Push-Location $BuildDir
-          $isccPath = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe"
-          if (!(Test-Path $isccPath)) {
-            throw "Inno Setup compiler not found at $isccPath"
+          $nsisPath = "C:\\Program Files (x86)\\NSIS\\makensis.exe"
+          if (!(Test-Path $nsisPath)) {
+            throw "NSIS compiler not found at $nsisPath"
           }
           
-          Write-Host "Compiling installer with Inno Setup..."
-          $result = & $isccPath "nipaplay_installer.iss"
+          Write-Host "Compiling installer with NSIS..."
+          & $nsisPath "/V4" "nipaplay_installer.nsi"
           $exitCode = $LASTEXITCODE
           Pop-Location
           
           if ($exitCode -ne 0) {
-            throw "Inno Setup compilation failed with exit code $exitCode"
+            throw "NSIS compilation failed with exit code $exitCode"
           }
           
           # Verify installer was created
@@ -412,7 +442,7 @@ jobs:
             throw "Failed to move installer to final location"
           }
           
-          Write-Host "Installer created successfully: $finalInstallerPath"
+          Write-Host "NSIS installer created successfully: $finalInstallerPath"
 
       # List Windows build artifacts  
       - name: List Windows build artifacts
