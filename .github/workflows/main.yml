@@ -365,13 +365,25 @@ jobs:
             $BuildDir = "build\\windows\\x64\\runner\\Release"
           }
           
-          # Update NSIS script with version and architecture info
-          $nsiContent = Get-Content "$BuildDir\\nipaplay_installer.nsi" -Raw
+          # Read NSIS script with proper encoding
+          $nsiContent = Get-Content "$BuildDir\\nipaplay_installer.nsi" -Raw -Encoding UTF8
           
-          # Update version information
-          $nsiContent = $nsiContent -replace 'VIProductVersion "1\.0\.0\.0"', "VIProductVersion `"${version}.0`""
-          $nsiContent = $nsiContent -replace 'VIAddVersionKey "FileVersion" "1\.0\.0\.0"', "VIAddVersionKey `"FileVersion`" `"${version}.0`""
-          $nsiContent = $nsiContent -replace 'VIAddVersionKey "ProductVersion" "1\.0\.0\.0"', "VIAddVersionKey `"ProductVersion`" `"${version}.0`""
+          # Ensure version is in 4-part format for NSIS (X.Y.Z.W)
+          $versionParts = $version.Split('.')
+          if ($versionParts.Length -eq 3) {
+            $nsiVersion = "${version}.0"
+          } elseif ($versionParts.Length -eq 4) {
+            $nsiVersion = $version
+          } else {
+            # Fallback to default if version format is unexpected
+            $nsiVersion = "1.0.0.0"
+          }
+          Write-Host "Using version: $version, NSIS version: $nsiVersion"
+          
+          # Update version information with proper escaping
+          $nsiContent = $nsiContent -replace 'VIProductVersion "1\.0\.0\.0"', "VIProductVersion `"${nsiVersion}`""
+          $nsiContent = $nsiContent -replace 'VIAddVersionKey "FileVersion" "1\.0\.0\.0"', "VIAddVersionKey `"FileVersion`" `"${nsiVersion}`""
+          $nsiContent = $nsiContent -replace 'VIAddVersionKey "ProductVersion" "1\.0\.0\.0"', "VIAddVersionKey `"ProductVersion`" `"${nsiVersion}`""
           
           # Update output filename
           $nsiContent = $nsiContent -replace 'OutFile "NipaPlay_Setup\.exe"', "OutFile `"NipaPlay_${version}_Windows_${arch}_Setup.exe`""
@@ -383,7 +395,22 @@ jobs:
             $nsiContent = $nsiContent -replace 'Function \.onInitARM64', 'Function .onInit'
           }
           
-          Set-Content -Path "$BuildDir\\nipaplay_installer.nsi" -Value $nsiContent -Encoding UTF8
+          # Write file with UTF8 BOM to ensure proper encoding for NSIS
+          $utf8BOM = New-Object System.Text.UTF8Encoding $true
+          [System.IO.File]::WriteAllText("$BuildDir\\nipaplay_installer.nsi", $nsiContent, $utf8BOM)
+          
+          # Verify the NSIS script file was written correctly
+          Write-Host "Verifying NSIS script file..."
+          $verifyContent = Get-Content "$BuildDir\\nipaplay_installer.nsi" -Raw -Encoding UTF8
+          if ($verifyContent -match "VIProductVersion") {
+            Write-Host "NSIS script version information updated successfully"
+          } else {
+            Write-Host "Warning: NSIS script may not have been updated correctly"
+          }
+          
+          # Show first few lines for debugging
+          Write-Host "First 10 lines of NSIS script:"
+          Get-Content "$BuildDir\\nipaplay_installer.nsi" -Head 10 -Encoding UTF8 | ForEach-Object { Write-Host $_ }
           
           # Download FileAssociation plugin for NSIS
           $pluginUrl = "https://nsis.sourceforge.io/mediawiki/images/7/7f/FileAssociation.nsh"

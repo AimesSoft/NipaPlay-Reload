@@ -29,11 +29,11 @@ VIAddVersionKey "LegalCopyright" "© MCDFSteve"
 
 ; 欢迎页面配置
 !define MUI_WELCOMEPAGE_TITLE "欢迎使用 NipaPlay 安装向导"
-!define MUI_WELCOMEPAGE_TEXT "此向导将引导您完成 NipaPlay 的安装过程。$\r$\n$\r$\nNipaPlay 是一款功能强大的视频播放器，支持多种视频格式和弹幕功能。$\r$\n$\r$\n点击 "下一步" 继续安装。"
+!define MUI_WELCOMEPAGE_TEXT "此向导将引导您完成 NipaPlay 的安装过程。$\r$\n$\r$\nNipaPlay 是一款功能强大的视频播放器，支持多种视频格式和弹幕功能。$\r$\n$\r$\n点击下一步继续安装。"
 
 ; 许可协议页面
 !define MUI_LICENSEPAGE_TEXT_TOP "请仔细阅读下列许可协议。"
-!define MUI_LICENSEPAGE_TEXT_BOTTOM "如果您接受协议中的条款，请点击 "我同意" 继续安装。只有接受协议才能安装 NipaPlay。"
+!define MUI_LICENSEPAGE_TEXT_BOTTOM "如果您接受协议中的条款，请点击我同意继续安装。只有接受协议才能安装 NipaPlay。"
 !define MUI_LICENSEPAGE_BUTTON "我同意(&A)"
 
 ; 组件选择页面
@@ -52,7 +52,7 @@ VIAddVersionKey "LegalCopyright" "© MCDFSteve"
 
 ; 完成页面
 !define MUI_FINISHPAGE_TITLE "NipaPlay 安装完成"
-!define MUI_FINISHPAGE_TEXT "NipaPlay 已成功安装到您的计算机。$\r$\n$\r$\n点击 "完成" 关闭此向导。"
+!define MUI_FINISHPAGE_TEXT "NipaPlay 已成功安装到您的计算机。$\r$\n$\r$\n点击完成关闭此向导。"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\NipaPlay.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "启动 NipaPlay"
 
@@ -91,7 +91,7 @@ Function .onInit
     ; 64位系统，允许安装
   ${Else}
     ; 32位系统，显示警告
-    MessageBox MB_YESNO|MB_ICONQUESTION "检测到您的系统是 32 位，NipaPlay 针对 64 位系统优化。是否继续安装？" /SD IDYES IDNO abort
+    MessageBox MB_YESNO|MB_ICONQUESTION "检测到您的系统是 32 位，NipaPlay 针对 64 位系统优化。是否继续安装" /SD IDYES IDNO abort
     abort:
       Abort
   ${EndIf}
@@ -109,7 +109,7 @@ Function .onInitARM64
     ; ARM64系统，允许安装
   ${Else}
     ; 非ARM64系统
-    MessageBox MB_OK|MB_ICONSTOP "此安装程序仅适用于 ARM64 架构的设备。$\r$\n请下载 x64 版本的安装程序。"
+    MessageBox MB_OK|MB_ICONSTOP "此安装程序仅适用于 ARM64 架构的设备。$\r$\n请下载 x64 版本的安装程序"
     Abort
   ${EndIf}
   
