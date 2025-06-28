@@ -375,7 +375,7 @@ jobs:
             $issContent = $issContent -replace 'ArchitecturesAllowed=x64 arm64', 'ArchitecturesAllowed=arm64'
           } else {
             $issContent = $issContent -replace 'ArchitecturesInstallIn64BitMode=x64 arm64', 'ArchitecturesInstallIn64BitMode=x64'
-            $issContent = $issContent -replace 'ArchitecturesAllowed=x64 arm64', 'ArchitecturesAllowed=x64 compatible'
+            $issContent = $issContent -replace 'ArchitecturesAllowed=x64 arm64', 'ArchitecturesAllowed=x64'
           }
           
           Set-Content -Path "$BuildDir\\nipaplay_installer.iss" -Value $issContent -Encoding UTF8
