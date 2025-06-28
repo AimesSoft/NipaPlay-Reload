@@ -33,9 +33,14 @@ jobs:
             artifact_path: build/app/outputs/apk/release/*.apk
           - target: Windows
             os: windows-latest
-            artifact_name: release-Windows
-            artifact_path: build/windows/*.zip
+            artifact_name: release-Windows-x64
+            artifact_path: build/windows/*
             arch: x64
+          - target: Windows ARM64
+            os: windows-latest-arm64
+            artifact_name: release-Windows-arm64
+            artifact_path: build/windows/*
+            arch: arm64
           - target: Linux
             os: ubuntu-22.04
             arch: amd64
@@ -220,33 +225,77 @@ jobs:
           
           # Try to create DMG with timeout and retry mechanism
           timeout 300 ./dmg.sh || {
-            echo "DMG creation timed out or failed, trying simplified approach..."
+            echo "DMG creation timed out or failed, trying fallback approach with layout..."
             
-            # Fallback: Create DMG without fancy GUI customization
+            # Fallback: Create DMG with layout but without complex AppleScript operations
             version=$(head -n 19 pubspec.yaml | tail -n 1 | cut -d ' ' -f 2)
             dmg_name="NipaPlay_${version}_macOS_Universal.dmg"
             
-            # Create a simple DMG without AppleScript customization
+            # Create a temporary directory for the DMG layout
+            temp_dir=$(mktemp -d)
+            mkdir -p "${temp_dir}/.background"
+            
+            # Copy the app to the temporary directory
+            cp -R "build/macos/Build/Products/Release/NipaPlay.app" "${temp_dir}/"
+            
+            # Create a symbolic link to Applications
+            ln -s /Applications "${temp_dir}/Applications"
+            
+            # Create the background image with arrow (fallback version)
+            convert -size 800x450 xc:white \
+              -font Arial-Bold -pointsize 120 -fill '#666666' \
+              -gravity center \
+              -draw "text -150,0 'NipaPlay'" \
+              -draw "text 150,0 '>'" \
+              "${temp_dir}/.background/background.png" || {
+                # If ImageMagick fails, create simple background
+                convert -size 800x450 xc:'#f0f0f0' "${temp_dir}/.background/background.png"
+              }
+            
+            # Create DMG with layout (CI-friendly version)
             create-dmg \
               --volname "NipaPlay-${version}" \
+              --window-pos 200 120 \
               --window-size 800 450 \
               --icon-size 100 \
-              --app-drop-link 600 185 \
+              --icon "NipaPlay.app" 200 185 \
+              --icon "Applications" 600 185 \
+              --background "${temp_dir}/.background/background.png" \
               --no-internet-enable \
               --skip-jenkins \
               "${dmg_name}" \
-              "build/macos/Build/Products/Release/NipaPlay.app"
+              "${temp_dir}" || {
+                # Final fallback: simple DMG without background
+                echo "Fallback with layout failed, creating simple DMG..."
+                rm -f "${dmg_name}"
+                create-dmg \
+                  --volname "NipaPlay-${version}" \
+                  --window-size 800 450 \
+                  --icon-size 100 \
+                  --app-drop-link 600 185 \
+                  --no-internet-enable \
+                  --skip-jenkins \
+                  "${dmg_name}" \
+                  "build/macos/Build/Products/Release/NipaPlay.app"
+              }
+            
+            # Clean up
+            rm -rf "${temp_dir}"
           }
           
           echo "Listing final DMG:"
           ls -la *.dmg
       
-      # Build Windows .zip
+      # Build Windows .zip and installer
       - name: Build Windows
-        if: matrix.target == 'Windows'
+        if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
         shell: pwsh
         run: |
-          flutter build windows --release
+          if ("${{ matrix.arch }}" -eq "arm64") {
+            flutter build windows --release --target-platform windows-arm64
+          } else {
+            flutter build windows --release
+          }
           $arch = "${{ matrix.arch }}"
           $version = "${{ steps.get_version.outputs.version }}"
           if ($arch -eq "arm64") {
@@ -259,7 +308,122 @@ jobs:
           New-Item -Path $DestDir -ItemType Directory -Force
           Copy-Item -Path "$SrcDir\\*" -Destination $DestDir -Recurse -Force
           Copy-Item -Path "windows\\*.dll" -Destination $DestDir -Force
-          Compress-Archive -Path $DestDir -DestinationPath "build\\windows\\NipaPlay_${version}_Windows_x64.zip" -Force
+          Compress-Archive -Path $DestDir -DestinationPath "build\\windows\\NipaPlay_${version}_Windows_${arch}.zip" -Force
+
+      # Prepare installer assets for Windows
+      - name: Prepare Windows installer assets
+        if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
+        shell: pwsh
+        run: |
+          # Install ImageMagick for image processing
+          choco install imagemagick -y
+          
+          $arch = "${{ matrix.arch }}"
+          $version = "${{ steps.get_version.outputs.version }}"
+          if ($arch -eq "arm64") {
+            $BuildDir = "build\\windows\\arm64\\runner\\Release"
+          } else {
+            $BuildDir = "build\\windows\\x64\\runner\\Release"
+          }
+          
+          # Create installer assets directory
+          New-Item -Path "installer_assets" -ItemType Directory -Force
+          
+          # Convert icon.png to ICO format for installer
+          magick "icon.png" -resize 256x256 "installer_assets\\nipaplay_icon.ico"
+          
+          # Process main_image.png for installer banner (crop right-bottom to focus on logo at top-left)
+          # Create banner image 164x314 pixels (Inno Setup standard)
+          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 600x400+0+0 -resize 164x314! "installer_assets\\installer_small.bmp"
+          
+          # Create large banner image 497x373 pixels  
+          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 800x600+0+0 -resize 497x373! "installer_assets\\installer_banner.bmp"
+          
+          # Verify all required images were created
+          if (!(Test-Path "installer_assets\\nipaplay_icon.ico")) { throw "Failed to create icon file" }
+          if (!(Test-Path "installer_assets\\installer_small.bmp")) { throw "Failed to create small banner" }
+          if (!(Test-Path "installer_assets\\installer_banner.bmp")) { throw "Failed to create large banner" }
+          
+          # Copy installer script and assets to build directory
+          Copy-Item -Path "windows\\nipaplay_installer.iss" -Destination "$BuildDir\\"
+          Copy-Item -Path "installer_assets\\*" -Destination "$BuildDir\\" -Recurse -Force
+          Copy-Item -Path "LICENSE" -Destination "$BuildDir\\" -ErrorAction SilentlyContinue
+
+      # Create Windows installer
+      - name: Create Windows installer
+        if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
+        shell: pwsh
+        run: |
+          # Install Inno Setup
+          choco install innosetup -y
+          
+          $arch = "${{ matrix.arch }}"
+          $version = "${{ steps.get_version.outputs.version }}"
+          if ($arch -eq "arm64") {
+            $BuildDir = "build\\windows\\arm64\\runner\\Release"
+          } else {
+            $BuildDir = "build\\windows\\x64\\runner\\Release"
+          }
+          
+          # Update Inno Setup script with architecture info
+          $issContent = Get-Content "$BuildDir\\nipaplay_installer.iss" -Raw
+          $issContent = $issContent -replace 'OutputBaseFilename=NipaPlay_.*_Windows_Setup', "OutputBaseFilename=NipaPlay_${version}_Windows_${arch}_Setup"
+          
+          # Set architecture restrictions
+          if ($arch -eq "arm64") {
+            $issContent = $issContent -replace 'ArchitecturesInstallIn64BitMode=x64 arm64', 'ArchitecturesInstallIn64BitMode=arm64'
+            $issContent = $issContent -replace 'ArchitecturesAllowed=x64 arm64', 'ArchitecturesAllowed=arm64'
+          } else {
+            $issContent = $issContent -replace 'ArchitecturesInstallIn64BitMode=x64 arm64', 'ArchitecturesInstallIn64BitMode=x64'
+            $issContent = $issContent -replace 'ArchitecturesAllowed=x64 arm64', 'ArchitecturesAllowed=x64 compatible'
+          }
+          
+          Set-Content -Path "$BuildDir\\nipaplay_installer.iss" -Value $issContent -Encoding UTF8
+          
+          # Compile installer
+          Push-Location $BuildDir
+          $isccPath = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe"
+          if (!(Test-Path $isccPath)) {
+            throw "Inno Setup compiler not found at $isccPath"
+          }
+          
+          Write-Host "Compiling installer with Inno Setup..."
+          $result = & $isccPath "nipaplay_installer.iss"
+          $exitCode = $LASTEXITCODE
+          Pop-Location
+          
+          if ($exitCode -ne 0) {
+            throw "Inno Setup compilation failed with exit code $exitCode"
+          }
+          
+          # Verify installer was created
+          $installerPath = "$BuildDir\\NipaPlay_${version}_Windows_${arch}_Setup.exe"
+          if (!(Test-Path $installerPath)) {
+            throw "Installer file was not created: $installerPath"
+          }
+          
+          # Move installer to final location
+          Write-Host "Moving installer to build directory..."
+          Move-Item $installerPath "build\\windows\\" -Force
+          
+          # Verify final installer exists
+          $finalInstallerPath = "build\\windows\\NipaPlay_${version}_Windows_${arch}_Setup.exe"
+          if (!(Test-Path $finalInstallerPath)) {
+            throw "Failed to move installer to final location"
+          }
+          
+          Write-Host "Installer created successfully: $finalInstallerPath"
+
+      # List Windows build artifacts  
+      - name: List Windows build artifacts
+        if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
+        shell: pwsh
+        run: |
+          Write-Host "=== Windows Build Artifacts ==="
+          Get-ChildItem "build\\windows\\" -File | ForEach-Object {
+            $sizeKB = [math]::Round($_.Length / 1KB, 2)
+            Write-Host "$($_.Name) - ${sizeKB} KB"
+          }
       
       # Build Linux .deb
       - name: Install Linux build dependencies
@@ -701,9 +865,9 @@ jobs:
             - 提交: ${{ github.sha }}
             - 分支: ${{ github.ref_name }}
           allowUpdates: true
-          # Updated artifacts list to include AppImage, tar.gz and RPM for Linux
-          # Separate Linux patterns instead of using brace expansion
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm
+          # Updated artifacts list to include AppImage, tar.gz and RPM for Linux, plus Windows installers
+          # Separate patterns for different artifact types
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-arm64/*.zip,/tmp/artifacts/release-Windows-arm64/*.exe,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm
           artifactErrorsFailBuild: true
           replacesArtifacts: true
 
