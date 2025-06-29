@@ -82,25 +82,8 @@ VIAddVersionKey "LegalCopyright" "© MCDFSteve"
 !define MUI_FINISHPAGE_TITLE_3LINES
 !define MUI_FINISHPAGE_TEXT_LARGE
 
-; 自定义页面标题和图标
-Function .onGUIInit
-  ; 优化窗口显示位置（居中显示）
-  System::Call "user32::GetSystemMetrics(i 0) i .r0" ; 获取屏幕宽度
-  System::Call "user32::GetSystemMetrics(i 1) i .r1" ; 获取屏幕高度
-  IntOp $0 $0 - 500  ; 窗口宽度约500
-  IntOp $0 $0 / 2    ; 居中计算
-  IntOp $1 $1 - 400  ; 窗口高度约400
-  IntOp $1 $1 / 2    ; 居中计算
-  
-  ; 设置窗口位置居中
-  System::Call "user32::SetWindowPos(i $HWNDPARENT, i 0, i r0, i r1, i 0, i 0, i 0x0001)"
-FunctionEnd
-
-; 页面显示效果优化
-Function WelcomePagePre
-  ; 设置窗口为固定大小以确保海报完整显示
-  System::Call "user32::SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 512, i 400, i 0x0002)"
-FunctionEnd
+; 自定义GUI初始化函数
+!define MUI_CUSTOMFUNCTION_GUIINIT myGUIInit
 
 ; 安装器页面配置 (每个页面都会显示配图)
 ; 欢迎页面 - 显示大海报 (installer_banner.bmp)
@@ -137,6 +120,26 @@ FunctionEnd
 ; 语言设置 (必须在页面定义之后)
 !insertmacro MUI_LANGUAGE "SimpChinese"
 !insertmacro MUI_LANGUAGE "English"
+
+; 自定义GUI初始化函数实现
+Function myGUIInit
+  ; 优化窗口显示位置（居中显示）
+  System::Call "user32::GetSystemMetrics(i 0) i .r0" ; 获取屏幕宽度
+  System::Call "user32::GetSystemMetrics(i 1) i .r1" ; 获取屏幕高度
+  IntOp $0 $0 - 500  ; 窗口宽度约500
+  IntOp $0 $0 / 2    ; 居中计算
+  IntOp $1 $1 - 400  ; 窗口高度约400
+  IntOp $1 $1 / 2    ; 居中计算
+  
+  ; 设置窗口位置居中
+  System::Call "user32::SetWindowPos(i $HWNDPARENT, i 0, i r0, i r1, i 0, i 0, i 0x0001)"
+FunctionEnd
+
+; 欢迎页面预处理函数
+Function WelcomePagePre
+  ; 设置窗口为固定大小以确保海报完整显示
+  System::Call "user32::SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 512, i 400, i 0x0002)"
+FunctionEnd
 
 ; 安装器初始化函数
 Function .onInit
