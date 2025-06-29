@@ -3,7 +3,6 @@
 
 ; 包含必要的头文件
 !include "MUI2.nsh"
-!include "FileAssociation.nsh"
 !include "x64.nsh"
 
 ; 安装器基本信息
@@ -198,11 +197,11 @@ Section "NipaPlay 主程序" SecMain
   
 SectionEnd
 
-Section "桌面快捷方式" SecDesktop
+Section "创建桌面快捷方式" SecDesktop
   CreateShortcut "$DESKTOP\NipaPlay.lnk" "$INSTDIR\NipaPlay.exe"
 SectionEnd
 
-Section "开始菜单快捷方式" SecStartMenu
+Section "创建开始菜单快捷方式" SecStartMenu
   CreateDirectory "$SMPROGRAMS\NipaPlay"
   CreateShortcut "$SMPROGRAMS\NipaPlay\NipaPlay.lnk" "$INSTDIR\NipaPlay.exe"
   CreateShortcut "$SMPROGRAMS\NipaPlay\卸载 NipaPlay.lnk" "$INSTDIR\Uninstall.exe"
@@ -210,19 +209,23 @@ SectionEnd
 
 Section "文件关联" SecFileAssoc
   ; 注册视频文件关联
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".mp4" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".mkv" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".avi" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".mov" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".wmv" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".flv" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".webm" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".m4v" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".3gp" "NipaPlay.VideoFile"
-  ${RegisterExtension} "$INSTDIR\NipaPlay.exe" ".rmvb" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.mp4" "" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.mkv" "" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.avi" "" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.flv" "" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.mov" "" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.wmv" "" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.m4v" "" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.ts" "" "NipaPlay.VideoFile"
+  WriteRegStr HKCU "Software\Classes\.webm" "" "NipaPlay.VideoFile"
   
-  ; 刷新文件关联
-  System::Call 'shell32.dll::SHChangeNotify(i, i, i, i) v (0x08000000, 0, 0, 0)'
+  ; 注册文件类型
+  WriteRegStr HKCU "Software\Classes\NipaPlay.VideoFile" "" "NipaPlay 视频文件"
+  WriteRegStr HKCU "Software\Classes\NipaPlay.VideoFile\DefaultIcon" "" "$INSTDIR\NipaPlay.exe,0"
+  WriteRegStr HKCU "Software\Classes\NipaPlay.VideoFile\shell\open\command" "" '"$INSTDIR\NipaPlay.exe" "%1"'
+  
+  ; 刷新系统图标缓存
+  System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
 SectionEnd
 
 ; 组件描述
@@ -245,8 +248,7 @@ LangString DESC_SecFileAssoc ${LANG_ENGLISH} "Associate video file formats with 
 
 ; 卸载部分
 Section "Uninstall"
-  
-  ; 删除文件
+  ; 删除程序文件
   Delete "$INSTDIR\NipaPlay.exe"
   Delete "$INSTDIR\*.dll"
   RMDir /r "$INSTDIR\data"
@@ -260,22 +262,21 @@ Section "Uninstall"
   RMDir "$SMPROGRAMS\NipaPlay"
   
   ; 删除文件关联
-  ${UnRegisterExtension} ".mp4" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".mkv" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".avi" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".mov" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".wmv" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".flv" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".webm" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".m4v" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".3gp" "NipaPlay.VideoFile"
-  ${UnRegisterExtension} ".rmvb" "NipaPlay.VideoFile"
+  DeleteRegKey HKCU "Software\Classes\.mp4"
+  DeleteRegKey HKCU "Software\Classes\.mkv"
+  DeleteRegKey HKCU "Software\Classes\.avi"
+  DeleteRegKey HKCU "Software\Classes\.flv"
+  DeleteRegKey HKCU "Software\Classes\.mov"
+  DeleteRegKey HKCU "Software\Classes\.wmv"
+  DeleteRegKey HKCU "Software\Classes\.m4v"
+  DeleteRegKey HKCU "Software\Classes\.ts"
+  DeleteRegKey HKCU "Software\Classes\.webm"
+  DeleteRegKey HKCU "Software\Classes\NipaPlay.VideoFile"
   
   ; 删除注册表项
   DeleteRegKey HKCU "Software\NipaPlay"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay"
   
-  ; 刷新文件关联
-  System::Call 'shell32.dll::SHChangeNotify(i, i, i, i) v (0x08000000, 0, 0, 0)'
-  
+  ; 刷新系统图标缓存
+  System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
 SectionEnd 
