@@ -316,35 +316,21 @@ jobs:
           
           # Process main_image.png for installer banner with enhanced quality
           # Create small header banner image 164x314 pixels (displayed at top of installer pages)
-          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 600x400+0+0 +repage -resize 164x314! -sharpen 0x1 -modulate 105,110,100 "installer_assets\\installer_small.bmp"
+          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 600x400+0+0 +repage -resize 164x314! -depth 24 -define bmp:format=bmp3 "installer_assets\\installer_small.bmp"
           
           # Create large welcome/finish banner image 497x373 pixels with better quality  
-          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 800x600+0+0 +repage -resize 497x373! -sharpen 0x0.8 -modulate 105,110,100 -enhance "installer_assets\\installer_banner.bmp"
+          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 800x600+0+0 +repage -resize 497x373! -depth 24 -define bmp:format=bmp3 "installer_assets\\installer_banner.bmp"
           
           # Create uninstaller banner (same as installer banner but can be customized)
-          Copy-Item "installer_assets\\installer_banner.bmp" "installer_assets\\uninstaller_banner.bmp"
+          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 800x600+0+0 +repage -resize 497x373! -depth 24 -define bmp:format=bmp3 "installer_assets\\uninstaller_banner.bmp"
           
           # Create a custom background image for license page (optional)
-          magick "assets\\images\\main_image.png" -gravity Center -crop 400x300+0+0 +repage -resize 400x300! -blur 0x2 -modulate 90,50,100 "installer_assets\\license_bg.bmp"
+          magick "assets\\images\\main_image.png" -gravity Center -crop 400x300+0+0 +repage -resize 400x300! -depth 24 -define bmp:format=bmp3 "installer_assets\\license_bg.bmp"
           
           # Create alternative header images for different sections (same as main but can be customized)
           Copy-Item "installer_assets\\installer_small.bmp" "installer_assets\\components_header.bmp"
           Copy-Item "installer_assets\\installer_small.bmp" "installer_assets\\directory_header.bmp"
           Copy-Item "installer_assets\\installer_small.bmp" "installer_assets\\instfiles_header.bmp"
-          
-          # Optimize all BMP files for better display quality
-          Write-Host "Optimizing BMP files for installer display..."
-          Get-ChildItem "installer_assets\\*.bmp" | ForEach-Object {
-            $file = $_.FullName
-            magick "$file" -strip -quality 95 -compress None "$file"
-          }
-          
-          Write-Host "Generated installer images:"
-          Write-Host "- Icon: nipaplay_icon.ico (256x256)"
-          Write-Host "- Small banner: installer_small.bmp (164x314) - Header area"  
-          Write-Host "- Large banner: installer_banner.bmp (497x373) - Welcome/Finish pages"
-          Write-Host "- Uninstaller banner: uninstaller_banner.bmp (497x373) - Uninstaller pages"
-          Write-Host "- License background: license_bg.bmp (400x300) - License page"
           
           # Verify all required images were created
           if (!(Test-Path "installer_assets\\nipaplay_icon.ico")) { throw "Failed to create icon file" }
