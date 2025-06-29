@@ -764,6 +764,42 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 准备播放器
       player.prepare();
 
+      // 针对Jellyfin流媒体，给予更长的初始化时间
+      final bool isJellyfinStreaming = videoPath.contains('jellyfin://') || videoPath.contains('emby://');
+      final int initializationTimeout = isJellyfinStreaming ? 30000 : 15000; // Jellyfin: 30秒, 其他: 15秒
+      
+      debugPrint('VideoPlayerState: 播放器初始化超时设置: ${initializationTimeout}ms (${isJellyfinStreaming ? 'Jellyfin流媒体' : '本地文件'})');
+
+      // 等待播放器准备完成，设置超时
+      int waitCount = 0;
+      const int maxWaitCount = 100; // 最大等待次数
+      const int waitInterval = 100; // 每次等待100毫秒
+      
+      while (waitCount < maxWaitCount) {
+        await Future.delayed(Duration(milliseconds: waitInterval));
+        waitCount++;
+        
+        // 检查播放器状态
+        if (player.state == PlaybackState.playing || 
+            player.state == PlaybackState.paused ||
+            (player.mediaInfo.duration > 0 && player.textureId.value != null)) {
+          debugPrint('VideoPlayerState: 播放器准备完成，等待时间: ${waitCount * waitInterval}ms');
+          break;
+        }
+        
+        // 检查是否超时
+        if (waitCount * waitInterval >= initializationTimeout) {
+          debugPrint('VideoPlayerState: 播放器初始化超时 (${initializationTimeout}ms)');
+          if (isJellyfinStreaming) {
+            debugPrint('VideoPlayerState: Jellyfin流媒体初始化超时，但继续尝试播放');
+            // 对于Jellyfin流媒体，即使超时也继续尝试
+            break;
+          } else {
+            throw Exception('播放器初始化超时');
+          }
+        }
+      }
+
       //debugPrint('5. 获取视频纹理...');
       // 获取视频纹理
       final textureId = await player.updateTexture();
@@ -1550,9 +1586,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             final bool hasValidDurationBefore = _duration.inMilliseconds > 0;
             final bool isTemporaryInvalid = hasValidDurationBefore && playerPosition == 0 && playerDuration == 0;
             
+            // 检查是否是Jellyfin流媒体正在初始化
+            final bool isJellyfinInitializing = _currentVideoPath != null && 
+                (_currentVideoPath!.contains('jellyfin://') || _currentVideoPath!.contains('emby://')) &&
+                _status == PlayerStatus.loading;
+            
             if (isTemporaryInvalid) {
               // 临时的无效状态，跳过本次更新，不报错
               debugPrint('VideoPlayerState: 检测到临时的无效播放器数据 (position: $playerPosition, duration: $playerDuration)，可能是字幕操作等导致，跳过本次更新');
+              return;
+            }
+            
+            if (isJellyfinInitializing) {
+              // Jellyfin流媒体正在初始化，跳过错误检测
+              debugPrint('VideoPlayerState: Jellyfin流媒体正在初始化中，跳过无效数据检测 (position: $playerPosition, duration: $playerDuration)');
               return;
             }
             
