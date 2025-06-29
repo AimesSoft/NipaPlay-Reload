@@ -196,11 +196,64 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void setAnimeTitle(String? title) {
     _animeTitle = title;
     notifyListeners();
+    
+    // 立即更新历史记录，确保历史记录卡片显示正确的动画名称
+    _updateHistoryWithNewTitles();
   }
   
   void setEpisodeTitle(String? title) {
     _episodeTitle = title;
     notifyListeners();
+    
+    // 立即更新历史记录，确保历史记录卡片显示正确的动画名称
+    _updateHistoryWithNewTitles();
+  }
+  
+  /// 使用新的标题更新历史记录
+  Future<void> _updateHistoryWithNewTitles() async {
+    if (_currentVideoPath == null) return;
+    
+    // 只有当两个标题都有值时才更新
+    if (_animeTitle == null || _animeTitle!.isEmpty) return;
+    
+    try {
+      debugPrint('[VideoPlayerState] 使用新标题更新历史记录: $_animeTitle - $_episodeTitle');
+      
+      // 获取现有历史记录
+      final existingHistory = await WatchHistoryDatabase.instance.getHistoryByFilePath(_currentVideoPath!);
+      if (existingHistory == null) {
+        debugPrint('[VideoPlayerState] 未找到现有历史记录，跳过更新');
+        return;
+      }
+      
+      // 创建更新后的历史记录
+      final updatedHistory = WatchHistoryItem(
+        filePath: existingHistory.filePath,
+        animeName: _animeTitle!,
+        episodeTitle: _episodeTitle ?? existingHistory.episodeTitle,
+        episodeId: _episodeId ?? existingHistory.episodeId,
+        animeId: _animeId ?? existingHistory.animeId,
+        watchProgress: existingHistory.watchProgress,
+        lastPosition: existingHistory.lastPosition,
+        duration: existingHistory.duration,
+        lastWatchTime: DateTime.now(),
+        thumbnailPath: existingHistory.thumbnailPath,
+        isFromScan: existingHistory.isFromScan,
+      );
+      
+      // 保存更新后的记录
+      await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(updatedHistory);
+      
+      debugPrint('[VideoPlayerState] 成功更新历史记录: ${updatedHistory.animeName} - ${updatedHistory.episodeTitle}');
+      
+      // 通知UI刷新历史记录
+      if (_context != null && _context!.mounted) {
+        _context!.read<WatchHistoryProvider>().refresh();
+      }
+      
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 更新历史记录时出错: $e');
+    }
   }
   
   // 字幕管理器相关的getter
@@ -606,13 +659,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 检查是否为网络URL (HTTP或HTTPS)
     bool isNetworkUrl = videoPath.startsWith('http://') || videoPath.startsWith('https://');
     
-    // 检查是否是流媒体（jellyfin://协议、emby://协议或有actualPlayUrl参数且为HTTP URL）
-    bool isJellyfinStream = videoPath.startsWith('jellyfin://') || 
-                           (actualPlayUrl != null && 
-                           (actualPlayUrl.startsWith('http://') || actualPlayUrl.startsWith('https://')));
-    bool isEmbyStream = videoPath.startsWith('emby://') || 
-                       (actualPlayUrl != null && 
-                       (actualPlayUrl.startsWith('http://') || actualPlayUrl.startsWith('https://')));
+    // 检查是否是流媒体（jellyfin://协议、emby://协议）
+    bool isJellyfinStream = videoPath.startsWith('jellyfin://');
+    bool isEmbyStream = videoPath.startsWith('emby://');
     
     // 对于本地文件才检查存在性，网络URL和流媒体默认认为"存在"
     bool fileExists = isNetworkUrl || isJellyfinStream || isEmbyStream;
@@ -626,9 +675,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('检测到Jellyfin流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
       _statusMessages.add('正在准备Jellyfin流媒体播放...');
       notifyListeners();
+    } else if (isEmbyStream) {
+      debugPrint('检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
+      _statusMessages.add('正在准备Emby流媒体播放...');
+      notifyListeners();
     }
     
-    if (!isNetworkUrl && !isJellyfinStream) {
+    if (!isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
       // 使用FilePickerService处理文件路径问题
       if (Platform.isIOS) {
         final filePickerService = FilePickerService();
@@ -668,7 +721,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         fileExists = videoFile.existsSync();
       }
     } else {
-      debugPrint('检测到网络URL或Jellyfin流媒体: $videoPath');
+      debugPrint('检测到网络URL或流媒体: $videoPath');
     }
     
     if (!fileExists) {
@@ -3426,6 +3479,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           // 使用已有的episodeId和animeId直接加载弹幕，跳过文件哈希计算
           _setStatus(PlayerStatus.recognizing, message: '正在为Jellyfin流媒体加载弹幕...');
           loadDanmaku(historyItem.episodeId.toString(), historyItem.animeId.toString());
+          
+          // 更新当前实例的弹幕ID
+          _episodeId = historyItem.episodeId;
+          _animeId = historyItem.animeId;
+          
+          // 如果历史记录中有正确的动画名称和剧集标题，立即更新当前实例
+          if (historyItem.animeName.isNotEmpty && historyItem.animeName != 'Unknown') {
+            _animeTitle = historyItem.animeName;
+            _episodeTitle = historyItem.episodeTitle;
+            debugPrint('[流媒体弹幕] 从历史记录更新标题: $_animeTitle - $_episodeTitle');
+            
+            // 立即更新历史记录，确保UI显示正确的信息
+            await _updateHistoryWithNewTitles();
+          }
+          
           return true; // 表示已处理
         } catch (e) {
           debugPrint('Jellyfin流媒体弹幕加载失败: $e');

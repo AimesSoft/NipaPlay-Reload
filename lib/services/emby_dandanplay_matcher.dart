@@ -7,6 +7,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 
 /// 负责将Emby媒体与DandanPlay的内容匹配，以获取弹幕和元数据
 class EmbyDandanplayMatcher {
@@ -204,6 +205,21 @@ class EmbyDandanplayMatcher {
           videoHash: videoInfo['hash'], // 保存视频哈希值，用于后续匹配弹幕
         );
         debugPrint('创建了增强的历史记录项: ${updatedItem.animeName} - ${updatedItem.episodeTitle}');
+        
+        // 保存映射关系到数据库
+        try {
+          await _saveMappingToDatabase(
+            episode: episode,
+            animeId: animeId,
+            animeTitle: dummyVideoInfo['animeTitle'] ?? historyItem.animeName,
+            episodeId: episodeId,
+            episodeTitle: dummyVideoInfo['episodeTitle'] ?? historyItem.episodeTitle,
+          );
+        } catch (e) {
+          debugPrint('保存映射关系到数据库时出错: $e');
+          // 不影响主流程，继续返回匹配结果
+        }
+        
         return updatedItem;
       } else {
         debugPrint('没有匹配到DandanPlay内容，将使用原始历史记录项');
@@ -431,6 +447,20 @@ class EmbyDandanplayMatcher {
         debugPrint('严重错误: 匹配过程结束但episodeId仍为空，弹幕功能可能无法正常工作');
       } else {
         debugPrint('匹配成功: animeId=${selectedMatch['animeId']}, episodeId=$episodeId, 标题=${selectedMatch['animeTitle']} - $episodeTitle');
+        
+        // 保存映射关系到数据库
+        try {
+          await _saveMappingToDatabase(
+            episode: episode,
+            animeId: selectedMatch['animeId'],
+            animeTitle: selectedMatch['animeTitle'],
+            episodeId: episodeId,
+            episodeTitle: episodeTitle,
+          );
+        } catch (e) {
+          debugPrint('保存映射关系到数据库时出错: $e');
+          // 不影响主流程，继续返回匹配结果
+        }
       }
       
       return {
@@ -844,6 +874,55 @@ class EmbyDandanplayMatcher {
       };
     }
     */
+  }
+
+  /// 保存映射关系到数据库
+  Future<void> _saveMappingToDatabase({
+    required EmbyEpisodeInfo episode,
+    required int animeId,
+    required String animeTitle,
+    required dynamic episodeId,
+    required String episodeTitle,
+  }) async {
+    try {
+      debugPrint('[Emby映射] 开始保存映射关系到数据库');
+      
+      // 获取Emby系列和季节信息
+      final seriesId = episode.seriesId ?? '';
+      final seasonId = episode.seasonId;
+      final indexNumber = episode.indexNumber ?? 0;
+      
+      if (seriesId.isEmpty) {
+        debugPrint('[Emby映射] 警告: 无法获取系列ID，跳过映射保存');
+        return;
+      }
+      
+      // 创建或更新动画级映射
+      final mappingId = await EmbyEpisodeMappingService.instance.createOrUpdateAnimeMapping(
+        embySeriesId: seriesId,
+        embySeriesName: episode.seriesName ?? '未知系列',
+        embySeasonId: seasonId,
+        dandanplayAnimeId: animeId,
+        dandanplayAnimeTitle: animeTitle,
+      );
+      
+      debugPrint('[Emby映射] 动画映射已保存，映射ID: $mappingId');
+      
+      // 记录剧集级映射
+      await EmbyEpisodeMappingService.instance.recordEpisodeMapping(
+        embyEpisodeId: episode.id,
+        embyIndexNumber: indexNumber,
+        dandanplayEpisodeId: int.tryParse(episodeId.toString()) ?? 0,
+        mappingId: mappingId,
+        confirmed: true, // 用户手动匹配的，标记为已确认
+      );
+      
+      debugPrint('[Emby映射] 剧集映射已保存: Emby集$indexNumber -> DandanPlay集$episodeId');
+      
+    } catch (e) {
+      debugPrint('[Emby映射] 保存映射关系到数据库时出错: $e');
+      rethrow;
+    }
   }
 }
 
