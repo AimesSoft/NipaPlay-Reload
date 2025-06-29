@@ -363,8 +363,8 @@ jobs:
         if: matrix.target == 'Windows'
         shell: pwsh
         run: |
-          # Install NSIS
-          choco install nsis -y
+          # Force reinstall NSIS to ensure clean state
+          choco install nsis --force --yes
           
           $arch = "x64"
           $version = "${{ steps.get_version.outputs.version }}"
@@ -380,7 +380,6 @@ jobs:
           } elseif ($versionParts.Length -eq 4) {
             $nsiVersion = $version
           } else {
-            # Fallback to default if version format is unexpected
             $nsiVersion = "1.0.0.0"
           }
           Write-Host "Using version: $version, NSIS version: $nsiVersion"
@@ -397,43 +396,64 @@ jobs:
           $utf8BOM = New-Object System.Text.UTF8Encoding $true
           [System.IO.File]::WriteAllText("$BuildDir\\nipaplay_installer.nsi", $nsiContent, $utf8BOM)
           
-          # Verify the NSIS script file was written correctly
-          Write-Host "Verifying NSIS script file..."
-          $verifyContent = Get-Content "$BuildDir\\nipaplay_installer.nsi" -Raw -Encoding UTF8
-          if ($verifyContent -match "VIProductVersion") {
-            Write-Host "NSIS script version information updated successfully"
-          } else {
-            Write-Host "Warning: NSIS script may not have been updated correctly"
-          }
+          # Download FileAssociation plugin for NSIS with multiple fallback URLs
+          $pluginUrls = @(
+            "https://nsis.sourceforge.io/mediawiki/images/7/7f/FileAssociation.nsh",
+            "https://raw.githubusercontent.com/NSIS-Dev/Documentation/master/Reference/FileAssociation.nsh",
+            "https://raw.githubusercontent.com/nsis-dev/nsis/master/Contrib/FileAssociation/FileAssociation.nsh"
+          )
           
-          # Show first few lines for debugging
-          Write-Host "First 10 lines of NSIS script:"
-          Get-Content "$BuildDir\\nipaplay_installer.nsi" -Head 10 -Encoding UTF8 | ForEach-Object { Write-Host $_ }
-          
-          # Download FileAssociation plugin for NSIS
-          $pluginUrl = "https://nsis.sourceforge.io/mediawiki/images/7/7f/FileAssociation.nsh"
           $pluginPath = "$BuildDir\\FileAssociation.nsh"
-          try {
-            Invoke-WebRequest -Uri $pluginUrl -OutFile $pluginPath -UseBasicParsing
-            Write-Host "Downloaded FileAssociation.nsh plugin"
-          } catch {
-            Write-Host "Warning: Could not download FileAssociation.nsh plugin, using fallback"
-            # Create a basic fallback version
-            $fallbackContent = "; Basic FileAssociation fallback`r`n"
-            $fallbackContent += "!define RegisterExtension `"!insertmacro RegisterExtension`"`r`n"
-            $fallbackContent += "!define UnRegisterExtension `"!insertmacro UnRegisterExtension`"`r`n`r`n"
-            $fallbackContent += "!macro RegisterExtension executable extension description`r`n"
-            $fallbackContent += "  WriteRegStr HKCR `"`${extension}`" `"`" `"`${description}`"`r`n"
-            $fallbackContent += "  WriteRegStr HKCR `"`${description}`" `"`" `"`${description}`"`r`n"
-            $fallbackContent += "  WriteRegStr HKCR `"`${description}\shell`" `"`" `"open`"`r`n"
-            $fallbackContent += "  WriteRegStr HKCR `"`${description}\shell\open\command`" `"`" '`"`${executable}`" `"%1`"'`r`n"
-            $fallbackContent += "!macroend`r`n`r`n"
-            $fallbackContent += "!macro UnRegisterExtension extension description`r`n"
-            $fallbackContent += "  DeleteRegKey HKCR `"`${extension}`"`r`n"
-            $fallbackContent += "  DeleteRegKey HKCR `"`${description}`"`r`n"
-            $fallbackContent += "!macroend"
-            Set-Content -Path $pluginPath -Value $fallbackContent -Encoding UTF8
+          $downloadSuccess = $false
+          
+          foreach ($url in $pluginUrls) {
+            try {
+              Write-Host "Attempting to download FileAssociation.nsh from $url"
+              Invoke-WebRequest -Uri $url -OutFile $pluginPath -UseBasicParsing -ErrorAction Stop
+              if (Test-Path $pluginPath) {
+                $content = Get-Content $pluginPath -Raw
+                if ($content -match "FileAssociation") {
+                  $downloadSuccess = $true
+                  Write-Host "Successfully downloaded FileAssociation.nsh from $url"
+                  break
+                }
+              }
+            } catch {
+              Write-Host "Failed to download from $url"
+              continue
+            }
           }
+          
+          if (-not $downloadSuccess) {
+            Write-Host "All download attempts failed, creating basic FileAssociation.nsh"
+            $lines = @()
+            $lines += "!ifndef FileAssociation_INCLUDED"
+            $lines += "!define FileAssociation_INCLUDED"
+            $lines += ""
+            $lines += "!macro RegisterExtension executable extension description"
+            $lines += "  WriteRegStr HKCR `".`${extension}`" `"`" `"`${description}`""
+            $lines += "  WriteRegStr HKCR `"`${description}`" `"`" `"`${description}`""
+            $lines += "  WriteRegStr HKCR `"`${description}\DefaultIcon`" `"`" `"`${executable},0`""
+            $lines += "  WriteRegStr HKCR `"`${description}\shell`" `"`" `"open`""
+            $lines += "  WriteRegStr HKCR `"`${description}\shell\open`" `"`" `"`""
+            $lines += "  WriteRegStr HKCR `"`${description}\shell\open\command`" `"`" '`"`${executable}`" `"%1`"'"
+            $lines += "!macroend"
+            $lines += ""
+            $lines += "!macro UnRegisterExtension extension description"
+            $lines += "  DeleteRegKey HKCR `".`${extension}`""
+            $lines += "  DeleteRegKey HKCR `"`${description}`""
+            $lines += "!macroend"
+            $lines += ""
+            $lines += "!endif # !FileAssociation_INCLUDED"
+            Set-Content -Path $pluginPath -Value ($lines -join "`r`n") -Encoding UTF8
+          }
+          
+          # Ensure NSIS can find the plugin
+          $nsisIncludeDir = "C:\\Program Files (x86)\\NSIS\\Include"
+          if (-not (Test-Path $nsisIncludeDir)) {
+            New-Item -ItemType Directory -Force -Path $nsisIncludeDir
+          }
+          Copy-Item $pluginPath $nsisIncludeDir -Force
           
           # Compile installer with NSIS
           Push-Location $BuildDir
@@ -451,23 +471,22 @@ jobs:
             throw "NSIS compilation failed with exit code $exitCode"
           }
           
-          # Verify installer was created
-          $installerPath = "$BuildDir\\NipaPlay_${version}_Windows_x64_Setup.exe"
+          # Move and verify installer
+          $installerName = "NipaPlay_${version}_Windows_x64_Setup.exe"
+          $installerPath = "$BuildDir\\$installerName"
+          $finalPath = "build\\windows\\$installerName"
+          
           if (!(Test-Path $installerPath)) {
             throw "Installer file was not created: $installerPath"
           }
           
-          # Move installer to final location
-          Write-Host "Moving installer to build directory..."
           Move-Item $installerPath "build\\windows\\" -Force
           
-          # Verify final installer exists
-          $finalInstallerPath = "build\\windows\\NipaPlay_${version}_Windows_x64_Setup.exe"
-          if (!(Test-Path $finalInstallerPath)) {
-            throw "Failed to move installer to final location"
+          if (!(Test-Path $finalPath)) {
+            throw "Failed to move installer to final location: $finalPath"
           }
           
-          Write-Host "NSIS installer created successfully: $finalInstallerPath"
+          Write-Host "NSIS installer created successfully at: $finalPath"
 
       # List Windows build artifacts  
       - name: List Windows build artifacts
@@ -684,7 +703,7 @@ jobs:
           echo '  echo "请安装: sudo apt install libmpv1 mpv (Ubuntu/Debian)"' >> "${RUN_SCRIPT_PATH}"
           echo '  echo "或者:   sudo dnf install mpv-libs mpv (Fedora)"' >> "${RUN_SCRIPT_PATH}"
           echo '  echo "或者:   sudo pacman -S mpv (Arch)"' >> "${RUN_SCRIPT_PATH}"
-          echo '  echo ""' >> "${RUN_SCRIPT_PATH}"
+          echo '  echo "' >> "${RUN_SCRIPT_PATH}"
           echo 'fi' >> "${RUN_SCRIPT_PATH}"
           echo '' >> "${RUN_SCRIPT_PATH}"
           echo '# Print library path for debugging' >> "${RUN_SCRIPT_PATH}"
