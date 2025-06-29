@@ -30,6 +30,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   bool _currentMediaHasNoInitiallyEmbeddedSubtitles = false;
   String _mediaPathForSubtitleStatusCheck = "";
 
+  // Jellyfin流媒体重试
+  int _jellyfinRetryCount = 0;
+  static const int _maxJellyfinRetries = 3;
+  Timer? _jellyfinRetryTimer;
+  String? _lastJellyfinMediaPath;
+
   final Map<PlayerMediaType, List<String>> _decoders = {
     PlayerMediaType.video: [],
     PlayerMediaType.audio: [],
@@ -154,6 +160,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
 
     _player.stream.error.listen((error) {
       debugPrint('MediaKit错误: $error');
+      _handleStreamingError(error);
     });
     
     _player.stream.duration.listen((duration) {
@@ -223,6 +230,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     final realVideoTracks = _filterRealTracks<VideoTrack>(tracks.video);
     final realAudioTracks = _filterRealTracks<AudioTrack>(tracks.audio);
     final realIncomingSubtitleTracks = _filterRealTracks<SubtitleTrack>(tracks.subtitle); 
+
+    // 针对Jellyfin流媒体的特殊处理
+    if (_currentMedia.contains('jellyfin://') || _currentMedia.contains('emby://')) {
+      _handleJellyfinStreamingTracks(tracks, realVideoTracks, realAudioTracks, realIncomingSubtitleTracks);
+      return;
+    }
 
     // Initial assessment for embedded subtitles when a new main media's tracks are first processed.
     if (_mediaPathForSubtitleStatusCheck == _currentMedia && _currentMedia.isNotEmpty) {
@@ -383,6 +396,108 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     final currentActualPlayerSubtitleId = _player.state.track.subtitle.id;
     debugPrint('MediaKitAdapter: _updateMediaInfo - Triggering sync with current actual player subtitle ID: $currentActualPlayerSubtitleId');
     _performSubtitleSyncLogic(currentActualPlayerSubtitleId);
+  }
+
+  /// 处理Jellyfin流媒体的轨道信息
+  void _handleJellyfinStreamingTracks(Tracks tracks, List<VideoTrack> realVideoTracks, List<AudioTrack> realAudioTracks, List<SubtitleTrack> realSubtitleTracks) {
+    debugPrint('MediaKitAdapter: 处理Jellyfin流媒体轨道信息');
+    
+    // 对于Jellyfin流媒体，即使轨道信息不完整，也要尝试创建基本的媒体信息
+    List<PlayerVideoStreamInfo>? videoStreams;
+    List<PlayerAudioStreamInfo>? audioStreams;
+    List<PlayerSubtitleStreamInfo>? subtitleStreams;
+    
+    // 如果真实轨道为空，尝试从原始轨道中提取信息
+    if (realVideoTracks.isEmpty && tracks.video.isNotEmpty) {
+      debugPrint('MediaKitAdapter: Jellyfin流媒体视频轨道信息不完整，尝试从原始轨道提取');
+      videoStreams = [
+        PlayerVideoStreamInfo(
+          codec: PlayerVideoCodecParams(
+            width: 1920, // 默认值
+            height: 1080, // 默认值
+            name: 'Jellyfin Video Stream',
+          ),
+          codecName: 'unknown',
+        )
+      ];
+    } else if (realVideoTracks.isNotEmpty) {
+      videoStreams = realVideoTracks.map((track) =>
+        PlayerVideoStreamInfo(
+          codec: PlayerVideoCodecParams(
+            width: 0,
+            height: 0,
+            name: track.title ?? track.language ?? 'Jellyfin Video',
+          ),
+          codecName: track.codec ?? 'Unknown',
+        )
+      ).toList();
+    }
+    
+    if (realAudioTracks.isEmpty && tracks.audio.isNotEmpty) {
+      debugPrint('MediaKitAdapter: Jellyfin流媒体音频轨道信息不完整，尝试从原始轨道提取');
+      audioStreams = [
+        PlayerAudioStreamInfo(
+          codec: PlayerAudioCodecParams(
+            name: 'Jellyfin Audio Stream',
+            channels: 2, // 默认立体声
+            sampleRate: 48000, // 默认采样率
+            bitRate: null,
+          ),
+          title: 'Jellyfin Audio',
+          language: 'unknown',
+          metadata: {
+            'id': 'auto',
+            'title': 'Jellyfin Audio',
+            'language': 'unknown',
+            'index': '0',
+          },
+          rawRepresentation: 'Audio: Jellyfin Audio Stream',
+        )
+      ];
+    } else if (realAudioTracks.isNotEmpty) {
+      audioStreams = [];
+      for (int i = 0; i < realAudioTracks.length; i++) {
+        final track = realAudioTracks[i];
+        final title = track.title ?? track.language ?? 'Audio Track ${i + 1}';
+        final language = track.language ?? '';
+        audioStreams.add(
+          PlayerAudioStreamInfo(
+            codec: PlayerAudioCodecParams(
+              name: title,
+              channels: 0,
+              sampleRate: 0,
+              bitRate: null,
+            ),
+            title: title,
+            language: language,
+            metadata: {
+              'id': track.id.toString(),
+              'title': title,
+              'language': language,
+              'index': i.toString(),
+            },
+            rawRepresentation: 'Audio: $title (ID: ${track.id})',
+          )
+        );
+      }
+    }
+    
+    // 对于Jellyfin流媒体，通常没有内嵌字幕，所以subtitleStreams保持为null
+    
+    final currentDuration = _mediaInfo.duration > 0 
+        ? _mediaInfo.duration 
+        : _player.state.duration.inMilliseconds;
+    
+    _mediaInfo = PlayerMediaInfo(
+      duration: currentDuration,
+      video: videoStreams,
+      audio: audioStreams,
+      subtitle: subtitleStreams,
+    );
+    
+    debugPrint('MediaKitAdapter: Jellyfin流媒体媒体信息更新完成 - 视频轨道: ${videoStreams?.length ?? 0}, 音频轨道: ${audioStreams?.length ?? 0}');
+    
+    _ensureDefaultTracksSelected();
   }
 
   // Made async to handle potential future from getProperty
@@ -812,6 +927,19 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   @override
   bool get supportsExternalSubtitles => true;
   
+  /// 检查是否是Jellyfin流媒体且正在初始化
+  bool get _isJellyfinInitializing {
+    if (!_currentMedia.contains('jellyfin://') && !_currentMedia.contains('emby://')) {
+      return false;
+    }
+    
+    final hasNoDuration = _mediaInfo.duration <= 0;
+    final hasNoPosition = _player.state.position.inMilliseconds <= 0;
+    final hasNoError = _mediaInfo.specificErrorMessage == null || _mediaInfo.specificErrorMessage!.isEmpty;
+    
+    return hasNoDuration && hasNoPosition && hasNoError;
+  }
+  
   @override
   Future<int?> updateTexture() async {
     if (_textureIdNotifier.value == null) {
@@ -881,6 +1009,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   void dispose() {
     _isDisposed = true;
     _trackSubscription?.cancel(); 
+    _jellyfinRetryTimer?.cancel(); 
     _player.dispose();
     _textureIdNotifier.dispose();
   }
@@ -1003,6 +1132,108 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
       }
     } catch (e) {
       debugPrint('MediaKitAdapter: 设置默认轨道选择策略失败: $e');
+    }
+  }
+
+  /// 处理流媒体特定错误
+  void _handleStreamingError(dynamic error) {
+    if (_currentMedia.contains('jellyfin://') || _currentMedia.contains('emby://')) {
+      debugPrint('MediaKitAdapter: 检测到流媒体错误，尝试特殊处理: $error');
+      
+      // 检查是否是网络连接问题
+      if (error.toString().contains('network') || 
+          error.toString().contains('connection') ||
+          error.toString().contains('timeout')) {
+        debugPrint('MediaKitAdapter: 流媒体网络连接错误，建议检查网络连接和服务器状态');
+        _mediaInfo = _mediaInfo.copyWith(
+          specificErrorMessage: '流媒体连接失败，请检查网络连接和服务器状态'
+        );
+        _attemptJellyfinRetry('网络连接错误');
+      }
+      // 检查是否是认证问题
+      else if (error.toString().contains('auth') || 
+               error.toString().contains('unauthorized') ||
+               error.toString().contains('401') ||
+               error.toString().contains('403')) {
+        debugPrint('MediaKitAdapter: 流媒体认证错误，请检查API密钥和权限');
+        _mediaInfo = _mediaInfo.copyWith(
+          specificErrorMessage: '流媒体认证失败，请检查API密钥和访问权限'
+        );
+        // 认证错误不重试，因为重试也不会成功
+      }
+      // 检查是否是格式不支持
+      else if (error.toString().contains('format') || 
+               error.toString().contains('codec') ||
+               error.toString().contains('unsupported')) {
+        debugPrint('MediaKitAdapter: 流媒体格式不支持，可能需要转码');
+        _mediaInfo = _mediaInfo.copyWith(
+          specificErrorMessage: '当前播放内核不支持此流媒体格式，请尝试在服务器端启用转码'
+        );
+        // 格式不支持不重试
+      }
+      // 其他流媒体错误
+      else {
+        debugPrint('MediaKitAdapter: 未知流媒体错误');
+        _mediaInfo = _mediaInfo.copyWith(
+          specificErrorMessage: '流媒体播放失败，请检查服务器配置和网络连接'
+        );
+        _attemptJellyfinRetry('未知错误');
+      }
+    }
+  }
+
+  /// 尝试Jellyfin流媒体重试
+  void _attemptJellyfinRetry(String errorType) {
+    if (_jellyfinRetryCount >= _maxJellyfinRetries) {
+      debugPrint('MediaKitAdapter: Jellyfin流媒体重试次数已达上限 ($_maxJellyfinRetries)，停止重试');
+      return;
+    }
+    
+    if (_lastJellyfinMediaPath != _currentMedia) {
+      // 新的媒体路径，重置重试计数
+      _jellyfinRetryCount = 0;
+      _lastJellyfinMediaPath = _currentMedia;
+    }
+    
+    _jellyfinRetryCount++;
+    final retryDelay = Duration(seconds: _jellyfinRetryCount * 2); // 递增延迟：2秒、4秒、6秒
+    
+    debugPrint('MediaKitAdapter: 准备重试Jellyfin流媒体播放 (第$_jellyfinRetryCount次，延迟${retryDelay.inSeconds}秒)');
+    
+    _jellyfinRetryTimer?.cancel();
+    _jellyfinRetryTimer = Timer(retryDelay, () {
+      if (!_isDisposed && _currentMedia == _lastJellyfinMediaPath) {
+        debugPrint('MediaKitAdapter: 开始重试Jellyfin流媒体播放');
+        _retryJellyfinPlayback();
+      }
+    });
+  }
+
+  /// 重试Jellyfin播放
+  void _retryJellyfinPlayback() {
+    if (_currentMedia.isEmpty) return;
+    
+    try {
+      debugPrint('MediaKitAdapter: 重试播放Jellyfin流媒体: $_currentMedia');
+      
+      // 停止当前播放
+      _player.stop();
+      
+      // 等待一小段时间
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!_isDisposed) {
+          // 重新打开媒体
+          final mediaOptions = <String, dynamic>{};
+          _properties.forEach((key, value) {
+            mediaOptions[key] = value;
+          });
+          
+          _player.open(Media(_currentMedia, extras: mediaOptions), play: false);
+          debugPrint('MediaKitAdapter: Jellyfin流媒体重试完成');
+        }
+      });
+    } catch (e) {
+      debugPrint('MediaKitAdapter: Jellyfin流媒体重试失败: $e');
     }
   }
 }

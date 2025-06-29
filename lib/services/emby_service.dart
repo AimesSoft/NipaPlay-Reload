@@ -392,16 +392,30 @@ class EmbyService {
   
   Future<EmbyEpisodeInfo?> getEpisodeDetails(String episodeId) async {
     try {
-      final response = await _makeAuthenticatedRequest('/emby/Items/$episodeId');
+      debugPrint('[EmbyService] 开始获取剧集详情: episodeId=$episodeId');
+      debugPrint('[EmbyService] 服务器URL: $_serverUrl');
+      debugPrint('[EmbyService] 用户ID: $_userId');
+      debugPrint('[EmbyService] 访问令牌: ${_accessToken != null ? "已设置" : "未设置"}');
+      
+      // 使用用户特定的API路径，与detail页面保持一致
+      final response = await _makeAuthenticatedRequest('/emby/Users/$_userId/Items/$episodeId');
+      
+      debugPrint('[EmbyService] API响应状态码: ${response.statusCode}');
+      debugPrint('[EmbyService] API响应内容长度: ${response.body.length}');
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        debugPrint('[EmbyService] 解析到的数据键: ${data.keys.toList()}');
         return EmbyEpisodeInfo.fromJson(data);
+      } else {
+        debugPrint('[EmbyService] ❌ API请求失败: HTTP ${response.statusCode}');
+        debugPrint('[EmbyService] 错误响应内容: ${response.body}');
       }
     } catch (e) {
-      print('Error getting episode details: $e');
+      debugPrint('[EmbyService] ❌ 获取剧集详情时出错: $e');
     }
     
+    debugPrint('[EmbyService] 返回null，无法获取剧集详情');
     return null;
   }
   
