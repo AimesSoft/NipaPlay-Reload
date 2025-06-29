@@ -1,4 +1,4 @@
-package com.example.nipaplay
+package com.aimessoft.nipaplay
 
 import android.content.Intent
 import android.net.Uri

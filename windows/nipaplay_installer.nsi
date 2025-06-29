@@ -59,29 +59,69 @@ VIAddVersionKey "LegalCopyright" "© MCDFSteve"
 ; 卸载确认页面
 !define MUI_UNCONFIRMPAGE_TEXT_TOP "您即将从系统中卸载 NipaPlay。"
 
-; 界面背景图片
+; 界面背景图片和视觉配置
 !define MUI_WELCOMEFINISHPAGE_BITMAP "installer_banner.bmp"
-!define MUI_UNWELCOMEFINISHPAGE_BITMAP "installer_banner.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "uninstaller_banner.bmp"
 !define MUI_HEADERIMAGE
 !define MUI_HEADERIMAGE_BITMAP "installer_small.bmp"
 !define MUI_HEADERIMAGE_RIGHT
+
+; 许可页面配置
+!define MUI_LICENSEPAGE_BGCOLOR FFFFFF
+
+; 界面颜色和外观优化  
+!define MUI_BGCOLOR FFFFFF
+!define MUI_TEXTCOLOR 000000
+!define MUI_INSTFILESPAGE_COLORS "FFFFFF 000000"
+
+; 欢迎页面文字位置调整 (为了配合海报)
+!define MUI_WELCOMEPAGE_TITLE_3LINES
+!define MUI_WELCOMEPAGE_TEXT_LARGE
+
+; 完成页面文字调整
+!define MUI_FINISHPAGE_TITLE_3LINES
+!define MUI_FINISHPAGE_TEXT_LARGE
+
+; 自定义页面标题和图标
+!define MUI_CUSTOMFUNCTION_GUIINIT .onGUIInit
+
+; 页面显示效果优化
+!define MUI_PAGE_CUSTOMFUNCTION_PRE WelcomePagePre
 
 ; 语言设置
 !insertmacro MUI_LANGUAGE "SimpChinese"
 !insertmacro MUI_LANGUAGE "English"
 
-; 安装器页面
+; 安装器页面配置 (每个页面都会显示配图)
+; 欢迎页面 - 显示大海报 (installer_banner.bmp)
 !insertmacro MUI_PAGE_WELCOME
+
+; 许可协议页面 - 显示小横幅 (installer_small.bmp)
 !insertmacro MUI_PAGE_LICENSE "LICENSE"
+
+; 组件选择页面 - 显示小横幅 (installer_small.bmp)
 !insertmacro MUI_PAGE_COMPONENTS
+
+; 安装目录页面 - 显示小横幅 (installer_small.bmp)
 !insertmacro MUI_PAGE_DIRECTORY
+
+; 安装进度页面 - 显示小横幅 (installer_small.bmp)
 !insertmacro MUI_PAGE_INSTFILES
+
+; 完成页面 - 显示大海报 (installer_banner.bmp)
 !insertmacro MUI_PAGE_FINISH
 
-; 卸载器页面
+; 卸载器页面配置 (每个页面都会显示配图)
+; 卸载欢迎页面 - 显示卸载海报 (uninstaller_banner.bmp)
 !insertmacro MUI_UNPAGE_WELCOME
+
+; 卸载确认页面 - 显示小横幅 (installer_small.bmp)
 !insertmacro MUI_UNPAGE_CONFIRM
+
+; 卸载进度页面 - 显示小横幅 (installer_small.bmp)
 !insertmacro MUI_UNPAGE_INSTFILES
+
+; 卸载完成页面 - 显示卸载海报 (uninstaller_banner.bmp)
 !insertmacro MUI_UNPAGE_FINISH
 
 ; 安装器初始化函数
@@ -115,6 +155,26 @@ Function .onInitARM64
   
   ; 设置默认语言为中文
   !insertmacro MUI_LANGDLL_DISPLAY
+FunctionEnd
+
+; GUI初始化函数 - 自定义界面外观
+Function .onGUIInit
+  ; 优化窗口显示位置（居中显示）
+  System::Call "user32::GetSystemMetrics(i 0) i .r0" ; 获取屏幕宽度
+  System::Call "user32::GetSystemMetrics(i 1) i .r1" ; 获取屏幕高度
+  IntOp $0 $0 - 500  ; 窗口宽度约500
+  IntOp $0 $0 / 2    ; 居中计算
+  IntOp $1 $1 - 400  ; 窗口高度约400
+  IntOp $1 $1 / 2    ; 居中计算
+  
+  ; 设置窗口位置居中
+  System::Call "user32::SetWindowPos(i $HWNDPARENT, i 0, i r0, i r1, i 0, i 0, i 0x0001)"
+FunctionEnd
+
+; 欢迎页面预处理函数 - 优化海报显示效果
+Function WelcomePagePre
+  ; 设置窗口为固定大小以确保海报完整显示
+  System::Call "user32::SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 512, i 400, i 0x0002)"
 FunctionEnd
 
 ; 安装部分

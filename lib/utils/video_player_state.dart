@@ -508,6 +508,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         'VideoPlayerState: _setLandscape CALLED. Current _isFullscreen: $_isFullscreen, globals.isPhone: ${globals.isPhone}');
     if (!globals.isPhone) return;
 
+    // 获取屏幕尺寸判断是否为TV等横屏设备
+    final window = WidgetsBinding.instance.window;
+    final size = window.physicalSize / window.devicePixelRatio;
+    // 如果宽度大于高度，说明可能是TV或横屏设备，不需要强制横屏
+    if (size.width > size.height) return;
+
     try {
       _isFullscreenTransitioning = true;
       notifyListeners();
@@ -549,6 +555,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 设置竖屏
   Future<void> _setPortrait() async {
     if (!globals.isPhone) return;
+
+    // 获取屏幕尺寸判断是否为TV等横屏设备
+    final window = WidgetsBinding.instance.window;
+    final size = window.physicalSize / window.devicePixelRatio;
+    // 如果宽度大于高度，说明可能是TV或横屏设备，不需要强制竖屏
+    if (size.width > size.height) return;
+
     try {
       _isFullscreenTransitioning = true;
       notifyListeners();

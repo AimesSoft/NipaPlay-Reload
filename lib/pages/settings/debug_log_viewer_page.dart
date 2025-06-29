@@ -5,12 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:intl/intl.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/services/log_share_service.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/blur_dropdown.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 /// 调试日志查看器页面
 /// 提供日志查看、搜索、过滤和导出功能
@@ -21,30 +23,36 @@ class DebugLogViewerPage extends StatefulWidget {
   State<DebugLogViewerPage> createState() => _DebugLogViewerPageState();
 }
 
-class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
-  final TextEditingController _searchController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  
-  // 为BlurDropdown添加GlobalKey
-  final GlobalKey _levelDropdownKey = GlobalKey();
-  final GlobalKey _tagDropdownKey = GlobalKey();
-  
+class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProviderStateMixin {
+  late ScrollController _scrollController;
+  late TextEditingController _searchController;
+  late GlobalKey<State> _levelDropdownKey;
+  late GlobalKey<State> _tagDropdownKey;
+
+  bool _showTimestamp = true;
+  bool _autoScroll = true;
   String _selectedLevel = '全部';
   String _selectedTag = '全部';
   String _searchQuery = '';
-  bool _autoScroll = false;
-  bool _showTimestamp = true;
-  
-  final List<String> _logLevels = ['全部', 'DEBUG', 'INFO', 'WARN', 'ERROR'];
   List<String> _availableTags = ['全部'];
+  final List<String> _logLevels = ['全部', 'DEBUG', 'INFO', 'WARN', 'ERROR'];
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController();
+    _searchController = TextEditingController();
+    _levelDropdownKey = GlobalKey();
+    _tagDropdownKey = GlobalKey();
     _searchController.addListener(_onSearchChanged);
     
     // 获取可用的标签
     _updateAvailableTags();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
   }
 
   @override
@@ -222,7 +230,11 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
     );
   }
 
+  // 显示更多选项对话框
   void _showMoreOptions(BuildContext context) {
+    final scaffoldMessengerState = ScaffoldMessenger.of(context);
+    final navigatorState = Navigator.of(context);
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -374,6 +386,22 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                       
                       const SizedBox(height: 12),
                       
+                      // 分享二维码选项
+                      _buildOptionItem(
+                        icon: Icons.qr_code,
+                        title: '分享二维码',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Future.microtask(() {
+                            if (mounted) {
+                              _showQRCode();
+                            }
+                          });
+                        },
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
                       // 清空日志
                       _buildOptionItem(
                         icon: Icons.clear_all,
@@ -476,6 +504,70 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
         ),
       ),
     );
+  }
+
+  // 显示二维码对话框
+  Future<void> _showQRCode() async {
+    if (!mounted) return;
+    debugPrint('[QRCode] 开始生成二维码...');
+
+    try {
+      debugPrint('[QRCode] 开始上传日志');
+      // 上传日志并获取URL
+      final url = await LogShareService.uploadLogs();
+      debugPrint('[QRCode] 获取到URL: $url');
+      
+      if (!mounted) return;
+
+      debugPrint('[QRCode] 显示二维码对话框');
+      await BlurDialog.show(
+        context: context,
+        title: '扫描二维码查看日志',
+        contentWidget: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: QrImageView(
+                data: url,
+                version: QrVersions.auto,
+                size: 200.0,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              '日志将在1小时后自动删除',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: url));
+              if (mounted) {
+                BlurSnackBar.show(context, '链接已复制到剪贴板');
+              }
+            },
+            child: const Text('复制链接'),
+          ),
+        ],
+      );
+      debugPrint('[QRCode] 二维码对话框显示完成');
+    } catch (e) {
+      debugPrint('[QRCode] 发生错误: $e');
+      if (!mounted) return;
+      
+      BlurSnackBar.show(context, '生成二维码失败: $e');
+    }
   }
 
   @override
@@ -581,7 +673,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                     IconButton(
                       onPressed: () => _showMoreOptions(context),
                       icon: const Icon(Ionicons.ellipsis_vertical, color: Colors.white),
-                      tooltip: '更多选项',
+                      //tooltip: '更多选项',
                     ),
                   ],
                 ),
@@ -689,7 +781,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> {
                                 children: [
                                   // 时间戳
                                   if (_showTimestamp)
-                                    Container(
+                                    SizedBox(
                                       width: 80,
                                       child: Text(
                                         '${entry.timestamp.hour.toString().padLeft(2, '0')}:'

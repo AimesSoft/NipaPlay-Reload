@@ -36,11 +36,6 @@ jobs:
             artifact_name: release-Windows-x64
             artifact_path: build/windows/*
             arch: x64
-          - target: Windows ARM64
-            os: windows-latest-arm64
-            artifact_name: release-Windows-arm64
-            artifact_path: build/windows/*
-            arch: arm64
           - target: Linux
             os: ubuntu-22.04
             arch: amd64
@@ -288,61 +283,75 @@ jobs:
       
       # Build Windows .zip and installer
       - name: Build Windows
-        if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
+        if: matrix.target == 'Windows'
         shell: pwsh
         run: |
-          if ("${{ matrix.arch }}" -eq "arm64") {
-            flutter build windows --release --target-platform windows-arm64
-          } else {
           flutter build windows --release
-          }
-          $arch = "${{ matrix.arch }}"
+          $arch = "x64"
           $version = "${{ steps.get_version.outputs.version }}"
-          if ($arch -eq "arm64") {
-            $DestDir = "build\\windows\\NipaPlay_${version}_Windows_arm64"
-            $SrcDir = "build\\windows\\arm64\\runner\\Release"
-          } else {
-            $DestDir = "build\\windows\\NipaPlay_${version}_Windows_x64"
-            $SrcDir = "build\\windows\\x64\\runner\\Release"
-          }
+          $DestDir = "build\\windows\\NipaPlay_${version}_Windows_x64"
+          $SrcDir = "build\\windows\\x64\\runner\\Release"
           New-Item -Path $DestDir -ItemType Directory -Force
           Copy-Item -Path "$SrcDir\\*" -Destination $DestDir -Recurse -Force
           Copy-Item -Path "windows\\*.dll" -Destination $DestDir -Force
-          Compress-Archive -Path $DestDir -DestinationPath "build\\windows\\NipaPlay_${version}_Windows_${arch}.zip" -Force
+          Compress-Archive -Path $DestDir -DestinationPath "build\\windows\\NipaPlay_${version}_Windows_x64.zip" -Force
 
       # Prepare installer assets for Windows
       - name: Prepare Windows installer assets
-        if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
+        if: matrix.target == 'Windows'
         shell: pwsh
         run: |
           # Install ImageMagick for image processing
           choco install imagemagick -y
           
-          $arch = "${{ matrix.arch }}"
+          $arch = "x64"
           $version = "${{ steps.get_version.outputs.version }}"
-          if ($arch -eq "arm64") {
-            $BuildDir = "build\\windows\\arm64\\runner\\Release"
-          } else {
-            $BuildDir = "build\\windows\\x64\\runner\\Release"
-          }
+          $BuildDir = "build\\windows\\x64\\runner\\Release"
           
           # Create installer assets directory
           New-Item -Path "installer_assets" -ItemType Directory -Force
           
-          # Convert icon.png to ICO format for installer
-          magick "icon.png" -resize 256x256 "installer_assets\\nipaplay_icon.ico"
+          # Convert icon.png to ICO format for installer with better quality
+          magick "icon.png" -resize 256x256 -depth 8 -colors 256 "installer_assets\\nipaplay_icon.ico"
           
-          # Process main_image.png for installer banner (crop right-bottom to focus on logo at top-left)
-          # Create banner image 164x314 pixels (Inno Setup standard)
-          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 600x400+0+0 -resize 164x314! "installer_assets\\installer_small.bmp"
+          # Process main_image.png for installer banner with enhanced quality
+          # Create small header banner image 164x314 pixels (displayed at top of installer pages)
+          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 600x400+0+0 +repage -resize 164x314! -sharpen 0x1 -modulate 105,110,100 "installer_assets\\installer_small.bmp"
           
-          # Create large banner image 497x373 pixels  
-          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 800x600+0+0 -resize 497x373! "installer_assets\\installer_banner.bmp"
+          # Create large welcome/finish banner image 497x373 pixels with better quality  
+          magick "assets\\images\\main_image.png" -gravity NorthWest -crop 800x600+0+0 +repage -resize 497x373! -sharpen 0x0.8 -modulate 105,110,100 -enhance "installer_assets\\installer_banner.bmp"
+          
+          # Create uninstaller banner (same as installer banner but can be customized)
+          Copy-Item "installer_assets\\installer_banner.bmp" "installer_assets\\uninstaller_banner.bmp"
+          
+          # Create a custom background image for license page (optional)
+          magick "assets\\images\\main_image.png" -gravity Center -crop 400x300+0+0 +repage -resize 400x300! -blur 0x2 -modulate 90,50,100 "installer_assets\\license_bg.bmp"
+          
+          # Create alternative header images for different sections (same as main but can be customized)
+          Copy-Item "installer_assets\\installer_small.bmp" "installer_assets\\components_header.bmp"
+          Copy-Item "installer_assets\\installer_small.bmp" "installer_assets\\directory_header.bmp"
+          Copy-Item "installer_assets\\installer_small.bmp" "installer_assets\\instfiles_header.bmp"
+          
+          # Optimize all BMP files for better display quality
+          Write-Host "Optimizing BMP files for installer display..."
+          Get-ChildItem "installer_assets\\*.bmp" | ForEach-Object {
+            $file = $_.FullName
+            magick "$file" -strip -quality 95 -compress None "$file"
+          }
+          
+          Write-Host "Generated installer images:"
+          Write-Host "- Icon: nipaplay_icon.ico (256x256)"
+          Write-Host "- Small banner: installer_small.bmp (164x314) - Header area"  
+          Write-Host "- Large banner: installer_banner.bmp (497x373) - Welcome/Finish pages"
+          Write-Host "- Uninstaller banner: uninstaller_banner.bmp (497x373) - Uninstaller pages"
+          Write-Host "- License background: license_bg.bmp (400x300) - License page"
           
           # Verify all required images were created
           if (!(Test-Path "installer_assets\\nipaplay_icon.ico")) { throw "Failed to create icon file" }
           if (!(Test-Path "installer_assets\\installer_small.bmp")) { throw "Failed to create small banner" }
           if (!(Test-Path "installer_assets\\installer_banner.bmp")) { throw "Failed to create large banner" }
+          if (!(Test-Path "installer_assets\\uninstaller_banner.bmp")) { throw "Failed to create uninstaller banner" }
+          if (!(Test-Path "installer_assets\\license_bg.bmp")) { throw "Failed to create license background" }
           
           # Copy installer script and assets to build directory
           Copy-Item -Path "windows\\nipaplay_installer.nsi" -Destination "$BuildDir\\"
@@ -351,19 +360,15 @@ jobs:
 
       # Create Windows installer with NSIS
       - name: Create Windows installer with NSIS
-        if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
+        if: matrix.target == 'Windows'
         shell: pwsh
         run: |
           # Install NSIS
           choco install nsis -y
           
-          $arch = "${{ matrix.arch }}"
+          $arch = "x64"
           $version = "${{ steps.get_version.outputs.version }}"
-          if ($arch -eq "arm64") {
-            $BuildDir = "build\\windows\\arm64\\runner\\Release"
-          } else {
-            $BuildDir = "build\\windows\\x64\\runner\\Release"
-          }
+          $BuildDir = "build\\windows\\x64\\runner\\Release"
           
           # Read NSIS script with proper encoding
           $nsiContent = Get-Content "$BuildDir\\nipaplay_installer.nsi" -Raw -Encoding UTF8
@@ -386,14 +391,7 @@ jobs:
           $nsiContent = $nsiContent -replace 'VIAddVersionKey "ProductVersion" "1\.0\.0\.0"', "VIAddVersionKey `"ProductVersion`" `"${nsiVersion}`""
           
           # Update output filename
-          $nsiContent = $nsiContent -replace 'OutFile "NipaPlay_Setup\.exe"', "OutFile `"NipaPlay_${version}_Windows_${arch}_Setup.exe`""
-          
-          # Add architecture-specific logic for ARM64
-          if ($arch -eq "arm64") {
-            # For ARM64, replace the initialization function
-            $nsiContent = $nsiContent -replace 'Function \.onInit', 'Function .onInitOld'
-            $nsiContent = $nsiContent -replace 'Function \.onInitARM64', 'Function .onInit'
-          }
+          $nsiContent = $nsiContent -replace 'OutFile "NipaPlay_Setup\.exe"', "OutFile `"NipaPlay_${version}_Windows_x64_Setup.exe`""
           
           # Write file with UTF8 BOM to ensure proper encoding for NSIS
           $utf8BOM = New-Object System.Text.UTF8Encoding $true
@@ -454,7 +452,7 @@ jobs:
           }
           
           # Verify installer was created
-          $installerPath = "$BuildDir\\NipaPlay_${version}_Windows_${arch}_Setup.exe"
+          $installerPath = "$BuildDir\\NipaPlay_${version}_Windows_x64_Setup.exe"
           if (!(Test-Path $installerPath)) {
             throw "Installer file was not created: $installerPath"
           }
@@ -464,7 +462,7 @@ jobs:
           Move-Item $installerPath "build\\windows\\" -Force
           
           # Verify final installer exists
-          $finalInstallerPath = "build\\windows\\NipaPlay_${version}_Windows_${arch}_Setup.exe"
+          $finalInstallerPath = "build\\windows\\NipaPlay_${version}_Windows_x64_Setup.exe"
           if (!(Test-Path $finalInstallerPath)) {
             throw "Failed to move installer to final location"
           }
@@ -473,7 +471,7 @@ jobs:
 
       # List Windows build artifacts  
       - name: List Windows build artifacts
-        if: matrix.target == 'Windows' || matrix.target == 'Windows ARM64'
+        if: matrix.target == 'Windows'
         shell: pwsh
         run: |
           Write-Host "=== Windows Build Artifacts ==="
@@ -924,7 +922,7 @@ jobs:
           allowUpdates: true
           # Updated artifacts list to include AppImage, tar.gz and RPM for Linux, plus Windows installers
           # Separate patterns for different artifact types
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-arm64/*.zip,/tmp/artifacts/release-Windows-arm64/*.exe,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm
           artifactErrorsFailBuild: true
           replacesArtifacts: true
 

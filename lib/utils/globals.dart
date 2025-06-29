@@ -21,6 +21,7 @@ bool get isMobile {
     // 排除平板设备，通常平板设备的宽度大于 600
     return screenWidth < mobileThreshold;
 }
+
 bool get isPhone {
   //移动平台
   if (!kIsWeb) {
