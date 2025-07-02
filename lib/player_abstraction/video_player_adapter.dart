@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
@@ -24,6 +22,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
   String _mediaPath = '';
   PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
   double _volume = 1.0;
+  double _playbackRate = 1.0;
   final List<int> _activeSubtitleTracks = [];
   final List<int> _activeAudioTracks = [];
   final Map<String, String> _properties = {};
@@ -33,70 +32,8 @@ class VideoPlayerAdapter implements AbstractPlayer {
     PlayerMediaType.subtitle: ['default'],
   };
   
-  // 时间轴流式更新相关
-  final ValueNotifier<int> _positionNotifier = ValueNotifier<int>(0);
-  Timer? _positionTimer;
-  int _lastKnownPosition = 0;
-  DateTime _lastPositionUpdateTime = DateTime.now();
-  bool _isPlaying = false;
-
   VideoPlayerAdapter() {
     print('[VideoPlayerAdapter] 初始化');
-    _startPositionTimer();
-  }
-
-  /// 启动位置更新定时器，用于提供流式时间轴
-  void _startPositionTimer() {
-    // 每300毫秒更新一次位置，减少主循环负担
-    _positionTimer?.cancel();
-    _positionTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
-      _updateInterpolatedPosition();
-    });
-  }
-  
-  /// 根据播放状态和时间流逝计算插值位置
-  void _updateInterpolatedPosition() {
-    if (_controller == null || !_controller!.value.isInitialized) {
-      _positionNotifier.value = 0;
-      return;
-    }
-    
-    // 如果不是播放状态，直接使用实际位置
-    if (!_isPlaying) {
-      _positionNotifier.value = _controller!.value.position.inMilliseconds;
-      return;
-    }
-    
-    // 计算自上次更新以来经过的时间
-    final now = DateTime.now();
-    final elapsedSinceLastUpdate = now.difference(_lastPositionUpdateTime).inMilliseconds;
-    
-    // 根据播放状态和时间流逝计算插值位置
-    if (_controller!.value.isPlaying) {
-      // 实际位置 = 上次已知位置 + 经过的时间
-      final interpolatedPosition = _lastKnownPosition + elapsedSinceLastUpdate;
-      
-      // 确保不超过视频总长度
-      final duration = _controller!.value.duration.inMilliseconds;
-      final clampedPosition = duration > 0 ? 
-          interpolatedPosition.clamp(0, duration) : interpolatedPosition;
-      
-      _positionNotifier.value = clampedPosition;
-    } else {
-      // 如果播放器不是播放状态但我们的状态是播放中，可能是内部延迟，保持上次位置
-      _positionNotifier.value = _lastKnownPosition;
-    }
-  }
-  
-  /// 从控制器更新实际位置信息
-  void _updateActualPosition() {
-    if (_controller == null || !_controller!.value.isInitialized) return;
-    
-    _lastKnownPosition = _controller!.value.position.inMilliseconds;
-    _lastPositionUpdateTime = DateTime.now();
-    
-    // 同步更新通知器值
-    _positionNotifier.value = _lastKnownPosition;
   }
 
   @override
@@ -106,6 +43,20 @@ class VideoPlayerAdapter implements AbstractPlayer {
   set volume(double value) {
     _volume = value.clamp(0.0, 1.0);
     _controller?.setVolume(_volume);
+  }
+
+  @override
+  double get playbackRate => _playbackRate;
+
+  @override
+  set playbackRate(double value) {
+    _playbackRate = value;
+    try {
+      _controller?.setPlaybackSpeed(value);
+      debugPrint('VideoPlayer: 设置播放速度: ${value}x');
+    } catch (e) {
+      debugPrint('VideoPlayer: 设置播放速度失败: $e');
+    }
   }
 
   @override
@@ -144,12 +95,6 @@ class VideoPlayerAdapter implements AbstractPlayer {
             return;
           }
           
-          // 更新内部跟踪状态
-          _isPlaying = true;
-          
-          // 更新初始位置基准点
-          _updateActualPosition();
-          
           // 直接调用内部方法，不使用异步
           // 否则VideoPlayerState可能无法识别状态变化
           _controller!.play();
@@ -159,28 +104,13 @@ class VideoPlayerAdapter implements AbstractPlayer {
           break;
           
         case PlayerPlaybackState.paused:
-          // 更新内部跟踪状态
-          _isPlaying = false;
-          
           _controller!.pause();
           pauseDirectly();
-          
-          // 暂停后更新一次准确位置
-          Future.delayed(const Duration(milliseconds: 50), () {
-            _updateActualPosition();
-          });
           break;
           
         case PlayerPlaybackState.stopped:
-          // 更新内部跟踪状态
-          _isPlaying = false;
-          
           _controller!.pause();
           _controller!.seekTo(Duration.zero);
-          
-          // 停止后重置位置
-          _lastKnownPosition = 0;
-          _positionNotifier.value = 0;
           break;
       }
     } catch (e) {
@@ -218,9 +148,6 @@ class VideoPlayerAdapter implements AbstractPlayer {
           _controller!.pause();
         }
         
-        // 更新内部状态
-        _isPlaying = false;
-        
         // 完全取消所有监听器
         _controller!.removeListener(_controllerListener);
         
@@ -235,20 +162,12 @@ class VideoPlayerAdapter implements AbstractPlayer {
         _controller = null;
         
         // 重置位置
-        _lastKnownPosition = 0;
-        _positionNotifier.value = 0;
-        
-        // 强制GC（Flutter没有直接调用GC的API，但可以用一些辅助操作）
-        Future.delayed(const Duration(milliseconds: 200), () {
-          oldController?.dispose();
-        });
+        _mediaInfo = PlayerMediaInfo(duration: 0, specificErrorMessage: _mediaInfo.specificErrorMessage); // 保留可能已设置的错误信息
       }
     } catch (e) {
       print('[VideoPlayerAdapter] 释放控制器时出错: $e');
       _controller = null;
       _textureIdNotifier.value = null;
-      _lastKnownPosition = 0;
-      _positionNotifier.value = 0;
     }
   }
 
@@ -277,12 +196,9 @@ class VideoPlayerAdapter implements AbstractPlayer {
 
   @override
   int get position {
-    // 使用流式更新的位置而不是直接从控制器获取
-    return _positionNotifier.value;
+    if (_controller == null || !_controller!.value.isInitialized) return 0;
+    return _controller!.value.position.inMilliseconds;
   }
-  
-  /// 获取位置通知器，用于UI绑定（如弹幕系统）
-  ValueListenable<int> get positionNotifier => _positionNotifier;
 
   @override
   bool get supportsExternalSubtitles => false; // video_player 不支持外挂字幕
@@ -310,9 +226,6 @@ class VideoPlayerAdapter implements AbstractPlayer {
         print('[VideoPlayerAdapter] 控制器初始化成功，更新媒体信息');
         _updateMediaInfo();
         _textureIdNotifier.value = _controller!.textureId;
-        
-        // 初始化后更新位置
-        _updateActualPosition();
         
         print('[VideoPlayerAdapter] 纹理ID: ${_controller!.textureId}');
         return _controller!.textureId;
@@ -523,24 +436,10 @@ class VideoPlayerAdapter implements AbstractPlayer {
     
     final duration = Duration(milliseconds: position);
     _controller!.seekTo(duration);
-    
-    // 立即更新本地位置，避免跳转延迟
-    _lastKnownPosition = position;
-    _positionNotifier.value = position;
-    _lastPositionUpdateTime = DateTime.now();
-    
-    // 延迟更新一次以确保准确
-    Future.delayed(const Duration(milliseconds: 50), () {
-      _updateActualPosition();
-    });
   }
 
   @override
   void dispose() {
-    // 停止位置更新定时器
-    _positionTimer?.cancel();
-    _positionTimer = null;
-    
     _disposeController();
   }
 
@@ -891,15 +790,6 @@ class VideoPlayerAdapter implements AbstractPlayer {
     try {
       final value = _controller!.value;
       
-      // 更新实际位置
-      _updateActualPosition();
-      
-      // 处理播放状态变化
-      if (_isPlaying != value.isPlaying) {
-        _isPlaying = value.isPlaying;
-        print('[VideoPlayerAdapter] 播放状态变化检测: $_isPlaying');
-      }
-      
       // 报告错误
       if (value.hasError) {
         print('[VideoPlayerAdapter] 控制器报告错误: ${value.errorDescription}');
@@ -1024,10 +914,6 @@ class VideoPlayerAdapter implements AbstractPlayer {
       return;
     }
     
-    // 立即更新内部状态
-    _isPlaying = true;
-    _updateActualPosition();
-    
     // 立即同步调用播放
     try {
       _controller!.play();
@@ -1046,9 +932,6 @@ class VideoPlayerAdapter implements AbstractPlayer {
       return;
     }
     
-    // 立即更新内部状态
-    _isPlaying = false;
-    
     // 立即同步调用暂停
     try {
       _controller!.pause();
@@ -1058,10 +941,11 @@ class VideoPlayerAdapter implements AbstractPlayer {
     
     // 然后在后台异步进行验证和重试
     _pauseDirectly();
-    
-    // 暂停后更新一次准确位置
-    Future.delayed(const Duration(milliseconds: 50), () {
-      _updateActualPosition();
-    });
+  }
+
+  // 添加setPlaybackRate方法实现
+  @override
+  void setPlaybackRate(double rate) {
+    playbackRate = rate; // 这将调用setter
   }
 } 

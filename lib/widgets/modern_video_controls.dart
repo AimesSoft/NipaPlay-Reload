@@ -44,6 +44,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isNextEpisodePressed = false;
   bool _isPreviousEpisodeHovered = false;
   bool _isNextEpisodeHovered = false;
+  // 添加倍速按钮状态变量
+  bool _isSpeedBoostPressed = false;
+  bool _isSpeedBoostHovered = false;
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -446,7 +449,43 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         ),
                                       ),
                                       
-                                      //const SizedBox(width: 0),
+                                      const SizedBox(width: 12),
+                                      
+                                      // 倍速按钮
+                                      Consumer<VideoPlayerState>(
+                                        builder: (context, videoState, child) {
+                                          return _buildControlButton(
+                                            icon: AnimatedSwitcher(
+                                              duration: const Duration(milliseconds: 200),
+                                              transitionBuilder: (child, animation) {
+                                                return ScaleTransition(
+                                                  scale: animation,
+                                                  child: child,
+                                                );
+                                              },
+                                              child: Icon(
+                                                videoState.isSpeedBoostActive 
+                                                    ? Icons.fast_forward 
+                                                    : Icons.speed,
+                                                key: ValueKey<bool>(videoState.isSpeedBoostActive),
+                                                color: videoState.isSpeedBoostActive 
+                                                    ? Colors.yellow 
+                                                    : Colors.white,
+                                                size: globals.isPhone ? 28 : 24,
+                                              ),
+                                            ),
+                                            onTap: () => videoState.togglePlaybackRate(),
+                                            isPressed: _isSpeedBoostPressed,
+                                            isHovered: _isSpeedBoostHovered,
+                                            onHover: (value) => setState(() => _isSpeedBoostHovered = value),
+                                            onPressed: (value) => setState(() => _isSpeedBoostPressed = value),
+                                            tooltip: '${videoState.playbackRate}x倍速',
+                                            useAnimatedSwitcher: true,
+                                          );
+                                        },
+                                      ),
+                                      
+                                      const SizedBox(width: 12),
                                       
                                       // 设置按钮
                                       _buildControlButton(

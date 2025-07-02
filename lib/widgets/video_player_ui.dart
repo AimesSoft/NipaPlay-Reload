@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
+import 'right_edge_hover_menu.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -232,6 +233,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   }
 
   void _handleDoubleTap() {
+    if (_isProcessingTap) return;
+    _tapCount = 0;
+    _doubleTapTimer?.cancel();
+    
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.hasVideo) {
       if (globals.isPhone) {
@@ -240,6 +245,27 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
         videoState.toggleFullscreen();
       }
     }
+  }
+  
+  // 添加长按手势处理方法
+  void _handleLongPressStart(VideoPlayerState videoState) {
+    if (!globals.isPhone || !videoState.hasVideo) return;
+    
+    // 开始倍速播放
+    videoState.startSpeedBoost();
+    
+    // 触觉反馈
+    HapticFeedback.lightImpact();
+  }
+  
+  void _handleLongPressEnd(VideoPlayerState videoState) {
+    if (!globals.isPhone || !videoState.hasVideo) return;
+    
+    // 结束倍速播放
+    videoState.stopSpeedBoost();
+    
+    // 触觉反馈
+    HapticFeedback.lightImpact();
   }
 
   void _handleMouseMove(PointerEvent event) {
@@ -371,6 +397,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: _handleTap,
+                  onLongPressStart: globals.isPhone ? (details) => _handleLongPressStart(videoState) : null,
+                  onLongPressEnd: globals.isPhone ? (details) => _handleLongPressEnd(videoState) : null,
                   onHorizontalDragStart: globals.isPhone ? (details) => _handleHorizontalDragStart(context, details) : null,
                   onHorizontalDragUpdate: globals.isPhone ? (details) => _handleHorizontalDragUpdate(context, details) : null,
                   onHorizontalDragEnd: globals.isPhone ? (details) => _handleHorizontalDragEnd(context, details) : null,
@@ -497,6 +525,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                               
                               if (videoState.hasVideo)
                                 VerticalIndicator(videoState: videoState),
+                              
+                              // 右边缘悬浮菜单（仅桌面版）
+                              const RightEdgeHoverMenu(),
                             ],
                           ),
                         ),

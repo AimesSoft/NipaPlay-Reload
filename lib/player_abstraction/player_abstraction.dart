@@ -43,6 +43,10 @@ class Player {
   double get volume => _delegate.volume;
   set volume(double value) => _delegate.volume = value;
 
+  // 添加播放速度属性
+  double get playbackRate => _delegate.playbackRate;
+  set playbackRate(double value) => _delegate.playbackRate = value;
+
   /// Gets the current playback state using MDK-compatible [PlaybackState] enum.
   PlaybackState get state {
     switch (_delegate.state) { // _delegate.state is core_enums.PlayerPlaybackState
@@ -143,6 +147,9 @@ class Player {
       return "未知";
     }
   }
+  
+  // 添加setPlaybackRate方法实现
+  void setPlaybackRate(double rate) => _delegate.setPlaybackRate(rate);
 }
 
 // Type aliases for full compatibility if VideoPlayerState uses these type names

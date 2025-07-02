@@ -44,6 +44,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   };
   final Map<String, String> _properties = {};
   
+  // 添加播放速度状态变量
+  double _playbackRate = 1.0;
+  
   MediaKitPlayerAdapter() : _player = Player(
     configuration: PlayerConfiguration(
       libass: true,
@@ -759,6 +762,21 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     _player.setVolume(value.clamp(0.0, 1.0) * 100);
   }
   
+  // 添加播放速度属性实现
+  @override
+  double get playbackRate => _playbackRate;
+  
+  @override
+  set playbackRate(double value) {
+    _playbackRate = value;
+    try {
+      _player.setRate(value);
+      debugPrint('MediaKit: 设置播放速度: ${value}x');
+    } catch (e) {
+      debugPrint('MediaKit: 设置播放速度失败: $e');
+    }
+  }
+  
   @override
   PlayerPlaybackState get state => _state;
   
@@ -1235,6 +1253,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     } catch (e) {
       debugPrint('MediaKitAdapter: Jellyfin流媒体重试失败: $e');
     }
+  }
+
+  // 添加setPlaybackRate方法实现
+  @override
+  void setPlaybackRate(double rate) {
+    playbackRate = rate; // 这将调用setter
   }
 }
 

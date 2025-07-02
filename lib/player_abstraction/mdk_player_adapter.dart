@@ -174,6 +174,7 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
 
 class MdkPlayerAdapter implements AbstractPlayer {
   mdk.Player _mdkPlayer;
+  double _playbackRate = 1.0; // 添加播放速度状态变量
 
   MdkPlayerAdapter(mdk.Player initialPlayer) : _mdkPlayer = initialPlayer {
     _applyInitialSettings();
@@ -193,6 +194,20 @@ class MdkPlayerAdapter implements AbstractPlayer {
   double get volume => _mdkPlayer.volume;
   @override
   set volume(double value) => _mdkPlayer.volume = value;
+  
+  // 添加播放速度属性实现
+  @override
+  double get playbackRate => _playbackRate;
+  @override
+  set playbackRate(double value) {
+    _playbackRate = value;
+    try {
+      _mdkPlayer.setProperty('speed', value.toString());
+      debugPrint('[MdkPlayerAdapter] 设置播放速度: ${value}x');
+    } catch (e) {
+      debugPrint('[MdkPlayerAdapter] 设置播放速度失败: $e');
+    }
+  }
 
   @override
   PlayerPlaybackState get state => _toPlayerPlaybackState(_mdkPlayer.state);
@@ -428,5 +443,11 @@ class MdkPlayerAdapter implements AbstractPlayer {
     } catch (e) {
       print('[MDKPlayerAdapter] 直接暂停出错: $e');
     }
+  }
+
+  // 添加setPlaybackRate方法实现
+  @override
+  void setPlaybackRate(double rate) {
+    playbackRate = rate; // 这将调用setter
   }
 } 

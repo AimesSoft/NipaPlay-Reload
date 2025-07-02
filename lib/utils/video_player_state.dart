@@ -65,7 +65,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
-  Timer? _positionUpdateTimer;
+  Timer? _uiUpdateTimer; // UI更新定时器（包含位置保存和数据持久化功能）
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
   Timer? _autoHideTimer;
@@ -105,6 +105,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕屏蔽词
   static const String _danmakuBlockWordsKey = 'danmaku_block_words';
   List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
+  
+  // 添加播放速度相关状态
+  static const String _playbackRateKey = 'playback_rate';
+  double _playbackRate = 2.0; // 默认2倍速
+  bool _isSpeedBoostActive = false; // 是否正在倍速播放（长按状态）
+  double _normalPlaybackRate = 1.0; // 正常播放速度
   
   dynamic danmakuController; // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
@@ -146,6 +152,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   OverlayEntry? _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
   Duration _dragSeekTargetPosition = Duration.zero; // To show target position during drag
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
+
+  // 右边缘悬浮菜单状态
+  bool _isRightEdgeHovered = false;
+  Timer? _rightEdgeHoverTimer;
+  OverlayEntry? _hoverSettingsMenuOverlay;
 
   // 加载状态相关
   bool _isInFinalLoadingPhase = false; // 是否处于最终加载阶段，用于优化动画性能
@@ -293,6 +304,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 获取播放器内核名称
   String get playerCoreName => player.getPlayerKernelName();
+  
+  // 播放速度相关的getter
+  double get playbackRate => _playbackRate;
+  bool get isSpeedBoostActive => _isSpeedBoostActive;
+
+  // 右边缘悬浮菜单的getter
+  bool get isRightEdgeHovered => _isRightEdgeHovered;
 
   Future<void> _initialize() async {
     if (globals.isPhone) {
@@ -300,7 +318,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       await _loadInitialBrightness(); // Load initial brightness for phone
       await _loadInitialVolume(); // <<< CALL ADDED
     }
-    _startPositionUpdateTimer();
+    _startUiUpdateTimer(); // 启动UI更新定时器（已包含位置保存功能）
     _setupWindowManagerListener();
     _focusNode.requestFocus();
     KeyboardShortcuts.loadShortcuts();
@@ -318,6 +336,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 加载弹幕屏蔽词
     await _loadDanmakuBlockWords();
+    
+    // 加载播放速度设置
+    await _loadPlaybackRate();
 
     // Ensure wakelock is disabled on initialization
     try {
@@ -877,9 +898,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final textureId = await player.updateTexture();
       //debugPrint('获取到纹理ID: $textureId');
 
-      // !!!!! 在这里启动或重启位置更新定时器 !!!!!
-      _startPositionUpdateTimer();
-      // !!!!! ----------------------------- !!!!!
+      // !!!!! 在这里启动或重启UI更新定时器（已包含位置保存功能）!!!!!
+      _startUiUpdateTimer(); // 启动UI更新定时器（已包含位置保存功能）
+      // !!!!! ------------------------------------------- !!!!!
 
       // 等待纹理初始化完成
       await Future.delayed(const Duration(milliseconds: 200));
@@ -1172,9 +1193,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           episodeTitle: finalEpisodeTitle,
           episodeId: existingHistory.episodeId,
           animeId: existingHistory.animeId,
-          watchProgress: _progress,
-          lastPosition: _position.inMilliseconds,
-          duration: _duration.inMilliseconds,
+          watchProgress: existingHistory.watchProgress,
+          lastPosition: existingHistory.lastPosition,
+          duration: existingHistory.duration,
           lastWatchTime: DateTime.now(),
           thumbnailPath: existingHistory.thumbnailPath,
         );
@@ -1448,7 +1469,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> stop() async {
     if (_status != PlayerStatus.idle && _status != PlayerStatus.disposed) {
       _setStatus(PlayerStatus.idle, message: '播放已停止');
-      _positionUpdateTimer?.cancel();
+      _uiUpdateTimer?.cancel(); // 停止UI更新定时器
       player.state = PlaybackState.stopped; // Changed from player.stop()
       _resetVideoState();
     }
@@ -1619,135 +1640,56 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     notifyListeners();
   }
 
-  void _startPositionUpdateTimer() {
-    // <<< REMOVE DEBUG LOG >>>
-    // debugPrint('[VideoPlayerState] _startPositionUpdateTimer CALLED.');
-    _positionUpdateTimer?.cancel(); 
-    _positionUpdateTimer =
-        Timer.periodic(const Duration(milliseconds: 300), (timer) { 
-      // <<< REMOVE EXISTING DEBUG LOG >>>
-      // debugPrint('[Timer] Tick. _isSeeking: $_isSeeking, hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
-      if (!_isSeeking && hasVideo) { 
-        if (_status == PlayerStatus.playing) {
-          final playerPosition = player.position;
-          final playerDuration = player.mediaInfo.duration;
-          // <<< REMOVE ADDED DEBUG LOG >>>
-          // debugPrint('[Timer] PlayerStatus.playing. pos: $playerPosition, dur: $playerDuration');
-          
-          if (playerPosition >= 0 && playerDuration > 0) {
-            _position = Duration(milliseconds: playerPosition);
-            _duration = Duration(milliseconds: playerDuration);
-            _progress = _position.inMilliseconds / _duration.inMilliseconds;
-            
-            _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+  // 右边缘悬浮菜单管理方法
+  void setRightEdgeHovered(bool hovered) {
+    if (_isRightEdgeHovered == hovered) return;
+    
+    _isRightEdgeHovered = hovered;
+    _rightEdgeHoverTimer?.cancel();
+    
+    if (hovered) {
+      // 鼠标进入右边缘，显示悬浮菜单
+      _showHoverSettingsMenu();
+    } else {
+      // 鼠标离开右边缘，延迟隐藏菜单
+      _rightEdgeHoverTimer = Timer(const Duration(milliseconds: 300), () {
+        _hideHoverSettingsMenu();
+      });
+    }
+    
+    notifyListeners();
+  }
 
-            if (_position.inMilliseconds % 10000 < 20) { 
-              _updateWatchHistory();
-            }
-
-            if (_position.inMilliseconds >= _duration.inMilliseconds - 100) {
-              player.state = PlaybackState.paused;
-              _setStatus(PlayerStatus.paused, message: '播放结束');
-              if (_currentVideoPath != null) {
-                _saveVideoPosition(_currentVideoPath!, 0);
-                debugPrint(
-                    'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
-                
-                // 触发自动播放下一话
-                if (_context != null && _context!.mounted) {
-                  AutoNextEpisodeService.instance.startAutoNextEpisode(_context!, _currentVideoPath!);
-                }
-              }
-              notifyListeners(); 
-            }
-          } else {
-            // 当播放器返回无效的 position 或 duration 时
-            // 增加额外检查以避免在字幕操作等特殊情况下误报
-            
-            // 如果之前已经有有效的时长信息，而现在临时返回0，可能是正常的操作过程
-            final bool hasValidDurationBefore = _duration.inMilliseconds > 0;
-            final bool isTemporaryInvalid = hasValidDurationBefore && playerPosition == 0 && playerDuration == 0;
-            
-            // 检查是否是Jellyfin流媒体正在初始化
-            final bool isJellyfinInitializing = _currentVideoPath != null && 
-                (_currentVideoPath!.contains('jellyfin://') || _currentVideoPath!.contains('emby://')) &&
-                _status == PlayerStatus.loading;
-            
-            if (isTemporaryInvalid) {
-              // 临时的无效状态，跳过本次更新，不报错
-              debugPrint('VideoPlayerState: 检测到临时的无效播放器数据 (position: $playerPosition, duration: $playerDuration)，可能是字幕操作等导致，跳过本次更新');
-              return;
-            }
-            
-            if (isJellyfinInitializing) {
-              // Jellyfin流媒体正在初始化，跳过错误检测
-              debugPrint('VideoPlayerState: Jellyfin流媒体正在初始化中，跳过无效数据检测 (position: $playerPosition, duration: $playerDuration)');
-              return;
-            }
-            
-            final String pathForErrorLog = _currentVideoPath ?? "未知路径";
-            final String baseName = p.basename(pathForErrorLog);
-            
-            // 优先使用来自播放器适配器的特定错误消息
-            String userMessage;
-            if (player.mediaInfo.specificErrorMessage != null && player.mediaInfo.specificErrorMessage!.isNotEmpty) {
-              userMessage = player.mediaInfo.specificErrorMessage!;
-            } else {
-              final String technicalDetail = '(pos: $playerPosition, dur: $playerDuration)';
-              userMessage = '视频文件 "$baseName" 可能已损坏或无法读取 $technicalDetail';
-            }
-
-            debugPrint('VideoPlayerState: 播放器返回无效的视频数据 (position: $playerPosition, duration: $playerDuration) 路径: $pathForErrorLog. 错误信息: $userMessage. 已停止播放并设置为错误状态.');
-            
-            _error = userMessage; 
-
-            player.state = PlaybackState.stopped; 
-            
-            if (_positionUpdateTimer?.isActive ?? false) { 
-              _positionUpdateTimer!.cancel();
-              _positionUpdateTimer = null; 
-            }
-            
-            _setStatus(PlayerStatus.error, message: userMessage); 
-
-            _position = Duration.zero;
-            _progress = 0.0;
-            _duration = Duration.zero; 
-            
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              // 1. 执行 handleBackButton 逻辑 (处理全屏、截图等)
-              await handleBackButton(); // <--- 重新启用此行
-              
-              // 2. DO NOT call resetPlayer() here. The dialog's action will call it.
-
-              // 3. 通知UI层执行pop/显示对话框等
-              onSeriousPlaybackErrorAndShouldPop?.call();
-            });
-
-            return; 
-          }
-          _lastSeekPosition = null; 
-          if (_status == PlayerStatus.playing) { 
-             notifyListeners(); 
-          }
-        } else if (_status == PlayerStatus.paused && _lastSeekPosition != null) {
-          // 暂停状态：使用最后一次seek的位置
-          _position = _lastSeekPosition!;
-          if (_duration.inMilliseconds > 0) {
-            _progress = _position.inMilliseconds / _duration.inMilliseconds;
-            // 保存当前播放位置
-            _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
-
-            // 暂停状态下，只在位置变化时更新观看记录
-            _updateWatchHistory();
-          }
-          notifyListeners();
-        }
+  void _showHoverSettingsMenu() {
+    if (_hoverSettingsMenuOverlay != null || _context == null) return;
+    
+    // 导入设置菜单组件，这里需要延迟导入避免循环依赖
+    Future.microtask(() {
+      if (_context != null && _context!.mounted) {
+        _hoverSettingsMenuOverlay = OverlayEntry(
+          builder: (context) {
+            return _buildHoverSettingsMenu(context);
+          },
+        );
+        
+        Overlay.of(_context!).insert(_hoverSettingsMenuOverlay!);
       }
     });
-    // <<< REMOVE DEBUG LOG >>>
-    // debugPrint('[VideoPlayerState] _startPositionUpdateTimer FINISHED. _positionUpdateTimer is active: ${_positionUpdateTimer?.isActive}');
   }
+
+  void _hideHoverSettingsMenu() {
+    _hoverSettingsMenuOverlay?.remove();
+    _hoverSettingsMenuOverlay = null;
+    _isRightEdgeHovered = false;
+    notifyListeners();
+  }
+
+  Widget _buildHoverSettingsMenu(BuildContext context) {
+    // 这里会在后面的组件中实现
+    return const SizedBox.shrink();
+  }
+
+  // 已移除 _startPositionUpdateTimer，功能已合并到 _startUiUpdateTimer
 
   bool shouldShowAppBar() {
     if (globals.isPhone) {
@@ -1765,7 +1707,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     player.dispose();
     _focusNode.dispose();
-    _positionUpdateTimer?.cancel();
+    _uiUpdateTimer?.cancel(); // 清理UI更新定时器
     _hideControlsTimer?.cancel();
     _hideMouseTimer?.cancel();
     _autoHideTimer?.cancel();
@@ -1784,6 +1726,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_seekOverlayEntry != null) { // <<< ADDED
       _seekOverlayEntry!.remove();
       _seekOverlayEntry = null;
+    }
+    _rightEdgeHoverTimer?.cancel(); // 清理右边缘悬浮定时器
+    if (_hoverSettingsMenuOverlay != null) { // 清理悬浮设置菜单
+      _hoverSettingsMenuOverlay!.remove();
+      _hoverSettingsMenuOverlay = null;
     }
     WakelockPlus.disable();
     //debugPrint("Wakelock disabled on dispose.");
@@ -3543,6 +3490,75 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     notifyListeners();
   }
   
+  // 播放速度相关方法
+  
+  // 加载播放速度设置
+  Future<void> _loadPlaybackRate() async {
+    final prefs = await SharedPreferences.getInstance();
+    _playbackRate = prefs.getDouble(_playbackRateKey) ?? 2.0;
+    _normalPlaybackRate = 1.0; // 始终重置为1.0
+    notifyListeners();
+  }
+  
+  // 保存播放速度设置
+  Future<void> setPlaybackRate(double rate) async {
+    _playbackRate = rate;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_playbackRateKey, rate);
+    
+    // 立即应用新的播放速度
+    if (hasVideo) {
+      player.setPlaybackRate(rate);
+      debugPrint('设置播放速度: ${rate}x');
+    }
+    notifyListeners();
+  }
+  
+  // 开始倍速播放（长按开始）
+  void startSpeedBoost() {
+    if (!hasVideo || _isSpeedBoostActive) return;
+    
+    // 保存当前播放速度，以便长按结束时恢复
+    _normalPlaybackRate = _playbackRate;
+    _isSpeedBoostActive = true;
+    
+    // 如果当前已经是预设的倍速，则使用2倍速作为临时倍速
+    final tempSpeedBoost = (_playbackRate == 2.0) ? 3.0 : 2.0;
+    player.setPlaybackRate(tempSpeedBoost);
+    debugPrint('开始长按倍速播放: ${tempSpeedBoost}x (之前: ${_normalPlaybackRate}x)');
+    notifyListeners();
+  }
+  
+  // 结束倍速播放（长按结束）
+  void stopSpeedBoost() {
+    if (!hasVideo || !_isSpeedBoostActive) return;
+    
+    _isSpeedBoostActive = false;
+    // 恢复到长按前的播放速度
+    player.setPlaybackRate(_normalPlaybackRate);
+    debugPrint('结束长按倍速播放，恢复到: ${_normalPlaybackRate}x');
+    notifyListeners();
+  }
+  
+  // 切换播放速度按钮功能
+  void togglePlaybackRate() {
+    if (!hasVideo) return;
+    
+    if (_isSpeedBoostActive) {
+      // 如果正在长按倍速播放，结束长按
+      stopSpeedBoost();
+    } else {
+      // 智能切换播放速度：在1倍速和2倍速之间切换
+      if (_playbackRate == 1.0) {
+        // 当前是1倍速，切换到2倍速
+        setPlaybackRate(2.0);
+      } else {
+        // 当前是其他倍速，切换到1倍速
+        setPlaybackRate(1.0);
+      }
+    }
+  }
+  
   // 获取当前活跃解码器，代理到解码器管理器
   Future<String> getActiveDecoder() async {
     final decoder = await _decoderManager.getActiveDecoder();
@@ -3960,5 +3976,130 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       //   SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
       // );
     }
+  }
+
+    // 启动UI更新定时器（500ms更新一次，同时处理数据保存）
+  void _startUiUpdateTimer() {
+    _uiUpdateTimer?.cancel();
+    _uiUpdateTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      if (!_isSeeking && hasVideo) {
+        if (_status == PlayerStatus.playing) {
+          final playerPosition = player.position;
+          final playerDuration = player.mediaInfo.duration;
+          
+          if (playerPosition >= 0 && playerDuration > 0) {
+            // 更新UI显示
+            _position = Duration(milliseconds: playerPosition);
+            _duration = Duration(milliseconds: playerDuration);
+            _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            
+            // 保存播放位置（原来在10秒定时器中）
+            _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+
+            // 每10秒更新一次观看记录（减少数据库写入频率）
+            if (_position.inMilliseconds % 10000 < 500) { 
+              _updateWatchHistory();
+            }
+
+            // 检测播放结束
+            if (_position.inMilliseconds >= _duration.inMilliseconds - 100) {
+              player.state = PlaybackState.paused;
+              _setStatus(PlayerStatus.paused, message: '播放结束');
+              if (_currentVideoPath != null) {
+                _saveVideoPosition(_currentVideoPath!, 0);
+                debugPrint(
+                    'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
+                
+                // 触发自动播放下一话
+                if (_context != null && _context!.mounted) {
+                  AutoNextEpisodeService.instance.startAutoNextEpisode(_context!, _currentVideoPath!);
+                }
+              }
+            }
+            
+            notifyListeners();
+          } else {
+            // 错误处理逻辑（原来在10秒定时器中）
+            // 当播放器返回无效的 position 或 duration 时
+            // 增加额外检查以避免在字幕操作等特殊情况下误报
+            
+            // 如果之前已经有有效的时长信息，而现在临时返回0，可能是正常的操作过程
+            final bool hasValidDurationBefore = _duration.inMilliseconds > 0;
+            final bool isTemporaryInvalid = hasValidDurationBefore && playerPosition == 0 && playerDuration == 0;
+            
+            // 检查是否是Jellyfin流媒体正在初始化
+            final bool isJellyfinInitializing = _currentVideoPath != null && 
+                (_currentVideoPath!.contains('jellyfin://') || _currentVideoPath!.contains('emby://')) &&
+                _status == PlayerStatus.loading;
+            
+            if (isTemporaryInvalid) {
+              // 临时的无效状态，跳过本次更新，不报错
+              debugPrint('VideoPlayerState: 检测到临时的无效播放器数据 (position: $playerPosition, duration: $playerDuration)，可能是字幕操作等导致，跳过本次更新');
+              return;
+            }
+            
+            if (isJellyfinInitializing) {
+              // Jellyfin流媒体正在初始化，跳过错误检测
+              debugPrint('VideoPlayerState: Jellyfin流媒体正在初始化中，跳过无效数据检测 (position: $playerPosition, duration: $playerDuration)');
+              return;
+            }
+            
+            final String pathForErrorLog = _currentVideoPath ?? "未知路径";
+            final String baseName = p.basename(pathForErrorLog);
+            
+            // 优先使用来自播放器适配器的特定错误消息
+            String userMessage;
+            if (player.mediaInfo.specificErrorMessage != null && player.mediaInfo.specificErrorMessage!.isNotEmpty) {
+              userMessage = player.mediaInfo.specificErrorMessage!;
+            } else {
+              final String technicalDetail = '(pos: $playerPosition, dur: $playerDuration)';
+              userMessage = '视频文件 "$baseName" 可能已损坏或无法读取 $technicalDetail';
+            }
+
+            debugPrint('VideoPlayerState: 播放器返回无效的视频数据 (position: $playerPosition, duration: $playerDuration) 路径: $pathForErrorLog. 错误信息: $userMessage. 已停止播放并设置为错误状态.');
+            
+            _error = userMessage; 
+
+            player.state = PlaybackState.stopped; 
+            
+            // 停止定时器
+            if (_uiUpdateTimer?.isActive ?? false) { 
+              _uiUpdateTimer!.cancel();
+              _uiUpdateTimer = null; 
+            }
+            
+            _setStatus(PlayerStatus.error, message: userMessage); 
+
+            _position = Duration.zero;
+            _progress = 0.0;
+            _duration = Duration.zero; 
+            
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              // 1. 执行 handleBackButton 逻辑 (处理全屏、截图等)
+              await handleBackButton();
+              
+              // 2. DO NOT call resetPlayer() here. The dialog's action will call it.
+
+              // 3. 通知UI层执行pop/显示对话框等
+              onSeriousPlaybackErrorAndShouldPop?.call();
+            });
+
+            return; 
+          }
+        } else if (_status == PlayerStatus.paused && _lastSeekPosition != null) {
+          // 暂停状态：使用最后一次seek的位置
+          _position = _lastSeekPosition!;
+          if (_duration.inMilliseconds > 0) {
+            _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            // 保存当前播放位置
+            _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+
+            // 暂停状态下，只在位置变化时更新观看记录
+            _updateWatchHistory();
+          }
+          notifyListeners();
+        }
+      }
+    });
   }
 }

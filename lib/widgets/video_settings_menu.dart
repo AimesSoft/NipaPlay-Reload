@@ -12,6 +12,7 @@ import 'danmaku_tracks_menu.dart';
 import 'subtitle_list_menu.dart';
 import '../player_abstraction/player_factory.dart';
 import 'playlist_menu.dart';
+import 'playback_rate_menu.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -35,6 +36,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   bool _showDanmakuTracks = false;
   bool _showSubtitleList = false;
   bool _showPlaylist = false;
+  bool _showPlaybackRate = false;
 
   OverlayEntry? _subtitleTracksOverlay;
   OverlayEntry? _controlBarSettingsOverlay;
@@ -44,6 +46,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   OverlayEntry? _danmakuTracksOverlay;
   OverlayEntry? _subtitleListOverlay;
   OverlayEntry? _playlistOverlay;
+  OverlayEntry? _playbackRateOverlay;
 
   late final List<SettingsItem> _settingsItems;
   late final VideoPlayerState videoState;
@@ -116,6 +119,14 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       title: '控制栏设置',
       onTap: _toggleControlBarSettingsMenu,
       isActive: () => _showControlBarSettings,
+    ));
+    
+    // 添加倍速设置菜单项
+    _settingsItems.add(SettingsItem(
+      icon: Icons.speed,
+      title: '倍速设置',
+      onTap: _togglePlaybackRateMenu,
+      isActive: () => _showPlaybackRate,
     ));
     
     // 剧集列表 - 当有视频文件时显示（整合了API、数据库、文件系统三种模式）
@@ -404,6 +415,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _subtitleListOverlay = null;
     _playlistOverlay?.remove();
     _playlistOverlay = null;
+    _playbackRateOverlay?.remove();
+    _playbackRateOverlay = null;
     
     // 只有在组件仍然挂载时才调用setState
     if (mounted) {
@@ -611,6 +624,40 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         ),
       ),
     );
+  }
+
+  // 添加倍速设置菜单切换方法
+  void _togglePlaybackRateMenu() {
+    if (_showPlaybackRate) {
+      _playbackRateOverlay?.remove();
+      _playbackRateOverlay = null;
+      setState(() => _showPlaybackRate = false);
+    } else {
+      _closeAllOverlays();
+      setState(() {
+        _showPlaybackRate = true;
+        _showSubtitleTracks = false;
+        _showControlBarSettings = false;
+        _showDanmakuSettings = false;
+        _showAudioTracks = false;
+        _showDanmakuList = false;
+        _showDanmakuTracks = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
+      });
+      
+      _playbackRateOverlay = OverlayEntry(
+        builder: (context) => PlaybackRateMenu(
+          onClose: () {
+            _playbackRateOverlay?.remove();
+            _playbackRateOverlay = null;
+            setState(() => _showPlaybackRate = false);
+          },
+        ),
+      );
+
+      Overlay.of(context).insert(_playbackRateOverlay!);
+    }
   }
 }
 

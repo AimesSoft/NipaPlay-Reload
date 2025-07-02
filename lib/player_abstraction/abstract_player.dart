@@ -8,6 +8,9 @@ abstract class AbstractPlayer {
   double get volume;
   set volume(double value);
 
+  double get playbackRate;
+  set playbackRate(double value);
+
   PlayerPlaybackState get state;
   set state(PlayerPlaybackState value);
 
@@ -53,4 +56,7 @@ abstract class AbstractPlayer {
   
   /// 直接暂停播放，绕过状态设置
   Future<void> pauseDirectly();
+
+  /// 设置播放速度
+  void setPlaybackRate(double rate);
 } 
