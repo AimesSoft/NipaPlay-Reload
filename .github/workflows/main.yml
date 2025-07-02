@@ -119,6 +119,7 @@ jobs:
       
       # Flutter Pub Get
       - name: Flutter Pub Get
+        shell: bash
         run: |
           # Only set core.longpaths on Windows (not supported on macOS/Linux)
           if [[ "$RUNNER_OS" == "Windows" ]]; then
