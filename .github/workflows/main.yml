@@ -120,7 +120,10 @@ jobs:
       # Flutter Pub Get
       - name: Flutter Pub Get
         run: |
-          git config --global core.longpaths true
+          # Only set core.longpaths on Windows (not supported on macOS/Linux)
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            git config --global core.longpaths true
+          fi
           flutter pub get
       
       # Build iOS .ipa
