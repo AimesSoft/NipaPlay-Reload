@@ -79,6 +79,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   List<Map<String, dynamic>> _danmakuList = [];
+  
+  // 多轨道弹幕系统
+  Map<String, Map<String, dynamic>> _danmakuTracks = {};
+  Map<String, bool> _danmakuTrackEnabled = {};
   static const String _controlBarHeightKey = 'control_bar_height';
   double _controlBarHeight = 20.0; // 默认高度
   static const String _danmakuOpacityKey = 'danmaku_opacity';
@@ -180,6 +184,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isPaused => _status == PlayerStatus.paused;
   FocusNode get focusNode => _focusNode;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
+  Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
+  Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
   double get controlBarHeight => _controlBarHeight;
   double get danmakuOpacity => _danmakuOpacity;
   bool get danmakuVisible => _danmakuVisible;
@@ -842,7 +848,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       const int waitInterval = 100; // 每次等待100毫秒
       
       while (waitCount < maxWaitCount) {
-        await Future.delayed(Duration(milliseconds: waitInterval));
+        await Future.delayed(const Duration(milliseconds: waitInterval));
         waitCount++;
         
         // 检查播放器状态
@@ -1023,6 +1029,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             debugPrint('加载手动匹配的弹幕失败: $e');
             // 如果手动匹配的弹幕加载失败，清空弹幕列表但不重新识别
             _danmakuList = [];
+            _danmakuTracks.clear();
+            _danmakuTrackEnabled.clear();
             _addStatusMessage('手动匹配的弹幕加载失败');
           }
         } else {
@@ -1033,6 +1041,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             //debugPrint('弹幕加载失败: $e');
             // 设置空弹幕列表，确保播放不受影响
             _danmakuList = [];
+            _danmakuTracks.clear();
+            _danmakuTrackEnabled.clear();
             _addStatusMessage('无法连接服务器，跳过加载弹幕');
           }
         }
@@ -1258,6 +1268,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _animeTitle = null;  // 清除动画标题
       _episodeTitle = null; // 清除集数标题
       _danmakuList = []; // 清除弹幕列表
+      _danmakuTracks.clear();
+      _danmakuTrackEnabled.clear();
       _subtitleManager.clearSubtitleTrackInfo();
       _setStatus(PlayerStatus.idle);
 
@@ -1451,6 +1463,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
     _danmakuList.clear();
+    _danmakuTracks.clear();
+    _danmakuTrackEnabled.clear();
     _subtitleManager.clearSubtitleTrackInfo();
     danmakuController
         ?.dispose(); // Assuming danmakuController has a dispose method
@@ -1483,6 +1497,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
     _danmakuList.clear();
+    _danmakuTracks.clear();
+    _danmakuTrackEnabled.clear();
     _subtitleManager.clearSubtitleTrackInfo();
     danmakuController
         ?.dispose(); // Assuming danmakuController has a dispose method
@@ -1997,6 +2013,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                   //debugPrint('网络弹幕解析并排序完成');
                 } else {
                   _danmakuList = [];
+                  _danmakuTracks.clear();
+                  _danmakuTrackEnabled.clear();
                 }
 
                 notifyListeners();
@@ -2004,18 +2022,24 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               } catch (e) {
                 //debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
+                _danmakuTracks.clear();
+                _danmakuTrackEnabled.clear();
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载失败，跳过');
               }
             }
           } else {
             //debugPrint('视频未匹配到信息');
             _danmakuList = [];
+            _danmakuTracks.clear();
+            _danmakuTrackEnabled.clear();
             _setStatus(PlayerStatus.recognizing, message: '未匹配到视频信息，跳过弹幕');
           }
         }
       } catch (e) {
         //debugPrint('视频识别网络错误: $e\n$s');
         _danmakuList = [];
+        _danmakuTracks.clear();
+        _danmakuTrackEnabled.clear();
         _setStatus(PlayerStatus.recognizing, message: '无法连接服务器，跳过加载弹幕');
       }
     } catch (e) {
@@ -2555,13 +2579,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _setStatus(PlayerStatus.playing,
             message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
         
-        // 同时更新_danmakuList，保持状态一致
-        _danmakuList = await compute(parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
-        _danmakuList.sort((a, b) {
-          final timeA = (a['time'] as double?) ?? 0.0;
-          final timeB = (b['time'] as double?) ?? 0.0;
-          return timeA.compareTo(timeB);
-        });
+        // 解析弹幕数据并添加到弹弹play轨道
+        final parsedDanmaku = await compute(parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
+        
+        _danmakuTracks['dandanplay'] = {
+          'name': '弹弹play',
+          'source': 'dandanplay',
+          'episodeId': episodeId,
+          'animeId': animeIdStr,
+          'danmakuList': parsedDanmaku,
+          'count': parsedDanmaku.length,
+        };
+        _danmakuTrackEnabled['dandanplay'] = true;
+        
+        // 重新计算合并后的弹幕列表
+        _updateMergedDanmakuList();
         notifyListeners();
         return;
       }
@@ -2585,13 +2617,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 加载弹幕到控制器
         danmakuController?.loadDanmaku(danmakuData['comments']);
         
-        // 同时更新_danmakuList，保持状态一致
-        _danmakuList = await compute(parseDanmakuListInBackground, danmakuData['comments'] as List<dynamic>?);
-        _danmakuList.sort((a, b) {
-          final timeA = (a['time'] as double?) ?? 0.0;
-          final timeB = (b['time'] as double?) ?? 0.0;
-          return timeA.compareTo(timeB);
-        });
+        // 解析弹幕数据并添加到弹弹play轨道
+        final parsedDanmaku = await compute(parseDanmakuListInBackground, danmakuData['comments'] as List<dynamic>?);
+        
+        _danmakuTracks['dandanplay'] = {
+          'name': '弹弹play',
+          'source': 'dandanplay',
+          'episodeId': episodeId,
+          'animeId': animeId.toString(),
+          'danmakuList': parsedDanmaku,
+          'count': parsedDanmaku.length,
+        };
+        _danmakuTrackEnabled['dandanplay'] = true;
+        
+        // 重新计算合并后的弹幕列表
+        _updateMergedDanmakuList();
         
         _setStatus(PlayerStatus.playing,
             message: '弹幕加载完成 (${danmakuData['count']}条)');
@@ -2603,6 +2643,128 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } catch (e) {
       debugPrint('加载弹幕失败: $e');
       _setStatus(PlayerStatus.playing, message: '弹幕加载失败');
+    }
+  }
+
+  // 从本地JSON数据加载弹幕（多轨道模式）
+  Future<void> loadDanmakuFromLocal(Map<String, dynamic> jsonData, {String? trackName}) async {
+    try {
+      debugPrint('开始从本地JSON加载弹幕...');
+      
+      // 解析弹幕数据，支持多种格式
+      List<dynamic> comments = [];
+      
+      if (jsonData.containsKey('comments') && jsonData['comments'] is List) {
+        // 标准格式：comments字段包含数组
+        comments = jsonData['comments'];
+      } else if (jsonData.containsKey('data')) {
+        // 兼容格式：data字段
+        final data = jsonData['data'];
+        if (data is List) {
+          // data是数组
+          comments = data;
+        } else if (data is String) {
+          // data是字符串，需要解析
+          try {
+            final parsedData = json.decode(data);
+            if (parsedData is List) {
+              comments = parsedData;
+            } else {
+              throw Exception('data字段的JSON字符串不是数组格式');
+            }
+          } catch (e) {
+            throw Exception('data字段的JSON字符串解析失败: $e');
+          }
+        } else {
+          throw Exception('data字段格式不正确，应为数组或JSON字符串');
+        }
+      } else {
+        throw Exception('JSON文件格式不正确，必须包含comments数组或data字段');
+      }
+
+      if (comments.isEmpty) {
+        throw Exception('弹幕文件中没有弹幕数据');
+      }
+
+      // 解析弹幕数据
+      final parsedDanmaku = await compute(parseDanmakuListInBackground, comments);
+      
+      // 生成轨道名称
+      final String finalTrackName = trackName ?? 'local_${DateTime.now().millisecondsSinceEpoch}';
+      
+      // 添加到本地轨道
+      _danmakuTracks[finalTrackName] = {
+        'name': trackName ?? '本地轨道${_danmakuTracks.length}',
+        'source': 'local',
+        'danmakuList': parsedDanmaku,
+        'count': parsedDanmaku.length,
+        'loadTime': DateTime.now(),
+      };
+      _danmakuTrackEnabled[finalTrackName] = true;
+      
+      // 重新计算合并后的弹幕列表
+      _updateMergedDanmakuList();
+      
+      debugPrint('本地弹幕轨道添加完成: $finalTrackName，共${comments.length}条');
+      _setStatus(PlayerStatus.playing, message: '本地弹幕轨道添加完成 (${comments.length}条)');
+      notifyListeners();
+      
+    } catch (e) {
+      debugPrint('加载本地弹幕失败: $e');
+      _setStatus(PlayerStatus.playing, message: '本地弹幕加载失败');
+      rethrow;
+    }
+  }
+
+  // 更新合并后的弹幕列表
+  void _updateMergedDanmakuList() {
+    _danmakuList.clear();
+    
+    // 合并所有启用的轨道
+    for (final trackId in _danmakuTracks.keys) {
+      if (_danmakuTrackEnabled[trackId] == true) {
+        final trackData = _danmakuTracks[trackId]!;
+        final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
+        _danmakuList.addAll(trackDanmaku);
+      }
+    }
+    
+    // 重新排序
+    _danmakuList.sort((a, b) {
+      final timeA = (a['time'] as double?) ?? 0.0;
+      final timeB = (b['time'] as double?) ?? 0.0;
+      return timeA.compareTo(timeB);
+    });
+    
+    // 更新到弹幕控制器
+    danmakuController?.loadDanmaku(_danmakuList.map((e) => e).toList());
+    
+    debugPrint('弹幕轨道合并完成，总计${_danmakuList.length}条弹幕');
+  }
+
+  // 切换轨道启用状态
+  void toggleDanmakuTrack(String trackId, bool enabled) {
+    if (_danmakuTracks.containsKey(trackId)) {
+      _danmakuTrackEnabled[trackId] = enabled;
+      _updateMergedDanmakuList();
+      notifyListeners();
+      debugPrint('弹幕轨道 $trackId ${enabled ? "启用" : "禁用"}');
+    }
+  }
+
+  // 删除弹幕轨道
+  void removeDanmakuTrack(String trackId) {
+    if (trackId == 'dandanplay') {
+      debugPrint('不能删除弹弹play轨道');
+      return;
+    }
+    
+    if (_danmakuTracks.containsKey(trackId)) {
+      _danmakuTracks.remove(trackId);
+      _danmakuTrackEnabled.remove(trackId);
+      _updateMergedDanmakuList();
+      notifyListeners();
+      debugPrint('删除弹幕轨道: $trackId');
     }
   }
 
@@ -3511,6 +3673,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         } catch (e) {
           debugPrint('Jellyfin流媒体弹幕加载失败: $e');
           _danmakuList = [];
+          _danmakuTracks.clear();
+          _danmakuTrackEnabled.clear();
           _setStatus(PlayerStatus.recognizing, message: 'Jellyfin弹幕加载失败，跳过');
           return true; // 尽管失败，但仍标记为已处理
         }

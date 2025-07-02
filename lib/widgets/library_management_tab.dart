@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:ui';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'dart:async';
@@ -12,11 +13,10 @@ import 'package:nipaplay/services/scan_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
 import '../services/file_picker_service.dart';
-import '../utils/globals.dart' as globals;
 import '../utils/storage_service.dart'; // 导入StorageService
 import 'package:permission_handler/permission_handler.dart'; // 导入权限处理库
 import '../utils/android_storage_helper.dart'; // 导入Android存储辅助类
-import 'package:flutter/services.dart'; // Import MethodChannel
+// Import MethodChannel
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 
 class LibraryManagementTab extends StatefulWidget {
@@ -465,28 +465,76 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final result = await BlurDialog.show<int>(
       context: context,
       title: '选择排序方式',
-      content: '选择文件夹中文件和子文件夹的排序方式：',
-      actions: [
-        ...sortOptions.asMap().entries.map((entry) {
-          final index = entry.key;
-          final option = entry.value;
-          final isSelected = _sortOption == index;
-          return TextButton(
-            onPressed: () => Navigator.of(context).pop(index),
-            child: Text(
-              isSelected ? '✓ $option' : option,
-              style: TextStyle(
-                color: isSelected ? Colors.lightBlueAccent : Colors.white70,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '选择文件夹中文件和子文件夹的排序方式：',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 200, // 减少高度
+            child: SingleChildScrollView(
+              child: Column(
+                children: sortOptions.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final option = entry.value;
+                  final isSelected = _sortOption == index;
+                  return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(vertical: 1),
+                    child: Material(
+                      color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () => Navigator.of(context).pop(index),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Row(
+                            children: [
+                              if (isSelected) ...[
+                                const Icon(
+                                  Icons.check,
+                                  color: Colors.lightBlueAccent,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 10),
+                              ] else ...[
+                                const SizedBox(width: 28),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  option,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.lightBlueAccent : Colors.white70,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
-          );
-        }),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消', style: TextStyle(color: Colors.white54)),
-        ),
-      ],
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消', style: TextStyle(color: Colors.white54)),
+          ),
+        ],
+      ),
     );
 
     if (result != null && result != _sortOption && mounted) {

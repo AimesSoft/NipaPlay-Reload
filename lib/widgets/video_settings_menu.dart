@@ -8,6 +8,7 @@ import 'control_bar_settings_menu.dart';
 import 'danmaku_settings_menu.dart';
 import 'audio_tracks_menu.dart';
 import 'danmaku_list_menu.dart';
+import 'danmaku_tracks_menu.dart';
 import 'subtitle_list_menu.dart';
 import '../player_abstraction/player_factory.dart';
 import 'playlist_menu.dart';
@@ -31,6 +32,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   bool _showDanmakuSettings = false;
   bool _showAudioTracks = false;
   bool _showDanmakuList = false;
+  bool _showDanmakuTracks = false;
   bool _showSubtitleList = false;
   bool _showPlaylist = false;
 
@@ -39,6 +41,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   OverlayEntry? _danmakuSettingsOverlay;
   OverlayEntry? _audioTracksOverlay;
   OverlayEntry? _danmakuListOverlay;
+  OverlayEntry? _danmakuTracksOverlay;
   OverlayEntry? _subtitleListOverlay;
   OverlayEntry? _playlistOverlay;
 
@@ -95,6 +98,13 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     ));
     
     _settingsItems.add(SettingsItem(
+      icon: Icons.track_changes,
+      title: '弹幕轨道',
+      onTap: _toggleDanmakuTracksMenu,
+      isActive: () => _showDanmakuTracks,
+    ));
+    
+    _settingsItems.add(SettingsItem(
       icon: Icons.list_alt_outlined,
       title: '弹幕列表',
       onTap: _toggleDanmakuListMenu,
@@ -132,6 +142,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
       });
@@ -163,6 +174,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showControlBarSettings = false;
         _showDanmakuSettings = false;
         _showDanmakuList = false;
+        _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
       });
@@ -194,6 +206,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
       });
@@ -226,6 +239,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showControlBarSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
       });
@@ -258,6 +272,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showControlBarSettings = false;
         _showDanmakuSettings = false;
         _showAudioTracks = false;
+        _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
       });
@@ -276,6 +291,38 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     }
   }
 
+  void _toggleDanmakuTracksMenu() {
+    if (_showDanmakuTracks) {
+      _danmakuTracksOverlay?.remove();
+      _danmakuTracksOverlay = null;
+      setState(() => _showDanmakuTracks = false);
+    } else {
+      _closeAllOverlays();
+      setState(() {
+        _showDanmakuTracks = true;
+        _showSubtitleTracks = false;
+        _showControlBarSettings = false;
+        _showDanmakuSettings = false;
+        _showAudioTracks = false;
+        _showDanmakuList = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
+      });
+
+      _danmakuTracksOverlay = OverlayEntry(
+        builder: (context) => DanmakuTracksMenu(
+          onClose: () {
+            _danmakuTracksOverlay?.remove();
+            _danmakuTracksOverlay = null;
+            setState(() => _showDanmakuTracks = false);
+          },
+        ),
+      );
+
+      Overlay.of(context).insert(_danmakuTracksOverlay!);
+    }
+  }
+
   void _toggleSubtitleListMenu() {
     if (_showSubtitleList) {
       _subtitleListOverlay?.remove();
@@ -290,6 +337,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showDanmakuTracks = false;
         _showPlaylist = false;
       });
 
@@ -321,6 +369,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showDanmakuTracks = false;
         _showSubtitleList = false;
       });
 
@@ -349,6 +398,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _audioTracksOverlay = null;
     _danmakuListOverlay?.remove();
     _danmakuListOverlay = null;
+    _danmakuTracksOverlay?.remove();
+    _danmakuTracksOverlay = null;
     _subtitleListOverlay?.remove();
     _subtitleListOverlay = null;
     _playlistOverlay?.remove();
@@ -362,6 +413,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuSettings = false;
         _showAudioTracks = false;
         _showDanmakuList = false;
+        _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
       });
@@ -372,6 +424,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _showDanmakuSettings = false;
       _showAudioTracks = false;
       _showDanmakuList = false;
+      _showDanmakuTracks = false;
       _showSubtitleList = false;
       _showPlaylist = false;
     }
@@ -385,6 +438,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _danmakuSettingsOverlay?.remove();
     _audioTracksOverlay?.remove();
     _danmakuListOverlay?.remove();
+    _danmakuTracksOverlay?.remove();
     _subtitleListOverlay?.remove();
     _playlistOverlay?.remove();
     

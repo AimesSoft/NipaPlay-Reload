@@ -323,8 +323,9 @@ class DandanplayService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['token'] != null) {
-          _token = data['token'];
-          await saveToken(data['token']);
+          // 保存完整的登录信息，包括状态
+          final screenName = data['user']?['screenName'] ?? username;
+          await saveLoginInfo(data['token'], username, screenName);
           return {'success': true, 'message': '登录成功'};
         } else {
           return {'success': false, 'message': data['errorMessage'] ?? '登录失败，请检查用户名和密码'};

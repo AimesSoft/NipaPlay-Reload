@@ -27,10 +27,9 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   Future<void> _loadLoginStatus() async {
-    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
-      _username = prefs.getString('dandanplay_username') ?? '';
+      _isLoggedIn = DandanplayService.isLoggedIn;
+      _username = DandanplayService.userName ?? '';
       _updateAvatarUrl();
     });
   }
@@ -66,10 +65,6 @@ class _AccountPageState extends State<AccountPage> {
       final result = await DandanplayService.login(username, password);
       
       if (result['success'] == true) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('dandanplay_logged_in', true);
-        await prefs.setString('dandanplay_username', username);
-
         setState(() {
           _isLoggedIn = true;
           _username = username;
@@ -104,9 +99,7 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('dandanplay_logged_in', false);
-    await prefs.remove('dandanplay_username');
+    await DandanplayService.clearLoginInfo();
 
     setState(() {
       _isLoggedIn = false;
