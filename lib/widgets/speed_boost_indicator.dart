@@ -35,9 +35,9 @@ class SpeedBoostIndicator extends StatelessWidget {
                           size: 20,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          "${videoState.playbackRate}x 倍速",
-                          style: const TextStyle(
+                        const Text(
+                          "2x 倍速",
+                          style: TextStyle(
                             color: Color.fromARGB(139, 255, 255, 255),
                             fontSize: 16,
                             fontWeight: FontWeight.w500,

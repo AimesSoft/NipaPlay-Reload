@@ -2,12 +2,9 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
-import 'dart:async';
-import 'dart:math';
 import 'package:nipaplay/models/watch_history_model.dart';
 import '../utils/video_player_state.dart';
 import '../widgets/loading_overlay.dart';
@@ -15,14 +12,12 @@ import '../utils/tab_change_notifier.dart';
 import '../widgets/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
 import '../providers/appearance_settings_provider.dart';
-import 'package:flutter/gestures.dart';
 import '../pages/media_library_page.dart';
 import '../widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import '../widgets/blur_snackbar.dart';
 import '../widgets/history_all_modal.dart';
 import '../widgets/switchable_view.dart';
-import 'package:flutter/rendering.dart';
 import 'package:nipaplay/main.dart';
 import '../services/jellyfin_service.dart';
 import '../services/emby_service.dart';
@@ -820,7 +815,6 @@ class _MediaLibraryTabs extends StatefulWidget {
   final int mediaLibraryVersion;
 
   const _MediaLibraryTabs({
-    super.key,
     this.initialIndex = 0,
     required this.onPlayEpisode,
     required this.mediaLibraryVersion,
@@ -957,53 +951,79 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           print('警告：标签数量(${tabs.length})、内容数量(${pageChildren.length})与预期数量($_tabCount)不匹配');
         }
         
-        return Column(
-          children: [
-            TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabs: tabs,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              labelStyle: const TextStyle(
-                fontSize: 24, 
-                fontWeight: FontWeight.bold
-              ),
-              indicatorPadding: const EdgeInsets.only(
-                top: 45, 
-                left: 0, 
-                right: 0
-              ),
-              indicator: BoxDecoration(
-                color: Colors.greenAccent,
-                borderRadius: BorderRadius.circular(30),
-              ),
-              tabAlignment: TabAlignment.start,
-              dividerColor: const Color.fromARGB(59, 255, 255, 255),
-              dividerHeight: 3.0,
-              indicatorSize: TabBarIndicatorSize.tab,
-            ),
-            Expanded(
-              child: SwitchableView(
-                enableAnimation: enableAnimation,
-                currentIndex: _currentIndex,
-                controller: _tabController,
-                physics: enableAnimation 
-                    ? const PageScrollPhysics()
-                    : const NeverScrollableScrollPhysics(),
-                onPageChanged: (index) {
-                  if (_currentIndex != index) {
-                    setState(() {
-                      _currentIndex = index;
-                    });
-                    _tabController.animateTo(index);
-                    print('页面变更到: $index (启用动画: $enableAnimation)');
-                  }
-                },
-                children: pageChildren,
-              ),
-            ),
-          ],
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // 检查可用高度，如果太小则使用最小安全布局
+            final availableHeight = constraints.maxHeight;
+            final isHeightConstrained = availableHeight < 100; // 小于100像素视为高度受限
+            
+            if (isHeightConstrained) {
+              // 高度受限时，使用简化布局避免溢出
+              return SizedBox(
+                height: availableHeight,
+                child: const Center(
+                  child: Text(
+                    '布局空间不足',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              );
+            }
+            
+            return Column(
+              children: [
+                // TabBar - 使用Flexible包装以防溢出
+                Flexible(
+                  flex: 0,
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    tabs: tabs,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.white70,
+                    labelStyle: const TextStyle(
+                      fontSize: 24, 
+                      fontWeight: FontWeight.bold
+                    ),
+                    indicatorPadding: const EdgeInsets.only(
+                      top: 45, 
+                      left: 0, 
+                      right: 0
+                    ),
+                    indicator: BoxDecoration(
+                      color: Colors.greenAccent,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    tabAlignment: TabAlignment.start,
+                    dividerColor: const Color.fromARGB(59, 255, 255, 255),
+                    dividerHeight: 3.0,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                  ),
+                ),
+                // 内容区域 - 确保占用剩余所有空间
+                Expanded(
+                  child: SwitchableView(
+                    enableAnimation: enableAnimation,
+                    currentIndex: _currentIndex,
+                    controller: _tabController,
+                    physics: enableAnimation 
+                        ? const PageScrollPhysics()
+                        : const NeverScrollableScrollPhysics(),
+                    onPageChanged: (index) {
+                      if (_currentIndex != index) {
+                        setState(() {
+                          _currentIndex = index;
+                        });
+                        _tabController.animateTo(index);
+                        print('页面变更到: $index (启用动画: $enableAnimation)');
+                      }
+                    },
+                    children: pageChildren,
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );

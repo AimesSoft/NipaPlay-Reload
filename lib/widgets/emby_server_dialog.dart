@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:glassmorphism/glassmorphism.dart';
-import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/blur_login_dialog.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
-import 'dart:ui';
+import '../utils/globals.dart' as globals;
 
 class EmbyServerDialog extends StatefulWidget {
   const EmbyServerDialog({super.key});
@@ -44,7 +42,7 @@ class EmbyServerDialog extends StatefulWidget {
             label: '用户名',
             initialValue: embyProvider.username,
           ),
-          LoginField(
+          const LoginField(
             key: 'password',
             label: '密码',
             isPassword: true,
@@ -110,35 +108,49 @@ class _EmbyServerDialogState extends State<EmbyServerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isLandscape = screenSize.width > screenSize.height;
+    final isPhone = screenSize.shortestSide < 600;
+    
+    // 使用预计算的对话框宽度和高度
+    final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
+    final dialogHeight = globals.DialogSizes.serverDialogHeight;
+    
+    // 获取键盘高度，用于动态调整底部间距
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    
     return Dialog(
       backgroundColor: Colors.transparent,
-      child: GlassmorphicContainer(
-        width: 400,
-        height: 500,
-        borderRadius: 20,
-        blur: 20,
-        alignment: Alignment.center,
-        border: 1.5,
-        linearGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF212121).withOpacity(0.6),
-            const Color(0xFF424242).withOpacity(0.6),
-          ],
-          stops: const [0.1, 1],
-        ),
-        borderGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF424242).withOpacity(0.5),
-            const Color(0xFF424242).withOpacity(0.5),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: _buildConnectedView(),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: keyboardHeight),
+        child: GlassmorphicContainer(
+          width: dialogWidth,
+          height: dialogHeight,
+          borderRadius: 20,
+          blur: 20,
+          alignment: Alignment.center,
+          border: 1.5,
+          linearGradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF212121).withOpacity(0.6),
+              const Color(0xFF424242).withOpacity(0.6),
+            ],
+            stops: const [0.1, 1],
+          ),
+          borderGradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF424242).withOpacity(0.5),
+              const Color(0xFF424242).withOpacity(0.5),
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(isPhone ? 20.0 : 24.0),
+            child: _buildConnectedView(),
+          ),
         ),
       ),
     );

@@ -44,9 +44,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isNextEpisodePressed = false;
   bool _isPreviousEpisodeHovered = false;
   bool _isNextEpisodeHovered = false;
-  // 添加倍速按钮状态变量
-  bool _isSpeedBoostPressed = false;
-  bool _isSpeedBoostHovered = false;
+
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -451,40 +449,6 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       
                                       const SizedBox(width: 12),
                                       
-                                      // 倍速按钮
-                                      Consumer<VideoPlayerState>(
-                                        builder: (context, videoState, child) {
-                                          return _buildControlButton(
-                                            icon: AnimatedSwitcher(
-                                              duration: const Duration(milliseconds: 200),
-                                              transitionBuilder: (child, animation) {
-                                                return ScaleTransition(
-                                                  scale: animation,
-                                                  child: child,
-                                                );
-                                              },
-                                              child: Icon(
-                                                videoState.isSpeedBoostActive 
-                                                    ? Icons.fast_forward_rounded 
-                                                    : Icons.speed_rounded,
-                                                key: ValueKey<bool>(videoState.isSpeedBoostActive),
-                                                color: Colors.white,
-                                                size: globals.isPhone ? 28 : 24,
-                                              ),
-                                            ),
-                                            onTap: () => videoState.togglePlaybackRate(),
-                                            isPressed: _isSpeedBoostPressed,
-                                            isHovered: _isSpeedBoostHovered,
-                                            onHover: (value) => setState(() => _isSpeedBoostHovered = value),
-                                            onPressed: (value) => setState(() => _isSpeedBoostPressed = value),
-                                            tooltip: '${videoState.playbackRate}x倍速',
-                                            useAnimatedSwitcher: true,
-                                          );
-                                        },
-                                      ),
-                                      
-                                      const SizedBox(width: 12),
-                                      
                                       // 设置按钮
                                       _buildControlButton(
                                         icon: Icon(
@@ -504,36 +468,37 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         useAnimatedSwitcher: true,
                                       ),
                                       
-                                      // 全屏按钮（桌面）或菜单栏切换按钮（平板）
-                                      if (globals.isDesktop || globals.isTablet)
-                                        _buildControlButton(
-                                          icon: Icon(
-                                            globals.isTablet 
-                                              ? (videoState.isAppBarHidden 
-                                                  ? Icons.fullscreen_exit_rounded 
-                                                  : Icons.fullscreen_rounded)
-                                              : (videoState.isFullscreen 
-                                                  ? Icons.fullscreen_exit_rounded 
-                                                  : Icons.fullscreen_rounded),
-                                            key: ValueKey<bool>(globals.isTablet ? videoState.isAppBarHidden : videoState.isFullscreen),
-                                            color: Colors.white,
-                                            size: 32,
-                                          ),
-                                          onTap: () => globals.isTablet 
-                                            ? videoState.toggleAppBarVisibility() 
-                                            : videoState.toggleFullscreen(),
-                                          isPressed: _isFullscreenPressed,
-                                          isHovered: _isFullscreenHovered,
-                                          onHover: (value) => setState(() => _isFullscreenHovered = value),
-                                          onPressed: (value) => setState(() => _isFullscreenPressed = value),
-                                          tooltip: globals.isTablet 
-                                            ? (videoState.isAppBarHidden ? '显示菜单栏' : '隐藏菜单栏')
+                                      // 全屏按钮（所有平台）或菜单栏切换按钮（平板）
+                                      _buildControlButton(
+                                        icon: Icon(
+                                          globals.isTablet 
+                                            ? (videoState.isAppBarHidden 
+                                                ? Icons.fullscreen_exit_rounded 
+                                                : Icons.fullscreen_rounded)
+                                            : (videoState.isFullscreen 
+                                                ? Icons.fullscreen_exit_rounded 
+                                                : Icons.fullscreen_rounded),
+                                          key: ValueKey<bool>(globals.isTablet ? videoState.isAppBarHidden : videoState.isFullscreen),
+                                          color: Colors.white,
+                                          size: globals.isPhone ? 36 : 32,
+                                        ),
+                                        onTap: () => globals.isTablet 
+                                          ? videoState.toggleAppBarVisibility() 
+                                          : videoState.toggleFullscreen(),
+                                        isPressed: _isFullscreenPressed,
+                                        isHovered: _isFullscreenHovered,
+                                        onHover: (value) => setState(() => _isFullscreenHovered = value),
+                                        onPressed: (value) => setState(() => _isFullscreenPressed = value),
+                                        tooltip: globals.isTablet 
+                                          ? (videoState.isAppBarHidden ? '显示菜单栏' : '隐藏菜单栏')
+                                          : globals.isPhone
+                                            ? (videoState.isFullscreen ? '退出全屏' : '全屏')
                                             : KeyboardShortcuts.formatActionWithShortcut(
                                                 videoState.isFullscreen ? '退出全屏' : '全屏',
                                                 KeyboardShortcuts.getShortcutText('fullscreen')
                                               ),
-                                          useCustomAnimation: true,
-                                        ),
+                                        useCustomAnimation: true,
+                                      ),
                                     ],
                                   ),
                                 ),

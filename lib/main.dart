@@ -769,6 +769,13 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    
+    // 初始化对话框尺寸管理器 - 只初始化一次
+    if (!globals.DialogSizes.isInitialized) {
+      final screenSize = MediaQuery.of(context).size;
+      globals.DialogSizes.initialize(screenSize.width, screenSize.height);
+    }
+    
     // 只添加一次监听 - Temporarily remove or comment out for Scheme 1
     _tabChangeNotifier ??= Provider.of<TabChangeNotifier>(context);
     _tabChangeNotifier?.removeListener(_onTabChangeRequested);

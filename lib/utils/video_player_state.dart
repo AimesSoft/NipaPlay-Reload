@@ -3536,10 +3536,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _normalPlaybackRate = _playbackRate;
     _isSpeedBoostActive = true;
     
-    // 如果当前已经是预设的倍速，则使用2倍速作为临时倍速
-    final tempSpeedBoost = (_playbackRate == 2.0) ? 3.0 : 2.0;
-    player.setPlaybackRate(tempSpeedBoost);
-    debugPrint('开始长按倍速播放: ${tempSpeedBoost}x (之前: ${_normalPlaybackRate}x)');
+    // 固定使用2倍速
+    player.setPlaybackRate(2.0);
+    debugPrint('开始长按倍速播放: 2.0x (之前: ${_normalPlaybackRate}x)');
     
     // 显示倍速指示器
     _showSpeedBoostIndicator();

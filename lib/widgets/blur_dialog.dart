@@ -17,34 +17,21 @@ class BlurDialog {
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (BuildContext context) {
         final screenSize = MediaQuery.of(context).size;
-        final isPortrait = screenSize.height > screenSize.width;
         
-        // 响应式宽度计算
-        double dialogWidth;
-        if (globals.isPhone) {
-          // 手机设备：使用屏幕宽度的90%，最小280，最大450
-          dialogWidth = (screenSize.width * 0.9).clamp(280.0, 450.0);
-        } else if (globals.isTablet) {
-          // 平板设备：使用屏幕宽度的70%，最小400，最大600
-          dialogWidth = (screenSize.width * 0.7).clamp(400.0, 600.0);
-        } else {
-          // 桌面设备：固定400
-          dialogWidth = 400.0;
-        }
+        // 使用预计算的对话框宽度和高度
+        final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
+        final dialogHeight = globals.DialogSizes.generalDialogHeight;
         
-        // 响应式最大高度计算
-        final maxHeight = screenSize.height * 0.8; // 最大不超过屏幕高度的80%
+        // 获取键盘高度，用于动态调整底部间距
+        final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
         
         return Dialog(
           backgroundColor: Colors.transparent,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: dialogWidth,
-              maxHeight: maxHeight,
-            ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: keyboardHeight),
             child: GlassmorphicContainer(
               width: dialogWidth,
-              height: contentWidget != null ? maxHeight : 200,
+              height: dialogHeight,
               borderRadius: 20,
               blur: 20,
               alignment: Alignment.center,
@@ -66,74 +53,70 @@ class BlurDialog {
                 ],
               ),
               child: Padding(
-                padding: EdgeInsets.all(globals.isPhone ? 16 : 20),
-                child: IntrinsicHeight(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 标题
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: globals.isPhone ? 18 : 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 固定标题区域
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      SizedBox(height: globals.isPhone ? 16 : 20),
-                      
-                      // 内容区域 - 可滚动
-                      Flexible(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (content != null)
-                                Text(
-                                  content,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: globals.isPhone ? 14 : 16,
-                                    height: 1.4, // 增加行高提升可读性
-                                  ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // 可滚动内容区域
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (content != null)
+                              Text(
+                                content,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  height: 1.4,
                                 ),
-                              if (contentWidget != null)
-                                contentWidget,
-                            ],
-                          ),
+                              ),
+                            if (contentWidget != null)
+                              contentWidget,
+                          ],
                         ),
                       ),
-                      
-                      // 按钮区域
-                      if (actions != null) ...[
-                        SizedBox(height: globals.isPhone ? 16 : 20),
-                        // 在手机设备上，如果按钮较多，使用垂直布局
-                        if (globals.isPhone && actions.length > 2)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: actions.map((action) => 
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: action,
-                              )
-                            ).toList(),
-                          )
-                        else
-                          // 正常的横向布局
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: actions
-                                .map((action) => Padding(
-                                      padding: const EdgeInsets.only(left: 8),
-                                      child: action,
-                                    ))
-                                .toList(),
-                          ),
-                      ],
+                    ),
+                    
+                    // 固定按钮区域
+                    if (actions != null) ...[
+                      const SizedBox(height: 16),
+                      if ((globals.isPhone && !globals.isTablet) && actions.length > 2)
+                        // 手机垂直布局
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: actions.map((action) => 
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: action,
+                            )
+                          ).toList(),
+                        )
+                      else
+                        // 正常横向布局
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: actions
+                              .map((action) => Padding(
+                                    padding: const EdgeInsets.only(left: 8),
+                                    child: action,
+                                  ))
+                              .toList(),
+                        ),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ),
