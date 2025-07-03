@@ -19,7 +19,7 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
 
   @override
   void dispose() {
-    _hideSettingsMenu();
+    _hideSettingsMenuWithoutSetState();
     super.dispose();
   }
 
@@ -30,25 +30,37 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
       builder: (context) => HoverSettingsMenuWrapper(
         onClose: _hideSettingsMenu,
         onHover: (isHovered) {
-          setState(() {
-            _isMenuVisible = isHovered;
-          });
+          if (mounted) {
+            setState(() {
+              _isMenuVisible = isHovered;
+            });
+          }
         },
       ),
     );
 
     Overlay.of(context).insert(_settingsMenuOverlay!);
-    setState(() {
-      _isMenuVisible = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isMenuVisible = true;
+      });
+    }
   }
 
   void _hideSettingsMenu() {
     _settingsMenuOverlay?.remove();
     _settingsMenuOverlay = null;
-    setState(() {
-      _isMenuVisible = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isMenuVisible = false;
+      });
+    }
+  }
+
+  void _hideSettingsMenuWithoutSetState() {
+    _settingsMenuOverlay?.remove();
+    _settingsMenuOverlay = null;
+    _isMenuVisible = false;
   }
 
   @override
