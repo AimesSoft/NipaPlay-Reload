@@ -30,6 +30,15 @@ bool get isPhone {
     return false;
   }
 }
+
+// 判断是否为平板设备（屏幕宽度大于高度的移动设备）
+bool get isTablet {
+  if (!isPhone) return false;
+  final window = WidgetsBinding.instance.window;
+  final size = window.physicalSize / window.devicePixelRatio;
+  return size.width > size.height;
+}
+
 bool get isTouch {
   //移动平台
   if (kIsWeb) {

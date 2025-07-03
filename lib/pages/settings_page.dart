@@ -35,8 +35,8 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     // 初始化TabController
     _tabController = TabController(length: 1, vsync: this);
     
-    // 可以在这里为桌面端设置一个默认显示的页面
-    if (globals.isDesktop) {
+    // 可以在这里为桌面端和平板设备设置一个默认显示的页面
+    if (globals.isDesktop || globals.isTablet) {
       currentPage = const AboutPage(); // 例如默认显示 AboutPage
     }
   }
@@ -61,8 +61,8 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     }
 
     final List<Widget> pages = [pageToShow];
-    if (globals.isDesktop) {
-      // 桌面端：更新状态，改变右侧面板内容
+    if (globals.isDesktop || globals.isTablet) {
+      // 桌面端和平板设备：更新状态，改变右侧面板内容
       setState(() {
         currentPage = pageToShow;
       });

@@ -31,6 +31,7 @@ import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brigh
 import '../widgets/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
 import '../widgets/volume_indicator.dart'; // Added import for VolumeIndicator widget
 import '../widgets/seek_indicator.dart'; // Added import for SeekIndicator widget
+import '../widgets/speed_boost_indicator.dart'; // Added import for SpeedBoostIndicator widget
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
 import '../services/file_picker_service.dart'; // Added import for FilePickerService
@@ -39,6 +40,7 @@ import 'decoder_manager.dart'; // 导入解码器管理器
 import '../services/episode_navigation_service.dart'; // 导入剧集导航服务
 import '../services/auto_next_episode_service.dart';
 import 'storage_service.dart'; // Added import for StorageService
+import 'screen_orientation_manager.dart';
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -153,6 +155,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _dragSeekTargetPosition = Duration.zero; // To show target position during drag
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
 
+  // 倍速指示器状态
+  OverlayEntry? _speedBoostOverlayEntry;
+
   // 右边缘悬浮菜单状态
   bool _isRightEdgeHovered = false;
   Timer? _rightEdgeHoverTimer;
@@ -165,9 +170,44 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late DecoderManager _decoderManager;
 
   bool _hasInitialScreenshot = false; // 添加标记跟踪是否已进行第一次播放截图
+  
+  // 平板设备菜单栏隐藏状态
+  bool _isAppBarHidden = false;
 
   // 新增回调：当发生严重播放错误且应弹出时调用
   Function()? onSeriousPlaybackErrorAndShouldPop;
+
+  // 获取菜单栏隐藏状态
+  bool get isAppBarHidden => _isAppBarHidden;
+
+  // 检查是否为平板设备（使用globals中的判定逻辑）
+  bool get isTablet => globals.isTablet;
+
+  // 切换菜单栏显示/隐藏状态（仅用于平板设备）
+  void toggleAppBarVisibility() async {
+    if (isTablet) {
+      _isAppBarHidden = !_isAppBarHidden;
+      
+      // 当切换到全屏状态时，同时隐藏系统状态栏
+      if (_isAppBarHidden) {
+        // 进入全屏状态，隐藏系统UI
+        try {
+          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        } catch (e) {
+          debugPrint('隐藏系统UI时出错: $e');
+        }
+      } else {
+        // 退出全屏状态，显示系统UI
+        try {
+          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        } catch (e) {
+          debugPrint('显示系统UI时出错: $e');
+        }
+      }
+      
+      notifyListeners();
+    }
+  }
 
   VideoPlayerState() {
     // 创建临时播放器实例，后续会被 _initialize 中的异步创建替换
@@ -314,7 +354,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Future<void> _initialize() async {
     if (globals.isPhone) {
-      await _setPortrait();
+      // 使用新的屏幕方向管理器设置初始方向
+      await ScreenOrientationManager.instance.setInitialOrientation();
       await _loadInitialBrightness(); // Load initial brightness for phone
       await _loadInitialVolume(); // <<< CALL ADDED
     }
@@ -582,99 +623,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     return positionMap[path] ?? 0;
   }
 
-  // 设置横屏
-  Future<void> _setLandscape() async {
-    debugPrint(
-        'VideoPlayerState: _setLandscape CALLED. Current _isFullscreen: $_isFullscreen, globals.isPhone: ${globals.isPhone}');
-    if (!globals.isPhone) return;
 
-    // 获取屏幕尺寸判断是否为TV等横屏设备
-    final window = WidgetsBinding.instance.window;
-    final size = window.physicalSize / window.devicePixelRatio;
-    // 如果宽度大于高度，说明可能是TV或横屏设备，不需要强制横屏
-    if (size.width > size.height) return;
-
-    try {
-      _isFullscreenTransitioning = true;
-      notifyListeners();
-      final wasPlaying = _status == PlayerStatus.playing;
-      if (wasPlaying) {
-        player.state = PlaybackState.paused;
-      }
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-        DeviceOrientation.portraitUp,
-      ]);
-      await Future.delayed(const Duration(milliseconds: 100));
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      await Future.delayed(const Duration(milliseconds: 500));
-      // player.textureId.value = null; // COMMENTED OUT - ValueListenable has no setter
-      await Future.delayed(const Duration(milliseconds: 100));
-      final textureId = await player.updateTexture();
-      if (wasPlaying) {
-        player.state = PlaybackState.playing;
-        _setStatus(PlayerStatus.playing, message: '继续播放');
-      }
-      _isFullscreen = true;
-      _isFullscreenTransitioning = false;
-      notifyListeners();
-    } catch (e) {
-      _isFullscreenTransitioning = false;
-      try {
-        await _setPortrait();
-      } catch (e2) {}
-      notifyListeners();
-    }
-  }
-
-  // 设置竖屏
-  Future<void> _setPortrait() async {
-    if (!globals.isPhone) return;
-
-    // 获取屏幕尺寸判断是否为TV等横屏设备
-    final window = WidgetsBinding.instance.window;
-    final size = window.physicalSize / window.devicePixelRatio;
-    // 如果宽度大于高度，说明可能是TV或横屏设备，不需要强制竖屏
-    if (size.width > size.height) return;
-
-    try {
-      _isFullscreenTransitioning = true;
-      notifyListeners();
-      final wasPlaying = _status == PlayerStatus.playing;
-      if (wasPlaying) {
-        player.state = PlaybackState.paused;
-      }
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-        DeviceOrientation.portraitUp,
-      ]);
-      await Future.delayed(const Duration(milliseconds: 100));
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-      ]);
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      await Future.delayed(const Duration(milliseconds: 500));
-      // player.textureId.value = null; // COMMENTED OUT
-      await Future.delayed(const Duration(milliseconds: 100));
-      final textureId = await player.updateTexture();
-      if (wasPlaying) {
-        player.state = PlaybackState.playing;
-        _setStatus(PlayerStatus.playing, message: '继续播放');
-      }
-      _isFullscreen = false;
-      _isFullscreenTransitioning = false;
-      notifyListeners();
-    } catch (e) {
-      _isFullscreenTransitioning = false;
-      notifyListeners();
-    }
-  }
 
   Future<void> initializePlayer(String videoPath,
       {WatchHistoryItem? historyItem, String? historyFilePath, String? actualPlayUrl}) async {
@@ -1077,11 +1026,24 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 设置状态为准备就绪
       _setStatus(PlayerStatus.ready, message: '准备就绪');
       
-      // 新逻辑：只要是手机，就尝试设置横屏，在确定播放状态之前
+      // 使用屏幕方向管理器设置播放时的屏幕方向
       if (globals.isPhone) {
         debugPrint(
-            'VideoPlayerState: Device is phone. Attempting to call _setLandscape PRIOR to setting final playback state.');
-        await _setLandscape();
+            'VideoPlayerState: Device is phone. Setting video playing orientation.');
+        await ScreenOrientationManager.instance.setVideoPlayingOrientation();
+        
+        // 平板设备默认隐藏菜单栏（全屏状态）
+        if (globals.isTablet) {
+          _isAppBarHidden = true;
+          debugPrint('VideoPlayerState: Tablet detected, hiding app bar by default.');
+          
+          // 同时隐藏系统UI
+          try {
+            await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+          } catch (e) {
+            debugPrint('隐藏系统UI时出错: $e');
+          }
+        }
       }
 
       //debugPrint('12. 设置最终播放状态 (在可能的横屏切换之后)...');
@@ -1292,11 +1254,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _danmakuTracks.clear();
       _danmakuTrackEnabled.clear();
       _subtitleManager.clearSubtitleTrackInfo();
+      _isAppBarHidden = false; // 重置平板设备菜单栏隐藏状态
+      
+      // 重置系统UI显示状态
+      if (globals.isPhone && globals.isTablet) {
+        try {
+          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        } catch (e) {
+          debugPrint('重置系统UI时出错: $e');
+        }
+      }
+      
       _setStatus(PlayerStatus.idle);
 
-      // 在手机平台上恢复竖屏
+      // 使用屏幕方向管理器重置屏幕方向
       if (globals.isPhone) {
-        await _setPortrait();
+        await ScreenOrientationManager.instance.resetOrientation();
       }
       
       // 关闭唤醒锁
@@ -1494,6 +1467,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _position = Duration.zero;
     _progress = 0.0;
     _error = null;
+    _isAppBarHidden = false; // 重置平板设备菜单栏隐藏状态
     // Do NOT call WakelockPlus.disable() here directly, _setStatus will handle it
   }
 
@@ -1693,7 +1667,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   bool shouldShowAppBar() {
     if (globals.isPhone) {
-      return !hasVideo || !_isFullscreen;
+      if (isTablet) {
+        // 平板设备：根据 _isAppBarHidden 状态决定是否显示菜单栏
+        return !hasVideo || !_isAppBarHidden;
+      } else {
+        // 手机设备：按原有逻辑
+        return !hasVideo || !_isFullscreen;
+      }
     }
     return !_isFullscreen;
   }
@@ -1726,6 +1706,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_seekOverlayEntry != null) { // <<< ADDED
       _seekOverlayEntry!.remove();
       _seekOverlayEntry = null;
+    }
+    if (_speedBoostOverlayEntry != null) { // 清理倍速指示器
+      _speedBoostOverlayEntry!.remove();
+      _speedBoostOverlayEntry = null;
     }
     _rightEdgeHoverTimer?.cancel(); // 清理右边缘悬浮定时器
     if (_hoverSettingsMenuOverlay != null) { // 清理悬浮设置菜单
@@ -2358,9 +2342,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Future<void> _tryRecoverFromError() async {
     try {
-      // 如果处于横屏状态，先切回竖屏
-      if (_isFullscreen && globals.isPhone) {
-        await _setPortrait();
+      // 使用屏幕方向管理器重置屏幕方向
+      if (globals.isPhone) {
+        await ScreenOrientationManager.instance.resetOrientation();
       }
 
       // 重置播放器状态
@@ -3160,6 +3144,36 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
+  // 显示倍速指示器
+  void _showSpeedBoostIndicator() {
+    if (!globals.isPhone || _context == null) return;
+
+    if (_speedBoostOverlayEntry == null) {
+      _speedBoostOverlayEntry = OverlayEntry(
+        builder: (context) {
+          return ChangeNotifierProvider<VideoPlayerState>.value(
+            value: this,
+            child: const SpeedBoostIndicator(),
+          );
+        },
+      );
+      Overlay.of(_context!).insert(_speedBoostOverlayEntry!);
+    }
+  }
+
+  // 隐藏倍速指示器
+  void _hideSpeedBoostIndicator() {
+    if (!globals.isPhone) return;
+
+    // Wait for fade-out animation to complete before removing
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (_speedBoostOverlayEntry != null) {
+        _speedBoostOverlayEntry!.remove();
+        _speedBoostOverlayEntry = null;
+      }
+    });
+  }
+
   // 获取字幕轨道的语言名称
   String _getLanguageName(String language) {
     // 语言代码映射
@@ -3526,6 +3540,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     final tempSpeedBoost = (_playbackRate == 2.0) ? 3.0 : 2.0;
     player.setPlaybackRate(tempSpeedBoost);
     debugPrint('开始长按倍速播放: ${tempSpeedBoost}x (之前: ${_normalPlaybackRate}x)');
+    
+    // 显示倍速指示器
+    _showSpeedBoostIndicator();
+    
     notifyListeners();
   }
   
@@ -3537,6 +3555,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 恢复到长按前的播放速度
     player.setPlaybackRate(_normalPlaybackRate);
     debugPrint('结束长按倍速播放，恢复到: ${_normalPlaybackRate}x');
+    
+    // 隐藏倍速指示器
+    _hideSpeedBoostIndicator();
+    
     notifyListeners();
   }
   

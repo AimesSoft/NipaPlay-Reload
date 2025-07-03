@@ -89,7 +89,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                   ? 100
                   : globals.isDesktop
                       ? 20
-                      : 60,
+                      : globals.isTablet ? 30 : 60,
               leading: widget.pageIsHome
                   ? null
                   : IconButton(
@@ -148,11 +148,11 @@ class TabControllerScope extends InheritedWidget {
   final bool enabled;
 
   const TabControllerScope({
-    Key? key,
+    super.key,
     required this.controller,
     required this.enabled,
-    required Widget child,
-  }) : super(key: key, child: child);
+    required super.child,
+  });
 
   static TabController? of(BuildContext context) {
     final TabControllerScope? scope = context.dependOnInheritedWidgetOfExactType<TabControllerScope>();

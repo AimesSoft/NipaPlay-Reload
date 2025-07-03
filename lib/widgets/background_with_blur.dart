@@ -7,7 +7,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'dart:io';
 
 // 导入 glassmorphism 插件
-String backgroundImageUrl = !globals.isPhone
+String backgroundImageUrl = (globals.isDesktop || globals.isTablet)
     ? 'assets/images/main_image.png'
     : 'assets/images/main_image_mobile.png';
 

@@ -2,8 +2,7 @@
 // ignore_for_file: sized_box_for_whitespace
 
 import 'package:flutter/material.dart';
-import 'package:nipaplay/utils/globals.dart';
-// 导入新的 AboutPage
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class ResponsiveContainer extends StatelessWidget {
   final Widget child;
@@ -15,10 +14,8 @@ class ResponsiveContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 如果是移动设备，则直接显示 currentPage，不显示 child
-        if (!isDesktop) {
-          return child; // 只返回 currentPage
-        } else {
+        // 如果是桌面设备或平板设备，使用左右分区布局；手机设备使用单页布局
+        if (globals.isDesktop || globals.isTablet) {
           return Row(
             children: [
               // 左侧部分，显示 SettingsPage
@@ -40,6 +37,9 @@ class ResponsiveContainer extends StatelessWidget {
               ),
             ],
           );
+        } else {
+          // 手机设备使用单页布局
+          return child;
         }
       },
     );

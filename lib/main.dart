@@ -916,7 +916,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
 // 检查自定义背景图片路径有效性
 Future<void> _validateCustomBackgroundPath() async {
   final customPath = globals.customBackgroundPath;
-  var defaultPath = !globals.isPhone ? 'assets/images/main_image.png' : 'assets/images/main_image_mobile.png';
+  var defaultPath = (globals.isDesktop || globals.isTablet) ? 'assets/images/main_image.png' : 'assets/images/main_image_mobile.png';
   bool needReset = false;
 
   if (customPath.isEmpty) {

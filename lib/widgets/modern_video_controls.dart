@@ -465,12 +465,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                               },
                                               child: Icon(
                                                 videoState.isSpeedBoostActive 
-                                                    ? Icons.fast_forward 
-                                                    : Icons.speed,
+                                                    ? Icons.fast_forward_rounded 
+                                                    : Icons.speed_rounded,
                                                 key: ValueKey<bool>(videoState.isSpeedBoostActive),
-                                                color: videoState.isSpeedBoostActive 
-                                                    ? Colors.yellow 
-                                                    : Colors.white,
+                                                color: Colors.white,
                                                 size: globals.isPhone ? 28 : 24,
                                               ),
                                             ),
@@ -506,26 +504,34 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         useAnimatedSwitcher: true,
                                       ),
                                       
-                                      // 全屏按钮
-                                      if (!globals.isPhone)
+                                      // 全屏按钮（桌面）或菜单栏切换按钮（平板）
+                                      if (globals.isDesktop || globals.isTablet)
                                         _buildControlButton(
                                           icon: Icon(
-                                            videoState.isFullscreen 
-                                              ? Icons.fullscreen_exit_rounded 
-                                              : Icons.fullscreen_rounded,
-                                            key: ValueKey<bool>(videoState.isFullscreen),
+                                            globals.isTablet 
+                                              ? (videoState.isAppBarHidden 
+                                                  ? Icons.fullscreen_exit_rounded 
+                                                  : Icons.fullscreen_rounded)
+                                              : (videoState.isFullscreen 
+                                                  ? Icons.fullscreen_exit_rounded 
+                                                  : Icons.fullscreen_rounded),
+                                            key: ValueKey<bool>(globals.isTablet ? videoState.isAppBarHidden : videoState.isFullscreen),
                                             color: Colors.white,
                                             size: 32,
                                           ),
-                                          onTap: () => videoState.toggleFullscreen(),
+                                          onTap: () => globals.isTablet 
+                                            ? videoState.toggleAppBarVisibility() 
+                                            : videoState.toggleFullscreen(),
                                           isPressed: _isFullscreenPressed,
                                           isHovered: _isFullscreenHovered,
                                           onHover: (value) => setState(() => _isFullscreenHovered = value),
                                           onPressed: (value) => setState(() => _isFullscreenPressed = value),
-                                          tooltip: KeyboardShortcuts.formatActionWithShortcut(
-                                            videoState.isFullscreen ? '退出全屏' : '全屏',
-                                            KeyboardShortcuts.getShortcutText('fullscreen')
-                                          ),
+                                          tooltip: globals.isTablet 
+                                            ? (videoState.isAppBarHidden ? '显示菜单栏' : '隐藏菜单栏')
+                                            : KeyboardShortcuts.formatActionWithShortcut(
+                                                videoState.isFullscreen ? '退出全屏' : '全屏',
+                                                KeyboardShortcuts.getShortcutText('fullscreen')
+                                              ),
                                           useCustomAnimation: true,
                                         ),
                                     ],
