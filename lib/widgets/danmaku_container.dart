@@ -106,8 +106,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   @override
   void initState() {
     super.initState();
-    // 根据设备类型设置垂直间距
-    _verticalSpacing = globals.isPhone ? 10.0 : 20.0;
+    // 🔥 修改：统一设置垂直间距为10.0，电脑和手机保持一致
+    _verticalSpacing = 10.0;
     
     // 初始化弹幕独立时间系统
     _initializeDanmakuTimeSystem();

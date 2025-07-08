@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'danmaku_container.dart';
+import 'canvas_danmaku_overlay.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
+import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class DanmakuOverlay extends StatefulWidget {
   final double currentPosition;
@@ -31,8 +33,24 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
     // 使用Consumer包装，监听VideoPlayerState的变化
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        // 分批加载弹幕：只取当前窗口弹幕，并且应用过滤
-        final activeDanmakuList = videoState.getActiveDanmakuList(widget.currentPosition / 1000);
+        final kernelType = DanmakuKernelFactory.getKernelType();
+
+        if (kernelType == DanmakuKernelType.canvasDanmaku) {
+          // 使用 Canvas_Danmaku 内核
+          return CanvasDanmakuOverlay(
+            currentPosition: widget.currentPosition,
+            videoDuration: widget.videoDuration,
+            isPlaying: widget.isPlaying,
+            fontSize: widget.fontSize,
+            isVisible: widget.isVisible,
+            opacity: widget.opacity,
+          );
+        }
+
+        // 默认使用 NipaPlay 内核
+        final activeDanmakuList =
+            videoState.getActiveDanmakuList(widget.currentPosition / 1000);
+
         return DanmakuContainer(
           danmakuList: activeDanmakuList,
           currentTime: widget.currentPosition / 1000, // 转换为秒

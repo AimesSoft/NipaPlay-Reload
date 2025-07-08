@@ -43,6 +43,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/services/drag_drop_service.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -287,6 +288,9 @@ void main(List<String> args) async {
 
   // 预加载播放器内核设置
   await PlayerFactory.initialize();
+
+  // 预加载弹幕内核设置
+  await DanmakuKernelFactory.initialize();
 
   // 初始化安全书签服务 (仅限 macOS)
   if (Platform.isMacOS) {

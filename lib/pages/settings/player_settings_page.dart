@@ -6,6 +6,7 @@ import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/blur_dropdown.dart';
@@ -27,9 +28,11 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   late DecoderManager _decoderManager;
   String _playerCoreName = "MDK";
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
+  DanmakuKernelType _selectedDanmakuKernelType = DanmakuKernelType.nipaPlay;
   
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();
+  final GlobalKey _danmakuKernelDropdownKey = GlobalKey();
 
   @override
   void initState() {
@@ -46,6 +49,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _getAvailableDecoders();
     _loadDecoderSettings();
     _loadPlayerKernelSettings();
+    _loadDanmakuKernelSettings();
   }
 
   Future<void> _loadPlayerKernelSettings() async {
@@ -196,6 +200,34 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
   }
 
+  Future<void> _loadDanmakuKernelSettings() async {
+    setState(() {
+      _selectedDanmakuKernelType = DanmakuKernelFactory.getKernelType();
+    });
+  }
+
+  Future<void> _saveDanmakuKernelSettings(DanmakuKernelType kernelType) async {
+    await DanmakuKernelFactory.saveKernelType(kernelType);
+    
+    setState(() {
+      _selectedDanmakuKernelType = kernelType;
+    });
+    
+    if (context.mounted) {
+      String kernelName = kernelType == DanmakuKernelType.nipaPlay ? 'NipaPlay' : 'Canvas_Danmaku';
+      BlurSnackBar.show(context, '弹幕内核已切换为: $kernelName');
+    }
+  }
+
+  String _getDanmakuKernelDescription(DanmakuKernelType type) {
+    switch (type) {
+      case DanmakuKernelType.nipaPlay:
+        return 'NipaPlay 内置弹幕渲染器\n支持轨道分配、弹幕合并、防重叠等高级功能';
+      case DanmakuKernelType.canvasDanmaku:
+        return 'Canvas_Danmaku 渲染器\n基于CustomPainter，性能更佳，功耗更低';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -223,6 +255,37 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             ],
             onItemSelected: (kernelType) {
               _savePlayerKernelSettings(kernelType);
+            },
+          ),
+        ),
+        
+        const Divider(),
+        
+        ListTile(
+          title: Text("弹幕内核", style: getTitleTextStyle(context)),
+          subtitle: Text(
+            _getDanmakuKernelDescription(_selectedDanmakuKernelType),
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 12,
+            ),
+          ),
+          trailing: BlurDropdown<DanmakuKernelType>(
+            dropdownKey: _danmakuKernelDropdownKey,
+            items: [
+              DropdownMenuItemData(
+                title: "NipaPlay",
+                value: DanmakuKernelType.nipaPlay,
+                isSelected: _selectedDanmakuKernelType == DanmakuKernelType.nipaPlay,
+              ),
+              DropdownMenuItemData(
+                title: "Canvas_Danmaku",
+                value: DanmakuKernelType.canvasDanmaku,
+                isSelected: _selectedDanmakuKernelType == DanmakuKernelType.canvasDanmaku,
+              ),
+            ],
+            onItemSelected: (kernelType) {
+              _saveDanmakuKernelSettings(kernelType);
             },
           ),
         ),
