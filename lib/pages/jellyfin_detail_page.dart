@@ -12,6 +12,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart'; // 导入TabChangeNotifier
+import 'package:nipaplay/widgets/blur_snackbar.dart';
 
 class JellyfinDetailPage extends StatefulWidget {
   final String jellyfinId;
@@ -69,6 +70,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
   String? _selectedSeasonId;
   bool _isLoading = true;
   String? _error;
+  bool _isMovie = false; // 新增状态，判断是否为电影
 
   TabController? _tabController;
 
@@ -76,14 +78,14 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
   void initState() {
     super.initState();
     _loadMediaDetail();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController!.addListener(() {
-      if (mounted && !_tabController!.indexIsChanging) {
-        setState(() {
-          // 当 TabController 的索引稳定改变后，触发重建以更新 SwitchableView 的 currentIndex
-        });
-      }
-    });
+    // _tabController = TabController(length: 2, vsync: this); // 延迟到加载后初始化
+    // _tabController!.addListener(() {
+    //   if (mounted && !_tabController!.indexIsChanging) {
+    //     setState(() {
+    //       // 当 TabController 的索引稳定改变后，触发重建以更新 SwitchableView 的 currentIndex
+    //     });
+    //   }
+    // });
   }
 
   @override
@@ -106,21 +108,44 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
       // 加载媒体详情
       final detail = await jellyfinService.getMediaItemDetails(widget.jellyfinId);
       
-      // 加载剧集季节
-      final seasons = await jellyfinService.getSeriesSeasons(widget.jellyfinId);
-      
       if (mounted) {
         setState(() {
           _mediaDetail = detail;
-          _seasons = seasons;
-          _isLoading = false;
-          
-          // 如果有季，选择第一个季
-          if (seasons.isNotEmpty) {
-            _selectedSeasonId = seasons.first.id;
-            _loadEpisodesForSeason(seasons.first.id);
+          _isMovie = detail.type == 'Movie'; // 判断是否为电影
+
+          if (_isMovie) {
+            _isLoading = false;
+            // 对于电影，我们不需要 TabController
+          } else {
+            // 对于剧集，初始化 TabController
+            _tabController = TabController(length: 2, vsync: this);
+            _tabController!.addListener(() {
+              if (mounted && !_tabController!.indexIsChanging) {
+                setState(() {
+                  // 当 TabController 的索引稳定改变后，触发重建以更新 SwitchableView 的 currentIndex
+                });
+              }
+            });
           }
         });
+      }
+
+      // 如果是剧集，才加载季节信息
+      if (!_isMovie) {
+        final seasons = await jellyfinService.getSeriesSeasons(widget.jellyfinId);
+        
+        if (mounted) {
+          setState(() {
+            _seasons = seasons;
+            _isLoading = false;
+            
+            // 如果有季，选择第一个季
+            if (seasons.isNotEmpty) {
+              _selectedSeasonId = seasons.first.id;
+              _loadEpisodesForSeason(seasons.first.id);
+            }
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -244,6 +269,51 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
       return episode.toWatchHistoryItem();
     }
   }
+
+  Future<void> _playMovie() async {
+    if (_mediaDetail == null || !_isMovie) return;
+
+    // 将 JellyfinMediaItemDetail 转换为 JellyfinMovieInfo
+    // 这是必要的，因为匹配器需要一个 JellyfinMovieInfo 对象
+    final movieInfo = JellyfinMovieInfo(
+      id: _mediaDetail!.id,
+      name: _mediaDetail!.name,
+      overview: _mediaDetail!.overview,
+      originalTitle: _mediaDetail!.originalTitle,
+      imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
+      imageBackdropTag: _mediaDetail!.imageBackdropTag,
+      productionYear: _mediaDetail!.productionYear,
+      dateAdded: _mediaDetail!.dateAdded,
+      premiereDate: _mediaDetail!.premiereDate,
+      communityRating: _mediaDetail!.communityRating,
+      genres: _mediaDetail!.genres,
+      officialRating: _mediaDetail!.officialRating,
+      cast: _mediaDetail!.cast,
+      directors: _mediaDetail!.directors,
+      runTimeTicks: _mediaDetail!.runTimeTicks,
+      studio: _mediaDetail!.seriesStudio,
+    );
+
+    try {
+      final matcher = JellyfinDandanplayMatcher.instance;
+      final playableItem = await matcher.createPlayableHistoryItemFromMovie(context, movieInfo);
+      
+      if (mounted && playableItem != null) {
+        Navigator.of(context).pop(playableItem);
+      } else if (mounted) {
+        // 如果匹配失败，可以给用户一个提示
+        BlurSnackBar.show(context, '未能找到匹配的弹幕信息，但仍可播放。');
+        // 即使没有弹幕，也创建一个基本的播放项
+        final basicItem = movieInfo.toWatchHistoryItem();
+        Navigator.of(context).pop(basicItem);
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '播放失败: $e');
+      }
+      debugPrint('电影播放失败: $e');
+    }
+  }
   
   String _formatRuntime(int? runTimeTicks) {
     if (runTimeTicks == null) return '';
@@ -333,42 +403,45 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
               ],
             ),
           ),
-          TabBar(
-            controller: _tabController,
-            dividerColor: const Color.fromARGB(59, 255, 255, 255),
-            dividerHeight: 3.0,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicatorPadding: const EdgeInsets.only(top: 46, left: 15, right: 15), // 根据实际TabBar高度调整
-            indicator: BoxDecoration(
-              color: Colors.blueAccent, // Jellyfin 主题色或自定义
-              borderRadius: BorderRadius.circular(30),
-            ),
-            indicatorWeight: 3,
-            tabs: const [
-              Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.info_outline, size: 18), SizedBox(width: 8), Text('简介')])),
-              Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.video_library_outlined, size: 18), SizedBox(width: 8), Text('剧集')])),
-            ],
-          ),
-          Expanded(
-            child: SwitchableView(
+          if (!_isMovie && _tabController != null) // 如果不是电影，才显示TabBar
+            TabBar(
               controller: _tabController,
-              currentIndex: _tabController!.index,
-              children: [
-                RepaintBoundary(child: _buildInfoView(isPortrait)), // 使用RepaintBoundary优化
-                RepaintBoundary(child: _buildEpisodesView(isPortrait)), // 使用RepaintBoundary优化
+              dividerColor: const Color.fromARGB(59, 255, 255, 255),
+              dividerHeight: 3.0,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicatorPadding: const EdgeInsets.only(top: 46, left: 15, right: 15), // 根据实际TabBar高度调整
+              indicator: BoxDecoration(
+                color: Colors.blueAccent, // Jellyfin 主题色或自定义
+                borderRadius: BorderRadius.circular(30),
+              ),
+              indicatorWeight: 3,
+              tabs: const [
+                Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.info_outline, size: 18), SizedBox(width: 8), Text('简介')])),
+                Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.video_library_outlined, size: 18), SizedBox(width: 8), Text('剧集')])),
               ],
-              enableAnimation: enableAnimation,
-              physics: enableAnimation
-                  ? const PageScrollPhysics()
-                  : const NeverScrollableScrollPhysics(),
-              onPageChanged: (index) {
-                if (_tabController!.index != index) {
-                  _tabController!.animateTo(index);
-                }
-              },
             ),
+          Expanded(
+            child: _isMovie || _tabController == null
+              ? RepaintBoundary(child: _buildInfoView(isPortrait)) // 如果是电影，直接显示信息页
+              : SwitchableView(
+                  controller: _tabController,
+                  currentIndex: _tabController!.index,
+                  children: [
+                    RepaintBoundary(child: _buildInfoView(isPortrait)), // 使用RepaintBoundary优化
+                    RepaintBoundary(child: _buildEpisodesView(isPortrait)), // 使用RepaintBoundary优化
+                  ],
+                  enableAnimation: enableAnimation,
+                  physics: enableAnimation
+                      ? const PageScrollPhysics()
+                      : const NeverScrollableScrollPhysics(),
+                  onPageChanged: (index) {
+                    if (_tabController!.index != index) {
+                      _tabController!.animateTo(index);
+                    }
+                  },
+                ),
           ),
         ],
       );
@@ -845,6 +918,28 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
               );
             }).toList(),
           ),
+        
+        // 如果是电影，在详情信息下方添加播放按钮
+        if (_isMovie) ...[
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('播放'),
+                onPressed: _playMovie,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -1118,7 +1213,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                     debugPrint('初始化播放器 - 步骤2：TabChangeNotifier为空，无法切换页面');
                   }
                   
-                  // 关闭详情页面 - 页面关闭后不再访问context相关内容
+                  // 关闭详情页面 - 页面关闭前不再访问context相关内容
                   debugPrint('初始化播放器 - 步骤3：准备关闭详情页面');
                   Navigator.of(context).pop();
                   debugPrint('初始化播放器 - 步骤3：详情页面已关闭');
