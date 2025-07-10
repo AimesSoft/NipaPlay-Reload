@@ -150,15 +150,20 @@ class JellyfinService {
 
         List<JellyfinLibrary> tempLibraries = [];
         for (var item in items) {
-          if (item['CollectionType'] == 'tvshows') {
+          if (item['CollectionType'] == 'tvshows' || item['CollectionType'] == 'movies') {
             final String libraryId = item['Id'];
-            final countResponse = await _makeAuthenticatedRequest(
-                '/Items?parentId=$libraryId&IncludeItemTypes=Series&Recursive=true&Limit=0&Fields=ParentId');
+            final String collectionType = item['CollectionType'];
             
-            int seriesCount = 0;
+            // 根据媒体库类型选择不同的IncludeItemTypes
+            String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+            
+            final countResponse = await _makeAuthenticatedRequest(
+                '/Items?parentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&Limit=0&Fields=ParentId');
+            
+            int itemCount = 0;
             if (countResponse.statusCode == 200) {
               final countData = json.decode(countResponse.body);
-              seriesCount = countData['TotalRecordCount'] ?? 0;
+              itemCount = countData['TotalRecordCount'] ?? 0;
             }
             
             tempLibraries.add(JellyfinLibrary(
@@ -166,7 +171,7 @@ class JellyfinService {
               name: item['Name'],
               type: item['CollectionType'], // Assuming 'CollectionType' maps to 'type'
               imageTagsPrimary: item['ImageTags']?['Primary'], // Safely access ImageTags
-              totalItems: seriesCount, 
+              totalItems: itemCount, 
             ));
           }
         }
@@ -195,19 +200,32 @@ class JellyfinService {
     // 从每个选中的媒体库获取最新内容
     for (String libraryId in _selectedLibraryIds) {
       try {
-        final response = await _makeAuthenticatedRequest(
-          '/Items?ParentId=$libraryId&IncludeItemTypes=Series&Recursive=true&SortBy=DateCreated,SortName&SortOrder=Descending&Limit=$limit&userId=$_userId'
+        // 首先获取媒体库信息以确定类型
+        final libraryResponse = await _makeAuthenticatedRequest(
+          '/Users/$_userId/Items/$libraryId'
         );
         
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          final List<dynamic> items = data['Items'];
+        if (libraryResponse.statusCode == 200) {
+          final libraryData = json.decode(libraryResponse.body);
+          final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
           
-          List<JellyfinMediaItem> libraryItems = items
-              .map((item) => JellyfinMediaItem.fromJson(item))
-              .toList();
+          // 根据媒体库类型选择不同的IncludeItemTypes
+          String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
           
-          allItems.addAll(libraryItems);
+          final response = await _makeAuthenticatedRequest(
+            '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=DateCreated,SortName&SortOrder=Descending&Limit=$limit&userId=$_userId'
+          );
+          
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+            final List<dynamic> items = data['Items'];
+            
+            List<JellyfinMediaItem> libraryItems = items
+                .map((item) => JellyfinMediaItem.fromJson(item))
+                .toList();
+            
+            allItems.addAll(libraryItems);
+          }
         }
       } catch (e) {
         // 处理错误
@@ -223,6 +241,69 @@ class JellyfinService {
     }
     
     return allItems;
+  }
+  
+  // 获取最新电影列表
+  Future<List<JellyfinMovieInfo>> getLatestMovies({int limit = 99999}) async {
+    if (!_isConnected || _selectedLibraryIds.isEmpty) {
+      return [];
+    }
+    
+    List<JellyfinMovieInfo> allMovies = [];
+    
+    // 从每个选中的媒体库获取最新电影
+    for (String libraryId in _selectedLibraryIds) {
+      try {
+        final response = await _makeAuthenticatedRequest(
+          '/Items?ParentId=$libraryId&IncludeItemTypes=Movie&Recursive=true&SortBy=DateCreated,SortName&SortOrder=Descending&Limit=$limit&userId=$_userId'
+        );
+        
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List<dynamic> items = data['Items'];
+          
+          List<JellyfinMovieInfo> libraryMovies = items
+              .map((item) => JellyfinMovieInfo.fromJson(item))
+              .toList();
+          
+          allMovies.addAll(libraryMovies);
+        }
+      } catch (e) {
+        // 处理错误
+      }
+    }
+    
+    // 按最近添加日期排序
+    allMovies.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
+    
+    // 限制总数
+    if (allMovies.length > limit) {
+      allMovies = allMovies.sublist(0, limit);
+    }
+    
+    return allMovies;
+  }
+  
+  // 获取电影详情
+  Future<JellyfinMovieInfo?> getMovieDetails(String movieId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+    
+    try {
+      final response = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$movieId'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return JellyfinMovieInfo.fromJson(data);
+      }
+    } catch (e) {
+      throw Exception('无法获取电影详情: $e');
+    }
+    
+    return null;
   }
   
   Future<JellyfinMediaItemDetail> getMediaItemDetails(String itemId) async {

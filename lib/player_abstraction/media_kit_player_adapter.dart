@@ -150,6 +150,32 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     
     _player.stream.tracks.listen(_updateMediaInfo);
     
+    // 添加对视频尺寸变化的监听
+    debugPrint('[MediaKit] 设置videoParams监听器');
+    _player.stream.videoParams.listen((params) {
+      debugPrint('[MediaKit] 视频参数变化: dw=${params.dw}, dh=${params.dh}');
+      // 当视频尺寸可用时，重新更新媒体信息
+      if (params.dw != null && params.dh != null && params.dw! > 0 && params.dh! > 0) {
+        _updateMediaInfoWithVideoDimensions(params.dw!, params.dh!);
+      }
+    });
+    
+    // 添加对播放状态的监听，在播放时检查视频尺寸
+    _player.stream.playing.listen((playing) {
+      if (playing) {
+        debugPrint('[MediaKit] 视频开始播放，检查视频尺寸');
+        // 延迟一点时间确保视频已经真正开始播放
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (_player.state.width != null && _player.state.height != null && 
+              _player.state.width! > 0 && _player.state.height! > 0) {
+            debugPrint('[MediaKit] 播放时获取到视频尺寸: ${_player.state.width}x${_player.state.height}');
+            // 强制更新媒体信息
+            _updateMediaInfoWithVideoDimensions(_player.state.width!, _player.state.height!);
+          }
+        });
+      }
+    });
+    
     _trackSubscription = _player.stream.track.listen((trackEvent) {
       // debugPrint('MediaKitAdapter: Active track changed event received. Subtitle ID from event: ${trackEvent.subtitle.id}, Title: ${trackEvent.subtitle.title}');
       // The listener callback itself is not async, so we don't await _handleActiveSubtitleTrackDataChange here.
@@ -187,7 +213,16 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     sb.writeln('真实视频轨道数: ${realVideoTracks.length}, 真实音频轨道数: ${realAudioTracks.length}, 真实字幕轨道数: ${realSubtitleTracks.length}');
     for (int i = 0; i < tracks.video.length; i++) {
       final track = tracks.video[i];
-      sb.writeln('V[$i] ID:${track.id} 标题:${track.title ?? 'N/A'} 语言:${track.language ?? 'N/A'} 编码:${track.codec ?? 'N/A'}');
+      int? width;
+      int? height;
+      try {
+        width = (track as dynamic).codec?.width;
+        height = (track as dynamic).codec?.height;
+      } catch (_) {
+        width = null;
+        height = null;
+      }
+      sb.writeln('V[$i] ID:${track.id} 标题:${track.title ?? 'N/A'} 语言:${track.language ?? 'N/A'} 编码:${track.codec ?? 'N/A'} width:$width height:$height');
     }
     for (int i = 0; i < tracks.audio.length; i++) {
       final track = tracks.audio[i];
@@ -229,8 +264,21 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   void _updateMediaInfo(Tracks tracks) {
     debugPrint('MediaKitAdapter: _updateMediaInfo CALLED. Received tracks: Video=${tracks.video.length}, Audio=${tracks.audio.length}, Subtitle=${tracks.subtitle.length}');
     _printAllTracksInfo(tracks);
-    
+    // 打印所有视频轨道的宽高
     final realVideoTracks = _filterRealTracks<VideoTrack>(tracks.video);
+    for (var track in realVideoTracks) {
+      int? width;
+      int? height;
+      try {
+        width = (track as dynamic).codec?.width;
+        height = (track as dynamic).codec?.height;
+      } catch (_) {
+        width = null;
+        height = null;
+      }
+      debugPrint('[MediaKit] 轨道: id=${track.id}, title=${track.title}, codec=${track.codec}, width=$width, height=$height');
+    }
+    
     final realAudioTracks = _filterRealTracks<AudioTrack>(tracks.audio);
     final realIncomingSubtitleTracks = _filterRealTracks<SubtitleTrack>(tracks.subtitle); 
 
@@ -259,16 +307,38 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
 
     List<PlayerVideoStreamInfo>? videoStreams;
     if (realVideoTracks.isNotEmpty) {
-      videoStreams = realVideoTracks.map((track) =>
-        PlayerVideoStreamInfo(
+      videoStreams = realVideoTracks.map((track) {
+        // 尝试从轨道信息获取宽高
+        int? width;
+        int? height;
+        try {
+          width = (track as dynamic).codec?.width;
+          height = (track as dynamic).codec?.height;
+        } catch (_) {
+          width = null;
+          height = null;
+        }
+        
+        // 如果轨道信息中没有宽高，从_player.state获取
+        if ((width == null || width == 0) && (_player.state.width != null && _player.state.width! > 0)) {
+          width = _player.state.width;
+          height = _player.state.height;
+          debugPrint('[MediaKit] 从_player.state获取视频尺寸: ${width}x${height}');
+        }
+        
+        return PlayerVideoStreamInfo(
           codec: PlayerVideoCodecParams(
-            width: 0,
-            height: 0,
+            width: width ?? 0,
+            height: height ?? 0,
             name: track.title ?? track.language ?? 'Unknown Video',
           ),
           codecName: track.codec ?? 'Unknown',
-        )
-      ).toList();
+        );
+      }).toList();
+      // 打印videoStreams的宽高
+      for (var vs in videoStreams) {
+        debugPrint('[MediaKit] videoStreams: codec.width=${vs.codec.width}, codec.height=${vs.codec.height}, codecName=${vs.codecName}');
+      }
     }
     
     List<PlayerAudioStreamInfo>? audioStreams;
@@ -399,6 +469,33 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     final currentActualPlayerSubtitleId = _player.state.track.subtitle.id;
     debugPrint('MediaKitAdapter: _updateMediaInfo - Triggering sync with current actual player subtitle ID: $currentActualPlayerSubtitleId');
     _performSubtitleSyncLogic(currentActualPlayerSubtitleId);
+  }
+
+  /// 当视频尺寸可用时更新媒体信息
+  void _updateMediaInfoWithVideoDimensions(int width, int height) {
+    debugPrint('[MediaKit] _updateMediaInfoWithVideoDimensions: width=$width, height=$height');
+    
+    // 更新现有的视频流信息
+    if (_mediaInfo.video != null && _mediaInfo.video!.isNotEmpty) {
+      final updatedVideoStreams = _mediaInfo.video!.map((stream) {
+        // 如果当前宽高为0，则使用新的宽高
+        if (stream.codec.width == 0 || stream.codec.height == 0) {
+          debugPrint('[MediaKit] 更新视频流尺寸: ${stream.codec.width}x${stream.codec.height} -> ${width}x${height}');
+          return PlayerVideoStreamInfo(
+            codec: PlayerVideoCodecParams(
+              width: width,
+              height: height,
+              name: stream.codec.name,
+            ),
+            codecName: stream.codecName,
+          );
+        }
+        return stream;
+      }).toList();
+      
+      _mediaInfo = _mediaInfo.copyWith(video: updatedVideoStreams);
+      debugPrint('[MediaKit] 媒体信息已更新，视频流尺寸: ${updatedVideoStreams.first.codec.width}x${updatedVideoStreams.first.codec.height}');
+    }
   }
 
   /// 处理Jellyfin流媒体的轨道信息
@@ -968,6 +1065,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   
   @override
   void setMedia(String path, PlayerMediaType type) {
+    debugPrint('[MediaKit] setMedia: path=$path, type=$type');
     if (type == PlayerMediaType.subtitle) {
       debugPrint('MediaKitAdapter: setMedia called for SUBTITLE. Path: "$path"');
       if (path.isEmpty) {
@@ -1000,6 +1098,33 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     
     debugPrint('MediaKitAdapter: 打开媒体 (MAIN VIDEO/AUDIO): $path');
     if (!_isDisposed) _player.open(Media(path, extras: mediaOptions), play: false);
+    
+    // 设置mpv底层video-aspect属性，确保保持原始宽高比
+    Future.delayed(const Duration(milliseconds: 500), () {
+      try {
+        final dynamic platform = _player.platform;
+        if (platform != null && platform.setProperty != null) {
+          // 设置video-aspect为-1，让mpv自动保持原始宽高比
+          platform.setProperty('video-aspect', '-1');
+          debugPrint('[MediaKit] 设置mpv底层video-aspect为-1（保持原始比例）');
+          
+          // 延迟检查设置是否生效
+          Future.delayed(const Duration(milliseconds: 500), () async {
+            try {
+              var videoAspect = platform.getProperty('video-aspect');
+              if (videoAspect is Future) {
+                videoAspect = await videoAspect;
+              }
+              debugPrint('[MediaKit] mpv底层 video-aspect 设置后: $videoAspect');
+            } catch (e) {
+              debugPrint('[MediaKit] 获取mpv底层video-aspect失败: $e');
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint('[MediaKit] 设置mpv底层video-aspect失败: $e');
+      }
+    });
     
     // This delayed block might still be useful for printing initial track info after the player has processed the new media.
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -1040,7 +1165,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     try {
       final videoWidth = _player.state.width ?? 1920;
       final videoHeight = _player.state.height ?? 1080;
-      debugPrint('MediaKit: 视频原始尺寸: ${videoWidth}x${videoHeight}');
+      debugPrint('[MediaKit] snapshot: _player.state.width=$videoWidth, _player.state.height=$videoHeight');
       final actualWidth = width > 0 ? width : videoWidth;
       final actualHeight = height > 0 ? height : videoHeight;
       

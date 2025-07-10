@@ -11,7 +11,9 @@ class JellyfinProvider extends ChangeNotifier {
   bool _hasError = false;
   String? _errorMessage;
   List<JellyfinMediaItem> _mediaItems = [];
+  List<JellyfinMovieInfo> _movieItems = [];
   Map<String, JellyfinMediaItemDetail> _mediaDetailsCache = {};
+  Map<String, JellyfinMovieInfo> _movieDetailsCache = {};
 
   // Getters
   bool get isInitialized => _isInitialized;
@@ -20,6 +22,7 @@ class JellyfinProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isConnected => _jellyfinService.isConnected;
   List<JellyfinMediaItem> get mediaItems => _mediaItems;
+  List<JellyfinMovieInfo> get movieItems => _movieItems;
   List<JellyfinLibrary> get availableLibraries => _jellyfinService.availableLibraries;
   List<String> get selectedLibraryIds => _jellyfinService.selectedLibraryIds;
   String? get serverUrl => _jellyfinService.serverUrl;
@@ -40,6 +43,7 @@ class JellyfinProvider extends ChangeNotifier {
       
       if (_jellyfinService.isConnected) {
         await loadMediaItems();
+        await loadMovieItems();
       }
     } catch (e) {
       _hasError = true;
@@ -71,6 +75,19 @@ class JellyfinProvider extends ChangeNotifier {
     }
   }
   
+  // 加载Jellyfin电影项
+  Future<void> loadMovieItems() async {
+    if (!_jellyfinService.isConnected) return;
+    
+    try {
+      _movieItems = await _jellyfinService.getLatestMovies();
+    } catch (e) {
+      _hasError = true;
+      _errorMessage = e.toString();
+      _movieItems = [];
+    }
+  }
+  
   // 连接到Jellyfin服务器
   Future<bool> connectToServer(String serverUrl, String username, String password) async {
     _isLoading = true;
@@ -83,6 +100,7 @@ class JellyfinProvider extends ChangeNotifier {
       
       if (success) {
         await loadMediaItems();
+        await loadMovieItems();
       }
       
       return success;
@@ -100,7 +118,9 @@ class JellyfinProvider extends ChangeNotifier {
   Future<void> disconnectFromServer() async {
     await _jellyfinService.disconnect();
     _mediaItems = [];
+    _movieItems = [];
     _mediaDetailsCache = {};
+    _movieDetailsCache = {};
     notifyListeners();
   }
   
@@ -108,6 +128,7 @@ class JellyfinProvider extends ChangeNotifier {
   Future<void> updateSelectedLibraries(List<String> libraryIds) async {
     await _jellyfinService.updateSelectedLibraries(libraryIds);
     await loadMediaItems();
+    await loadMovieItems();
   }
   
   // 获取媒体详情
@@ -126,9 +147,32 @@ class JellyfinProvider extends ChangeNotifier {
     }
   }
   
+  // 获取电影详情
+  Future<JellyfinMovieInfo?> getMovieDetails(String movieId) async {
+    // 如果已经缓存了详情，直接返回
+    if (_movieDetailsCache.containsKey(movieId)) {
+      return _movieDetailsCache[movieId]!;
+    }
+    
+    try {
+      final details = await _jellyfinService.getMovieDetails(movieId);
+      if (details != null) {
+        _movieDetailsCache[movieId] = details;
+      }
+      return details;
+    } catch (e) {
+      rethrow;
+    }
+  }
+  
   // 将Jellyfin媒体项转换为WatchHistoryItem
   List<WatchHistoryItem> convertToWatchHistoryItems() {
     return _mediaItems.map((item) => item.toWatchHistoryItem()).toList();
+  }
+  
+  // 将Jellyfin电影项转换为WatchHistoryItem
+  List<WatchHistoryItem> convertMoviesToWatchHistoryItems() {
+    return _movieItems.map((item) => item.toWatchHistoryItem()).toList();
   }
   
   // 获取流媒体URL

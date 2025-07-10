@@ -215,6 +215,44 @@ class JellyfinDandanplayMatcher {
     return historyItem;
   }
 
+  /// 创建一个可播放的历史记录条目（电影版本）
+  /// 
+  /// 将Jellyfin电影信息转换为可播放的WatchHistoryItem，同时尝试匹配DandanPlay元数据
+  /// 复用现有的剧集匹配逻辑，内部进行兼容性转换
+  /// 
+  /// [context] 用于显示匹配对话框
+  /// [movie] Jellyfin电影信息
+  /// [showMatchDialog] 是否显示匹配对话框（默认true）
+  Future<WatchHistoryItem?> createPlayableHistoryItemFromMovie(
+      BuildContext context,
+      JellyfinMovieInfo movie, {
+      bool showMatchDialog = true}) async {
+    // 创建虚拟的JellyfinEpisodeInfo来复用现有匹配逻辑
+    final episodeInfo = _createVirtualEpisodeFromItem(movie);
+    
+    // 直接调用现有的剧集匹配方法
+    return await createPlayableHistoryItem(context, episodeInfo, showMatchDialog: showMatchDialog);
+  }
+
+  /// 创建虚拟的剧集信息从电影，用于复用现有匹配逻辑
+  JellyfinEpisodeInfo _createVirtualEpisodeFromItem(JellyfinMovieInfo movie) {
+    return JellyfinEpisodeInfo(
+      id: movie.id,
+      name: '电影', // 电影设置为通用标题，这样搜索时会是"电影名 电影"
+      overview: movie.overview,
+      seriesId: movie.id,
+      seriesName: movie.name, // 电影名作为系列名，这是主要的搜索关键词
+      seasonId: null,
+      seasonName: null,
+      indexNumber: 1, // 电影默认为第1集
+      parentIndexNumber: null,
+      imagePrimaryTag: movie.imagePrimaryTag,
+      dateAdded: movie.dateAdded,
+      premiereDate: movie.premiereDate,
+      runTimeTicks: movie.runTimeTicks,
+    );
+  }
+
   /// 获取播放URL
   /// 
   /// 根据Jellyfin剧集信息获取媒体流URL
@@ -830,6 +868,62 @@ class JellyfinDandanplayMatcher {
     } catch (e, stackTrace) {
       debugPrint('使用标题 "$animeTitle" 获取剧集列表时出错: $e');
       debugPrint('错误堆栈: $stackTrace');
+    }
+    
+    // 如果无法获取到剧集列表，尝试作为电影处理
+    debugPrint('未能获取剧集列表，尝试作为电影/剧场版处理 (animeId: $animeId)');
+    try {
+      // 使用DandanplayService现有的getBangumiDetails方法获取电影的详细信息
+      final bangumiData = await DandanplayService.getBangumiDetails(animeId);
+      
+      if (bangumiData['success'] == true && 
+          bangumiData['bangumi'] != null && 
+          bangumiData['bangumi']['episodes'] != null && 
+          bangumiData['bangumi']['episodes'] is List) {
+        
+        final episodes = List<Map<String, dynamic>>.from(bangumiData['bangumi']['episodes']);
+        debugPrint('从番组信息中获取到 ${episodes.length} 个剧集');
+        
+        // 为每个剧集添加episodeIndex并规范数据格式
+        for (var i = 0; i < episodes.length; i++) {
+          var ep = episodes[i];
+          
+          // 确保episodeId存在
+          if (ep['episodeId'] == null) {
+            debugPrint('警告: 番组剧集中缺少episodeId: ${ep['episodeTitle']}');
+            continue;
+          }
+          
+          // 从标题中提取集数或使用索引
+          final episodeTitle = ep['episodeTitle'] as String? ?? '';
+          final indexMatch = RegExp(r'第\s*(\d+)\s*[集话期]|\s(\d+)(?:\s|$)|EP\s*(\d+)|\((\d+)\)|\【(\d+)\】').firstMatch(episodeTitle);
+          
+          if (indexMatch != null) {
+            String? numStr;
+            for (int j = 1; j <= indexMatch.groupCount; j++) {
+              if (indexMatch.group(j) != null) {
+                numStr = indexMatch.group(j);
+                break;
+              }
+            }
+            if (numStr != null) {
+              ep['episodeIndex'] = int.parse(numStr);
+            } else {
+              ep['episodeIndex'] = i + 1;
+            }
+          } else {
+            ep['episodeIndex'] = i + 1;
+          }
+          
+          debugPrint('番组剧集: ID=${ep['episodeId']}, 标题=${ep['episodeTitle']}, 索引=${ep['episodeIndex']}');
+        }
+        
+        return episodes;
+      } else {
+        debugPrint('番组信息中没有episodes字段或格式不正确');
+      }
+    } catch (e) {
+      debugPrint('获取电影番组信息失败: $e');
     }
     
     debugPrint('未能获取动画ID: $animeId (标题: "$animeTitle") 的剧集列表');
