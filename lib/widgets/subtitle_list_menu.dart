@@ -42,11 +42,10 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
   void initState() {
     super.initState();
     
-    // 添加调试日志
-    debugPrint('SubtitleListMenu: initState - 开始加载字幕');
-    
     // 延迟一点加载，确保VideoPlayerState已完全初始化
     Future.delayed(const Duration(milliseconds: 500), () {
+      // 添加调试日志（移到延迟执行中，避免build过程中触发状态更新）
+      debugPrint('SubtitleListMenu: initState - 开始加载字幕');
       _loadSubtitles();
     });
     
