@@ -41,6 +41,7 @@ import '../services/episode_navigation_service.dart'; // 导入剧集导航服�
 import '../services/auto_next_episode_service.dart';
 import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
+import '../player_abstraction/media_kit_player_adapter.dart'; // 导入MediaKitPlayerAdapter
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -864,7 +865,25 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         final videoTrack = player.mediaInfo.video![0];
         if (videoTrack.codec.width > 0 && videoTrack.codec.height > 0) {
           _aspectRatio = videoTrack.codec.width / videoTrack.codec.height;
-          //debugPrint('设置视频宽高比: $_aspectRatio');
+          debugPrint('VideoPlayerState: 从mediaInfo设置视频宽高比: $_aspectRatio (${videoTrack.codec.width}x${videoTrack.codec.height})');
+        } else {
+          // 备用方案：从播放器状态获取视频尺寸
+          debugPrint('VideoPlayerState: mediaInfo中视频尺寸为0，尝试从播放器状态获取');
+          // 延迟获取，因为播放器状态可能还没有准备好
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            // 尝试从播放器的snapshot方法获取视频尺寸
+            try {
+              player.snapshot().then((frame) {
+                if (frame != null && frame.width > 0 && frame.height > 0) {
+                  _aspectRatio = frame.width / frame.height;
+                  debugPrint('VideoPlayerState: 从snapshot设置视频宽高比: $_aspectRatio (${frame.width}x${frame.height})');
+                  notifyListeners(); // 通知UI更新
+                }
+              });
+            } catch (e) {
+              debugPrint('VideoPlayerState: 从snapshot获取视频尺寸失败: $e');
+            }
+          });
         }
         
         // 更新当前解码器信息
