@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/jellyfin_model.dart';
+import 'package:path_provider/path_provider.dart'; // Added for getTemporaryDirectory
+import 'dart:io'; // Added for File
 
 class JellyfinService {
   static final JellyfinService instance = JellyfinService._internal();
@@ -491,6 +493,145 @@ class JellyfinService {
     }
     
     return '$_serverUrl/Videos/$itemId/stream?static=true&MediaSourceId=$itemId&api_key=$_accessToken';
+  }
+
+  /// 获取Jellyfin视频的字幕轨道信息
+  /// 包括内嵌字幕和外挂字幕
+  Future<List<Map<String, dynamic>>> getSubtitleTracks(String itemId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+
+    try {
+      // 获取播放信息，包含媒体源和字幕轨道
+      final response = await _makeAuthenticatedRequest(
+        '/Items/$itemId/PlaybackInfo?userId=$_userId'
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final mediaSources = data['MediaSources'] as List?;
+        
+        if (mediaSources == null || mediaSources.isEmpty) {
+          debugPrint('JellyfinService: 未找到媒体源信息');
+          return [];
+        }
+
+        final mediaSource = mediaSources[0];
+        final mediaStreams = mediaSource['MediaStreams'] as List?;
+        
+        if (mediaStreams == null) {
+          debugPrint('JellyfinService: 未找到媒体流信息');
+          return [];
+        }
+
+        List<Map<String, dynamic>> subtitleTracks = [];
+        
+        for (int i = 0; i < mediaStreams.length; i++) {
+          final stream = mediaStreams[i];
+          final streamType = stream['Type'];
+          
+          if (streamType == 'Subtitle') {
+            final isExternal = stream['IsExternal'] ?? false;
+            final deliveryMethod = stream['DeliveryMethod'];
+            final language = stream['Language'] ?? '';
+            final title = stream['Title'] ?? '';
+            final codec = stream['Codec'] ?? '';
+            final isDefault = stream['IsDefault'] ?? false;
+            final isForced = stream['IsForced'] ?? false;
+            final isHearingImpaired = stream['IsHearingImpaired'] ?? false;
+            
+            // 构建字幕轨道信息
+            Map<String, dynamic> trackInfo = {
+              'index': i,
+              'type': isExternal ? 'external' : 'embedded',
+              'language': language,
+              'title': title.isNotEmpty ? title : (language.isNotEmpty ? language : 'Unknown'),
+              'codec': codec,
+              'isDefault': isDefault,
+              'isForced': isForced,
+              'isHearingImpaired': isHearingImpaired,
+              'deliveryMethod': deliveryMethod,
+            };
+
+            // 如果是外挂字幕，添加下载URL
+            if (isExternal) {
+              final mediaSourceId = mediaSource['Id'];
+              final subtitleUrl = '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$i/Stream.$codec?api_key=$_accessToken';
+              trackInfo['downloadUrl'] = subtitleUrl;
+            }
+
+            subtitleTracks.add(trackInfo);
+            debugPrint('JellyfinService: 找到字幕轨道 $i: ${trackInfo['title']} (${trackInfo['type']})');
+          }
+        }
+
+        debugPrint('JellyfinService: 总共找到 ${subtitleTracks.length} 个字幕轨道');
+        return subtitleTracks;
+      } else {
+        debugPrint('JellyfinService: 获取播放信息失败: HTTP ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('JellyfinService: 获取字幕轨道信息失败: $e');
+      return [];
+    }
+  }
+
+  /// 下载外挂字幕文件
+  Future<String?> downloadSubtitleFile(String itemId, int subtitleIndex, String format) async {
+    if (!_isConnected || _accessToken == null) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+
+    try {
+      // 获取媒体源ID
+      final playbackInfoResponse = await _makeAuthenticatedRequest(
+        '/Items/$itemId/PlaybackInfo?userId=$_userId'
+      );
+
+      if (playbackInfoResponse.statusCode != 200) {
+        debugPrint('JellyfinService: 获取播放信息失败，无法下载字幕');
+        return null;
+      }
+
+      final playbackData = json.decode(playbackInfoResponse.body);
+      final mediaSources = playbackData['MediaSources'] as List?;
+      
+      if (mediaSources == null || mediaSources.isEmpty) {
+        debugPrint('JellyfinService: 未找到媒体源信息');
+        return null;
+      }
+
+      final mediaSourceId = mediaSources[0]['Id'];
+      
+      // 构建字幕下载URL
+      final subtitleUrl = '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?api_key=$_accessToken';
+      
+      debugPrint('JellyfinService: 下载字幕文件: $subtitleUrl');
+      
+      // 下载字幕文件
+      final subtitleResponse = await http.get(Uri.parse(subtitleUrl));
+      
+      if (subtitleResponse.statusCode == 200) {
+        // 保存到临时文件
+        final tempDir = await getTemporaryDirectory();
+        final fileName = 'jellyfin_subtitle_${itemId}_$subtitleIndex.$format';
+        final filePath = '${tempDir.path}/$fileName';
+        
+        final file = File(filePath);
+        await file.writeAsBytes(subtitleResponse.bodyBytes);
+        
+        debugPrint('JellyfinService: 字幕文件已保存到: $filePath');
+        return filePath;
+      } else {
+        debugPrint('JellyfinService: 下载字幕文件失败: HTTP ${subtitleResponse.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('JellyfinService: 下载字幕文件时出错: $e');
+      return null;
+    }
   }
   
   // 获取图片URL

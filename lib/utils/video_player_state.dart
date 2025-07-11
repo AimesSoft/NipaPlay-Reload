@@ -21,6 +21,7 @@ import '../models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
 
 import 'package:path/path.dart' as p; // Added import for path package
+import 'package:path_provider/path_provider.dart'; // Added for getTemporaryDirectory
 import 'package:crypto/crypto.dart';
 import 'package:provider/provider.dart';
 import '../providers/watch_history_provider.dart';
@@ -950,6 +951,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         
         // 通知字幕轨道变化
         _subtitleManager.onSubtitleTrackChanged();
+      }
+
+      // 针对Jellyfin流媒体，自动加载外挂字幕
+      if (videoPath.startsWith('jellyfin://')) {
+        await _loadJellyfinExternalSubtitles(videoPath);
       }
 
       //debugPrint('7. 更新视频状态...');
@@ -3683,6 +3689,83 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 通知监听器
     notifyListeners();
+  }
+
+  /// 加载Jellyfin外挂字幕
+  Future<void> _loadJellyfinExternalSubtitles(String videoPath) async {
+    try {
+      // 从jellyfin://协议URL中提取itemId
+      final itemId = videoPath.replaceFirst('jellyfin://', '');
+      debugPrint('[Jellyfin字幕] 开始加载外挂字幕，itemId: $itemId');
+      
+      // 获取字幕轨道信息
+      final subtitleTracks = await JellyfinService.instance.getSubtitleTracks(itemId);
+      
+      if (subtitleTracks.isEmpty) {
+        debugPrint('[Jellyfin字幕] 未找到字幕轨道');
+        return;
+      }
+      
+      // 查找外挂字幕轨道
+      final externalSubtitles = subtitleTracks.where((track) => track['type'] == 'external').toList();
+      
+      if (externalSubtitles.isEmpty) {
+        debugPrint('[Jellyfin字幕] 未找到外挂字幕轨道');
+        return;
+      }
+      
+      debugPrint('[Jellyfin字幕] 找到 ${externalSubtitles.length} 个外挂字幕轨道');
+      
+      // 优先选择中文字幕
+      Map<String, dynamic>? preferredSubtitle;
+      
+      // 首先查找简体中文
+      preferredSubtitle = externalSubtitles.firstWhere(
+        (track) => track['language']?.toLowerCase().contains('chi') == true ||
+                   track['title']?.toLowerCase().contains('简体') == true ||
+                   track['title']?.toLowerCase().contains('中文') == true,
+        orElse: () => externalSubtitles.first,
+      );
+      
+      // 如果没有中文，选择默认字幕或第一个
+      if (preferredSubtitle == null) {
+        preferredSubtitle = externalSubtitles.firstWhere(
+          (track) => track['isDefault'] == true,
+          orElse: () => externalSubtitles.first,
+        );
+      }
+      
+      if (preferredSubtitle != null) {
+        final subtitleIndex = preferredSubtitle['index'];
+        final subtitleCodec = preferredSubtitle['codec'];
+        final subtitleTitle = preferredSubtitle['title'];
+        
+        debugPrint('[Jellyfin字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
+        
+        // 下载字幕文件
+        final subtitleFilePath = await JellyfinService.instance.downloadSubtitleFile(
+          itemId, 
+          subtitleIndex, 
+          subtitleCodec
+        );
+        
+        if (subtitleFilePath != null) {
+          debugPrint('[Jellyfin字幕] 字幕文件下载成功: $subtitleFilePath');
+          
+          // 等待播放器完全初始化
+          await Future.delayed(const Duration(milliseconds: 1000));
+          
+          // 加载外挂字幕
+          _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
+          
+          debugPrint('[Jellyfin字幕] 外挂字幕加载完成');
+        } else {
+          debugPrint('[Jellyfin字幕] 字幕文件下载失败');
+        }
+      }
+    } catch (e) {
+      debugPrint('[Jellyfin字幕] 加载外挂字幕时出错: $e');
+    }
   }
 
   // 检查是否是流媒体视频并使用现有的IDs直接加载弹幕
