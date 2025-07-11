@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'dart:async'; // 添加定时器支持
 
 // 全局气泡管理器 - 确保同一时间只有一个气泡显示
 class _TooltipManager {
@@ -61,16 +62,30 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   Offset? _mousePosition;
   final _TooltipManager _manager = _TooltipManager();
   
+  // 添加定时器管理
+  Timer? _showTimer;
+  Timer? _hideTimer;
+  
   @override
   void dispose() {
     _manager.unregisterTooltip(this);
+    _cancelAllTimers(); // 取消所有定时器
     _hideOverlay();
     super.dispose();
+  }
+
+  // 取消所有定时器
+  void _cancelAllTimers() {
+    _showTimer?.cancel();
+    _hideTimer?.cancel();
+    _showTimer = null;
+    _hideTimer = null;
   }
 
   // 强制隐藏（供管理器调用）
   void _forceHide() {
     if (_overlayEntry != null) {
+      _cancelAllTimers(); // 取消所有定时器
       setState(() => _isHovered = false);
       _hideOverlay();
     }
@@ -151,6 +166,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   }
 
   void _hideOverlay() {
+    _cancelAllTimers(); // 确保取消所有定时器
     _manager.unregisterTooltip(this);
     _overlayEntry?.remove();
     _overlayEntry = null;
@@ -187,19 +203,32 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       },
       onEnter: (event) {
         _mousePosition = event.position;
+        
+        // 取消之前的所有定时器
+        _cancelAllTimers();
+        
         setState(() => _isHovered = true);
-        Future.delayed(widget.showDelay, () {
+        
+        // 使用可管理的定时器
+        _showTimer = Timer(widget.showDelay, () {
           if (_isHovered && mounted) {
             _showOverlay(context);
           }
+          _showTimer = null; // 清空引用
         });
       },
       onExit: (_) {
+        // 取消之前的所有定时器
+        _cancelAllTimers();
+        
         setState(() => _isHovered = false);
-        Future.delayed(widget.hideDelay, () {
+        
+        // 使用可管理的定时器
+        _hideTimer = Timer(widget.hideDelay, () {
           if (!_isHovered && mounted) {
             _hideOverlay();
           }
+          _hideTimer = null; // 清空引用
         });
       },
       child: KeyedSubtree(

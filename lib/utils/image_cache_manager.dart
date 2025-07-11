@@ -40,13 +40,17 @@ class ImageCacheManager {
   final Map<String, ui.Image> _cache = {};
   final Map<String, Completer<ui.Image>> _loading = {};
   final Map<String, int> _refCount = {};
+  final Map<String, DateTime> _lastAccessed = {}; // 跟踪图片最后访问时间
   static const int targetWidth = 512;
+  static const Duration _maxCacheAge = Duration(minutes: 10); // 最大缓存时间
   Directory? _cacheDir;
   bool _isInitialized = false;
   bool _isClearingCache = false;
+  Timer? _cleanupTimer;
 
   ImageCacheManager._() {
     _initCacheDir();
+    _startPeriodicCleanup();
   }
 
   Future<void> _initCacheDir() async {
@@ -83,8 +87,9 @@ class ImageCacheManager {
     if (!_isInitialized) {
       await _initCacheDir();
     }
-    // 如果图片已经在内存缓存中，增加引用计数并返回
+    // 如果图片已经在内存缓存中，更新访问时间并增加引用计数
     if (_cache.containsKey(url)) {
+      _lastAccessed[url] = DateTime.now();
       _refCount[url] = (_refCount[url] ?? 0) + 1;
       return _cache[url]!;
     }
@@ -132,11 +137,12 @@ class ImageCacheManager {
       final frame = await codec.getNextFrame();
       final uiImage = frame.image;
 
-      // 存入内存缓存
-      _cache[url] = uiImage;
-      _refCount[url] = 1;
-      completer.complete(uiImage);
-      _loading.remove(url);
+              // 存入内存缓存
+        _cache[url] = uiImage;
+        _refCount[url] = 1;
+        _lastAccessed[url] = DateTime.now();
+        completer.complete(uiImage);
+        _loading.remove(url);
 
       return uiImage;
     } catch (e) {
@@ -182,22 +188,54 @@ class ImageCacheManager {
   }
 
   void releaseImage(String url) {
+    // 简化释放逻辑，不立即释放图片，由定期清理处理
     if (_refCount.containsKey(url)) {
       _refCount[url] = (_refCount[url]! - 1);
       if (_refCount[url]! <= 0) {
         _refCount.remove(url);
-        if (_cache.containsKey(url)) {
-          try {
-            // 安全地dispose图片资源
-            final image = _cache[url]!;
-            image.dispose();
-          } catch (e) {
-            // 图片已经被dispose或其他错误，忽略
-            //////debugPrint('释放图片资源时出错: $e');
-          } finally {
-            _cache.remove(url);
-          }
+        // 标记最后访问时间为过去，让定期清理处理
+        _lastAccessed[url] = DateTime.now().subtract(const Duration(hours: 1));
+      }
+    }
+  }
+
+  // 定期清理机制
+  void _startPeriodicCleanup() {
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      _cleanupExpiredImages();
+    });
+  }
+
+  void _cleanupExpiredImages() {
+    final now = DateTime.now();
+    final expiredUrls = <String>[];
+    
+    for (final entry in _lastAccessed.entries) {
+      final url = entry.key;
+      final lastAccessed = entry.value;
+      
+      // 检查是否过期且没有引用
+      if (now.difference(lastAccessed) > _maxCacheAge && 
+          (_refCount[url] ?? 0) <= 0) {
+        expiredUrls.add(url);
+      }
+    }
+    
+    // 安全释放过期图片
+    for (final url in expiredUrls) {
+      try {
+        final image = _cache[url];
+        if (image != null) {
+          image.dispose();
+          _cache.remove(url);
         }
+        _lastAccessed.remove(url);
+        _refCount.remove(url);
+      } catch (e) {
+        // 图片已被释放或其他错误，仅移除引用
+        _cache.remove(url);
+        _lastAccessed.remove(url);
+        _refCount.remove(url);
       }
     }
   }
@@ -215,6 +253,9 @@ class ImageCacheManager {
     _cache.clear();
     _loading.clear();
     _refCount.clear();
+    _lastAccessed.clear();
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
   }
 
   Future<void> clearCache() async {
