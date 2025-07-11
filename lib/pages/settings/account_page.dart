@@ -271,7 +271,7 @@ class _AccountPageState extends State<AccountPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: SingleChildScrollView(
+      body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,9 +348,8 @@ class _AccountPageState extends State<AccountPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              // 使用固定高度，在横屏时可以通过页面滚动查看完整内容
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.6, // 使用屏幕高度的60%
+              // 让活动记录铺满剩余空间
+              Expanded(
                 child: DandanplayUserActivity(key: ValueKey(_username)),
               ),
             ] else ...[

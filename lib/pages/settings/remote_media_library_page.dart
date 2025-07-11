@@ -9,6 +9,7 @@ import 'package:nipaplay/widgets/jellyfin_server_dialog.dart';
 import 'package:nipaplay/widgets/emby_server_dialog.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class RemoteMediaLibraryPage extends StatefulWidget {
   const RemoteMediaLibraryPage({super.key});
@@ -66,10 +67,11 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             children: [
               Row(
                 children: [
-                  const Icon(
-                    Ionicons.server_outline,
-                    color: Colors.white,
-                    size: 24,
+                  SvgPicture.asset(
+                    'assets/jellyfin.svg',
+                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    width: 24,
+                    height: 24,
                   ),
                   const SizedBox(width: 12),
                   const Text(
@@ -284,10 +286,11 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             children: [
               Row(
                 children: [
-                  const Icon(
-                    Ionicons.server_outline,
-                    color: Colors.white,
-                    size: 24,
+                  SvgPicture.asset(
+                    'assets/emby.svg',
+                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    width: 24,
+                    height: 24,
                   ),
                   const SizedBox(width: 12),
                   const Text(

@@ -63,6 +63,7 @@ dependencies:
   media_kit_video: ^1.3.0
   media_kit_libs_video: ^1.0.6
   qr_flutter: ^4.1.0  # 用于生成二维码
+  flutter_svg: ^2.0.14  # 用于显示SVG图标
 
 dev_dependencies:
   flutter_test:
@@ -94,6 +95,8 @@ flutter:
     - assets/images/main_image.png
     - assets/images/main_image_mobile.png
     - assets/subfont.ttf
+    - assets/jellyfin.svg
+    - assets/emby.svg
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

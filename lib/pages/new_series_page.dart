@@ -6,20 +6,14 @@ import '../models/bangumi_model.dart';
 import '../models/watch_history_model.dart';
 import '../utils/image_cache_manager.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:glassmorphism/glassmorphism.dart';
-import '../widgets/cached_network_image_widget.dart';
-import '../widgets/custom_refresh_indicator.dart';
-import '../widgets/translation_button.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../services/dandanplay_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../pages/anime_detail_page.dart';
-import '../widgets/transparent_page_route.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../widgets/loading_overlay.dart';
-import 'package:flutter/rendering.dart';
 import 'package:nipaplay/widgets/floating_action_glass_button.dart';
 import '../widgets/blur_snackbar.dart';
 import '../widgets/anime_card.dart';
@@ -423,12 +417,14 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
               FloatingActionGlassButton(
                 iconData: Ionicons.search_outline,
                 onPressed: _showSearchModal,
+                description: '搜索新番\n按标签、类型快速筛选\n查找你感兴趣的新番',
               ),
               const SizedBox(height: 16), // 按钮之间的间距
               // 排序按钮
               FloatingActionGlassButton(
                 iconData: _isReversed ? Ionicons.chevron_up_outline : Ionicons.chevron_down_outline,
                 onPressed: _toggleSort,
+                description: _isReversed ? '切换为正序显示\n今天的新番排在最前' : '切换为倒序显示\n今天的新番排在最后',
               ),
             ],
           ),
@@ -445,6 +441,9 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           : anime.nameCn,
       imageUrl: anime.imageUrl,
       isOnAir: false,
+      source: 'Bangumi',
+      rating: anime.rating,
+      ratingDetails: anime.ratingDetails,
       onTap: () => _showAnimeDetail(anime),
     );
   }

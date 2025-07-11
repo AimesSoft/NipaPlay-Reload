@@ -219,6 +219,17 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
   }
 
+  String _getPlayerKernelDescription(PlayerKernelType type) {
+    switch (type) {
+      case PlayerKernelType.mdk:
+        return 'MDK 多媒体开发套件\n基于FFmpeg，支持硬件加速，性能优秀';
+      case PlayerKernelType.videoPlayer:
+        return 'Video Player 官方播放器\n适用于简单视频播放，兼容性良好';
+      case PlayerKernelType.mediaKit:
+        return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持复杂媒体格式';
+    }
+  }
+
   String _getDanmakuKernelDescription(DanmakuKernelType type) {
     switch (type) {
       case DanmakuKernelType.nipaPlay:
@@ -234,6 +245,13 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       children: [
         ListTile(
           title: Text("播放器内核", style: getTitleTextStyle(context)),
+          subtitle: Text(
+            _getPlayerKernelDescription(_selectedKernelType),
+            style: TextStyle(
+              color: Colors.grey[200],
+              fontSize: 12,
+            ),
+          ),
           trailing: BlurDropdown<PlayerKernelType>(
             dropdownKey: _playerKernelDropdownKey,
             items: [
@@ -241,16 +259,19 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 title: "MDK",
                 value: PlayerKernelType.mdk,
                 isSelected: _selectedKernelType == PlayerKernelType.mdk,
+                description: _getPlayerKernelDescription(PlayerKernelType.mdk),
               ),
               DropdownMenuItemData(
                 title: "Video Player",
                 value: PlayerKernelType.videoPlayer,
                 isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
+                description: _getPlayerKernelDescription(PlayerKernelType.videoPlayer),
               ),
               DropdownMenuItemData(
                 title: "Libmpv",
                 value: PlayerKernelType.mediaKit,
                 isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
+                description: _getPlayerKernelDescription(PlayerKernelType.mediaKit),
               ),
             ],
             onItemSelected: (kernelType) {
@@ -266,7 +287,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           subtitle: Text(
             _getDanmakuKernelDescription(_selectedDanmakuKernelType),
             style: TextStyle(
-              color: Colors.grey[400],
+              color: Colors.grey[200],
               fontSize: 12,
             ),
           ),
@@ -277,11 +298,13 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 title: "NipaPlay",
                 value: DanmakuKernelType.nipaPlay,
                 isSelected: _selectedDanmakuKernelType == DanmakuKernelType.nipaPlay,
+                description: _getDanmakuKernelDescription(DanmakuKernelType.nipaPlay),
               ),
               DropdownMenuItemData(
                 title: "Canvas_Danmaku",
                 value: DanmakuKernelType.canvasDanmaku,
                 isSelected: _selectedDanmakuKernelType == DanmakuKernelType.canvasDanmaku,
+                description: _getDanmakuKernelDescription(DanmakuKernelType.canvasDanmaku),
               ),
             ],
             onItemSelected: (kernelType) {

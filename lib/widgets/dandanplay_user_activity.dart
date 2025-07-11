@@ -22,6 +22,9 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
   
   // 错误状态
   String? _error;
+  
+  // 分页控制
+  static const int _maxDisplayItems = 100; // 最大显示数量
 
   @override
   void initState() {
@@ -65,12 +68,16 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
       
       // 处理观看历史
       final List<Map<String, dynamic>> recentWatched = [];
+      int filteredCount = 0;
+      
       if (playHistory['success'] == true && playHistory['playHistoryAnimes'] != null) {
         final animes = playHistory['playHistoryAnimes'] as List;
         debugPrint('[用户活动] 观看历史动画数量: ${animes.length}');
         
-        // 取最近观看的动画（最多20个）
-        for (final anime in animes.take(20)) {
+        // 取最近观看的动画（最多显示设定数量）
+        final animesToProcess = animes.take(_maxDisplayItems);
+        
+        for (final anime in animesToProcess) {
           final animeId = anime['animeId'];
           final animeTitle = anime['animeTitle'];
           
@@ -101,7 +108,14 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
               'lastEpisodeTitle': lastEpisodeTitle,
               'lastWatchedTime': lastWatchedTime,
             });
+          } else {
+            filteredCount++;
+            debugPrint('[用户活动] 过滤无效动画: animeId=$animeId, title=$animeTitle');
           }
+        }
+        
+        if (filteredCount > 0) {
+          debugPrint('[用户活动] 共过滤了 $filteredCount 个无效的观看记录');
         }
       }
 
@@ -147,6 +161,12 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
       }
 
       if (mounted) {
+        // 打印处理结果统计
+        debugPrint('[用户活动] 数据处理完成:');
+        debugPrint('[用户活动] - 观看历史: ${recentWatched.length} 个动画');
+        debugPrint('[用户活动] - 收藏列表: ${favoriteList.length} 个动画');
+        debugPrint('[用户活动] - 评分列表: ${ratedList.length} 个动画');
+        
         setState(() {
           _recentWatched = recentWatched;
           _favorites = favoriteList;

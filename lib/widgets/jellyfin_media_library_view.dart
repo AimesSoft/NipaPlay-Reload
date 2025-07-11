@@ -273,6 +273,7 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
                         key: ValueKey('jellyfin_${mediaItem.id}'),
                         name: mediaItem.name,
                         imageUrl: imageUrl,
+                        source: 'Jellyfin',
                         onTap: () {
                           _navigateToJellyfinDetail(mediaItem.id);
                         },
@@ -287,6 +288,7 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
           child: FloatingActionGlassButton(
             iconData: Ionicons.settings_outline,
             onPressed: _showJellyfinServerDialog,
+            description: 'Jellyfin服务器设置\n管理连接信息和媒体库\n配置播放偏好设置',
           ),
         ),
       ],

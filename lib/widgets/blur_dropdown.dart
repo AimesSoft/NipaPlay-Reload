@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
+import 'package:nipaplay/widgets/hover_tooltip_bubble.dart';
 // Assume getTitleTextStyle is defined elsewhere, e.g., in theme_utils.dart
 // import 'package:nipaplay/utils/theme_utils.dart';
 
@@ -249,7 +250,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                         itemCount: widget.items.length,
                         itemBuilder: (context, index) {
                           final item = widget.items[index];
-                          return InkWell(
+                          final Widget menuItem = InkWell(
                             onTap: () {
                               setState(() {
                                 _currentSelectedValue = item.value;
@@ -280,6 +281,18 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                               ),
                             ),
                           );
+                          
+                          // 如果有描述，则包装在HoverTooltipBubble中
+                          if (item.description != null && item.description!.isNotEmpty) {
+                            return HoverTooltipBubble(
+                              text: item.description!,
+                              showDelay: const Duration(milliseconds: 300),
+                              hideDelay: const Duration(milliseconds: 100),
+                              child: menuItem,
+                            );
+                          } else {
+                            return menuItem;
+                          }
                         },
                       ),
                     ),
@@ -372,11 +385,13 @@ class DropdownMenuItemData<T> {
   final String title;
   final T value;
   final bool isSelected; // Used for initial selection hint
+  final String? description; // 新增：描述信息
 
   DropdownMenuItemData({
     required this.title,
     required this.value,
     this.isSelected = false,
+    this.description, // 新增：描述信息
   });
 
    // Added for easy comparison, especially for finding the initial value

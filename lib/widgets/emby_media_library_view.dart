@@ -274,6 +274,7 @@ class _EmbyMediaLibraryViewState extends State<EmbyMediaLibraryView> with Automa
                         key: ValueKey('emby_${mediaItem.id}'),
                         name: mediaItem.name,
                         imageUrl: imageUrl,
+                        source: 'Emby',
                         onTap: () {
                           _navigateToEmbyDetail(mediaItem.id);
                         },
@@ -288,6 +289,7 @@ class _EmbyMediaLibraryViewState extends State<EmbyMediaLibraryView> with Automa
           child: FloatingActionGlassButton(
             iconData: Ionicons.settings_outline,
             onPressed: _showEmbyServerDialog,
+            description: 'Emby服务器设置\n管理连接信息和媒体库\n配置播放偏好设置',
           ),
         ),
       ],

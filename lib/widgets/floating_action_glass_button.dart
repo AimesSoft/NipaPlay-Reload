@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Assuming Ionicons are from here or similar
+import 'package:nipaplay/widgets/hover_tooltip_bubble.dart';
 
 class FloatingActionGlassButton extends StatelessWidget {
   final IconData iconData;
   final VoidCallback onPressed;
   final String? tooltip;
+  final String? description; // 新增：悬浮气泡描述
 
   const FloatingActionGlassButton({
     super.key,
     required this.iconData,
     required this.onPressed,
     this.tooltip,
+    this.description, // 新增：悬浮气泡描述
   });
 
   @override
   Widget build(BuildContext context) {
-    return GlassmorphicContainer(
+    final Widget button = GlassmorphicContainer(
       width: 56,
       height: 56,
       borderRadius: 28,
@@ -54,5 +56,17 @@ class FloatingActionGlassButton extends StatelessWidget {
         ),
       ),
     );
+
+    // 如果有描述信息，则用HoverTooltipBubble包装
+    if (description != null && description!.isNotEmpty) {
+      return HoverTooltipBubble(
+        text: description!,
+        showDelay: const Duration(milliseconds: 500),
+        hideDelay: const Duration(milliseconds: 100),
+        child: button,
+      );
+    } else {
+      return button;
+    }
   }
 } 

@@ -17,6 +17,7 @@ import 'package:nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/emby_server_dialog.dart';
+import 'package:nipaplay/widgets/media_server_selection_sheet.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -191,34 +192,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
   }
 
   Future<void> _showServerSelectionDialog() async {
-    final result = await BlurDialog.show<String>(
-      context: context,
-      title: '选择媒体服务器',
-      content: '请选择要连接的媒体服务器类型：',
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop('jellyfin'),
-          child: const Text(
-            'Jellyfin',
-            style: TextStyle(color: Colors.lightBlueAccent),
-          ),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop('emby'),
-          child: const Text(
-            'Emby',
-            style: TextStyle(color: Colors.green),
-          ),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
-            '取消',
-            style: TextStyle(color: Colors.white70),
-          ),
-        ),
-      ],
-    );
+    final result = await MediaServerSelectionSheet.show(context);
 
     if (result != null && mounted) {
       if (result == 'jellyfin') {
@@ -498,6 +472,13 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                       key: ValueKey(animeId ?? historyItem.filePath), 
                       name: nameToDisplay, 
                       imageUrl: imageUrlToDisplay,
+                      source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
+                      rating: animeId != null && _fetchedFullAnimeData.containsKey(animeId) 
+                          ? _fetchedFullAnimeData[animeId]!.rating 
+                          : null,
+                      ratingDetails: animeId != null && _fetchedFullAnimeData.containsKey(animeId) 
+                          ? _fetchedFullAnimeData[animeId]!.ratingDetails 
+                          : null,
                       onTap: () {
                         if (animeId != null) {
                           _navigateToAnimeDetail(animeId);
@@ -565,6 +546,13 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                         key: ValueKey(animeId ?? historyItem.filePath), 
                         name: nameToDisplay, 
                         imageUrl: imageUrlToDisplay,
+                        source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
+                        rating: animeId != null && _fetchedFullAnimeData.containsKey(animeId) 
+                            ? _fetchedFullAnimeData[animeId]!.rating 
+                            : null,
+                        ratingDetails: animeId != null && _fetchedFullAnimeData.containsKey(animeId) 
+                            ? _fetchedFullAnimeData[animeId]!.ratingDetails 
+                            : null,
                         onTap: () {
                           if (animeId != null) {
                             _navigateToAnimeDetail(animeId);
@@ -585,6 +573,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
               child: FloatingActionGlassButton(
                 iconData: Ionicons.cloud_outline,
                 onPressed: _showServerSelectionDialog,
+                description: '添加媒体服务器\n连接到Jellyfin或Emby服务器\n享受云端媒体库内容',
               ),
             ),
           ],
@@ -597,7 +586,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
     required VoidCallback onPressed,
     required IconData icon,
     required String label,
-    bool isDestructive = false,
   }) {
     return StatefulBuilder(
       builder: (context, setState) {

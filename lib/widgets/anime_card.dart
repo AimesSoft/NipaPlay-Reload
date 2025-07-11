@@ -3,12 +3,16 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/widgets/hover_tooltip_bubble.dart';
 
 class AnimeCard extends StatelessWidget {
   final String name;
   final String imageUrl; // Can be a network URL or a local file path
   final VoidCallback onTap;
   final bool isOnAir;
+  final String? source; // 新增：来源信息（本地/Emby/Jellyfin）
+  final double? rating; // 新增：评分信息
+  final Map<String, dynamic>? ratingDetails; // 新增：详细评分信息
 
   const AnimeCard({
     super.key,
@@ -16,7 +20,60 @@ class AnimeCard extends StatelessWidget {
     required this.imageUrl,
     required this.onTap,
     this.isOnAir = false,
+    this.source, // 新增：来源信息
+    this.rating, // 新增：评分信息
+    this.ratingDetails, // 新增：详细评分信息
   });
+
+  // 根据filePath获取来源信息
+  static String getSourceFromFilePath(String filePath) {
+    if (filePath.startsWith('jellyfin://')) {
+      return 'Jellyfin';
+    } else if (filePath.startsWith('emby://')) {
+      return 'Emby';
+    } else {
+      return '本地';
+    }
+  }
+
+  // 格式化评分信息用于显示
+  String _formatRatingInfo() {
+    List<String> ratingInfo = [];
+    
+    // 添加来源信息
+    if (source != null) {
+      ratingInfo.add('来源：$source');
+    }
+    
+    // 添加Bangumi评分（优先显示）
+    if (ratingDetails != null && ratingDetails!.containsKey('Bangumi评分')) {
+      final bangumiRating = ratingDetails!['Bangumi评分'];
+      if (bangumiRating is num && bangumiRating > 0) {
+        ratingInfo.add('Bangumi评分：${bangumiRating.toStringAsFixed(1)}');
+      }
+    }
+    // 如果没有Bangumi评分，使用通用评分
+    else if (rating != null && rating! > 0) {
+      ratingInfo.add('评分：${rating!.toStringAsFixed(1)}');
+    }
+    
+    // 添加其他平台评分（排除Bangumi评分）
+    if (ratingDetails != null) {
+      final otherRatings = ratingDetails!.entries
+          .where((entry) => entry.key != 'Bangumi评分' && entry.value is num && (entry.value as num) > 0)
+          .take(2) // 最多显示2个其他平台评分
+          .map((entry) {
+            String siteName = entry.key;
+            if (siteName.endsWith('评分')) {
+              siteName = siteName.substring(0, siteName.length - 2);
+            }
+            return '$siteName：${(entry.value as num).toStringAsFixed(1)}';
+          });
+      ratingInfo.addAll(otherRatings);
+    }
+    
+    return ratingInfo.isNotEmpty ? ratingInfo.join('\n') : '';
+  }
 
   // 占位图组件
   Widget _buildPlaceholder(BuildContext context) {
@@ -67,7 +124,7 @@ class AnimeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
+    final Widget card = RepaintBoundary(
       child: GestureDetector(
         onTap: onTap,
         child: Container(
@@ -163,5 +220,18 @@ class AnimeCard extends StatelessWidget {
         ),
       ),
     );
+
+    // 如果有来源或评分信息，则用HoverTooltipBubble包装
+    final tooltipText = _formatRatingInfo();
+    if (tooltipText.isNotEmpty) {
+      return HoverTooltipBubble(
+        text: tooltipText,
+        showDelay: const Duration(milliseconds: 400),
+        hideDelay: const Duration(milliseconds: 100),
+        child: card,
+      );
+    } else {
+      return card;
+    }
   }
 } 

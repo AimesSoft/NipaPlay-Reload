@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:intl/intl.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/log_share_service.dart';
+import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/blur_dropdown.dart';
@@ -30,7 +31,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
   late GlobalKey<State> _tagDropdownKey;
 
   bool _showTimestamp = true;
-  bool _autoScroll = true;
+  bool _autoScroll = false;
   String _selectedLevel = '全部';
   String _selectedTag = '全部';
   String _searchQuery = '';
@@ -48,6 +49,9 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
     
     // 获取可用的标签
     _updateAvailableTags();
+    
+    // 加载保存的设置
+    _loadSettings();
   }
 
   @override
@@ -66,6 +70,19 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
     setState(() {
       _searchQuery = _searchController.text;
     });
+  }
+
+  // 加载保存的设置
+  Future<void> _loadSettings() async {
+    final showTimestamp = await SettingsStorage.loadBool('debug_log_show_timestamp', defaultValue: true);
+    final autoScroll = await SettingsStorage.loadBool('debug_log_auto_scroll', defaultValue: false);
+    
+    if (mounted) {
+      setState(() {
+        _showTimestamp = showTimestamp;
+        _autoScroll = autoScroll;
+      });
+    }
   }
 
   void _updateAvailableTags() {
@@ -316,6 +333,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                           setState(() {
                             _showTimestamp = value;
                           });
+                          SettingsStorage.saveBool('debug_log_show_timestamp', value);
                           Navigator.pop(context);
                         },
                       ),
@@ -332,6 +350,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                           setState(() {
                             _autoScroll = value;
                           });
+                          SettingsStorage.saveBool('debug_log_auto_scroll', value);
                           Navigator.pop(context);
                         },
                       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import 'dart:ui';
 import '../utils/globals.dart' as globals;
 
 class BlurDialog {
@@ -25,55 +26,65 @@ class BlurDialog {
         // 获取键盘高度，用于动态调整底部间距
         final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
         
-        return Dialog(
+                return Dialog(
           backgroundColor: Colors.transparent,
           child: SingleChildScrollView(
             padding: EdgeInsets.only(bottom: keyboardHeight),
-            child: GlassmorphicContainer(
-              width: dialogWidth,
-              height: dialogHeight,
-              borderRadius: 20,
-              blur: 20,
-              alignment: Alignment.center,
-              border: 1,
-              linearGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.15),
-                  Colors.white.withOpacity(0.05),
-                ],
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: screenSize.height * 0.8, // 最大高度限制
+                maxWidth: dialogWidth, // 最大宽度限制
               ),
-              borderGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.5),
-                  Colors.white.withOpacity(0.2),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 固定标题区域
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+              child: IntrinsicWidth(
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minWidth: 200, // 最小宽度，防止过窄
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withOpacity(0.15),
+                        Colors.white.withOpacity(0.05),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    
-                    // 可滚动内容区域
-                    Expanded(
-                      child: SingleChildScrollView(
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 20,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min, // 关键：让Column根据内容自适应
+                          crossAxisAlignment: CrossAxisAlignment.center, // 居中对齐
                           children: [
+                            // 标题区域 - 居中
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center, // 标题居中
+                            ),
+                            const SizedBox(height: 20),
+                            
+                            // 内容区域 - 居中，真正的内容自适应
                             if (content != null)
                               Text(
                                 content,
@@ -82,41 +93,43 @@ class BlurDialog {
                                   fontSize: 15,
                                   height: 1.4,
                                 ),
+                                textAlign: TextAlign.center, // 内容文本居中
                               ),
                             if (contentWidget != null)
                               contentWidget,
+                            
+                            // 按钮区域 - 底部居中
+                            if (actions != null) ...[
+                              const SizedBox(height: 24),
+                              if ((globals.isPhone && !globals.isTablet) && actions.length > 2)
+                                // 手机垂直布局
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: actions.map((action) => 
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: action,
+                                    )
+                                  ).toList(),
+                                )
+                              else
+                                // 正常横向布局 - 居中
+                                Row(
+                                  mainAxisSize: MainAxisSize.min, // 让Row也根据内容自适应
+                                  mainAxisAlignment: MainAxisAlignment.center, // 按钮居中
+                                  children: actions
+                                      .map((action) => Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            child: action,
+                                          ))
+                                      .toList(),
+                                ),
+                            ],
                           ],
                         ),
                       ),
                     ),
-                    
-                    // 固定按钮区域
-                    if (actions != null) ...[
-                      const SizedBox(height: 16),
-                      if ((globals.isPhone && !globals.isTablet) && actions.length > 2)
-                        // 手机垂直布局
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: actions.map((action) => 
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: action,
-                            )
-                          ).toList(),
-                        )
-                      else
-                        // 正常横向布局
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: actions
-                              .map((action) => Padding(
-                                    padding: const EdgeInsets.only(left: 8),
-                                    child: action,
-                                  ))
-                              .toList(),
-                        ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
             ),
