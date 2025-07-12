@@ -19,19 +19,15 @@ class ManualDanmakuMatcher {
   /// 根据关键词搜索动画列表
   Future<List<Map<String, dynamic>>> searchAnime(String keyword) async {
     if (keyword.trim().isEmpty) {
-      debugPrint('搜索关键词为空');
       return [];
     }
 
     try {
-      debugPrint('开始搜索动画: $keyword');
-      
       final appSecret = await DandanplayService.getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/search/anime';
       
       final url = 'https://api.dandanplay.net/api/v2/search/anime?keyword=${Uri.encodeComponent(keyword)}';
-      debugPrint('搜索请求URL: $url');
       
       final response = await http.get(
         Uri.parse(url),
@@ -48,11 +44,8 @@ class ManualDanmakuMatcher {
         },
       );
       
-      debugPrint('搜索响应状态码: ${response.statusCode}');
-      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        debugPrint('搜索响应数据: ${json.encode(data)}');
         
         if (data['animes'] != null && data['animes'] is List) {
           final List<dynamic> animesList = data['animes'];
@@ -64,96 +57,91 @@ class ManualDanmakuMatcher {
             }
           }
           
-          debugPrint('搜索到 ${results.length} 个动画结果');
           return results;
         } else {
-          debugPrint('搜索响应中没有animes字段或格式错误');
           return [];
         }
       } else {
-        debugPrint('搜索请求失败，状态码: ${response.statusCode}');
         return [];
       }
     } catch (e, stackTrace) {
-      debugPrint('搜索动画时出错: $e');
-      debugPrint('错误堆栈: $stackTrace');
-      return [];
+      rethrow;
     }
   }
 
   /// 获取动画的剧集列表
-  /// 
-  /// 根据动画ID和标题获取剧集列表
   Future<List<Map<String, dynamic>>> getAnimeEpisodes(int animeId, String animeTitle) async {
-    debugPrint('开始获取动画剧集列表: animeId=$animeId, title="$animeTitle"');
-
-    if (animeTitle.isEmpty) {
-      debugPrint('动画标题为空，无法获取剧集列表');
-      return [];
-    }
-
     try {
+      if (animeTitle.isEmpty) {
+        throw Exception('动画标题为空');
+      }
+
       final appSecret = await DandanplayService.getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/search/episodes';
+      const apiPath = '/api/v2/bangumi';
       
-      final url = 'https://api.dandanplay.net/api/v2/search/episodes?anime=${Uri.encodeComponent(animeTitle)}';
-      debugPrint('剧集请求URL: $url');
+      final url = 'https://api.dandanplay.net/api/v2/bangumi/$animeId';
       
       final response = await http.get(
         Uri.parse(url),
         headers: {
-          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(
-            DandanplayService.appId, 
-            timestamp, 
-            apiPath, 
-            appSecret
-          ),
+          'X-Signature': DandanplayService.generateSignature(DandanplayService.appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
+          'Accept': 'application/json',
         },
       );
-      
-      debugPrint('剧集列表请求状态码: ${response.statusCode}');
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         
-        if (data['animes'] != null && data['animes'] is List) {
-          final List<dynamic> animesList = data['animes'];
+        final List<Map<String, dynamic>> episodes = [];
+        
+        if (data.containsKey('episodes') && data['episodes'] is List) {
+          final List<dynamic> episodesData = data['episodes'];
           
-          // 查找匹配的动画
-          Map<String, dynamic>? matchedAnime;
-          for (var anime in animesList) {
-            if (anime is Map<String, dynamic> && anime['animeId'] == animeId) {
-              matchedAnime = anime;
-              break;
+          for (var episode in episodesData) {
+            if (episode is Map<String, dynamic>) {
+              episodes.add({
+                'episodeId': episode['episodeId'],
+                'episodeTitle': episode['episodeTitle'],
+                'episodeNumber': episode['episodeNumber'],
+              });
             }
           }
+        } else if (data.containsKey('animes') && data['animes'] is List) {
+          final List<dynamic> animesData = data['animes'];
           
-          if (matchedAnime != null && 
-              matchedAnime['episodes'] != null && 
-              matchedAnime['episodes'] is List) {
-            final episodes = List<Map<String, dynamic>>.from(matchedAnime['episodes']);
-            debugPrint('成功获取 ${episodes.length} 个剧集');
-            return episodes;
-          } else {
-            debugPrint('未找到匹配的动画或剧集信息');
-            return [];
+          for (var anime in animesData) {
+            if (anime is Map<String, dynamic> && 
+                anime.containsKey('episodes') && 
+                anime['episodes'] is List) {
+              final List<dynamic> episodesData = anime['episodes'];
+              
+              for (var episode in episodesData) {
+                if (episode is Map<String, dynamic>) {
+                  episodes.add({
+                    'episodeId': episode['episodeId'],
+                    'episodeTitle': episode['episodeTitle'],
+                    'episodeNumber': episode['episodeNumber'],
+                  });
+                }
+              }
+            }
           }
+        }
+        
+        if (episodes.isNotEmpty) {
+          return episodes;
         } else {
-          debugPrint('响应中没有animes字段');
-          return [];
+          throw Exception('未找到剧集信息');
         }
       } else {
-        debugPrint('获取剧集列表失败，状态码: ${response.statusCode}');
-        return [];
+        throw Exception('获取剧集列表失败，状态码: ${response.statusCode}');
       }
-    } catch (e, stackTrace) {
-      debugPrint('获取剧集列表时出错: $e');
-      debugPrint('错误堆栈: $stackTrace');
-      return [];
+    } catch (e) {
+      rethrow;
     }
   }
 

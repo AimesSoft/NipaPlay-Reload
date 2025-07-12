@@ -64,9 +64,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
       
       if (fileName.endsWith('.xml')) {
         // XML文件，先转换为JSON格式
-        debugPrint('检测到XML弹幕文件，开始转换...');
         jsonData = _convertXmlToJson(fileContent);
-        debugPrint('XML转换完成，共${jsonData['comments']?.length ?? 0}条弹幕');
       } else {
         // JSON文件，直接解析
         jsonData = json.decode(fileContent);
@@ -120,7 +118,6 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
       }
 
     } catch (e) {
-      debugPrint('加载本地弹幕文件失败: $e');
       if (mounted) {
         BlurSnackBar.show(context, '加载弹幕文件失败: $e');
       }
@@ -193,7 +190,6 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
           comments.add(comment);
         }
       } catch (e) {
-        debugPrint('解析XML弹幕项失败: $e, 内容: ${match.group(0)}');
         // 跳过无效的弹幕项，继续处理下一个
         continue;
       }

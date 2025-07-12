@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import '../utils/settings_storage.dart';
 
 /// 弹幕内核类型枚举
 enum DanmakuKernelType {
@@ -8,6 +9,9 @@ enum DanmakuKernelType {
 
   /// Canvas_Danmaku 渲染器
   canvasDanmaku,
+
+  /// Flutter GPU + Custom Shaders 渲染器
+  flutterGPUDanmaku,
 }
 
 /// 负责读写弹幕内核设置以及提供默认值的工厂类。
@@ -15,49 +19,38 @@ enum DanmakuKernelType {
 /// 与现有的 `PlayerFactory` 设计保持一致，便于在设置界面与业务代码中统一调用。
 class DanmakuKernelFactory {
   static const String _danmakuKernelTypeKey = 'danmaku_kernel_type';
-  static DanmakuKernelType? _cachedType;
-  static bool _hasLoaded = false;
+  static DanmakuKernelType _cachedType = DanmakuKernelType.nipaPlay;
+  static bool _initialized = false;
 
   /// 初始化方法，在应用启动时尽早调用（如 main.dart 的 runApp 之前）。
   static Future<void> initialize() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final index = prefs.getInt(_danmakuKernelTypeKey);
-      if (index != null && index < DanmakuKernelType.values.length) {
-        _cachedType = DanmakuKernelType.values[index];
-        debugPrint('[DanmakuKernelFactory] 预加载内核设置: \\${_cachedType.toString()}');
-      } else {
-        _cachedType = DanmakuKernelType.nipaPlay;
-        debugPrint('[DanmakuKernelFactory] 无内核设置，使用默认: NipaPlay');
-      }
-      _hasLoaded = true;
-    } catch (e) {
-      debugPrint('[DanmakuKernelFactory] 初始化读取设置出错: $e');
-      _cachedType = DanmakuKernelType.nipaPlay;
-      _hasLoaded = true;
-    }
+    await _preloadSettings();
   }
 
-  /// 同步加载设置。在 `initialize` 调用前读取时使用临时默认值，避免空指针。
-  static void _loadSettingsSync() {
-    _cachedType = DanmakuKernelType.nipaPlay;
-    _hasLoaded = true;
-    // 异步纠正
-    SharedPreferences.getInstance().then((prefs) {
-      final index = prefs.getInt(_danmakuKernelTypeKey);
-      if (index != null && index < DanmakuKernelType.values.length) {
-        _cachedType = DanmakuKernelType.values[index];
-        debugPrint('[DanmakuKernelFactory] 异步更新内核设置: \\${_cachedType.toString()}');
+  /// 预加载设置并缓存，避免每次都读取SharedPreferences
+  static Future<void> _preloadSettings() async {
+    if (_initialized) return;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final typeIndex = prefs.getInt(_danmakuKernelTypeKey);
+      
+      if (typeIndex != null && typeIndex >= 0 && typeIndex < DanmakuKernelType.values.length) {
+        _cachedType = DanmakuKernelType.values[typeIndex];
+      } else {
+        // 如果没有保存的值或值无效，使用默认值
+        _cachedType = DanmakuKernelType.nipaPlay;
       }
-    });
+    } catch (e) {
+      _cachedType = DanmakuKernelType.nipaPlay;
+    }
+    
+    _initialized = true;
   }
 
   /// 获取当前弹幕内核类型
   static DanmakuKernelType getKernelType() {
-    if (!_hasLoaded) {
-      _loadSettingsSync();
-    }
-    return _cachedType ?? DanmakuKernelType.nipaPlay;
+    return _cachedType;
   }
 
   /// 保存弹幕内核设置
@@ -66,9 +59,8 @@ class DanmakuKernelFactory {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_danmakuKernelTypeKey, type.index);
       _cachedType = type;
-      debugPrint('[DanmakuKernelFactory] 保存内核设置: \\${type.toString()}');
     } catch (e) {
-      debugPrint('[DanmakuKernelFactory] 保存内核设置出错: $e');
+      // ignore
     }
   }
 } 

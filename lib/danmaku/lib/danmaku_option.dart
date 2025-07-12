@@ -26,6 +26,12 @@ class DanmakuOption {
   /// 海量弹幕模式 (弹幕轨道占满时进行叠加)
   final bool massiveMode;
 
+  /// 显示碰撞箱（调试用）
+  final bool showCollisionBoxes;
+
+  /// 显示轨道编号（调试用）
+  final bool showTrackNumbers;
+
   DanmakuOption({
     this.fontSize = 16,
     this.area = 1.0,
@@ -36,6 +42,8 @@ class DanmakuOption {
     this.hideTop = false,
     this.showStroke = true,
     this.massiveMode = false,
+    this.showCollisionBoxes = false,
+    this.showTrackNumbers = false,
   });
 
   DanmakuOption copyWith({
@@ -48,6 +56,8 @@ class DanmakuOption {
     bool? hideScroll,
     bool? showStroke,
     bool? massiveMode,
+    bool? showCollisionBoxes,
+    bool? showTrackNumbers,
   }) {
     return DanmakuOption(
       area: area ?? this.area,
@@ -59,6 +69,8 @@ class DanmakuOption {
       hideScroll: hideScroll ?? this.hideScroll,
       showStroke: showStroke ?? this.showStroke,
       massiveMode: massiveMode ?? this.massiveMode,
+      showCollisionBoxes: showCollisionBoxes ?? this.showCollisionBoxes,
+      showTrackNumbers: showTrackNumbers ?? this.showTrackNumbers,
     );
   }
 }

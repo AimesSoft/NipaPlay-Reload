@@ -9,6 +9,7 @@ import 'danmaku_option.dart';
 import 'danmaku_content_item.dart';
 import 'dart:math';
 import '../../utils/globals.dart' as globals;
+import 'danmaku_track_manager.dart'; // 🔥 新增：轨道管理员
 
 class DanmakuScreen extends StatefulWidget {
   // 创建Screen后返回控制器
@@ -65,6 +66,9 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 弹幕轨道位置
   final List<double> _trackYPositions = [];
 
+  /// 🔥 新增：轨道管理员
+  final DanmakuTrackManager _trackManager = DanmakuTrackManager();
+
   /// 内部计时器
   late int _tick;
 
@@ -84,6 +88,14 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 🔥 修改：直接使用播放暂停状态，不需要额外的时间暂停状态
   bool _isPaused = false;
 
+  /// 🔥 新增：标记是否是时间跳转或状态恢复场景
+  bool _isTimeJumpOrRestoring = false;
+  
+  /// 🔥 新增：设置时间跳转或状态恢复标记
+  void setTimeJumpOrRestoring(bool value) {
+    _isTimeJumpOrRestoring = value;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -98,6 +110,11 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       onPause: pause,
       onResume: resume,
       onClear: clearDanmakus,
+      onResetAll: resetAll, // 🔥 新增：彻底重置回调
+      onGetCurrentTick: getCurrentTick, // 🔥 新增：获取当前时间tick
+      onSetCurrentTick: setCurrentTick, // 🔥 新增：设置当前时间tick
+      onGetDanmakuStates: getDanmakuStates, // 🔥 新增：获取弹幕状态
+      onSetTimeJumpOrRestoring: setTimeJumpOrRestoring, // 🔥 新增：设置时间跳转或状态恢复标记
     );
     _controller.option = _option;
     widget.createdController.call(
@@ -134,11 +151,28 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     super.dispose();
   }
 
+  /// 🔥 新增：获取当前时间tick
+  int getCurrentTick() {
+    return _tick;
+  }
+
+  /// 🔥 新增：设置当前时间tick（用于模拟弹幕按原始时间添加）
+  void setCurrentTick(int tick) {
+    _tick = tick;
+    _trackManager.updateCurrentTick(_tick);
+  }
+
   /// 添加弹幕
   void addDanmaku(DanmakuContentItem content) {
     if (!_running || !mounted) {
       return;
     }
+    
+    // 🔥 检查是否是时间跳转场景（不包括弹幕状态恢复）
+    // 如果指定了轨道编号且有时间偏移，说明是弹幕状态恢复，不需要时间跳转逻辑
+    final isStateRestore = content.trackIndex != null && content.timeOffset > 0;
+    final isTimeJumpOrRestoring = _isTimeJumpOrRestoring && !isStateRestore;
+    
     // 在这里提前创建 Paragraph 缓存防止卡顿
     final textPainter = TextPainter(
       text: TextSpan(
@@ -159,109 +193,164 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     bool danmakuAdded = false;
     
     if (content.type == DanmakuItemType.scroll && !_option.hideScroll) {
-      // 🔥 滚动弹幕：遍历所有轨道，优先分配不会碰撞的轨道（照抄NipaPlay）
-      int? availableTrack;
-      for (int track = 0; track < _trackYPositions.length; track++) {
-        final yPosition = _trackYPositions[track];
-        if (_scrollCanAddToTrack(yPosition, danmakuWidth)) {
-          availableTrack = track;
-          break;
-        }
-      }
+      // 🔥 创建临时弹幕项目用于碰撞检测
+      final tempDanmakuItem = DanmakuItem(
+          content: content,
+          xPosition: _viewWidth,
+          yPosition: 0, // 临时Y位置，会在分配轨道后更新
+          width: danmakuWidth,
+          creationTime: adjustedCreationTime,
+          paragraph: paragraph,
+          strokeParagraph: strokeParagraph);
+      
+      // 🔥 使用轨道管理员分配滚动弹幕轨道（包括碰撞检测）
+      final availableTrack = _trackManager.assignScrollTrack(
+        danmakuWidth, 
+        preferredTrack: content.trackIndex, // 优先使用指定轨道（状态恢复）
+        newItem: tempDanmakuItem,
+        fontSize: _option.fontSize,
+        isTimeJump: isTimeJumpOrRestoring, // 🔥 关键修复：正确传递时间跳转标记
+      );
       
       if (availableTrack != null) {
-        final yPosition = _trackYPositions[availableTrack];
-        _scrollDanmakuItems.add(DanmakuItem(
+        final yPosition = _trackManager.getTrackYPosition(availableTrack);
+        final danmakuItem = DanmakuItem(
             content: content,
             xPosition: _viewWidth,
             yPosition: yPosition,
             width: danmakuWidth,
             creationTime: adjustedCreationTime,
             paragraph: paragraph,
-            strokeParagraph: strokeParagraph));
+            strokeParagraph: strokeParagraph);
+        
+        _scrollDanmakuItems.add(danmakuItem);
+        _trackManager.addDanmakuToTrack(availableTrack, danmakuItem);
         danmakuAdded = true;
       } else {
         // 🔥 主层满了，尝试分配到溢出层
         if (_option.massiveMode && _trackYPositions.isNotEmpty) {
           // 溢出层重新从第一轨道开始分配
           _overflowScrollTrack = (_overflowScrollTrack + 1) % _trackYPositions.length;
-          final yPosition = _trackYPositions[_overflowScrollTrack];
-          _overflowScrollDanmakuItems.add(DanmakuItem(
+          final yPosition = _trackManager.getTrackYPosition(_overflowScrollTrack);
+          final danmakuItem = DanmakuItem(
               content: content,
               xPosition: _viewWidth,
               yPosition: yPosition,
               width: danmakuWidth,
               creationTime: adjustedCreationTime,
               paragraph: paragraph,
-              strokeParagraph: strokeParagraph));
+              strokeParagraph: strokeParagraph);
+          
+          _overflowScrollDanmakuItems.add(danmakuItem);
+          _trackManager.addDanmakuToTrack(_overflowScrollTrack, danmakuItem, overflow: true);
           danmakuAdded = true;
         }
         // 如果不允许堆叠，弹幕会被丢弃（danmakuAdded保持false）
       }
     } else if (content.type == DanmakuItemType.top && !_option.hideTop) {
-      // 🔥 顶部弹幕：从顶部开始逐轨道分配（照抄NipaPlay）
-      for (int track = 0; track < _trackYPositions.length; track++) {
-        final yPosition = _trackYPositions[track];
-        if (_topCanAddToTrack(yPosition)) {
-          _topDanmakuItems.add(DanmakuItem(
-              content: content,
-              xPosition: (_viewWidth - danmakuWidth) / 2,
-              yPosition: yPosition,
-              width: danmakuWidth,
-              creationTime: adjustedCreationTime,
-              paragraph: paragraph,
-              strokeParagraph: strokeParagraph));
-          danmakuAdded = true;
-          break;
-        }
+      // 🔥 创建临时弹幕项目用于碰撞检测
+      final tempDanmakuItem = DanmakuItem(
+          content: content,
+          xPosition: (_viewWidth - danmakuWidth) / 2,
+          yPosition: 0, // 临时Y位置，会在分配轨道后更新
+          width: danmakuWidth,
+          creationTime: adjustedCreationTime,
+          paragraph: paragraph,
+          strokeParagraph: strokeParagraph);
+      
+      // 🔥 使用轨道管理员分配顶部弹幕轨道（包括碰撞检测）
+      final availableTrack = _trackManager.assignTopTrack(
+        preferredTrack: content.trackIndex, // 优先使用指定轨道（状态恢复）
+        newItem: tempDanmakuItem,
+        fontSize: _option.fontSize,
+        isTimeJump: isTimeJumpOrRestoring, // 🔥 关键修复：正确传递时间跳转标记
+      );
+      
+      if (availableTrack != null) {
+        final yPosition = _trackManager.getTrackYPosition(availableTrack);
+        final danmakuItem = DanmakuItem(
+            content: content,
+            xPosition: (_viewWidth - danmakuWidth) / 2,
+            yPosition: yPosition,
+            width: danmakuWidth,
+            creationTime: adjustedCreationTime,
+            paragraph: paragraph,
+            strokeParagraph: strokeParagraph);
+        
+        _topDanmakuItems.add(danmakuItem);
+        _trackManager.addDanmakuToTrack(availableTrack, danmakuItem);
+        danmakuAdded = true;
       }
       
       // 🔥 主层满了，尝试分配到溢出层
       if (!danmakuAdded && _option.massiveMode && _trackYPositions.isNotEmpty) {
         // 溢出层重新从第一轨道开始分配
         _overflowTopTrack = (_overflowTopTrack + 1) % _trackYPositions.length;
-        final yPosition = _trackYPositions[_overflowTopTrack];
-        _overflowTopDanmakuItems.add(DanmakuItem(
+        final yPosition = _trackManager.getTrackYPosition(_overflowTopTrack);
+        final danmakuItem = DanmakuItem(
             content: content,
             xPosition: (_viewWidth - danmakuWidth) / 2,
             yPosition: yPosition,
             width: danmakuWidth,
             creationTime: adjustedCreationTime,
             paragraph: paragraph,
-            strokeParagraph: strokeParagraph));
+            strokeParagraph: strokeParagraph);
+        
+        _overflowTopDanmakuItems.add(danmakuItem);
+        _trackManager.addDanmakuToTrack(_overflowTopTrack, danmakuItem, overflow: true);
         danmakuAdded = true;
       }
     } else if (content.type == DanmakuItemType.bottom && !_option.hideBottom) {
-      // 🔥 底部弹幕：从底部开始逐轨道分配（照抄NipaPlay）
-      for (int track = 0; track < _trackYPositions.length; track++) {
-        final yPosition = _trackYPositions[track];
-        if (_bottomCanAddToTrack(yPosition)) {
-          _bottomDanmakuItems.add(DanmakuItem(
-              content: content,
-              xPosition: (_viewWidth - danmakuWidth) / 2,
-              yPosition: yPosition,
-              width: danmakuWidth,
-              creationTime: adjustedCreationTime,
-              paragraph: paragraph,
-              strokeParagraph: strokeParagraph));
-          danmakuAdded = true;
-          break;
-        }
+      // 🔥 创建临时弹幕项目用于碰撞检测
+      final tempDanmakuItem = DanmakuItem(
+          content: content,
+          xPosition: (_viewWidth - danmakuWidth) / 2,
+          yPosition: 0, // 临时Y位置，会在分配轨道后更新
+          width: danmakuWidth,
+          creationTime: adjustedCreationTime,
+          paragraph: paragraph,
+          strokeParagraph: strokeParagraph);
+      
+      // 🔥 使用轨道管理员分配底部弹幕轨道（包括碰撞检测）
+      final availableTrack = _trackManager.assignBottomTrack(
+        preferredTrack: content.trackIndex, // 优先使用指定轨道（状态恢复）
+        newItem: tempDanmakuItem,
+        fontSize: _option.fontSize,
+        isTimeJump: isTimeJumpOrRestoring, // 🔥 关键修复：正确传递时间跳转标记
+      );
+      
+      if (availableTrack != null) {
+        final yPosition = _trackManager.getTrackYPosition(availableTrack);
+        final danmakuItem = DanmakuItem(
+            content: content,
+            xPosition: (_viewWidth - danmakuWidth) / 2,
+            yPosition: yPosition,
+            width: danmakuWidth,
+            creationTime: adjustedCreationTime,
+            paragraph: paragraph,
+            strokeParagraph: strokeParagraph);
+        
+        _bottomDanmakuItems.add(danmakuItem);
+        _trackManager.addDanmakuToTrack(availableTrack, danmakuItem);
+        danmakuAdded = true;
       }
       
       // 🔥 主层满了，尝试分配到溢出层
       if (!danmakuAdded && _option.massiveMode && _trackYPositions.isNotEmpty) {
         // 溢出层重新从第一轨道开始分配
         _overflowBottomTrack = (_overflowBottomTrack + 1) % _trackYPositions.length;
-        final yPosition = _trackYPositions[_overflowBottomTrack];
-        _overflowBottomDanmakuItems.add(DanmakuItem(
+        final yPosition = _trackManager.getTrackYPosition(_overflowBottomTrack);
+        final danmakuItem = DanmakuItem(
             content: content,
             xPosition: (_viewWidth - danmakuWidth) / 2,
             yPosition: yPosition,
             width: danmakuWidth,
             creationTime: adjustedCreationTime,
             paragraph: paragraph,
-            strokeParagraph: strokeParagraph));
+            strokeParagraph: strokeParagraph);
+        
+        _overflowBottomDanmakuItems.add(danmakuItem);
+        _trackManager.addDanmakuToTrack(_overflowBottomTrack, danmakuItem, overflow: true);
         danmakuAdded = true;
       }
     }
@@ -277,19 +366,50 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         _staticAnimationController.value = 0;
       }
     }
-    // 移除屏幕外滚动弹幕 - 主层和溢出层
+    // 🔥 关键修复：移除屏幕外滚动弹幕 - 主层和溢出层，同时从轨道管理器中移除
+    final expiredScrollItems = _scrollDanmakuItems.where((item) => item.xPosition + item.width < 0).toList();
+    for (final item in expiredScrollItems) {
+      final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+      _trackManager.removeDanmakuFromTrack(trackIndex, item);
+    }
     _scrollDanmakuItems.removeWhere((item) => item.xPosition + item.width < 0);
+    
+    final expiredOverflowScrollItems = _overflowScrollDanmakuItems.where((item) => item.xPosition + item.width < 0).toList();
+    for (final item in expiredOverflowScrollItems) {
+      final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+      _trackManager.removeDanmakuFromTrack(trackIndex, item, overflow: true);
+    }
     _overflowScrollDanmakuItems.removeWhere((item) => item.xPosition + item.width < 0);
-    // 🔥 修改：顶部弹幕显示时间改为5秒，与NipaPlay保持一致 - 主层和溢出层
-    _topDanmakuItems.removeWhere(
-        (item) => ((_tick - item.creationTime) > (5 * 1000))); // 5秒而不是_option.duration
-    _overflowTopDanmakuItems.removeWhere(
-        (item) => ((_tick - item.creationTime) > (5 * 1000))); // 5秒而不是_option.duration
-    // 🔥 修改：底部弹幕显示时间改为5秒，与NipaPlay保持一致 - 主层和溢出层
-    _bottomDanmakuItems.removeWhere(
-        (item) => ((_tick - item.creationTime) > (5 * 1000))); // 5秒而不是_option.duration
-    _overflowBottomDanmakuItems.removeWhere(
-        (item) => ((_tick - item.creationTime) > (5 * 1000))); // 5秒而不是_option.duration
+    
+    // 🔥 关键修复：移除过期的顶部弹幕 - 主层和溢出层，同时从轨道管理器中移除
+    final expiredTopItems = _topDanmakuItems.where((item) => ((_tick - item.creationTime) > (5 * 1000))).toList();
+    for (final item in expiredTopItems) {
+      final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+      _trackManager.removeDanmakuFromTrack(trackIndex, item);
+    }
+    _topDanmakuItems.removeWhere((item) => ((_tick - item.creationTime) > (5 * 1000))); // 5秒而不是_option.duration
+    
+    final expiredOverflowTopItems = _overflowTopDanmakuItems.where((item) => ((_tick - item.creationTime) > (5 * 1000))).toList();
+    for (final item in expiredOverflowTopItems) {
+      final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+      _trackManager.removeDanmakuFromTrack(trackIndex, item, overflow: true);
+    }
+    _overflowTopDanmakuItems.removeWhere((item) => ((_tick - item.creationTime) > (5 * 1000))); // 5秒而不是_option.duration
+    
+    // 🔥 关键修复：移除过期的底部弹幕 - 主层和溢出层，同时从轨道管理器中移除
+    final expiredBottomItems = _bottomDanmakuItems.where((item) => ((_tick - item.creationTime) > (5 * 1000))).toList();
+    for (final item in expiredBottomItems) {
+      final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+      _trackManager.removeDanmakuFromTrack(trackIndex, item);
+    }
+    _bottomDanmakuItems.removeWhere((item) => ((_tick - item.creationTime) > (5 * 1000))); // 5秒而不是_option.duration
+    
+    final expiredOverflowBottomItems = _overflowBottomDanmakuItems.where((item) => ((_tick - item.creationTime) > (5 * 1000))).toList();
+    for (final item in expiredOverflowBottomItems) {
+      final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+      _trackManager.removeDanmakuFromTrack(trackIndex, item, overflow: true);
+    }
+    _overflowBottomDanmakuItems.removeWhere((item) => ((_tick - item.creationTime) > (5 * 1000))); // 5秒而不是_option.duration
 
     /// 重绘静态弹幕
     setState(() {
@@ -297,21 +417,18 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     });
   }
 
-  /// 暂停
+  /// 🔥 暂停弹幕
   void pause() {
-    setState(() {
-      _isPaused = true;
-    });
-    // 🔥 关键修改：暂停时停止动画控制器
+    if (_isPaused) return;
+    _isPaused = true;
     _animationController.stop();
     _staticAnimationController.stop();
   }
 
   /// 恢复
   void resume() {
-    setState(() {
-      _isPaused = false;
-    });
+    if (!_isPaused) return;
+    _isPaused = false;
     
     // 🔥 关键修改：恢复时重新启动动画控制器
     if (_running && mounted) {
@@ -328,24 +445,37 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 更新弹幕设置
   void updateOption(DanmakuOption option) {
     bool needRestart = false;
+    bool needStateUpdate = false; // 🔥 新增：标记是否需要更新状态
+    
     if (_animationController.isAnimating) {
       _animationController.stop();
       needRestart = true;
     }
 
-    /// 需要隐藏弹幕时清理已有弹幕 - 主层和溢出层
-    if (option.hideScroll && !_option.hideScroll) {
-      _scrollDanmakuItems.clear();
-      _overflowScrollDanmakuItems.clear();
+    // 🔥 关键修改：不再清空弹幕列表，而是通过绘制器的渲染逻辑来隐藏弹幕
+    // 这样可以保持弹幕的动画状态，隐藏后再显示时弹幕能从正确的位置继续
+    
+    // 🔥 新增：检查弹幕类型显示/隐藏状态变化，同步轨道管理器状态
+    bool trackStateChanged = false;
+    if (_option.hideScroll != option.hideScroll || 
+        _option.hideTop != option.hideTop || 
+        _option.hideBottom != option.hideBottom) {
+      trackStateChanged = true;
     }
-    if (option.hideTop && !_option.hideTop) {
-      _topDanmakuItems.clear();
-      _overflowTopDanmakuItems.clear();
+    
+    // 🔥 检查是否有其他需要更新UI的选项变化
+    if (_option.opacity != option.opacity || 
+        _option.fontSize != option.fontSize ||
+        _option.area != option.area ||
+        _option.showStroke != option.showStroke ||
+        _option.hideTop != option.hideTop ||
+        _option.hideBottom != option.hideBottom ||
+        _option.hideScroll != option.hideScroll ||
+        _option.massiveMode != option.massiveMode ||
+        _option.showCollisionBoxes != option.showCollisionBoxes) {
+      needStateUpdate = true;
     }
-    if (option.hideBottom && !_option.hideBottom) {
-      _bottomDanmakuItems.clear();
-      _overflowBottomDanmakuItems.clear();
-    }
+    
     _option = option;
     _controller.option = _option;
 
@@ -398,15 +528,44 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         item.strokeParagraph = null;
       }
     }
-    if (needRestart) {
+    
+    // 🔥 新增：如果轨道状态发生变化，同步轨道管理器状态
+    if (trackStateChanged) {
+      _trackManager.syncTrackStates(
+        _scrollDanmakuItems,
+        _topDanmakuItems,
+        _bottomDanmakuItems,
+        _overflowScrollDanmakuItems,
+        _overflowTopDanmakuItems,
+        _overflowBottomDanmakuItems
+      );
+    }
+    
+    // 🔥 关键修改：只有在未暂停且需要重启时才重启动画控制器
+    if (needRestart && !_isPaused) {
       _animationController.repeat();
     }
-    setState(() {});
+    
+    // 🔥 关键修改：只有在需要更新状态时才调用setState
+    if (needStateUpdate) {
+      setState(() {});
+    }
   }
 
   /// 清空弹幕
   void clearDanmakus() {
     setState(() {
+      // 🔥 关键修复：在清空弹幕列表之前先调用轨道管理器的清空方法
+      // 这样可以保持轨道分配的连续性，避免每个轨道只有一个弹幕的问题
+      _trackManager.clearTrackContents(
+        _scrollDanmakuItems,
+        _topDanmakuItems,
+        _bottomDanmakuItems,
+        _overflowScrollDanmakuItems,
+        _overflowTopDanmakuItems,
+        _overflowBottomDanmakuItems,
+      );
+      
       _scrollDanmakuItems.clear();
       _topDanmakuItems.clear();
       _bottomDanmakuItems.clear();
@@ -423,6 +582,187 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       _overflowBottomTrack = 0;
     });
     _animationController.stop();
+  }
+
+  /// 🔥 新增：彻底重置所有状态（用于切换视频等场景）
+  void resetAll() {
+    setState(() {
+      _scrollDanmakuItems.clear();
+      _topDanmakuItems.clear();
+      _bottomDanmakuItems.clear();
+      _overflowScrollDanmakuItems.clear();
+      _overflowTopDanmakuItems.clear();
+      _overflowBottomDanmakuItems.clear();
+      
+      // 🔥 重置轨道计数器 - 主层和溢出层
+      _currentScrollTrack = 0;
+      _currentTopTrack = 0;
+      _currentBottomTrack = 0;
+      _overflowScrollTrack = 0;
+      _overflowTopTrack = 0;
+      _overflowBottomTrack = 0;
+      
+      // 🔥 彻底重置轨道管理器的所有状态
+      _trackManager.resetAll();
+    });
+    _animationController.stop();
+  }
+
+  /// 🔥 修改：使用轨道管理员获取轨道编号
+  int _getTrackIndexFromYPosition(double yPosition) {
+    return _trackManager.getTrackIndexFromYPosition(yPosition);
+  }
+
+  /// 🔥 新增：获取当前弹幕状态
+  List<DanmakuItemState> getDanmakuStates() {
+    final List<DanmakuItemState> states = [];
+    final currentTime = _tick / 1000.0; // 转换为秒
+    
+    // 获取滚动弹幕状态
+    for (final item in _scrollDanmakuItems) {
+      final elapsedTime = currentTime - (item.creationTime / 1000.0);
+      final totalDuration = 10.0; // 滚动弹幕10秒运动时间
+      final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
+      final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
+      
+      // 🔥 关键修复：只保存仍在有效时间内的弹幕（避免保存已经消失的弹幕）
+      if (remainingTime > 0 && elapsedTime >= 0) {
+        // 🔥 重要修改：保存轨道编号，确保弹幕关闭重新打开时能恢复到原有位置
+        final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+        states.add(DanmakuItemState(
+          content: item.content.text,
+          color: item.content.color,
+          type: item.content.type,
+          normalizedProgress: normalizedProgress,
+          originalCreationTime: item.creationTime,
+          remainingTime: remainingTime,
+          yPosition: item.yPosition,
+          trackIndex: trackIndex, // 🔥 保存真实的轨道编号
+        ));
+      }
+    }
+    
+    // 获取溢出滚动弹幕状态
+    for (final item in _overflowScrollDanmakuItems) {
+      final elapsedTime = currentTime - (item.creationTime / 1000.0);
+      final totalDuration = 10.0; // 滚动弹幕10秒运动时间
+      final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
+      final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
+      
+      // 🔥 关键修复：只保存仍在有效时间内的弹幕
+      if (remainingTime > 0 && elapsedTime >= 0) {
+        // 🔥 重要修改：保存轨道编号，确保弹幕关闭重新打开时能恢复到原有位置
+        final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+        states.add(DanmakuItemState(
+          content: item.content.text,
+          color: item.content.color,
+          type: item.content.type,
+          normalizedProgress: normalizedProgress,
+          originalCreationTime: item.creationTime,
+          remainingTime: remainingTime,
+          yPosition: item.yPosition,
+          trackIndex: trackIndex, // 🔥 保存真实的轨道编号
+        ));
+      }
+    }
+    
+    // 获取顶部弹幕状态
+    for (final item in _topDanmakuItems) {
+      final elapsedTime = currentTime - (item.creationTime / 1000.0);
+      final totalDuration = 5.0; // 顶部弹幕5秒显示时间
+      final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
+      final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
+      
+      // 🔥 关键修复：只保存仍在有效时间内的弹幕
+      if (remainingTime > 0 && elapsedTime >= 0) {
+        // 🔥 重要修改：保存轨道编号，确保弹幕关闭重新打开时能恢复到原有位置
+        final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+        states.add(DanmakuItemState(
+          content: item.content.text,
+          color: item.content.color,
+          type: item.content.type,
+          normalizedProgress: normalizedProgress,
+          originalCreationTime: item.creationTime,
+          remainingTime: remainingTime,
+          yPosition: item.yPosition,
+          trackIndex: trackIndex, // 🔥 保存真实的轨道编号
+        ));
+      }
+    }
+    
+    // 获取溢出顶部弹幕状态
+    for (final item in _overflowTopDanmakuItems) {
+      final elapsedTime = currentTime - (item.creationTime / 1000.0);
+      final totalDuration = 5.0; // 顶部弹幕5秒显示时间
+      final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
+      final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
+      
+      // 🔥 关键修复：只保存仍在有效时间内的弹幕
+      if (remainingTime > 0 && elapsedTime >= 0) {
+        // 🔥 重要修改：保存轨道编号，确保弹幕关闭重新打开时能恢复到原有位置
+        final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+        states.add(DanmakuItemState(
+          content: item.content.text,
+          color: item.content.color,
+          type: item.content.type,
+          normalizedProgress: normalizedProgress,
+          originalCreationTime: item.creationTime,
+          remainingTime: remainingTime,
+          yPosition: item.yPosition,
+          trackIndex: trackIndex, // 🔥 保存真实的轨道编号
+        ));
+      }
+    }
+    
+    // 获取底部弹幕状态
+    for (final item in _bottomDanmakuItems) {
+      final elapsedTime = currentTime - (item.creationTime / 1000.0);
+      final totalDuration = 5.0; // 底部弹幕5秒显示时间
+      final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
+      final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
+      
+      // 🔥 关键修复：只保存仍在有效时间内的弹幕
+      if (remainingTime > 0 && elapsedTime >= 0) {
+        // 🔥 重要修改：保存轨道编号，确保弹幕关闭重新打开时能恢复到原有位置
+        final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+        states.add(DanmakuItemState(
+          content: item.content.text,
+          color: item.content.color,
+          type: item.content.type,
+          normalizedProgress: normalizedProgress,
+          originalCreationTime: item.creationTime,
+          remainingTime: remainingTime,
+          yPosition: item.yPosition,
+          trackIndex: trackIndex, // 🔥 保存真实的轨道编号
+        ));
+      }
+    }
+    
+    // 获取溢出底部弹幕状态
+    for (final item in _overflowBottomDanmakuItems) {
+      final elapsedTime = currentTime - (item.creationTime / 1000.0);
+      final totalDuration = 5.0; // 底部弹幕5秒显示时间
+      final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
+      final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
+      
+      // 🔥 关键修复：只保存仍在有效时间内的弹幕
+      if (remainingTime > 0 && elapsedTime >= 0) {
+        // 🔥 重要修改：保存轨道编号，确保弹幕关闭重新打开时能恢复到原有位置
+        final trackIndex = _trackManager.getTrackIndexFromYPosition(item.yPosition);
+        states.add(DanmakuItemState(
+          content: item.content.text,
+          color: item.content.color,
+          type: item.content.type,
+          normalizedProgress: normalizedProgress,
+          originalCreationTime: item.creationTime,
+          remainingTime: remainingTime,
+          yPosition: item.yPosition,
+          trackIndex: trackIndex, // 🔥 保存真实的轨道编号
+        ));
+      }
+    }
+    
+    return states;
   }
 
   /// 确定滚动弹幕是否可以添加 - 照抄NipaPlay逻辑
@@ -521,6 +861,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   void _startTick() async {
     final stopwatch = Stopwatch()..start();
     int lastElapsedTime = 0;
+    int printCounter = 0; // 限制打印频率
 
     while (_running && mounted) {
       await Future.delayed(const Duration(milliseconds: 1));
@@ -530,6 +871,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       // 🔥 关键修改：只有在未暂停时才更新时间
       if (!_isPaused) {
         _tick += delta;
+        // 🔥 新增：同步轨道管理员的时间
+        _trackManager.updateCurrentTick(_tick);
       }
       
       lastElapsedTime = currentElapsedTime; // 更新最后记录的时间
@@ -564,6 +907,9 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         _trackYPositions.add(i * trackHeight + verticalSpacing);
       }
       
+      // 🔥 新增：初始化轨道管理员
+      _trackManager.initializeTracks(_trackYPositions, _viewWidth);
+      
       return ClipRect(
         child: IgnorePointer(
           child: Opacity(
@@ -584,7 +930,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                         _danmakuHeight,
                         _running,
                         _tick,
-                        _isPaused), // 🔥 传递暂停状态
+                        _isPaused, // 🔥 传递暂停状态
+                        _option), // 🔥 传递弹幕选项
                     child: Container(),
                   );
                 },
@@ -604,7 +951,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                         _danmakuHeight,
                         _running,
                         _tick,
-                        _isPaused), // 🔥 传递暂停状态
+                        _isPaused, // 🔥 传递暂停状态
+                        _option), // 🔥 传递弹幕选项
                     child: Container(),
                   );
                 },
@@ -624,7 +972,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                         _danmakuHeight,
                         _running,
                         _tick,
-                        _isPaused), // 🔥 传递暂停状态
+                        _isPaused, // 🔥 传递暂停状态
+                        _option), // 🔥 传递弹幕选项
                     child: Container(),
                   );
                 },
@@ -644,7 +993,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                         _danmakuHeight,
                         _running,
                         _tick,
-                        _isPaused), // 🔥 传递暂停状态
+                        _isPaused, // 🔥 传递暂停状态
+                        _option), // 🔥 传递弹幕选项
                     child: Container(),
                   );
                 },

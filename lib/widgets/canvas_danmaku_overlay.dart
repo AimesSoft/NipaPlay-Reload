@@ -1,9 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../utils/video_player_state.dart';
 import '../danmaku/lib/canvas_danmaku.dart' as canvas;
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
+import '../providers/developer_options_provider.dart';
+
+/// 🔥 新增：弹幕状态保存类
+class DanmakuState {
+  final String content;
+  final Color color;
+  final canvas.DanmakuItemType type;
+  final double normalizedProgress; // 归一化进度 (0.0-1.0)
+  final int originalCreationTime; // 原始创建时间
+  final int remainingTime; // 剩余显示时间（毫秒）
+  final double yPosition; // Y轴位置
+  final int saveTime; // 🔥 新增：保存时的时间戳
+  final int trackIndex; // 🔥 新增：轨道编号
+  
+  DanmakuState({
+    required this.content,
+    required this.color,
+    required this.type,
+    required this.normalizedProgress,
+    required this.originalCreationTime,
+    required this.remainingTime,
+    required this.yPosition,
+    required this.saveTime, // 🔥 新增
+    required this.trackIndex, // 🔥 新增：轨道编号
+  });
+}
 
 /// Canvas_Danmaku 渲染器的外层封装，保持与原 `DanmakuOverlay` 相同的入参。
 class CanvasDanmakuOverlay extends StatefulWidget {
@@ -46,6 +73,10 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
   // 🔥 添加弹幕轨道变化检测
   Map<String, bool> _lastTrackEnabled = {};
   String _lastTrackHash = '';
+  
+  // 🔥 新增：弹幕状态保存
+  List<DanmakuState> _savedDanmakuStates = [];
+  bool _isRestoring = false;
 
   @override
   void didUpdateWidget(covariant CanvasDanmakuOverlay oldWidget) {
@@ -74,24 +105,38 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
 
       _updateOption();
       
-      // 🔥 关键修复：当弹幕从隐藏变为显示时，立即同步弹幕
+      // 🔥 关键修复：当弹幕从隐藏变为显示时，恢复弹幕状态
       if (widget.isVisible && !oldWidget.isVisible) {
-
-        // 重置同步时间，强制立即同步
-        _lastSyncTime = 0.0;
-        // 立即同步弹幕，而不是等待下一次调度
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _syncDanmaku();
-          // 🔥 关键修复：如果是暂停状态，需要特殊处理让弹幕显示
-          if (!widget.isPlaying) {
-            _handlePausedDanmakuDisplay();
-          }
-        });
+        // 保存当前状态，用于判断是否成功恢复
+        final hadSavedStates = _savedDanmakuStates.isNotEmpty;
+        
+        // 恢复保存的弹幕状态
+        _restoreDanmakuStates();
+        
+        // 🔥 关键修复：只有在没有保存状态的情况下才重新同步
+        // 如果有保存的状态且成功恢复，就不再调用_syncDanmaku()避免轨道重新分配
+        if (!hadSavedStates) {
+          // 重置同步时间，强制立即同步
+          _lastSyncTime = 0.0;
+          // 立即同步弹幕，而不是等待下一次调度
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _syncDanmaku();
+            // 🔥 关键修复：如果是暂停状态，需要特殊处理让弹幕显示
+            if (!widget.isPlaying) {
+              _handlePausedDanmakuDisplay();
+            }
+          });
+        } else {
+          // 🔥 如果成功恢复状态，设置合理的同步时间，避免立即触发时间轴跳转逻辑
+          _lastSyncTime = widget.currentPosition / 1000;
+        }
       }
       
-      // 🔥 新增：当弹幕从显示变为隐藏时，清空画布
+      // 🔥 修改：当弹幕从显示变为隐藏时，保存弹幕状态并清空画布
       if (!widget.isVisible && oldWidget.isVisible && _controller != null) {
-
+        // 保存当前弹幕状态
+        _saveDanmakuStates();
+        
         _controller!.clear();
       }
     }
@@ -158,7 +203,8 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
 
       _addedDanmaku.clear();
       if (_controller != null) {
-        _controller!.clear();
+        // 🔥 关键修复：切换视频时使用彻底重置，包括重置交叉绘制策略状态
+        _controller!.resetAll();
       }
       _lastSyncTime = 0.0;
     }
@@ -168,6 +214,7 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     if (!mounted) return;
     
     final videoState = context.read<VideoPlayerState>();
+    final devOptions = context.read<DeveloperOptionsProvider>();
     final updated = _option.copyWith(
       fontSize: widget.fontSize,
       opacity: widget.isVisible ? widget.opacity : 0.0,
@@ -176,6 +223,8 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
       hideScroll: videoState.blockScrollDanmaku,
       showStroke: true,
       massiveMode: videoState.danmakuStacking,
+      showCollisionBoxes: devOptions.showCanvasDanmakuCollisionBoxes,
+      showTrackNumbers: devOptions.showCanvasDanmakuTrackNumbers,
     );
     
     // 🔥 检测弹幕类型过滤变化
@@ -196,19 +245,11 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     if (_controller != null) {
       _controller!.updateOption(updated);
       
-      // 如果弹幕类型过滤或轨道堆叠发生变化，立即重新同步弹幕
+      // 🔥 关键修改：弹幕类型过滤变化时不清空弹幕，只更新选项
+      // 这样可以保持弹幕的动画状态，绘制器会根据选项决定是否渲染
       if ((filterChanged || stackingChanged) && widget.isVisible) {
-        // 清空已添加的弹幕记录，重新添加符合新设置的弹幕
-        _addedDanmaku.clear();
-        _controller!.clear();
-        _lastSyncTime = 0.0;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _syncDanmaku();
-          // 🔥 关键修复：如果是暂停状态，需要特殊处理让弹幕显示
-          if (!widget.isPlaying) {
-            _handlePausedDanmakuDisplay();
-          }
-        });
+        // 只更新弹幕选项，不清空弹幕列表
+        // 绘制器会根据hideXXX选项决定是否显示弹幕
       }
     }
   }
@@ -283,11 +324,14 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     final timeDiff = currentTimeSeconds - danmakuTime;
     final timeOffsetMs = (timeDiff * 1000).round();
     
+    // 🔥 关键修复：在时间轴跳转时不指定trackIndex，让轨道管理器重新分配
+    // 这样可以确保弹幕按照交叉绘制策略正常分布，而不是每个轨道一个弹幕
     return canvas.DanmakuContentItem(
       content, 
       color: color, 
       type: itemType,
       timeOffset: timeOffsetMs, // 设置时间偏移
+      trackIndex: null, // 🔥 不指定轨道编号，让轨道管理器重新分配
     );
   }
 
@@ -312,37 +356,56 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<VideoPlayerState>(builder: (context, videoState, child) {
-      // 🔥 检测屏蔽词变化
-      final currentBlockWords = List<String>.from(videoState.danmakuBlockWords);
-      final blockWordsChanged = !_listEquals(_lastBlockWords, currentBlockWords);
+    return Consumer2<VideoPlayerState, DeveloperOptionsProvider>(
+      builder: (context, videoState, devOptions, child) {
+        // 🔥 检测屏蔽词变化
+        final currentBlockWords = List<String>.from(videoState.danmakuBlockWords);
+        final blockWordsChanged = !_listEquals(_lastBlockWords, currentBlockWords);
+        
+        // 🔥 检测弹幕类型过滤设置变化
+        final currentFilterSettings = '${videoState.blockTopDanmaku}-${videoState.blockBottomDanmaku}-${videoState.blockScrollDanmaku}';
+        final filterSettingsChanged = _lastFilterSettings != currentFilterSettings;
+        
+        // 🔥 检测弹幕轨道堆叠设置变化
+        final stackingSettingsChanged = _lastStackingSettings != videoState.danmakuStacking;
+        
+        // 🔥 检测碰撞箱显示设置变化
+        final collisionBoxesChanged = _option.showCollisionBoxes != devOptions.showCanvasDanmakuCollisionBoxes;
+        
+        // 🔥 检测轨道编号显示设置变化
+        final trackNumbersChanged = _option.showTrackNumbers != devOptions.showCanvasDanmakuTrackNumbers;
       
-      // 🔥 检测弹幕类型过滤设置变化
-      final currentFilterSettings = '${videoState.blockTopDanmaku}-${videoState.blockBottomDanmaku}-${videoState.blockScrollDanmaku}';
-      final filterSettingsChanged = _lastFilterSettings != currentFilterSettings;
-      
-      // 🔥 检测弹幕轨道堆叠设置变化
-      final stackingSettingsChanged = _lastStackingSettings != videoState.danmakuStacking;
-      
-      if (blockWordsChanged || filterSettingsChanged || stackingSettingsChanged) {
+      if (blockWordsChanged || filterSettingsChanged || stackingSettingsChanged || collisionBoxesChanged || trackNumbersChanged) {
         _lastBlockWords = currentBlockWords;
         _lastFilterSettings = currentFilterSettings;
         _lastStackingSettings = videoState.danmakuStacking;
         
-        // 设置变化时，立即重新同步弹幕
+        // 🔥 关键修改：对于屏蔽词变化，需要重新同步弹幕，因为需要过滤内容
+        // 对于类型过滤变化、堆叠变化、碰撞箱变化、轨道编号变化，只更新选项，不重新同步
         if (_controller != null && widget.isVisible) {
-          // 清空已添加的弹幕记录，重新添加符合新设置的弹幕
-          _addedDanmaku.clear();
-          _controller!.clear();
-          _lastSyncTime = 0.0;
-          
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _syncDanmaku();
-            // 🔥 关键修复：如果是暂停状态，需要特殊处理让弹幕显示
-            if (!widget.isPlaying) {
-              _handlePausedDanmakuDisplay();
-            }
-          });
+          if (blockWordsChanged) {
+            // 只有屏蔽词变化才需要重新同步弹幕
+            _addedDanmaku.clear();
+            _controller!.clear();
+            _lastSyncTime = 0.0;
+            
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _syncDanmaku();
+              // 🔥 关键修复：如果是暂停状态，需要特殊处理让弹幕显示
+              if (!widget.isPlaying) {
+                _handlePausedDanmakuDisplay();
+              }
+            });
+          } else {
+            // 类型过滤、堆叠、碰撞箱、轨道编号变化时只更新选项，保持弹幕状态
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _updateOption();
+              // 🔥 重要：保持当前的播放/暂停状态，不要重新启动动画
+              if (!widget.isPlaying && _controller != null) {
+                _controller!.pause();
+              }
+            });
+          }
         }
       }
       
@@ -361,16 +424,16 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted && _controller != null) {
                   _updateOption();
-                  // 🔥 修复：Canvas_Danmaku始终保持运行状态，通过时间暂停来控制弹幕
-                  _controller!.resume(); // 始终保持运行
+                  // 🔥 关键修复：不要在这里调用resume()或pause()，因为这会在build重建时错误地改变状态
+                  // 让_updateOption()和其他逻辑来处理播放/暂停状态
                   
-                  // 🔥 根据播放状态设置时间暂停状态
+                  // 🔥 关键修复：确保在初始化时也正确设置播放/暂停状态
                   if (!widget.isPlaying) {
-                    _controller!.pause(); // 这会设置_timePaused=true，但不停止动画循环
+                    _controller!.pause(); // 暂停状态保持暂停
                   }
+                  
                   // 🔥 修复：无论播放状态如何，如果当前是可见状态，都要立即同步弹幕
                   if (widget.isVisible) {
-
                     _lastSyncTime = 0.0;
                     _syncDanmaku();
                     
@@ -390,6 +453,8 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
               hideScroll: videoState.blockScrollDanmaku,
               showStroke: true,
               massiveMode: videoState.danmakuStacking,
+              showCollisionBoxes: Provider.of<DeveloperOptionsProvider>(context, listen: false).showCanvasDanmakuCollisionBoxes,
+              showTrackNumbers: Provider.of<DeveloperOptionsProvider>(context, listen: false).showCanvasDanmakuTrackNumbers,
             ),
           ),
         ),
@@ -448,11 +513,9 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     double timeWindow = isAfterTimeJump ? 1.0 : 0.2; // 时间轴切换后扩大到1秒窗口
     
     if (isAfterTimeJump) {
-
-      
       // 🔥 重大改进：时间轴切换后，加载所有应该在当前时间显示的弹幕（包括运动中途的）
       // 滚动弹幕：10秒运动时间，顶部/底部弹幕：5秒显示时间
-      final allCurrentDanmaku = activeList.where((danmaku) {
+      var allCurrentDanmaku = activeList.where((danmaku) {
         final danmakuTime = (danmaku['time'] ?? 0.0) as double;
         final danmakuType = danmaku['type']?.toString() ?? 'scroll';
         final timeDiff = currentTimeSeconds - danmakuTime;
@@ -467,21 +530,42 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
         }
       }).toList();
       
-
+      // 🔥 关键修复：按照原始时间顺序排序弹幕，确保轨道管理器按正确顺序处理
+      allCurrentDanmaku.sort((a, b) {
+        final timeA = (a['time'] ?? 0.0) as double;
+        final timeB = (b['time'] ?? 0.0) as double;
+        return timeA.compareTo(timeB);
+      });
       
-      // 立即添加这些应该显示的弹幕
+      // 🔥 关键修复：设置时间跳转标记，确保时间跳转场景使用正确的轨道分配策略
+      _controller!.setTimeJumpOrRestoring(true);
+      
+      // 🔥 关键修复：模拟原始弹幕添加顺序，而不是同时添加所有弹幕
+      // 通过临时修改轨道管理器的时间，让它认为弹幕是按原始顺序添加的
       for (final danmaku in allCurrentDanmaku) {
         final danmakuTime = (danmaku['time'] ?? 0.0) as double;
         final content = danmaku['content']?.toString() ?? '';
         final key = '${danmakuTime.toStringAsFixed(3)}_$content';
         
         if (!_addedDanmaku.contains(key) && !_shouldFilterDanmaku(danmaku, videoState)) {
-          // 🔥 关键：为Canvas_Danmaku创建运动中途的弹幕
+          // 🔥 关键修复：临时设置轨道管理器的时间为弹幕的原始时间
+          // 这样轨道管理器会认为弹幕是在原始时间点添加的，而不是同时添加
+          final originalTime = (danmakuTime * 1000).round(); // 转换为毫秒
+          final savedCurrentTick = _controller!.getCurrentTick();
+          _controller!.setCurrentTick(originalTime);
+          
+          // 创建运动中途的弹幕
           final convertedDanmaku = _convertWithTimeOffset(danmaku, currentTimeSeconds);
           _controller!.addDanmaku(convertedDanmaku);
           _addedDanmaku.add(key);
+          
+          // 恢复真实的当前时间
+          _controller!.setCurrentTick(savedCurrentTick);
         }
       }
+      
+      // 🔥 关键修复：时间跳转处理完成后重置时间跳转标记
+      _controller!.setTimeJumpOrRestoring(false);
     }
 
     int addedCount = 0;
@@ -506,8 +590,6 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
       }
     }
     
-
-    
     // 清理过期的已添加记录（超过30秒的）
     _addedDanmaku.removeWhere((key) {
       final timeStr = key.split('_')[0];
@@ -530,23 +612,110 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     return true;
   }
 
+  /// 🔥 新增：保存当前弹幕状态
+  void _saveDanmakuStates() {
+    _savedDanmakuStates.clear();
+    
+    if (_controller == null) return;
+    
+    // 获取当前弹幕状态
+    final danmakuStates = _controller!.getDanmakuStates();
+    final currentTime = DateTime.now().millisecondsSinceEpoch; // 🔥 记录保存时间
+    
+    // 转换为DanmakuState格式并保存
+    for (final state in danmakuStates) {
+      _savedDanmakuStates.add(DanmakuState(
+        content: state.content,
+        color: state.color,
+        type: state.type,
+        normalizedProgress: state.normalizedProgress,
+        originalCreationTime: state.originalCreationTime,
+        remainingTime: state.remainingTime,
+        yPosition: state.yPosition,
+        saveTime: currentTime, // 🔥 新增：保存时间
+        trackIndex: state.trackIndex, // 🔥 新增：轨道编号
+      ));
+    }
+    
+  }
+
+  /// 🔥 新增：恢复弹幕状态
+  void _restoreDanmakuStates() {
+    if (_savedDanmakuStates.isEmpty || _controller == null) return;
+    
+    _isRestoring = true;
+    
+    // 清空当前弹幕
+    _controller!.clear();
+    
+    final restoreTime = DateTime.now().millisecondsSinceEpoch; // 🔥 记录恢复时间
+    
+    // 恢复保存的弹幕状态
+    int validCount = 0;
+    int totalCount = _savedDanmakuStates.length;
+    
+    for (final state in _savedDanmakuStates) {
+      // 🔥 关键修复：计算隐藏期间过去的时间
+      final timeDuringHide = restoreTime - state.saveTime;
+      
+      // 🔥 关键修复：计算考虑隐藏时间的新剩余时间
+      final newRemainingTime = state.remainingTime - timeDuringHide;
+      
+      // 🔥 关键修复：只恢复仍然有效的弹幕
+      if (newRemainingTime > 0) {
+        validCount++;
+        final totalDuration = state.type == canvas.DanmakuItemType.scroll ? 10000 : 5000; // 毫秒
+        final totalElapsedTime = totalDuration - newRemainingTime; // 包括隐藏期间的总运行时间
+        
+        // 创建带有时间偏移的弹幕项，让它从正确的位置开始
+        final danmakuItem = canvas.DanmakuContentItem(
+          state.content,
+          color: state.color,
+          type: state.type,
+          timeOffset: totalElapsedTime, // 使用总运行时间作为偏移
+          trackIndex: state.trackIndex, // 🔥 修复：使用保存的轨道编号，避免重新分配导致轨道调整
+        );
+        
+        _controller!.addDanmaku(danmakuItem);
+      }
+    }
+    
+    _isRestoring = false;
+    
+    // 🔥 添加轨道信息调试
+    if (validCount > 0) {
+      final trackCounts = <int, int>{};
+      for (final state in _savedDanmakuStates) {
+        final timeDuringHide = restoreTime - state.saveTime;
+        final newRemainingTime = state.remainingTime - timeDuringHide;
+        if (newRemainingTime > 0) {
+          trackCounts[state.trackIndex] = (trackCounts[state.trackIndex] ?? 0) + 1;
+        }
+      }
+    }
+    _savedDanmakuStates.clear();
+    
+    // 如果是暂停状态，需要特殊处理
+    if (!widget.isPlaying) {
+      _handlePausedDanmakuDisplay();
+    }
+  }
+
   /// 🔥 关键修复：处理暂停状态下的弹幕显示
   /// Canvas_Danmaku在暂停状态下不会渲染新添加的弹幕，需要特殊处理
   void _handlePausedDanmakuDisplay() {
     if (_controller == null || !mounted) return;
     
-    // 🔥 简化方案：在暂停状态下，让Canvas_Danmaku继续运行动画循环，但不更新弹幕时间
-    // 这样可以确保弹幕始终显示在画布上，不会因为UI重绘而消失
+    // 🔥 修复：在暂停状态下，需要特殊处理来确保弹幕能够显示
     if (!widget.isPlaying) {
-      // 确保动画循环继续运行，这样弹幕就不会消失
+      // 🔥 关键修复：使用最小时间渲染，避免弹幕位置偏移
+      // 先暂时恢复动画，立即在下一帧暂停
       _controller!.resume();
       
-      // 短暂延迟后设置为"暂停"状态，但不停止动画循环
+      // 立即在下一帧暂停，确保弹幕位置不会发生偏移
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _controller != null && !widget.isPlaying) {
-          // 不调用pause()，让动画循环继续运行以保持弹幕显示
-          // Canvas_Danmaku会根据时间变化来决定是否更新弹幕位置
-          // 在暂停状态下时间不变，所以弹幕位置也不会变化，但会保持显示
+          _controller!.pause();
         }
       });
     }

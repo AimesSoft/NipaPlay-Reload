@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'danmaku_content_item.dart';
 import 'single_danmaku.dart';
 import 'dart:math' as math;
 import 'dart:async';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
-import '../utils/globals.dart' as globals;
 import 'danmaku_group_widget.dart';
 
 class DanmakuContainer extends StatefulWidget {
@@ -34,13 +34,15 @@ class DanmakuContainer extends StatefulWidget {
   State<DanmakuContainer> createState() => _DanmakuContainerState();
 }
 
-class _DanmakuContainerState extends State<DanmakuContainer> {
+class _DanmakuContainerState extends State<DanmakuContainer>
+    with SingleTickerProviderStateMixin {
   final double _danmakuHeight = 25.0; // 弹幕高度
   late final double _verticalSpacing; // 上下间距
   final double _horizontalSpacing = 20.0; // 左右间距
   
   // 弹幕独立时间管理系统
-  Timer? _danmakuTimer;
+  Ticker? _ticker;
+  Duration _lastTickTime = Duration.zero;
   double _danmakuCurrentTime = 0.0; // 弹幕系统独立的当前时间
   double _lastPlayerTime = 0.0; // 上次播放器时间
 
@@ -128,49 +130,63 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     // 初始化时间相关变量
     _danmakuCurrentTime = widget.currentTime;
     _lastPlayerTime = widget.currentTime;
-    
-    // 启动16ms的弹幕时间更新定时器
-    _danmakuTimer?.cancel();
-    _danmakuTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      _updateDanmakuTime();
-    });
-    
-    print('[DANMAKU] 🚀 弹幕独立时间系统初始化完成，初始时间: ${_danmakuCurrentTime.toStringAsFixed(3)}s');
+
+    // 启动Ticker进行时间更新
+    _ticker?.dispose();
+    _ticker = createTicker(_onTick)..start();
+
+    print(
+        '[DANMAKU] 🚀 弹幕 Ticker 系统初始化完成，初始时间: ${_danmakuCurrentTime.toStringAsFixed(3)}s');
   }
-  
+
+  // Ticker的回调，计算帧间隔时间
+  void _onTick(Duration newTickTime) {
+    if (_lastTickTime == Duration.zero) {
+      _lastTickTime = newTickTime;
+      return;
+    }
+    final delta = newTickTime - _lastTickTime;
+    _lastTickTime = newTickTime;
+
+    // 使用计算出的delta更新弹幕时间
+    _updateDanmakuTime(delta);
+  }
+
   // 更新弹幕独立时间
-  void _updateDanmakuTime() {
+  void _updateDanmakuTime(Duration delta) {
     if (!mounted) return;
-    
+
     // 检测真正的时间跳跃（拖拽进度条）
     final playerTimeDelta = (widget.currentTime - _lastPlayerTime).abs();
-    
+
     if (playerTimeDelta > 0.5) {
       // 真正的拖拽：立即同步弹幕时间
       //print('[DANMAKU] 🔄 检测到拖拽: ${_danmakuCurrentTime.toStringAsFixed(3)}s → ${widget.currentTime.toStringAsFixed(3)}s (播放器跳跃: ${playerTimeDelta.toStringAsFixed(3)}s)');
       _danmakuCurrentTime = widget.currentTime;
       _isVideoPaused = false;
-      
+
       // 重置第一条弹幕追踪
       _resetFirstDanmakuTracking();
     } else {
-      // 正常播放：弹幕时间严格按16ms增长，不与播放器同步
+      // 正常播放：弹幕时间按实际帧间隔增长
       if (widget.status == PlayerStatus.playing) {
-        // 弹幕时间按播放速度调整，保证运动连续性
-        _danmakuCurrentTime += 0.016 * widget.playbackRate;
+        // 如果刚从暂停状态恢复，delta会很大，当帧的增量为0，避免跳跃
+        final correctedDelta = _isVideoPaused ? Duration.zero : delta;
+        _danmakuCurrentTime +=
+            correctedDelta.inMilliseconds / 1000.0 * widget.playbackRate;
         _isVideoPaused = false;
       } else {
         // 暂停状态：弹幕时间不变
         _isVideoPaused = true;
       }
     }
-    
+
     // 更新记录
     _lastPlayerTime = widget.currentTime;
-    
+
     // 记录第一条弹幕的轨迹
     _trackFirstDanmakuTrajectory();
-    
+
     // 触发弹幕重绘
     if (mounted) {
       setState(() {});
@@ -367,7 +383,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   
   @override
   void dispose() {
-    _danmakuTimer?.cancel();
+    _ticker?.dispose();
     super.dispose();
   }
 

@@ -290,6 +290,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
 
       _danmakuListOverlay = OverlayEntry(
         builder: (context) => DanmakuListMenu(
+          videoState: videoState,
           onClose: () {
             _danmakuListOverlay?.remove();
             _danmakuListOverlay = null;

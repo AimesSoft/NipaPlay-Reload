@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'danmaku_container.dart';
 import 'canvas_danmaku_overlay.dart';
+import '../danmaku_gpu/lib/gpu_danmaku_overlay.dart';
+import '../danmaku_gpu/lib/gpu_danmaku_config.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -42,6 +44,26 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             videoDuration: widget.videoDuration,
             isPlaying: widget.isPlaying,
             fontSize: widget.fontSize,
+            isVisible: widget.isVisible,
+            opacity: widget.opacity,
+          );
+        } else if (kernelType == DanmakuKernelType.flutterGPUDanmaku) {
+          // 使用 Flutter GPU 内核
+          final gpuConfig = GPUDanmakuConfig(
+            fontSize: widget.fontSize,
+            strokeWidth: 1.0,
+            trackSpacing: 10.0,
+            durationMultiplier: 1.0,
+            trackHeightMultiplier: 1.5,
+            verticalSpacing: 10.0,
+            screenUsageRatio: 0.3,
+          );
+          
+          return GPUDanmakuOverlay(
+            currentPosition: widget.currentPosition.toInt(),
+            videoDuration: widget.videoDuration.toInt(),
+            isPlaying: widget.isPlaying,
+            config: gpuConfig,
             isVisible: widget.isVisible,
             opacity: widget.opacity,
           );

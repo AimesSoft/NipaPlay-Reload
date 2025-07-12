@@ -8,10 +8,12 @@ import '../utils/globals.dart' as globals;
 // Convert to StatefulWidget
 class DanmakuListMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final VideoPlayerState videoState;
 
   const DanmakuListMenu({
     super.key,
     required this.onClose,
+    required this.videoState,
   });
 
   @override
@@ -25,6 +27,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
   // 弹幕数据
   List<Map<String, dynamic>> _allSortedDanmakus = [];
   List<Map<String, dynamic>> _visibleDanmakus = [];
+  List<Map<String, dynamic>> _danmakuList = [];
   
   // 状态变量
   bool _isLoading = true;
@@ -48,11 +51,11 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
   void initState() {
     super.initState();
     
-    // 添加调试日志
-    debugPrint('DanmakuListMenu: initState - 开始加载弹幕');
+    // 获取弹幕列表
+    _danmakuList = widget.videoState.danmakuList;
     
     // 延迟一点加载，确保VideoPlayerState已完全初始化
-    Future.delayed(Duration(milliseconds: 500), () {
+    Future.delayed(const Duration(milliseconds: 500), () {
       _loadDanmakus();
     });
     
@@ -147,7 +150,6 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
         _initializeVisibleWindow(nearestIndex);
       });
     } catch (e) {
-      debugPrint('DanmakuListMenu: 加载弹幕失败: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -370,7 +372,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '显示被过滤的弹幕 (${totalFilteredCount}条)',
+                        '显示被过滤的弹幕 ($totalFilteredCount条)',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
@@ -413,7 +415,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                   )
                 : Stack(
                     children: [
-                      Container(
+                      SizedBox(
                         height: listHeight,
                         child: globals.isPhone 
                           ? ListView.builder(

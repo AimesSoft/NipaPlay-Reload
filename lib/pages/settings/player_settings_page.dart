@@ -214,7 +214,18 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     });
     
     if (context.mounted) {
-      String kernelName = kernelType == DanmakuKernelType.nipaPlay ? 'NipaPlay' : 'Canvas_Danmaku';
+      String kernelName;
+      switch (kernelType) {
+        case DanmakuKernelType.nipaPlay:
+          kernelName = 'NipaPlay';
+          break;
+        case DanmakuKernelType.canvasDanmaku:
+          kernelName = 'Canvas_Danmaku';
+          break;
+        case DanmakuKernelType.flutterGPUDanmaku:
+          kernelName = 'Flutter GPU';
+          break;
+      }
       BlurSnackBar.show(context, '弹幕内核已切换为: $kernelName');
     }
   }
@@ -236,6 +247,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         return 'NipaPlay 内置弹幕渲染器\n支持轨道分配、弹幕合并、防重叠等高级功能';
       case DanmakuKernelType.canvasDanmaku:
         return 'Canvas_Danmaku 渲染器\n基于CustomPainter，性能更佳，功耗更低';
+      case DanmakuKernelType.flutterGPUDanmaku:
+        return 'Flutter GPU 弹幕渲染器\n使用Flutter GPU API和自定义着色器，目前仅支持顶部弹幕';
     }
   }
 
@@ -301,10 +314,16 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 description: _getDanmakuKernelDescription(DanmakuKernelType.nipaPlay),
               ),
               DropdownMenuItemData(
-                title: "Canvas_Danmaku",
+                title: "Canvas_Danmaku(试验性)",
                 value: DanmakuKernelType.canvasDanmaku,
                 isSelected: _selectedDanmakuKernelType == DanmakuKernelType.canvasDanmaku,
                 description: _getDanmakuKernelDescription(DanmakuKernelType.canvasDanmaku),
+              ),
+              DropdownMenuItemData(
+                title: "Flutter GPU(试验性)",
+                value: DanmakuKernelType.flutterGPUDanmaku,
+                isSelected: _selectedDanmakuKernelType == DanmakuKernelType.flutterGPUDanmaku,
+                description: _getDanmakuKernelDescription(DanmakuKernelType.flutterGPUDanmaku),
               ),
             ],
             onItemSelected: (kernelType) {
