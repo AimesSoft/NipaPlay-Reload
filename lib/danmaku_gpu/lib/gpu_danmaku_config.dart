@@ -33,7 +33,7 @@ class GPUDanmakuConfig {
     this.durationMultiplier = 1.0,
     this.trackHeightMultiplier = 1.0, // 默认1.0
     this.verticalSpacing = 0.0,       // 默认0.0
-    this.screenUsageRatio = 1.0,      // 修改为100%屏幕使用率
+    this.screenUsageRatio = 1.0,      // 恢复为100%屏幕使用率
     this.danmakuBottomMargin = 10.0,
   }) : fontSize = fontSize ?? (globals.isPhone ? 20.0 : 30.0); // 动态默认字体大小
 

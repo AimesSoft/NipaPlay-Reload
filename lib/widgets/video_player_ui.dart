@@ -434,7 +434,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                         // 修改：保持DanmakuOverlay组件始终存在，通过isVisible控制可见性
                                         // 避免销毁重建导致的延迟问题
                                         return DanmakuOverlay(
-                                          key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
+                                          key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
                                           currentPosition: videoState.position.inMilliseconds.toDouble(),
                                           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
                                           isPlaying: videoState.status == PlayerStatus.playing,
@@ -499,7 +499,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                         // 修改：保持DanmakuOverlay组件始终存在，通过isVisible控制可见性
                                         // 避免销毁重建导致的延迟问题
                                         return DanmakuOverlay(
-                                          key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
+                                          key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
                                           currentPosition: videoState.position.inMilliseconds.toDouble(),
                                           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
                                           isPlaying: videoState.status == PlayerStatus.playing,

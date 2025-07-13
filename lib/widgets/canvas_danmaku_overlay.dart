@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../utils/video_player_state.dart';
-import '../danmaku/lib/canvas_danmaku.dart' as canvas;
+import 'package:nipaplay/danmaku/lib/canvas_danmaku.dart' as canvas;
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 import '../providers/developer_options_provider.dart';
 
@@ -75,7 +75,7 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
   String _lastTrackHash = '';
   
   // 🔥 新增：弹幕状态保存
-  List<DanmakuState> _savedDanmakuStates = [];
+  final List<DanmakuState> _savedDanmakuStates = [];
   bool _isRestoring = false;
 
   @override
@@ -208,6 +208,36 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
       }
       _lastSyncTime = 0.0;
     }
+    
+    // 🔥 新增：检测弹幕轨道状态变化
+    final currentTracks = Map<String, bool>.from(videoState.danmakuTrackEnabled);
+    final tracksChanged = !_mapEquals(_lastTrackEnabled, currentTracks);
+    
+    if (tracksChanged) {
+      debugPrint('CanvasDanmakuOverlay: 检测到弹幕轨道状态变化，清空弹幕记录');
+      _lastTrackEnabled = currentTracks;
+      _addedDanmaku.clear(); // 清空已添加的弹幕记录
+      if (_controller != null) {
+        _controller!.clear(); // 清空控制器中的弹幕
+      }
+      _lastSyncTime = 0.0; // 🔥 关键修复：重置同步时间，确保弹幕能重新加载
+      
+      // 🔥 新增：立即触发同步，不等待下一次同步周期
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _syncDanmaku();
+        }
+      });
+    }
+  }
+
+  /// 比较两个Map是否相等
+  bool _mapEquals<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
   }
 
   void _updateOption() {
@@ -465,6 +495,13 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    
+    // 🔥 新增：初始化弹幕轨道状态
+    if (_lastTrackEnabled.isEmpty) {
+      final videoState = context.read<VideoPlayerState>();
+      _lastTrackEnabled = Map<String, bool>.from(videoState.danmakuTrackEnabled);
+    }
+    
     // 监听视频播放时间，按需添加弹幕
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncDanmaku());
   }
@@ -506,8 +543,42 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     
     final videoState = context.read<VideoPlayerState>();
 
-    // 获取当前活跃弹幕列表
-    final activeList = videoState.getActiveDanmakuList(currentTimeSeconds);
+    // 🔥 新增：支持多弹幕来源的轨道管理
+    // 获取所有启用的弹幕轨道
+    final enabledTracks = <String, List<Map<String, dynamic>>>{};
+    final tracks = videoState.danmakuTracks;
+    final trackEnabled = videoState.danmakuTrackEnabled;
+    
+    // 只处理启用的轨道
+    for (final trackId in tracks.keys) {
+      if (trackEnabled[trackId] == true) {
+        final trackData = tracks[trackId]!;
+        final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
+        
+        // 过滤当前时间窗口内的弹幕
+        final activeDanmaku = trackDanmaku.where((d) {
+          final t = d['time'] as double? ?? 0.0;
+          return t >= currentTimeSeconds - 15.0 && t <= currentTimeSeconds + 15.0;
+        }).toList();
+        
+        if (activeDanmaku.isNotEmpty) {
+          enabledTracks[trackId] = activeDanmaku;
+        }
+      }
+    }
+    
+    // 合并所有启用轨道的弹幕
+    final List<Map<String, dynamic>> activeList = [];
+    for (final trackDanmaku in enabledTracks.values) {
+      activeList.addAll(trackDanmaku);
+    }
+    
+    // 按时间排序
+    activeList.sort((a, b) {
+      final timeA = (a['time'] ?? 0.0) as double;
+      final timeB = (b['time'] ?? 0.0) as double;
+      return timeA.compareTo(timeB);
+    });
 
     // 如果是时间轴切换后的首次同步，需要预加载更大范围的弹幕
     double timeWindow = isAfterTimeJump ? 1.0 : 0.2; // 时间轴切换后扩大到1秒窗口

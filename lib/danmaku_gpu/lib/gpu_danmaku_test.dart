@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../utils/video_player_state.dart';
+import '../../danmaku/lib/danmaku_content_item.dart';
+import 'gpu_danmaku_base_renderer.dart';
+import 'gpu_danmaku_config.dart';
+import 'gpu_danmaku_item.dart';
 
 /// GPU弹幕测试工具
 class GPUDanmakuTest {
@@ -67,4 +71,145 @@ class GPUDanmakuTest {
     
     print('==================');
   }
+
+  /// 测试合并弹幕转换逻辑
+  static void testMergeDanmakuConversion() {
+    print('=== 测试合并弹幕转换逻辑 ===');
+    
+    // 创建一个测试渲染器
+    final config = GPUDanmakuConfig();
+    final renderer = TestRenderer(config: config);
+    
+    // 创建一个合并弹幕项目
+    final mergedItem = GPUDanmakuItem(
+      text: '测试弹幕',
+      color: Colors.white,
+      type: DanmakuItemType.top,
+      timeOffset: 0,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      fontSizeMultiplier: 1.5,
+      countText: 'x3',
+      isMerged: true,
+      mergeCount: 3,
+    );
+    
+    print('原始合并弹幕:');
+    print('  文本: ${mergedItem.text}');
+    print('  字体倍率: ${mergedItem.fontSizeMultiplier}');
+    print('  计数文本: ${mergedItem.countText}');
+    
+    // 测试开启合并弹幕时的显示属性
+    renderer.setMergeDanmaku(true);
+    final mergedProps = renderer.getDanmakuDisplayProperties(mergedItem);
+    print('\n开启合并弹幕时的显示属性:');
+    print('  字体倍率: ${mergedProps['fontSizeMultiplier']}');
+    print('  计数文本: ${mergedProps['countText']}');
+    
+    // 测试关闭合并弹幕时的显示属性
+    renderer.setMergeDanmaku(false);
+    final normalProps = renderer.getDanmakuDisplayProperties(mergedItem);
+    print('\n关闭合并弹幕时的显示属性:');
+    print('  字体倍率: ${normalProps['fontSizeMultiplier']}');
+    print('  计数文本: ${normalProps['countText']}');
+    
+    print('==================');
+  }
+
+  /// 测试合并弹幕显示逻辑
+  static void testMergeDanmakuDisplayLogic() {
+    print('=== 测试合并弹幕显示逻辑 ===');
+    
+    // 模拟弹幕数据
+    final List<Map<String, dynamic>> testDanmakuList = [
+      {
+        'content': '测试弹幕1',
+        'time': 10.0,
+        'type': 'top',
+        'color': 'rgb(255,255,255)',
+        'isMerged': true,
+        'mergeCount': 3,
+        'isFirstInGroup': true,
+        'groupContent': '测试弹幕1',
+      },
+      {
+        'content': '测试弹幕1',
+        'time': 10.1,
+        'type': 'top',
+        'color': 'rgb(255,255,255)',
+        'isMerged': true,
+        'mergeCount': 3,
+        'isFirstInGroup': false,
+        'groupContent': '测试弹幕1',
+      },
+      {
+        'content': '测试弹幕1',
+        'time': 10.2,
+        'type': 'top',
+        'color': 'rgb(255,255,255)',
+        'isMerged': true,
+        'mergeCount': 3,
+        'isFirstInGroup': false,
+        'groupContent': '测试弹幕1',
+      },
+      {
+        'content': '单独弹幕',
+        'time': 11.0,
+        'type': 'top',
+        'color': 'rgb(255,255,255)',
+        'isMerged': false,
+        'mergeCount': 1,
+        'isFirstInGroup': true,
+        'groupContent': '单独弹幕',
+      },
+    ];
+    
+    print('原始弹幕列表:');
+    for (int i = 0; i < testDanmakuList.length; i++) {
+      final danmaku = testDanmakuList[i];
+      print('  弹幕 $i: "${danmaku['content']}" - 合并:${danmaku['isMerged']} - 首条:${danmaku['isFirstInGroup']}');
+    }
+    
+    // 测试开启合并弹幕时的显示逻辑
+    print('\n开启合并弹幕时的显示逻辑:');
+    for (int i = 0; i < testDanmakuList.length; i++) {
+      final danmaku = testDanmakuList[i];
+      final isMerged = danmaku['isMerged'] == true;
+      final isFirstInGroup = danmaku['isFirstInGroup'] == true;
+      
+      if (isMerged && !isFirstInGroup) {
+        print('  弹幕 $i: 跳过（合并弹幕但不是首条）');
+      } else {
+        print('  弹幕 $i: 显示 "${danmaku['content']}"');
+      }
+    }
+    
+    // 测试关闭合并弹幕时的显示逻辑
+    print('\n关闭合并弹幕时的显示逻辑:');
+    for (int i = 0; i < testDanmakuList.length; i++) {
+      final danmaku = testDanmakuList[i];
+      print('  弹幕 $i: 显示 "${danmaku['content']}"（转换为普通弹幕）');
+    }
+    
+    print('==================');
+  }
+}
+
+/// 测试用的渲染器类
+class TestRenderer extends GPUDanmakuBaseRenderer {
+  TestRenderer({required GPUDanmakuConfig config}) : super(
+    config: config,
+    opacity: 1.0,
+  );
+
+  @override
+  void onDanmakuAdded(GPUDanmakuItem item) {}
+
+  @override
+  void onDanmakuRemoved(GPUDanmakuItem item) {}
+
+  @override
+  void onDanmakuCleared() {}
+
+  @override
+  void paintDanmaku(Canvas canvas, Size size) {}
 } 

@@ -20,6 +20,9 @@ class GPUDanmakuTrackManager {
   /// 轨道类型（顶部或底部）
   final DanmakuTrackType trackType;
   
+  /// 🔥 新增：记录上次的屏幕尺寸，用于检测窗口大小变化
+  Size _lastScreenSize = Size.zero;
+  
   GPUDanmakuTrackManager({
     required this.config,
     required this.trackType,
@@ -30,11 +33,22 @@ class GPUDanmakuTrackManager {
   /// 参数:
   /// - size: 屏幕尺寸
   void updateLayout(Size size) {
+    // 🔥 新增：检测窗口大小变化
+    final sizeChanged = _lastScreenSize != size;
+    _lastScreenSize = size;
+    
     final newMaxTracks = _calculateMaxTracks(size);
-    if (newMaxTracks != _maxTracks) {
+    if (newMaxTracks != _maxTracks || sizeChanged) {
+      final oldMaxTracks = _maxTracks;
       _maxTracks = newMaxTracks;
       _availableTracks = List<bool>.filled(_maxTracks, true);
-      _resetInvalidTracks();
+      
+      // 🔥 修复：窗口大小变化时，只调整超出新轨道范围的弹幕，不清空所有轨道
+      if (sizeChanged) {
+        _adjustTracksForSizeChange(oldMaxTracks);
+      } else {
+        _resetInvalidTracks();
+      }
     }
   }
 
@@ -153,11 +167,15 @@ class GPUDanmakuTrackManager {
     switch (trackType) {
       case DanmakuTrackType.top:
         // 顶部弹幕从屏幕顶部开始
-        return trackId * (config.fontSize + config.danmakuBottomMargin);
+        final y = trackId * (config.fontSize + config.danmakuBottomMargin);
+        // 🔥 新增：确保弹幕不会超出屏幕顶部边界
+        return y.clamp(0.0, screenHeight - config.fontSize);
       case DanmakuTrackType.bottom:
         // 底部弹幕从屏幕底部开始，向上排列
         final totalHeight = _maxTracks * (config.fontSize + config.danmakuBottomMargin);
-        return screenHeight - totalHeight + trackId * (config.fontSize + config.danmakuBottomMargin);
+        final y = screenHeight - totalHeight + trackId * (config.fontSize + config.danmakuBottomMargin);
+        // 🔥 新增：确保弹幕不会超出屏幕底部边界
+        return y.clamp(0.0, screenHeight - config.fontSize);
     }
   }
 
@@ -182,6 +200,28 @@ class GPUDanmakuTrackManager {
       'trackType': trackType.toString(),
       'trackItems': _trackItems.map((key, value) => MapEntry(key.toString(), value.length)),
     };
+  }
+
+  /// 窗口大小变化时调整轨道
+  void _adjustTracksForSizeChange(int oldMaxTracks) {
+    // 只处理超出新轨道范围的弹幕
+    final invalidItems = <GPUDanmakuItem>[];
+    _trackItems.removeWhere((trackId, items) {
+      if (trackId >= _maxTracks) {
+        // 收集需要重新分配的项目
+        for (final item in items) {
+          item.resetTrack();
+          invalidItems.add(item);
+        }
+        return true;
+      }
+      return false;
+    });
+    
+    // 重新分配超出范围的弹幕
+    for (final item in invalidItems) {
+      assignTrack(item);
+    }
   }
 }
 

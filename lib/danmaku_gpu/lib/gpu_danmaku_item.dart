@@ -25,6 +25,18 @@ class GPUDanmakuItem {
   /// 弹幕的文本宽度（缓存，避免重复计算）
   double? _textWidth;
   
+  /// 合并弹幕相关属性
+  bool isMerged = false;
+  int mergeCount = 1;
+  bool isFirstInGroup = true;
+  String? groupContent;
+  
+  /// 字体大小倍率
+  double fontSizeMultiplier = 1.0;
+  
+  /// 计数文本
+  String? countText;
+  
   GPUDanmakuItem({
     required this.text,
     required this.color,
@@ -35,6 +47,12 @@ class GPUDanmakuItem {
     this.currentY,
     this.targetX,
     this.targetY,
+    this.isMerged = false,
+    this.mergeCount = 1,
+    this.isFirstInGroup = true,
+    this.groupContent,
+    this.fontSizeMultiplier = 1.0,
+    this.countText,
   });
 
   /// 获取文本宽度（缓存计算结果）
@@ -73,6 +91,8 @@ class GPUDanmakuItem {
       type: item.type,
       timeOffset: item.timeOffset,
       createdAt: createdAt,
+      fontSizeMultiplier: item.fontSizeMultiplier,
+      countText: item.countText,
     );
   }
 
