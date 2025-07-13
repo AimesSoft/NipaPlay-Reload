@@ -43,6 +43,8 @@ import '../services/auto_next_episode_service.dart';
 import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
 import '../player_abstraction/media_kit_player_adapter.dart'; // 导入MediaKitPlayerAdapter
+import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
+import '../danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -85,8 +87,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   List<Map<String, dynamic>> _danmakuList = [];
   
   // 多轨道弹幕系统
-  Map<String, Map<String, dynamic>> _danmakuTracks = {};
-  Map<String, bool> _danmakuTrackEnabled = {};
+  final Map<String, Map<String, dynamic>> _danmakuTracks = {};
+  final Map<String, bool> _danmakuTrackEnabled = {};
   static const String _controlBarHeightKey = 'control_bar_height';
   double _controlBarHeight = 20.0; // 默认高度
   static const String _danmakuOpacityKey = 'danmaku_opacity';
@@ -1975,6 +1977,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
                 notifyListeners();
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载完成 (${_danmakuList.length}条)');
+                
+                // GPU弹幕字符集预构建
+                await _prebuildGPUDanmakuCharsetIfNeeded();
               } catch (e) {
                 //debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
@@ -2550,6 +2555,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         
         // 重新计算合并后的弹幕列表
         _updateMergedDanmakuList();
+        
+        // GPU弹幕字符集预构建
+        await _prebuildGPUDanmakuCharsetIfNeeded();
+        
         notifyListeners();
         return;
       }
@@ -2588,6 +2597,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         
         // 重新计算合并后的弹幕列表
         _updateMergedDanmakuList();
+        
+        // GPU弹幕字符集预构建
+        await _prebuildGPUDanmakuCharsetIfNeeded();
         
         _setStatus(PlayerStatus.playing,
             message: '弹幕加载完成 (${danmakuData['count']}条)');
@@ -2696,6 +2708,32 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     danmakuController?.loadDanmaku(_danmakuList.map((e) => e).toList());
     
     debugPrint('弹幕轨道合并完成，总计${_danmakuList.length}条弹幕');
+  }
+
+  // GPU弹幕字符集预构建（如果需要）
+  Future<void> _prebuildGPUDanmakuCharsetIfNeeded() async {
+    try {
+      // 检查当前是否使用GPU弹幕内核
+      final kernelType = DanmakuKernelFactory.getKernelType();
+      if (kernelType != DanmakuKernelType.flutterGPUDanmaku) {
+        return; // 不是GPU内核，跳过
+      }
+      
+      if (_danmakuList.isEmpty) {
+        return; // 没有弹幕数据，跳过
+      }
+      
+      debugPrint('VideoPlayerState: 检测到GPU弹幕内核，开始预构建字符集');
+      _setStatus(PlayerStatus.recognizing, message: '正在优化GPU弹幕字符集...');
+      
+      // 调用GPU弹幕覆盖层的预构建方法
+      await GPUDanmakuOverlay.prebuildDanmakuCharset(_danmakuList);
+      
+      debugPrint('VideoPlayerState: GPU弹幕字符集预构建完成');
+    } catch (e) {
+      debugPrint('VideoPlayerState: GPU弹幕字符集预构建失败: $e');
+      // 不抛出异常，避免影响正常播放
+    }
   }
 
   // 切换轨道启用状态
@@ -3728,42 +3766,38 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       );
       
       // 如果没有中文，选择默认字幕或第一个
-      if (preferredSubtitle == null) {
-        preferredSubtitle = externalSubtitles.firstWhere(
+      preferredSubtitle ??= externalSubtitles.firstWhere(
           (track) => track['isDefault'] == true,
           orElse: () => externalSubtitles.first,
         );
-      }
       
-      if (preferredSubtitle != null) {
-        final subtitleIndex = preferredSubtitle['index'];
-        final subtitleCodec = preferredSubtitle['codec'];
-        final subtitleTitle = preferredSubtitle['title'];
+      final subtitleIndex = preferredSubtitle['index'];
+      final subtitleCodec = preferredSubtitle['codec'];
+      final subtitleTitle = preferredSubtitle['title'];
+      
+      debugPrint('[Jellyfin字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
+      
+      // 下载字幕文件
+      final subtitleFilePath = await JellyfinService.instance.downloadSubtitleFile(
+        itemId, 
+        subtitleIndex, 
+        subtitleCodec
+      );
+      
+      if (subtitleFilePath != null) {
+        debugPrint('[Jellyfin字幕] 字幕文件下载成功: $subtitleFilePath');
         
-        debugPrint('[Jellyfin字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
+        // 等待播放器完全初始化
+        await Future.delayed(const Duration(milliseconds: 1000));
         
-        // 下载字幕文件
-        final subtitleFilePath = await JellyfinService.instance.downloadSubtitleFile(
-          itemId, 
-          subtitleIndex, 
-          subtitleCodec
-        );
+        // 加载外挂字幕
+        _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
         
-        if (subtitleFilePath != null) {
-          debugPrint('[Jellyfin字幕] 字幕文件下载成功: $subtitleFilePath');
-          
-          // 等待播放器完全初始化
-          await Future.delayed(const Duration(milliseconds: 1000));
-          
-          // 加载外挂字幕
-          _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
-          
-          debugPrint('[Jellyfin字幕] 外挂字幕加载完成');
-        } else {
-          debugPrint('[Jellyfin字幕] 字幕文件下载失败');
-        }
+        debugPrint('[Jellyfin字幕] 外挂字幕加载完成');
+      } else {
+        debugPrint('[Jellyfin字幕] 字幕文件下载失败');
       }
-    } catch (e) {
+        } catch (e) {
       debugPrint('[Jellyfin字幕] 加载外挂字幕时出错: $e');
     }
   }

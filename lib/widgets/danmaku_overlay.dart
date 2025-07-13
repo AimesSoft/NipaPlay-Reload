@@ -49,15 +49,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           );
         } else if (kernelType == DanmakuKernelType.flutterGPUDanmaku) {
           // 使用 Flutter GPU 内核
-          final gpuConfig = GPUDanmakuConfig(
-            fontSize: widget.fontSize,
-            strokeWidth: 1.0,
-            trackSpacing: 10.0,
-            durationMultiplier: 1.0,
-            trackHeightMultiplier: 1.5,
-            verticalSpacing: 10.0,
-            screenUsageRatio: 0.3,
-          );
+          final gpuConfig = GPUDanmakuConfig();
           
           return GPUDanmakuOverlay(
             currentPosition: widget.currentPosition.toInt(),

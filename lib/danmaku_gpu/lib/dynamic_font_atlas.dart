@@ -9,12 +9,17 @@ class DynamicFontAtlas {
   
   final double fontSize;
   final Color color;
+  final VoidCallback? onAtlasUpdated; // 添加回调
 
   final Set<String> _allChars = {};
   final Set<String> _pendingChars = {};
   bool _isUpdating = false;
 
-  DynamicFontAtlas({required this.fontSize, this.color = Colors.white});
+  DynamicFontAtlas({
+    required this.fontSize,
+    this.color = Colors.white,
+    this.onAtlasUpdated,
+  });
 
   // 初始化，生成一个包含基本字符的初始图集
   Future<void> generate() async {
@@ -22,6 +27,42 @@ class DynamicFontAtlas {
     _allChars.addAll(initialChars.split(''));
     await _regenerateAtlas();
     debugPrint('DynamicFontAtlas: 初始图集生成完毕');
+  }
+
+  // 预扫描大量文本并批量生成字符集（用于视频初始化时预处理）
+  Future<void> prebuildFromTexts(List<String> texts) async {
+    if (_isUpdating) return;
+    _isUpdating = true;
+    
+    debugPrint('DynamicFontAtlas: 开始预扫描 ${texts.length} 条弹幕文本');
+    
+    final Set<String> newChars = {};
+    int totalChars = 0;
+    
+    // 批量提取所有唯一字符
+    for (final text in texts) {
+      for (final char in text.runes) {
+        final charStr = String.fromCharCode(char);
+        totalChars++;
+        if (!_allChars.contains(charStr)) {
+          newChars.add(charStr);
+        }
+      }
+    }
+    
+    if (newChars.isNotEmpty) {
+      debugPrint('DynamicFontAtlas: 发现 ${newChars.length} 个新字符（总计 $totalChars 个字符）');
+      
+      _allChars.addAll(newChars);
+      await _regenerateAtlas();
+      
+      debugPrint('DynamicFontAtlas: 预构建完成，图集包含 ${_allChars.length} 个字符');
+      onAtlasUpdated?.call();
+    } else {
+      debugPrint('DynamicFontAtlas: 所有字符已在图集中，无需重建');
+    }
+    
+    _isUpdating = false;
   }
 
   // 从文本中提取新字符，并触发更新
@@ -54,6 +95,7 @@ class DynamicFontAtlas {
     await _regenerateAtlas();
     
     _isUpdating = false;
+    onAtlasUpdated?.call(); // 触发回调
     debugPrint('DynamicFontAtlas: 图集已动态更新');
   }
   

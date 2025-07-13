@@ -1,3 +1,5 @@
+import '../../utils/globals.dart' as globals;
+
 /// GPU弹幕配置类
 /// 
 /// 包含GPU弹幕渲染的所有配置选项
@@ -22,16 +24,20 @@ class GPUDanmakuConfig {
   
   /// 顶部弹幕占用屏幕高度比例（0.1-1.0）
   final double screenUsageRatio;
+  final double danmakuBottomMargin;
 
-  const GPUDanmakuConfig({
-    this.fontSize = 16.0,
+  GPUDanmakuConfig({
+    double? fontSize,
     this.strokeWidth = 1.0,
     this.trackSpacing = 10.0,
     this.durationMultiplier = 1.0,
-    this.trackHeightMultiplier = 1.5,
-    this.verticalSpacing = 10.0,
-    this.screenUsageRatio = 0.3,
-  });
+    this.trackHeightMultiplier = 1.0, // 默认1.0
+    this.verticalSpacing = 0.0,       // 默认0.0
+    this.screenUsageRatio = 1.0,      // 修改为100%屏幕使用率
+    this.danmakuBottomMargin = 10.0,
+  }) : fontSize = fontSize ?? (globals.isPhone ? 20.0 : 30.0); // 动态默认字体大小
+
+
 
   /// 计算轨道高度
   double get trackHeight => fontSize * trackHeightMultiplier;

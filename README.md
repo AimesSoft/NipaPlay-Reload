@@ -11,7 +11,7 @@
 </div>
 
 <div align="center" style="margin: 10px 0;">
-  <img src="https://img.shields.io/badge/QQ群-701184841-12B7F5?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ群">
+  <img src="https://img.shields.io/badge/QQ群-961207150-12B7F5?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ群">
   <img src="https://img.shields.io/badge/番剧-追番中-ff69b4?style=for-the-badge&logo=anilist" alt="追番状态">
   <img src="https://img.shields.io/badge/弹幕-密集-ff6b6b?style=for-the-badge&logo=wechat" alt="弹幕密度">
   <img src="https://img.shields.io/badge/播放器-高性能-ffa500?style=for-the-badge&logo=flutter" alt="播放器性能">

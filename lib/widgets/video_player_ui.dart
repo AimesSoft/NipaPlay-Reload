@@ -425,28 +425,27 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                               ),
                             ),
                             
-                            if (videoState.hasVideo)
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  ignoring: true,
-                                  child: Consumer<VideoPlayerState>(
-                                    builder: (context, videoState, _) {
-                                      if (!videoState.danmakuVisible) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return DanmakuOverlay(
-                                        key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
-                                        currentPosition: videoState.position.inMilliseconds.toDouble(),
-                                        videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
-                                        isPlaying: videoState.status == PlayerStatus.playing,
-                                        fontSize: getFontSize(),
-                                        isVisible: videoState.danmakuVisible,
-                                        opacity: videoState.mappedDanmakuOpacity,
-                                      );
-                                    },
+                                                          if (videoState.hasVideo)
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    ignoring: true,
+                                    child: Consumer<VideoPlayerState>(
+                                      builder: (context, videoState, _) {
+                                        // 修改：保持DanmakuOverlay组件始终存在，通过isVisible控制可见性
+                                        // 避免销毁重建导致的延迟问题
+                                        return DanmakuOverlay(
+                                          key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
+                                          currentPosition: videoState.position.inMilliseconds.toDouble(),
+                                          videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+                                          isPlaying: videoState.status == PlayerStatus.playing,
+                                          fontSize: getFontSize(),
+                                          isVisible: videoState.danmakuVisible,
+                                          opacity: videoState.mappedDanmakuOpacity,
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
-                              ),
                             
                             if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
                               Positioned.fill(
@@ -497,9 +496,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                     ignoring: true,
                                     child: Consumer<VideoPlayerState>(
                                       builder: (context, videoState, _) {
-                                        if (!videoState.danmakuVisible) {
-                                          return const SizedBox.shrink();
-                                        }
+                                        // 修改：保持DanmakuOverlay组件始终存在，通过isVisible控制可见性
+                                        // 避免销毁重建导致的延迟问题
                                         return DanmakuOverlay(
                                           key: ValueKey('danmaku_${videoState.currentVideoPath ?? DateTime.now().millisecondsSinceEpoch}'),
                                           currentPosition: videoState.position.inMilliseconds.toDouble(),

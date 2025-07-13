@@ -23,6 +23,7 @@ class GPUDanmakuRenderer extends CustomPainter {
   
   // 时间管理
   bool _isPaused = false;
+  bool _isVisible = true; // 新增可见性状态
 
   GPUDanmakuRenderer({
     required this.config,
@@ -31,8 +32,10 @@ class GPUDanmakuRenderer extends CustomPainter {
     bool isPaused = false,
     bool showCollisionBoxes = false,
     bool showTrackNumbers = false,
+    bool isVisible = true, // 在构造函数中接收
   }) : _onNeedRepaint = onNeedRepaint, 
        _isPaused = isPaused,
+       _isVisible = isVisible, // 初始化
        _showCollisionBoxes = showCollisionBoxes,
        _showTrackNumbers = showTrackNumbers {
     _initializeRenderers();
@@ -51,6 +54,7 @@ class GPUDanmakuRenderer extends CustomPainter {
       isPaused: _isPaused,
       showCollisionBoxes: _showCollisionBoxes,
       showTrackNumbers: _showTrackNumbers,
+      isVisible: _isVisible, // 传递给子渲染器
     );
     
     // TODO: 后续初始化其他类型的弹幕渲染器
@@ -87,6 +91,13 @@ class GPUDanmakuRenderer extends CustomPainter {
       
       debugPrint('GPUDanmakuRenderer: 调试选项更新完成');
     }
+  }
+
+  /// 设置可见性
+  void setVisibility(bool visible) {
+    _isVisible = visible;
+    _topRenderer.setVisibility(visible);
+    // TODO: 其他渲染器
   }
 
   /// 设置暂停状态
@@ -167,7 +178,7 @@ class GPUDanmakuRenderer extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true; // 总是重绘，因为弹幕是动态的
+    return true; // 总是重绘，因为弹幕是动态的，由AnimationController驱动
   }
 }
 
