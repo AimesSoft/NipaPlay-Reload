@@ -14,7 +14,7 @@ class DanmakuOption {
   /// 隐藏顶部弹幕
   final bool hideTop;
 
-  /// 隐藏底部弹幕
+  /// 底部弹幕
   final bool hideBottom;
 
   /// 隐藏滚动弹幕
@@ -31,6 +31,12 @@ class DanmakuOption {
 
   /// 显示轨道编号（调试用）
   final bool showTrackNumbers;
+  
+  /// 描边粗细（与nipaplay内核保持一致）
+  final double strokeWidth;
+  
+  /// 描边颜色（与nipaplay内核保持一致）
+  final int strokeColor;
 
   DanmakuOption({
     this.fontSize = 16,
@@ -44,6 +50,8 @@ class DanmakuOption {
     this.massiveMode = false,
     this.showCollisionBoxes = false,
     this.showTrackNumbers = false,
+    this.strokeWidth = 1.0,
+    this.strokeColor = 0xFF000000, // 默认黑色描边
   });
 
   DanmakuOption copyWith({
@@ -58,6 +66,8 @@ class DanmakuOption {
     bool? massiveMode,
     bool? showCollisionBoxes,
     bool? showTrackNumbers,
+    double? strokeWidth,
+    int? strokeColor,
   }) {
     return DanmakuOption(
       area: area ?? this.area,
@@ -71,6 +81,8 @@ class DanmakuOption {
       massiveMode: massiveMode ?? this.massiveMode,
       showCollisionBoxes: showCollisionBoxes ?? this.showCollisionBoxes,
       showTrackNumbers: showTrackNumbers ?? this.showTrackNumbers,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      strokeColor: strokeColor ?? this.strokeColor,
     );
   }
 }

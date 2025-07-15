@@ -31,7 +31,7 @@ class GPUDanmakuConfig {
     this.strokeWidth = 1.0,
     this.trackSpacing = 10.0,
     this.durationMultiplier = 1.0,
-    this.trackHeightMultiplier = 1.0, // 默认1.0
+    this.trackHeightMultiplier = 1.5, // 默认1.0
     this.verticalSpacing = 0.0,       // 默认0.0
     this.screenUsageRatio = 1.0,      // 恢复为100%屏幕使用率
     this.danmakuBottomMargin = 10.0,

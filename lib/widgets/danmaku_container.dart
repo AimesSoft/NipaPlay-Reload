@@ -3,7 +3,6 @@ import 'package:flutter/scheduler.dart';
 import 'danmaku_content_item.dart';
 import 'single_danmaku.dart';
 import 'dart:math' as math;
-import 'dart:async';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import 'danmaku_group_widget.dart';

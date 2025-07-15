@@ -78,11 +78,15 @@ class DanmakuTrackManager {
   /// 当前时间tick
   int _currentTick = 0;
   
+  /// 弹幕滚动时间
+  double _duration = 10.0;
+  
   /// 🔥 移除交叉绘制策略变量（不再需要）
   
   /// 初始化轨道
-  void initializeTracks(List<double> trackYPositions, double viewWidth) {
+  void initializeTracks(List<double> trackYPositions, double viewWidth, double duration) {
     _viewWidth = viewWidth;
+    _duration = duration;
     _tracks.clear();
     
     for (int i = 0; i < trackYPositions.length; i++) {
@@ -119,138 +123,57 @@ class DanmakuTrackManager {
   }
   
   /// 🔥 滚动弹幕轨道分配策略 - 完全照抄NipaPlay的算法
-  int? assignScrollTrack(double danmakuWidth, {int? preferredTrack, DanmakuItem? newItem, double? fontSize, bool isTimeJump = false}) {
-    // 🔥 修复：如果有指定的轨道编号，优先使用该轨道（用于状态恢复）
+  int? assignScrollTrack(double danmakuWidth, {int? preferredTrack, bool massiveMode = false}) {
     if (preferredTrack != null && preferredTrack != -1 && preferredTrack >= 0 && preferredTrack < _tracks.length) {
-      // 检查指定轨道是否可用
-      if (newItem != null) {
-        if (canAddScrollDanmakuToTrackDynamic(preferredTrack, newItem, danmakuWidth)) {
-          return preferredTrack;
-        }
-      } else {
-        // 如果没有提供碰撞检测参数，直接使用指定轨道
-        return preferredTrack;
+      return preferredTrack;
+    }
+    
+    for (int i = 0; i < _tracks.length; i++) {
+      if (_canAddScrollDanmakuToTrack(i, danmakuWidth)) {
+        return i;
       }
     }
     
-    // 🔥 完全照抄NipaPlay的轨道分配策略：智能轨道选择
-    if (newItem != null) {
-      
-      // 🔥 第一轮：寻找完全空的轨道（优先选择）
-      for (int trackIndex = 0; trackIndex < _tracks.length; trackIndex++) {
-        final track = _tracks[trackIndex];
-        
-        if (track.scrollItems.isEmpty && track.overflowScrollItems.isEmpty) {
-          return trackIndex;
-        }
-      }
-      
-      // 🔥 第二轮：寻找弹幕最少且无碰撞的轨道（智能均衡分配）
-      int bestTrack = -1;
-      int minDanmakuCount = 999;
-      final currentTime = _currentTick / 1000.0;
-      
-      for (int trackIndex = 0; trackIndex < _tracks.length; trackIndex++) {
-        // 检查是否可以添加到该轨道
-        if (canAddScrollDanmakuToTrackDynamic(trackIndex, newItem, danmakuWidth)) {
-          // 计算该轨道当前的弹幕数量
-          final track = _tracks[trackIndex];
-          int currentDanmakuCount = 0;
-          
-          // 统计主层弹幕
-          for (var item in track.scrollItems) {
-            final itemTime = item.creationTime / 1000.0;
-            final timeDiff = currentTime - itemTime;
-            if (timeDiff >= 0 && timeDiff <= 10.0) {
-              currentDanmakuCount++;
-            }
-          }
-          
-          // 统计溢出层弹幕
-          for (var item in track.overflowScrollItems) {
-            final itemTime = item.creationTime / 1000.0;
-            final timeDiff = currentTime - itemTime;
-            if (timeDiff >= 0 && timeDiff <= 10.0) {
-              currentDanmakuCount++;
-            }
-          }
-          
-          // 选择弹幕数量最少的轨道
-          if (currentDanmakuCount < minDanmakuCount) {
-            minDanmakuCount = currentDanmakuCount;
-            bestTrack = trackIndex;
-          }
-        }
-      }
-      
-      if (bestTrack != -1) {
-        return bestTrack;
-      }
-      
-      // 🔥 第三轮：如果所有轨道都有碰撞，使用最优轨道选择（Fallback）
-      bestTrack = _findBestTrackForFallback(currentTime);
-      if (bestTrack != -1) {
-        return bestTrack;
-      }
+    // 海量弹幕模式，随机选择一个轨道
+    if (massiveMode) {
+      return math.Random().nextInt(_tracks.length);
     }
     
-    // 🔥 如果没有提供弹幕信息，返回null
     return null;
   }
   
-  /// 🔥 新增：为fallback场景寻找最优轨道
-  int _findBestTrackForFallback(double currentTime) {
-    int bestTrack = 0;
-    double bestScore = double.infinity;
-    
-    for (int trackIndex = 0; trackIndex < _tracks.length; trackIndex++) {
-      final track = _tracks[trackIndex];
-      double trackScore = 0;
-      
-      // 计算轨道评分：弹幕数量 + 最早结束时间的权重
-      int danmakuCount = 0;
-      double earliestEndTime = currentTime + 20.0; // 默认很远的未来时间
-      
-      // 检查主层弹幕
-      for (var item in track.scrollItems) {
-        final itemTime = item.creationTime / 1000.0;
-        final endTime = itemTime + 10.0;
-        if (endTime > currentTime) {
-          danmakuCount++;
-          if (endTime < earliestEndTime) {
-            earliestEndTime = endTime;
-          }
+  bool _canAddScrollDanmakuToTrack(int trackIndex, double newDanmakuWidth) {
+    final track = _tracks[trackIndex];
+    final items = [...track.scrollItems, ...track.overflowScrollItems];
+    final currentTime = _currentTick / 1000.0;
+
+
+    for (var item in items) {
+      final existingTime = item.creationTime / 1000.0;
+      final elapsed = currentTime - existingTime;
+      if (elapsed < 0) continue;
+
+
+      final xPosition = _viewWidth - (elapsed / _duration) * (_viewWidth + item.width);
+      final existingEndPosition = xPosition + item.width;
+
+
+      if (_viewWidth - existingEndPosition < 0) {
+        return false;
+      }
+
+
+      if (item.width < newDanmakuWidth) {
+        final existingItemProgress = (_viewWidth - xPosition) / (item.width + _viewWidth);
+        final newItemProgress = _viewWidth / (_viewWidth + newDanmakuWidth);
+        if (1 - existingItemProgress > newItemProgress) {
+          return false;
         }
-      }
-      
-      // 检查溢出层弹幕
-      for (var item in track.overflowScrollItems) {
-        final itemTime = item.creationTime / 1000.0;
-        final endTime = itemTime + 10.0;
-        if (endTime > currentTime) {
-          danmakuCount++;
-          if (endTime < earliestEndTime) {
-            earliestEndTime = endTime;
-          }
-        }
-      }
-      
-      // 评分算法：弹幕数量权重 + 时间权重
-      trackScore = danmakuCount * 100.0 + (earliestEndTime - currentTime) * 10.0;
-      
-      // 🔥 关键：给t0轨道增加惩罚分数，避免过度使用
-      if (trackIndex == 0) {
-        trackScore += 50.0; // 增加惩罚分，降低t0轨道的优先级
-      }
-      
-      if (trackScore < bestScore) {
-        bestScore = trackScore;
-        bestTrack = trackIndex;
       }
     }
-    
-    return bestTrack;
+    return true;
   }
+
   
   /// 🔥 移除交叉绘制相关方法（不再需要）
   
@@ -333,10 +256,10 @@ class DanmakuTrackManager {
       // 检查与后续弹幕的重叠
       for (int j = i + 1; j < visibleItems.length; j++) {
         final next = visibleItems[j];
-        final currentTime_i = current.creationTime / 1000.0;
-        final nextTime_i = next.creationTime / 1000.0;
-        final currentElapsed = currentTime - currentTime_i;
-        final nextElapsed = currentTime - nextTime_i;
+        final currenttimeI = current.creationTime / 1000.0;
+        final nexttimeI = next.creationTime / 1000.0;
+        final currentElapsed = currentTime - currenttimeI;
+        final nextElapsed = currentTime - nexttimeI;
         final currentPosition = _viewWidth - (currentElapsed / 10.0) * (_viewWidth + current.width);
         final nextPosition = _viewWidth - (nextElapsed / 10.0) * (_viewWidth + next.width);
         final currentRight = currentPosition + current.width;
@@ -479,118 +402,38 @@ class DanmakuTrackManager {
   }
   
   /// 🔥 顶部弹幕轨道分配策略 - 完全照抄NipaPlay的算法
-  int? assignTopTrack({int? preferredTrack, DanmakuItem? newItem, double? fontSize, bool isTimeJump = false}) {
+  int? assignTopTrack({int? preferredTrack}) {
     // 🔥 修复：如果有指定的轨道编号，优先使用该轨道（用于状态恢复）
     if (preferredTrack != null && preferredTrack != -1 && preferredTrack >= 0 && preferredTrack < _tracks.length) {
-      // 检查指定轨道是否可用
-      if (newItem != null && fontSize != null) {
-        if (canAddStaticDanmakuToTrack(preferredTrack, newItem, fontSize)) {
-          return preferredTrack;
-        }
-      } else {
-        // 如果没有提供碰撞检测参数，直接使用指定轨道
-        return preferredTrack;
-      }
+      return preferredTrack;
     }
     
-    // 🔥 完全照抄NipaPlay的轨道分配策略：从顶部开始逐轨道分配
-    for (int trackIndex = 0; trackIndex < _tracks.length; trackIndex++) {
-      final track = _tracks[trackIndex];
-      
-      // 如果轨道为空，直接分配
+    // 从顶部轨道开始查找可用轨道
+    for (int i = 0; i < _tracks.length; i++) {
+      final track = _tracks[i];
       if (track.topItems.isEmpty && track.overflowTopItems.isEmpty) {
-        return trackIndex;
-      }
-      
-      // 检查是否可以添加到该轨道（时间重叠检测）
-      if (newItem != null && fontSize != null) {
-        if (canAddStaticDanmakuToTrack(trackIndex, newItem, fontSize)) {
-          bool hasTimeOverlap = false;
-          
-          // 检查与现有顶部弹幕的时间重叠
-          for (var existingItem in track.topItems) {
-            if (_checkTimeOverlap(existingItem, newItem)) {
-              hasTimeOverlap = true;
-              break;
-            }
-          }
-          
-          // 检查与溢出层顶部弹幕的时间重叠
-          if (!hasTimeOverlap) {
-            for (var existingItem in track.overflowTopItems) {
-              if (_checkTimeOverlap(existingItem, newItem)) {
-                hasTimeOverlap = true;
-                break;
-              }
-            }
-          }
-          
-          if (!hasTimeOverlap) {
-            return trackIndex;
-          }
-        }
+        return i;
       }
     }
     
-    // 🔥 如果所有轨道都有时间重叠，返回null表示无法分配
     return null;
   }
   
   /// 🔥 底部弹幕轨道分配策略 - 完全照抄NipaPlay的算法
-  int? assignBottomTrack({int? preferredTrack, DanmakuItem? newItem, double? fontSize, bool isTimeJump = false}) {
+  int? assignBottomTrack({int? preferredTrack}) {
     // 🔥 修复：如果有指定的轨道编号，优先使用该轨道（用于状态恢复）
     if (preferredTrack != null && preferredTrack != -1 && preferredTrack >= 0 && preferredTrack < _tracks.length) {
-      // 检查指定轨道是否可用
-      if (newItem != null && fontSize != null) {
-        if (canAddStaticDanmakuToTrack(preferredTrack, newItem, fontSize)) {
-          return preferredTrack;
-        }
-      } else {
-        // 如果没有提供碰撞检测参数，直接使用指定轨道
-        return preferredTrack;
-      }
+      return preferredTrack;
     }
     
-    // 🔥 完全照抄NipaPlay的轨道分配策略：从底部开始逐轨道分配
-    for (int trackIndex = 0; trackIndex < _tracks.length; trackIndex++) {
-      final track = _tracks[trackIndex];
-      
-      // 如果轨道为空，直接分配
+    // 从底部轨道开始查找可用轨道
+    for (int i = _tracks.length - 1; i >= 0; i--) {
+      final track = _tracks[i];
       if (track.bottomItems.isEmpty && track.overflowBottomItems.isEmpty) {
-        return trackIndex;
-      }
-      
-      // 检查是否可以添加到该轨道（时间重叠检测）
-      if (newItem != null && fontSize != null) {
-        if (canAddStaticDanmakuToTrack(trackIndex, newItem, fontSize)) {
-          bool hasTimeOverlap = false;
-          
-          // 检查与现有底部弹幕的时间重叠
-          for (var existingItem in track.bottomItems) {
-            if (_checkTimeOverlap(existingItem, newItem)) {
-              hasTimeOverlap = true;
-              break;
-            }
-          }
-          
-          // 检查与溢出层底部弹幕的时间重叠
-          if (!hasTimeOverlap) {
-            for (var existingItem in track.overflowBottomItems) {
-              if (_checkTimeOverlap(existingItem, newItem)) {
-                hasTimeOverlap = true;
-                break;
-              }
-            }
-          }
-          
-          if (!hasTimeOverlap) {
-            return trackIndex;
-          }
-        }
+        return i;
       }
     }
     
-    // 🔥 如果所有轨道都有时间重叠，返回null表示无法分配
     return null;
   }
   

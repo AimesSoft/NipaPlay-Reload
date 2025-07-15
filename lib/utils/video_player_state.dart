@@ -44,7 +44,7 @@ import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
 import '../player_abstraction/media_kit_player_adapter.dart'; // 导入MediaKitPlayerAdapter
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
-import '../danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
+import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
 
 enum PlayerStatus {
   idle, // 空闲状态

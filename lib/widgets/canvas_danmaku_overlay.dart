@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
+import 'dart:math';
 
 import '../utils/video_player_state.dart';
-import 'package:nipaplay/danmaku/lib/canvas_danmaku.dart' as canvas;
-import '../danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/canvas_danmaku/lib/canvas_danmaku.dart' as canvas;
 import '../providers/developer_options_provider.dart';
 
 /// 🔥 新增：弹幕状态保存类
@@ -247,6 +246,7 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     final devOptions = context.read<DeveloperOptionsProvider>();
     final updated = _option.copyWith(
       fontSize: widget.fontSize,
+      // 直接使用原始不透明度值，映射将在DanmakuScreen中处理
       opacity: widget.isVisible ? widget.opacity : 0.0,
       hideTop: videoState.blockTopDanmaku,
       hideBottom: videoState.blockBottomDanmaku,
@@ -384,6 +384,36 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     return false;
   }
 
+  // 添加自定义的不透明度映射函数
+  double _mapOpacity(double originalOpacity) {
+    // 使用分段线性函数，确保整个范围内都有明显的变化
+    // 0%   -> 10%（最低底线，确保永远可见）
+    // 10%  -> 40%（低值区域快速提升可见度）
+    // 30%  -> 60%（中值区域适度提升）
+    // 50%  -> 75%（中高值区域）
+    // 70%  -> 85%（高值区域）
+    // 100% -> 100%（最高值保持不变）
+    
+    if (originalOpacity < 0.0) {
+      return 0.1; // 安全检查
+    } else if (originalOpacity < 0.1) {
+      // 0-10% 映射到 10-40%
+      return 0.1 + (originalOpacity * 3.0);
+    } else if (originalOpacity < 0.3) {
+      // 10-30% 映射到 40-60%
+      return 0.4 + ((originalOpacity - 0.1) * 1.0);
+    } else if (originalOpacity < 0.5) {
+      // 30-50% 映射到 60-75%
+      return 0.6 + ((originalOpacity - 0.3) * 0.75);
+    } else if (originalOpacity < 0.7) {
+      // 50-70% 映射到 75-85%
+      return 0.75 + ((originalOpacity - 0.5) * 0.5);
+    } else {
+      // 70-100% 映射到 85-100%
+      return 0.85 + ((originalOpacity - 0.7) * 0.5);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<VideoPlayerState, DeveloperOptionsProvider>(
@@ -445,7 +475,8 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
       return Visibility(
         visible: widget.isVisible,
         child: Opacity(
-          opacity: widget.opacity,
+          // 使用自定义映射函数，确保低透明度值在视觉上更加平滑
+          opacity: _mapOpacity(widget.opacity),
           child: canvas.DanmakuScreen(
             createdController: (ctrl) {
               _controller = ctrl;
@@ -477,6 +508,7 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
             },
             option: _option.copyWith(
               fontSize: widget.fontSize,
+              // 直接使用原始不透明度值，映射将在DanmakuScreen中处理
               opacity: widget.isVisible ? widget.opacity : 0.0,
               hideTop: videoState.blockTopDanmaku,
               hideBottom: videoState.blockBottomDanmaku,

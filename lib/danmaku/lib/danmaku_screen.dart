@@ -7,8 +7,6 @@ import 'danmaku_controller.dart';
 import 'dart:ui' as ui;
 import 'danmaku_option.dart';
 import 'danmaku_content_item.dart';
-import 'dart:math';
-import '../../utils/globals.dart' as globals;
 import 'danmaku_track_manager.dart'; // 🔥 新增：轨道管理员
 
 class DanmakuScreen extends StatefulWidget {
@@ -207,9 +205,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       final availableTrack = _trackManager.assignScrollTrack(
         danmakuWidth, 
         preferredTrack: content.trackIndex, // 优先使用指定轨道（状态恢复）
-        newItem: tempDanmakuItem,
-        fontSize: _option.fontSize,
-        isTimeJump: isTimeJumpOrRestoring, // 🔥 关键修复：正确传递时间跳转标记
+        massiveMode: _option.massiveMode,
       );
       
       if (availableTrack != null) {
@@ -261,9 +257,6 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       // 🔥 使用轨道管理员分配顶部弹幕轨道（包括碰撞检测）
       final availableTrack = _trackManager.assignTopTrack(
         preferredTrack: content.trackIndex, // 优先使用指定轨道（状态恢复）
-        newItem: tempDanmakuItem,
-        fontSize: _option.fontSize,
-        isTimeJump: isTimeJumpOrRestoring, // 🔥 关键修复：正确传递时间跳转标记
       );
       
       if (availableTrack != null) {
@@ -314,9 +307,6 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       // 🔥 使用轨道管理员分配底部弹幕轨道（包括碰撞检测）
       final availableTrack = _trackManager.assignBottomTrack(
         preferredTrack: content.trackIndex, // 优先使用指定轨道（状态恢复）
-        newItem: tempDanmakuItem,
-        fontSize: _option.fontSize,
-        isTimeJump: isTimeJumpOrRestoring, // 🔥 关键修复：正确传递时间跳转标记
       );
       
       if (availableTrack != null) {
@@ -621,7 +611,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // 获取滚动弹幕状态
     for (final item in _scrollDanmakuItems) {
       final elapsedTime = currentTime - (item.creationTime / 1000.0);
-      final totalDuration = 10.0; // 滚动弹幕10秒运动时间
+      const totalDuration = 10.0; // 滚动弹幕10秒运动时间
       final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
       final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
       
@@ -645,7 +635,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // 获取溢出滚动弹幕状态
     for (final item in _overflowScrollDanmakuItems) {
       final elapsedTime = currentTime - (item.creationTime / 1000.0);
-      final totalDuration = 10.0; // 滚动弹幕10秒运动时间
+      const totalDuration = 10.0; // 滚动弹幕10秒运动时间
       final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
       final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
       
@@ -669,7 +659,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // 获取顶部弹幕状态
     for (final item in _topDanmakuItems) {
       final elapsedTime = currentTime - (item.creationTime / 1000.0);
-      final totalDuration = 5.0; // 顶部弹幕5秒显示时间
+      const totalDuration = 5.0; // 顶部弹幕5秒显示时间
       final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
       final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
       
@@ -693,7 +683,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // 获取溢出顶部弹幕状态
     for (final item in _overflowTopDanmakuItems) {
       final elapsedTime = currentTime - (item.creationTime / 1000.0);
-      final totalDuration = 5.0; // 顶部弹幕5秒显示时间
+      const totalDuration = 5.0; // 顶部弹幕5秒显示时间
       final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
       final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
       
@@ -717,7 +707,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // 获取底部弹幕状态
     for (final item in _bottomDanmakuItems) {
       final elapsedTime = currentTime - (item.creationTime / 1000.0);
-      final totalDuration = 5.0; // 底部弹幕5秒显示时间
+      const totalDuration = 5.0; // 底部弹幕5秒显示时间
       final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
       final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
       
@@ -741,7 +731,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // 获取溢出底部弹幕状态
     for (final item in _overflowBottomDanmakuItems) {
       final elapsedTime = currentTime - (item.creationTime / 1000.0);
-      final totalDuration = 5.0; // 底部弹幕5秒显示时间
+      const totalDuration = 5.0; // 底部弹幕5秒显示时间
       final normalizedProgress = (elapsedTime / totalDuration).clamp(0.0, 1.0);
       final remainingTime = ((totalDuration - elapsedTime) * 1000).round().clamp(0, (totalDuration * 1000).round());
       
@@ -783,7 +773,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         final existingRight = existingPosition + existingWidth;
         
         // 计算新弹幕的当前位置
-        final newElapsed = 0.0; // 新弹幕刚开始
+        const newElapsed = 0.0; // 新弹幕刚开始
         final newPosition = _viewWidth - (newElapsed / 10) * (_viewWidth + newWidth);
         final newLeft = newPosition;
         final newRight = newPosition + newWidth;
@@ -884,7 +874,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   @override
   Widget build(BuildContext context) {
     /// 🔥 修改：统一设置垂直间距为10.0，电脑和手机保持一致
-    final verticalSpacing = 10.0;
+    const verticalSpacing = 10.0;
     final textPainter = TextPainter(
       text: TextSpan(text: '弹幕', style: TextStyle(fontSize: _option.fontSize)),
       textDirection: TextDirection.ltr,
@@ -899,17 +889,14 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
       /// 计算轨道数量，考虑垂直间距
       final trackHeight = _danmakuHeight + verticalSpacing;
-      _trackCount = ((constraints.maxHeight * _option.area - verticalSpacing) / trackHeight).floor();
-      
-      /// 重新计算轨道位置，加入垂直间距
+      _trackCount =
+          (constraints.maxHeight * _option.area / _danmakuHeight).floor() - 1;
+
       _trackYPositions.clear();
       for (int i = 0; i < _trackCount; i++) {
-        _trackYPositions.add(i * trackHeight + verticalSpacing);
+        _trackYPositions.add(i * _danmakuHeight);
       }
-      
-      // 🔥 新增：初始化轨道管理员
-      _trackManager.initializeTracks(_trackYPositions, _viewWidth);
-      
+      _trackManager.initializeTracks(_trackYPositions, _viewWidth, _option.duration.toDouble());
       return ClipRect(
         child: IgnorePointer(
           child: Opacity(
