@@ -31,11 +31,12 @@ class DanmakuController {
   final Function onPause;
   final Function onResume;
   final Function onClear;
-  final Function onResetAll; // 🔥 新增：彻底重置回调
-  final int Function() onGetCurrentTick; // 🔥 新增：获取当前时间tick
-  final Function(int) onSetCurrentTick; // 🔥 新增：设置当前时间tick
-  final List<DanmakuItemState> Function() onGetDanmakuStates; // 🔥 新增：获取弹幕状态的回调
-  final Function(bool) onSetTimeJumpOrRestoring; // 🔥 新增：设置时间跳转或状态恢复标记的回调
+  final Function onResetAll; // 彻底重置回调
+  final int Function() onGetCurrentTick; // 获取当前时间tick
+  final Function(int) onSetCurrentTick; // 设置当前时间tick
+  final List<DanmakuItemState> Function() onGetDanmakuStates; // 获取弹幕状态的回调
+  final Function(bool) onSetTimeJumpOrRestoring; // 设置时间跳转或状态恢复标记的回调
+  final Function(int)? onUpdateTick; // 新增：更新时间tick的回调，由外部定时器调用
   
   DanmakuController({
     required this.onAddDanmaku,
@@ -43,11 +44,12 @@ class DanmakuController {
     required this.onPause,
     required this.onResume,
     required this.onClear,
-    required this.onResetAll, // 🔥 新增
-    required this.onGetCurrentTick, // 🔥 新增
-    required this.onSetCurrentTick, // 🔥 新增
-    required this.onGetDanmakuStates, // 🔥 新增
-    required this.onSetTimeJumpOrRestoring, // 🔥 新增
+    required this.onResetAll,
+    required this.onGetCurrentTick,
+    required this.onSetCurrentTick,
+    required this.onGetDanmakuStates,
+    required this.onSetTimeJumpOrRestoring,
+    this.onUpdateTick, // 新增：可选参数
   });
 
   bool _running = true;
@@ -110,8 +112,13 @@ class DanmakuController {
     return onGetDanmakuStates.call();
   }
   
-  /// 🔥 新增：设置时间跳转或状态恢复标记
+  /// 设置时间跳转或状态恢复标记
   void setTimeJumpOrRestoring(bool value) {
     onSetTimeJumpOrRestoring.call(value);
+  }
+  
+  /// 更新时间戳，由外部定时器调用
+  void updateTick(int delta) {
+    onUpdateTick?.call(delta);
   }
 }

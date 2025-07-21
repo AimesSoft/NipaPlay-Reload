@@ -45,6 +45,7 @@ import 'screen_orientation_manager.dart';
 import '../player_abstraction/media_kit_player_adapter.dart'; // 导入MediaKitPlayerAdapter
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
+import 'package:flutter/scheduler.dart'; // 添加Ticker导入
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -73,6 +74,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _currentVideoPath;
   String _danmakuOverlayKey = 'idle'; // 弹幕覆盖层的稳定key
   Timer? _uiUpdateTimer; // UI更新定时器（包含位置保存和数据持久化功能）
+  // 🔥 新增：Ticker相关字段
+  Ticker? _uiUpdateTicker;
+  int _lastTickTime = 0;
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
   Timer? _autoHideTimer;
@@ -1474,7 +1478,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> stop() async {
     if (_status != PlayerStatus.idle && _status != PlayerStatus.disposed) {
       _setStatus(PlayerStatus.idle, message: '播放已停止');
-      _uiUpdateTimer?.cancel(); // 停止UI更新定时器
+      
+      // 停止UI更新定时器和Ticker
+      _uiUpdateTimer?.cancel();
+      if (_uiUpdateTicker != null) {
+        _uiUpdateTicker!.stop();
+      }
+      
       player.state = PlaybackState.stopped; // Changed from player.stop()
       _resetVideoState();
     }
@@ -1722,6 +1732,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     player.dispose();
     _focusNode.dispose();
     _uiUpdateTimer?.cancel(); // 清理UI更新定时器
+    
+    // 🔥 新增：清理Ticker资源
+    if (_uiUpdateTicker != null) {
+      _uiUpdateTicker!.stop();
+      _uiUpdateTicker!.dispose();
+      _uiUpdateTicker = null;
+    }
+    
     _hideControlsTimer?.cancel();
     _hideMouseTimer?.cancel();
     _autoHideTimer?.cancel();
@@ -4148,10 +4166,38 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
-    // 启动UI更新定时器（500ms更新一次，同时处理数据保存）
+    // 启动UI更新定时器（根据弹幕内核类型设置不同的更新频率，同时处理数据保存）
   void _startUiUpdateTimer() {
+    // 取消现有定时器和Ticker
     _uiUpdateTimer?.cancel();
-    _uiUpdateTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+    _uiUpdateTicker?.dispose();
+    
+    // 记录上次更新时间，用于计算时间增量
+    _lastTickTime = DateTime.now().millisecondsSinceEpoch;
+    
+    // 🔥 关键优化：使用Ticker代替Timer.periodic
+    // Ticker会与显示刷新率同步，更精确地控制帧率
+    _uiUpdateTicker = Ticker((elapsed) {
+      // 计算从上次更新到现在的时间增量
+      final nowTime = DateTime.now().millisecondsSinceEpoch;
+      final deltaTime = nowTime - _lastTickTime;
+      _lastTickTime = nowTime;
+      
+      // 更新弹幕控制器的时间戳
+      if (danmakuController != null) {
+        try {
+          // 使用反射安全调用updateTick方法，不论是哪种内核
+          // 这是一种动态方法调用，可以处理不同弹幕控制器
+          final updateTickMethod = danmakuController?.updateTick;
+          if (updateTickMethod != null && updateTickMethod is Function) {
+            updateTickMethod(deltaTime);
+          }
+        } catch (e) {
+          // 静默处理错误，避免影响主流程
+          debugPrint('更新弹幕时间戳失败: $e');
+        }
+      }
+      
       if (!_isSeeking && hasVideo) {
         if (_status == PlayerStatus.playing) {
           final playerPosition = player.position;
@@ -4232,10 +4278,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
             player.state = PlaybackState.stopped; 
             
-            // 停止定时器
-            if (_uiUpdateTimer?.isActive ?? false) { 
-              _uiUpdateTimer!.cancel();
-              _uiUpdateTimer = null; 
+            // 停止定时器和Ticker
+            if (_uiUpdateTicker?.isTicking ?? false) {
+              _uiUpdateTicker!.stop();
+              _uiUpdateTicker!.dispose();
+              _uiUpdateTicker = null;
             }
             
             _setStatus(PlayerStatus.error, message: userMessage); 
@@ -4271,5 +4318,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
     });
+    
+    // 启动Ticker
+    _uiUpdateTicker!.start();
+    
+    debugPrint('启动UI更新Ticker，弹幕内核：${DanmakuKernelFactory.getKernelType()}');
   }
 }

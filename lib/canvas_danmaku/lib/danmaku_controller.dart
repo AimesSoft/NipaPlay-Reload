@@ -36,6 +36,7 @@ class DanmakuController {
   final Function? onSetCurrentTick;
   final Function? onGetDanmakuStates;
   final Function? onSetTimeJumpOrRestoring;
+  final Function(int)? onUpdateTick; // 新增：更新时间tick的回调，由外部定时器调用
 
   DanmakuController({
     required this.onAddDanmaku,
@@ -48,6 +49,7 @@ class DanmakuController {
     this.onSetCurrentTick,
     this.onGetDanmakuStates,
     this.onSetTimeJumpOrRestoring,
+    this.onUpdateTick,
   });
 
   bool _running = true;
@@ -121,11 +123,28 @@ class DanmakuController {
 
   /// 添加弹幕
   void addDanmaku(DanmakuContentItem item) {
-    onAddDanmaku.call(item);
+    try {
+      onAddDanmaku.call(item);
+    } catch (e) {
+      // 安全处理异常，避免添加弹幕时崩溃
+      print('添加弹幕时出错: $e');
+    }
   }
 
   /// 更新弹幕配置
   void updateOption(DanmakuOption option) {
-    onUpdateOption.call(option);
+    try {
+      onUpdateOption.call(option);
+    } catch (e) {
+      // 安全处理异常，避免更新配置时崩溃
+      print('更新弹幕配置时出错: $e');
+    }
+  }
+  
+  /// 更新时间戳，由外部定时器调用
+  void updateTick(int delta) {
+    if (onUpdateTick != null) {
+      onUpdateTick!(delta);
+    }
   }
 }

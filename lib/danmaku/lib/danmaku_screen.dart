@@ -847,28 +847,20 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     return true;
   }
 
-  // 基于Stopwatch的计时器同步
-  void _startTick() async {
-    final stopwatch = Stopwatch()..start();
-    int lastElapsedTime = 0;
-    int printCounter = 0; // 限制打印频率
-
-    while (_running && mounted) {
-      await Future.delayed(const Duration(milliseconds: 1));
-      int currentElapsedTime = stopwatch.elapsedMilliseconds; // 获取当前的已用时间
-      int delta = currentElapsedTime - lastElapsedTime; // 计算自上次记录以来的时间差
-      
-      // 🔥 关键修改：只有在未暂停时才更新时间
-      if (!_isPaused) {
-        _tick += delta;
-        // 🔥 新增：同步轨道管理员的时间
-        _trackManager.updateCurrentTick(_tick);
-      }
-      
-      lastElapsedTime = currentElapsedTime; // 更新最后记录的时间
+  // 原本基于Stopwatch的计时器同步现已移除
+  // 改为由播放器的16ms定时器统一驱动，减少资源消耗和跳帧
+  void _startTick() {
+    // 仅设置初始状态，实际计时由外部更新
+    _running = true;
+  }
+  
+  // 新增：更新时间戳的方法，由外部定时器调用
+  void updateTick(int delta) {
+    if (_running && !_isPaused) {
+      _tick += delta;
+      // 同步轨道管理员的时间
+      _trackManager.updateCurrentTick(_tick);
     }
-
-    stopwatch.stop();
   }
 
   @override

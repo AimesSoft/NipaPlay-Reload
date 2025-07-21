@@ -58,11 +58,21 @@ class ScrollDanmakuPainter extends CustomPainter {
     for (DanmakuItem item in items) {
       if (item.paragraph == null) continue;
 
+      // 🔥 关键优化：弹幕运动时间计算
+      // 确保弹幕速度恒定，无论动画控制器的duration如何
       double progress = (tick - item.creationTime) / (duration * 1000);
       if (progress < 0 || progress > 1) continue;
 
-      // 修正弹幕运动逻辑
-      double x = size.width - (size.width + item.width) * progress;
+      // 🔥 关键优化：弹幕位置计算
+      double screenWidth = size.width;
+      double danmakuWidth = item.width;
+      double totalDistance = screenWidth + danmakuWidth;
+      
+      // 计算弹幕当前位置 - 确保匀速运动
+      double x = screenWidth - (progress * totalDistance);
+      
+      // 保存当前位置，以便其他功能使用（如碰撞检测）
+      item.xPosition = x;
 
       // 绘制碰撞箱
       if (showCollisionBoxes) {
@@ -82,14 +92,16 @@ class ScrollDanmakuPainter extends CustomPainter {
         item.paragraph!,
         Offset(x, item.yPosition),
       );
-
-      // 更新弹幕实际位置（用于碰撞检测）
-      item.xPosition = x;
     }
   }
 
   @override
   bool shouldRepaint(ScrollDanmakuPainter oldDelegate) {
-    return oldDelegate.value != value;
+    // 🔥 关键修复：无论是否在运行状态，都应该重绘
+    // 原因：即使在暂停状态，也需要保持弹幕在正确位置显示
+    // 特别是在新添加弹幕或弹幕状态变化时，需要立即显示
+    return oldDelegate.value != value || 
+           oldDelegate.tick != tick ||
+           items.length != oldDelegate.items.length;
   }
 }

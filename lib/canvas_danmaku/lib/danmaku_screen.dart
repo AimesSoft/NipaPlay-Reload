@@ -1,5 +1,6 @@
 import 'utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart'; // 添加这一行导入Ticker
 import 'danmaku_item.dart';
 import 'scroll_danmaku_painter.dart';
 import 'static_danmaku_painter.dart';
@@ -87,6 +88,9 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
   /// 静态弹幕动画控制器
   late AnimationController _staticAnimationController;
+  
+  /// 🔥 新增：计时器
+  Ticker? _ticker;
 
   /// 弹幕配置
   DanmakuOption _option = DanmakuOption();
@@ -152,15 +156,23 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     _controller.option = _option;
     widget.createdController.call(_controller);
 
+    // 🔥 关键修复：设置更短的动画周期（500ms），增加动画流畅度
+    // 使用更短的周期能够提高动画的平滑度
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(seconds: _option.duration),
-    )..repeat();
+      duration: const Duration(milliseconds: 500),
+    );
+    
+    // 🔥 关键修复：确保动画一开始就启动，并设为连续重复模式
+    _animationController.repeat();
 
     _staticAnimationController = AnimationController(
       vsync: this,
       duration: Duration(seconds: _option.duration),
     );
+    
+    // 🔥 关键修复：启动静态弹幕动画控制器
+    _staticAnimationController.forward();
 
     WidgetsBinding.instance.addObserver(this);
   }
@@ -175,10 +187,47 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
   @override
   void dispose() {
+    // 确保在dispose之前停止并处理掉所有Ticker
     _running = false;
+    
+    // 移除观察者
     WidgetsBinding.instance.removeObserver(this);
-    _animationController.dispose();
-    _staticAnimationController.dispose();
+    
+    // 停止并释放Ticker（需要在super.dispose()之前）
+    if (_ticker != null) {
+      _ticker!.stop();
+      _ticker!.dispose();
+      _ticker = null;
+    }
+    
+    // 安全地处理动画控制器
+    try {
+      if (_animationController.isAnimating) {
+        _animationController.stop();
+      }
+      _animationController.dispose();
+      
+      if (_staticAnimationController.isAnimating) {
+        _staticAnimationController.stop();
+      }
+      _staticAnimationController.dispose();
+    } catch (e) {
+      // 捕获可能的异常，避免崩溃
+      print('处理动画控制器异常: $e');
+    }
+    
+    // 清空弹幕列表，避免后续可能的引用
+    _scrollDanmakuItems.clear();
+    _topDanmakuItems.clear();
+    _bottomDanmakuItems.clear();
+    
+    // 清空轨道信息
+    for (var trackInfo in _trackInfos) {
+      trackInfo.reset();
+    }
+    _trackInfos.clear();
+    _trackYPositions.clear();
+    
     super.dispose();
   }
 
@@ -492,11 +541,23 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 暂停
   void pause() {
     if (_running) {
-      setState(() {
+      // 安全检查：确保组件仍然挂载
+      if (mounted) {
+        setState(() {
+          _running = false;
+        });
+      } else {
         _running = false;
-      });
+      }
+      
+      // 暂停Ticker
+      _ticker?.muted = true;
+      
+      // 🔥 关键修复：暂停时保持动画控制器活跃，但不增加tick值
+      // 这样弹幕会保持可见，但不会移动位置
       if (_animationController.isAnimating) {
-        _animationController.stop();
+        // 不停止动画控制器，让它继续驱动重绘
+        // 但tick值不再增加，所以弹幕位置不会变化
       }
     }
   }
@@ -504,19 +565,43 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 恢复
   void resume() {
     if (!_running) {
-      setState(() {
+      // 安全检查：确保组件仍然挂载
+      if (mounted) {
+        setState(() {
+          _running = true;
+        });
+      } else {
         _running = true;
-      });
+        return; // 如果组件已经卸载，不执行后续操作
+      }
+      
+      // 恢复Ticker
+      _ticker?.muted = false;
+      
+      // 确保动画控制器正常运行
       if (!_animationController.isAnimating) {
         _animationController.repeat();
-        // 重启计时器
-        _startTick();
+      }
+      
+      // 确保静态动画控制器也正常运行
+      if (!_staticAnimationController.isAnimating) {
+        _staticAnimationController.reset();
+        _staticAnimationController.forward();
+      }
+      
+      // 强制重绘，确保弹幕能够立即显示
+      // 安全检查：确保组件仍然挂载
+      if (mounted) {
+        setState(() {});
       }
     }
   }
 
   /// 更新弹幕设置
   void updateOption(DanmakuOption option) {
+    // 添加mounted检查，确保组件仍然挂载
+    if (!mounted) return;
+    
     bool needRestart = false;
     if (_animationController.isAnimating) {
       _animationController.stop();
@@ -555,7 +640,11 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     if (needRestart) {
       _animationController.repeat();
     }
-    setState(() {});
+    
+    // 添加mounted检查，确保组件仍然挂载
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   /// 清空弹幕
@@ -591,20 +680,36 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     return true;
   }
 
-  // 基于Stopwatch的计时器同步
-  void _startTick() async {
-    final stopwatch = Stopwatch()..start();
-    int lastElapsedTime = 0;
-
-    while (_running && mounted) {
-      await Future.delayed(const Duration(milliseconds: 1));
-      int currentElapsedTime = stopwatch.elapsedMilliseconds;
-      int delta = currentElapsedTime - lastElapsedTime;
+  // 修改_startTick方法
+  void _startTick() {
+    // 确保之前的ticker被处理
+    _ticker?.dispose();
+    
+    // 创建新的ticker
+    _ticker = createTicker((elapsed) {
+      if (!mounted || !_running) return;
+      
+      // 每帧更新时间（通常是16.67ms或与刷新率同步）
+      _tick += 16;
+      
+      // 强制重绘（仅在状态变化时）
+      if (mounted) {
+        setState(() {});
+      }
+    });
+    
+    // 启动ticker
+    _ticker!.start();
+    
+    // 设置运行状态
+    _running = true;
+  }
+  
+  // 新增：更新时间戳的方法，由外部定时器调用
+  void updateTick(int delta) {
+    if (_running) {
       _tick += delta;
-      lastElapsedTime = currentElapsedTime;
     }
-
-    stopwatch.stop();
   }
 
   @override
