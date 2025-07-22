@@ -87,8 +87,7 @@ class EmbyService {
       );
       
       if (configResponse.statusCode != 200) {
-        _isConnected = false;
-        return false;
+        throw Exception('服务器返回错误: ${configResponse.statusCode} ${configResponse.reasonPhrase ?? ''}\n${configResponse.body}');
       }
       
       // 认证用户
@@ -105,8 +104,7 @@ class EmbyService {
       );
       
       if (authResponse.statusCode != 200) {
-        _isConnected = false;
-        return false;
+        throw Exception('服务器返回错误: ${authResponse.statusCode} ${authResponse.reasonPhrase ?? ''}\n${authResponse.body}');
       }
       
       final authData = json.decode(authResponse.body);
@@ -126,7 +124,7 @@ class EmbyService {
     } catch (e) {
       print('Emby 连接失败: $e');
       _isConnected = false;
-      return false;
+      throw Exception('连接Emby服务器失败: $e');
     }
   }
   
@@ -168,19 +166,31 @@ class EmbyService {
       'Content-Type': 'application/json',
       'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0", Token="$_accessToken"',
     };
-    
-    switch (method.toUpperCase()) {
-      case 'GET':
-        return await http.get(uri, headers: headers);
-      case 'POST':
-        return await http.post(uri, headers: headers, body: body != null ? json.encode(body) : null);
-      case 'PUT':
-        return await http.put(uri, headers: headers, body: body != null ? json.encode(body) : null);
-      case 'DELETE':
-        return await http.delete(uri, headers: headers);
-      default:
-        throw Exception('不支持的 HTTP 方法: $method');
+    http.Response response;
+    try {
+      switch (method.toUpperCase()) {
+        case 'GET':
+          response = await http.get(uri, headers: headers);
+          break;
+        case 'POST':
+          response = await http.post(uri, headers: headers, body: body != null ? json.encode(body) : null);
+          break;
+        case 'PUT':
+          response = await http.put(uri, headers: headers, body: body != null ? json.encode(body) : null);
+          break;
+        case 'DELETE':
+          response = await http.delete(uri, headers: headers);
+          break;
+        default:
+          throw Exception('不支持的 HTTP 方法: $method');
+      }
+    } catch (e) {
+      throw Exception('请求Emby服务器失败: $e');
     }
+    if (response.statusCode >= 400) {
+      throw Exception('服务器返回错误: ${response.statusCode} ${response.reasonPhrase ?? ''}\n${response.body}');
+    }
+    return response;
   }
   
   // 专门用于需要验证连接状态的请求方法
