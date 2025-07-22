@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'danmaku_container.dart';
-import 'canvas_danmaku_overlay.dart';
-import '../danmaku_gpu/lib/gpu_danmaku_overlay.dart';
-import '../danmaku_gpu/lib/gpu_danmaku_config.dart';
+import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
+import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -37,17 +36,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
       builder: (context, videoState, child) {
         final kernelType = DanmakuKernelFactory.getKernelType();
 
-        if (kernelType == DanmakuKernelType.canvasDanmaku) {
-          // 使用 Canvas_Danmaku 内核
-          return CanvasDanmakuOverlay(
-            currentPosition: widget.currentPosition,
-            videoDuration: widget.videoDuration,
-            isPlaying: widget.isPlaying,
-            fontSize: widget.fontSize,
-            isVisible: widget.isVisible,
-            opacity: widget.opacity,
-          );
-        } else if (kernelType == DanmakuKernelType.flutterGPUDanmaku) {
+        if (kernelType == DanmakuRenderEngine.gpu) {
           // 使用 Flutter GPU 内核
           final gpuConfig = GPUDanmakuConfig();
           
@@ -61,7 +50,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           );
         }
 
-        // 默认使用 NipaPlay 内核
+        // 默认使用 CPU (原NipaPlay) 内核
         // 🔥 新增：支持多弹幕来源的轨道管理
         // 获取所有启用的弹幕轨道
         final enabledTracks = <String, List<Map<String, dynamic>>>{};

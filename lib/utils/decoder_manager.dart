@@ -7,7 +7,7 @@ import 'system_resource_monitor.dart'; // 导入系统资源监视器
 
 /// 解码器管理类，负责视频解码器的配置和管理
 class DecoderManager {
-  final Player player; // Type remains Player, but now it's our abstracted Player
+  Player player; // Type remains Player, but now it's our abstracted Player
   // static const String _useHardwareDecoderKey = 'use_hardware_decoder'; // REMOVED
   static const String _selectedDecodersKey = 'selected_decoders';
   
@@ -15,6 +15,14 @@ class DecoderManager {
   String? _currentDecoder;
 
   DecoderManager({required this.player}) {
+    initialize();
+  }
+
+  // 更新播放器实例
+  void updatePlayer(Player newPlayer) {
+    player = newPlayer;
+    debugPrint('DecoderManager: 播放器实例已更新');
+    // 重新应用解码器设置
     initialize();
   }
 
@@ -235,8 +243,9 @@ class DecoderManager {
       // Determine default for current platform to make an educated guess.
       List<String> platformDefaultDecoders = [];
       final allSupported = getAllSupportedDecoders();
-      if (Platform.isMacOS) platformDefaultDecoders = allSupported['macos']!;
-      else if (Platform.isIOS) platformDefaultDecoders = allSupported['ios']!;
+      if (Platform.isMacOS) {
+        platformDefaultDecoders = allSupported['macos']!;
+      } else if (Platform.isIOS) platformDefaultDecoders = allSupported['ios']!;
       else if (Platform.isWindows) platformDefaultDecoders = allSupported['windows']!;
       else if (Platform.isLinux) platformDefaultDecoders = allSupported['linux']!;
       else if (Platform.isAndroid) platformDefaultDecoders = allSupported['android']!;

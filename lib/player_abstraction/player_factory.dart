@@ -6,6 +6,7 @@ import './media_kit_player_adapter.dart'; // 导入新的MediaKit适配器
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 用于 debugPrint
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
+import 'dart:async'; // 导入dart:async库
 
 // Define available player types if you plan to support more than one.
 // For now, it defaults to MDK or could take a parameter.
@@ -20,6 +21,10 @@ class PlayerFactory {
   static const String _playerKernelTypeKey = 'player_kernel_type';
   static PlayerKernelType? _cachedKernelType;
   static bool _hasLoadedSettings = false;
+
+  // 添加一个StreamController来广播内核切换事件
+  static final StreamController<PlayerKernelType> _kernelChangeController = StreamController<PlayerKernelType>.broadcast();
+  static Stream<PlayerKernelType> get onKernelChanged => _kernelChangeController.stream;
   
   // 初始化方法，在应用启动时调用
   static Future<void> initialize() async {
@@ -31,14 +36,14 @@ class PlayerFactory {
         _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
         debugPrint('[PlayerFactory] 预加载内核设置: ${_cachedKernelType.toString()}');
       } else {
-        _cachedKernelType = PlayerKernelType.mdk;
+        _cachedKernelType = PlayerKernelType.mediaKit;
         debugPrint('[PlayerFactory] 无内核设置，使用默认: MDK');
       }
       
       _hasLoadedSettings = true;
     } catch (e) {
       debugPrint('[PlayerFactory] 初始化读取设置出错: $e');
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType = PlayerKernelType.mediaKit;
       _hasLoadedSettings = true;
     }
   }
@@ -47,7 +52,7 @@ class PlayerFactory {
   static void _loadSettingsSync() {
     try {
       // 这里没有真正同步，仅使用默认值，确保后续异步加载会更新缓存值
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType = PlayerKernelType.mediaKit;
       _hasLoadedSettings = true;
       
       // 异步加载正确设置并更新缓存
@@ -62,7 +67,7 @@ class PlayerFactory {
       debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
     } catch (e) {
       debugPrint('[PlayerFactory] 同步加载设置出错: $e');
-      _cachedKernelType = PlayerKernelType.mdk;
+      _cachedKernelType = PlayerKernelType.mediaKit;
     }
   }
   
@@ -71,7 +76,7 @@ class PlayerFactory {
     if (!_hasLoadedSettings) {
       _loadSettingsSync();
     }
-    return _cachedKernelType ?? PlayerKernelType.mdk;
+    return _cachedKernelType ?? PlayerKernelType.mediaKit;
   }
   
   // 创建播放器实例
@@ -128,6 +133,9 @@ class PlayerFactory {
       
       // 确保完整更新监视器显示 - 调用更新方法
       SystemResourceMonitor().updatePlayerKernelType();
+
+      // 广播内核切换事件
+      _kernelChangeController.add(type);
     } catch (e) {
       debugPrint('[PlayerFactory] 保存内核设置出错: $e');
     }

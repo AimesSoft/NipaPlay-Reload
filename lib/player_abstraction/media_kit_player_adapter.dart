@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -12,7 +13,7 @@ import './player_enums.dart';
 import './player_data_models.dart';
 
 /// MediaKit播放器适配器
-class MediaKitPlayerAdapter implements AbstractPlayer {
+class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   final Player _player;
   late final VideoController _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
@@ -35,6 +36,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   static const int _maxJellyfinRetries = 3;
   Timer? _jellyfinRetryTimer;
   String? _lastJellyfinMediaPath;
+
+  // 时间插值器相关字段
+  Ticker? _ticker;
+  Duration _interpolatedPosition = Duration.zero;
+  Duration _lastActualPosition = Duration.zero;
+  int _lastPositionTimestamp = 0;
 
   final Map<PlayerMediaType, List<String>> _decoders = {
     PlayerMediaType.video: [],
@@ -68,6 +75,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     });
     _addEventListeners();
     _setupDefaultTrackSelectionBehavior();
+    _initializeTicker();
   }
   
   void _initializeHardwareDecoding() {
@@ -146,6 +154,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
           : (_player.state.position.inMilliseconds > 0 
               ? PlayerPlaybackState.paused 
               : PlayerPlaybackState.stopped);
+      if (playing) {
+        _lastActualPosition = _player.state.position;
+        _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+        _ticker?.start();
+      } else {
+        _ticker?.stop();
+        _interpolatedPosition = _player.state.position;
+        _lastActualPosition = _player.state.position;
+      }
     });
     
     _player.stream.tracks.listen(_updateMediaInfo);
@@ -881,12 +898,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   set state(PlayerPlaybackState value) {
     switch (value) {
       case PlayerPlaybackState.stopped:
+        _ticker?.stop();
         _player.stop();
         break;
       case PlayerPlaybackState.paused:
+        _ticker?.stop();
         _player.pause();
         break;
       case PlayerPlaybackState.playing:
+        _ticker?.start();
         _player.play();
         break;
     }
@@ -1037,7 +1057,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   }
   
   @override
-  int get position => _player.state.position.inMilliseconds;
+  int get position => _interpolatedPosition.inMilliseconds;
   
   @override
   bool get supportsExternalSubtitles => true;
@@ -1145,12 +1165,17 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   
   @override
   void seek({required int position}) {
-    _player.seek(Duration(milliseconds: position));
+    final seekPosition = Duration(milliseconds: position);
+    _player.seek(seekPosition);
+    _interpolatedPosition = seekPosition;
+    _lastActualPosition = seekPosition;
+    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
   }
   
   @override
   void dispose() {
     _isDisposed = true;
+    _ticker?.dispose();
     _trackSubscription?.cancel(); 
     _jellyfinRetryTimer?.cancel(); 
     _player.dispose();
@@ -1384,6 +1409,31 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   @override
   void setPlaybackRate(double rate) {
     playbackRate = rate; // 这将调用setter
+  }
+
+  // 实现 TickerProvider 的 createTicker 方法
+  @override
+  Ticker createTicker(TickerCallback onTick) {
+    return Ticker(onTick);
+  }
+
+  void _initializeTicker() {
+    _ticker = createTicker(_onTick);
+  }
+
+  void _onTick(Duration elapsed) {
+    if (_player.state.playing) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_lastPositionTimestamp == 0) {
+        _lastPositionTimestamp = now;
+      }
+      final delta = now - _lastPositionTimestamp;
+      _interpolatedPosition = _lastActualPosition + Duration(milliseconds: (delta * _player.state.rate).toInt());
+
+      if (_player.state.duration > Duration.zero && _interpolatedPosition > _player.state.duration) {
+        _interpolatedPosition = _player.state.duration;
+      }
+    }
   }
 }
 

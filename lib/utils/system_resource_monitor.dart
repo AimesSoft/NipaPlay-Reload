@@ -193,7 +193,7 @@ class SystemResourceMonitor {
     
     // 1. 获取帧率下降幅度作为CPU负载的一个指标
     // 理想帧率为60帧
-    final idealFps = 60.0;
+    const idealFps = 60.0;
     double frameRateFactor = 0.0;
     if (_fps > 0) {
       frameRateFactor = (idealFps - _fps) / idealFps;
@@ -261,14 +261,11 @@ class SystemResourceMonitor {
       // 从DanmakuKernelFactory获取当前内核类型
       final kernelType = DanmakuKernelFactory.getKernelType();
       switch (kernelType) {
-        case DanmakuKernelType.nipaPlay:
-          _danmakuKernelType = "NipaPlay";
+        case DanmakuRenderEngine.cpu:
+          _danmakuKernelType = "CPU";
           break;
-        case DanmakuKernelType.canvasDanmaku:
-          _danmakuKernelType = "Canvas_Danmaku";
-          break;
-        case DanmakuKernelType.flutterGPUDanmaku:
-          _danmakuKernelType = "Flutter GPU";
+        case DanmakuRenderEngine.gpu:
+          _danmakuKernelType = "GPU";
           break;
         default:
           _danmakuKernelType = "未知";

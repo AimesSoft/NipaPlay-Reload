@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'danmaku_content_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_text_renderer.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_text_renderer_factory.dart';
 import 'single_danmaku.dart';
 import 'dart:math';
 import 'package:provider/provider.dart';
@@ -75,6 +77,9 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   
   // 添加一个变量追踪屏蔽状态的哈希值
   String _lastBlockStateHash = '';
+
+  // 文本渲染器
+  DanmakuTextRenderer? _textRenderer;
   
   // 计算当前屏蔽状态的哈希值
   String _getBlockStateHash(VideoPlayerState videoState) {
@@ -95,6 +100,9 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     // 根据设备类型设置垂直间距
     _verticalSpacing = globals.isPhone ? 10.0 : 20.0;
     
+    // 初始化文本渲染器
+    _initializeTextRenderer();
+    
     // 初始化时获取画布大小
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {
@@ -104,6 +112,13 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     
     // 初始化时对弹幕列表进行预处理和排序
     _preprocessDanmakuList();
+  }
+
+  Future<void> _initializeTextRenderer() async {
+    _textRenderer = await DanmakuTextRendererFactory.create();
+    if (mounted) {
+      setState(() {});
+    }
   }
   
   // 对弹幕列表进行预处理和排序
@@ -761,6 +776,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
 
   @override
   Widget build(BuildContext context) {
+    // 如果渲染器还未初始化，则不显示任何内容
+    if (_textRenderer == null) {
+      return const SizedBox.shrink();
+    }
+    
     return LayoutBuilder(
       builder: (context, constraints) {
         // 使用 constraints 获取实际的窗口大小
@@ -1232,6 +1252,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       isVisible: widget.isVisible,
       yPosition: yPosition,
       opacity: widget.opacity,
+      textRenderer: _textRenderer!,
     );
   }
   
@@ -1280,6 +1301,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       isVisible: widget.isVisible,
       yPosition: yPosition,
       opacity: widget.opacity,
+      textRenderer: _textRenderer!,
     );
   }
 

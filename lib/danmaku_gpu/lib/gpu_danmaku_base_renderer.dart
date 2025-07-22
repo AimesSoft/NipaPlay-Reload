@@ -32,7 +32,7 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
   late final DynamicFontAtlas _fontAtlas;
   
   /// 文本渲染器
-  late final GPUDanmakuTextRenderer _textRenderer;
+  late final GpuDanmakuTextRenderer _textRenderer;
   
   /// 初始化状态
   bool _isInitialized = false;
@@ -70,7 +70,7 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
       onAtlasUpdated: onNeedRepaint,
     );
     
-    _textRenderer = GPUDanmakuTextRenderer(
+    _textRenderer = GpuDanmakuTextRenderer(
       fontAtlas: _fontAtlas,
       config: config,
     );
@@ -93,7 +93,7 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
   DynamicFontAtlas get fontAtlas => _fontAtlas;
 
   /// 获取文本渲染器
-  GPUDanmakuTextRenderer get textRenderer => _textRenderer;
+  GpuDanmakuTextRenderer get textRenderer => _textRenderer;
 
   /// 获取所有弹幕项目
   List<GPUDanmakuItem> get danmakuItems => List.unmodifiable(_danmakuItems);

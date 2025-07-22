@@ -8,7 +8,7 @@ import '../../player_abstraction/player_abstraction.dart';
 
 /// 字幕管理器类，负责处理与字幕相关的所有功能
 class SubtitleManager extends ChangeNotifier {
-  Player? _player;
+  Player _player;
   String? _currentVideoPath;
   String? _currentExternalSubtitlePath;
   final Map<String, Map<String, dynamic>> _subtitleTrackInfo = {};
@@ -21,8 +21,12 @@ class SubtitleManager extends ChangeNotifier {
   Function(String path, String fileName)? onExternalSubtitleAutoLoaded;
 
   // 构造函数
-  SubtitleManager({Player? player}) {
-    _player = player;
+  SubtitleManager({required Player player}) : _player = player;
+
+  // 更新播放器实例
+  void updatePlayer(Player newPlayer) {
+    _player = newPlayer;
+    debugPrint('SubtitleManager: 播放器实例已更新');
   }
 
   // Getters
@@ -53,12 +57,12 @@ class SubtitleManager extends ChangeNotifier {
 
   // 获取当前活跃的外部字幕文件路径
   String? getActiveExternalSubtitlePath() {
-    if (_player == null || _player!.activeSubtitleTracks.isEmpty) {
+    if (_player.activeSubtitleTracks.isEmpty) {
       return null;
     }
 
     // 检查是否是外部字幕
-    final activeTrack = _player!.activeSubtitleTracks.first;
+    final activeTrack = _player.activeSubtitleTracks.first;
     // 查找外部字幕信息
     if (_subtitleTrackInfo.containsKey('external_subtitle') &&
         _subtitleTrackInfo['external_subtitle']?['isActive'] == true) {
@@ -127,7 +131,7 @@ class SubtitleManager extends ChangeNotifier {
   String getCurrentSubtitleText() {
     try {
       // 如果没有播放器或没有激活的字幕轨道
-      if (_player == null || _player!.activeSubtitleTracks.isEmpty) {
+      if (_player.activeSubtitleTracks.isEmpty) {
         debugPrint('SubtitleManager: getCurrentSubtitleText - 没有激活的字幕轨道');
         return '';
       }
@@ -147,7 +151,7 @@ class SubtitleManager extends ChangeNotifier {
       debugPrint(
           'SubtitleManager: getCurrentSubtitleText - 外部字幕路径: $externalSubtitlePath');
       debugPrint(
-          'SubtitleManager: getCurrentSubtitleText - 激活轨道: ${_player!.activeSubtitleTracks}');
+          'SubtitleManager: getCurrentSubtitleText - 激活轨道: ${_player.activeSubtitleTracks}');
 
       // 如果是外部字幕
       if (externalSubtitlePath != null && externalSubtitlePath.isNotEmpty) {
@@ -156,7 +160,7 @@ class SubtitleManager extends ChangeNotifier {
       }
 
       // 如果是内嵌字幕
-      final activeTrack = _player!.activeSubtitleTracks.first;
+      final activeTrack = _player.activeSubtitleTracks.first;
       return "正在播放内嵌字幕轨道 $activeTrack";
     } catch (e) {
       debugPrint('SubtitleManager: 获取当前字幕内容失败: $e');
@@ -205,13 +209,8 @@ class SubtitleManager extends ChangeNotifier {
   // 设置外部字幕并更新路径
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     try {
-      if (_player == null) {
-        debugPrint('SubtitleManager: 播放器未初始化，无法设置外部字幕');
-        return;
-      }
-
       // NEW: Check if player supports external subtitles
-      if (!_player!.supportsExternalSubtitles) {
+      if (!_player.supportsExternalSubtitles) {
         debugPrint('SubtitleManager: 当前播放器内核不支持加载外部字幕');
         // TODO: Call your blur_snackbar here
         // For example: globals.showBlurSnackbar('当前播放器内核不支持加载外部字幕');
@@ -226,10 +225,10 @@ class SubtitleManager extends ChangeNotifier {
       // 如果字幕文件存在
       if (path.isNotEmpty && File(path).existsSync()) {
         // 设置外部字幕文件
-        _player!.setMedia(path, MediaType.subtitle);
+        _player.setMedia(path, MediaType.subtitle);
 
         // 更新字幕轨道
-        _player!.activeSubtitleTracks = [0];
+        _player.activeSubtitleTracks = [0];
 
         // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
         _currentExternalSubtitlePath = path;
@@ -253,7 +252,7 @@ class SubtitleManager extends ChangeNotifier {
         debugPrint('SubtitleManager: 外部字幕设置成功');
       } else if (path.isEmpty) {
         // 清除外部字幕
-        _player!.setMedia("", MediaType.subtitle);
+        _player.setMedia("", MediaType.subtitle);
         _currentExternalSubtitlePath = null;
 
         // 更新轨道信息，明确清除所有相关标记
@@ -321,15 +320,15 @@ class SubtitleManager extends ChangeNotifier {
       }
 
       // 检查视频是否有内嵌字幕
-      bool hasEmbeddedSubtitles = _player?.mediaInfo.subtitle != null &&
-          _player!.mediaInfo.subtitle!.isNotEmpty;
+      bool hasEmbeddedSubtitles = _player.mediaInfo.subtitle != null &&
+          _player.mediaInfo.subtitle!.isNotEmpty;
 
       // 检查是否已激活内嵌字幕轨道
       bool hasActiveEmbeddedTrack = false;
-      if (_player != null && _player!.activeSubtitleTracks.isNotEmpty) {
+      if (_player.activeSubtitleTracks.isNotEmpty) {
         // 排除轨道0（外部字幕轨道）
         hasActiveEmbeddedTrack =
-            _player!.activeSubtitleTracks.any((track) => track > 0);
+            _player.activeSubtitleTracks.any((track) => track > 0);
       }
 
       // 如果以前手动设置过外部字幕，则始终尝试加载
@@ -382,9 +381,7 @@ class SubtitleManager extends ChangeNotifier {
         }
 
         // 如果没找到两位数，使用最后一个数字
-        if (episodeNumber == null) {
-          episodeNumber = videoNumbers.last;
-        }
+        episodeNumber ??= videoNumbers.last;
 
         debugPrint('SubtitleManager: 提取的可能集数: $episodeNumber');
       }
@@ -662,13 +659,12 @@ class SubtitleManager extends ChangeNotifier {
 
   // 更新指定的字幕轨道信息
   void updateEmbeddedSubtitleTrack(int trackIndex) {
-    if (_player == null ||
-        _player!.mediaInfo.subtitle == null ||
-        trackIndex >= _player!.mediaInfo.subtitle!.length) {
+    if (_player.mediaInfo.subtitle == null ||
+        trackIndex >= _player.mediaInfo.subtitle!.length) {
       return;
     }
 
-    final playerSubInfo = _player!.mediaInfo.subtitle![trackIndex];
+    final playerSubInfo = _player.mediaInfo.subtitle![trackIndex];
     debugPrint(
         'SubtitleManager: updateEmbeddedSubtitleTrack - Called for trackIndex: $trackIndex');
     debugPrint(
@@ -729,8 +725,9 @@ class SubtitleManager extends ChangeNotifier {
         determinedLanguage = langFromOrigTitle;
       } else {
         displayTitle = originalTitleFromAdapter;
-        if (determinedLanguage == "未知")
+        if (determinedLanguage == "未知") {
           determinedLanguage = originalTitleFromAdapter;
+        }
       }
     } else {
       displayTitle = "轨道 ${trackIndex + 1}";
@@ -781,7 +778,7 @@ class SubtitleManager extends ChangeNotifier {
       'index': trackIndex,
       'title': displayTitle,
       'language': determinedLanguage,
-      'isActive': _player!.activeSubtitleTracks.contains(trackIndex),
+      'isActive': _player.activeSubtitleTracks.contains(trackIndex),
       'original_media_kit_title':
           playerSubInfo.metadata['title'] ?? originalTitleFromAdapter,
       'original_media_kit_lang_code':
@@ -789,7 +786,7 @@ class SubtitleManager extends ChangeNotifier {
     });
 
     // 清除外部字幕信息的激活状态
-    if (_player!.activeSubtitleTracks.contains(trackIndex) &&
+    if (_player.activeSubtitleTracks.contains(trackIndex) &&
         _subtitleTrackInfo.containsKey('external_subtitle')) {
       updateSubtitleTrackInfo('external_subtitle', {'isActive': false});
     }
@@ -797,7 +794,7 @@ class SubtitleManager extends ChangeNotifier {
 
   // 更新所有字幕轨道信息
   void updateAllSubtitleTracksInfo() {
-    if (_player == null || _player!.mediaInfo.subtitle == null) {
+    if (_player.mediaInfo.subtitle == null) {
       return;
     }
 
@@ -809,19 +806,19 @@ class SubtitleManager extends ChangeNotifier {
     }
 
     // 更新所有内嵌字幕轨道信息
-    for (var i = 0; i < _player!.mediaInfo.subtitle!.length; i++) {
+    for (var i = 0; i < _player.mediaInfo.subtitle!.length; i++) {
       updateEmbeddedSubtitleTrack(i);
     }
 
     // 在更新完成后检查当前激活的字幕轨道并确保相应的信息被更新
-    if (_player!.activeSubtitleTracks.isNotEmpty) {
-      final activeIndex = _player!.activeSubtitleTracks.first;
+    if (_player.activeSubtitleTracks.isNotEmpty) {
+      final activeIndex = _player.activeSubtitleTracks.first;
       if (activeIndex > 0 &&
-          activeIndex <= _player!.mediaInfo.subtitle!.length) {
+          activeIndex <= _player.mediaInfo.subtitle!.length) {
         // 激活的是内嵌字幕轨道
         updateSubtitleTrackInfo('embedded_subtitle', {
           'index': activeIndex - 1, // MDK 字幕轨道从 1 开始，而我们的索引从 0 开始
-          'title': _player!.mediaInfo.subtitle![activeIndex - 1].toString(),
+          'title': _player.mediaInfo.subtitle![activeIndex - 1].toString(),
           'isActive': true,
         });
 

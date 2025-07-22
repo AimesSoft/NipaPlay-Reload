@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'danmaku_content_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
+import 'single_danmaku.dart';
 
 class DanmakuGroupWidget extends StatelessWidget {
   final List<Map<String, dynamic>> danmakus;
