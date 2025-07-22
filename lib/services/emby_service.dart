@@ -202,16 +202,22 @@ class EmbyService {
         final List<EmbyLibrary> tempLibraries = [];
         
         for (var item in items) {
-          // 只处理电视剧媒体库
-          if (item['CollectionType'] == 'tvshows') {
+          // 处理电视剧和电影媒体库
+          if (item['CollectionType'] == 'tvshows' || item['CollectionType'] == 'movies') {
+            final String libraryId = item['Id'];
+            final String collectionType = item['CollectionType'];
+            
+            // 根据媒体库类型选择不同的IncludeItemTypes
+            String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+            
             // 获取该库的项目数量
             final countResponse = await _makeAuthenticatedRequest(
-                '/emby/Users/$_userId/Items?parentId=${item['Id']}&IncludeItemTypes=Series&Recursive=true&Limit=0&Fields=ParentId');
+                '/emby/Users/$_userId/Items?parentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&Limit=0&Fields=ParentId');
             
-            int seriesCount = 0;
+            int itemCount = 0;
             if (countResponse.statusCode == 200) {
               final countData = json.decode(countResponse.body);
-              seriesCount = countData['TotalRecordCount'] ?? 0;
+              itemCount = countData['TotalRecordCount'] ?? 0;
             }
             
             tempLibraries.add(EmbyLibrary(
@@ -219,7 +225,7 @@ class EmbyService {
               name: item['Name'],
               type: item['CollectionType'],
               imageTagsPrimary: item['ImageTags']?['Primary'],
-              totalItems: seriesCount, 
+              totalItems: itemCount, 
             ));
           }
         }
@@ -248,13 +254,26 @@ class EmbyService {
     List<EmbyMediaItem> allItems = [];
     try {
       for (final libraryId in _selectedLibraryIds) {
+        try {
+          // 首先获取媒体库信息以确定类型
+          final libraryResponse = await _makeAuthenticatedRequest(
+            '/emby/Users/$_userId/Items/$libraryId'
+          );
+          
+          if (libraryResponse.statusCode == 200) {
+            final libraryData = json.decode(libraryResponse.body);
+            final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+            
+            // 根据媒体库类型选择不同的IncludeItemTypes
+            String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+            
         final String path = '/emby/Users/$_userId/Items';
         final Map<String, String> queryParameters = {
           'ParentId': libraryId,
-          'IncludeItemTypes': 'Series',
+              'IncludeItemTypes': includeItemTypes,
           'Recursive': 'true',
           'Limit': limitPerLibrary.toString(),
-          'Fields': 'Overview,Genres,People,Studios,ProviderIds,DateCreated,PremiereDate,CommunityRating,ProductionYear', //确保DateCreated在请求中
+              'Fields': 'Overview,Genres,People,Studios,ProviderIds,DateCreated,PremiereDate,CommunityRating,ProductionYear',
           'SortBy': 'DateCreated',
           'SortOrder': 'Descending',
         };
@@ -272,6 +291,10 @@ class EmbyService {
           }
         } else {
           print('Error fetching Emby items for library $libraryId: ${response.statusCode} - ${response.body}');
+            }
+          }
+        } catch (e) {
+          // 处理错误
         }
       }
 
@@ -292,6 +315,69 @@ class EmbyService {
       print('Error getting latest media items from Emby: $e');
     }
     return [];
+  }
+  
+  // 获取最新电影列表
+  Future<List<EmbyMovieInfo>> getLatestMovies({int limit = 99999}) async {
+    if (!_isConnected || _selectedLibraryIds.isEmpty || _userId == null) {
+      return [];
+    }
+    
+    List<EmbyMovieInfo> allMovies = [];
+    
+    // 从每个选中的媒体库获取最新电影
+    for (String libraryId in _selectedLibraryIds) {
+      try {
+        final response = await _makeAuthenticatedRequest(
+          '/emby/Users/$_userId/Items?ParentId=$libraryId&IncludeItemTypes=Movie&Recursive=true&SortBy=DateCreated,SortName&SortOrder=Descending&Limit=$limit'
+        );
+        
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List<dynamic> items = data['Items'];
+          
+          List<EmbyMovieInfo> libraryMovies = items
+              .map((item) => EmbyMovieInfo.fromJson(item))
+              .toList();
+          
+          allMovies.addAll(libraryMovies);
+        }
+      } catch (e) {
+        // 处理错误
+      }
+    }
+    
+    // 按最近添加日期排序
+    allMovies.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
+    
+    // 限制总数
+    if (allMovies.length > limit) {
+      allMovies = allMovies.sublist(0, limit);
+    }
+    
+    return allMovies;
+  }
+  
+  // 获取电影详情
+  Future<EmbyMovieInfo?> getMovieDetails(String movieId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Emby服务器');
+    }
+    
+    try {
+      final response = await _makeAuthenticatedRequest(
+        '/emby/Users/$_userId/Items/$movieId'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return EmbyMovieInfo.fromJson(data);
+      }
+    } catch (e) {
+      throw Exception('无法获取电影详情: $e');
+    }
+    
+    return null;
   }
   
   Future<EmbyMediaItemDetail> getMediaItemDetails(String itemId) async {

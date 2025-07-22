@@ -232,6 +232,44 @@ class EmbyDandanplayMatcher {
     return historyItem;
   }
 
+  /// 创建一个可播放的历史记录条目（电影版本）
+  /// 
+  /// 将Emby电影信息转换为可播放的WatchHistoryItem，同时尝试匹配DandanPlay元数据
+  /// 复用现有的剧集匹配逻辑，内部进行兼容性转换
+  /// 
+  /// [context] 用于显示匹配对话框
+  /// [movie] Emby电影信息
+  /// [showMatchDialog] 是否显示匹配对话框（默认true）
+  Future<WatchHistoryItem?> createPlayableHistoryItemFromMovie(
+      BuildContext context,
+      EmbyMovieInfo movie, {
+      bool showMatchDialog = true}) async {
+    // 创建虚拟的EmbyEpisodeInfo来复用现有匹配逻辑
+    final episodeInfo = _createVirtualEpisodeFromMovie(movie);
+    
+    // 直接调用现有的剧集匹配方法
+    return await createPlayableHistoryItem(context, episodeInfo, showMatchDialog: showMatchDialog);
+  }
+
+  /// 创建虚拟的剧集信息从电影，用于复用现有匹配逻辑
+  EmbyEpisodeInfo _createVirtualEpisodeFromMovie(EmbyMovieInfo movie) {
+    return EmbyEpisodeInfo(
+      id: movie.id,
+      name: '电影', // 电影设置为通用标题，这样搜索时会是"电影名 电影"
+      overview: movie.overview,
+      seriesId: movie.id,
+      seriesName: movie.name, // 电影名作为系列名，这是主要的搜索关键词
+      seasonId: null,
+      seasonName: null,
+      indexNumber: 1, // 电影默认为第1集
+      parentIndexNumber: null,
+      imagePrimaryTag: movie.imagePrimaryTag,
+      dateAdded: movie.dateAdded,
+      premiereDate: movie.premiereDate,
+      runTimeTicks: movie.runTimeTicks,
+    );
+  }
+
   /// 获取播放URL
   /// 
   /// 根据Emby剧集信息获取媒体流URL
