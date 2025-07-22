@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/emby_model.dart';
+import 'package:path_provider/path_provider.dart'; // Added for getTemporaryDirectory
+import 'dart:io'; // Added for File
 
 class EmbyService {
   static final EmbyService instance = EmbyService._internal();
@@ -85,8 +87,7 @@ class EmbyService {
       );
       
       if (configResponse.statusCode != 200) {
-        _isConnected = false;
-        return false;
+        throw Exception('服务器返回错误: ${configResponse.statusCode} ${configResponse.reasonPhrase ?? ''}\n${configResponse.body}');
       }
       
       // 认证用户
@@ -103,8 +104,7 @@ class EmbyService {
       );
       
       if (authResponse.statusCode != 200) {
-        _isConnected = false;
-        return false;
+        throw Exception('服务器返回错误: ${authResponse.statusCode} ${authResponse.reasonPhrase ?? ''}\n${authResponse.body}');
       }
       
       final authData = json.decode(authResponse.body);
@@ -124,7 +124,7 @@ class EmbyService {
     } catch (e) {
       print('Emby 连接失败: $e');
       _isConnected = false;
-      return false;
+      throw Exception('连接Emby服务器失败: $e');
     }
   }
   
@@ -166,19 +166,31 @@ class EmbyService {
       'Content-Type': 'application/json',
       'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0", Token="$_accessToken"',
     };
-    
-    switch (method.toUpperCase()) {
-      case 'GET':
-        return await http.get(uri, headers: headers);
-      case 'POST':
-        return await http.post(uri, headers: headers, body: body != null ? json.encode(body) : null);
-      case 'PUT':
-        return await http.put(uri, headers: headers, body: body != null ? json.encode(body) : null);
-      case 'DELETE':
-        return await http.delete(uri, headers: headers);
-      default:
-        throw Exception('不支持的 HTTP 方法: $method');
+    http.Response response;
+    try {
+      switch (method.toUpperCase()) {
+        case 'GET':
+          response = await http.get(uri, headers: headers);
+          break;
+        case 'POST':
+          response = await http.post(uri, headers: headers, body: body != null ? json.encode(body) : null);
+          break;
+        case 'PUT':
+          response = await http.put(uri, headers: headers, body: body != null ? json.encode(body) : null);
+          break;
+        case 'DELETE':
+          response = await http.delete(uri, headers: headers);
+          break;
+        default:
+          throw Exception('不支持的 HTTP 方法: $method');
+      }
+    } catch (e) {
+      throw Exception('请求Emby服务器失败: $e');
     }
+    if (response.statusCode >= 400) {
+      throw Exception('服务器返回错误: ${response.statusCode} ${response.reasonPhrase ?? ''}\n${response.body}');
+    }
+    return response;
   }
   
   // 专门用于需要验证连接状态的请求方法
@@ -202,16 +214,22 @@ class EmbyService {
         final List<EmbyLibrary> tempLibraries = [];
         
         for (var item in items) {
-          // 只处理电视剧媒体库
-          if (item['CollectionType'] == 'tvshows') {
+          // 处理电视剧和电影媒体库
+          if (item['CollectionType'] == 'tvshows' || item['CollectionType'] == 'movies') {
+            final String libraryId = item['Id'];
+            final String collectionType = item['CollectionType'];
+            
+            // 根据媒体库类型选择不同的IncludeItemTypes
+            String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+            
             // 获取该库的项目数量
             final countResponse = await _makeAuthenticatedRequest(
-                '/emby/Users/$_userId/Items?parentId=${item['Id']}&IncludeItemTypes=Series&Recursive=true&Limit=0&Fields=ParentId');
+                '/emby/Users/$_userId/Items?parentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&Limit=0&Fields=ParentId');
             
-            int seriesCount = 0;
+            int itemCount = 0;
             if (countResponse.statusCode == 200) {
               final countData = json.decode(countResponse.body);
-              seriesCount = countData['TotalRecordCount'] ?? 0;
+              itemCount = countData['TotalRecordCount'] ?? 0;
             }
             
             tempLibraries.add(EmbyLibrary(
@@ -219,7 +237,7 @@ class EmbyService {
               name: item['Name'],
               type: item['CollectionType'],
               imageTagsPrimary: item['ImageTags']?['Primary'],
-              totalItems: seriesCount, 
+              totalItems: itemCount, 
             ));
           }
         }
@@ -248,13 +266,26 @@ class EmbyService {
     List<EmbyMediaItem> allItems = [];
     try {
       for (final libraryId in _selectedLibraryIds) {
+        try {
+          // 首先获取媒体库信息以确定类型
+          final libraryResponse = await _makeAuthenticatedRequest(
+            '/emby/Users/$_userId/Items/$libraryId'
+          );
+          
+          if (libraryResponse.statusCode == 200) {
+            final libraryData = json.decode(libraryResponse.body);
+            final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+            
+            // 根据媒体库类型选择不同的IncludeItemTypes
+            String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+            
         final String path = '/emby/Users/$_userId/Items';
         final Map<String, String> queryParameters = {
           'ParentId': libraryId,
-          'IncludeItemTypes': 'Series',
+              'IncludeItemTypes': includeItemTypes,
           'Recursive': 'true',
           'Limit': limitPerLibrary.toString(),
-          'Fields': 'Overview,Genres,People,Studios,ProviderIds,DateCreated,PremiereDate,CommunityRating,ProductionYear', //确保DateCreated在请求中
+              'Fields': 'Overview,Genres,People,Studios,ProviderIds,DateCreated,PremiereDate,CommunityRating,ProductionYear',
           'SortBy': 'DateCreated',
           'SortOrder': 'Descending',
         };
@@ -272,6 +303,10 @@ class EmbyService {
           }
         } else {
           print('Error fetching Emby items for library $libraryId: ${response.statusCode} - ${response.body}');
+            }
+          }
+        } catch (e) {
+          // 处理错误
         }
       }
 
@@ -292,6 +327,69 @@ class EmbyService {
       print('Error getting latest media items from Emby: $e');
     }
     return [];
+  }
+  
+  // 获取最新电影列表
+  Future<List<EmbyMovieInfo>> getLatestMovies({int limit = 99999}) async {
+    if (!_isConnected || _selectedLibraryIds.isEmpty || _userId == null) {
+      return [];
+    }
+    
+    List<EmbyMovieInfo> allMovies = [];
+    
+    // 从每个选中的媒体库获取最新电影
+    for (String libraryId in _selectedLibraryIds) {
+      try {
+        final response = await _makeAuthenticatedRequest(
+          '/emby/Users/$_userId/Items?ParentId=$libraryId&IncludeItemTypes=Movie&Recursive=true&SortBy=DateCreated,SortName&SortOrder=Descending&Limit=$limit'
+        );
+        
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List<dynamic> items = data['Items'];
+          
+          List<EmbyMovieInfo> libraryMovies = items
+              .map((item) => EmbyMovieInfo.fromJson(item))
+              .toList();
+          
+          allMovies.addAll(libraryMovies);
+        }
+      } catch (e) {
+        // 处理错误
+      }
+    }
+    
+    // 按最近添加日期排序
+    allMovies.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
+    
+    // 限制总数
+    if (allMovies.length > limit) {
+      allMovies = allMovies.sublist(0, limit);
+    }
+    
+    return allMovies;
+  }
+  
+  // 获取电影详情
+  Future<EmbyMovieInfo?> getMovieDetails(String movieId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Emby服务器');
+    }
+    
+    try {
+      final response = await _makeAuthenticatedRequest(
+        '/emby/Users/$_userId/Items/$movieId'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return EmbyMovieInfo.fromJson(data);
+      }
+    } catch (e) {
+      throw Exception('无法获取电影详情: $e');
+    }
+    
+    return null;
   }
   
   Future<EmbyMediaItemDetail> getMediaItemDetails(String itemId) async {
@@ -531,5 +629,119 @@ class EmbyService {
     }
     
     return null;
+  }
+
+  /// 获取Emby视频的字幕轨道信息，包括内嵌字幕和外挂字幕
+  Future<List<Map<String, dynamic>>> getSubtitleTracks(String itemId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Emby服务器');
+    }
+    try {
+      // 获取播放信息，包含媒体源和字幕轨道
+      final response = await _makeAuthenticatedRequest(
+        '/emby/Items/$itemId/PlaybackInfo?UserId=$_userId'
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final mediaSources = data['MediaSources'] as List?;
+        if (mediaSources == null || mediaSources.isEmpty) {
+          debugPrint('EmbyService: 未找到媒体源信息');
+          return [];
+        }
+        final mediaSource = mediaSources[0];
+        final mediaStreams = mediaSource['MediaStreams'] as List?;
+        if (mediaStreams == null) {
+          debugPrint('EmbyService: 未找到媒体流信息');
+          return [];
+        }
+        List<Map<String, dynamic>> subtitleTracks = [];
+        for (int i = 0; i < mediaStreams.length; i++) {
+          final stream = mediaStreams[i];
+          final streamType = stream['Type'];
+          if (streamType == 'Subtitle') {
+            final isExternal = stream['IsExternal'] ?? false;
+            final deliveryMethod = stream['DeliveryMethod'];
+            final language = stream['Language'] ?? '';
+            final title = stream['Title'] ?? '';
+            final codec = stream['Codec'] ?? '';
+            final isDefault = stream['IsDefault'] ?? false;
+            final isForced = stream['IsForced'] ?? false;
+            final isHearingImpaired = stream['IsHearingImpaired'] ?? false;
+            Map<String, dynamic> trackInfo = {
+              'index': i,
+              'type': isExternal ? 'external' : 'embedded',
+              'language': language,
+              'title': title.isNotEmpty ? title : (language.isNotEmpty ? language : 'Unknown'),
+              'codec': codec,
+              'isDefault': isDefault,
+              'isForced': isForced,
+              'isHearingImpaired': isHearingImpaired,
+              'deliveryMethod': deliveryMethod,
+            };
+            // 如果是外挂字幕，添加下载URL
+            if (isExternal) {
+              final mediaSourceId = mediaSource['Id'];
+              final subtitleUrl = '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$i/Stream.$codec?api_key=$_accessToken';
+              trackInfo['downloadUrl'] = subtitleUrl;
+            }
+            subtitleTracks.add(trackInfo);
+            debugPrint('EmbyService: 找到字幕轨道 $i: ${trackInfo['title']} (${trackInfo['type']})');
+          }
+        }
+        debugPrint('EmbyService: 总共找到 ${subtitleTracks.length} 个字幕轨道');
+        return subtitleTracks;
+      } else {
+        debugPrint('EmbyService: 获取播放信息失败: HTTP ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('EmbyService: 获取字幕轨道信息失败: $e');
+      return [];
+    }
+  }
+
+  /// 下载Emby外挂字幕文件
+  Future<String?> downloadSubtitleFile(String itemId, int subtitleIndex, String format) async {
+    if (!_isConnected || _accessToken == null) {
+      throw Exception('未连接到Emby服务器');
+    }
+    try {
+      // 获取媒体源ID
+      final playbackInfoResponse = await _makeAuthenticatedRequest(
+        '/emby/Items/$itemId/PlaybackInfo?UserId=$_userId'
+      );
+      if (playbackInfoResponse.statusCode != 200) {
+        debugPrint('EmbyService: 获取播放信息失败，无法下载字幕');
+        return null;
+      }
+      final playbackData = json.decode(playbackInfoResponse.body);
+      final mediaSources = playbackData['MediaSources'] as List?;
+      if (mediaSources == null || mediaSources.isEmpty) {
+        debugPrint('EmbyService: 未找到媒体源信息');
+        return null;
+      }
+      final mediaSourceId = mediaSources[0]['Id'];
+      // 构建字幕下载URL
+      final subtitleUrl = '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?api_key=$_accessToken';
+      debugPrint('EmbyService: 下载字幕文件: $subtitleUrl');
+      // 下载字幕文件
+      final subtitleResponse = await http.get(Uri.parse(subtitleUrl));
+      if (subtitleResponse.statusCode == 200) {
+        // 保存到临时文件
+        final tempDir = await getTemporaryDirectory();
+        final fileName = 'emby_subtitle_${itemId}_$subtitleIndex.$format';
+        final filePath = '${tempDir.path}/$fileName';
+        final file = File(filePath);
+        await file.writeAsBytes(subtitleResponse.bodyBytes);
+        debugPrint('EmbyService: 字幕文件已保存到: $filePath');
+        return filePath;
+      } else {
+        debugPrint('EmbyService: 下载字幕文件失败: HTTP ${subtitleResponse.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('EmbyService: 下载字幕文件时出错: $e');
+      return null;
+    }
   }
 }

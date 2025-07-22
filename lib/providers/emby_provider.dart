@@ -11,7 +11,9 @@ class EmbyProvider extends ChangeNotifier {
   bool _hasError = false;
   String? _errorMessage;
   List<EmbyMediaItem> _mediaItems = [];
+  List<EmbyMovieInfo> _movieItems = [];
   Map<String, EmbyMediaItemDetail> _mediaDetailsCache = {};
+  Map<String, EmbyMovieInfo> _movieDetailsCache = {};
 
   // Getters
   bool get isInitialized => _isInitialized;
@@ -20,6 +22,7 @@ class EmbyProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isConnected => _embyService.isConnected;
   List<EmbyMediaItem> get mediaItems => _mediaItems;
+  List<EmbyMovieInfo> get movieItems => _movieItems;
   List<EmbyLibrary> get availableLibraries => _embyService.availableLibraries;
   List<String> get selectedLibraryIds => _embyService.selectedLibraryIds;
   String? get serverUrl => _embyService.serverUrl;
@@ -46,6 +49,7 @@ class EmbyProvider extends ChangeNotifier {
       if (_embyService.isConnected) {
         print('EmbyProvider: Emby已连接，正在加载媒体项目...');
         await loadMediaItems();
+        await loadMovieItems();
         print('EmbyProvider: 媒体项目加载完成，数量: ${_mediaItems.length}');
       } else {
         print('EmbyProvider: Emby未连接，跳过媒体项目加载');
@@ -82,6 +86,19 @@ class EmbyProvider extends ChangeNotifier {
     }
   }
   
+  // 加载Emby电影项
+  Future<void> loadMovieItems() async {
+    if (!_embyService.isConnected) return;
+    
+    try {
+      _movieItems = await _embyService.getLatestMovies();
+    } catch (e) {
+      _hasError = true;
+      _errorMessage = e.toString();
+      _movieItems = [];
+    }
+  }
+  
   // 连接到Emby服务器
   Future<bool> connectToServer(String serverUrl, String username, String password) async {
     _isLoading = true;
@@ -94,6 +111,7 @@ class EmbyProvider extends ChangeNotifier {
       
       if (success) {
         await loadMediaItems();
+        await loadMovieItems();
       }
       
       return success;
@@ -111,7 +129,9 @@ class EmbyProvider extends ChangeNotifier {
   Future<void> disconnectFromServer() async {
     await _embyService.disconnect();
     _mediaItems = [];
+    _movieItems = [];
     _mediaDetailsCache = {};
+    _movieDetailsCache = {};
     notifyListeners();
   }
   
@@ -119,6 +139,7 @@ class EmbyProvider extends ChangeNotifier {
   Future<void> updateSelectedLibraries(List<String> libraryIds) async {
     await _embyService.updateSelectedLibraries(libraryIds);
     await loadMediaItems();
+    await loadMovieItems();
   }
   
   // 获取媒体详情
@@ -137,9 +158,32 @@ class EmbyProvider extends ChangeNotifier {
     }
   }
   
+  // 获取电影详情
+  Future<EmbyMovieInfo?> getMovieDetails(String movieId) async {
+    // 如果已经缓存了详情，直接返回
+    if (_movieDetailsCache.containsKey(movieId)) {
+      return _movieDetailsCache[movieId]!;
+    }
+    
+    try {
+      final details = await _embyService.getMovieDetails(movieId);
+      if (details != null) {
+        _movieDetailsCache[movieId] = details;
+      }
+      return details;
+    } catch (e) {
+      rethrow;
+    }
+  }
+  
   // 将Emby媒体项转换为WatchHistoryItem
   List<WatchHistoryItem> convertToWatchHistoryItems() {
     return _mediaItems.map((item) => item.toWatchHistoryItem()).toList();
+  }
+  
+  // 将Emby电影项转换为WatchHistoryItem
+  List<WatchHistoryItem> convertMoviesToWatchHistoryItems() {
+    return _movieItems.map((item) => item.toWatchHistoryItem()).toList();
   }
   
   // 获取流媒体URL

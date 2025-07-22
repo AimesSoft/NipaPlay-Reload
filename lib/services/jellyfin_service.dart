@@ -76,8 +76,7 @@ class JellyfinService {
       );
       
       if (configResponse.statusCode != 200) {
-        _isConnected = false;
-        return false;
+        throw Exception('服务器返回错误: ${configResponse.statusCode} ${configResponse.reasonPhrase ?? ''}\n${configResponse.body}');
       }
       
       // 认证用户
@@ -94,8 +93,7 @@ class JellyfinService {
       );
       
       if (authResponse.statusCode != 200) {
-        _isConnected = false;
-        return false;
+        throw Exception('服务器返回错误: ${authResponse.statusCode} ${authResponse.reasonPhrase ?? ''}\n${authResponse.body}');
       }
       
       final authData = json.decode(authResponse.body);
@@ -117,7 +115,8 @@ class JellyfinService {
       return true;
     } catch (e) {
       _isConnected = false;
-      return false;
+      // 直接抛出异常，Provider会捕获并展示message
+      throw Exception('连接Jellyfin服务器失败: $e');
     }
   }
   
@@ -669,17 +668,31 @@ class JellyfinService {
       headers['Content-Type'] = 'application/json';
     }
     
-    switch (method) {
-      case 'GET':
-        return http.get(uri, headers: headers);
-      case 'POST':
-        return http.post(uri, headers: headers, body: body != null ? json.encode(body) : null);
-      case 'PUT':
-        return http.put(uri, headers: headers, body: body != null ? json.encode(body) : null);
-      case 'DELETE':
-        return http.delete(uri, headers: headers);
-      default:
-        throw Exception('不支持的HTTP方法: $method');
+    http.Response response;
+    try {
+      switch (method) {
+        case 'GET':
+          response = await http.get(uri, headers: headers);
+          break;
+        case 'POST':
+          response = await http.post(uri, headers: headers, body: body != null ? json.encode(body) : null);
+          break;
+        case 'PUT':
+          response = await http.put(uri, headers: headers, body: body != null ? json.encode(body) : null);
+          break;
+        case 'DELETE':
+          response = await http.delete(uri, headers: headers);
+          break;
+        default:
+          throw Exception('不支持的HTTP方法: $method');
+      }
+    } catch (e) {
+      throw Exception('请求Jellyfin服务器失败: $e');
     }
+    if (response.statusCode >= 400) {
+      // 详细抛出服务器错误，包括403/401/500等
+      throw Exception('服务器返回错误: ${response.statusCode} ${response.reasonPhrase ?? ''}\n${response.body}');
+    }
+    return response;
   }
 }

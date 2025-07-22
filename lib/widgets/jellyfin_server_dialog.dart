@@ -186,7 +186,7 @@ class _JellyfinServerDialogState extends State<JellyfinServerDialog> {
           children: [
             const Icon(Ionicons.library_outline, size: 18),
             const SizedBox(width: 8),
-            const Text('可用的电视剧媒体库', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('可用的媒体库', style: TextStyle(fontWeight: FontWeight.bold)),
             const Spacer(),
             GestureDetector(
               onTap: () {
@@ -208,7 +208,7 @@ class _JellyfinServerDialogState extends State<JellyfinServerDialog> {
         const SizedBox(height: 8),
         Expanded(
           child: _currentAvailableLibraries.isEmpty
-              ? const Center(child: Text('没有找到电视剧媒体库', style: TextStyle(color: Colors.white70)))
+              ? const Center(child: Text('没有找到媒体库', style: TextStyle(color: Colors.white70)))
               : ListView.builder(
                   itemCount: _currentAvailableLibraries.length,
                   itemBuilder: (context, index) {
