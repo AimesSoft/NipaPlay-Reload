@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../utils/video_player_state.dart';
-import '../../danmaku/lib/danmaku_content_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'gpu_danmaku_base_renderer.dart';
 import 'gpu_danmaku_config.dart';
 import 'gpu_danmaku_item.dart';
@@ -196,8 +196,7 @@ class GPUDanmakuTest {
 
 /// 测试用的渲染器类
 class TestRenderer extends GPUDanmakuBaseRenderer {
-  TestRenderer({required GPUDanmakuConfig config}) : super(
-    config: config,
+  TestRenderer({required super.config}) : super(
     opacity: 1.0,
   );
 

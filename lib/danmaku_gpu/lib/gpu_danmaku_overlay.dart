@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../utils/video_player_state.dart';
-import '../../danmaku/lib/danmaku_content_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import '../../providers/developer_options_provider.dart';
 import 'gpu_danmaku_renderer.dart';
 import 'gpu_danmaku_config.dart';
@@ -21,14 +21,14 @@ class GPUDanmakuOverlay extends StatefulWidget {
   final double opacity;
 
   const GPUDanmakuOverlay({
-    Key? key,
+    super.key,
     required this.currentPosition,
     required this.videoDuration,
     required this.isPlaying,
     required this.config,
     required this.isVisible,
     required this.opacity,
-  }) : super(key: key);
+  });
 
   /// 预构建弹幕字符集（用于视频初始化时优化）
   /// 
@@ -369,6 +369,8 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     }
 
     int topDanmakuCount = 0;
+    int bottomDanmakuCount = 0;
+    int scrollDanmakuCount = 0;
     int newDanmakuCount = 0; // 新增：统计新添加的弹幕数量
     
     // 只处理顶部弹幕
@@ -381,23 +383,40 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
       // 判断是否为顶部弹幕
       // 现有系统使用字符串类型
       bool isTopDanmaku = false;
+      bool isBottomDanmaku = false;
+      bool isScrollDanmaku = false;
+
       if (danmakuTypeRaw is String) {
         // 字符串类型：'top' 表示顶部弹幕
         isTopDanmaku = (danmakuTypeRaw == 'top');
+        isBottomDanmaku = (danmakuTypeRaw == 'bottom');
+        isScrollDanmaku = (danmakuTypeRaw == 'scroll');
       } else if (danmakuTypeRaw is int) {
-        // 数字类型：通常 5 表示顶部弹幕
+        // 数字类型：通常 5 表示顶部弹幕, 4 表示底部弹幕, 1 表示滚动弹幕
         isTopDanmaku = (danmakuTypeRaw == 5);
+        isBottomDanmaku = (danmakuTypeRaw == 4);
+        isScrollDanmaku = (danmakuTypeRaw == 1);
       }
 
-      // 只处理顶部弹幕
-      if (!isTopDanmaku) continue;
+      // 只处理顶部或底部弹幕
+      if (!isTopDanmaku && !isBottomDanmaku && !isScrollDanmaku) continue;
       
       // 🔥 新增：检查是否屏蔽顶部弹幕
-      if (videoState.blockTopDanmaku) {
+      if (isTopDanmaku && videoState.blockTopDanmaku) {
         continue; // 如果屏蔽顶部弹幕，跳过这条弹幕
       }
+
+      if (isBottomDanmaku && videoState.blockBottomDanmaku) {
+        continue; // 如果屏蔽底部弹幕，跳过这条弹幕
+      }
+
+      if (isScrollDanmaku && videoState.blockScrollDanmaku) {
+        continue; // 如果屏蔽滚动弹幕，跳过这条弹幕
+      }
       
-      topDanmakuCount++;
+      if (isTopDanmaku) topDanmakuCount++;
+      if (isBottomDanmaku) bottomDanmakuCount++;
+      if (isScrollDanmaku) scrollDanmakuCount++;
 
       // 检查是否已经添加
       if (_addedDanmaku.contains(danmakuId)) continue;
@@ -416,7 +435,16 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
           }
         }
         
-        _addTopDanmaku(danmaku, timeDiff);
+        final DanmakuItemType type;
+        if(isTopDanmaku) {
+          type = DanmakuItemType.top;
+        } else if (isBottomDanmaku) {
+          type = DanmakuItemType.bottom;
+        } else {
+          type = DanmakuItemType.scroll;
+        }
+        
+        _addDanmaku(danmaku, timeDiff, type, MediaQuery.of(context).size.width);
         _addedDanmaku.add(danmakuId);
         newDanmakuCount++; // 新增：计数新添加的弹幕
       }
@@ -424,7 +452,7 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     
     // 优化：只在有新弹幕时才打印日志
     if (newDanmakuCount > 0) {
-      debugPrint('GPUDanmakuOverlay: 同步弹幕 - 当前时间:${currentTimeSeconds.toStringAsFixed(1)}s, 顶部弹幕总数:$topDanmakuCount, 新添加:$newDanmakuCount, 启用轨道数:${enabledTracks.length}');
+      debugPrint('GPUDanmakuOverlay: 同步弹幕 - 当前时间:${currentTimeSeconds.toStringAsFixed(1)}s, 顶部弹幕总数:$topDanmakuCount, 底部弹幕总数:$bottomDanmakuCount, 滚动弹幕总数:$scrollDanmakuCount, 新添加:$newDanmakuCount, 启用轨道数:${enabledTracks.length}');
     }
   }
 
@@ -440,14 +468,21 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     for (final danmaku in danmakuList) {
       final danmakuTypeRaw = danmaku['type'];
       bool isTopDanmaku = false;
+      bool isBottomDanmaku = false;
+      bool isScrollDanmaku = false;
       
       if (danmakuTypeRaw is String) {
         isTopDanmaku = (danmakuTypeRaw == 'top');
+        isBottomDanmaku = (danmakuTypeRaw == 'bottom');
+        isScrollDanmaku = (danmakuTypeRaw == 'scroll');
       } else if (danmakuTypeRaw is int) {
         isTopDanmaku = (danmakuTypeRaw == 5);
+        isBottomDanmaku = (danmakuTypeRaw == 4);
+        isScrollDanmaku = (danmakuTypeRaw == 1);
       }
       
-      if (!isTopDanmaku) {
+      // 只处理顶部和底部弹幕，滚动弹幕不参与合并
+      if (!isTopDanmaku && !isBottomDanmaku) {
         result.add(danmaku);
         continue;
       }
@@ -517,7 +552,7 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     }
   }
 
-  void _addTopDanmaku(Map<String, dynamic> danmaku, double timeOffset) {
+  void _addDanmaku(Map<String, dynamic> danmaku, double timeOffset, DanmakuItemType type, double screenWidth) {
     // 弹幕文本字段名为 'content'
     final text = danmaku['content']?.toString() ?? '';
     
@@ -547,21 +582,27 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     String? countText;
     if (isMerged) {
       // 使用GPU渲染器的计算方法
-      fontSizeMultiplier = _renderer?.calculateMergedFontSizeMultiplier?.call(mergeCount) ?? 1.0;
+      fontSizeMultiplier = _renderer?.calculateMergedFontSizeMultiplier.call(mergeCount) ?? 1.0;
       countText = 'x$mergeCount';
+    }
+
+    double? scrollOriginalX;
+    if (type == DanmakuItemType.scroll) {
+      scrollOriginalX = screenWidth + (timeOffset / 1000) * (widget.config.scrollScreensPerSecond * screenWidth);
     }
 
     final danmakuItem = DanmakuContentItem(
       text,
       color: color,
-      type: DanmakuItemType.top,
+      type: type,
       timeOffset: (timeOffset * 1000).toInt(),
       fontSizeMultiplier: fontSizeMultiplier,
       countText: countText,
+      scrollOriginalX: scrollOriginalX,
     );
 
-    final mergeInfo = isMerged ? ' (合并${mergeCount}条)' : '';
-    debugPrint('GPUDanmakuOverlay: 添加顶部弹幕 - 文本:"$text"$mergeInfo, 颜色:$color, 时间偏移:${timeOffset.toStringAsFixed(2)}s');
+    final mergeInfo = isMerged ? ' (合并$mergeCount条)' : '';
+    debugPrint('GPUDanmakuOverlay: 添加${type.toString().split('.').last}弹幕 - 文本:"$text"$mergeInfo, 颜色:$color, 时间偏移:${timeOffset.toStringAsFixed(2)}s');
     _renderer?.addDanmaku(danmakuItem);
   }
 

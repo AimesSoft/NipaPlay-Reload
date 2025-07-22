@@ -17,7 +17,7 @@ enum DanmakuKernelType {
 /// 与现有的 `PlayerFactory` 设计保持一致，便于在设置界面与业务代码中统一调用。
 class DanmakuKernelFactory {
   static const String _danmakuKernelTypeKey = 'danmaku_kernel_type';
-  static DanmakuKernelType _cachedType = DanmakuKernelType.canvasDanmaku;
+  static DanmakuKernelType _cachedType = DanmakuKernelType.nipaPlay;
   static bool _initialized = false;
 
   /// 初始化方法，在应用启动时尽早调用（如 main.dart 的 runApp 之前）。
@@ -37,10 +37,10 @@ class DanmakuKernelFactory {
         _cachedType = DanmakuKernelType.values[typeIndex];
       } else {
         // 如果没有保存的值或值无效，使用默认值
-        _cachedType = DanmakuKernelType.canvasDanmaku;
+        _cachedType = DanmakuKernelType.nipaPlay;
       }
     } catch (e) {
-      _cachedType = DanmakuKernelType.canvasDanmaku;
+      _cachedType = DanmakuKernelType.nipaPlay;
     }
     
     _initialized = true;

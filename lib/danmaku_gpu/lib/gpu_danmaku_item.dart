@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../danmaku/lib/danmaku_content_item.dart';
+import '../../danmaku_abstraction/danmaku_content_item.dart';
 
 /// GPU弹幕项目
 /// 
@@ -17,6 +17,9 @@ class GPUDanmakuItem {
   /// 弹幕的实际显示位置（用于滚动弹幕）
   double? currentX;
   double? currentY;
+  
+  /// 滚动弹幕的初始X坐标
+  double? scrollOriginalX;
   
   /// 弹幕的目标位置（用于动画）
   double? targetX;
@@ -53,6 +56,7 @@ class GPUDanmakuItem {
     this.groupContent,
     this.fontSizeMultiplier = 1.0,
     this.countText,
+    this.scrollOriginalX,
   });
 
   /// 获取文本宽度（缓存计算结果）
@@ -93,6 +97,7 @@ class GPUDanmakuItem {
       createdAt: createdAt,
       fontSizeMultiplier: item.fontSizeMultiplier,
       countText: item.countText,
+      scrollOriginalX: item.scrollOriginalX,
     );
   }
 

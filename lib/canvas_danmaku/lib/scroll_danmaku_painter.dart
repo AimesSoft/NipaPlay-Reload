@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 import 'danmaku_item.dart';
-import 'utils.dart';
 import 'danmaku_option.dart';
 
 class ScrollDanmakuPainter extends CustomPainter {

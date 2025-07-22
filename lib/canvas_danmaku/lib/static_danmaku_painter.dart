@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'danmaku_item.dart';
-import 'dart:ui' as ui;
 import 'danmaku_option.dart';
 
 class StaticDanmakuPainter extends CustomPainter {

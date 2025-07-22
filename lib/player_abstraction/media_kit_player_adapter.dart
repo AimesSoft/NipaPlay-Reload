@@ -48,7 +48,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   double _playbackRate = 1.0;
   
   MediaKitPlayerAdapter() : _player = Player(
-    configuration: PlayerConfiguration(
+    configuration: const PlayerConfiguration(
       libass: true,
       bufferSize: 32 * 1024 * 1024,
       logLevel: MPVLogLevel.debug,
@@ -323,7 +323,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
         if ((width == null || width == 0) && (_player.state.width != null && _player.state.width! > 0)) {
           width = _player.state.width;
           height = _player.state.height;
-          debugPrint('[MediaKit] 从_player.state获取视频尺寸: ${width}x${height}');
+          debugPrint('[MediaKit] 从_player.state获取视频尺寸: ${width}x$height');
         }
         
         return PlayerVideoStreamInfo(
@@ -480,7 +480,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
       final updatedVideoStreams = _mediaInfo.video!.map((stream) {
         // 如果当前宽高为0，则使用新的宽高
         if (stream.codec.width == 0 || stream.codec.height == 0) {
-          debugPrint('[MediaKit] 更新视频流尺寸: ${stream.codec.width}x${stream.codec.height} -> ${width}x${height}');
+          debugPrint('[MediaKit] 更新视频流尺寸: ${stream.codec.width}x${stream.codec.height} -> ${width}x$height');
           return PlayerVideoStreamInfo(
             codec: PlayerVideoCodecParams(
               width: width,
@@ -730,8 +730,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     final title = (subInfo.title ?? '').toLowerCase();
     final lang = (subInfo.language ?? '').toLowerCase();
     // Also check metadata which might have more accurate original values from media_kit tracks
-    final metadataTitle = (subInfo.metadata['title'] as String? ?? '').toLowerCase();
-    final metadataLang = (subInfo.metadata['language'] as String? ?? '').toLowerCase();
+    final metadataTitle = (subInfo.metadata['title'] ?? '').toLowerCase();
+    final metadataLang = (subInfo.metadata['language'] ?? '').toLowerCase();
 
     final patterns = [
       'chi', 'chs', 'zh', '中文', '简体', '繁体', 'simplified', 'traditional', 
@@ -789,8 +789,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
           for (int i = 0; i < _mediaInfo.subtitle!.length; i++) {
               final subInfo = _mediaInfo.subtitle![i];
               // Use original title and language from metadata for more reliable matching against keywords
-              final titleLower = (subInfo.metadata['title'] as String? ?? subInfo.title ?? '').toLowerCase();
-              final langLower = (subInfo.metadata['language'] as String? ?? subInfo.language ?? '').toLowerCase();
+              final titleLower = (subInfo.metadata['title'] ?? subInfo.title ?? '').toLowerCase();
+              final langLower = (subInfo.metadata['language'] ?? subInfo.language ?? '').toLowerCase();
 
               bool isSimplified = titleLower.contains('simplified') || titleLower.contains('简体') ||
                                   langLower.contains('zh-hans') || langLower.contains('zh-cn') || langLower.contains('sc');
@@ -1191,7 +1191,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
       }
       
       if (bytes != null) {
-        debugPrint('MediaKit: 成功获取截图，大小: ${bytes.length} 字节，尺寸: ${actualWidth}x${actualHeight}');
+        debugPrint('MediaKit: 成功获取截图，大小: ${bytes.length} 字节，尺寸: ${actualWidth}x$actualHeight');
         final String base64Image = base64Encode(bytes);
         if (base64Image.length > 200) {
           debugPrint('MediaKit: 截图BASE64(截断): ${base64Image.substring(0, 100)}...${base64Image.substring(base64Image.length - 100)}');

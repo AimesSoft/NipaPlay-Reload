@@ -7,6 +7,9 @@ enum DanmakuItemType {
 }
 
 class DanmakuContentItem {
+  /// 弹幕唯一ID
+  final String? id;
+
   /// 弹幕文本
   final String text;
 
@@ -24,6 +27,7 @@ class DanmakuContentItem {
 
   DanmakuContentItem(
     this.text, {
+    this.id,
     this.color = Colors.white,
     this.type = DanmakuItemType.scroll,
     this.timeOffset = 0,

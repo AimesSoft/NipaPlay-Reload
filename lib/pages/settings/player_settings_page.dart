@@ -269,9 +269,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   String _getDanmakuKernelDescription(DanmakuKernelType type) {
     switch (type) {
       case DanmakuKernelType.nipaPlay:
-        return 'NipaPlay 内置弹幕渲染器\n根据视频时间轴移动绘制弹幕，受视频帧率波动影响\n支持轨道分配、弹幕合并、防重叠等高级功能';
+        return 'NipaPlay 内置弹幕渲染器\n和MDK内核搭配最佳，libmpv内核下会导致弹幕卡顿\n根据视频时间轴移动绘制弹幕，受视频帧率波动影响\n支持轨道分配、弹幕合并、防重叠等高级功能';
       case DanmakuKernelType.canvasDanmaku:
-        return 'Canvas_Danmaku 渲染器\n基于CustomPainter，使用动画系统进行绘制弹幕\n性能更佳，功耗更低';
+        return 'Canvas_Danmaku 渲染器\n基于CustomPainter，使用动画系统进行绘制弹幕\n性能更佳，功耗更低\n开发中';
       case DanmakuKernelType.flutterGPUDanmaku:
         return 'Flutter GPU 弹幕渲染器\n使用Flutter GPU API和自定义着色器，目前仅支持顶部弹幕';
     }

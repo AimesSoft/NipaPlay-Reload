@@ -31,14 +31,14 @@ class PlayerFactory {
         _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
         debugPrint('[PlayerFactory] 预加载内核设置: ${_cachedKernelType.toString()}');
       } else {
-        _cachedKernelType = PlayerKernelType.mediaKit;
-        debugPrint('[PlayerFactory] 无内核设置，使用默认: MediaKit');
+        _cachedKernelType = PlayerKernelType.mdk;
+        debugPrint('[PlayerFactory] 无内核设置，使用默认: MDK');
       }
       
       _hasLoadedSettings = true;
     } catch (e) {
       debugPrint('[PlayerFactory] 初始化读取设置出错: $e');
-      _cachedKernelType = PlayerKernelType.mediaKit;
+      _cachedKernelType = PlayerKernelType.mdk;
       _hasLoadedSettings = true;
     }
   }
@@ -47,7 +47,7 @@ class PlayerFactory {
   static void _loadSettingsSync() {
     try {
       // 这里没有真正同步，仅使用默认值，确保后续异步加载会更新缓存值
-      _cachedKernelType = PlayerKernelType.mediaKit;
+      _cachedKernelType = PlayerKernelType.mdk;
       _hasLoadedSettings = true;
       
       // 异步加载正确设置并更新缓存
@@ -59,10 +59,10 @@ class PlayerFactory {
         }
       });
       
-      debugPrint('[PlayerFactory] 同步设置临时默认值: MediaKit');
+      debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
     } catch (e) {
       debugPrint('[PlayerFactory] 同步加载设置出错: $e');
-      _cachedKernelType = PlayerKernelType.mediaKit;
+      _cachedKernelType = PlayerKernelType.mdk;
     }
   }
   
@@ -71,15 +71,13 @@ class PlayerFactory {
     if (!_hasLoadedSettings) {
       _loadSettingsSync();
     }
-    return _cachedKernelType ?? PlayerKernelType.mediaKit;
+    return _cachedKernelType ?? PlayerKernelType.mdk;
   }
   
   // 创建播放器实例
   AbstractPlayer createPlayer({PlayerKernelType? kernelType}) {
     // 如果没有指定内核类型，从缓存或设置中读取
-    if (kernelType == null) {
-      kernelType = getKernelType();
-    }
+    kernelType ??= getKernelType();
     
     switch (kernelType) {
       case PlayerKernelType.mdk:

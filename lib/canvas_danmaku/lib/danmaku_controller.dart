@@ -4,6 +4,7 @@ import 'danmaku_content_item.dart';
 
 /// 弹幕状态类
 class DanmakuState {
+  final String? id;
   final String content;
   final DanmakuItemType type;
   final double normalizedProgress;
@@ -14,6 +15,7 @@ class DanmakuState {
   final Color color;
 
   DanmakuState({
+    this.id,
     required this.content,
     required this.type,
     required this.normalizedProgress,

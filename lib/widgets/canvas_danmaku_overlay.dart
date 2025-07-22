@@ -1,35 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:math';
 
+import '../canvas_danmaku/lib/danmaku_timeline_manager.dart';
 import '../utils/video_player_state.dart';
 import 'package:nipaplay/canvas_danmaku/lib/canvas_danmaku.dart' as canvas;
 import '../providers/developer_options_provider.dart';
-
-/// 🔥 新增：弹幕状态保存类
-class DanmakuState {
-  final String content;
-  final Color color;
-  final canvas.DanmakuItemType type;
-  final double normalizedProgress; // 归一化进度 (0.0-1.0)
-  final int originalCreationTime; // 原始创建时间
-  final int remainingTime; // 剩余显示时间（毫秒）
-  final double yPosition; // Y轴位置
-  final int saveTime; // 🔥 新增：保存时的时间戳
-  final int trackIndex; // 🔥 新增：轨道编号
-  
-  DanmakuState({
-    required this.content,
-    required this.color,
-    required this.type,
-    required this.normalizedProgress,
-    required this.originalCreationTime,
-    required this.remainingTime,
-    required this.yPosition,
-    required this.saveTime, // 🔥 新增
-    required this.trackIndex, // 🔥 新增：轨道编号
-  });
-}
 
 /// Canvas_Danmaku 渲染器的外层封装，保持与原 `DanmakuOverlay` 相同的入参。
 class CanvasDanmakuOverlay extends StatefulWidget {
@@ -60,6 +35,9 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
   double _lastSyncTime = -1;
   canvas.DanmakuOption _option = canvas.DanmakuOption();
   
+  // 🔥 新增：弹幕轨道记忆地图
+  final Map<String, int> _danmakuTrackMap = {};
+  
   // 🔥 添加屏蔽词变化检测
   List<String> _lastBlockWords = [];
   
@@ -73,8 +51,8 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
   Map<String, bool> _lastTrackEnabled = {};
   String _lastTrackHash = '';
   
-  // 🔥 新增：弹幕状态保存
-  final List<DanmakuState> _savedDanmakuStates = [];
+  // 🔥 移除：不再需要临时的状态保存列表
+  // final List<DanmakuState> _savedDanmakuStates = [];
   bool _isRestoring = false;
 
   @override
@@ -86,25 +64,15 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     if (widget.isPlaying != oldWidget.isPlaying && _controller != null) {
       if (widget.isPlaying) {
         if (mounted) {
-          // 🔥 关键修复：先同步弹幕，然后才恢复播放
-          // 这样可以确保在恢复播放时有正确的弹幕数据
-          if (widget.isVisible) {
-            _lastSyncTime = 0.0;  // 重置同步时间，强制立即同步
-            _syncDanmaku();  // 先同步弹幕
-          }
-          
-          // 恢复弹幕播放
+          // 恢复播放时，触发一次完全同步
+          _lastSyncTime = 0.0;
+          _syncDanmaku();
           _controller!.resume();
         }
       } else {
         if (mounted) {
           // 暂停弹幕
           _controller!.pause();
-          
-          // 🔥 关键修复：暂停时特殊处理弹幕显示
-          if (widget.isVisible) {
-            _handlePausedDanmakuDisplay();
-          }
         }
       }
     }
@@ -114,47 +82,17 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
       if (mounted) {
         _updateOption();
         
-        // 🔥 关键修复：当弹幕从隐藏变为显示时，恢复弹幕状态
-        if (widget.isVisible && !oldWidget.isVisible) {
-          // 保存当前状态，用于判断是否成功恢复
-          final hadSavedStates = _savedDanmakuStates.isNotEmpty;
-          
-          // 恢复保存的弹幕状态
-          if (mounted) {
-            _restoreDanmakuStates();
-          }
-          
-          // 🔥 关键修复：只有在没有保存状态的情况下才重新同步
-          // 如果有保存的状态且成功恢复，就不再调用_syncDanmaku()避免轨道重新分配
-          if (!hadSavedStates && mounted) {
-            // 重置同步时间，强制立即同步
-            _lastSyncTime = 0.0;
-            // 立即同步弹幕，而不是等待下一次调度
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _syncDanmaku();
-                // 🔥 关键修复：如果是暂停状态，需要特殊处理让弹幕显示
-                if (!widget.isPlaying && mounted && _controller != null) {
-                  _handlePausedDanmakuDisplay();
-                }
-              }
-            });
-          } else {
-            // 🔥 如果成功恢复状态，设置合理的同步时间，避免立即触发时间轴跳转逻辑
-            _lastSyncTime = widget.currentPosition / 1000;
-          }
-        }
-        
-        // 🔥 修改：当弹幕从显示变为隐藏时，保存弹幕状态并清空画布
-        if (!widget.isVisible && oldWidget.isVisible && _controller != null) {
-          // 保存当前弹幕状态
-          if (mounted) {
-            _saveDanmakuStates();
-          }
-          
-          if (mounted) {
-            _controller!.clear();
-          }
+        if (widget.isVisible) {
+          // 🔥 统一逻辑：显示弹幕时，触发一次与“时间跳转”完全相同的同步
+          _lastSyncTime = 0.0;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _syncDanmaku();
+            }
+          });
+        } else {
+          // 🔥 统一逻辑：隐藏弹幕时，只清空屏幕，保留轨道记忆
+          _controller?.clear();
         }
       }
     }
@@ -324,83 +262,91 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
   }
 
   /// 将项目中的 Map 弹幕数据转换为 Canvas_Danmaku 的实体
-  canvas.DanmakuContentItem _convert(Map<String, dynamic> danmaku) {
+  canvas.DanmakuContentItem _convert(Map<String, dynamic> danmaku, [int? trackIndex]) {
     final content = danmaku['content']?.toString() ?? '';
-    final typeStr = danmaku['type']?.toString() ?? 'scroll';
-    late canvas.DanmakuItemType itemType;
-    switch (typeStr) {
+    final time = (danmaku['time'] ?? 0.0) as double;
+    final id = '${time}_$content'; // 🔥 生成唯一ID
+
+    final colorStr = danmaku['color']?.toString() ?? '#FFFFFF';
+    final type = danmaku['type']?.toString() ?? 'scroll';
+
+    Color color = Colors.white;
+    try {
+      if (colorStr.startsWith('#')) {
+        color = Color(int.parse('FF${colorStr.substring(1)}', radix: 16));
+      } else if (colorStr.startsWith('0x')) {
+        color = Color(int.parse(colorStr.substring(2), radix: 16));
+      }
+    } catch (e) {
+      // 颜色解析失败，使用默认白色
+    }
+
+    canvas.DanmakuItemType itemType;
+    switch (type) {
       case 'top':
         itemType = canvas.DanmakuItemType.top;
         break;
       case 'bottom':
         itemType = canvas.DanmakuItemType.bottom;
         break;
+      case 'scroll':
       default:
         itemType = canvas.DanmakuItemType.scroll;
     }
 
-    // 解析颜色字符串，例如 rgb(255,255,255)
-    Color color = Colors.white;
-    final colorStr = danmaku['color']?.toString();
-    if (colorStr != null && colorStr.startsWith('rgb(')) {
-      final vals = colorStr
-          .replaceAll('rgb(', '')
-          .replaceAll(')', '')
-          .split(',')
-          .map((e) => int.tryParse(e.trim()) ?? 255)
-          .toList();
-      if (vals.length == 3) {
-        color = Color.fromARGB(255, vals[0], vals[1], vals[2]);
-      }
-    }
-    return canvas.DanmakuContentItem(content, color: color, type: itemType);
+    return canvas.DanmakuContentItem(
+      content,
+      id: id, // 🔥 传递ID
+      color: color,
+      type: itemType,
+      timeOffset: 0,
+      trackIndex: trackIndex, // 🔥 修改：使用传入的轨道索引
+    );
   }
 
-  /// 将项目中的 Map 弹幕数据转换为 Canvas_Danmaku 的实体（带时间偏移）
-  canvas.DanmakuContentItem _convertWithTimeOffset(Map<String, dynamic> danmaku, double currentTimeSeconds) {
+  /// 将原始弹幕数据转换为带时间偏移的DanmakuContentItem
+  canvas.DanmakuContentItem _convertWithTimeOffset(Map<String, dynamic> danmaku, double timeOffset, [int? trackIndex]) {
     final content = danmaku['content']?.toString() ?? '';
-    final typeStr = danmaku['type']?.toString() ?? 'scroll';
     final danmakuTime = (danmaku['time'] ?? 0.0) as double;
+    final id = '${danmakuTime}_$content'; // 🔥 生成唯一ID
     
-    late canvas.DanmakuItemType itemType;
-    switch (typeStr) {
+    final colorStr = danmaku['color']?.toString() ?? '#FFFFFF';
+    final type = danmaku['type']?.toString() ?? 'scroll';
+    
+    // 🔥 关键修复：直接使用传入的时间偏移量
+    final timeOffsetMs = (timeOffset * 1000).round();
+
+    Color color = Colors.white;
+    try {
+      if (colorStr.startsWith('#')) {
+        color = Color(int.parse('FF${colorStr.substring(1)}', radix: 16));
+      } else if (colorStr.startsWith('0x')) {
+        color = Color(int.parse(colorStr.substring(2), radix: 16));
+      }
+    } catch (e) {
+      // 颜色解析失败，使用默认白色
+    }
+
+    canvas.DanmakuItemType itemType;
+    switch (type) {
       case 'top':
         itemType = canvas.DanmakuItemType.top;
         break;
       case 'bottom':
         itemType = canvas.DanmakuItemType.bottom;
         break;
+      case 'scroll':
       default:
         itemType = canvas.DanmakuItemType.scroll;
     }
 
-    // 解析颜色字符串，例如 rgb(255,255,255)
-    Color color = Colors.white;
-    final colorStr = danmaku['color']?.toString();
-    if (colorStr != null && colorStr.startsWith('rgb(')) {
-      final vals = colorStr
-          .replaceAll('rgb(', '')
-          .replaceAll(')', '')
-          .split(',')
-          .map((e) => int.tryParse(e.trim()) ?? 255)
-          .toList();
-      if (vals.length == 3) {
-        color = Color.fromARGB(255, vals[0], vals[1], vals[2]);
-      }
-    }
-    
-    // 🔥 关键：计算时间偏移，模拟弹幕已经运动的时间
-    final timeDiff = currentTimeSeconds - danmakuTime;
-    final timeOffsetMs = (timeDiff * 1000).round();
-    
-    // 🔥 关键修复：在时间轴跳转时不指定trackIndex，让轨道管理器重新分配
-    // 这样可以确保弹幕按照交叉绘制策略正常分布，而不是每个轨道一个弹幕
     return canvas.DanmakuContentItem(
-      content, 
-      color: color, 
+      content,
+      id: id, // 🔥 传递ID
+      color: color,
       type: itemType,
-      timeOffset: timeOffsetMs, // 设置时间偏移
-      trackIndex: null, // 🔥 不指定轨道编号，让轨道管理器重新分配
+      timeOffset: timeOffsetMs, // 🔥 关键修复：使用传入的时间偏移量
+      trackIndex: trackIndex, //  不指定轨道编号，让轨道管理器重新分配
     );
   }
 
@@ -588,7 +534,8 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     // 清理所有可能导致异步回调的资源
     _controller = null; // 直接置空，不调用任何方法
     _addedDanmaku.clear();
-    _savedDanmakuStates.clear();
+    // 🔥 移除：状态列表已删除
+    // _savedDanmakuStates.clear();
     _isRestoring = false;
     _lastSyncTime = -1;
     super.dispose();
@@ -599,179 +546,120 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     if (!mounted || _controller == null || !context.mounted) return;
     
     final currentTimeSeconds = widget.currentPosition / 1000;
+    final videoState = context.read<VideoPlayerState>();
+    final tracks = videoState.danmakuTracks;
+    final trackEnabled = videoState.danmakuTrackEnabled;
     
     // 检查是否是时间轴切换后的首次同步
     bool isAfterTimeJump = _lastSyncTime == 0.0 || (currentTimeSeconds - _lastSyncTime).abs() > 2.0;
     
-    // 🔥 修复：在暂停状态下，如果是首次同步或时间轴切换，立即执行同步
-    bool shouldSyncImmediately = isAfterTimeJump || !widget.isPlaying;
-    
-    // 避免频繁同步，每100ms同步一次（除非是时间轴切换后的首次同步或暂停状态）
-    if (!shouldSyncImmediately && (currentTimeSeconds - _lastSyncTime).abs() < 0.1) {
-      if (mounted && context.mounted && widget.isPlaying) {
-        // 使用安全检查，确保组件仍然挂载
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _syncDanmaku();
-          }
-        });
-      }
-      return;
-    }
-    
-    _lastSyncTime = currentTimeSeconds;
-    
-    // 再次检查上下文是否有效
-    if (!context.mounted || !mounted) return;
-    
-    final videoState = context.read<VideoPlayerState>();
+    if (isAfterTimeJump) {
+      // ---------------------------------------------------
+      // 时间轴跳转逻辑：使用完整的弹幕数据
+      // ---------------------------------------------------
+      _controller!.clear();
+      _addedDanmaku.clear();
 
-    // 🔥 新增：支持多弹幕来源的轨道管理
-    // 获取所有启用的弹幕轨道
-    final enabledTracks = <String, List<Map<String, dynamic>>>{};
-    final tracks = videoState.danmakuTracks;
-    final trackEnabled = videoState.danmakuTrackEnabled;
-    
-    // 只处理启用的轨道
-    for (final trackId in tracks.keys) {
-      if (trackEnabled[trackId] == true) {
-        final trackData = tracks[trackId]!;
-        final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
-        
-        // 过滤当前时间窗口内的弹幕
-        final activeDanmaku = trackDanmaku.where((d) {
-          final t = d['time'] as double? ?? 0.0;
-          return t >= currentTimeSeconds - 15.0 && t <= currentTimeSeconds + 15.0;
-        }).toList();
-        
-        if (activeDanmaku.isNotEmpty) {
-          enabledTracks[trackId] = activeDanmaku;
+      final allDanmakuFromTracks = <Map<String, dynamic>>[];
+      for (final trackId in tracks.keys) {
+        if (trackEnabled[trackId] == true) {
+          final trackData = tracks[trackId]!;
+          allDanmakuFromTracks.addAll(trackData['danmakuList'] as List<Map<String, dynamic>>);
         }
       }
-    }
-    
-    // 合并所有启用轨道的弹幕
-    final List<Map<String, dynamic>> activeList = [];
-    for (final trackDanmaku in enabledTracks.values) {
-      activeList.addAll(trackDanmaku);
-    }
-    
-    // 按时间排序
-    activeList.sort((a, b) {
-      final timeA = (a['time'] ?? 0.0) as double;
-      final timeB = (b['time'] ?? 0.0) as double;
-      return timeA.compareTo(timeB);
-    });
 
-    // 如果是时间轴切换后的首次同步，需要预加载更大范围的弹幕
-    double timeWindow = isAfterTimeJump ? 1.0 : 0.2; // 时间轴切换后扩大到1秒窗口
-    
-    if (isAfterTimeJump && mounted && _controller != null) {
-      // 🔥 重大改进：时间轴切换后，加载所有应该在当前时间显示的弹幕（包括运动中途的）
-      // 滚动弹幕：10秒运动时间，顶部/底部弹幕：5秒显示时间
-      var allCurrentDanmaku = activeList.where((danmaku) {
-        final danmakuTime = (danmaku['time'] ?? 0.0) as double;
-        final danmakuType = danmaku['type']?.toString() ?? 'scroll';
-        final timeDiff = currentTimeSeconds - danmakuTime;
-        
-        // 根据弹幕类型判断是否应该显示
-        if (danmakuType == 'scroll') {
-          // 滚动弹幕：在10秒运动时间内都应该显示
-          return timeDiff >= 0 && timeDiff <= 10.0;
-        } else {
-          // 顶部/底部弹幕：在5秒显示时间内都应该显示
-          return timeDiff >= 0 && timeDiff <= 5.0;
-        }
-      }).toList();
+      var danmakuToDisplay = DanmakuTimelineManager.getDanmakuForTimeJump(
+        allDanmaku: allDanmakuFromTracks,
+        currentTimeSeconds: currentTimeSeconds,
+      );
       
-      // 🔥 关键修复：按照原始时间顺序排序弹幕，确保轨道管理器按正确顺序处理
-      allCurrentDanmaku.sort((a, b) {
-        final timeA = (a['time'] ?? 0.0) as double;
-        final timeB = (b['time'] ?? 0.0) as double;
-        return timeA.compareTo(timeB);
-      });
-      
-      // 🔥 关键修复：设置时间跳转标记，确保时间跳转场景使用正确的轨道分配策略
-      if (mounted && _controller != null) {
-        _controller!.setTimeJumpOrRestoring(true);
-      }
-      
-      // 🔥 关键修复：模拟原始弹幕添加顺序，而不是同时添加所有弹幕
-      // 通过临时修改轨道管理器的时间，让它认为弹幕是按原始顺序添加的
-      for (final danmaku in allCurrentDanmaku) {
+      _controller!.setTimeJumpOrRestoring(true);
+
+      for (final danmaku in danmakuToDisplay) {
         if (!mounted || _controller == null) break;
         
         final danmakuTime = (danmaku['time'] ?? 0.0) as double;
         final content = danmaku['content']?.toString() ?? '';
-        final key = '${danmakuTime.toStringAsFixed(3)}_$content';
-        
-        if (!_addedDanmaku.contains(key) && !_shouldFilterDanmaku(danmaku, videoState)) {
-          // 🔥 关键修复：临时设置轨道管理器的时间为弹幕的原始时间
-          // 这样轨道管理器会认为弹幕是在原始时间点添加的，而不是同时添加
-          final originalTime = (danmakuTime * 1000).round(); // 转换为毫秒
-          final savedCurrentTick = _controller!.getCurrentTick();
-          _controller!.setCurrentTick(originalTime);
-          
-          // 创建运动中途的弹幕
-          try {
-            final convertedDanmaku = _convertWithTimeOffset(danmaku, currentTimeSeconds);
-            _controller!.addDanmaku(convertedDanmaku);
-            _addedDanmaku.add(key);
-            
-            // 恢复真实的当前时间
-            _controller!.setCurrentTick(savedCurrentTick);
-          } catch (e) {
-            // 安全处理异常
-            debugPrint('添加运动中弹幕出错: $e');
-          }
+        final id = '${danmakuTime}_$content';
+
+        if (!_shouldFilterDanmaku(danmaku, videoState)) {
+          final timeOffset = currentTimeSeconds - danmakuTime;
+          // 🔥 关键修复：从原始数据中读取轨道信息
+          final int? trackIndex = danmaku['trackIndex'] as int?; 
+
+          // 🔥 恢复记忆：查找已保存的轨道号
+          final int? rememberedTrack = _danmakuTrackMap[id]; 
+          final convertedDanmaku = _convertWithTimeOffset(
+            danmaku, 
+            timeOffset,
+            rememberedTrack, // 🔥 强制使用记住的轨道号
+          );
+
+          _controller!.addDanmaku(convertedDanmaku);
+          _addedDanmaku.add(id);
         }
       }
       
-      // 🔥 关键修复：时间跳转处理完成后重置时间跳转标记
-      if (mounted && _controller != null) {
-        _controller!.setTimeJumpOrRestoring(false);
-      }
-    }
+      _controller!.setTimeJumpOrRestoring(false);
 
-    int addedCount = 0;
-    if (mounted && _controller != null) {
-      for (final danmaku in activeList) {
+    } else {
+      // ---------------------------------------------------
+      // 正常播放逻辑：只添加即将出现的弹幕
+      // ---------------------------------------------------
+      final upcomingDanmaku = <Map<String, dynamic>>[];
+      for (final trackId in tracks.keys) {
+        if (trackEnabled[trackId] == true) {
+          final trackData = tracks[trackId]!;
+          final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
+          
+          upcomingDanmaku.addAll(trackDanmaku.where((d) {
+            final t = d['time'] as double? ?? 0.0;
+            // 只获取未来一小段时间内的弹幕
+            return t > currentTimeSeconds && t <= currentTimeSeconds + 1.0;
+          }));
+        }
+      }
+
+      for (final danmaku in upcomingDanmaku) {
         final danmakuTime = (danmaku['time'] ?? 0.0) as double;
         final content = danmaku['content']?.toString() ?? '';
-        
-        // 创建唯一标识符
         final key = '${danmakuTime.toStringAsFixed(3)}_$content';
-        
-        // 检查是否已添加
-        if (_addedDanmaku.contains(key)) continue;
-        
-        // 检查是否应该过滤
-        if (_shouldFilterDanmaku(danmaku, videoState)) continue;
-        
-        // 检查时间窗口（即将播放的弹幕）
-        if (danmakuTime <= currentTimeSeconds + timeWindow && danmakuTime >= currentTimeSeconds - timeWindow) {
-          try {
-            _controller!.addDanmaku(_convert(danmaku));
-            _addedDanmaku.add(key);
-            addedCount++;
-          } catch (e) {
-            // 安全处理异常
-            debugPrint('添加即将播放弹幕出错: $e');
+
+        if (!_addedDanmaku.contains(key) && !_shouldFilterDanmaku(danmaku, videoState)) {
+          final int? trackIndex = danmaku['trackIndex'] as int?;
+          final danmakuContent = _convert(danmaku, trackIndex);
+          _controller!.addDanmaku(danmakuContent);
+          _addedDanmaku.add(key);
+
+          // 🔥 获取并记忆轨道号
+          if (_danmakuTrackMap[key] == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted || _controller == null) return;
+              final states = _controller!.getDanmakuStates();
+              final newDanmakuState = states.firstWhere(
+                (s) => s.id == key,
+                orElse: () => states.last, // Fallback
+              );
+              if (newDanmakuState.id == key) {
+                _danmakuTrackMap[key] = newDanmakuState.trackIndex;
+              }
+            });
           }
         }
       }
     }
-    
-    // 清理过期的已添加记录（超过30秒的）
+
+    _lastSyncTime = currentTimeSeconds;
+
+    // 清理过期的已添加记录（超过60秒的）
     _addedDanmaku.removeWhere((key) {
       final timeStr = key.split('_')[0];
       final time = double.tryParse(timeStr) ?? 0.0;
-      return (currentTimeSeconds - time).abs() > 30;
+      return (currentTimeSeconds - time).abs() > 60;
     });
 
-    // 🔥 修复：只在播放状态下继续调度同步
-    if (mounted && context.mounted && widget.isPlaying) {
-      // 使用安全检查，确保组件仍然挂载
+    // 播放状态下继续调度
+    if (mounted && widget.isPlaying) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _syncDanmaku();
@@ -789,112 +677,7 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     return true;
   }
 
-  /// 🔥 新增：保存当前弹幕状态
-  void _saveDanmakuStates() {
-    if (!mounted) return;
-    
-    _savedDanmakuStates.clear();
-    
-    if (_controller == null) return;
-    
-    // 获取当前弹幕状态
-    final danmakuStates = _controller!.getDanmakuStates();
-    final currentTime = DateTime.now().millisecondsSinceEpoch; // 🔥 记录保存时间
-    
-    // 转换为DanmakuState格式并保存
-    for (final state in danmakuStates) {
-      _savedDanmakuStates.add(DanmakuState(
-        content: state.content,
-        color: state.color,
-        type: state.type,
-        normalizedProgress: state.normalizedProgress,
-        originalCreationTime: state.originalCreationTime,
-        remainingTime: state.remainingTime,
-        yPosition: state.yPosition,
-        saveTime: currentTime, // 🔥 新增：保存时间
-        trackIndex: state.trackIndex, // 🔥 新增：轨道编号
-      ));
-    }
-    
-  }
-
-  /// 🔥 新增：恢复弹幕状态
-  void _restoreDanmakuStates() {
-    if (!mounted || _controller == null || _savedDanmakuStates.isEmpty) return;
-    
-    _isRestoring = true;
-    
-    try {
-      // 清空当前弹幕
-      _controller!.clear();
-      
-      // 标记为时间跳转或状态恢复，确保轨道分配正确
-      _controller!.setTimeJumpOrRestoring(true);
-      
-      final restoreTime = DateTime.now().millisecondsSinceEpoch; // 🔥 记录恢复时间
-      
-      // 恢复保存的弹幕状态
-      int validCount = 0;
-      int totalCount = _savedDanmakuStates.length;
-      
-      // 先按轨道索引排序，确保轨道分配顺序正确
-      _savedDanmakuStates.sort((a, b) => a.trackIndex.compareTo(b.trackIndex));
-      
-      for (final state in _savedDanmakuStates) {
-        // 🔥 关键修复：计算隐藏期间过去的时间
-        final timeDuringHide = restoreTime - state.saveTime;
-        
-        // 🔥 关键修复：计算考虑隐藏时间的新剩余时间
-        final newRemainingTime = state.remainingTime - timeDuringHide;
-        
-        // 🔥 关键修复：只恢复仍然有效的弹幕
-        if (newRemainingTime > 0) {
-          validCount++;
-          final totalDuration = state.type == canvas.DanmakuItemType.scroll ? 10000 : 5000; // 毫秒
-          final totalElapsedTime = totalDuration - newRemainingTime; // 包括隐藏期间的总运行时间
-          
-          try {
-            // 创建带有时间偏移的弹幕项，让它从正确的位置开始
-            final danmakuItem = canvas.DanmakuContentItem(
-              state.content,
-              color: state.color,
-              type: state.type,
-              timeOffset: totalElapsedTime, // 使用总运行时间作为偏移
-              // 不再强制指定轨道索引，让系统重新分配，避免越界错误
-              // trackIndex: state.trackIndex
-            );
-            
-            if (mounted && _controller != null) {
-              _controller!.addDanmaku(danmakuItem);
-            }
-          } catch (e) {
-            debugPrint('恢复弹幕状态出错: $e');
-            // 继续处理下一条弹幕
-          }
-        }
-      }
-      
-      // 恢复完成后重置标记
-      if (mounted && _controller != null) {
-        _controller!.setTimeJumpOrRestoring(false);
-      }
-      
-      // 🔥 添加轨道信息调试
-      if (validCount > 0) {
-        debugPrint('成功恢复 $validCount/$totalCount 条弹幕');
-      }
-    } catch (e) {
-      debugPrint('恢复弹幕状态过程中出错: $e');
-    } finally {
-      _isRestoring = false;
-      _savedDanmakuStates.clear();
-      
-      // 如果是暂停状态，需要特殊处理
-      if (!widget.isPlaying && mounted && _controller != null) {
-        _handlePausedDanmakuDisplay();
-      }
-    }
-  }
+  /// 🔥 移除：不再需要 _saveDanmakuStates 和 _restoreDanmakuStates 方法
 
   /// 🔥 关键修复：处理暂停状态下的弹幕显示
   /// Canvas_Danmaku在暂停状态下不会渲染新添加的弹幕，需要特殊处理
@@ -931,6 +714,8 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
                 color: state.color,
                 type: state.type,
                 timeOffset: elapsedTime,
+                // 🔥 关键修改：添加轨道索引，确保弹幕使用原来的轨道
+                trackIndex: state.trackIndex
               );
               
               _controller!.addDanmaku(danmakuItem);

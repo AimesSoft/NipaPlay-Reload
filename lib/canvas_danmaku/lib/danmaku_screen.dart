@@ -267,10 +267,11 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // 处理滚动弹幕
     for (final item in _scrollDanmakuItems) {
       final elapsedTime = _tick - item.creationTime;
-      final totalDuration = _option.duration * 1000;
+      const totalDuration = 10000; // 滚动弹幕10秒
       final remainingTime = totalDuration - elapsedTime;
       if (remainingTime > 0) {
         states.add(DanmakuState(
+          id: item.content.id,
           content: item.content.text,
           type: item.content.type,
           normalizedProgress: elapsedTime / totalDuration,
@@ -286,10 +287,11 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // 处理顶部和底部弹幕（保持不变）
     for (final item in _topDanmakuItems) {
       final elapsedTime = _tick - item.creationTime;
-      final totalDuration = 5000; // 顶部弹幕显示5秒
+      const totalDuration = 5000; // 顶部弹幕显示5秒
       final remainingTime = totalDuration - elapsedTime;
       if (remainingTime > 0) {
         states.add(DanmakuState(
+          id: item.content.id,
           content: item.content.text,
           type: item.content.type,
           normalizedProgress: elapsedTime / totalDuration,
@@ -304,10 +306,11 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     
     for (final item in _bottomDanmakuItems) {
       final elapsedTime = _tick - item.creationTime;
-      final totalDuration = 5000; // 底部弹幕显示5秒
+      const totalDuration = 5000; // 底部弹幕显示5秒
       final remainingTime = totalDuration - elapsedTime;
       if (remainingTime > 0) {
         states.add(DanmakuState(
+          id: item.content.id,
           content: item.content.text,
           type: item.content.type,
           normalizedProgress: elapsedTime / totalDuration,
@@ -335,7 +338,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
   /// 添加弹幕
   void addDanmaku(DanmakuContentItem content) {
-    if (!_running || !mounted) {
+    // 🔥 关键修复：移除 !_running 判断，允许在暂停时添加弹幕
+    if (!mounted) {
       return;
     }
 
@@ -394,6 +398,32 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     ui.Paragraph paragraph,
     ui.Paragraph? strokeParagraph,
   ) {
+    // 如果弹幕内容已指定轨道编号，则优先使用
+    if (content.trackIndex != null && content.trackIndex! < _trackInfos.length) {
+      // 使用指定的轨道
+      final trackIndex = content.trackIndex!;
+      final trackInfo = _trackInfos[trackIndex];
+      
+      // 创建新弹幕 - 使用指定轨道的Y位置
+      final danmaku = DanmakuItem(
+        yPosition: _trackYPositions[trackIndex],
+        xPosition: _viewWidth, // 始终从屏幕右侧开始
+        width: danmakuWidth,
+        creationTime: creationTime,
+        content: content,
+        paragraph: paragraph,
+        strokeParagraph: strokeParagraph,
+      );
+      
+      // 更新轨道信息
+      trackInfo.items.add(danmaku);
+      trackInfo.lastItemEndX = _viewWidth;
+      
+      // 添加到显示列表
+      _scrollDanmakuItems.add(danmaku);
+      return;
+    }
+    
     // 从轨道0开始尝试
     int currentTrack = 0;
     bool added = false;
@@ -440,6 +470,23 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     ui.Paragraph paragraph,
     ui.Paragraph? strokeParagraph,
   ) {
+    // 如果弹幕内容已指定轨道编号，则优先使用
+    if (content.trackIndex != null && content.trackIndex! < _trackYPositions.length) {
+      final trackIndex = content.trackIndex!;
+      double yPosition = _trackYPositions[trackIndex];
+      
+      _topDanmakuItems.add(DanmakuItem(
+        yPosition: yPosition,
+        xPosition: (_viewWidth - danmakuWidth) / 2,  // 居中显示
+        width: danmakuWidth,
+        creationTime: creationTime,
+        content: content,
+        paragraph: paragraph,
+        strokeParagraph: strokeParagraph,
+      ));
+      return true;
+    }
+    
     // 从上往下找空闲轨道，使用全部轨道
     for (int i = 0; i < _trackYPositions.length; i++) {
       double yPosition = _trackYPositions[i];
@@ -481,6 +528,23 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     ui.Paragraph paragraph,
     ui.Paragraph? strokeParagraph,
   ) {
+    // 如果弹幕内容已指定轨道编号，则优先使用
+    if (content.trackIndex != null && content.trackIndex! < _trackYPositions.length) {
+      final trackIndex = content.trackIndex!;
+      double yPosition = _trackYPositions[trackIndex];
+      
+      _bottomDanmakuItems.add(DanmakuItem(
+        yPosition: yPosition,
+        xPosition: (_viewWidth - danmakuWidth) / 2,  // 居中显示
+        width: danmakuWidth,
+        creationTime: creationTime,
+        content: content,
+        paragraph: paragraph,
+        strokeParagraph: strokeParagraph,
+      ));
+      return true;
+    }
+    
     // 从下往上找空闲轨道，使用全部轨道
     for (int i = _trackYPositions.length - 1; i >= 0; i--) {
       double yPosition = _trackYPositions[i];

@@ -3,7 +3,7 @@ import 'gpu_danmaku_item.dart';
 import 'gpu_danmaku_config.dart';
 import 'dynamic_font_atlas.dart';
 import 'gpu_danmaku_text_renderer.dart';
-import '../../danmaku/lib/danmaku_content_item.dart';
+import '../../danmaku_abstraction/danmaku_content_item.dart';
 
 /// GPU弹幕基础渲染器
 /// 
@@ -259,7 +259,11 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
     final expiredItems = <GPUDanmakuItem>[];
     
     _danmakuItems.removeWhere((item) {
-      if (item.isExpired(currentTime, config.danmakuDuration)) {
+      // 滚动弹幕有自己的过期逻辑（移出屏幕），不在此处处理
+      if (item.type == DanmakuItemType.scroll) {
+        return false;
+      }
+      if (item.isExpired(currentTime, config.duration)) {
         expiredItems.add(item);
         return true;
       }

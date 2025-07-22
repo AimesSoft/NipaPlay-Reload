@@ -3,7 +3,7 @@ import 'gpu_danmaku_base_renderer.dart';
 import 'gpu_danmaku_item.dart';
 import 'gpu_danmaku_config.dart';
 import 'gpu_danmaku_layered_track_manager.dart';
-import '../../danmaku/lib/danmaku_content_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 
 /// GPU顶部弹幕渲染器
 /// 
@@ -14,20 +14,14 @@ class GPUTopDanmakuRenderer extends GPUDanmakuBaseRenderer {
 
   GPUTopDanmakuRenderer({
     required GPUDanmakuConfig config,
-    required double opacity,
-    VoidCallback? onNeedRepaint,
-    bool isPaused = false,
-    bool showCollisionBoxes = false,
-    bool showTrackNumbers = false,
-    bool isVisible = true,
+    required super.opacity,
+    super.onNeedRepaint,
+    super.isPaused,
+    super.showCollisionBoxes,
+    super.showTrackNumbers,
+    super.isVisible,
   }) : super(
           config: config,
-          opacity: opacity,
-          onNeedRepaint: onNeedRepaint,
-          isPaused: isPaused,
-          showCollisionBoxes: showCollisionBoxes,
-          showTrackNumbers: showTrackNumbers,
-          isVisible: isVisible,
         ) {
     _layeredTrackManager = GPUDanmakuLayeredTrackManager(
       config: config,
@@ -177,7 +171,7 @@ class GPUTopDanmakuRenderer extends GPUDanmakuBaseRenderer {
     final localTrackId = _layeredTrackManager.getLocalTrackId(trackId);
     
     // 构建轨道数文本（包含层数信息）
-    final trackNumberText = layer > 1 ? 'L${layer}-${localTrackId + 1}' : '${localTrackId + 1}';
+    final trackNumberText = layer > 1 ? 'L$layer-${localTrackId + 1}' : '${localTrackId + 1}';
     
     final paint = Paint()
       ..color = Colors.red

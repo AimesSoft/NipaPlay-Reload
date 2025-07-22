@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../danmaku/lib/danmaku_content_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'gpu_danmaku_config.dart';
 import 'gpu_top_danmaku_renderer.dart';
+import 'gpu_bottom_danmaku_renderer.dart';
+import 'gpu_scroll_danmaku_renderer.dart';
 
 /// GPU弹幕渲染器调度器
 /// 
@@ -13,9 +15,8 @@ class GPUDanmakuRenderer extends CustomPainter {
   
   // 不同类型弹幕的渲染器
   late final GPUTopDanmakuRenderer _topRenderer;
-  // TODO: 后续添加滚动和底部弹幕渲染器
-  // late final GPUScrollDanmakuRenderer _scrollRenderer;
-  // late final GPUBottomDanmakuRenderer _bottomRenderer;
+  late final GPUScrollDanmakuRenderer _scrollRenderer;
+  late final GPUBottomDanmakuRenderer _bottomRenderer;
   
   // 调试选项
   bool _showCollisionBoxes = false;
@@ -56,6 +57,26 @@ class GPUDanmakuRenderer extends CustomPainter {
       showTrackNumbers: _showTrackNumbers,
       isVisible: _isVisible, // 传递给子渲染器
     );
+
+    _scrollRenderer = GPUScrollDanmakuRenderer(
+      config: config,
+      opacity: opacity,
+      onNeedRepaint: _onNeedRepaint,
+      isPaused: _isPaused,
+      showCollisionBoxes: _showCollisionBoxes,
+      showTrackNumbers: _showTrackNumbers,
+      isVisible: _isVisible,
+    );
+
+    _bottomRenderer = GPUBottomDanmakuRenderer(
+      config: config,
+      opacity: opacity,
+      onNeedRepaint: _onNeedRepaint,
+      isPaused: _isPaused,
+      showCollisionBoxes: _showCollisionBoxes,
+      showTrackNumbers: _showTrackNumbers,
+      isVisible: _isVisible,
+    );
     
     // TODO: 后续初始化其他类型的弹幕渲染器
     // _scrollRenderer = GPUScrollDanmakuRenderer(...);
@@ -85,6 +106,15 @@ class GPUDanmakuRenderer extends CustomPainter {
         showTrackNumbers: showTrackNumbers,
       );
       
+      _scrollRenderer.updateDebugOptions(
+        showCollisionBoxes: showCollisionBoxes,
+        showTrackNumbers: showTrackNumbers,
+      );
+
+      _bottomRenderer.updateDebugOptions(
+        showCollisionBoxes: showCollisionBoxes,
+        showTrackNumbers: showTrackNumbers,
+      );
       // TODO: 后续更新其他渲染器的调试选项
       // _scrollRenderer.updateDebugOptions(...);
       // _bottomRenderer.updateDebugOptions(...);
@@ -97,18 +127,24 @@ class GPUDanmakuRenderer extends CustomPainter {
   void setVisibility(bool visible) {
     _isVisible = visible;
     _topRenderer.setVisibility(visible);
+    _scrollRenderer.setVisibility(visible);
+    _bottomRenderer.setVisibility(visible);
     // TODO: 其他渲染器
   }
 
   /// 设置屏蔽词列表
   void setBlockWords(List<String> blockWords) {
     _topRenderer.setBlockWords(blockWords);
+    _scrollRenderer.setBlockWords(blockWords);
+    _bottomRenderer.setBlockWords(blockWords);
     // TODO: 其他渲染器
   }
 
   /// 设置合并弹幕开关
   void setMergeDanmaku(bool mergeDanmaku) {
     _topRenderer.setMergeDanmaku(mergeDanmaku);
+    _scrollRenderer.setMergeDanmaku(mergeDanmaku);
+    _bottomRenderer.setMergeDanmaku(mergeDanmaku);
     // TODO: 其他渲染器
   }
 
@@ -123,6 +159,8 @@ class GPUDanmakuRenderer extends CustomPainter {
     
     // 更新所有子渲染器的暂停状态
     _topRenderer.setPaused(paused);
+    _scrollRenderer.setPaused(paused);
+    _bottomRenderer.setPaused(paused);
     
     // TODO: 后续更新其他渲染器的暂停状态
     // _scrollRenderer.setPaused(paused);
@@ -138,14 +176,10 @@ class GPUDanmakuRenderer extends CustomPainter {
         _topRenderer.addDanmaku(item);
         break;
       case DanmakuItemType.scroll:
-        // TODO: 后续添加滚动弹幕支持
-        // _scrollRenderer.addDanmaku(item);
-        debugPrint('GPUDanmakuRenderer: 滚动弹幕暂未支持 - ${item.text}');
+        _scrollRenderer.addDanmaku(item);
         break;
       case DanmakuItemType.bottom:
-        // TODO: 后续添加底部弹幕支持
-        // _bottomRenderer.addDanmaku(item);
-        debugPrint('GPUDanmakuRenderer: 底部弹幕暂未支持 - ${item.text}');
+        _bottomRenderer.addDanmaku(item);
         break;
     }
   }
@@ -153,6 +187,8 @@ class GPUDanmakuRenderer extends CustomPainter {
   /// 清空弹幕
   void clear() {
     _topRenderer.clear();
+    _scrollRenderer.clear();
+    _bottomRenderer.clear();
     
     // TODO: 后续清空其他渲染器
     // _scrollRenderer.clear();
@@ -164,6 +200,8 @@ class GPUDanmakuRenderer extends CustomPainter {
   /// 更新选项
   void updateOptions({GPUDanmakuConfig? config, double? opacity}) {
     _topRenderer.updateOptions(newConfig: config, newOpacity: opacity);
+    _scrollRenderer.updateOptions(newConfig: config, newOpacity: opacity);
+    _bottomRenderer.updateOptions(newConfig: config, newOpacity: opacity);
     
     // TODO: 后续更新其他渲染器选项
     // _scrollRenderer.updateOptions(config: config, opacity: opacity);
@@ -175,6 +213,8 @@ class GPUDanmakuRenderer extends CustomPainter {
   /// 释放资源
   void dispose() {
     _topRenderer.dispose();
+    _scrollRenderer.dispose();
+    _bottomRenderer.dispose();
     
     // TODO: 后续释放其他渲染器资源
     // _scrollRenderer.dispose();
@@ -187,6 +227,8 @@ class GPUDanmakuRenderer extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // 绘制顶部弹幕
     _topRenderer.paint(canvas, size);
+    _scrollRenderer.paint(canvas, size);
+    _bottomRenderer.paint(canvas, size);
     
     // TODO: 后续绘制其他类型弹幕
     // _scrollRenderer.paint(canvas, size);

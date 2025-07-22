@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'danmaku_content_item.dart';
 import 'single_danmaku.dart';
-import 'dart:math' as math;
+import 'dart:math';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
+import '../utils/globals.dart' as globals;
 import 'danmaku_group_widget.dart';
 
 class DanmakuContainer extends StatefulWidget {
@@ -14,8 +14,8 @@ class DanmakuContainer extends StatefulWidget {
   final double fontSize;
   final bool isVisible;
   final double opacity;
-  final PlayerStatus status;
-  final double playbackRate;
+  final String status; // 添加播放状态参数
+  final double playbackRate; // 添加播放速度参数
 
   const DanmakuContainer({
     super.key,
@@ -25,33 +25,18 @@ class DanmakuContainer extends StatefulWidget {
     required this.fontSize,
     required this.isVisible,
     required this.opacity,
-    required this.status,
-    required this.playbackRate,
+    required this.status, // 添加播放状态参数
+    required this.playbackRate, // 添加播放速度参数
   });
 
   @override
   State<DanmakuContainer> createState() => _DanmakuContainerState();
 }
 
-class _DanmakuContainerState extends State<DanmakuContainer>
-    with SingleTickerProviderStateMixin {
+class _DanmakuContainerState extends State<DanmakuContainer> {
   final double _danmakuHeight = 25.0; // 弹幕高度
   late final double _verticalSpacing; // 上下间距
   final double _horizontalSpacing = 20.0; // 左右间距
-  
-  // 弹幕独立时间管理系统
-  Ticker? _ticker;
-  Duration _lastTickTime = Duration.zero;
-  double _danmakuCurrentTime = 0.0; // 弹幕系统独立的当前时间
-  double _lastPlayerTime = 0.0; // 上次播放器时间
-
-  bool _isVideoPaused = false; // 视频是否暂停
-  
-  // 第一条弹幕追踪
-  String? _firstDanmakuContent;
-  double? _firstDanmakuTime;
-  bool _isTrackingFirst = false;
-  final List<Map<String, dynamic>> _firstDanmakuTrajectory = []; // 运动轨迹记录
   
   // 为每种类型的弹幕创建独立的轨道系统
   final Map<String, List<Map<String, dynamic>>> _trackDanmaku = {
@@ -107,11 +92,8 @@ class _DanmakuContainerState extends State<DanmakuContainer>
   @override
   void initState() {
     super.initState();
-    // 🔥 修改：统一设置垂直间距为10.0，电脑和手机保持一致
-    _verticalSpacing = 10.0;
-    
-    // 初始化弹幕独立时间系统
-    _initializeDanmakuTimeSystem();
+    // 根据设备类型设置垂直间距
+    _verticalSpacing = globals.isPhone ? 10.0 : 20.0;
     
     // 初始化时获取画布大小
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -122,109 +104,6 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     
     // 初始化时对弹幕列表进行预处理和排序
     _preprocessDanmakuList();
-  }
-  
-  // 初始化弹幕独立时间系统
-  void _initializeDanmakuTimeSystem() {
-    // 初始化时间相关变量
-    _danmakuCurrentTime = widget.currentTime;
-    _lastPlayerTime = widget.currentTime;
-
-    // 移除内部独立Ticker，直接使用播放器的16ms定时器更新
-    // 仅保留Ticker变量以便与外部代码兼容
-    _ticker?.dispose();
-    _ticker = null;
-
-    print(
-        '[DANMAKU] 🚀 弹幕时间系统初始化完成，使用播放器定时器，初始时间: ${_danmakuCurrentTime.toStringAsFixed(3)}s');
-  }
-
-  // 原本的Ticker回调方法保留为空实现，以兼容可能的外部调用
-  void _onTick(Duration newTickTime) {
-    // 已移除内部Ticker逻辑，改为由播放器定时器驱动
-  }
-
-  // 原本的更新弹幕时间方法保留为空实现，以兼容可能的外部调用
-  void _updateDanmakuTime(Duration delta) {
-    // 已移除内部时间更新逻辑，改为由播放器定时器驱动
-  }
-  
-  // 重置第一条弹幕追踪
-  void _resetFirstDanmakuTracking() {
-    _firstDanmakuContent = null;
-    _firstDanmakuTime = null;
-    _isTrackingFirst = false;
-    _firstDanmakuTrajectory.clear();
-    //print('[DANMAKU] 🔄 重置第一条弹幕追踪');
-  }
-  
-  // 记录第一条弹幕的运动轨迹
-  void _trackFirstDanmakuTrajectory() {
-    if (!_isTrackingFirst || _firstDanmakuContent == null || _firstDanmakuTime == null) {
-      return;
-    }
-    
-    // 计算弹幕的运动进度
-    final elapsedTime = _danmakuCurrentTime - _firstDanmakuTime!;
-    
-    // 弹幕运动持续时间约8秒
-    if (elapsedTime >= 0 && elapsedTime <= 8.0) {
-      final progress = elapsedTime / 8.0;
-      final screenWidth = MediaQuery.of(context).size.width;
-      
-      // 计算弹幕的X坐标（从右到左）
-      final currentX = screenWidth * (1.0 - progress);
-      
-      // 记录轨迹点
-      _firstDanmakuTrajectory.add({
-        'time': _danmakuCurrentTime,
-        'elapsed': elapsedTime,
-        'progress': progress,
-        'x': currentX,
-        'player_time': widget.currentTime,
-        'danmaku_time': _danmakuCurrentTime,
-      });
-    } else if (elapsedTime > 8.0) {
-      // 弹幕运动结束，打印完整轨迹分析
-      _analyzeFirstDanmakuTrajectory();
-      _isTrackingFirst = false;
-    }
-  }
-  
-  // 分析第一条弹幕的轨迹，检测倒退现象
-  void _analyzeFirstDanmakuTrajectory() {
-    if (_firstDanmakuTrajectory.isEmpty) return;
-    
-    print('\n🔍 第一条弹幕 "$_firstDanmakuContent" 轨迹分析:');
-    print('总记录点数: ${_firstDanmakuTrajectory.length}');
-    
-    int backwardCount = 0;
-    double maxBackward = 0.0;
-    
-    for (int i = 1; i < _firstDanmakuTrajectory.length; i++) {
-      final current = _firstDanmakuTrajectory[i];
-      final previous = _firstDanmakuTrajectory[i - 1];
-      
-      final xCurrent = current['x'] as double;
-      final xPrevious = previous['x'] as double;
-      
-      // 检测X坐标是否后退（增大）
-      if (xCurrent > xPrevious) {
-        backwardCount++;
-        final backwardDistance = xCurrent - xPrevious;
-        maxBackward = math.max(maxBackward, backwardDistance);
-        
-        print('⬅️  第$i帧倒退: X从${xPrevious.toStringAsFixed(1)}px → ${xCurrent.toStringAsFixed(1)}px (倒退${backwardDistance.toStringAsFixed(1)}px)');
-        print('   时间: 播放器=${previous['player_time'].toStringAsFixed(3)}s → ${current['player_time'].toStringAsFixed(3)}s');
-        print('   弹幕: ${previous['danmaku_time'].toStringAsFixed(3)}s → ${current['danmaku_time'].toStringAsFixed(3)}s');
-      }
-    }
-    
-    print('\n📊 倒退统计:');
-    print('倒退次数: $backwardCount');
-    print('最大倒退距离: ${maxBackward.toStringAsFixed(1)}px');
-    print('倒退率: ${(backwardCount / _firstDanmakuTrajectory.length * 100).toStringAsFixed(1)}%');
-    print('==========================================\n');
   }
   
   // 对弹幕列表进行预处理和排序
@@ -317,66 +196,10 @@ class _DanmakuContainerState extends State<DanmakuContainer>
   void didUpdateWidget(DanmakuContainer oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // print('[DANMAKU] 🔄 Widget更新: 播放器时间 ${oldWidget.currentTime.toStringAsFixed(3)}s → ${widget.currentTime.toStringAsFixed(3)}s');
-    
-    // 检测播放速度变化
-    if (oldWidget.playbackRate != widget.playbackRate) {
-      print('[DANMAKU] ⚡ 播放速度变化: ${oldWidget.playbackRate}x → ${widget.playbackRate}x，重新同步弹幕时间');
-      // 播放速度改变时，立即同步弹幕时间到播放器时间
-      _danmakuCurrentTime = widget.currentTime;
-      _lastPlayerTime = widget.currentTime;
-      // 重置第一条弹幕追踪
-      _resetFirstDanmakuTracking();
-    }
-    
     // 如果弹幕列表变化，重新预处理
     if (widget.danmakuList != oldWidget.danmakuList) {
       _preprocessDanmakuList();
     }
-    
-    // 直接使用播放器时间更新弹幕时间
-    _updateDanmakuTimeFromPlayer();
-  }
-  
-  // 从播放器时间更新弹幕时间
-  void _updateDanmakuTimeFromPlayer() {
-    if (!mounted) return;
-    
-    // 检测时间跳跃（拖拽进度条）
-    final playerTimeDelta = (widget.currentTime - _lastPlayerTime).abs();
-    
-    if (playerTimeDelta > 0.5) {
-      // 时间跳跃：直接同步弹幕时间
-      _danmakuCurrentTime = widget.currentTime;
-      _isVideoPaused = false;
-      _resetFirstDanmakuTracking();
-    } else {
-      // 正常播放：使用播放器时间增量
-      if (widget.status == PlayerStatus.playing) {
-        // 计算时间增量
-        final timeIncrement = widget.currentTime - _lastPlayerTime;
-        // 应用播放速度
-        _danmakuCurrentTime += timeIncrement * widget.playbackRate;
-        _isVideoPaused = false;
-      } else {
-        // 暂停状态：弹幕时间不变
-        _isVideoPaused = true;
-      }
-    }
-    
-    // 更新记录
-    _lastPlayerTime = widget.currentTime;
-    
-    // 记录第一条弹幕轨迹
-    _trackFirstDanmakuTrajectory();
-  }
-  
-  @override
-  void dispose() {
-    // _ticker应该已经为null，因为我们不再使用独立的Ticker
-    // 但为了安全起见，仍保留dispose调用
-    _ticker?.dispose();
-    super.dispose();
   }
 
   // 重新计算所有弹幕位置
@@ -488,7 +311,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     double safetyMargin = screenWidth * 0.02; // 标准弹幕的安全距离
     if (existingIsMerged || newIsMerged) {
       // 根据合并数量调整安全距离
-              final maxCount = math.max(existingMergeCount, newMergeCount);
+      final maxCount = max(existingMergeCount, newMergeCount);
       safetyMargin = screenWidth * (0.02 + (maxCount / 100.0)); // 动态调整安全距离
     }
     
@@ -539,7 +362,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
         
         if (currentRight > nextLeft) {
           final overlap = currentRight - nextLeft;
-          maxOverlap = math.max(maxOverlap, overlap);
+          maxOverlap = max(maxOverlap, overlap);
         } else {
           break; // 由于已排序，后续弹幕不会重叠
         }
@@ -648,7 +471,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     // 清理已经消失的弹幕
     _trackDanmaku[type]!.removeWhere((danmaku) {
       final danmakuTime = danmaku['time'] as double;
-      return _danmakuCurrentTime - danmakuTime > 10;
+      return widget.currentTime - danmakuTime > 10;
     });
     
     // 计算可用轨道数，考虑弹幕高度和间距
@@ -669,7 +492,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
             'width': danmakuWidth,
             'isMerged': isMerged,
             'mergeCount': mergeCount,
-          }, _danmakuCurrentTime)) {
+          }, widget.currentTime)) {
             hasCollision = true;
             break;
           }
@@ -757,7 +580,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
         }
         
         // 检查轨道是否已满
-        if (!_isStaticTrackFull(trackDanmaku, _danmakuCurrentTime)) {
+        if (!_isStaticTrackFull(trackDanmaku, widget.currentTime)) {
           bool hasOverlap = false;
           for (var danmaku in trackDanmaku) {
             if (_willOverlap(danmaku, {
@@ -765,7 +588,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
               'width': danmakuWidth,
               'isMerged': isMerged,
               'mergeCount': mergeCount,
-            }, _danmakuCurrentTime)) {
+            }, widget.currentTime)) {
               hasOverlap = true;
               break;
             }
@@ -859,7 +682,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
         }
         
         // 检查轨道是否已满
-        if (!_isStaticTrackFull(trackDanmaku, _danmakuCurrentTime)) {
+        if (!_isStaticTrackFull(trackDanmaku, widget.currentTime)) {
           bool hasOverlap = false;
           for (var danmaku in trackDanmaku) {
             if (_willOverlap(danmaku, {
@@ -867,7 +690,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
               'width': danmakuWidth,
               'isMerged': isMerged,
               'mergeCount': mergeCount,
-            }, _danmakuCurrentTime)) {
+            }, widget.currentTime)) {
               hasOverlap = true;
               break;
             }
@@ -938,9 +761,6 @@ class _DanmakuContainerState extends State<DanmakuContainer>
 
   @override
   Widget build(BuildContext context) {
-    // 在每次构建时直接更新弹幕时间，确保与播放器时间同步
-    _updateDanmakuTimeFromPlayer();
-    
     return LayoutBuilder(
       builder: (context, constraints) {
         // 使用 constraints 获取实际的窗口大小
@@ -973,7 +793,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
             // 使用缓存优化弹幕分组，状态变化时强制刷新
             final groupedDanmaku = _getCachedGroupedDanmaku(
               widget.danmakuList,
-              _danmakuCurrentTime,
+              widget.currentTime,
               mergeDanmaku,
               allowStacking,
               force: forceRefresh
@@ -982,7 +802,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
             // 使用缓存优化溢出弹幕，状态变化时强制刷新
             final overflowDanmaku = _getCachedOverflowDanmaku(
               widget.danmakuList,
-              _danmakuCurrentTime,
+              widget.currentTime,
               mergeDanmaku,
               allowStacking,
               force: forceRefresh
@@ -1033,8 +853,10 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     bool allowStacking,
     {bool force = false}
   ) {
-    // 独立弹幕时间系统下，每次都重新计算以保证流畅度
-    // (不使用时间缓存，避免16ms更新被100ms缓存阈值干扰)
+    // 如果时间变化小于0.1秒且没有强制刷新，使用缓存
+    if (!force && (currentTime - _lastGroupedTime).abs() < 0.1 && _groupedDanmakuCache.isNotEmpty) {
+      return _groupedDanmakuCache;
+    }
     
     // 重新计算分组
     final groupedDanmaku = <String, List<Map<String, dynamic>>>{
@@ -1046,27 +868,13 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     // 记录当前已显示的内容
     final Set<String> displayedContents = {};
     
-    int validDanmakuCount = 0;
-    int totalDanmakuCount = danmakuList.length;
-    
     for (var danmaku in danmakuList) {
       final time = danmaku['time'] as double? ?? 0.0;
       final timeDiff = currentTime - time;
       
       if (timeDiff >= 0 && timeDiff <= 10) {
-        validDanmakuCount++;
         final type = danmaku['type'] as String? ?? 'scroll';
         final content = danmaku['content'] as String? ?? '';
-        
-        // 检测并追踪第一条弹幕
-        if (!_isTrackingFirst && _firstDanmakuContent == null) {
-          _firstDanmakuContent = content;
-          _firstDanmakuTime = time;
-          _isTrackingFirst = true;
-          _firstDanmakuTrajectory.clear();
-          //print('[DANMAKU] 🎯 开始追踪第一条弹幕: "$content" 弹幕时间=${time.toStringAsFixed(3)}s, 当前时间=${currentTime.toStringAsFixed(3)}s');
-        }
-        
         // 处理合并弹幕逻辑
         var processedDanmaku = danmaku;
         if (mergeDanmaku) {
@@ -1085,7 +893,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
         }
       }
     }
-
+    
     // 更新缓存
     _groupedDanmakuCache = groupedDanmaku;
     _lastGroupedTime = currentTime;
@@ -1109,8 +917,10 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     bool allowStacking,
     {bool force = false}
   ) {
-    // 独立弹幕时间系统下，每次都重新计算以保证流畅度
-    // (不使用时间缓存，避免16ms更新被100ms缓存阈值干扰)
+    // 如果时间变化小于0.1秒且没有强制刷新，使用缓存
+    if (!force && (currentTime - _lastOverflowTime).abs() < 0.1 && _overflowDanmakuCache.isNotEmpty) {
+      return _overflowDanmakuCache;
+    }
     
     final overflowDanmaku = <String, List<Map<String, dynamic>>>{
       'scroll': <Map<String, dynamic>>[],
@@ -1201,7 +1011,7 @@ class _DanmakuContainerState extends State<DanmakuContainer>
             danmakus: group,
             type: type,
             videoDuration: widget.videoDuration,
-            currentTime: _danmakuCurrentTime,
+            currentTime: widget.currentTime,
             fontSize: widget.fontSize,
             isVisible: widget.isVisible,
             opacity: widget.opacity,
@@ -1412,12 +1222,11 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     final yPosition = _getYPosition(type, content, time, isMerged, mergeCount);
     
     // 创建单个弹幕，传递视频的暂停状态
-    print('[DANMAKU] 🎯 创建弹幕: "$content" 弹幕时间=${time.toStringAsFixed(3)}s, 当前时间=${_danmakuCurrentTime.toStringAsFixed(3)}s, 时间差=${(_danmakuCurrentTime - time).toStringAsFixed(3)}s');
     return SingleDanmaku(
       key: ValueKey('$type-$content-$time-${UniqueKey().toString()}'),
       content: danmakuItem,
       videoDuration: widget.videoDuration,
-      currentTime: _danmakuCurrentTime,
+      currentTime: widget.currentTime,
       danmakuTime: time,
       fontSize: widget.fontSize,
       isVisible: widget.isVisible,
@@ -1461,12 +1270,11 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     );
     
     // 为溢出弹幕创建一个带有特殊标记的key
-    print('[DANMAKU] 🌊 溢出弹幕: "$content" 弹幕时间=${time.toStringAsFixed(3)}s, 当前时间=${_danmakuCurrentTime.toStringAsFixed(3)}s');
     return SingleDanmaku(
       key: ValueKey('$overflowKey-${UniqueKey().toString()}'),
       content: danmakuItem,
       videoDuration: widget.videoDuration,
-      currentTime: _danmakuCurrentTime,
+      currentTime: widget.currentTime,
       danmakuTime: time,
       fontSize: widget.fontSize,
       isVisible: widget.isVisible,
