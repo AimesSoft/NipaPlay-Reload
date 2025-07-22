@@ -3,7 +3,6 @@ import 'package:flutter/scheduler.dart';
 import 'danmaku_content_item.dart';
 import 'single_danmaku.dart';
 import 'dart:math' as math;
-import 'dart:async';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
 import 'danmaku_group_widget.dart';
@@ -131,66 +130,23 @@ class _DanmakuContainerState extends State<DanmakuContainer>
     _danmakuCurrentTime = widget.currentTime;
     _lastPlayerTime = widget.currentTime;
 
-    // 启动Ticker进行时间更新
+    // 移除内部独立Ticker，直接使用播放器的16ms定时器更新
+    // 仅保留Ticker变量以便与外部代码兼容
     _ticker?.dispose();
-    _ticker = createTicker(_onTick)..start();
+    _ticker = null;
 
     print(
-        '[DANMAKU] 🚀 弹幕 Ticker 系统初始化完成，初始时间: ${_danmakuCurrentTime.toStringAsFixed(3)}s');
+        '[DANMAKU] 🚀 弹幕时间系统初始化完成，使用播放器定时器，初始时间: ${_danmakuCurrentTime.toStringAsFixed(3)}s');
   }
 
-  // Ticker的回调，计算帧间隔时间
+  // 原本的Ticker回调方法保留为空实现，以兼容可能的外部调用
   void _onTick(Duration newTickTime) {
-    if (_lastTickTime == Duration.zero) {
-      _lastTickTime = newTickTime;
-      return;
-    }
-    final delta = newTickTime - _lastTickTime;
-    _lastTickTime = newTickTime;
-
-    // 使用计算出的delta更新弹幕时间
-    _updateDanmakuTime(delta);
+    // 已移除内部Ticker逻辑，改为由播放器定时器驱动
   }
 
-  // 更新弹幕独立时间
+  // 原本的更新弹幕时间方法保留为空实现，以兼容可能的外部调用
   void _updateDanmakuTime(Duration delta) {
-    if (!mounted) return;
-
-    // 检测真正的时间跳跃（拖拽进度条）
-    final playerTimeDelta = (widget.currentTime - _lastPlayerTime).abs();
-
-    if (playerTimeDelta > 0.5) {
-      // 真正的拖拽：立即同步弹幕时间
-      //print('[DANMAKU] 🔄 检测到拖拽: ${_danmakuCurrentTime.toStringAsFixed(3)}s → ${widget.currentTime.toStringAsFixed(3)}s (播放器跳跃: ${playerTimeDelta.toStringAsFixed(3)}s)');
-      _danmakuCurrentTime = widget.currentTime;
-      _isVideoPaused = false;
-
-      // 重置第一条弹幕追踪
-      _resetFirstDanmakuTracking();
-    } else {
-      // 正常播放：弹幕时间按实际帧间隔增长
-      if (widget.status == PlayerStatus.playing) {
-        // 如果刚从暂停状态恢复，delta会很大，当帧的增量为0，避免跳跃
-        final correctedDelta = _isVideoPaused ? Duration.zero : delta;
-        _danmakuCurrentTime +=
-            correctedDelta.inMilliseconds / 1000.0 * widget.playbackRate;
-        _isVideoPaused = false;
-      } else {
-        // 暂停状态：弹幕时间不变
-        _isVideoPaused = true;
-      }
-    }
-
-    // 更新记录
-    _lastPlayerTime = widget.currentTime;
-
-    // 记录第一条弹幕的轨迹
-    _trackFirstDanmakuTrajectory();
-
-    // 触发弹幕重绘
-    if (mounted) {
-      setState(() {});
-    }
+    // 已移除内部时间更新逻辑，改为由播放器定时器驱动
   }
   
   // 重置第一条弹幕追踪
@@ -378,11 +334,47 @@ class _DanmakuContainerState extends State<DanmakuContainer>
       _preprocessDanmakuList();
     }
     
-    // 时间跳跃检测交给_updateDanmakuTime处理，避免重复同步
+    // 直接使用播放器时间更新弹幕时间
+    _updateDanmakuTimeFromPlayer();
+  }
+  
+  // 从播放器时间更新弹幕时间
+  void _updateDanmakuTimeFromPlayer() {
+    if (!mounted) return;
+    
+    // 检测时间跳跃（拖拽进度条）
+    final playerTimeDelta = (widget.currentTime - _lastPlayerTime).abs();
+    
+    if (playerTimeDelta > 0.5) {
+      // 时间跳跃：直接同步弹幕时间
+      _danmakuCurrentTime = widget.currentTime;
+      _isVideoPaused = false;
+      _resetFirstDanmakuTracking();
+    } else {
+      // 正常播放：使用播放器时间增量
+      if (widget.status == PlayerStatus.playing) {
+        // 计算时间增量
+        final timeIncrement = widget.currentTime - _lastPlayerTime;
+        // 应用播放速度
+        _danmakuCurrentTime += timeIncrement * widget.playbackRate;
+        _isVideoPaused = false;
+      } else {
+        // 暂停状态：弹幕时间不变
+        _isVideoPaused = true;
+      }
+    }
+    
+    // 更新记录
+    _lastPlayerTime = widget.currentTime;
+    
+    // 记录第一条弹幕轨迹
+    _trackFirstDanmakuTrajectory();
   }
   
   @override
   void dispose() {
+    // _ticker应该已经为null，因为我们不再使用独立的Ticker
+    // 但为了安全起见，仍保留dispose调用
     _ticker?.dispose();
     super.dispose();
   }
@@ -946,6 +938,9 @@ class _DanmakuContainerState extends State<DanmakuContainer>
 
   @override
   Widget build(BuildContext context) {
+    // 在每次构建时直接更新弹幕时间，确保与播放器时间同步
+    _updateDanmakuTimeFromPlayer();
+    
     return LayoutBuilder(
       builder: (context, constraints) {
         // 使用 constraints 获取实际的窗口大小

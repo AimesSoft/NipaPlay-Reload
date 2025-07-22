@@ -2,7 +2,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'danmaku_content_item.dart';
 import 'danmaku_item.dart';
-import '../../utils/globals.dart' as globals;
 
 class Utils {
   // 根据文字颜色判断使用的描边颜色，与 NipaPlay 保持一致
@@ -108,7 +107,7 @@ class Utils {
     final textPainter = TextPainter(
       text: TextSpan(
         text: infoText,
-        style: TextStyle(
+        style: const TextStyle(
           color: Colors.white,
           fontSize: 8,
           backgroundColor: Colors.black54,
@@ -139,7 +138,7 @@ class Utils {
     final textPainter = TextPainter(
       text: TextSpan(
         text: trackText,
-        style: TextStyle(
+        style: const TextStyle(
           color: Colors.yellow,
           fontSize: 12,
           fontWeight: FontWeight.bold,

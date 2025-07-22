@@ -22,11 +22,19 @@ class DanmakuContentItem {
   /// 🔥 新增：轨道编号，用于状态恢复时强制使用相同轨道
   final int? trackIndex;
   
+  /// 字体大小倍率（用于合并弹幕）
+  final double fontSizeMultiplier;
+  
+  /// 合并弹幕的计数文本（如 x15），为 null 表示不是合并弹幕
+  final String? countText;
+  
   DanmakuContentItem(
     this.text, {
     this.color = Colors.white,
     this.type = DanmakuItemType.scroll,
     this.timeOffset = 0,
     this.trackIndex, // 🔥 新增：轨道编号
+    this.fontSizeMultiplier = 1.0,
+    this.countText,
   });
 }

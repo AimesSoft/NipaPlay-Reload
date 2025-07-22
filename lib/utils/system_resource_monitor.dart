@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:fvp/mdk.dart'; // 导入MDK库
 import 'package:nipaplay/player_abstraction/player_factory.dart'; // 导入播放器工厂
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
 
 /// 系统资源监控类
 /// 用于监控应用的CPU使用率、帧率和内存使用情况
@@ -26,6 +27,7 @@ class SystemResourceMonitor {
   String _activeDecoder = "未知"; // 添加当前活跃的解码器
   String _mdkVersion = "未知"; // 添加MDK版本号
   String _playerKernelType = "未知"; // 添加播放器内核类型
+  String _danmakuKernelType = "未知"; // 添加弹幕内核类型
 
   // 定时器
   Timer? _resourceTimer;
@@ -59,6 +61,9 @@ class SystemResourceMonitor {
   
   /// 获取播放器内核类型
   String get playerKernelType => _playerKernelType;
+  
+  /// 获取弹幕内核类型
+  String get danmakuKernelType => _danmakuKernelType;
 
   /// 初始化系统资源监控
   static Future<void> initialize() async {
@@ -71,6 +76,9 @@ class SystemResourceMonitor {
       
       // 获取播放器内核类型
       _instance._updatePlayerKernelType();
+      
+      // 获取弹幕内核类型
+      _instance._updateDanmakuKernelType();
     }
   }
   
@@ -247,8 +255,38 @@ class SystemResourceMonitor {
     _activeDecoder = decoder;
   }
   
+  /// 更新弹幕内核类型
+  void _updateDanmakuKernelType() {
+    try {
+      // 从DanmakuKernelFactory获取当前内核类型
+      final kernelType = DanmakuKernelFactory.getKernelType();
+      switch (kernelType) {
+        case DanmakuKernelType.nipaPlay:
+          _danmakuKernelType = "NipaPlay";
+          break;
+        case DanmakuKernelType.canvasDanmaku:
+          _danmakuKernelType = "Canvas_Danmaku";
+          break;
+        case DanmakuKernelType.flutterGPUDanmaku:
+          _danmakuKernelType = "Flutter GPU";
+          break;
+        default:
+          _danmakuKernelType = "未知";
+      }
+      debugPrint('当前弹幕内核类型: $_danmakuKernelType');
+    } catch (e) {
+      debugPrint('获取弹幕内核类型出错: $e');
+      _danmakuKernelType = "未知";
+    }
+  }
+  
   /// 更新播放器内核类型
   void updatePlayerKernelType() {
     _updatePlayerKernelType();
+  }
+  
+  /// 更新弹幕内核类型
+  void updateDanmakuKernelType() {
+    _updateDanmakuKernelType();
   }
 } 

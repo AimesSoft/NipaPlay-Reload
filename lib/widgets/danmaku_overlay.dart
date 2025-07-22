@@ -62,8 +62,43 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
         }
 
         // 默认使用 NipaPlay 内核
-        final activeDanmakuList =
-            videoState.getActiveDanmakuList(widget.currentPosition / 1000);
+        // 🔥 新增：支持多弹幕来源的轨道管理
+        // 获取所有启用的弹幕轨道
+        final enabledTracks = <String, List<Map<String, dynamic>>>{};
+        final tracks = videoState.danmakuTracks;
+        final trackEnabled = videoState.danmakuTrackEnabled;
+        
+        // 只处理启用的轨道
+        for (final trackId in tracks.keys) {
+          if (trackEnabled[trackId] == true) {
+            final trackData = tracks[trackId]!;
+            final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
+            
+            // 过滤当前时间窗口内的弹幕
+            final currentTimeSeconds = widget.currentPosition / 1000;
+            final activeDanmaku = trackDanmaku.where((d) {
+              final t = d['time'] as double? ?? 0.0;
+              return t >= currentTimeSeconds - 15.0 && t <= currentTimeSeconds + 15.0;
+            }).toList();
+            
+            if (activeDanmaku.isNotEmpty) {
+              enabledTracks[trackId] = activeDanmaku;
+            }
+          }
+        }
+        
+        // 合并所有启用轨道的弹幕
+        final List<Map<String, dynamic>> activeDanmakuList = [];
+        for (final trackDanmaku in enabledTracks.values) {
+          activeDanmakuList.addAll(trackDanmaku);
+        }
+        
+        // 按时间排序
+        activeDanmakuList.sort((a, b) {
+          final timeA = (a['time'] ?? 0.0) as double;
+          final timeB = (b['time'] ?? 0.0) as double;
+          return timeA.compareTo(timeB);
+        });
 
         return DanmakuContainer(
           danmakuList: activeDanmakuList,

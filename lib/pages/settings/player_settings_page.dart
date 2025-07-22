@@ -5,6 +5,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:window_manager/window_manager.dart';
@@ -204,30 +205,54 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     setState(() {
       _selectedDanmakuKernelType = DanmakuKernelFactory.getKernelType();
     });
+    
+    // 更新系统资源监视器中的弹幕内核类型
+    SystemResourceMonitor().updateDanmakuKernelType();
   }
 
   Future<void> _saveDanmakuKernelSettings(DanmakuKernelType kernelType) async {
     await DanmakuKernelFactory.saveKernelType(kernelType);
     
+    // 如果切换了弹幕内核，需要提示重启应用
+    if (_selectedDanmakuKernelType != kernelType && context.mounted) {
+      _showRestartDanmakuDialog();
+    }
+    
     setState(() {
       _selectedDanmakuKernelType = kernelType;
     });
     
-    if (context.mounted) {
-      String kernelName;
-      switch (kernelType) {
-        case DanmakuKernelType.nipaPlay:
-          kernelName = 'NipaPlay';
-          break;
-        case DanmakuKernelType.canvasDanmaku:
-          kernelName = 'Canvas_Danmaku';
-          break;
-        case DanmakuKernelType.flutterGPUDanmaku:
-          kernelName = 'Flutter GPU';
-          break;
-      }
-      BlurSnackBar.show(context, '弹幕内核已切换为: $kernelName');
-    }
+    // 更新系统资源监视器中的弹幕内核类型
+    SystemResourceMonitor().updateDanmakuKernelType();
+  }
+  
+  void _showRestartDanmakuDialog() {
+    BlurDialog.show(
+      context: context,
+      title: '需要重启应用',
+      content: '更改弹幕内核需要重启应用才能完全生效。点击确定退出应用，点击取消保留当前设置。',
+      barrierDismissible: true,
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          child: const Text('取消', style: TextStyle(color: Colors.grey)),
+        ),
+        TextButton(
+          onPressed: () {
+            // 直接退出应用
+            if (Platform.isAndroid || Platform.isIOS) {
+              exit(0);
+            } else {
+              // 桌面平台
+              windowManager.close();
+            }
+          },
+          child: const Text('确定', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
   }
 
   String _getPlayerKernelDescription(PlayerKernelType type) {
@@ -244,9 +269,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   String _getDanmakuKernelDescription(DanmakuKernelType type) {
     switch (type) {
       case DanmakuKernelType.nipaPlay:
-        return 'NipaPlay 内置弹幕渲染器\n支持轨道分配、弹幕合并、防重叠等高级功能';
+        return 'NipaPlay 内置弹幕渲染器\n根据视频时间轴移动绘制弹幕，受视频帧率波动影响\n支持轨道分配、弹幕合并、防重叠等高级功能';
       case DanmakuKernelType.canvasDanmaku:
-        return 'Canvas_Danmaku 渲染器\n基于CustomPainter，性能更佳，功耗更低';
+        return 'Canvas_Danmaku 渲染器\n基于CustomPainter，使用动画系统进行绘制弹幕\n性能更佳，功耗更低';
       case DanmakuKernelType.flutterGPUDanmaku:
         return 'Flutter GPU 弹幕渲染器\n使用Flutter GPU API和自定义着色器，目前仅支持顶部弹幕';
     }

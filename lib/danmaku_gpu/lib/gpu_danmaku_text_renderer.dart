@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'gpu_danmaku_item.dart';
 import 'dynamic_font_atlas.dart';
 import 'gpu_danmaku_config.dart';
+import 'dart:math' as math;
 
 /// GPU弹幕文本渲染器
 /// 
@@ -39,6 +40,7 @@ class GPUDanmakuTextRenderer {
   /// - y: 文本起始Y坐标
   /// - opacity: 透明度
   /// - scale: 缩放比例（默认0.5，从2倍图集缩小回1倍）
+  /// - fontSizeMultiplier: 字体大小倍率（用于合并弹幕）
   void renderItem(
     Canvas canvas,
     GPUDanmakuItem item,
@@ -46,12 +48,24 @@ class GPUDanmakuTextRenderer {
     double y,
     double opacity, {
     double scale = 0.5,
+    double fontSizeMultiplier = 1.0,
   }) {
     if (_fontAtlas.atlasTexture == null) return;
     
     // 守卫：确保弹幕所需字符都已在图集中
     if (!_fontAtlas.isReady(item.text)) {
       return;
+    }
+
+    // 🔥 新增：保存当前画布状态，以便应用透明度
+    canvas.save();
+    
+    // 🔥 新增：应用透明度到整个绘制层，而不是修改颜色值
+    if (opacity < 1.0) {
+      canvas.saveLayer(
+        Rect.fromLTWH(x, y, calculateTextWidth(item.text, scale: scale * fontSizeMultiplier), config.fontSize * fontSizeMultiplier),
+        Paint()..color = Colors.white.withOpacity(opacity),
+      );
     }
 
     // 准备绘制参数
@@ -64,8 +78,9 @@ class GPUDanmakuTextRenderer {
     final fillColors = <Color>[];
 
     final double strokeOffset = _getStrokeOffset();
-    final shadowColor = _getShadowColor(item.color).withOpacity(opacity);
-    final fillColor = item.color.withOpacity(opacity);
+    // 🔥 修改：不再使用withOpacity修改颜色，保持原始颜色
+    final shadowColor = _getShadowColor(item.color);
+    final fillColor = item.color;
 
     double currentX = x;
 
@@ -75,9 +90,10 @@ class GPUDanmakuTextRenderer {
       final charInfo = _fontAtlas.getCharRect(charStr);
       if (charInfo == null) continue;
 
-      final charWidthScaled = charInfo.width * scale;
+      final adjustedScale = scale * fontSizeMultiplier;
+      final charWidthScaled = charInfo.width * adjustedScale;
       final charCenterX = currentX + charWidthScaled / 2;
-      final charCenterY = y + config.fontSize / 2;
+      final charCenterY = y + config.fontSize * fontSizeMultiplier / 2;
 
       // 1. 准备描边层参数 (8个方向)
       final offsets = [
@@ -89,7 +105,7 @@ class GPUDanmakuTextRenderer {
 
       for (final offset in offsets) {
         strokeTransforms.add(RSTransform.fromComponents(
-          rotation: 0, scale: scale,
+          rotation: 0, scale: adjustedScale,
           anchorX: charInfo.width / 2, anchorY: charInfo.height / 2,
           translateX: charCenterX + offset.dx, translateY: charCenterY + offset.dy,
         ));
@@ -99,7 +115,7 @@ class GPUDanmakuTextRenderer {
 
       // 2. 准备填充层参数
       fillTransforms.add(RSTransform.fromComponents(
-        rotation: 0, scale: scale,
+        rotation: 0, scale: adjustedScale,
         anchorX: charInfo.width / 2, anchorY: charInfo.height / 2,
         translateX: charCenterX, translateY: charCenterY,
       ));
@@ -137,6 +153,9 @@ class GPUDanmakuTextRenderer {
         paint,
       );
     }
+    
+    // 🔥 新增：恢复画布状态
+    canvas.restore();
   }
 
   /// 批量渲染弹幕项目
@@ -158,15 +177,47 @@ class GPUDanmakuTextRenderer {
       throw ArgumentError('Items and positions must have the same length');
     }
 
+    // 🔥 新增：如果透明度小于1.0，为整个批量渲染创建透明层
+    if (opacity < 1.0) {
+      // 计算整个批量渲染的边界
+      double minX = double.infinity;
+      double minY = double.infinity;
+      double maxX = -double.infinity;
+      double maxY = -double.infinity;
+      
+      for (int i = 0; i < items.length; i++) {
+        final item = items[i];
+        final position = positions[i];
+        final textWidth = calculateTextWidth(item.text, scale: scale);
+        final textHeight = config.fontSize;
+        
+        minX = math.min(minX, position.dx);
+        minY = math.min(minY, position.dy);
+        maxX = math.max(maxX, position.dx + textWidth);
+        maxY = math.max(maxY, position.dy + textHeight);
+      }
+      
+      // 创建透明层
+      canvas.saveLayer(
+        Rect.fromLTWH(minX, minY, maxX - minX, maxY - minY),
+        Paint()..color = Colors.white.withOpacity(opacity),
+      );
+    }
+
     for (int i = 0; i < items.length; i++) {
       renderItem(
         canvas,
         items[i],
         positions[i].dx,
         positions[i].dy,
-        opacity,
+        1.0, // 🔥 修改：传递1.0，因为透明度已经在批量层处理
         scale: scale,
       );
+    }
+    
+    // 🔥 新增：恢复画布状态
+    if (opacity < 1.0) {
+      canvas.restore();
     }
   }
 

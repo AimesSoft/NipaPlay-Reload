@@ -273,6 +273,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+
               // 弹幕类型屏蔽（移除标题，只保留开关）
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 8),

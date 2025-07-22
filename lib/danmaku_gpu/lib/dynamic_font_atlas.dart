@@ -1,6 +1,88 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
+/// 全局字体图集管理器
+/// 
+/// 管理不同配置的字体图集实例，避免重复生成
+class FontAtlasManager {
+  static final Map<String, DynamicFontAtlas> _instances = {};
+  static final Map<String, bool> _initialized = {};
+
+  /// 获取或创建字体图集实例
+  static DynamicFontAtlas getInstance({
+    required double fontSize,
+    Color color = Colors.white,
+    VoidCallback? onAtlasUpdated,
+  }) {
+    final key = '${fontSize}_${color.value}';
+    
+    if (!_instances.containsKey(key)) {
+      _instances[key] = DynamicFontAtlas(
+        fontSize: fontSize,
+        color: color,
+        onAtlasUpdated: onAtlasUpdated,
+      );
+      _initialized[key] = false;
+    }
+    
+    return _instances[key]!;
+  }
+
+  /// 预初始化字体图集
+  static Future<void> preInitialize({
+    required double fontSize,
+    Color color = Colors.white,
+  }) async {
+    final key = '${fontSize}_${color.value}';
+    
+    if (!_initialized[key]!) {
+      final atlas = _instances[key]!;
+      await atlas.generate();
+      _initialized[key] = true;
+      debugPrint('FontAtlasManager: 预初始化字体图集 - 字体大小: $fontSize, 颜色: $color');
+    }
+  }
+
+  /// 预构建字体图集（添加文本）
+  static Future<void> prebuildFromTexts({
+    required double fontSize,
+    required List<String> texts,
+    Color color = Colors.white,
+  }) async {
+    final key = '${fontSize}_${color.value}';
+    
+    if (!_initialized[key]!) {
+      await preInitialize(fontSize: fontSize, color: color);
+    }
+    
+    final atlas = _instances[key]!;
+    await atlas.prebuildFromTexts(texts);
+    debugPrint('FontAtlasManager: 预构建字体图集完成 - 字体大小: $fontSize, 文本数量: ${texts.length}');
+  }
+
+  /// 清理所有实例
+  static void disposeAll() {
+    for (final atlas in _instances.values) {
+      atlas.dispose();
+    }
+    _instances.clear();
+    _initialized.clear();
+    debugPrint('FontAtlasManager: 清理所有字体图集实例');
+  }
+
+  /// 清理特定配置的实例
+  static void disposeInstance({
+    required double fontSize,
+    Color color = Colors.white,
+  }) {
+    final key = '${fontSize}_${color.value}';
+    final atlas = _instances.remove(key);
+    _initialized.remove(key);
+    atlas?.dispose();
+    debugPrint('FontAtlasManager: 清理字体图集实例 - 字体大小: $fontSize, 颜色: $color');
+  }
+}
+
 // 动态字体图集
 // 能够从传入的文本中提取新字符，并增量更新图集
 class DynamicFontAtlas {
@@ -23,6 +105,12 @@ class DynamicFontAtlas {
 
   // 初始化，生成一个包含基本字符的初始图集
   Future<void> generate() async {
+    // 如果已经生成过，直接返回
+    if (atlasTexture != null) {
+      debugPrint('DynamicFontAtlas: 字体图集已存在，跳过重新生成');
+      return;
+    }
+    
     const initialChars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .!?';
     _allChars.addAll(initialChars.split(''));
     await _regenerateAtlas();

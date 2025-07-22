@@ -27,6 +27,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   String _activeDecoder = "未知"; // 添加当前活跃的解码器
   String _mdkVersion = "未知"; // 添加MDK版本号
   String _playerKernelType = "未知"; // 添加播放器内核类型
+  String _danmakuKernelType = "未知"; // 添加弹幕内核类型
   
   @override
   void initState() {
@@ -57,6 +58,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
           _activeDecoder = SystemResourceMonitor().activeDecoder;
           _mdkVersion = SystemResourceMonitor().mdkVersion;
           _playerKernelType = SystemResourceMonitor().playerKernelType;
+          _danmakuKernelType = SystemResourceMonitor().danmakuKernelType;
         });
       }
     });
@@ -230,15 +232,49 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                       
                       // 播放器内核信息
                       Flexible(
-                        // flex: 2, // No longer needs flex if it's the only main item or make it 1 for full span if needed
+                        flex: 1,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.developer_board, size: 16, color: Colors.white70), // Changed Icon to a valid one
+                            const Icon(Icons.developer_board, size: 16, color: Colors.white70),
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
-                                '播放器内核: $_playerKernelType', // 使用变量显示当前播放器内核
+                                '播放器: $_playerKernelType', // 使用变量显示当前播放器内核
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  decoration: TextDecoration.none,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // 分隔符
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Container(
+                          height: 16,
+                          width: 1,
+                          color: Colors.white30,
+                        ),
+                      ),
+                      
+                      // 弹幕内核信息
+                      Flexible(
+                        flex: 1,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.subtitles, size: 16, color: Colors.white70),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                '弹幕: $_danmakuKernelType',
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,

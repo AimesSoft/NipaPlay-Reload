@@ -53,24 +53,19 @@ class GPUDanmakuOverlay extends StatefulWidget {
       return;
     }
     
-    // 创建临时字体图集进行预构建
+    // 使用全局字体图集管理器进行预构建
     final config = GPUDanmakuConfig();
-    final tempAtlas = DynamicFontAtlas(
-      fontSize: config.fontSize,
-      color: Colors.white,
-    );
     
     try {
-      // 生成基础字符集
-      await tempAtlas.generate();
-      
-      // 预构建弹幕字符集
-      await tempAtlas.prebuildFromTexts(texts);
+      // 使用全局管理器预构建弹幕字符集
+      await FontAtlasManager.prebuildFromTexts(
+        fontSize: config.fontSize,
+        texts: texts,
+      );
       
       debugPrint('GPUDanmakuOverlay: 弹幕字符集预构建完成');
-    } finally {
-      // 释放临时图集资源
-      tempAtlas.dispose();
+    } catch (e) {
+      debugPrint('GPUDanmakuOverlay: 弹幕字符集预构建失败: $e');
     }
   }
 
@@ -84,6 +79,20 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
   final Set<String> _addedDanmaku = {};
   bool _hasAnalyzed = false;
   
+  // 添加屏蔽词变化检测
+  List<String> _lastBlockWords = [];
+  
+  // 添加合并弹幕变化检测
+  bool _lastMergeDanmaku = false;
+  
+  // 🔥 新增：添加弹幕轨道状态变化检测
+  Map<String, bool> _lastTrackEnabled = {};
+  
+  // 🔥 新增：添加弹幕类型过滤设置变化检测
+  bool _lastBlockTopDanmaku = false;
+  bool _lastBlockBottomDanmaku = false;
+  bool _lastBlockScrollDanmaku = false;
+  
   // 使用AnimationController来驱动动画，避免setState循环
   late final AnimationController _controller;
 
@@ -91,6 +100,15 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
   void initState() {
     super.initState();
     _initializeRenderer();
+
+    // 初始化屏蔽词列表和合并弹幕状态
+    final videoState = context.read<VideoPlayerState>();
+    _lastBlockWords = List<String>.from(videoState.danmakuBlockWords);
+    _lastMergeDanmaku = videoState.mergeDanmaku;
+    _lastTrackEnabled = Map<String, bool>.from(videoState.danmakuTrackEnabled);
+    _lastBlockTopDanmaku = videoState.blockTopDanmaku;
+    _lastBlockBottomDanmaku = videoState.blockBottomDanmaku;
+    _lastBlockScrollDanmaku = videoState.blockScrollDanmaku;
 
     // 初始化AnimationController
     _controller = AnimationController(
@@ -130,6 +148,11 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
         }
       },
     );
+
+    // 设置初始屏蔽词列表和合并弹幕状态
+    final videoState = context.read<VideoPlayerState>();
+    _renderer?.setBlockWords(videoState.danmakuBlockWords);
+    _renderer?.setMergeDanmaku(videoState.mergeDanmaku);
   }
 
   @override
@@ -159,6 +182,8 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
       _clearDanmaku();
       _addedDanmaku.clear();
       _lastSyncTime = 0.0;
+      // 优化：不再重新创建渲染器，只清理弹幕数据
+      // 字体图集由全局管理器管理，可以复用
       WidgetsBinding.instance.addPostFrameCallback((_) => _syncDanmaku());
     }
 
@@ -175,6 +200,72 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
       }
     }
     
+    // 检测屏蔽词变化
+    final videoState = context.read<VideoPlayerState>();
+    final currentBlockWords = List<String>.from(videoState.danmakuBlockWords);
+    final blockWordsChanged = !_listEquals(_lastBlockWords, currentBlockWords);
+    
+    if (blockWordsChanged) {
+      debugPrint('GPUDanmakuOverlay: 检测到屏蔽词变化，更新渲染器屏蔽词列表');
+      _lastBlockWords = currentBlockWords;
+      
+      // 直接更新渲染器的屏蔽词列表，不清空弹幕
+      _renderer?.setBlockWords(currentBlockWords);
+    }
+
+    // 检测合并弹幕变化
+    final currentMergeDanmaku = videoState.mergeDanmaku;
+    final mergeDanmakuChanged = _lastMergeDanmaku != currentMergeDanmaku;
+    
+    if (mergeDanmakuChanged) {
+      debugPrint('GPUDanmakuOverlay: 检测到合并弹幕设置变化，更新渲染器合并弹幕状态');
+      _lastMergeDanmaku = currentMergeDanmaku;
+      
+      // 直接更新渲染器的合并弹幕状态，不清空弹幕
+      _renderer?.setMergeDanmaku(currentMergeDanmaku);
+    }
+    
+    // 🔥 新增：检测弹幕轨道状态变化
+    final currentTracks = Map<String, bool>.from(videoState.danmakuTrackEnabled);
+    final tracksChanged = !_mapEquals(_lastTrackEnabled, currentTracks);
+    
+    if (tracksChanged) {
+      debugPrint('GPUDanmakuOverlay: 检测到弹幕轨道状态变化，清空弹幕记录');
+      _lastTrackEnabled = currentTracks;
+      _addedDanmaku.clear(); // 清空已添加的弹幕记录
+      _renderer?.clear(); // 清空渲染器中的弹幕
+      _lastSyncTime = 0.0; // 🔥 关键修复：重置同步时间，确保弹幕能重新加载
+      
+      // 🔥 新增：立即触发同步，不等待下一次同步周期
+      debugPrint('GPUDanmakuOverlay: 立即触发弹幕同步');
+      _syncDanmaku(); // 直接调用同步，不等待postFrameCallback
+    }
+    
+    // 🔥 新增：检测弹幕类型过滤设置变化
+    final currentBlockTopDanmaku = videoState.blockTopDanmaku;
+    final currentBlockBottomDanmaku = videoState.blockBottomDanmaku;
+    final currentBlockScrollDanmaku = videoState.blockScrollDanmaku;
+
+    final blockTopDanmakuChanged = _lastBlockTopDanmaku != currentBlockTopDanmaku;
+    final blockBottomDanmakuChanged = _lastBlockBottomDanmaku != currentBlockBottomDanmaku;
+    final blockScrollDanmakuChanged = _lastBlockScrollDanmaku != currentBlockScrollDanmaku;
+
+    if (blockTopDanmakuChanged || blockBottomDanmakuChanged || blockScrollDanmakuChanged) {
+      debugPrint('GPUDanmakuOverlay: 检测到弹幕类型过滤设置变化，清空弹幕记录');
+      _lastBlockTopDanmaku = currentBlockTopDanmaku;
+      _lastBlockBottomDanmaku = currentBlockBottomDanmaku;
+      _lastBlockScrollDanmaku = currentBlockScrollDanmaku;
+      _addedDanmaku.clear(); // 清空已添加的弹幕记录
+      _renderer?.clear(); // 清空渲染器中的弹幕
+      _lastSyncTime = 0.0; // 🔥 关键修复：重置同步时间，确保弹幕能重新加载
+      
+      // 🔥 新增：立即触发同步，不等待下一次同步周期
+      debugPrint('GPUDanmakuOverlay: 立即触发弹幕同步');
+      _syncDanmaku(); // 直接调用同步，不等待postFrameCallback
+    }
+    
+
+
     // 检查开发者设置变化
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -192,6 +283,24 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     );
   }
 
+  /// 比较两个列表是否相等
+  bool _listEquals<T>(List<T> a, List<T> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// 比较两个Map是否相等
+  bool _mapEquals<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
+
   void _syncDanmaku() {
     if (!mounted || _renderer == null) {
       return;
@@ -204,7 +313,43 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     _lastSyncTime = currentTimeSeconds;
 
     final videoState = context.read<VideoPlayerState>();
-    final activeList = videoState.getActiveDanmakuList(currentTimeSeconds);
+    
+    // 🔥 新增：支持多弹幕来源的轨道管理
+    // 获取所有启用的弹幕轨道
+    final enabledTracks = <String, List<Map<String, dynamic>>>{};
+    final tracks = videoState.danmakuTracks;
+    final trackEnabled = videoState.danmakuTrackEnabled;
+    
+    // 只处理启用的轨道
+    for (final trackId in tracks.keys) {
+      if (trackEnabled[trackId] == true) {
+        final trackData = tracks[trackId]!;
+        final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
+        
+        // 过滤当前时间窗口内的弹幕
+        final activeDanmaku = trackDanmaku.where((d) {
+          final t = d['time'] as double? ?? 0.0;
+          return t >= currentTimeSeconds - 15.0 && t <= currentTimeSeconds + 15.0;
+        }).toList();
+        
+        if (activeDanmaku.isNotEmpty) {
+          enabledTracks[trackId] = activeDanmaku;
+        }
+      }
+    }
+    
+    // 合并所有启用轨道的弹幕
+    final List<Map<String, dynamic>> activeList = [];
+    for (final trackDanmaku in enabledTracks.values) {
+      activeList.addAll(trackDanmaku);
+    }
+    
+    // 按时间排序
+    activeList.sort((a, b) {
+      final timeA = (a['time'] as double?) ?? 0.0;
+      final timeB = (b['time'] as double?) ?? 0.0;
+      return timeA.compareTo(timeB);
+    });
 
     // 只分析一次弹幕数据
     if (!_hasAnalyzed && activeList.isNotEmpty) {
@@ -217,11 +362,17 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
       _cleanupExpiredDanmakuRecords(currentTimeSeconds);
     }
 
+    // 如果启用了合并弹幕，先预处理弹幕列表
+    List<Map<String, dynamic>> processedList = activeList;
+    if (_lastMergeDanmaku) {
+      processedList = _preprocessDanmakuForMerging(activeList, currentTimeSeconds);
+    }
+
     int topDanmakuCount = 0;
     int newDanmakuCount = 0; // 新增：统计新添加的弹幕数量
     
     // 只处理顶部弹幕
-    for (final danmaku in activeList) {
+    for (final danmaku in processedList) {
       final danmakuTime = (danmaku['time'] ?? 0.0) as double;
       final danmakuTypeRaw = danmaku['type'];
       final danmakuText = danmaku['content']?.toString() ?? '';
@@ -241,6 +392,11 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
       // 只处理顶部弹幕
       if (!isTopDanmaku) continue;
       
+      // 🔥 新增：检查是否屏蔽顶部弹幕
+      if (videoState.blockTopDanmaku) {
+        continue; // 如果屏蔽顶部弹幕，跳过这条弹幕
+      }
+      
       topDanmakuCount++;
 
       // 检查是否已经添加
@@ -249,6 +405,17 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
       // 检查是否在显示时间范围内
       final timeDiff = currentTimeSeconds - danmakuTime;
       if (timeDiff >= 0 && timeDiff <= 5.0) {
+        // 🔥 关键修复：当开启合并弹幕时，只显示isFirstInGroup为true的弹幕
+        if (_lastMergeDanmaku) {
+          final isMerged = danmaku['isMerged'] == true;
+          final isFirstInGroup = danmaku['isFirstInGroup'] == true;
+          
+          // 如果是合并弹幕但不是组内第一条，则跳过
+          if (isMerged && !isFirstInGroup) {
+            continue;
+          }
+        }
+        
         _addTopDanmaku(danmaku, timeDiff);
         _addedDanmaku.add(danmakuId);
         newDanmakuCount++; // 新增：计数新添加的弹幕
@@ -257,8 +424,71 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     
     // 优化：只在有新弹幕时才打印日志
     if (newDanmakuCount > 0) {
-      debugPrint('GPUDanmakuOverlay: 同步弹幕 - 当前时间:${currentTimeSeconds.toStringAsFixed(1)}s, 顶部弹幕总数:$topDanmakuCount, 新添加:$newDanmakuCount');
+      debugPrint('GPUDanmakuOverlay: 同步弹幕 - 当前时间:${currentTimeSeconds.toStringAsFixed(1)}s, 顶部弹幕总数:$topDanmakuCount, 新添加:$newDanmakuCount, 启用轨道数:${enabledTracks.length}');
     }
+  }
+
+  /// 预处理弹幕列表，实现合并逻辑
+  List<Map<String, dynamic>> _preprocessDanmakuForMerging(
+    List<Map<String, dynamic>> danmakuList,
+    double currentTimeSeconds,
+  ) {
+    final Map<String, List<Map<String, dynamic>>> contentGroups = {};
+    final List<Map<String, dynamic>> result = [];
+    
+    // 按内容分组，只考虑顶部弹幕
+    for (final danmaku in danmakuList) {
+      final danmakuTypeRaw = danmaku['type'];
+      bool isTopDanmaku = false;
+      
+      if (danmakuTypeRaw is String) {
+        isTopDanmaku = (danmakuTypeRaw == 'top');
+      } else if (danmakuTypeRaw is int) {
+        isTopDanmaku = (danmakuTypeRaw == 5);
+      }
+      
+      if (!isTopDanmaku) {
+        result.add(danmaku);
+        continue;
+      }
+      
+      final content = danmaku['content']?.toString() ?? '';
+      final time = (danmaku['time'] ?? 0.0) as double;
+      
+      // 在45秒窗口内统计相同内容
+      if ((currentTimeSeconds - time).abs() <= 45.0) {
+        if (!contentGroups.containsKey(content)) {
+          contentGroups[content] = [];
+        }
+        contentGroups[content]!.add(danmaku);
+      } else {
+        result.add(danmaku);
+      }
+    }
+    
+    // 处理分组，只保留每组的第一条，并标记合并信息
+    for (final entry in contentGroups.entries) {
+      final content = entry.key;
+      final group = entry.value;
+      
+      if (group.length > 1) {
+        // 按时间排序，取最早的一条
+        group.sort((a, b) => (a['time'] as double).compareTo(b['time'] as double));
+        final firstDanmaku = Map<String, dynamic>.from(group.first);
+        
+        // 标记合并信息
+        firstDanmaku['isMerged'] = true;
+        firstDanmaku['mergeCount'] = group.length;
+        firstDanmaku['isFirstInGroup'] = true;
+        firstDanmaku['groupContent'] = content;
+        
+        result.add(firstDanmaku);
+      } else {
+        result.add(group.first);
+      }
+    }
+    
+    return result;
   }
 
   /// 清理过期的弹幕记录
@@ -306,14 +536,32 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
       }
     }
 
+    // 处理合并弹幕信息
+    final isMerged = danmaku['isMerged'] == true;
+    final mergeCount = isMerged ? (danmaku['mergeCount'] as int? ?? 1) : 1;
+    final isFirstInGroup = danmaku['isFirstInGroup'] == true;
+    final groupContent = danmaku['groupContent']?.toString();
+
+    // 根据合并状态调整字体大小
+    double fontSizeMultiplier = 1.0;
+    String? countText;
+    if (isMerged) {
+      // 使用GPU渲染器的计算方法
+      fontSizeMultiplier = _renderer?.calculateMergedFontSizeMultiplier?.call(mergeCount) ?? 1.0;
+      countText = 'x$mergeCount';
+    }
+
     final danmakuItem = DanmakuContentItem(
       text,
       color: color,
       type: DanmakuItemType.top,
       timeOffset: (timeOffset * 1000).toInt(),
+      fontSizeMultiplier: fontSizeMultiplier,
+      countText: countText,
     );
 
-    debugPrint('GPUDanmakuOverlay: 添加顶部弹幕 - 文本:"$text", 颜色:$color, 时间偏移:${timeOffset.toStringAsFixed(2)}s');
+    final mergeInfo = isMerged ? ' (合并${mergeCount}条)' : '';
+    debugPrint('GPUDanmakuOverlay: 添加顶部弹幕 - 文本:"$text"$mergeInfo, 颜色:$color, 时间偏移:${timeOffset.toStringAsFixed(2)}s');
     _renderer?.addDanmaku(danmakuItem);
   }
 
@@ -328,6 +576,10 @@ class _GPUDanmakuOverlayState extends State<GPUDanmakuOverlay> with SingleTicker
     _controller.removeListener(_onTick);
     _controller.dispose();
     _renderer?.dispose();
+    
+    // 清理全局字体图集管理器（在应用退出时）
+    FontAtlasManager.disposeAll();
+    
     super.dispose();
   }
 

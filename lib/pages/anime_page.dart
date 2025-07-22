@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
@@ -270,10 +271,8 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       }
       if ((videoState.status == PlayerStatus.ready ||
           videoState.status == PlayerStatus.playing) && !tabChangeLogicExecuted) {
-        debugPrint('[AnimePage] statusListener: Player ready/playing AND tabChangeLogicExecuted is false.');
         tabChangeLogicExecuted = true; // Set flag immediately
-        
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           debugPrint('[AnimePage] statusListener (postFrame): Executing tab change and UI update.');
           if (mounted) {
             setState(() {
@@ -297,12 +296,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
             } catch (e) {
               debugPrint("[AnimePage] statusListener (postFrame): Error directly changing tab or using fallback: $e");
             }
-            debugPrint('[AnimePage] statusListener (postFrame): Removing self (statusListener).');
-            videoState.removeListener(statusListener);
-          } else {
-            debugPrint('[AnimePage] statusListener (postFrame): Not mounted, removing listener only.');
-            videoState.removeListener(statusListener); // Also remove if not mounted here
           }
+          debugPrint('[AnimePage] statusListener (postFrame): Removing self (statusListener).');
+          videoState.removeListener(statusListener);
         });
       } else if (tabChangeLogicExecuted && (videoState.status == PlayerStatus.ready || videoState.status == PlayerStatus.playing)) {
         debugPrint('[AnimePage] statusListener: Player ready/playing BUT tabChangeLogicExecuted is true. Ensuring listener is removed.');

@@ -44,7 +44,8 @@ import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
 import '../player_abstraction/media_kit_player_adapter.dart'; // 导入MediaKitPlayerAdapter
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
-import '../danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
+import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
+import 'package:flutter/scheduler.dart'; // 添加Ticker导入
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -71,7 +72,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
+  String _danmakuOverlayKey = 'idle'; // 弹幕覆盖层的稳定key
   Timer? _uiUpdateTimer; // UI更新定时器（包含位置保存和数据持久化功能）
+  // 🔥 新增：Ticker相关字段
+  Ticker? _uiUpdateTicker;
+  int _lastTickTime = 0;
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
   Timer? _autoHideTimer;
@@ -248,6 +253,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get danmakuStacking => _danmakuStacking;
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
+  String get danmakuOverlayKey => _danmakuOverlayKey; // 弹幕覆盖层的稳定key
   String? get animeTitle => _animeTitle; // 添加动画标题getter
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
   int? get animeId => _animeId; // 添加动画ID getter
@@ -793,6 +799,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       player.media = '';
       await Future.delayed(const Duration(milliseconds: 100));
       _currentVideoPath = null;
+      _danmakuOverlayKey = 'idle'; // 临时重置弹幕覆盖层key
       _currentVideoHash = null; // 重置哈希值
       _currentThumbnailPath = null; // 重置缩略图路径
       _position = Duration.zero;
@@ -967,6 +974,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       //debugPrint('7. 更新视频状态...');
       // 更新状态
       _currentVideoPath = videoPath;
+      _danmakuOverlayKey = 'video_${videoPath.hashCode}'; // 为每个视频生成唯一的稳定key
 
       // 异步计算视频哈希值，不阻塞主要初始化流程
       _precomputeVideoHash(videoPath);
@@ -1275,6 +1283,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
       // 重置状态
       _currentVideoPath = null;
+      _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
       _position = Duration.zero;
       _duration = Duration.zero;
       _progress = 0.0;
@@ -1473,7 +1482,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> stop() async {
     if (_status != PlayerStatus.idle && _status != PlayerStatus.disposed) {
       _setStatus(PlayerStatus.idle, message: '播放已停止');
-      _uiUpdateTimer?.cancel(); // 停止UI更新定时器
+      
+      // 停止UI更新定时器和Ticker
+      _uiUpdateTimer?.cancel();
+      if (_uiUpdateTicker != null) {
+        _uiUpdateTicker!.stop();
+      }
+      
       player.state = PlaybackState.stopped; // Changed from player.stop()
       _resetVideoState();
     }
@@ -1481,6 +1496,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void _clearPreviousVideoState() {
     _currentVideoPath = null;
+    _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
     _currentVideoHash = null;
     _currentThumbnailPath = null;
     _animeTitle = null;
@@ -1516,6 +1532,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _error = null;
     }
     _currentVideoPath = null;
+    _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
     _currentVideoHash = null;
     _currentThumbnailPath = null;
     _animeTitle = null;
@@ -1719,6 +1736,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     player.dispose();
     _focusNode.dispose();
     _uiUpdateTimer?.cancel(); // 清理UI更新定时器
+    
+    // 🔥 新增：清理Ticker资源
+    if (_uiUpdateTicker != null) {
+      _uiUpdateTicker!.stop();
+      _uiUpdateTicker!.dispose();
+      _uiUpdateTicker = null;
+    }
+    
     _hideControlsTimer?.cancel();
     _hideMouseTimer?.cancel();
     _autoHideTimer?.cancel();
@@ -1982,8 +2007,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 notifyListeners();
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载完成 (${_danmakuList.length}条)');
                 
-                // GPU弹幕字符集预构建
-                await _prebuildGPUDanmakuCharsetIfNeeded();
+                // 移除GPU弹幕字符集预构建调用
+                // await _prebuildGPUDanmakuCharsetIfNeeded();
               } catch (e) {
                 //debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
@@ -2390,6 +2415,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (_currentVideoPath != null) {
         final path = _currentVideoPath!;
         _currentVideoPath = null; // 清空路径，避免重复初始化
+        _danmakuOverlayKey = 'idle'; // 临时重置弹幕覆盖层key
         await Future.delayed(const Duration(seconds: 1)); // 等待一秒
         await initializePlayer(path);
       } else {
@@ -2560,8 +2586,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 重新计算合并后的弹幕列表
         _updateMergedDanmakuList();
         
-        // GPU弹幕字符集预构建
-        await _prebuildGPUDanmakuCharsetIfNeeded();
+        // 移除GPU弹幕字符集预构建调用
+        // await _prebuildGPUDanmakuCharsetIfNeeded();
         
         notifyListeners();
         return;
@@ -2602,8 +2628,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 重新计算合并后的弹幕列表
         _updateMergedDanmakuList();
         
-        // GPU弹幕字符集预构建
-        await _prebuildGPUDanmakuCharsetIfNeeded();
+        // 移除GPU弹幕字符集预构建调用
+        // await _prebuildGPUDanmakuCharsetIfNeeded();
         
         _setStatus(PlayerStatus.playing,
             message: '弹幕加载完成 (${danmakuData['count']}条)');
@@ -2730,8 +2756,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('VideoPlayerState: 检测到GPU弹幕内核，开始预构建字符集');
       _setStatus(PlayerStatus.recognizing, message: '正在优化GPU弹幕字符集...');
       
+      // 使用过滤后的弹幕列表来预构建字符集，避免屏蔽词字符被包含
+      final filteredDanmakuList = getFilteredDanmakuList();
+      
       // 调用GPU弹幕覆盖层的预构建方法
-      await GPUDanmakuOverlay.prebuildDanmakuCharset(_danmakuList);
+      await GPUDanmakuOverlay.prebuildDanmakuCharset(filteredDanmakuList);
       
       debugPrint('VideoPlayerState: GPU弹幕字符集预构建完成');
     } catch (e) {
@@ -3530,6 +3559,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await prefs.setString(_danmakuBlockWordsKey, blockWordsJson);
   }
   
+
+  
   // 检查弹幕是否应该被屏蔽
   bool shouldBlockDanmaku(Map<String, dynamic> danmaku) {
     // 检查弹幕类型是否应该被屏蔽
@@ -4201,10 +4232,38 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
-    // 启动UI更新定时器（500ms更新一次，同时处理数据保存）
+    // 启动UI更新定时器（根据弹幕内核类型设置不同的更新频率，同时处理数据保存）
   void _startUiUpdateTimer() {
+    // 取消现有定时器和Ticker
     _uiUpdateTimer?.cancel();
-    _uiUpdateTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+    _uiUpdateTicker?.dispose();
+    
+    // 记录上次更新时间，用于计算时间增量
+    _lastTickTime = DateTime.now().millisecondsSinceEpoch;
+    
+    // 🔥 关键优化：使用Ticker代替Timer.periodic
+    // Ticker会与显示刷新率同步，更精确地控制帧率
+    _uiUpdateTicker = Ticker((elapsed) {
+      // 计算从上次更新到现在的时间增量
+      final nowTime = DateTime.now().millisecondsSinceEpoch;
+      final deltaTime = nowTime - _lastTickTime;
+      _lastTickTime = nowTime;
+      
+      // 更新弹幕控制器的时间戳
+      if (danmakuController != null) {
+        try {
+          // 使用反射安全调用updateTick方法，不论是哪种内核
+          // 这是一种动态方法调用，可以处理不同弹幕控制器
+          final updateTickMethod = danmakuController?.updateTick;
+          if (updateTickMethod != null && updateTickMethod is Function) {
+            updateTickMethod(deltaTime);
+          }
+        } catch (e) {
+          // 静默处理错误，避免影响主流程
+          debugPrint('更新弹幕时间戳失败: $e');
+        }
+      }
+      
       if (!_isSeeking && hasVideo) {
         if (_status == PlayerStatus.playing) {
           final playerPosition = player.position;
@@ -4285,10 +4344,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
             player.state = PlaybackState.stopped; 
             
-            // 停止定时器
-            if (_uiUpdateTimer?.isActive ?? false) { 
-              _uiUpdateTimer!.cancel();
-              _uiUpdateTimer = null; 
+            // 停止定时器和Ticker
+            if (_uiUpdateTicker?.isTicking ?? false) {
+              _uiUpdateTicker!.stop();
+              _uiUpdateTicker!.dispose();
+              _uiUpdateTicker = null;
             }
             
             _setStatus(PlayerStatus.error, message: userMessage); 
@@ -4324,5 +4384,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
     });
+    
+    // 启动Ticker
+    _uiUpdateTicker!.start();
+    
+    debugPrint('启动UI更新Ticker，弹幕内核：${DanmakuKernelFactory.getKernelType()}');
   }
 }

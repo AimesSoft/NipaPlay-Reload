@@ -100,6 +100,23 @@ class GPUDanmakuRenderer extends CustomPainter {
     // TODO: 其他渲染器
   }
 
+  /// 设置屏蔽词列表
+  void setBlockWords(List<String> blockWords) {
+    _topRenderer.setBlockWords(blockWords);
+    // TODO: 其他渲染器
+  }
+
+  /// 设置合并弹幕开关
+  void setMergeDanmaku(bool mergeDanmaku) {
+    _topRenderer.setMergeDanmaku(mergeDanmaku);
+    // TODO: 其他渲染器
+  }
+
+  /// 计算合并弹幕的字体大小倍率
+  double calculateMergedFontSizeMultiplier(int mergeCount) {
+    return _topRenderer.calculateMergedFontSizeMultiplier(mergeCount);
+  }
+
   /// 设置暂停状态
   void setPaused(bool paused) {
     _isPaused = paused;

@@ -19,11 +19,17 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
   /// 重绘回调
   final VoidCallback? _onNeedRepaint;
   
+  /// 屏蔽词列表
+  List<String> _blockWords = [];
+  
+  /// 合并弹幕开关
+  bool _mergeDanmaku = false;
+  
   /// 弹幕项目列表
   final List<GPUDanmakuItem> _danmakuItems = [];
   
-  /// 字体图集
-  final DynamicFontAtlas _fontAtlas;
+  /// 字体图集（使用全局管理器）
+  late final DynamicFontAtlas _fontAtlas;
   
   /// 文本渲染器
   late final GPUDanmakuTextRenderer _textRenderer;
@@ -56,11 +62,14 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
        _isPaused = isPaused,
        _showCollisionBoxes = showCollisionBoxes,
        _showTrackNumbers = showTrackNumbers,
-       _isVisible = isVisible,
-       _fontAtlas = DynamicFontAtlas(
-         fontSize: config.fontSize,
-         onAtlasUpdated: onNeedRepaint,
-       ) {
+       _isVisible = isVisible {
+    // 使用全局字体图集管理器获取或创建字体图集
+    _fontAtlas = FontAtlasManager.getInstance(
+      fontSize: config.fontSize,
+      color: Colors.white,
+      onAtlasUpdated: onNeedRepaint,
+    );
+    
     _textRenderer = GPUDanmakuTextRenderer(
       fontAtlas: _fontAtlas,
       config: config,
@@ -70,7 +79,8 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
 
   /// 初始化
   Future<void> _initialize() async {
-    await _fontAtlas.generate();
+    // 预初始化字体图集（如果还没有初始化）
+    await FontAtlasManager.preInitialize(fontSize: config.fontSize);
     _isInitialized = true;
     _onNeedRepaint?.call();
     debugPrint('${runtimeType}: 初始化完成');
@@ -96,6 +106,10 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
 
   /// 检查是否暂停
   bool get isPaused => _isPaused;
+
+  /// 获取调试选项
+  bool get showCollisionBoxes => _showCollisionBoxes;
+  bool get showTrackNumbers => _showTrackNumbers;
 
   /// 获取当前时间
   int getCurrentTime() {
@@ -138,6 +152,66 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
       _isVisible = visible;
       _onNeedRepaint?.call();
     }
+  }
+
+  /// 设置屏蔽词列表
+  void setBlockWords(List<String> blockWords) {
+    _blockWords = List<String>.from(blockWords);
+    _onNeedRepaint?.call();
+  }
+
+  /// 检查弹幕是否应该被屏蔽
+  bool shouldBlockDanmaku(String text) {
+    for (final word in _blockWords) {
+      if (text.contains(word)) return true;
+    }
+    return false;
+  }
+  
+  /// 检查弹幕是否应该被过滤（基于合并弹幕开关状态）
+  bool shouldFilterDanmaku(GPUDanmakuItem item) {
+    // 如果关闭合并弹幕，将合并弹幕转换为普通弹幕显示，而不是隐藏
+    if (!_mergeDanmaku && item.countText != null) {
+      // 不隐藏合并弹幕，而是在渲染时将其转换为普通弹幕
+      return false; // 允许显示，但会在渲染时调整
+    }
+    
+    // 如果开启合并弹幕，显示所有弹幕（合并的和单独的）
+    return false;
+  }
+
+  /// 获取弹幕的实际显示属性（考虑合并弹幕开关状态）
+  /// 
+  /// 当关闭合并弹幕时，将合并弹幕转换为普通弹幕显示
+  Map<String, dynamic> getDanmakuDisplayProperties(GPUDanmakuItem item) {
+    final properties = <String, dynamic>{
+      'text': item.text,
+      'color': item.color,
+      'fontSizeMultiplier': item.fontSizeMultiplier,
+      'countText': item.countText,
+    };
+    
+    // 如果关闭合并弹幕且是合并弹幕，转换为普通弹幕显示
+    if (!_mergeDanmaku && item.countText != null) {
+      properties['fontSizeMultiplier'] = 1.0; // 使用普通字体大小
+      properties['countText'] = null; // 不显示计数文本
+    }
+    
+    return properties;
+  }
+
+  /// 设置合并弹幕开关
+  void setMergeDanmaku(bool mergeDanmaku) {
+    _mergeDanmaku = mergeDanmaku;
+    _onNeedRepaint?.call();
+  }
+
+  /// 计算合并弹幕的字体大小倍率
+  double calculateMergedFontSizeMultiplier(int mergeCount) {
+    // 按照nipaplay的算法：按照数量计算放大倍率，例如15条是1.5倍
+    double multiplier = 1.0 + (mergeCount / 10.0);
+    // 限制最大倍率避免过大
+    return multiplier.clamp(1.0, 2.0);
   }
 
   /// 设置暂停状态
@@ -200,7 +274,7 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
 
   /// 释放资源
   void dispose() {
-    _fontAtlas.dispose();
+    // 注意：不再直接释放字体图集，因为它由全局管理器管理
     debugPrint('${runtimeType}: 资源释放完成');
   }
 
