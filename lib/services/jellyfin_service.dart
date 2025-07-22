@@ -228,8 +228,10 @@ class JellyfinService {
             allItems.addAll(libraryItems);
           }
         }
-      } catch (e) {
-        // 处理错误
+      } catch (e, stackTrace) {
+        // Log the error and stack trace for debugging purposes
+        print('Error processing library $libraryId: $e');
+        print('Stack trace: $stackTrace');
       }
     }
     
@@ -270,7 +272,8 @@ class JellyfinService {
           allMovies.addAll(libraryMovies);
         }
       } catch (e) {
-        // 处理错误
+        // Log the error for debugging purposes
+        print('Error fetching movies for library $libraryId: $e');
       }
     }
     
