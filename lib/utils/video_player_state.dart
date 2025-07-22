@@ -959,6 +959,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (videoPath.startsWith('jellyfin://')) {
         await _loadJellyfinExternalSubtitles(videoPath);
       }
+      // 针对Emby流媒体，自动加载外挂字幕
+      if (videoPath.startsWith('emby://')) {
+        await _loadEmbyExternalSubtitles(videoPath);
+      }
 
       //debugPrint('7. 更新视频状态...');
       // 更新状态
@@ -3799,6 +3803,68 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
         } catch (e) {
       debugPrint('[Jellyfin字幕] 加载外挂字幕时出错: $e');
+    }
+  }
+
+  /// 加载Emby外挂字幕
+  Future<void> _loadEmbyExternalSubtitles(String videoPath) async {
+    try {
+      // 从emby://协议URL中提取itemId
+      final itemId = videoPath.replaceFirst('emby://', '');
+      debugPrint('[Emby字幕] 开始加载外挂字幕，itemId: $itemId');
+      // 获取字幕轨道信息
+      final subtitleTracks = await EmbyService.instance.getSubtitleTracks(itemId);
+      if (subtitleTracks.isEmpty) {
+        debugPrint('[Emby字幕] 未找到字幕轨道');
+        return;
+      }
+      // 查找外挂字幕轨道
+      final externalSubtitles = subtitleTracks.where((track) => track['type'] == 'external').toList();
+      if (externalSubtitles.isEmpty) {
+        debugPrint('[Emby字幕] 未找到外挂字幕轨道');
+        return;
+      }
+      debugPrint('[Emby字幕] 找到 ${externalSubtitles.length} 个外挂字幕轨道');
+      // 优先选择中文字幕
+      Map<String, dynamic>? preferredSubtitle;
+      // 首先查找简体中文
+      preferredSubtitle = externalSubtitles.firstWhere(
+        (track) => track['language']?.toLowerCase().contains('chi') == true ||
+                   track['title']?.toLowerCase().contains('简体') == true ||
+                   track['title']?.toLowerCase().contains('中文') == true,
+        orElse: () => externalSubtitles.first,
+      );
+      // 如果没有中文，选择默认字幕或第一个
+      if (preferredSubtitle == null) {
+        preferredSubtitle = externalSubtitles.firstWhere(
+          (track) => track['isDefault'] == true,
+          orElse: () => externalSubtitles.first,
+        );
+      }
+      if (preferredSubtitle != null) {
+        final subtitleIndex = preferredSubtitle['index'];
+        final subtitleCodec = preferredSubtitle['codec'];
+        final subtitleTitle = preferredSubtitle['title'];
+        debugPrint('[Emby字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
+        // 下载字幕文件
+        final subtitleFilePath = await EmbyService.instance.downloadSubtitleFile(
+          itemId,
+          subtitleIndex,
+          subtitleCodec,
+        );
+        if (subtitleFilePath != null) {
+          debugPrint('[Emby字幕] 字幕文件下载成功: $subtitleFilePath');
+          // 等待播放器完全初始化
+          await Future.delayed(const Duration(milliseconds: 1000));
+          // 加载外挂字幕
+          _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
+          debugPrint('[Emby字幕] 外挂字幕加载完成');
+        } else {
+          debugPrint('[Emby字幕] 字幕文件下载失败');
+        }
+      }
+    } catch (e) {
+      debugPrint('[Emby字幕] 加载外挂字幕时出错: $e');
     }
   }
 
