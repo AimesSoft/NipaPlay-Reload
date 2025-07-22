@@ -267,18 +267,20 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     final time = (danmaku['time'] ?? 0.0) as double;
     final id = '${time}_$content'; // 🔥 生成唯一ID
 
-    final colorStr = danmaku['color']?.toString() ?? '#FFFFFF';
+    final colorStr = danmaku['color']?.toString();
     final type = danmaku['type']?.toString() ?? 'scroll';
 
     Color color = Colors.white;
-    try {
-      if (colorStr.startsWith('#')) {
-        color = Color(int.parse('FF${colorStr.substring(1)}', radix: 16));
-      } else if (colorStr.startsWith('0x')) {
-        color = Color(int.parse(colorStr.substring(2), radix: 16));
+    if (colorStr != null && colorStr.startsWith('rgb(')) {
+      final vals = colorStr
+          .replaceAll('rgb(', '')
+          .replaceAll(')', '')
+          .split(',')
+          .map((e) => int.tryParse(e.trim()) ?? 255)
+          .toList();
+      if (vals.length == 3) {
+        color = Color.fromARGB(255, vals[0], vals[1], vals[2]);
       }
-    } catch (e) {
-      // 颜色解析失败，使用默认白色
     }
 
     canvas.DanmakuItemType itemType;
@@ -310,21 +312,23 @@ class _CanvasDanmakuOverlayState extends State<CanvasDanmakuOverlay> {
     final danmakuTime = (danmaku['time'] ?? 0.0) as double;
     final id = '${danmakuTime}_$content'; // 🔥 生成唯一ID
     
-    final colorStr = danmaku['color']?.toString() ?? '#FFFFFF';
+    final colorStr = danmaku['color']?.toString();
     final type = danmaku['type']?.toString() ?? 'scroll';
     
     // 🔥 关键修复：直接使用传入的时间偏移量
     final timeOffsetMs = (timeOffset * 1000).round();
 
     Color color = Colors.white;
-    try {
-      if (colorStr.startsWith('#')) {
-        color = Color(int.parse('FF${colorStr.substring(1)}', radix: 16));
-      } else if (colorStr.startsWith('0x')) {
-        color = Color(int.parse(colorStr.substring(2), radix: 16));
+    if (colorStr != null && colorStr.startsWith('rgb(')) {
+      final vals = colorStr
+          .replaceAll('rgb(', '')
+          .replaceAll(')', '')
+          .split(',')
+          .map((e) => int.tryParse(e.trim()) ?? 255)
+          .toList();
+      if (vals.length == 3) {
+        color = Color.fromARGB(255, vals[0], vals[1], vals[2]);
       }
-    } catch (e) {
-      // 颜色解析失败，使用默认白色
     }
 
     canvas.DanmakuItemType itemType;
