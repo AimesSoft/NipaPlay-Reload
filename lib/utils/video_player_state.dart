@@ -2022,8 +2022,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 notifyListeners();
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载完成 (${_danmakuList.length}条)');
                 
-                // 移除GPU弹幕字符集预构建调用
-                // await _prebuildGPUDanmakuCharsetIfNeeded();
+                // 如果是GPU模式，预构建字符集
+                await _prebuildGPUDanmakuCharsetIfNeeded();
               } catch (e) {
                 //debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
@@ -2644,7 +2644,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _updateMergedDanmakuList();
         
         // 移除GPU弹幕字符集预构建调用
-        // await _prebuildGPUDanmakuCharsetIfNeeded();
+        await _prebuildGPUDanmakuCharsetIfNeeded();
         
         _setStatus(PlayerStatus.playing,
             message: '弹幕加载完成 (${danmakuData['count']}条)');
@@ -2731,28 +2731,32 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 更新合并后的弹幕列表
   void _updateMergedDanmakuList() {
-    _danmakuList.clear();
+    final List<Map<String, dynamic>> mergedList = [];
     
     // 合并所有启用的轨道
     for (final trackId in _danmakuTracks.keys) {
       if (_danmakuTrackEnabled[trackId] == true) {
         final trackData = _danmakuTracks[trackId]!;
         final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
-        _danmakuList.addAll(trackDanmaku);
+        mergedList.addAll(trackDanmaku);
       }
     }
     
     // 重新排序
-    _danmakuList.sort((a, b) {
+    mergedList.sort((a, b) {
       final timeA = (a['time'] as double?) ?? 0.0;
       final timeB = (b['time'] as double?) ?? 0.0;
       return timeA.compareTo(timeB);
     });
     
-    // 更新到弹幕控制器
-    danmakuController?.loadDanmaku(_danmakuList.map((e) => e).toList());
+    // 替换为新的列表实例，以触发Widget更新
+    _danmakuList = mergedList;
+    
+    // 通过更新key来强制刷新DanmakuOverlay
+    _danmakuOverlayKey = 'danmaku_${DateTime.now().millisecondsSinceEpoch}';
     
     debugPrint('弹幕轨道合并完成，总计${_danmakuList.length}条弹幕');
+    notifyListeners(); // 确保通知UI更新
   }
 
   // GPU弹幕字符集预构建（如果需要）
@@ -4499,6 +4503,59 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         return null;
       default:
         return null;
+    }
+  }
+
+  // 添加一条新弹幕到当前列表
+  void addDanmaku(Map<String, dynamic> danmaku) {
+    if (danmaku.containsKey('time') && danmaku.containsKey('content')) {
+      _danmakuList.add(danmaku);
+      // 按时间重新排序
+      _danmakuList.sort((a, b) {
+        final timeA = (a['time'] as double?) ?? 0.0;
+        final timeB = (b['time'] as double?) ?? 0.0;
+        return timeA.compareTo(timeB);
+      });
+      notifyListeners();
+      debugPrint('已添加新弹幕到列表: ${danmaku['content']}');
+    }
+  }
+
+  // 将一条新弹幕添加到指定的轨道，如果轨道不存在则创建
+  void addDanmakuToNewTrack(Map<String, dynamic> danmaku, {String trackName = '我的弹幕'}) {
+    if (danmaku.containsKey('time') && danmaku.containsKey('content')) {
+      final trackId = 'local_$trackName';
+
+      // 检查轨道是否存在
+      if (!_danmakuTracks.containsKey(trackId)) {
+        // 如果轨道不存在，创建新轨道
+        _danmakuTracks[trackId] = {
+          'name': trackName,
+          'source': 'local',
+          'danmakuList': <Map<String, dynamic>>[],
+          'count': 0,
+          'loadTime': DateTime.now(),
+        };
+        _danmakuTrackEnabled[trackId] = true; // 默认启用新轨道
+      }
+
+      // 添加弹幕到轨道
+      final trackDanmaku = _danmakuTracks[trackId]!['danmakuList'] as List<Map<String, dynamic>>;
+      trackDanmaku.add(danmaku);
+      _danmakuTracks[trackId]!['count'] = trackDanmaku.length;
+
+      // 重新计算合并后的弹幕列表
+      _updateMergedDanmakuList();
+
+      debugPrint('已将新弹幕添加到轨道 "$trackName": ${danmaku['content']}');
+    }
+  }
+
+  // 确保视频信息中包含格式化后的动画标题和集数标题
+  static void _ensureVideoInfoTitles(Map<String, dynamic> videoInfo) {
+    if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
+      final match = videoInfo['matches'][0];
+      // ... existing code ...
     }
   }
 }

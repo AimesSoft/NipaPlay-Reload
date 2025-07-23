@@ -65,39 +65,41 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: ListView.builder(
-        itemCount: _actionLabels.length,
-        itemBuilder: (context, index) {
-          final action = _actionLabels.keys.elementAt(index);
-          final label = _actionLabels[action]!;
-          final currentShortcut = KeyboardShortcuts.getShortcutText(action);
-          final shortcuts = _availableShortcuts[action]!;
+    return ListView.builder(
+      itemCount: _actionLabels.length,
+      itemBuilder: (context, index) {
+        final action = _actionLabels.keys.elementAt(index);
+        final label = _actionLabels[action]!;
+        final currentShortcut = KeyboardShortcuts.getShortcutText(action);
+        final shortcuts = _availableShortcuts[action]!;
 
-          return ListTile(
-            title: Text(label,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            subtitle: Text('当前快捷键: $currentShortcut',
-                style: const TextStyle(color: Colors.white70)),
-            trailing: BlurDropdown<String>(
-              dropdownKey: _dropdownKeys[action]!,
-              items: shortcuts.map((String shortcut) {
-                return DropdownMenuItemData(
-                  title: shortcut,
-                  value: shortcut,
-                  isSelected: currentShortcut == shortcut,
-                );
-              }).toList(),
-              onItemSelected: (shortcut) async {
-                await KeyboardShortcuts.setShortcut(action, shortcut);
-                setState(() {});
-                _showRestartDialog();
-                            },
+        return Column(
+          children: [
+            ListTile(
+              title: Text(label,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: Text('当前快捷键: $currentShortcut',
+                  style: const TextStyle(color: Colors.white70)),
+              trailing: BlurDropdown<String>(
+                dropdownKey: _dropdownKeys[action]!,
+                items: shortcuts.map((String shortcut) {
+                  return DropdownMenuItemData(
+                    title: shortcut,
+                    value: shortcut,
+                    isSelected: currentShortcut == shortcut,
+                  );
+                }).toList(),
+                onItemSelected: (shortcut) async {
+                  await KeyboardShortcuts.setShortcut(action, shortcut);
+                  setState(() {});
+                  _showRestartDialog();
+                },
+              ),
             ),
-          );
-        },
-      ),
+            const Divider(color: Colors.white12, height: 1),
+          ],
+        );
+      },
     );
   }
 } 

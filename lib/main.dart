@@ -42,8 +42,13 @@ import 'package:nipaplay/utils/storage_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
-import 'package:nipaplay/services/drag_drop_service.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/widgets/splash_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:nipaplay/widgets/drag_drop_overlay.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -223,6 +228,23 @@ void main(List<String> args) async {
         print('[Dart] 错误: $e');
         return '错误: $e';
       }
+    } else if (call.method == 'openVideoPlayback') {
+      try {
+        final context = navigatorKey.currentState?.overlay?.context;
+        if (context == null) {
+          print('[Dart] 错误: 无法获取UI上下文');
+          return '错误: 无法获取UI上下文';
+        }
+        
+        Future.microtask(() {
+          _navigateToPage(context, 0); // 切换到视频播放页面（索引0）
+        });
+        
+        return '正在切换到视频播放页面';
+      } catch (e) {
+        print('[Dart] 错误: $e');
+        return '错误: $e';
+      }
     } else if (call.method == 'openMediaLibrary') {
       try {
         final context = navigatorKey.currentState?.overlay?.context;
@@ -299,16 +321,6 @@ void main(List<String> args) async {
       debugPrint('SecurityBookmarkService 书签恢复完成');
     } catch (e) {
       debugPrint('SecurityBookmarkService 书签恢复失败: $e');
-    }
-  }
-
-  // 初始化拖拽功能 (桌面平台)
-  if (globals.isDesktop) {
-    try {
-      await DragDropService.initialize();
-      debugPrint('DragDropService 初始化完成');
-    } catch (e) {
-      debugPrint('DragDropService 初始化失败: $e');
     }
   }
 
@@ -589,28 +601,102 @@ Future<void> _ensureTemporaryDirectoryExists() async {
   }
 }
 
-class NipaPlayApp extends StatelessWidget {
+class NipaPlayApp extends StatefulWidget {
   final String? launchFilePath;
   
   const NipaPlayApp({super.key, this.launchFilePath});
 
   @override
+  State<NipaPlayApp> createState() => _NipaPlayAppState();
+}
+
+class _NipaPlayAppState extends State<NipaPlayApp> {
+  bool _isDragging = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeNotifier>(
-      builder: (context, themeNotifier, child) {
-        // 移除全局键盘快捷键注册，避免干扰文本输入
-        return MaterialApp(
-          title: 'NipaPlay',
-          debugShowCheckedModeBanner: false,
-          color: Colors.transparent,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: themeNotifier.themeMode,
-          navigatorKey: navigatorKey,
-          home: MainPage(launchFilePath: launchFilePath),
-        );
+    return DropTarget(
+      onDragEntered: (details) {
+        setState(() {
+          _isDragging = true;
+        });
+        debugPrint('[DragDrop] onDragEntered');
       },
+      onDragExited: (details) {
+        setState(() {
+          _isDragging = false;
+        });
+        debugPrint('[DragDrop] onDragExited');
+      },
+      onDragDone: (details) {
+        setState(() {
+          _isDragging = false;
+        });
+        debugPrint('[DragDrop] onDragDone: ${details.files.length} files');
+        if (details.files.isNotEmpty) {
+          final filePath = details.files.first.path;
+          debugPrint('[DragDrop] Handling file: $filePath');
+          _handleDroppedFile(filePath);
+        }
+      },
+      child: Consumer<ThemeNotifier>(
+        builder: (context, themeNotifier, child) {
+          // 移除全局键盘快捷键注册，避免干扰文本输入
+          return MaterialApp(
+            title: 'NipaPlay',
+            debugShowCheckedModeBanner: false,
+            color: Colors.transparent,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeNotifier.themeMode,
+            navigatorKey: navigatorKey,
+            home: MainPage(launchFilePath: widget.launchFilePath),
+            builder: (context, appChild) {
+              return Stack(
+                children: [
+                  appChild!, // The app's content
+                  if (_isDragging) const DragDropOverlay(),
+                ],
+              );
+            },
+          );
+        },
+      ),
     );
+  }
+
+  void _handleDroppedFile(String filePath) async {
+    try {
+      debugPrint('[DragDrop] Handling dropped file: $filePath');
+      
+      // 检查是否存在历史记录
+      WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
+
+      if (historyItem == null) {
+        // 如果不存在，创建一个临时的
+        historyItem = WatchHistoryItem(
+          filePath: filePath,
+          animeName: path.basenameWithoutExtension(filePath),
+          watchProgress: 0,
+          lastPosition: 0,
+          duration: 0,
+          lastWatchTime: DateTime.now(),
+        );
+      }
+
+      final playableItem = PlayableItem(
+        videoPath: filePath,
+        title: historyItem.animeName,
+        historyItem: historyItem,
+      );
+
+      await PlaybackService().play(playableItem);
+      debugPrint('[DragDrop] PlaybackService called for dropped file');
+      
+    } catch (e) {
+      debugPrint('[DragDrop] Error handling dropped file: $e');
+      // 可以考虑在这里显示一个错误提示
+    }
   }
 }
 
@@ -633,6 +719,7 @@ class MainPage extends StatefulWidget {
 class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, WindowListener {
   bool isMaximized = false;
   TabController? globalTabController;
+  bool _showSplash = true;
 
   // Static method to find MainPageState from context
   static MainPageState? of(BuildContext context) {
@@ -675,7 +762,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   @override
   void initState() {
     super.initState();
-    globalTabController = TabController(length: widget.pages.length, vsync: this);
+    globalTabController = TabController(length: 4, vsync: this, initialIndex: 0);
     globalTabController?.addListener(() {
       if (globalTabController != null) { 
         debugPrint('[MainPageState] globalTabController listener: index=${globalTabController!.index}, previousIndex=${globalTabController!.previousIndex}, indexIsChanging=${globalTabController!.indexIsChanging}, animationValue=${globalTabController!.animation?.value.toStringAsFixed(2)}');
@@ -690,18 +777,49 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       });
     }
 
-    // 设置拖拽回调 (桌面平台)
-    if (globals.isDesktop) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        DragDropService.setDropCallback(_handleDroppedFiles);
-      });
-    }
-
     // 窗口管理器初始化
     if (globals.winLinDesktop) {
       windowManager.addListener(this);
       _checkWindowMaximizedState();
     }
+    _startSplashScreenSequence();
+  }
+
+  void _startSplashScreenSequence() {
+    // 确保在第一帧后执行
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      final defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
+
+      const switchDelay = Duration(milliseconds: 200);
+      const initialDelay = Duration(milliseconds: 300);
+
+      Timer(initialDelay, () async {
+        if (!mounted) return;
+        globalTabController?.animateTo(1);
+        await Future.delayed(switchDelay);
+
+        if (!mounted) return;
+        globalTabController?.animateTo(2);
+        await Future.delayed(switchDelay);
+
+        if (!mounted) return;
+        globalTabController?.animateTo(3);
+        await Future.delayed(switchDelay);
+
+        if (!mounted) return;
+        globalTabController?.animateTo(defaultPageIndex);
+        await Future.delayed(switchDelay);
+
+        if (mounted) {
+          setState(() {
+            _showSplash = false;
+          });
+        }
+      });
+    });
   }
 
   // 处理启动文件
@@ -709,51 +827,34 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     try {
       debugPrint('[FileAssociation] 处理启动文件: $filePath');
       
-      // 切换到播放页面
-      if (globalTabController != null && globalTabController!.index != 0) {
-        globalTabController!.animateTo(0);
+      // 检查是否存在历史记录
+      WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
+
+      if (historyItem == null) {
+        // 如果不存在，创建一个临时的
+        historyItem = WatchHistoryItem(
+          filePath: filePath,
+          animeName: path.basenameWithoutExtension(filePath),
+          watchProgress: 0,
+          lastPosition: 0,
+          duration: 0,
+          lastWatchTime: DateTime.now(),
+        );
       }
+
+      final playableItem = PlayableItem(
+        videoPath: filePath,
+        title: historyItem.animeName,
+        historyItem: historyItem,
+      );
+
+      await PlaybackService().play(playableItem);
       
-      // 获取VideoPlayerState并初始化播放器
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      await videoState.initializePlayer(filePath);
-      
-      debugPrint('[FileAssociation] 启动文件播放成功');
+      debugPrint('[FileAssociation] 启动文件已提交给PlaybackService');
     } catch (e) {
       debugPrint('[FileAssociation] 启动文件播放失败: $e');
       if (mounted) {
         BlurSnackBar.show(context, '无法播放启动文件: $e');
-      }
-    }
-  }
-
-  // 处理拖拽文件
-  Future<void> _handleDroppedFiles(List<String> filePaths) async {
-    try {
-      debugPrint('[DragDrop] 收到拖拽文件: $filePaths');
-      
-      final selectedFile = await DragDropService.handleDroppedFiles(filePaths);
-      if (selectedFile == null) {
-        if (mounted) {
-          BlurSnackBar.show(context, '拖拽的文件中没有支持的视频格式');
-        }
-        return;
-      }
-      
-      // 切换到播放页面
-      if (globalTabController != null && globalTabController!.index != 0) {
-        globalTabController!.animateTo(0);
-      }
-      
-      // 获取VideoPlayerState并初始化播放器
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      await videoState.initializePlayer(selectedFile);
-      
-      debugPrint('[DragDrop] 拖拽文件播放成功: $selectedFile');
-    } catch (e) {
-      debugPrint('[DragDrop] 拖拽文件播放失败: $e');
-      if (mounted) {
-        BlurSnackBar.show(context, '无法播放拖拽的文件: $e');
       }
     }
   }
@@ -872,6 +973,15 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
             );
           },
         ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 500),
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          child: _showSplash
+              ? const SplashScreen(key: ValueKey('splash'))
+              : const SizedBox.shrink(key: ValueKey('no_splash')),
+        ),
         Positioned(
           top: 0,
           left: 0,
@@ -978,35 +1088,30 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
       return;
     }
     
-    // New logic for Scheme 1:
-    MainPageState? mainPageState = MainPageState.of(context);
-    if (mainPageState != null && mainPageState.globalTabController != null) {
-      if (mainPageState.globalTabController!.index != 0) {
-        mainPageState.globalTabController!.animateTo(0);
-        debugPrint('[Dart - _showGlobalUploadDialog] Directly called globalTabController.animateTo(0)');
-      } else {
-        debugPrint('[Dart - _showGlobalUploadDialog] globalTabController is already at index 0.');
-      }
-    } else {
-      debugPrint('[Dart - _showGlobalUploadDialog] Could not find MainPageState or globalTabController.');
-      // Fallback or error handling if direct access fails, maybe use TabChangeNotifier here as a backup
-      Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
-      debugPrint('[Dart - _showGlobalUploadDialog] Fallback: Used TabChangeNotifier to request tab change to 0.');
+    // 检查是否存在历史记录
+    WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
+
+    if (historyItem == null) {
+      // 如果不存在，创建一个临时的
+      historyItem = WatchHistoryItem(
+        filePath: filePath,
+        animeName: path.basenameWithoutExtension(filePath),
+        watchProgress: 0,
+        lastPosition: 0,
+        duration: 0,
+        lastWatchTime: DateTime.now(),
+      );
     }
+
+    final playableItem = PlayableItem(
+      videoPath: filePath,
+      title: historyItem.animeName,
+      historyItem: historyItem,
+    );
+
+    await PlaybackService().play(playableItem);
+    print('[Dart] PlaybackService 已调用');
     
-    // 2. 初始化播放器
-    try {
-      print('[Dart] 开始初始化播放器');
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      await videoState.initializePlayer(filePath);
-      print('[Dart] 播放器初始化成功');
-    } catch (e) {
-      print('[Dart] 播放器初始化失败: $e');
-      
-      if (context.mounted) {
-        BlurSnackBar.show(context, '无法播放视频: $e');
-      }
-    }
   } catch (e) {
     print('[Dart] 文件选择过程出错: $e');
     

@@ -7,7 +7,6 @@ import 'package:nipaplay/utils/linux_storage_migration.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 
@@ -63,90 +62,6 @@ class DeveloperOptionsPage extends StatelessWidget {
                 } else {
                   logService.stopCollecting();
                 }
-              },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
-            ),
-            
-            const Divider(color: Colors.white12, height: 1),
-            
-            // CanvasDanmaku弹幕内核碰撞箱显示开关
-            SwitchListTile(
-              title: const Text(
-                'CanvasDanmaku弹幕内核 碰撞箱显示',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                '显示弹幕碰撞检测边界框，用于调试弹幕重叠问题',
-                style: TextStyle(color: Colors.white70),
-              ),
-              value: devOptions.showCanvasDanmakuCollisionBoxes,
-              onChanged: (bool value) {
-                devOptions.setShowCanvasDanmakuCollisionBoxes(value);
-              },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
-            ),
-            
-            const Divider(color: Colors.white12, height: 1),
-            
-            // CanvasDanmaku弹幕内核轨道编号显示开关
-            SwitchListTile(
-              title: const Text(
-                'CanvasDanmaku弹幕内核 轨道编号显示',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                '在弹幕旁边显示轨道编号，用于调试弹幕轨道分配',
-                style: TextStyle(color: Colors.white70),
-              ),
-              value: devOptions.showCanvasDanmakuTrackNumbers,
-              onChanged: (bool value) {
-                devOptions.setShowCanvasDanmakuTrackNumbers(value);
-              },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
-            ),
-            
-            const Divider(color: Colors.white12, height: 1),
-            
-            // GPUDanmaku弹幕内核碰撞箱显示开关
-            SwitchListTile(
-              title: const Text(
-                'GPUDanmaku弹幕内核 碰撞箱显示',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                '显示GPU弹幕碰撞检测边界框，用于调试弹幕重叠问题',
-                style: TextStyle(color: Colors.white70),
-              ),
-              value: devOptions.showGPUDanmakuCollisionBoxes,
-              onChanged: (bool value) {
-                devOptions.setShowGPUDanmakuCollisionBoxes(value);
-              },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
-            ),
-            
-            const Divider(color: Colors.white12, height: 1),
-            
-            // GPUDanmaku弹幕内核轨道编号显示开关
-            SwitchListTile(
-              title: const Text(
-                'GPUDanmaku弹幕内核 轨道编号显示',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                '在GPU弹幕旁边显示轨道编号，用于调试弹幕轨道分配',
-                style: TextStyle(color: Colors.white70),
-              ),
-              value: devOptions.showGPUDanmakuTrackNumbers,
-              onChanged: (bool value) {
-                devOptions.setShowGPUDanmakuTrackNumbers(value);
               },
               activeColor: Colors.white,
               inactiveThumbColor: Colors.white,

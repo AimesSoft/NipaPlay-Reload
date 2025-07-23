@@ -56,6 +56,7 @@ class DanmakuGroupWidget extends StatelessWidget {
         color: color,
         fontSizeMultiplier: isMerged ? (1.0 + mergeCount / 10.0).clamp(1.0, 2.0) : 1.0,
         countText: isMerged ? 'x$mergeCount' : null,
+        isMe: danmaku['isMe'] as bool? ?? false,
       );
       // 计算X/Y位置和透明度
       double x = 0;

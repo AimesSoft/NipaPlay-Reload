@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/widgets/file_association_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Define the key for SharedPreferences
 const String globalFilterAdultContentKey = 'global_filter_adult_content';
+const String defaultPageIndexKey = 'default_page_index';
 
 class GeneralPage extends StatefulWidget {
   const GeneralPage({super.key});
@@ -18,18 +19,21 @@ class GeneralPage extends StatefulWidget {
 
 class _GeneralPageState extends State<GeneralPage> {
   bool _filterAdultContent = true;
+  int _defaultPageIndex = 0;
+  final GlobalKey _defaultPageDropdownKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _loadFilterPreference();
+    _loadPreferences();
   }
 
-  Future<void> _loadFilterPreference() async {
+  Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
         _filterAdultContent = prefs.getBool(globalFilterAdultContentKey) ?? true;
+        _defaultPageIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
       });
     }
   }
@@ -39,12 +43,41 @@ class _GeneralPageState extends State<GeneralPage> {
     await prefs.setBool(globalFilterAdultContentKey, value);
   }
 
+  Future<void> _saveDefaultPagePreference(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(defaultPageIndexKey, index);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        // 文件关联设置
-        const FileAssociationSettings(),
+        ListTile(
+          title: const Text(
+            "默认展示页面",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          subtitle: const Text(
+            "选择应用启动后默认显示的页面",
+            style: TextStyle(color: Colors.white70),
+          ),
+          trailing: BlurDropdown<int>(
+            dropdownKey: _defaultPageDropdownKey,
+            items: [
+              DropdownMenuItemData(title: "视频播放", value: 0, isSelected: _defaultPageIndex == 0),
+              DropdownMenuItemData(title: "媒体库", value: 1, isSelected: _defaultPageIndex == 1),
+              DropdownMenuItemData(title: "新番更新", value: 2, isSelected: _defaultPageIndex == 2),
+              DropdownMenuItemData(title: "设置", value: 3, isSelected: _defaultPageIndex == 3),
+            ],
+            onItemSelected: (index) {
+              setState(() {
+                _defaultPageIndex = index;
+              });
+              _saveDefaultPagePreference(index);
+            },
+          ),
+        ),
+        const Divider(color: Colors.white12, height: 1),
         SwitchListTile(
           title: const Text(
             "过滤成人内容 (全局)",
@@ -114,6 +147,7 @@ class _GeneralPageState extends State<GeneralPage> {
             }
           },
         ),
+        const Divider(color: Colors.white12, height: 1),
       ],
     );
   }

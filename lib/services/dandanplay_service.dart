@@ -536,6 +536,7 @@ class DandanplayService {
               'content': content,
               'type': mode == 1 ? 'scroll' : mode == 5 ? 'top' : 'bottom',
               'color': colorValue,
+              'isMe': false,
             };
           }).toList();
 
@@ -1045,6 +1046,80 @@ class DandanplayService {
       );
     } catch (e) {
       debugPrint('[弹弹play服务] 提交用户评分失败: $e');
+      rethrow;
+    }
+  }
+
+  // 发送弹幕
+  static Future<Map<String, dynamic>> sendDanmaku({
+    required int episodeId,
+    required double time,
+    required int mode,
+    required int color,
+    required String comment,
+  }) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能发送弹幕');
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final apiPath = '/api/v2/comment/$episodeId';
+      
+      final requestBody = {
+        'time': time,
+        'mode': mode,
+        'color': color,
+        'comment': comment,
+      };
+      
+      debugPrint('[弹弹play服务] 发送弹幕到: $episodeId, 内容: $comment');
+      
+      final response = await http.post(
+        Uri.parse('https://api.dandanplay.net$apiPath'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+        body: json.encode(requestBody),
+      );
+
+      debugPrint('[弹弹play服务] 发送弹幕响应: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          debugPrint('[弹弹play服务] 弹幕发送成功: cid=${data['cid']}');
+          
+          // 将发送的弹幕格式化为与getDanmaku一致的格式
+          final r = (color >> 16) & 0xFF;
+          final g = (color >> 8) & 0xFF;
+          final b = color & 0xFF;
+          final colorValue = 'rgb($r,$g,$b)';
+          
+          final formattedDanmaku = {
+            'time': time,
+            'content': comment,
+            'type': mode == 1 ? 'scroll' : mode == 5 ? 'top' : 'bottom',
+            'color': colorValue,
+            'isMe': true,
+          };
+          
+          return {'success': true, 'danmaku': formattedDanmaku};
+        } else {
+          throw Exception(data['errorMessage'] ?? '发送弹幕失败');
+        }
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        throw Exception('发送弹幕失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 发送弹幕时出错: $e');
       rethrow;
     }
   }

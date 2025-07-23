@@ -1,30 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'gpu_danmaku_config.dart';
 import 'gpu_top_danmaku_renderer.dart';
 import 'gpu_bottom_danmaku_renderer.dart';
 import 'gpu_scroll_danmaku_renderer.dart';
 
 /// GPU弹幕渲染器调度器
-/// 
+///
 /// 管理多种类型弹幕的GPU渲染器
-class GPUDanmakuRenderer extends CustomPainter {
-  final GPUDanmakuConfig config;
-  final double opacity;
+class GPUDanmakuRenderer extends CustomPainter with ChangeNotifier {
+  GPUDanmakuConfig config;
+  double opacity;
   final VoidCallback? _onNeedRepaint; // 重绘回调
-  
+
   // 不同类型弹幕的渲染器
   late final GPUTopDanmakuRenderer _topRenderer;
   late final GPUScrollDanmakuRenderer _scrollRenderer;
   late final GPUBottomDanmakuRenderer _bottomRenderer;
-  
+
   // 调试选项
   bool _showCollisionBoxes = false;
   bool _showTrackNumbers = false;
-  
-  // 时间管理
+
+  // 状态管理
   bool _isPaused = false;
-  bool _isVisible = true; // 新增可见性状态
+  bool _isVisible = true;
+
+  // 存储所有弹幕
+  List<PositionedDanmakuItem> _danmakuList = [];
+  double _currentTime = 0.0;
 
   GPUDanmakuRenderer({
     required this.config,
@@ -33,12 +38,12 @@ class GPUDanmakuRenderer extends CustomPainter {
     bool isPaused = false,
     bool showCollisionBoxes = false,
     bool showTrackNumbers = false,
-    bool isVisible = true, // 在构造函数中接收
-  }) : _onNeedRepaint = onNeedRepaint, 
-       _isPaused = isPaused,
-       _isVisible = isVisible, // 初始化
-       _showCollisionBoxes = showCollisionBoxes,
-       _showTrackNumbers = showTrackNumbers {
+    bool isVisible = true,
+  })  : _onNeedRepaint = onNeedRepaint,
+        _isPaused = isPaused,
+        _isVisible = isVisible,
+        _showCollisionBoxes = showCollisionBoxes,
+        _showTrackNumbers = showTrackNumbers {
     _initializeRenderers();
   }
 
@@ -47,197 +52,149 @@ class GPUDanmakuRenderer extends CustomPainter {
 
   /// 初始化各种弹幕渲染器
   void _initializeRenderers() {
-    // 初始化顶部弹幕渲染器
     _topRenderer = GPUTopDanmakuRenderer(
       config: config,
       opacity: opacity,
       onNeedRepaint: _onNeedRepaint,
       isPaused: _isPaused,
+      isVisible: _isVisible,
       showCollisionBoxes: _showCollisionBoxes,
       showTrackNumbers: _showTrackNumbers,
-      isVisible: _isVisible, // 传递给子渲染器
     );
-
     _scrollRenderer = GPUScrollDanmakuRenderer(
       config: config,
       opacity: opacity,
       onNeedRepaint: _onNeedRepaint,
       isPaused: _isPaused,
+      isVisible: _isVisible,
       showCollisionBoxes: _showCollisionBoxes,
       showTrackNumbers: _showTrackNumbers,
-      isVisible: _isVisible,
     );
-
     _bottomRenderer = GPUBottomDanmakuRenderer(
       config: config,
       opacity: opacity,
       onNeedRepaint: _onNeedRepaint,
       isPaused: _isPaused,
+      isVisible: _isVisible,
       showCollisionBoxes: _showCollisionBoxes,
       showTrackNumbers: _showTrackNumbers,
-      isVisible: _isVisible,
     );
-    
-    // TODO: 后续初始化其他类型的弹幕渲染器
-    // _scrollRenderer = GPUScrollDanmakuRenderer(...);
-    // _bottomRenderer = GPUBottomDanmakuRenderer(...);
-    
-    debugPrint('GPUDanmakuRenderer: 初始化弹幕渲染器完成');
   }
 
-  /// 更新调试选项
-  void updateDebugOptions({bool? showCollisionBoxes, bool? showTrackNumbers}) {
-    bool needsUpdate = false;
+  /// 设置弹幕数据
+  void setDanmaku(List<PositionedDanmakuItem> danmaku, double currentTime) {
+    _danmakuList = danmaku;
+    _currentTime = currentTime;
     
-    if (showCollisionBoxes != null && _showCollisionBoxes != showCollisionBoxes) {
-      _showCollisionBoxes = showCollisionBoxes;
-      needsUpdate = true;
+    // 清空旧数据并分发新数据
+    _topRenderer.onDanmakuCleared();
+    _scrollRenderer.onDanmakuCleared();
+    _bottomRenderer.onDanmakuCleared();
+
+    for (final item in _danmakuList) {
+      switch (item.content.type) {
+        case DanmakuItemType.top:
+          _topRenderer.onDanmakuAdded(item);
+          break;
+        case DanmakuItemType.scroll:
+          _scrollRenderer.onDanmakuAdded(item);
+          break;
+        case DanmakuItemType.bottom:
+          _bottomRenderer.onDanmakuAdded(item);
+          break;
+      }
     }
-    
-    if (showTrackNumbers != null && _showTrackNumbers != showTrackNumbers) {
-      _showTrackNumbers = showTrackNumbers;
-      needsUpdate = true;
-    }
-    
-    if (needsUpdate) {
-      // 更新所有子渲染器的调试选项
-      _topRenderer.updateDebugOptions(
-        showCollisionBoxes: showCollisionBoxes,
-        showTrackNumbers: showTrackNumbers,
-      );
-      
-      _scrollRenderer.updateDebugOptions(
-        showCollisionBoxes: showCollisionBoxes,
-        showTrackNumbers: showTrackNumbers,
-      );
-
-      _bottomRenderer.updateDebugOptions(
-        showCollisionBoxes: showCollisionBoxes,
-        showTrackNumbers: showTrackNumbers,
-      );
-      // TODO: 后续更新其他渲染器的调试选项
-      // _scrollRenderer.updateDebugOptions(...);
-      // _bottomRenderer.updateDebugOptions(...);
-      
-      debugPrint('GPUDanmakuRenderer: 调试选项更新完成');
-    }
+    notifyListeners();
   }
 
-  /// 设置可见性
-  void setVisibility(bool visible) {
-    _isVisible = visible;
-    _topRenderer.setVisibility(visible);
-    _scrollRenderer.setVisibility(visible);
-    _bottomRenderer.setVisibility(visible);
-    // TODO: 其他渲染器
-  }
-
-  /// 设置屏蔽词列表
-  void setBlockWords(List<String> blockWords) {
-    _topRenderer.setBlockWords(blockWords);
-    _scrollRenderer.setBlockWords(blockWords);
-    _bottomRenderer.setBlockWords(blockWords);
-    // TODO: 其他渲染器
-  }
-
-  /// 设置合并弹幕开关
-  void setMergeDanmaku(bool mergeDanmaku) {
-    _topRenderer.setMergeDanmaku(mergeDanmaku);
-    _scrollRenderer.setMergeDanmaku(mergeDanmaku);
-    _bottomRenderer.setMergeDanmaku(mergeDanmaku);
-    // TODO: 其他渲染器
-  }
-
-  /// 计算合并弹幕的字体大小倍率
-  double calculateMergedFontSizeMultiplier(int mergeCount) {
-    return _topRenderer.calculateMergedFontSizeMultiplier(mergeCount);
-  }
-
-  /// 设置暂停状态
-  void setPaused(bool paused) {
-    _isPaused = paused;
-    
-    // 更新所有子渲染器的暂停状态
-    _topRenderer.setPaused(paused);
-    _scrollRenderer.setPaused(paused);
-    _bottomRenderer.setPaused(paused);
-    
-    // TODO: 后续更新其他渲染器的暂停状态
-    // _scrollRenderer.setPaused(paused);
-    // _bottomRenderer.setPaused(paused);
-    
-    debugPrint('GPUDanmakuRenderer: 暂停状态设置为: $paused');
-  }
-
-  /// 添加弹幕
-  void addDanmaku(DanmakuContentItem item) {
-    switch (item.type) {
-      case DanmakuItemType.top:
-        _topRenderer.addDanmaku(item);
-        break;
-      case DanmakuItemType.scroll:
-        _scrollRenderer.addDanmaku(item);
-        break;
-      case DanmakuItemType.bottom:
-        _bottomRenderer.addDanmaku(item);
-        break;
-    }
-  }
-
-  /// 清空弹幕
-  void clear() {
-    _topRenderer.clear();
-    _scrollRenderer.clear();
-    _bottomRenderer.clear();
-    
-    // TODO: 后续清空其他渲染器
-    // _scrollRenderer.clear();
-    // _bottomRenderer.clear();
-    
-    debugPrint('GPUDanmakuRenderer: 清空所有弹幕');
-  }
-
-  /// 更新选项
-  void updateOptions({GPUDanmakuConfig? config, double? opacity}) {
-    _topRenderer.updateOptions(newConfig: config, newOpacity: opacity);
-    _scrollRenderer.updateOptions(newConfig: config, newOpacity: opacity);
-    _bottomRenderer.updateOptions(newConfig: config, newOpacity: opacity);
-    
-    // TODO: 后续更新其他渲染器选项
-    // _scrollRenderer.updateOptions(config: config, opacity: opacity);
-    // _bottomRenderer.updateOptions(config: config, opacity: opacity);
-    
-    debugPrint('GPUDanmakuRenderer: 选项更新完成');
-  }
-
-  /// 释放资源
-  void dispose() {
-    _topRenderer.dispose();
-    _scrollRenderer.dispose();
-    _bottomRenderer.dispose();
-    
-    // TODO: 后续释放其他渲染器资源
-    // _scrollRenderer.dispose();
-    // _bottomRenderer.dispose();
-    
-    debugPrint('GPUDanmakuRenderer: 资源释放完成');
-  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 绘制顶部弹幕
-    _topRenderer.paint(canvas, size);
-    _scrollRenderer.paint(canvas, size);
-    _bottomRenderer.paint(canvas, size);
-    
-    // TODO: 后续绘制其他类型弹幕
-    // _scrollRenderer.paint(canvas, size);
-    // _bottomRenderer.paint(canvas, size);
+    if (!_isVisible) return;
+
+    // 更新子渲染器的时间
+    _topRenderer.setCurrentTime(_currentTime);
+    _scrollRenderer.setCurrentTime(_currentTime);
+    _bottomRenderer.setCurrentTime(_currentTime);
+
+    // 绘制不同类型的弹幕
+    _topRenderer.paintDanmaku(canvas, size);
+    _scrollRenderer.paintDanmaku(canvas, size);
+    _bottomRenderer.paintDanmaku(canvas, size);
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true; // 总是重绘，因为弹幕是动态的，由AnimationController驱动
+    // We are using a Listenable (ChangeNotifier), so this can be false.
+    return false;
+  }
+
+  /// 更新显示选项
+  void updateOptions({GPUDanmakuConfig? newConfig, double? opacity}) {
+    bool changed = false;
+    if (newConfig != null && this.config != newConfig) {
+      this.config = newConfig;
+      changed = true;
+    }
+    if (opacity != null && this.opacity != opacity) {
+      this.opacity = opacity;
+      changed = true;
+    }
+    if (changed) {
+      _topRenderer.updateOptions(newConfig: config, newOpacity: this.opacity);
+      _scrollRenderer.updateOptions(newConfig: config, newOpacity: this.opacity);
+      _bottomRenderer.updateOptions(newConfig: config, newOpacity: this.opacity);
+      notifyListeners();
+    }
+  }
+
+  /// 更新调试选项
+  void updateDebugOptions({bool? showCollisionBoxes, bool? showTrackNumbers}) {
+    bool changed = false;
+    if (showCollisionBoxes != null && _showCollisionBoxes != showCollisionBoxes) {
+      _showCollisionBoxes = showCollisionBoxes;
+      _topRenderer.showCollisionBoxes = showCollisionBoxes;
+      _scrollRenderer.showCollisionBoxes = showCollisionBoxes;
+      _bottomRenderer.showCollisionBoxes = showCollisionBoxes;
+      changed = true;
+    }
+    if (showTrackNumbers != null && _showTrackNumbers != showTrackNumbers) {
+      _showTrackNumbers = showTrackNumbers;
+      _topRenderer.showTrackNumbers = showTrackNumbers;
+      _scrollRenderer.showTrackNumbers = showTrackNumbers;
+      _bottomRenderer.showTrackNumbers = showTrackNumbers;
+      changed = true;
+    }
+    if(changed) notifyListeners();
+  }
+
+  /// 设置暂停状态
+  void setPaused(bool isPaused) {
+    if (_isPaused == isPaused) return;
+    _isPaused = isPaused;
+    _topRenderer.setPaused(isPaused);
+    _scrollRenderer.setPaused(isPaused);
+    _bottomRenderer.setPaused(isPaused);
+    notifyListeners();
+  }
+
+  /// 设置可见性
+  void setVisibility(bool isVisible) {
+    if (_isVisible == isVisible) return;
+    _isVisible = isVisible;
+    _topRenderer.setVisibility(isVisible);
+    _scrollRenderer.setVisibility(isVisible);
+    _bottomRenderer.setVisibility(isVisible);
+    notifyListeners();
+  }
+
+  // 资源释放
+  @override
+  void dispose() {
+    _topRenderer.dispose();
+    _scrollRenderer.dispose();
+    _bottomRenderer.dispose();
+    super.dispose();
   }
 }
 

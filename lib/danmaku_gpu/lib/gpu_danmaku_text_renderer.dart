@@ -8,12 +8,12 @@ import 'gpu_danmaku_config.dart';
 import 'dart:math' as math;
 
 /// GPU弹幕文本渲染器
-/// 
+///
 /// 负责处理弹幕文本的描边和填充渲染
 class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
   final DynamicFontAtlas _fontAtlas;
-  final GPUDanmakuConfig config;
-  
+  GPUDanmakuConfig config;
+
   GpuDanmakuTextRenderer({
     required DynamicFontAtlas fontAtlas,
     required this.config,
@@ -59,6 +59,35 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     );
   }
 
+  /// 通用的渲染方法
+  void render({
+    required Canvas canvas,
+    required String text,
+    required Offset offset,
+    required double opacity,
+    double fontSizeMultiplier = 1.0,
+    String? countText,
+    Color color = Colors.white,
+    DanmakuItemType type = DanmakuItemType.scroll,
+  }) {
+    final tempItem = GPUDanmakuItem(
+      text: text,
+      color: color,
+      type: type,
+      timeOffset: 0,
+      createdAt: 0,
+    );
+    renderItem(
+      canvas,
+      tempItem,
+      offset.dx,
+      offset.dy,
+      opacity,
+      fontSizeMultiplier: fontSizeMultiplier,
+      countText: countText,
+    );
+  }
+
   /// 根据文字颜色判断使用的描边颜色，与 NipaPlay 保持一致
   Color _getShadowColor(Color textColor) {
     // 计算亮度，与 NipaPlay 的算法保持一致
@@ -74,7 +103,7 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
   }
 
   /// 渲染单个弹幕项目的文本
-  /// 
+  ///
   /// 参数:
   /// - canvas: 画布
   /// - item: 弹幕项目
@@ -93,22 +122,24 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     double fontSizeMultiplier = 1.0,
     String? countText,
   }) {
-    if (_fontAtlas.atlasTexture == null) return;
-    
     // 守卫：确保弹幕所需字符都已在图集中
     if (!_fontAtlas.isReady(item.text)) {
+      _fontAtlas.addText(item.text);
       return;
     }
 
     if (countText != null && !_fontAtlas.isReady(countText)) {
+      _fontAtlas.addText(countText);
       return;
     }
 
-    // 🔥 新增：保存当前画布状态，以便应用透明度
-    canvas.save();
+    final texture = _fontAtlas.atlasTexture;
+    if (texture == null) return;
     
-    // 🔥 新增：应用透明度到整个绘制层，而不是修改颜色值
-    if (opacity < 1.0) {
+    final bool needsOpacityLayer = opacity < 1.0;
+
+    // 🔥 修改：仅在需要时创建透明层
+    if (needsOpacityLayer) {
       final width = calculateTextWidth(
         item.text + (countText ?? ''),
         scale: scale * fontSizeMultiplier,
@@ -264,12 +295,14 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
       );
     }
     
-    // 🔥 新增：恢复画布状态
-    canvas.restore();
+    // 🔥 修改：仅在创建了透明层时恢复画布状态
+    if (needsOpacityLayer) {
+      canvas.restore();
+    }
   }
 
   /// 批量渲染弹幕项目
-  /// 
+  ///
   /// 参数:
   /// - canvas: 画布
   /// - items: 弹幕项目列表
@@ -332,7 +365,7 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
   }
 
   /// 计算弹幕文本的实际渲染宽度
-  /// 
+  ///
   /// 使用字体图集中的字符信息计算，比TextPainter更准确
   double calculateTextWidth(String text, {double scale = 0.5}) {
     if (_fontAtlas.atlasTexture == null) return 0.0;

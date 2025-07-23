@@ -62,98 +62,106 @@ class _AboutPageState extends State<AboutPage> {
     // final baseTextStyle = getTextStyle(context);
 
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(24.0),
-      child: Center( // Center the content if the page itself is not centered
-        child: ConstrainedBox( // Limit max width for better readability on wide screens
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/logo.png', // Ensure this path is correct
-                height: 120, // Adjust size as needed
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(Ionicons.image_outline, size: 100, color: Colors.white70); // Placeholder if logo fails
-                },
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'NipaPlay Reload 当前版本: $_version', // App Name
-                style: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
+      child: ConstrainedBox( // Limit max width for better readability on wide screens
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start, // Change to start
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 40), // Add some space at the top
+            Image.asset(
+              'assets/logo.png', // Ensure this path is correct
+              height: 120, // Adjust size as needed
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(Ionicons.image_outline, size: 100, color: Colors.white70); // Placeholder if logo fails
+              },
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'NipaPlay Reload 当前版本: $_version', // App Name
+              style: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
 
-              _buildInfoCard(
-                context: context,
-                children: [
-                  _buildRichText(
-                    context,
-                    [
-                      const TextSpan(text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
-                      TextSpan(text: 'にぱ〜☆', style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
-                      const TextSpan(text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
+            _buildInfoCard(
+              context: context,
+              children: [
+                _buildRichText(
+                  context,
+                  [
+                    const TextSpan(text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
+                    TextSpan(text: 'にぱ〜☆', style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                    const TextSpan(text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
 
-              _buildInfoCard(
-                context: context,
-                title: '致谢',
-                children: [
-                   _buildRichText(
-                    context,
-                    [
-                      const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
-                      TextSpan(text: 'Kaedei', style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
-                      const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
-                    ]
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              
-              _buildInfoCard(
-                context: context,
-                title: '开源与社区',
-                children: [
-                  _buildRichText(
-                    context,
-                    [
-                      const TextSpan(text: '欢迎贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
-                    ]
-                  ),
-                  const SizedBox(height: 16),
-                  GestureDetector(
-                    onTap: () => _launchURL('https://www.github.com/MCDFsteve/NipaPlay-Reload'),
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Ionicons.logo_github, color: Colors.white.withOpacity(0.8), size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'MCDFsteve/NipaPlay-Reload',
-                            style: TextStyle(
-                              color: Colors.cyanAccent[100],
-                              decoration: TextDecoration.underline,
-                              decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
-                            ),
+            _buildInfoCard(
+              context: context,
+              title: '致谢',
+              children: [
+                 _buildRichText(
+                  context,
+                  [
+                    const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
+                    TextSpan(text: 'Kaedei', style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
+                    const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
+                  ]
+                ),
+                _buildRichText(
+                  context,
+                  [
+                    const TextSpan(text: '感谢开发者 '),
+                    TextSpan(text: 'Sakiko', style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
+                    const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
+                  ]
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            
+            _buildInfoCard(
+              context: context,
+              title: '开源与社区',
+              children: [
+                _buildRichText(
+                  context,
+                  [
+                    const TextSpan(text: '欢迎贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
+                  ]
+                ),
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: () => _launchURL('https://www.github.com/MCDFsteve/NipaPlay-Reload'),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Ionicons.logo_github, color: Colors.white.withOpacity(0.8), size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'MCDFsteve/NipaPlay-Reload',
+                          style: TextStyle(
+                            color: Colors.cyanAccent[100],
+                            decoration: TextDecoration.underline,
+                            decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 30),
+                ),
+              ],
+            ),
+            const SizedBox(height: 30),
 
-            ],
-          ),
+          ],
         ),
       ),
     );

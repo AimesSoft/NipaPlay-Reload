@@ -274,13 +274,10 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     return ListView(
       children: [
         ListTile(
-          title: Text("播放器内核", style: getTitleTextStyle(context)),
-          subtitle: Text(
-            _getPlayerKernelDescription(_selectedKernelType),
-            style: TextStyle(
-              color: Colors.grey[200],
-              fontSize: 12,
-            ),
+          title: const Text("播放器内核", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          subtitle: const Text(
+            "选择播放器使用的核心引擎",
+            style: TextStyle(color: Colors.white70),
           ),
           trailing: BlurDropdown<PlayerKernelType>(
             dropdownKey: _playerKernelDropdownKey,
@@ -310,16 +307,13 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           ),
         ),
         
-        const Divider(),
+        const Divider(color: Colors.white12, height: 1),
         
         ListTile(
-          title: Text("弹幕渲染引擎", style: getTitleTextStyle(context)),
-          subtitle: Text(
-            _getDanmakuRenderEngineDescription(_selectedDanmakuRenderEngine),
-            style: TextStyle(
-              color: Colors.grey[200],
-              fontSize: 12,
-            ),
+          title: const Text("弹幕渲染引擎", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          subtitle: const Text(
+            "选择弹幕的渲染方式",
+            style: TextStyle(color: Colors.white70),
           ),
           trailing: BlurDropdown<DanmakuRenderEngine>(
             dropdownKey: _danmakuRenderEngineDropdownKey,
@@ -343,7 +337,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           ),
         ),
         
-        const Divider(),
+        const Divider(color: Colors.white12, height: 1),
         
         if (_selectedKernelType == PlayerKernelType.mdk) ...[
           // 这里可以添加解码器相关设置

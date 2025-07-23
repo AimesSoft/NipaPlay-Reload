@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_text_renderer.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_text_renderer_factory.dart';
+import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'single_danmaku.dart';
 import 'dart:math';
 import 'package:provider/provider.dart';
@@ -18,6 +19,7 @@ class DanmakuContainer extends StatefulWidget {
   final double opacity;
   final String status; // 添加播放状态参数
   final double playbackRate; // 添加播放速度参数
+  final Function(List<PositionedDanmakuItem>)? onLayoutCalculated;
 
   const DanmakuContainer({
     super.key,
@@ -29,6 +31,7 @@ class DanmakuContainer extends StatefulWidget {
     required this.opacity,
     required this.status, // 添加播放状态参数
     required this.playbackRate, // 添加播放速度参数
+    this.onLayoutCalculated,
   });
 
   @override
@@ -123,7 +126,25 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   
   // 对弹幕列表进行预处理和排序
   void _preprocessDanmakuList() {
-    if (widget.danmakuList.isEmpty) return;
+    // 清空所有旧的布局和位置缓存，确保全新渲染
+    _danmakuYPositions.clear();
+    _danmakuTrackInfo.clear();
+    for (var type in _trackDanmaku.keys) {
+      _trackDanmaku[type]!.clear();
+    }
+
+    if (widget.danmakuList.isEmpty) {
+      // 如果新列表为空，确保清空相关状态
+      _sortedDanmakuList.clear();
+      _processedDanmaku.clear();
+      _contentFirstTime.clear();
+      _contentGroupInfo.clear();
+      // 触发一次重绘以清空屏幕上的弹幕
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
     
     // 清空缓存
     _contentFirstTime.clear();
@@ -211,9 +232,10 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   void didUpdateWidget(DanmakuContainer oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // 如果弹幕列表变化，重新预处理
+    // 我们将在build方法中处理列表的变化，以确保总是使用最新的数据
+    // 因此这里的检查可以移除或保留以作备用
     if (widget.danmakuList != oldWidget.danmakuList) {
-      _preprocessDanmakuList();
+      _preprocessDanmakuList(); // 在列表对象变化时调用
     }
   }
 
@@ -776,82 +798,128 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
 
   @override
   Widget build(BuildContext context) {
-    // 如果渲染器还未初始化，则不显示任何内容
     if (_textRenderer == null) {
       return const SizedBox.shrink();
     }
-    
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 使用 constraints 获取实际的窗口大小
         final newSize = Size(constraints.maxWidth, constraints.maxHeight);
-        
-        // 如果窗口大小发生变化，重新计算位置
+
         if (newSize != _currentSize) {
           _resize(newSize);
         }
-        
-        // 使用Consumer替代Provider.of，确保监听状态变化
+
+        // 总是在build方法中重新处理弹幕列表，以响应外部变化
+        // _preprocessDanmakuList(); // 从build方法移回didUpdateWidget
+
         return Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            // 检查视频是否暂停
-            final isPaused = videoState.isPaused;
-            // 使用getter检测是否存在mergeDanmaku
             final mergeDanmaku = videoState.danmakuVisible && (videoState.mergeDanmaku ?? false);
-            // 获取弹幕堆叠设置
             final allowStacking = videoState.danmakuStacking;
-            
-            // 检查屏蔽状态是否变化
-            final currentBlockStateHash = _getBlockStateHash(videoState);
-            final forceRefresh = currentBlockStateHash != _lastBlockStateHash;
-            
-            // 更新屏蔽状态哈希
+            final forceRefresh = _getBlockStateHash(videoState) != _lastBlockStateHash;
             if (forceRefresh) {
-              _lastBlockStateHash = currentBlockStateHash;
+              _lastBlockStateHash = _getBlockStateHash(videoState);
             }
-            
-            // 使用缓存优化弹幕分组，状态变化时强制刷新
+
             final groupedDanmaku = _getCachedGroupedDanmaku(
               widget.danmakuList,
               widget.currentTime,
               mergeDanmaku,
               allowStacking,
-              force: forceRefresh
+              force: forceRefresh,
             );
-            
-            // 使用缓存优化溢出弹幕，状态变化时强制刷新
-            final overflowDanmaku = _getCachedOverflowDanmaku(
-              widget.danmakuList,
-              widget.currentTime,
-              mergeDanmaku,
-              allowStacking,
-              force: forceRefresh
-            );
-            
-            // 主弹幕层 - 使用缓存优化
-            final mainDanmakuLayer = _buildMainDanmakuLayer(
-              groupedDanmaku,
-              isPaused,
-              newSize
-            );
-            
-            // 溢出弹幕层 - 使用缓存优化
-            final overflowLayer = _buildOverflowLayer(
-              overflowDanmaku,
-              isPaused,
-              newSize,
-              allowStacking,
-              videoState
-            );
-            
-            // 返回包含主弹幕层和溢出弹幕层的Stack
-            return Stack(
-              children: [
-                mainDanmakuLayer,
-                if (overflowLayer != null) overflowLayer,
-              ],
-            );
-          }
+
+            final List<Widget> danmakuWidgets = [];
+            final List<PositionedDanmakuItem> positionedItems = [];
+
+            for (var entry in groupedDanmaku.entries) {
+              final type = entry.key;
+              for (var danmaku in entry.value) {
+                final time = danmaku['time'] as double;
+                final content = danmaku['content'] as String;
+                final colorStr = danmaku['color'] as String;
+                final isMerged = danmaku['merged'] == true;
+                final mergeCount = isMerged ? (danmaku['mergeCount'] as int? ?? 1) : 1;
+                
+                final colorValues = colorStr.replaceAll('rgb(', '').replaceAll(')', '').split(',').map((s) => int.tryParse(s.trim()) ?? 255).toList();
+                final color = Color.fromARGB(255, colorValues[0], colorValues[1], colorValues[2]);
+
+                final danmakuType = DanmakuItemType.values.firstWhere((e) => e.toString().split('.').last == type, orElse: () => DanmakuItemType.scroll);
+
+                final danmakuItem = DanmakuContentItem(
+                  content,
+                  type: danmakuType,
+                  color: color,
+                  fontSizeMultiplier: isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0,
+                  countText: isMerged ? 'x$mergeCount' : null,
+                  isMe: danmaku['isMe'] ?? false,
+                );
+
+                final yPosition = _getYPosition(type, content, time, isMerged, mergeCount);
+                if (yPosition < -500) continue;
+
+                final textPainter = TextPainter(
+                  text: TextSpan(text: danmakuItem.text, style: TextStyle(fontSize: widget.fontSize * danmakuItem.fontSizeMultiplier)),
+                  textDirection: TextDirection.ltr,
+                )..layout();
+                final textWidth = textPainter.width;
+                
+                double xPosition;
+                double offstageX = newSize.width;
+
+                if (danmakuType == DanmakuItemType.scroll) {
+                  const duration = 10.0; // Use fixed duration of 10 seconds
+                  final totalDistance = newSize.width + textWidth;
+                  final elapsed = widget.currentTime - time;
+                  xPosition = newSize.width - (elapsed / duration) * totalDistance;
+                  offstageX = newSize.width;
+                } else {
+                  xPosition = (newSize.width - textWidth) / 2;
+                }
+
+                positionedItems.add(PositionedDanmakuItem(
+                  content: danmakuItem,
+                  x: xPosition,
+                  y: yPosition,
+                  offstageX: offstageX,
+                  time: time,
+                ));
+
+                if (widget.onLayoutCalculated == null) {
+                  danmakuWidgets.add(
+                    SingleDanmaku(
+                      key: ValueKey('$type-$content-$time-${UniqueKey()}'),
+                      content: danmakuItem,
+                      videoDuration: widget.videoDuration,
+                      currentTime: widget.currentTime,
+                      danmakuTime: time,
+                      fontSize: widget.fontSize,
+                      isVisible: widget.isVisible,
+                      yPosition: yPosition,
+                      opacity: widget.opacity,
+                      textRenderer: _textRenderer!,
+                    ),
+                  );
+                }
+              }
+            }
+
+            if (widget.onLayoutCalculated != null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (positionedItems.isNotEmpty) {
+                  //debugPrint('[DanmakuContainer] Calculated layout for ${positionedItems.length} items.');
+                  final first = positionedItems.first;
+                  //debugPrint('[DanmakuContainer] First item details: pos=(${first.x.toStringAsFixed(2)}, ${first.y.toStringAsFixed(2)}), text="${first.content.text}"');
+                }
+                widget.onLayoutCalculated!(positionedItems);
+              });
+            }
+
+            return widget.onLayoutCalculated != null
+                ? const SizedBox.expand()
+                : IgnorePointer(child: Stack(children: danmakuWidgets));
+          },
         );
       },
     );

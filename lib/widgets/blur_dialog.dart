@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'dart:ui';
 import '../utils/globals.dart' as globals;
 
@@ -96,7 +95,9 @@ class BlurDialog {
                                 textAlign: TextAlign.center, // 内容文本居中
                               ),
                             if (contentWidget != null)
-                              contentWidget,
+                              Expanded(
+                                child: contentWidget,
+                              ),
                             
                             // 按钮区域 - 底部居中
                             if (actions != null) ...[

@@ -31,6 +31,9 @@ class DanmakuContentItem {
   /// 滚动弹幕的初始X坐标
   final double? scrollOriginalX;
 
+  /// 是否是用户自己发送的弹幕
+  final bool isMe;
+
   DanmakuContentItem(
     this.text, {
     this.color = Colors.white,
@@ -40,5 +43,6 @@ class DanmakuContentItem {
     this.fontSizeMultiplier = 1.0,
     this.countText,
     this.scrollOriginalX,
+    this.isMe = false,
   });
 }

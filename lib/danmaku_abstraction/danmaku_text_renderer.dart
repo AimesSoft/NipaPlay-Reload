@@ -55,56 +55,67 @@ class CpuDanmakuTextRenderer extends DanmakuTextRenderer {
       Shadow(offset: const Offset(1, 0), blurRadius: 0, color: strokeColor),
     ];
 
-    return Opacity(
-      opacity: opacity,
-      child: hasCountText
-          ? RichText(
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: content.text,
-                    style: TextStyle(
-                      fontSize: adjustedFontSize,
-                      color: content.color,
-                      fontWeight: FontWeight.normal,
-                      shadows: shadowList,
-                    ),
-                  ),
-                  TextSpan(
-                    text: content.countText,
-                    style: TextStyle(
-                      fontSize: 25.0, // 固定大小字体
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      shadows: shadowList, // 继承相同的描边效果
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : Stack(
+    final textWidget = hasCountText
+        ? RichText(
+            text: TextSpan(
               children: [
-                // 描边
-                Text(
-                  content.text,
-                  style: TextStyle(
-                    fontSize: adjustedFontSize,
-                    color: strokeColor,
-                    fontWeight: FontWeight.normal,
-                    shadows: shadowList,
-                  ),
-                ),
-                // 实际文本
-                Text(
-                  content.text,
+                TextSpan(
+                  text: content.text,
                   style: TextStyle(
                     fontSize: adjustedFontSize,
                     color: content.color,
                     fontWeight: FontWeight.normal,
+                    shadows: shadowList,
+                  ),
+                ),
+                TextSpan(
+                  text: content.countText,
+                  style: TextStyle(
+                    fontSize: 25.0, // 固定大小字体
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    shadows: shadowList, // 继承相同的描边效果
                   ),
                 ),
               ],
             ),
+          )
+        : Stack(
+            children: [
+              // 描边
+              Text(
+                content.text,
+                style: TextStyle(
+                  fontSize: adjustedFontSize,
+                  color: strokeColor,
+                  fontWeight: FontWeight.normal,
+                  shadows: shadowList,
+                ),
+              ),
+              // 实际文本
+              Text(
+                content.text,
+                style: TextStyle(
+                  fontSize: adjustedFontSize,
+                  color: content.color,
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            ],
+          );
+
+    return Opacity(
+      opacity: opacity,
+      child: content.isMe
+          ? Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white, width: 1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: textWidget,
+            )
+          : textWidget,
     );
   }
 } 
