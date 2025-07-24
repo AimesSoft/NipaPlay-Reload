@@ -12,6 +12,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/widgets/blur_button.dart';
 
 class EmbyDetailPage extends StatefulWidget {
   final String embyId;
@@ -714,18 +715,12 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
           const SizedBox(height: 20),
           Row(
             children: [
-              ElevatedButton.icon(
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('播放'),
-                onPressed: _playMovie,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
+              BlurButton(
+                icon: Icons.play_arrow,
+                text: '播放',
+                onTap: _playMovie,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                fontSize: 18,
               ),
             ],
           ),
@@ -823,18 +818,12 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      label: const Text('播放'),
-                      onPressed: _playMovie,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
+                    BlurButton(
+                      icon: Icons.play_arrow,
+                      text: '播放',
+                      onTap: _playMovie,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      fontSize: 18,
                     ),
                   ],
                 ),

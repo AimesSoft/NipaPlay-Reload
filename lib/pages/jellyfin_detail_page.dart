@@ -13,6 +13,7 @@ import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart'; // 导入TabChangeNotifier
 import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/widgets/blur_button.dart';
 
 class JellyfinDetailPage extends StatefulWidget {
   final String jellyfinId;
@@ -358,11 +359,12 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.2)),
-                onPressed: _loadMediaDetail,
-                child: const Text('重试', style: TextStyle(color: Colors.white)),
+              BlurButton(
+                icon: Icons.refresh,
+                text: '重试',
+                onTap: _loadMediaDetail,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                fontSize: 16,
               ),
               const SizedBox(height: 10),
               TextButton(
@@ -927,18 +929,12 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
           const SizedBox(height: 20),
           Row(
             children: [
-              ElevatedButton.icon(
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('播放'),
-                onPressed: _playMovie,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
+              BlurButton(
+                icon: Icons.play_arrow,
+                text: '播放',
+                onTap: _playMovie,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                fontSize: 18,
               ),
             ],
           ),
@@ -1026,10 +1022,12 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
               const SizedBox(height: 16),
               Text('加载剧集失败: $_error', style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white.withOpacity(0.2)),
-                onPressed: () => _loadEpisodesForSeason(_selectedSeasonId!),
-                child: const Text('重试', style: TextStyle(color: Colors.white)),
+              BlurButton(
+                icon: Icons.refresh,
+                text: '重试',
+                onTap: () => _loadEpisodesForSeason(_selectedSeasonId!),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                fontSize: 16,
               ),
             ],
           ),
