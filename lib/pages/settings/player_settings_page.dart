@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -9,6 +9,7 @@ import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
@@ -48,7 +49,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _decoderManager = playerState.decoderManager;
     _playerCoreName = playerState.playerCoreName;
     
-    _getAvailableDecoders();
+    if (!kIsWeb) {
+      _getAvailableDecoders();
+    }
     _loadDecoderSettings();
     _loadPlayerKernelSettings();
     _loadDanmakuRenderEngineSettings();
@@ -103,11 +106,14 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         TextButton(
           onPressed: () {
             // 直接退出应用
-            if (Platform.isAndroid || Platform.isIOS) {
+            if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
               exit(0);
-            } else {
+            } else if (!kIsWeb) {
               // 桌面平台
               windowManager.close();
+            } else {
+              // Web 平台可以提示用户手动刷新
+               Navigator.of(context).pop();
             }
           },
           child: const Text('确定', style: TextStyle(color: Colors.white)),
@@ -122,13 +128,14 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       final savedDecoders = prefs.getStringList(_selectedDecodersKey);
       if (savedDecoders != null && savedDecoders.isNotEmpty) {
         _selectedDecoders = savedDecoders;
-      } else {
+      } else if (!kIsWeb) {
         _initializeSelectedDecodersWithPlatformDefaults();
       }
     });
   }
 
   void _initializeSelectedDecodersWithPlatformDefaults() {
+    if (kIsWeb) return;
     final allDecoders = _decoderManager.getAllSupportedDecoders();
     if (Platform.isMacOS) {
       _selectedDecoders = List.from(allDecoders['macos']!);
@@ -146,6 +153,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   }
 
   void _getAvailableDecoders() {
+    if (kIsWeb) return;
     final allDecoders = _decoderManager.getAllSupportedDecoders();
     
     if (Platform.isMacOS) {
@@ -174,28 +182,30 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     if (context.mounted) {
       await _decoderManager.updateDecoders(_selectedDecoders);
         
-      final playerState = Provider.of<VideoPlayerState>(context, listen: false);
-      if (playerState.hasVideo && 
-          playerState.player.mediaInfo.video != null && 
-          playerState.player.mediaInfo.video!.isNotEmpty) {
-        
-        final videoTrack = playerState.player.mediaInfo.video![0];
-        final codecString = videoTrack.toString().toLowerCase();
-        if (codecString.contains('hevc') || codecString.contains('h265')) {
-          debugPrint('检测到设置变更时正在播放HEVC视频，应用特殊优化...');
+      if (!kIsWeb) {
+        final playerState = Provider.of<VideoPlayerState>(context, listen: false);
+        if (playerState.hasVideo && 
+            playerState.player.mediaInfo.video != null && 
+            playerState.player.mediaInfo.video!.isNotEmpty) {
           
-          if (Platform.isMacOS) {
-            if (_selectedDecoders.isNotEmpty && _selectedDecoders[0] != "VT") {
-              _selectedDecoders.remove("VT");
-              _selectedDecoders.insert(0, "VT");
-              
-              await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
-              await _decoderManager.updateDecoders(_selectedDecoders);
-              
-              BlurSnackBar.show(context, '已优化解码器设置以支持HEVC硬件解码');
-            }
+          final videoTrack = playerState.player.mediaInfo.video![0];
+          final codecString = videoTrack.toString().toLowerCase();
+          if (codecString.contains('hevc') || codecString.contains('h265')) {
+            debugPrint('检测到设置变更时正在播放HEVC视频，应用特殊优化...');
             
-            await playerState.forceEnableHardwareDecoder();
+            if (Platform.isMacOS) {
+              if (_selectedDecoders.isNotEmpty && _selectedDecoders[0] != "VT") {
+                _selectedDecoders.remove("VT");
+                _selectedDecoders.insert(0, "VT");
+                
+                await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
+                await _decoderManager.updateDecoders(_selectedDecoders);
+                
+                BlurSnackBar.show(context, '已优化解码器设置以支持HEVC硬件解码');
+              }
+              
+              await playerState.forceEnableHardwareDecoder();
+            }
           }
         }
       }
@@ -236,9 +246,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         TextButton(
           onPressed: () {
             // 直接退出应用
-            if (Platform.isAndroid || Platform.isIOS) {
+            if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
               exit(0);
-            } else {
+            } else if (!kIsWeb) {
               // 桌面平台
               windowManager.close();
             }
@@ -271,6 +281,15 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Web 平台不显示此页面内容，或者显示一个提示信息
+    if (kIsWeb) {
+      return const Center(
+        child: Text(
+          '播放器设置在Web平台不可用',
+          style: TextStyle(color: Colors.white),
+        ),
+      );
+    }
     return ListView(
       children: [
         ListTile(
@@ -347,6 +366,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   }
   
   String _getDecoderDescription() {
+    if (kIsWeb) return 'Web平台使用浏览器内置解码器';
     if (Platform.isMacOS || Platform.isIOS) {
       return 'VT: macOS/iOS 视频工具箱硬件加速\n'
              'hap: HAP 视频格式解码\n'

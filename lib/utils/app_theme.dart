@@ -1,11 +1,13 @@
 // ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class AppTheme {
   // 获取适合当前平台的默认字体
   static String? get _platformDefaultFont {
+    if (kIsWeb) return null; // Web平台使用浏览器默认字体
     if (Platform.isWindows) {
       return "微软雅黑"; // Windows中文系统默认字体：直接使用中文名称
     } else if (Platform.isMacOS) {

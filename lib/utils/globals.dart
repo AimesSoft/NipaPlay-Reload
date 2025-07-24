@@ -1,6 +1,6 @@
 // globals.dart
 library globals;
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -51,9 +51,11 @@ bool get isTouch {
   }
 }
 bool get noMenuButton {
+  if (kIsWeb) {
+    return true;
+  }
   //没有三大键的设备
-  return kIsWeb ||
-      !Platform.isWindows && !Platform.isLinux && !Platform.isMacOS;
+  return !Platform.isWindows && !Platform.isLinux && !Platform.isMacOS;
 }
 bool get winLinDesktop {
   //windows和linux桌面平台

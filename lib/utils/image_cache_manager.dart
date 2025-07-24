@@ -3,9 +3,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'package:image/image.dart' as img;
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'storage_service.dart';
@@ -54,7 +54,7 @@ class ImageCacheManager {
   }
 
   Future<void> _initCacheDir() async {
-    if (_isInitialized) return;
+    if (kIsWeb || _isInitialized) return;
     
     try {
       final appDir = await StorageService.getAppStorageDirectory();
@@ -76,15 +76,15 @@ class ImageCacheManager {
   }
 
   Future<File> _getCacheFile(String url) async {
-    if (!_isInitialized) {
+    if (!_isInitialized && !kIsWeb) {
       await _initCacheDir();
     }
     final key = _getCacheKey(url);
-    return File('${_cacheDir!.path}/$key.jpg');
+    return File('${_cacheDir?.path ?? 'web_cache'}/$key.jpg');
   }
 
   Future<ui.Image> loadImage(String url) async {
-    if (!_isInitialized) {
+    if (!_isInitialized && !kIsWeb) {
       await _initCacheDir();
     }
     // 如果图片已经在内存缓存中，更新访问时间并增加引用计数
@@ -105,19 +105,21 @@ class ImageCacheManager {
 
     try {
       // 检查本地缓存
-      final cacheFile = await _getCacheFile(url);
-      if (await cacheFile.exists()) {
-        // 从本地缓存加载
-        final bytes = await cacheFile.readAsBytes();
-        final codec = await ui.instantiateImageCodec(bytes);
-        final frame = await codec.getNextFrame();
-        final image = frame.image;
-        
-        _cache[url] = image;
-        _refCount[url] = 1;
-        completer.complete(image);
-        _loading.remove(url);
-        return image;
+      if (!kIsWeb) {
+        final cacheFile = await _getCacheFile(url);
+        if (await cacheFile.exists()) {
+          // 从本地缓存加载
+          final bytes = await cacheFile.readAsBytes();
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          final image = frame.image;
+          
+          _cache[url] = image;
+          _refCount[url] = 1;
+          completer.complete(image);
+          _loading.remove(url);
+          return image;
+        }
       }
 
       // 下载图片
@@ -130,7 +132,10 @@ class ImageCacheManager {
       final compressedBytes = await compute(_processImageInIsolate, response.bodyBytes);
 
       // 保存到本地缓存
-      await cacheFile.writeAsBytes(compressedBytes);
+      if (!kIsWeb) {
+        final cacheFile = await _getCacheFile(url);
+        await cacheFile.writeAsBytes(compressedBytes);
+      }
 
       // 解码压缩后的图片数据
       final codec = await ui.instantiateImageCodec(compressedBytes);
@@ -266,60 +271,62 @@ class ImageCacheManager {
       // 清除内存缓存
       clear();
 
-      // 清除本地文件缓存
-      try {
-        if (await _cacheDir!.exists()) {
-          await _cacheDir!.delete(recursive: true);
-          await _cacheDir!.create();
-          //////debugPrint('已清除压缩图片缓存目录: ${_cacheDir!.path}');
+      if (!kIsWeb) {
+        // 清除本地文件缓存
+        try {
+          if (_cacheDir != null && await _cacheDir!.exists()) {
+            await _cacheDir!.delete(recursive: true);
+            await _cacheDir!.create();
+            //////debugPrint('已清除压缩图片缓存目录: ${_cacheDir!.path}');
+          }
+        } catch (e) {
+          //////debugPrint('清除压缩图片缓存失败: $e');
         }
-      } catch (e) {
-        //////debugPrint('清除压缩图片缓存失败: $e');
-      }
 
-      // 清除 cached_network_image 的缓存
-      try {
-        final cacheDir = await getTemporaryDirectory();
-        final imageCacheDir = Directory('${cacheDir.path}/cached_network_image');
-        
-        if (await imageCacheDir.exists()) {
-          await imageCacheDir.delete(recursive: true);
-          //////debugPrint('已清除 cached_network_image 缓存目录: ${imageCacheDir.path}');
+        // 清除 cached_network_image 的缓存
+        try {
+          final cacheDir = await getTemporaryDirectory();
+          final imageCacheDir = Directory('${cacheDir.path}/cached_network_image');
+          
+          if (await imageCacheDir.exists()) {
+            await imageCacheDir.delete(recursive: true);
+            //////debugPrint('已清除 cached_network_image 缓存目录: ${imageCacheDir.path}');
+          }
+        } catch (e) {
+          //////debugPrint('清除 cached_network_image 缓存失败: $e');
         }
-      } catch (e) {
-        //////debugPrint('清除 cached_network_image 缓存失败: $e');
-      }
 
-      // 清除自定义图片缓存
-      try {
-        final cacheDir = await getTemporaryDirectory();
-        final imageCacheDir = Directory('${cacheDir.path}/image_cache');
-        
-        if (await imageCacheDir.exists()) {
-          await imageCacheDir.delete(recursive: true);
-          //////debugPrint('已清除自定义图片缓存目录: ${imageCacheDir.path}');
+        // 清除自定义图片缓存
+        try {
+          final cacheDir = await getTemporaryDirectory();
+          final imageCacheDir = Directory('${cacheDir.path}/image_cache');
+          
+          if (await imageCacheDir.exists()) {
+            await imageCacheDir.delete(recursive: true);
+            //////debugPrint('已清除自定义图片缓存目录: ${imageCacheDir.path}');
+          }
+        } catch (e) {
+          //////debugPrint('清除自定义图片缓存失败: $e');
         }
-      } catch (e) {
-        //////debugPrint('清除自定义图片缓存失败: $e');
+
+        // 清除所有临时文件
+        try {
+          final cacheDir = await getTemporaryDirectory();
+          final files = await cacheDir.list().toList();
+          for (var file in files) {
+            if (file is File || file is Directory) {
+              await file.delete(recursive: true);
+            }
+          }
+          //////debugPrint('已清除所有临时文件: ${cacheDir.path}');
+        } catch (e) {
+          //////debugPrint('清除临时文件失败: $e');
+        }
       }
 
       // 清除 Flutter 的图片缓存
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
-
-      // 清除所有临时文件
-      try {
-        final cacheDir = await getTemporaryDirectory();
-        final files = await cacheDir.list().toList();
-        for (var file in files) {
-          if (file is File || file is Directory) {
-            await file.delete(recursive: true);
-          }
-        }
-        //////debugPrint('已清除所有临时文件: ${cacheDir.path}');
-      } catch (e) {
-        //////debugPrint('清除临时文件失败: $e');
-      }
     } finally {
       _isClearingCache = false;
     }

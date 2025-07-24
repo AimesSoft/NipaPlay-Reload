@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:fvp/mdk.dart'; // Commented out old import
@@ -28,6 +29,7 @@ class DecoderManager {
 
   /// 初始化解码器设置
   Future<void> initialize() async {
+    if (kIsWeb) return;
     // 设置硬件解码器
     final prefs = await SharedPreferences.getInstance();
     // final useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true; // REMOVED
@@ -83,6 +85,7 @@ class DecoderManager {
 
   /// 配置所有支持的解码器，按平台组织
   Map<String, List<String>> getAllSupportedDecoders() {
+    if (kIsWeb) return {};
     // 为所有平台准备解码器列表
     final Map<String, List<String>> platformDecoders = {
       // macOS解码器 - Apple平台不支持NVIDIA GPU
@@ -143,6 +146,7 @@ class DecoderManager {
 
   /// 更新解码器设置
   Future<void> updateDecoders(List<String> decoders) async {
+    if (kIsWeb) return;
     if (decoders.isNotEmpty) {
       player.setDecoders(MediaType.video, decoders); // Use our MediaType
       // 更新活跃解码器信息
@@ -195,6 +199,7 @@ class DecoderManager {
   void _setGlobalDecodingProperties() {
     // 通用设置 - 不再需要设置大量属性
     // 官方建议：设置解码器就足够了，不需要过多复杂的setProperty调用
+    if (kIsWeb) return;
     
     // 平台特定设置 - 仅保留基本的编解码器设置，不再手动调整大量参数
     if (Platform.isMacOS || Platform.isIOS) {
@@ -217,6 +222,7 @@ class DecoderManager {
 
   /// 检查是否有NVIDIA GPU（Windows平台）
   bool _checkForNvidiaGpu() {
+    if (kIsWeb) return false;
     if (Platform.isWindows) {
       try {
         final result = Process.runSync('wmic', ['path', 'win32_VideoController', 'get', 'name']);
@@ -231,6 +237,7 @@ class DecoderManager {
 
   /// 获取当前活跃解码器 (This method primarily reflects the *intended* or *configured* state)
   Future<String> getActiveDecoder() async {
+    if (kIsWeb) return "浏览器解码";
     // This method now more reflects the configured decoders rather than a user toggle state.
     // The actual active decoder is best obtained from player.getProperty("video.decoder")
     // as done in updateCurrentActiveDecoder.
@@ -269,6 +276,7 @@ class DecoderManager {
 
   /// 更新当前活跃解码器信息（从播放器获取）
   Future<void> updateCurrentActiveDecoder() async {
+    if (kIsWeb) return;
     try {
       // 检查媒体信息
       if (player.mediaInfo.video == null || player.mediaInfo.video!.isEmpty) {
@@ -323,6 +331,7 @@ class DecoderManager {
 
   /// 强制启用硬件解码（如果当前是软解）
   Future<void> forceEnableHardwareDecoder() async {
+    if (kIsWeb) return;
     // Now that hardware decoding is default, this function primarily re-applies default hardware-first settings.
     // This can be useful if the player somehow ended up on software decoding despite hardware availability.
     debugPrint('尝试重新应用硬件优先的解码器设置...');
@@ -336,6 +345,7 @@ class DecoderManager {
 
   // 添加一个新的辅助方法，用于在截图后检查解码器状态
   Future<void> checkDecoderAfterScreenshot() async {
+    if (kIsWeb) return;
     try {
       // 确保视频正在播放
       if (player.mediaInfo.video != null && 

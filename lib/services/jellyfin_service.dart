@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/jellyfin_model.dart';
-import 'package:path_provider/path_provider.dart'; // Added for getTemporaryDirectory
-import 'dart:io'; // Added for File
+import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
+import 'dart:io' if (dart.library.io) 'dart:io';
 
 class JellyfinService {
   static final JellyfinService instance = JellyfinService._internal();
@@ -28,6 +29,10 @@ class JellyfinService {
   List<String> get selectedLibraryIds => _selectedLibraryIds;
   
   Future<void> loadSavedSettings() async {
+    if (kIsWeb) {
+      _isConnected = false;
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     
     _serverUrl = prefs.getString('jellyfin_server_url');
@@ -110,7 +115,9 @@ class JellyfinService {
       _isConnected = true;
       
       // 获取可用的媒体库列表
-      await loadAvailableLibraries();
+      if (!kIsWeb) {
+        await loadAvailableLibraries();
+      }
       
       return true;
     } catch (e) {
@@ -140,7 +147,7 @@ class JellyfinService {
   }
   
   Future<void> loadAvailableLibraries() async {
-    if (!_isConnected || _userId == null) return;
+    if (kIsWeb || !_isConnected || _userId == null) return;
 
     try {
       final response = await _makeAuthenticatedRequest('/UserViews?userId=$_userId');
@@ -192,6 +199,7 @@ class JellyfinService {
   }
   
   Future<List<JellyfinMediaItem>> getLatestMediaItems({int limit = 99999}) async {
+    if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty) {
       return [];
     }
@@ -246,6 +254,7 @@ class JellyfinService {
   
   // 获取最新电影列表
   Future<List<JellyfinMovieInfo>> getLatestMovies({int limit = 99999}) async {
+    if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty) {
       return [];
     }
@@ -579,6 +588,7 @@ class JellyfinService {
 
   /// 下载外挂字幕文件
   Future<String?> downloadSubtitleFile(String itemId, int subtitleIndex, String format) async {
+    if (kIsWeb) return null;
     if (!_isConnected || _accessToken == null) {
       throw Exception('未连接到Jellyfin服务器');
     }

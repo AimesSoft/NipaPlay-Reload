@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' as io;
 import 'package:path/path.dart' as path;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -113,16 +113,20 @@ class WatchHistoryManager {
   // 初始化历史记录管理器
   static Future<void> initialize() async {
     if (_initialized) return;
+    if (kIsWeb) {
+      _initialized = true;
+      return;
+    }
 
     try {
       // 使用StorageService获取正确的存储目录
-      final Directory appDir = await StorageService.getAppStorageDirectory();
+      final io.Directory appDir = await StorageService.getAppStorageDirectory();
 
       // 设置历史文件路径
       _historyFilePath = path.join(appDir.path, _historyFileName);
       
       // 检查是否已迁移到数据库
-      final dbFile = File(path.join(appDir.path, 'watch_history.db'));
+      final dbFile = io.File(path.join(appDir.path, 'watch_history.db'));
       _migratedToDatabase = dbFile.existsSync();
       
       // 如果已迁移到数据库，则只从数据库加载
@@ -145,6 +149,7 @@ class WatchHistoryManager {
   
   // 从数据库预加载缓存
   static Future<void> _preloadCacheFromDatabase() async {
+    if (kIsWeb) return;
     try {
       final db = WatchHistoryDatabase.instance;
       final historyItems = await db.getAllWatchHistory();
@@ -159,10 +164,11 @@ class WatchHistoryManager {
   
   // 检查文件大小并从备份恢复
   static Future<void> _checkAndRecoverFromBackup() async {
+    if (kIsWeb) return;
     // 如果已迁移到数据库，则跳过此步骤
     if (_migratedToDatabase) return;
     
-    final file = File(_historyFilePath);
+    final file = io.File(_historyFilePath);
     if (!file.existsSync()) {
       // 文件不存在，尝试从备份恢复
       await _tryRecoverFromBackup(true);
@@ -173,7 +179,7 @@ class WatchHistoryManager {
     final int currentSize = await file.length();
     
     // 检查自动备份文件
-    final autoBackupFile = File('$_historyFilePath.bak.auto');
+    final autoBackupFile = io.File('$_historyFilePath.bak.auto');
     if (autoBackupFile.existsSync()) {
       final int backupSize = await autoBackupFile.length();
       
@@ -186,11 +192,11 @@ class WatchHistoryManager {
     
     // 检查时间戳备份文件（从最新的开始）
     final directory = file.parent;
-    final List<FileSystemEntity> entities = await directory.list().toList();
-    final List<File> backupFiles = [];
+    final List<io.FileSystemEntity> entities = await directory.list().toList();
+    final List<io.File> backupFiles = [];
     
     for (var entity in entities) {
-      if (entity is File && 
+      if (entity is io.File && 
           entity.path.startsWith('$_historyFilePath.bak.') && 
           !entity.path.endsWith('.auto')) {
         backupFiles.add(entity);
@@ -215,29 +221,30 @@ class WatchHistoryManager {
   
   // 尝试从备份恢复
   static Future<void> _tryRecoverFromBackup(bool fileNotExists) async {
+    if (kIsWeb) return;
     // 首先检查自动备份
-    final autoBackupFile = File('$_historyFilePath.bak.auto');
+    final autoBackupFile = io.File('$_historyFilePath.bak.auto');
     if (autoBackupFile.existsSync()) {
       await _recoverFromSpecificBackup(autoBackupFile.path);
       return;
     }
     
     // 然后检查普通备份
-    final backupFile = File('$_historyFilePath.bak');
+    final backupFile = io.File('$_historyFilePath.bak');
     if (backupFile.existsSync()) {
       await _recoverFromSpecificBackup(backupFile.path);
       return;
     }
     
     // 最后检查时间戳备份
-    final directory = Directory(path.dirname(_historyFilePath));
+    final directory = io.Directory(path.dirname(_historyFilePath));
     if (!directory.existsSync()) return;
     
-    final List<FileSystemEntity> entities = await directory.list().toList();
-    final List<File> backupFiles = [];
+    final List<io.FileSystemEntity> entities = await directory.list().toList();
+    final List<io.File> backupFiles = [];
     
     for (var entity in entities) {
-      if (entity is File && entity.path.startsWith('$_historyFilePath.bak.')) {
+      if (entity is io.File && entity.path.startsWith('$_historyFilePath.bak.')) {
         backupFiles.add(entity);
       }
     }
@@ -249,15 +256,16 @@ class WatchHistoryManager {
       await _recoverFromSpecificBackup(backupFiles.first.path);
     } else if (fileNotExists) {
       // 如果没有找到任何备份，并且主文件不存在，创建一个空文件
-      final file = File(_historyFilePath);
+      final file = io.File(_historyFilePath);
       await file.writeAsString('[]');
     }
   }
   
   // 从指定备份文件恢复
   static Future<void> _recoverFromSpecificBackup(String backupPath) async {
+    if (kIsWeb) return;
     try {
-      final backupFile = File(backupPath);
+      final backupFile = io.File(backupPath);
       if (!backupFile.existsSync()) {
         return;
       }
@@ -270,7 +278,7 @@ class WatchHistoryManager {
         json.decode(content);
         
         // 备份有效，恢复到主文件
-        final file = File(_historyFilePath);
+        final file = io.File(_historyFilePath);
         await file.writeAsString(content);
       } catch (e) {
         // 尝试修复备份
@@ -282,7 +290,7 @@ class WatchHistoryManager {
         try {
           json.decode(fixedContent);
           // 修复成功，恢复修复后的内容
-          final file = File(_historyFilePath);
+          final file = io.File(_historyFilePath);
           await file.writeAsString(fixedContent);
         } catch (e) {
         }
@@ -315,11 +323,12 @@ class WatchHistoryManager {
 
   // 将文件加载到内存缓存
   static Future<void> _loadCacheFromFile() async {
+    if (kIsWeb) return;
     // 如果已迁移到数据库，则跳过此步骤
     if (_migratedToDatabase) return;
     
     try {
-      final file = File(_historyFilePath);
+      final file = io.File(_historyFilePath);
       if (!file.existsSync()) {
         _cachedItems.clear();
         return;
@@ -359,8 +368,9 @@ class WatchHistoryManager {
   
   // 重试加载缓存
   static Future<void> _retryLoadCache() async {
+    if (kIsWeb) return;
     try {
-      final file = File(_historyFilePath);
+      final file = io.File(_historyFilePath);
       if (!file.existsSync()) {
         _cachedItems.clear();
         return;
@@ -393,6 +403,7 @@ class WatchHistoryManager {
 
   // 获取所有历史记录
   static Future<List<WatchHistoryItem>> getAllHistory() async {
+    if (kIsWeb) return [];
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接从数据库获取
@@ -422,14 +433,16 @@ class WatchHistoryManager {
 
   // 在修复历史记录文件后重试获取历史记录
   static Future<List<WatchHistoryItem>> _getHistoryAfterFix() async {
+    if (kIsWeb) return [];
     await _retryLoadCache();
     return List.from(_cachedItems);
   }
 
   // 尝试修复历史记录文件
   static Future<void> _fixHistoryFile() async {
+    if (kIsWeb) return;
     try {
-      final file = File(_historyFilePath);
+      final file = io.File(_historyFilePath);
       if (!file.existsSync()) return;
 
       // 备份原始文件
@@ -457,8 +470,9 @@ class WatchHistoryManager {
 
   // 备份并清空历史记录
   static Future<void> _backupAndClearHistory() async {
+    if (kIsWeb) return;
     try {
-      final file = File(_historyFilePath);
+      final file = io.File(_historyFilePath);
       if (!file.existsSync()) return;
 
       // 创建带时间戳的备份
@@ -475,6 +489,7 @@ class WatchHistoryManager {
 
   // 添加或更新历史记录
   static Future<void> addOrUpdateHistory(WatchHistoryItem item) async {
+    if (kIsWeb) return;
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接使用数据库API
@@ -515,7 +530,7 @@ class WatchHistoryManager {
       _isWriting = true;
       
       // 首先备份当前文件
-      final file = File(_historyFilePath);
+      final file = io.File(_historyFilePath);
       if (file.existsSync()) {
         final fileLength = await file.length();
         // 只有当文件不为空时才备份，避免备份空文件
@@ -582,7 +597,7 @@ class WatchHistoryManager {
         // 保存到文件
         final jsonList = _cachedItems.map((item) => item.toJson()).toList();
         final jsonString = json.encode(jsonList);
-        final file = File(_historyFilePath);
+        final file = io.File(_historyFilePath);
         await file.writeAsString(jsonString);
         _lastWriteTime = DateTime.now();
       } catch (retryError) {
@@ -594,6 +609,7 @@ class WatchHistoryManager {
 
   // 获取单个历史记录项
   static Future<WatchHistoryItem?> getHistoryItem(String filePath) async {
+    if (kIsWeb) return null;
     try {
       // 如果已迁移到数据库，则直接使用数据库API
       if (_migratedToDatabase) {
@@ -614,7 +630,7 @@ class WatchHistoryManager {
       }
       
       // iOS路径前缀处理
-      if (Platform.isIOS) {
+      if (io.Platform.isIOS) {
         String alternativePath;
         if (filePath.startsWith('/private')) {
           // 尝试移除/private前缀
@@ -643,7 +659,7 @@ class WatchHistoryManager {
         }
         
         // iOS路径前缀处理
-        if (Platform.isIOS) {
+        if (io.Platform.isIOS) {
           String alternativePath;
           if (filePath.startsWith('/private')) {
             // 尝试移除/private前缀
@@ -669,6 +685,7 @@ class WatchHistoryManager {
 
   // 删除历史记录
   static Future<void> removeHistory(String filePath) async {
+    if (kIsWeb) return;
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接使用数据库API
@@ -702,7 +719,7 @@ class WatchHistoryManager {
       final jsonList = _cachedItems.map((item) => item.toJson()).toList();
       final jsonString = json.encode(jsonList);
 
-      final file = File(_historyFilePath);
+      final file = io.File(_historyFilePath);
       await file.writeAsString(jsonString);
       _lastWriteTime = DateTime.now();
     } finally {
@@ -712,6 +729,7 @@ class WatchHistoryManager {
 
   // 清空所有历史记录
   static Future<void> clearAllHistory() async {
+    if (kIsWeb) return;
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接使用数据库API
@@ -731,7 +749,7 @@ class WatchHistoryManager {
     
     // 原始JSON逻辑
     _cachedItems.clear();
-    final file = File(_historyFilePath);
+    final file = io.File(_historyFilePath);
     if (await file.exists()) {
       await file.delete();
       // Recreate an empty file
@@ -742,6 +760,7 @@ class WatchHistoryManager {
 
   // New method to get history item by animeId and episodeId
   static Future<WatchHistoryItem?> getHistoryItemByEpisode(int animeId, int episodeId) async {
+    if (kIsWeb) return null;
     if (!_initialized) {
       await initialize();
     }
@@ -774,6 +793,7 @@ class WatchHistoryManager {
 
   // Get items by file path prefix
   static Future<List<WatchHistoryItem>> getItemsByPathPrefix(String pathPrefix) async {
+    if (kIsWeb) return [];
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则优先使用数据库API
@@ -794,6 +814,7 @@ class WatchHistoryManager {
 
   // Remove items by file path prefix
   static Future<void> removeItemsByPathPrefix(String pathPrefix) async {
+    if (kIsWeb) return;
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接使用数据库API
@@ -828,7 +849,7 @@ class WatchHistoryManager {
         final jsonList = _cachedItems.map((item) => item.toJson()).toList();
         final jsonString = json.encode(jsonList);
         
-        final file = File(_historyFilePath);
+        final file = io.File(_historyFilePath);
         await file.writeAsString(jsonString);
         _lastWriteTime = DateTime.now();
       }
@@ -839,6 +860,7 @@ class WatchHistoryManager {
 
   // Get all items for a specific animeId
   static Future<List<WatchHistoryItem>> getAllItemsForAnime(int animeId) async {
+    if (kIsWeb) return [];
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则优先使用数据库API
@@ -870,6 +892,7 @@ class WatchHistoryManager {
 
   // 根据文件路径获取历史记录项
   static Future<WatchHistoryItem?> getHistoryItemByPath(String filePath) async {
+    if (kIsWeb) return null;
     await initialize();
     
     if (_migratedToDatabase) {
@@ -883,7 +906,7 @@ class WatchHistoryManager {
         return items.firstWhere((item) => item.filePath == filePath);
       } catch (e) {
         // 如果在iOS上没找到，尝试使用替代路径
-        if (Platform.isIOS) {
+        if (io.Platform.isIOS) {
           String alternativePath;
           if (filePath.startsWith('/private')) {
             alternativePath = filePath.replaceFirst('/private', '');
@@ -904,6 +927,7 @@ class WatchHistoryManager {
   
   // 根据动画ID获取该动画的所有剧集历史记录
   static Future<List<WatchHistoryItem>> getHistoryItemsByAnimeId(int animeId) async {
+    if (kIsWeb) return [];
     await initialize();
     
     if (_migratedToDatabase) {
@@ -921,6 +945,7 @@ class WatchHistoryManager {
   
   // 获取指定动画的上一集
   static Future<WatchHistoryItem?> getPreviousEpisode(int animeId, int currentEpisodeId) async {
+    if (kIsWeb) return null;
     await initialize();
     
     if (_migratedToDatabase) {
@@ -944,6 +969,7 @@ class WatchHistoryManager {
   
   // 获取指定动画的下一集
   static Future<WatchHistoryItem?> getNextEpisode(int animeId, int currentEpisodeId) async {
+    if (kIsWeb) return null;
     await initialize();
     
     if (_migratedToDatabase) {
