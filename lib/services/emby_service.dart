@@ -250,8 +250,9 @@ class EmbyService {
       } else {
         print('Error response: ${response.statusCode} - ${response.body}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('Error loading available libraries: $e');
+      print('Stack trace: $stackTrace');
     }
   }
   
@@ -311,8 +312,9 @@ class EmbyService {
           print('Error fetching Emby items for library $libraryId: ${response.statusCode} - ${response.body}');
             }
           }
-        } catch (e) {
-          // 处理错误
+        } catch (e, stackTrace) {
+          print('Error fetching Emby items for library $libraryId: $e');
+          print('Stack trace: $stackTrace');
         }
       }
 
@@ -329,8 +331,9 @@ class EmbyService {
       
       return allItems;
 
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('Error getting latest media items from Emby: $e');
+      print('Stack trace: $stackTrace');
     }
     return [];
   }
@@ -361,8 +364,9 @@ class EmbyService {
           
           allMovies.addAll(libraryMovies);
         }
-      } catch (e) {
-        // 处理错误
+      } catch (e, stackTrace) {
+        print('Error fetching movies for library $libraryId: $e');
+        print('Stack trace: $stackTrace');
       }
     }
     
@@ -392,7 +396,9 @@ class EmbyService {
         final data = json.decode(response.body);
         return EmbyMovieInfo.fromJson(data);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('Error getting movie details: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('无法获取电影详情: $e');
     }
     
@@ -415,8 +421,9 @@ class EmbyService {
         print('Error response: ${response.statusCode} - ${response.body}');
         throw Exception('HTTP ${response.statusCode}: 无法获取媒体详情');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('Error getting media item details: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('无法获取媒体详情: $e');
     }
   }
@@ -439,8 +446,9 @@ class EmbyService {
         print('Error response: ${response.statusCode} - ${response.body}');
         throw Exception('HTTP ${response.statusCode}: 无法获取季节信息');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('Error getting seasons: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('无法获取季节信息: $e');
     }
   }
@@ -463,8 +471,9 @@ class EmbyService {
         print('Error response: ${response.statusCode} - ${response.body}');
         throw Exception('HTTP ${response.statusCode}: 无法获取剧集信息');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('Error getting episodes: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('无法获取剧集信息: $e');
     }
   }
@@ -516,8 +525,9 @@ class EmbyService {
         debugPrint('[EmbyService] ❌ API请求失败: HTTP ${response.statusCode}');
         debugPrint('[EmbyService] 错误响应内容: ${response.body}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('[EmbyService] ❌ 获取剧集详情时出错: $e');
+      print('Stack trace: $stackTrace');
     }
     
     debugPrint('[EmbyService] 返回null，无法获取剧集详情');
@@ -631,8 +641,9 @@ class EmbyService {
           'fileSize': 0, // 无法获取确切大小时使用0
         };
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('获取Emby媒体文件信息时出错: $e');
+      print('Stack trace: $stackTrace');
     }
     
     return null;
@@ -701,8 +712,9 @@ class EmbyService {
         debugPrint('EmbyService: 获取播放信息失败: HTTP ${response.statusCode}');
         return [];
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('EmbyService: 获取字幕轨道信息失败: $e');
+      print('Stack trace: $stackTrace');
       return [];
     }
   }
@@ -747,8 +759,9 @@ class EmbyService {
         debugPrint('EmbyService: 下载字幕文件失败: HTTP ${subtitleResponse.statusCode}');
         return null;
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('EmbyService: 下载字幕文件时出错: $e');
+      print('Stack trace: $stackTrace');
       return null;
     }
   }

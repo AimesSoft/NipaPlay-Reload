@@ -3857,6 +3857,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('[Jellyfin字幕] 字幕文件下载成功: $subtitleFilePath');
         
         // 等待播放器完全初始化
+        // TODO: [技术债] 此处使用固定延迟等待播放器初始化，非常不可靠。
+        // 在网络或设备性能较差时可能导致字幕加载失败。
+        // 后续应重构为监听播放器的 isInitialized 状态。
         await Future.delayed(const Duration(milliseconds: 1000));
         
         // 加载外挂字幕
@@ -3920,6 +3923,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         if (subtitleFilePath != null) {
           debugPrint('[Emby字幕] 字幕文件下载成功: $subtitleFilePath');
           // 等待播放器完全初始化
+          // TODO: [技术债] 此处使用固定延迟等待播放器初始化，非常不可靠。
+          // 在网络或设备性能较差时可能导致字幕加载失败。
+          // 后续应重构为监听播放器的 isInitialized 状态。
           await Future.delayed(const Duration(milliseconds: 1000));
           // 加载外挂字幕
           _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
