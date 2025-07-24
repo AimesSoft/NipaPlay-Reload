@@ -19,6 +19,7 @@ import '../widgets/blur_snackbar.dart';
 import '../widgets/anime_card.dart';
 import 'package:nipaplay/main.dart';
 import '../widgets/tag_search_widget.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -33,14 +34,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   bool _isLoading = true;
   String? _error;
   bool _isReversed = false;
-  Map<int, String> _translatedSummaries = {};
-  static const String _translationCacheKey = 'bangumi_translation_cache';
-  static const Duration _translationCacheDuration = Duration(days: 7);
-  final bool _isShowingTranslation = false;
   
-  // bool _filterAdultContent = true; // REMOVED
-  // static const String _filterAdultContentKey = 'new_series_filter_adult_content'; // REMOVED
-
   // States for loading video from detail page
   bool _isLoadingVideoFromDetail = false;
   String _loadingMessageForDetail = '正在加载视频...';
@@ -84,9 +78,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   @override
   void initState() {
     super.initState();
-    // _loadFilterAdultContentPreference(); // REMOVED
     _loadAnimes();
-    _loadTranslationCache();
     // final today = DateTime.now().weekday % 7; // 旧的初始化方式移除
     // _expansionStates[today] = true; 
     // _expansionStates and _hoverStates will be initialized on-demand in build
@@ -101,28 +93,9 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     super.dispose();
   }
 
-  // Future<void> _loadFilterAdultContentPreference() async { // REMOVED
-  //   final prefs = await SharedPreferences.getInstance();
-  //   // Check if mounted before calling setState, especially if this could complete after dispose
-  //   if (mounted) { 
-  //     setState(() {
-  //       _filterAdultContent = prefs.getBool(_filterAdultContentKey) ?? true; // Default to true
-  //       //debugPrint('[NewSeriesPage] Loaded _filterAdultContent preference: $_filterAdultContent');
-  //     });
-  //     // Important: After loading the preference, we might need to reload animes 
-  //     // if the loaded preference is different from the initial default AND _loadAnimes in initState already ran.
-  //     // However, the current initState order (_loadFilterAdultContentPreference before _loadAnimes)
-  //     // should make _loadAnimes use the correct loaded value. 
-  //     // If _loadAnimes was called before this completed, a manual re-trigger might be needed.
-  //     // For simplicity now, relying on initState order.
-  //   }
-  // }
-
   Future<void> _loadAnimes({bool forceRefresh = false}) async {
     try {
-      //debugPrint('[NewSeriesPage _loadAnimes] Called. forceRefresh: $forceRefresh');
       if (!mounted) {
-        //debugPrint('[NewSeriesPage _loadAnimes] Not mounted, returning.');
         return;
       }
       setState(() {
@@ -130,30 +103,38 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         _error = null;
       });
 
-      final prefs = await SharedPreferences.getInstance();
-      // Use the same key defined in general_page.dart. 
-      // Ensure this key is consistently available, e.g. by importing the settings file or having a shared constants file.
-      // For now, we'll use the literal string, assuming 'global_filter_adult_content' is the key.
-      final bool filterAdultContentGlobally = prefs.getBool('global_filter_adult_content') ?? true; 
-      //debugPrint('[NewSeriesPage _loadAnimes] Using global NSFW filter: $filterAdultContentGlobally');
+      List<BangumiAnime> animes;
 
-      final animes = await _bangumiService.getCalendar(
-        forceRefresh: forceRefresh, 
-        filterAdultContent: filterAdultContentGlobally // Use the global setting value
-      );
-      //debugPrint('[NewSeriesPage _loadAnimes] getCalendar returned ${animes.length} animes.');
-
+      if (kIsWeb) {
+        // Web environment: fetch from the local API
+        try {
+          final response = await http.get(Uri.parse('/api/bangumi/calendar'));
+          if (response.statusCode == 200) {
+            final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+            animes = data.map((d) => BangumiAnime.fromJson(d as Map<String, dynamic>)).toList();
+          } else {
+            throw Exception('Failed to load from API: ${response.statusCode}');
+          }
+        } catch (e) {
+          throw Exception('Failed to connect to the local API: $e');
+        }
+      } else {
+        // Mobile/Desktop environment: fetch from the service
+        final prefs = await SharedPreferences.getInstance();
+        final bool filterAdultContentGlobally = prefs.getBool('global_filter_adult_content') ?? true; 
+        animes = await _bangumiService.getCalendar(
+          forceRefresh: forceRefresh,
+          filterAdultContent: filterAdultContentGlobally
+        );
+      }
+      
       if (mounted) {
-        //debugPrint('[NewSeriesPage _loadAnimes] Before final setState - animes.length from service: ${animes.length}');
         setState(() {
           _animes = animes;
           _isLoading = false;
         });
-        //debugPrint('[NewSeriesPage _loadAnimes] After final setState - _animes.length now: ${_animes.length}, _isLoading: $_isLoading');
       }
-      ////debugPrint('番剧数据加载完成');
     } catch (e) {
-      ////debugPrint('加载番剧数据时出错: $e');
       String errorMsg = e.toString();
       if (e is TimeoutException) {
         errorMsg = '网络请求超时，请检查网络连接后重试';
@@ -171,68 +152,6 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           _isLoading = false;
         });
       }
-    }
-  }
-
-  Future<void> _loadTranslationCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? cachedString = prefs.getString(_translationCacheKey);
-      
-      if (cachedString != null) {
-        ////debugPrint('找到翻译缓存数据');
-        final data = json.decode(cachedString);
-        final timestamp = data['timestamp'] as int;
-        final now = DateTime.now().millisecondsSinceEpoch;
-        
-        ////debugPrint('缓存时间戳: $timestamp');
-        ////debugPrint('当前时间戳: $now');
-        ////debugPrint('时间差: ${now - timestamp}ms');
-        ////debugPrint('缓存有效期: ${_translationCacheDuration.inMilliseconds}ms');
-        
-        // 检查缓存是否过期
-        if (now - timestamp <= _translationCacheDuration.inMilliseconds) {
-          final translations = Map<String, String>.from(data['translations']);
-          // 将字符串键转换回整数
-          final Map<int, String> parsedTranslations = {};
-          translations.forEach((key, value) {
-            parsedTranslations[int.parse(key)] = value;
-          });
-          ////debugPrint('从缓存加载翻译，共 ${parsedTranslations.length} 条');
-          setState(() {
-            _translatedSummaries = parsedTranslations;
-          });
-        } else {
-          ////debugPrint('翻译缓存已过期，清除缓存');
-          await prefs.remove(_translationCacheKey);
-        }
-      } else {
-        ////debugPrint('未找到翻译缓存');
-      }
-    } catch (e) {
-      ////debugPrint('加载翻译缓存失败: $e');
-    }
-  }
-
-  Future<void> _saveTranslationCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      // 确保所有值都是可序列化的字符串
-      final Map<String, String> serializableTranslations = {};
-      _translatedSummaries.forEach((key, value) {
-        serializableTranslations[key.toString()] = value;
-      });
-      
-      final data = {
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'translations': serializableTranslations,
-      };
-      final jsonString = json.encode(data);
-      await prefs.setString(_translationCacheKey, jsonString);
-      ////debugPrint('保存翻译到缓存，共 ${_translatedSummaries.length} 条');
-      ////debugPrint('缓存数据大小: ${jsonString.length} 字节');
-    } catch (e) {
-      ////debugPrint('保存翻译缓存失败: $e');
     }
   }
 
@@ -436,9 +355,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   Widget _buildAnimeCard(BuildContext context, BangumiAnime anime, {Key? key}) {
     return AnimeCard(
       key: key,
-      name: _isShowingTranslation && _translatedSummaries.containsKey(anime.id) 
-          ? _translatedSummaries[anime.id]! 
-          : anime.nameCn,
+      name: anime.nameCn,
       imageUrl: anime.imageUrl,
       isOnAir: false,
       source: 'Bangumi',
@@ -462,33 +379,6 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     } catch (e) {
       //////debugPrint('格式化日期出错: $e');
       return dateStr;
-    }
-  }
-
-  Future<String?> _translateSummary(String text) async {
-    try {
-      final appSecret = await DandanplayService.getAppSecret();
-      ////debugPrint('开始请求翻译...');
-      final response = await http.post(
-        Uri.parse('https://nipaplay.aimes-soft.com/tran.php'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({
-          'appSecret': appSecret,
-          'text': text,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        ////debugPrint('翻译请求成功');
-        return response.body;
-      }
-      ////debugPrint('翻译请求失败，状态码: ${response.statusCode}');
-      return null;
-    } catch (e) {
-      ////debugPrint('翻译请求异常: $e');
-      return null;
     }
   }
 
@@ -582,21 +472,6 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         BlurSnackBar.show(context, '处理播放请求时出错: $e');
       }
     }
-  }
-
-  Future<String?> _translateSummaryWithCache(int animeId, String text) async {
-    if (_translatedSummaries.containsKey(animeId) && _isShowingTranslation) { // Check _isShowingTranslation as well
-      return _translatedSummaries[animeId];
-    }
-    // This function is now primarily used by the old logic if any, 
-    // TranslationButton has its own _translateSummary.
-    // However, keeping it for now. The button's internal logic is preferred.
-    final translation = await _translateSummary(text); // _translateSummary is the actual API call
-    if (translation != null) {
-      // No setState here, the caller (TranslationButton or old logic) should handle state.
-      return translation;
-    }
-    return null;
   }
 
   // New method for the custom collapsible section header

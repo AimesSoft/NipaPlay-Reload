@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/widgets/hover_tooltip_bubble.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
-class AnimeCard extends StatelessWidget {
+class AnimeCard extends StatefulWidget {
   final String name;
   final String imageUrl; // Can be a network URL or a local file path
   final VoidCallback onTap;
@@ -27,12 +28,30 @@ class AnimeCard extends StatelessWidget {
 
   // 根据filePath获取来源信息
   static String getSourceFromFilePath(String filePath) {
-    if (filePath.startsWith('jellyfin://')) {
-      return 'Jellyfin';
-    } else if (filePath.startsWith('emby://')) {
+    if (filePath.contains('/Emby/')) {
       return 'Emby';
+    } else if (filePath.contains('/Jellyfin/')) {
+      return 'Jellyfin';
     } else {
-      return '本地';
+      return '本地文件';
+    }
+  }
+
+  @override
+  State<AnimeCard> createState() => _AnimeCardState();
+}
+
+class _AnimeCardState extends State<AnimeCard> {
+  bool _isHovering = false;
+  late final String _displayImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb && widget.imageUrl.startsWith('http')) {
+      _displayImageUrl = '/api/image_proxy?url=${Uri.encodeComponent(widget.imageUrl)}';
+    } else {
+      _displayImageUrl = widget.imageUrl;
     }
   }
 
@@ -41,25 +60,25 @@ class AnimeCard extends StatelessWidget {
     List<String> ratingInfo = [];
     
     // 添加来源信息
-    if (source != null) {
-      ratingInfo.add('来源：$source');
+    if (widget.source != null) {
+      ratingInfo.add('来源：${widget.source}');
     }
     
     // 添加Bangumi评分（优先显示）
-    if (ratingDetails != null && ratingDetails!.containsKey('Bangumi评分')) {
-      final bangumiRating = ratingDetails!['Bangumi评分'];
+    if (widget.ratingDetails != null && widget.ratingDetails!.containsKey('Bangumi评分')) {
+      final bangumiRating = widget.ratingDetails!['Bangumi评分'];
       if (bangumiRating is num && bangumiRating > 0) {
         ratingInfo.add('Bangumi评分：${bangumiRating.toStringAsFixed(1)}');
       }
     }
     // 如果没有Bangumi评分，使用通用评分
-    else if (rating != null && rating! > 0) {
-      ratingInfo.add('评分：${rating!.toStringAsFixed(1)}');
+    else if (widget.rating != null && widget.rating! > 0) {
+      ratingInfo.add('评分：${widget.rating!.toStringAsFixed(1)}');
     }
     
     // 添加其他平台评分（排除Bangumi评分）
-    if (ratingDetails != null) {
-      final otherRatings = ratingDetails!.entries
+    if (widget.ratingDetails != null) {
+      final otherRatings = widget.ratingDetails!.entries
           .where((entry) => entry.key != 'Bangumi评分' && entry.value is num && (entry.value as num) > 0)
           .take(2) // 最多显示2个其他平台评分
           .map((entry) {
@@ -91,14 +110,14 @@ class AnimeCard extends StatelessWidget {
   
   // 创建图片组件（网络图片或本地文件）
   Widget _buildImage(BuildContext context, bool isBackground) {
-    if (imageUrl.isEmpty) {
+    if (widget.imageUrl.isEmpty) {
       // 没有图片URL，使用占位符
       return _buildPlaceholder(context);
-    } else if (imageUrl.startsWith('http')) {
+    } else if (widget.imageUrl.startsWith('http')) {
       // 网络图片，使用缓存组件，为背景图和主图使用不同的key
       return CachedNetworkImageWidget(
-        key: ValueKey('${imageUrl}_${isBackground ? 'bg' : 'main'}'),
-        imageUrl: imageUrl,
+        key: ValueKey('${widget.imageUrl}_${isBackground ? 'bg' : 'main'}'),
+        imageUrl: _displayImageUrl,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
@@ -109,8 +128,8 @@ class AnimeCard extends StatelessWidget {
     } else {
       // 本地文件 - 为每个实例创建独立的key
       return Image.file(
-        File(imageUrl),
-        key: ValueKey('${imageUrl}_${isBackground ? 'bg' : 'main'}'),
+        File(widget.imageUrl),
+        key: ValueKey('${widget.imageUrl}_${isBackground ? 'bg' : 'main'}'),
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
@@ -126,7 +145,7 @@ class AnimeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget card = RepaintBoundary(
       child: GestureDetector(
-        onTap: onTap,
+        onTap: widget.onTap,
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
           decoration: BoxDecoration(
@@ -170,12 +189,12 @@ class AnimeCard extends StatelessWidget {
                 children: [
                   // 图片部分
                   Expanded(
-                    flex: 7,
+                    flex: 8,
                     child: _buildImage(context, false),
                   ),
                   // 标题部分
                   Expanded(
-                    flex: 3,
+                    flex: 2,
                     child: Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -190,7 +209,7 @@ class AnimeCard extends StatelessWidget {
                       padding: const EdgeInsets.all(6.0),
                       child: Center(
                         child: Text(
-                          name,
+                          widget.name,
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 fontSize: 12,
                                 height: 1.2,
@@ -205,7 +224,7 @@ class AnimeCard extends StatelessWidget {
                     ),
                   ),
                   // 状态图标
-                  if (isOnAir)
+                  if (widget.isOnAir)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4.0, right: 4.0),
                       child: Align(

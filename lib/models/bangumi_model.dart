@@ -235,6 +235,42 @@ class BangumiAnime {
       }).toList(), // 额外保存一份原始格式的数据，确保fromDandanplayDetail能正确解析
     };
   }
+
+  // Used for deserializing from our own toJson format
+  factory BangumiAnime.fromJson(Map<String, dynamic> json) {
+    List<EpisodeData>? parsedEpisodeList;
+    if (json['episodeList'] != null && json['episodeList'] is List) {
+      parsedEpisodeList = (json['episodeList'] as List)
+          .map((epJson) => EpisodeData.fromJson(epJson as Map<String, dynamic>))
+          .toList();
+    }
+    
+    return BangumiAnime(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      nameCn: json['name_cn'] as String,
+      imageUrl: json['imageUrl'] as String,
+      summary: json['summary'] as String?,
+      airDate: json['air_date'] as String?,
+      airWeekday: json['airDay'] as int?,
+      rating: (json['rating'] as num?)?.toDouble(),
+      ratingDetails: json['ratingDetails'] as Map<String, dynamic>?,
+      tags: (json['tags'] as List<dynamic>?)?.cast<String>(),
+      metadata: (json['metadata'] as List<dynamic>?)?.cast<String>(),
+      isNSFW: json['isNSFW'] as bool?,
+      platform: json['platform'] as String?,
+      totalEpisodes: json['totalEpisodes'] as int?,
+      typeDescription: json['typeDescription'] as String?,
+      bangumiUrl: json['bangumiUrl'] as String?,
+      isOnAir: json['isOnAir'] as bool?,
+      isFavorited: json['isFavorited'] as bool?,
+      titles: (json['titles'] as List<dynamic>?)
+          ?.map((t) => Map<String, String>.from(t as Map))
+          .toList(),
+      searchKeyword: json['searchKeyword'] as String?,
+      episodeList: parsedEpisodeList,
+    );
+  }
 }
 
 class EpisodeData {

@@ -1,0 +1,1 @@
+export 'dart:io' if (dart.library.html) 'platform_utils_stub.dart'; 

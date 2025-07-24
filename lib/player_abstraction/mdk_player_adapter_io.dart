@@ -48,30 +48,26 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
     video: mdkInfo.video?.map((v) {
       String? codecNameValue;
       try {
-        if (v.codec != null) {
-            try {
-                dynamic trackCodecName = (v as dynamic).codecName; 
-                if (trackCodecName is String && trackCodecName.isNotEmpty) {
-                    codecNameValue = trackCodecName;
-                }
-            } catch (_) {}
+          try {
+              dynamic trackCodecName = (v as dynamic).codecName; 
+              if (trackCodecName is String && trackCodecName.isNotEmpty) {
+                  codecNameValue = trackCodecName;
+              }
+          } catch (_) {}
 
-            if (codecNameValue == null) {
-                codecNameValue = v.codec.toString();
-                if (codecNameValue.startsWith('Instance of')) {
-                    codecNameValue = 'Unknown Codec';
-                }
-            }
-        } else {
-            codecNameValue = 'Unknown Codec';
-        }
-      } catch (e) {
+          if (codecNameValue == null) {
+              codecNameValue = v.codec.toString();
+              if (codecNameValue.startsWith('Instance of')) {
+                  codecNameValue = 'Unknown Codec';
+              }
+          }
+            } catch (e) {
         codecNameValue = 'Error Retrieving Codec';
       }
       return PlayerVideoStreamInfo(
         codec: PlayerVideoCodecParams(
-            width: v.codec?.width ?? 0,
-            height: v.codec?.height ?? 0, 
+            width: v.codec.width ?? 0,
+            height: v.codec.height ?? 0, 
             name: codecNameValue
         ),
         codecName: codecNameValue, 
@@ -106,13 +102,13 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
               codecNameValue = codecNameProp;
             } else {
               codecNameValue = mdkAudioCodec.toString();
-              if (codecNameValue != null && codecNameValue.startsWith('Instance of')) {
+              if (codecNameValue.startsWith('Instance of')) {
                 codecNameValue = 'Unknown Codec';
               }
             }
           } catch (e) {
             codecNameValue = mdkAudioCodec.toString();
-            if (codecNameValue != null && codecNameValue.startsWith('Instance of')) {
+            if (codecNameValue.startsWith('Instance of')) {
                 codecNameValue = 'Unknown Codec';
             }
           }
@@ -262,7 +258,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
         throw TimeoutException('Texture update timed out for ${_mdkPlayer.media}');
       });
     } catch (e) {
-      throw e;
+      rethrow;
     }
   }
 
@@ -336,20 +332,16 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   Future<void> playDirectly() async {
     try {
-      if (_mdkPlayer != null) {
-        _mdkPlayer.state = mdk.PlaybackState.playing;
-      }
-    } catch (e) {
+      _mdkPlayer.state = mdk.PlaybackState.playing;
+        } catch (e) {
     }
   }
   
   @override
   Future<void> pauseDirectly() async {
     try {
-      if (_mdkPlayer != null) {
-        _mdkPlayer.state = mdk.PlaybackState.paused;
-      }
-    } catch (e) {
+      _mdkPlayer.state = mdk.PlaybackState.paused;
+        } catch (e) {
     }
   }
 

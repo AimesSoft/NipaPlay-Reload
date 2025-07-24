@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  charset_converter
   desktop_drop
   file_selector_windows
   fvp

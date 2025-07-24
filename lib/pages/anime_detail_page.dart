@@ -20,6 +20,10 @@ import '../widgets/tag_search_widget.dart'; // 添加标签搜索组件
 import '../widgets/rating_dialog.dart'; // 添加评分对话框
 import '../services/playback_service.dart';
 import '../models/playable_item.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -170,15 +174,31 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       _error = null;
     });
     try {
-      final anime = await _bangumiService.getAnimeDetails(widget.animeId);
+      BangumiAnime anime;
+
+      if (kIsWeb) {
+        // Web environment: fetch from local API
+        try {
+          final response = await http.get(Uri.parse('/api/bangumi/detail/${widget.animeId}'));
+          if (response.statusCode == 200) {
+            final data = json.decode(utf8.decode(response.bodyBytes));
+            anime = BangumiAnime.fromJson(data as Map<String, dynamic>);
+          } else {
+            throw Exception('Failed to load details from API: ${response.statusCode}');
+          }
+        } catch (e) {
+          throw Exception('Failed to connect to the local details API: $e');
+        }
+      } else {
+        // Mobile/Desktop environment: fetch from service
+        anime = await BangumiService.instance.getAnimeDetails(widget.animeId);
+      }
+      
       if (mounted) {
         setState(() {
           _detailedAnime = anime;
           _isLoading = false;
         });
-        
-        // 获取弹弹play观看状态
-        _fetchDandanplayWatchStatus(anime);
       }
     } catch (e) {
       if (mounted) {

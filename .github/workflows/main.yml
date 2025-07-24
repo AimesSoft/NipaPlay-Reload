@@ -127,6 +127,13 @@ jobs:
           fi
           flutter pub get
       
+      - name: Build Web and copy assets
+        if: matrix.target == 'Windows' || matrix.target == 'Linux' || matrix.target == 'macOS'
+        shell: bash
+        run: |
+          chmod +x build_and_copy_web.sh
+          ./build_and_copy_web.sh
+      
       # Build iOS .ipa
       - name: Build iOS
         if: matrix.target == 'iOS'
@@ -698,10 +705,10 @@ jobs:
           echo 'else' >> "${INSTALL_SCRIPT_PATH}"
           echo '  echo "未识别的 Linux 发行版"' >> "${INSTALL_SCRIPT_PATH}"
           echo '  echo "请手动安装以下依赖:"' >> "${INSTALL_SCRIPT_PATH}"
-          echo '  echo "- libmpv (mpv 媒体播放器库)"' >> "${INSTALL_SCRIPT_PATH}"
-          echo '  echo "- gtk3 (GUI 工具包)"' >> "${INSTALL_SCRIPT_PATH}"
-          echo '  echo "- ffmpeg (媒体处理)"' >> "${INSTALL_SCRIPT_PATH}"
-          echo '  echo "- libass (字幕渲染)"' >> "${INSTALL_SCRIPT_PATH}"
+          echo '- libmpv (mpv 媒体播放器库)' >> "${INSTALL_SCRIPT_PATH}"
+          echo '- gtk3 (GUI 工具包)' >> "${INSTALL_SCRIPT_PATH}"
+          echo '- ffmpeg (媒体处理)' >> "${INSTALL_SCRIPT_PATH}"
+          echo '- libass (字幕渲染)' >> "${INSTALL_SCRIPT_PATH}"
           echo 'fi' >> "${INSTALL_SCRIPT_PATH}"
           echo '' >> "${INSTALL_SCRIPT_PATH}"
           echo 'echo "依赖安装完成！现在可以运行 ./run.sh 启动 NipaPlay"' >> "${INSTALL_SCRIPT_PATH}"

@@ -5,14 +5,12 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/widgets/blur_dropdown.dart';
-import 'package:nipaplay/utils/theme_utils.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
