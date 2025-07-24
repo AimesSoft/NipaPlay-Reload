@@ -292,7 +292,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
     try {
       final matcher = EmbyDandanplayMatcher.instance;
       final playableItem = await matcher.createPlayableHistoryItemFromMovie(context, movieInfo);
-      
+      if (playableItem == null) return; // 用户取消，彻底中断
       if (mounted && playableItem != null) {
         Navigator.of(context).pop(playableItem);
       } else if (mounted) {
@@ -1144,6 +1144,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               // 使用EmbyDandanplayMatcher创建增强的WatchHistoryItem
               // 这一步会显示匹配对话框，阻塞直到用户完成选择或跳过
               final historyItem = await _createWatchHistoryItem(episode);
+              if (historyItem == null) return; // 用户关闭弹窗，什么都不做
               
               // 用户已完成匹配选择，现在可以继续播放流程
               if (historyItem != null) {

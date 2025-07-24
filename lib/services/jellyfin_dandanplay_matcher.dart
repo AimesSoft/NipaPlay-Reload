@@ -182,6 +182,9 @@ class JellyfinDandanplayMatcher {
       
       // 2. 通过DandanPlay API匹配内容
       final Map<String, dynamic> dummyVideoInfo = await _matchWithDandanPlay(context, episode, showMatchDialog, videoInfo);
+      if (dummyVideoInfo['__cancel__'] == true) {
+        return null;
+      }
       
       // 3. 如果匹配成功，更新历史条目的元数据
       if (dummyVideoInfo.isNotEmpty && dummyVideoInfo['animeId'] != null) {
@@ -234,7 +237,9 @@ class JellyfinDandanplayMatcher {
     final episodeInfo = _createVirtualEpisodeFromItem(movie);
     
     // 直接调用现有的剧集匹配方法
-    return await createPlayableHistoryItem(context, episodeInfo, showMatchDialog: showMatchDialog);
+    final result = await createPlayableHistoryItem(context, episodeInfo, showMatchDialog: showMatchDialog);
+    if (result == null) return null;
+    return result;
   }
 
   /// 创建虚拟的剧集信息从电影，用于复用现有匹配逻辑
@@ -332,7 +337,7 @@ class JellyfinDandanplayMatcher {
       if (showMatchDialog) {
         // 总是显示对话框让用户选择或跳过，使其成为阻塞操作
         // 即使没有找到匹配，也要显示对话框，让用户能手动搜索
-        selectedMatch = await showDialog<Map<String, dynamic>>(
+        final result = await showDialog<Map<String, dynamic>>(
           context: context,
           barrierDismissible: false, // 设置为 false 使对话框成为模态对话框，阻止背景交互
           builder: (context) => AnimeMatchDialog(
@@ -340,6 +345,15 @@ class JellyfinDandanplayMatcher {
             episodeInfo: episode,
           ),
         );
+        if (result?['__cancel__'] == true) {
+          // 用户关闭弹窗，彻底中断
+          return {'__cancel__': true};
+        }
+        if (result == null) {
+          // 跳过匹配，继续用基础WatchHistoryItem
+          return {};
+        }
+        selectedMatch = result;
         
         // 如果用户通过对话框选择了匹配项，记录日志
         if (selectedMatch != null) {
@@ -1418,7 +1432,7 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(context).pop({'__cancel__': true}),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                   ),

@@ -183,6 +183,10 @@ class EmbyDandanplayMatcher {
       
       // 2. 通过DandanPlay API匹配内容
       final Map<String, dynamic> dummyVideoInfo = await _matchWithDandanPlay(context, episode, showMatchDialog, videoInfo);
+      if (dummyVideoInfo['__cancel__'] == true) {
+        debugPrint('用户取消了弹幕匹配，直接返回null');
+        return null;
+      }
       
       // 3. 如果匹配成功，更新历史条目的元数据
       if (dummyVideoInfo.isNotEmpty && dummyVideoInfo['animeId'] != null) {
@@ -248,9 +252,10 @@ class EmbyDandanplayMatcher {
       bool showMatchDialog = true}) async {
     // 创建虚拟的EmbyEpisodeInfo来复用现有匹配逻辑
     final episodeInfo = _createVirtualEpisodeFromMovie(movie);
-    
     // 直接调用现有的剧集匹配方法
-    return await createPlayableHistoryItem(context, episodeInfo, showMatchDialog: showMatchDialog);
+    final result = await createPlayableHistoryItem(context, episodeInfo, showMatchDialog: showMatchDialog);
+    if (result == null) return null;
+    return result;
   }
 
   /// 创建虚拟的剧集信息从电影，用于复用现有匹配逻辑
@@ -356,7 +361,7 @@ class EmbyDandanplayMatcher {
 
       if (showMatchDialog) {
         // 显示匹配对话框，让用户手动选择
-        debugPrint('显示选择对话框 (有 ${animeMatches.length} 个预搜索候选项)');
+        debugPrint('显示选择对话框 (有  [38;5;246m [48;5;236m${animeMatches.length} [0m 个预搜索候选项)');
         final dialogResult = await showDialog<Map<String, dynamic>>(
           context: context,
           barrierDismissible: false, // Make it modal, like Jellyfin's
@@ -365,17 +370,21 @@ class EmbyDandanplayMatcher {
             episodeInfo: episode,
           ),
         );
-        
-        if (dialogResult != null) {
-          selectedMatch = dialogResult;
-          if (dialogResult.containsKey('episodeId') && dialogResult['episodeId'] != null) {
-            matchedEpisode = dialogResult;
-            debugPrint('用户选择了动画和剧集: ${dialogResult['animeTitle']} - ${dialogResult['episodeTitle']}');
-          } else {
-            debugPrint('用户选择了动画: ${dialogResult['animeTitle']}，但没有选择具体剧集');
-          }
+        // 关键：和Jellyfin一致，关闭弹窗时直接中断
+        if (dialogResult?['__cancel__'] == true) {
+          debugPrint('用户关闭了弹幕匹配弹窗，彻底中断匹配流程');
+          return {'__cancel__': true};
+        }
+        if (dialogResult == null) {
+          debugPrint('用户跳过了匹配对话框');
+          return {};
+        }
+        selectedMatch = dialogResult;
+        if (dialogResult.containsKey('episodeId') && dialogResult['episodeId'] != null) {
+          matchedEpisode = dialogResult;
+          debugPrint('用户选择了动画和剧集: ${dialogResult['animeTitle']} - ${dialogResult['episodeTitle']}');
         } else {
-          debugPrint('用户取消或跳过了匹配对话框');
+          debugPrint('用户选择了动画: ${dialogResult['animeTitle']}，但没有选择具体剧集');
         }
       } else {
         // 预匹配模式：尝试自动选择最佳匹配项
@@ -1295,7 +1304,7 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(context).pop({'__cancel__': true}),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                   ),
