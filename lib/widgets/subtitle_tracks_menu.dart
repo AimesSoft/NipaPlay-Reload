@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import '../utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'base_settings_menu.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:glassmorphism/glassmorphism.dart';
-import 'package:fvp/mdk.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -12,6 +11,7 @@ import '../widgets/blur_snackbar.dart';
 import 'blur_button.dart';
 import 'package:file_selector/file_selector.dart';
 import '../services/file_picker_service.dart';
+import 'package:flutter/foundation.dart';
 
 class SubtitleTracksMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -63,6 +63,10 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   
   // 从SharedPreferences加载已保存的外部字幕信息
   Future<void> _loadExternalSubtitles() async {
+    if (kIsWeb) {
+      setState(() => _isLoading = false);
+      return;
+    }
     if (!mounted) return; // Add mounted check
     setState(() => _isLoading = true);
     
@@ -107,6 +111,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   
   // 计算视频文件的唯一标识
   String _getVideoHashKey(String videoPath) {
+    if (kIsWeb) return p.basename(videoPath);
     // 使用文件路径和大小作为标识
     final file = File(videoPath);
     if (file.existsSync()) {
@@ -119,6 +124,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   
   // 保存外部字幕信息到SharedPreferences
   Future<void> _saveExternalSubtitles(BuildContext context) async {
+    if (kIsWeb) return;
     try {
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       if (videoState.currentVideoPath == null) return;
@@ -169,6 +175,10 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   
   // 加载外部字幕文件
   Future<void> _loadExternalSubtitle(BuildContext context) async {
+    if (kIsWeb) {
+      BlurSnackBar.show(context, 'Web平台不支持加载本地字幕文件');
+      return;
+    }
     try {
       setState(() => _isLoading = true);
       
@@ -503,27 +513,29 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
             mainAxisSize: MainAxisSize.min,
             children: [
               // 添加加载本地字幕文件的按钮
-              _isLoading 
-                ? const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              if (!kIsWeb) ...[
+                _isLoading 
+                  ? const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
                       ),
+                    )
+                  : BlurButton(
+                      icon: Icons.add_circle_outline,
+                      text: "加载本地字幕文件",
+                      onTap: () => _loadExternalSubtitle(context),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      margin: const EdgeInsets.symmetric(horizontal: 0),
+                      expandHorizontally: true,
+                      borderRadius: BorderRadius.zero,
                     ),
-                  )
-                : BlurButton(
-                    icon: Icons.add_circle_outline,
-                    text: "加载本地字幕文件",
-                    onTap: () => _loadExternalSubtitle(context),
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    margin: const EdgeInsets.symmetric(horizontal: 0),
-                    expandHorizontally: true,
-                    borderRadius: BorderRadius.zero,
-                  ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
               
               // 外部字幕列表
               if (_externalSubtitles.isNotEmpty) ...[

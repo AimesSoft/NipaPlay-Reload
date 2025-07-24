@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'security_bookmark_service.dart';
 import '../utils/storage_service.dart';
+import 'dart:io' as io;
 
 class FilePickerService {
   // 单例模式
@@ -29,16 +30,16 @@ class FilePickerService {
     String normalizedPath = path.replaceAll('//', '/');
     
     // 处理iOS上的/private前缀
-    if (Platform.isIOS) {
+    if (io.Platform.isIOS) {
       // 如果路径不存在但添加/private后存在，则使用带前缀的路径
-      if (!File(normalizedPath).existsSync() && 
-          !Directory(normalizedPath).existsSync()) {
+      if (!io.File(normalizedPath).existsSync() && 
+          !io.Directory(normalizedPath).existsSync()) {
         
         String privatePrefix = normalizedPath.startsWith('/private') ? '' : '/private';
         String pathWithPrefix = '$privatePrefix$normalizedPath';
         
-        if (File(pathWithPrefix).existsSync() || 
-            Directory(pathWithPrefix).existsSync()) {
+        if (io.File(pathWithPrefix).existsSync() || 
+            io.Directory(pathWithPrefix).existsSync()) {
           return pathWithPrefix;
         }
       }
@@ -57,7 +58,7 @@ class FilePickerService {
   
   // 检查是否是iOS临时文件路径
   bool _isIOSTemporaryPath(String path) {
-    if (!Platform.isIOS) return false;
+    if (!io.Platform.isIOS) return false;
     
     // 检查是否包含常见的iOS临时目录或收件箱标记
     return path.contains('/tmp/') || 
@@ -69,28 +70,28 @@ class FilePickerService {
   // 将文件从临时目录复制到文档目录以保持持久化
   String? _copyToDocumentsIfNeeded(String filePath) {
     try {
-      if (!File(filePath).existsSync()) {
+      if (!io.File(filePath).existsSync()) {
         // 尝试添加/private前缀
         final altPath = filePath.startsWith('/private') 
                          ? filePath 
                          : '/private$filePath';
-        if (!File(altPath).existsSync()) {
+        if (!io.File(altPath).existsSync()) {
           print('文件不存在: $filePath 或 $altPath');
           return null;
         }
         filePath = altPath;
       }
       
-      final sourceFile = File(filePath);
+      final sourceFile = io.File(filePath);
       final fileName = p.basename(filePath);
       
       // 同步获取应用文档目录
       try {
         // 尝试直接创建视频目录
-        Directory videosDir;
+        io.Directory videosDir;
         
         // 在iOS上，我们知道文档目录的一般格式，可以尝试直接构建
-        if (Platform.isIOS) {
+        if (io.Platform.isIOS) {
           const String appDocPath = '/var/mobile/Containers/Data/Application/';
           // 获取源文件所在的应用容器ID
           final segments = filePath.split('/');
@@ -105,14 +106,14 @@ class FilePickerService {
           
           if (containerId != null) {
             final docsPath = '$appDocPath$containerId/Documents';
-            if (Directory(docsPath).existsSync()) {
-              videosDir = Directory('$docsPath/Videos');
+            if (io.Directory(docsPath).existsSync()) {
+              videosDir = io.Directory('$docsPath/Videos');
               if (!videosDir.existsSync()) {
                 videosDir.createSync();
               }
               
               final destinationPath = '${videosDir.path}/$fileName';
-              final destinationFile = File(destinationPath);
+              final destinationFile = io.File(destinationPath);
               
               // 检查文件是否已存在，避免重复复制
               if (!destinationFile.existsSync() || 
@@ -134,14 +135,14 @@ class FilePickerService {
         
         if (appId.isNotEmpty) {
           final possibleDocPath = '/var/mobile/Containers/Data/Application/$appId/Documents';
-          if (Directory(possibleDocPath).existsSync()) {
-            videosDir = Directory('$possibleDocPath/Videos');
+          if (io.Directory(possibleDocPath).existsSync()) {
+            videosDir = io.Directory('$possibleDocPath/Videos');
             if (!videosDir.existsSync()) {
               videosDir.createSync();
             }
             
             final destinationPath = '${videosDir.path}/$fileName';
-            final destinationFile = File(destinationPath);
+            final destinationFile = io.File(destinationPath);
             
             // 检查文件是否已存在，避免重复复制
             if (!destinationFile.existsSync() || 
@@ -156,13 +157,13 @@ class FilePickerService {
         
         // 如果上述方法都失败，使用异步方法但不等待结果
         StorageService.getAppStorageDirectory().then((docDir) {
-          final vDir = Directory('${docDir.path}/Videos');
+          final vDir = io.Directory('${docDir.path}/Videos');
           if (!vDir.existsSync()) {
             vDir.createSync();
           }
           
           final destPath = '${vDir.path}/$fileName';
-          final destFile = File(destPath);
+          final destFile = io.File(destPath);
           
           // 检查文件是否已存在，避免重复复制
           if (!destFile.existsSync() || 
@@ -186,13 +187,13 @@ class FilePickerService {
   
   // 检查文件是否存在，处理iOS路径问题
   bool checkFileExists(String path) {
-    final File file = File(path);
+    final io.File file = io.File(path);
     if (file.existsSync()) {
       return true;
     }
     
     // 处理iOS路径前缀问题
-    if (Platform.isIOS) {
+    if (io.Platform.isIOS) {
       String alternativePath;
       if (path.startsWith('/private')) {
         alternativePath = path.replaceFirst('/private', '');
@@ -200,7 +201,7 @@ class FilePickerService {
         alternativePath = '/private$path';
       }
       
-      return File(alternativePath).existsSync();
+      return io.File(alternativePath).existsSync();
     }
     
     return false;
@@ -209,7 +210,7 @@ class FilePickerService {
   // 内存优化：限制文件大小读取
   Future<List<int>?> _readFileSafely(String path, {int maxSizeInMb = 10}) async {
     try {
-      final file = File(path);
+      final file = io.File(path);
       if (!file.existsSync()) return null;
       
       // 检查文件大小
@@ -231,7 +232,7 @@ class FilePickerService {
   
   // 在隔离区中读取文件
   static List<int> _isolatedReadFile(String path) {
-    return File(path).readAsBytesSync();
+    return io.File(path).readAsBytesSync();
   }
 
   // 选择视频文件
@@ -241,9 +242,9 @@ class FilePickerService {
       initialDirectory ??= await _getLastDirectory(_lastVideoDirKey);
       
       // iOS上初始目录处理
-      if (Platform.isIOS && (initialDirectory == null || initialDirectory.isEmpty)) {
+      if (io.Platform.isIOS && (initialDirectory == null || initialDirectory.isEmpty)) {
         try {
-          final Directory appDocDir = await StorageService.getAppStorageDirectory();
+          final io.Directory appDocDir = await StorageService.getAppStorageDirectory();
           initialDirectory = appDocDir.path;
         } catch (e) {
           print("Error getting documents directory for iOS: $e");
@@ -251,7 +252,7 @@ class FilePickerService {
       }
       
       // macOS上尝试恢复之前的书签访问
-      if (Platform.isMacOS && initialDirectory != null) {
+      if (io.Platform.isMacOS && initialDirectory != null) {
         final resolvedPath = await SecurityBookmarkService.resolveBookmark(initialDirectory);
         if (resolvedPath != null) {
           initialDirectory = resolvedPath;
@@ -262,13 +263,13 @@ class FilePickerService {
       XTypeGroup videoGroup = XTypeGroup(
         label: '视频文件',
         extensions: const ['mp4', 'mkv', 'avi', 'wmv', 'mov'],
-        uniformTypeIdentifiers: Platform.isIOS 
+        uniformTypeIdentifiers: io.Platform.isIOS 
             ? ['public.movie', 'public.video', 'public.mpeg-4', 'com.apple.quicktime-movie'] 
             : null,
       );
       
       // OOM问题修复：Android平台使用不同的文件选择方式
-      if (Platform.isAndroid) {
+      if (io.Platform.isAndroid) {
         // 使用自定义方法选择文件，避免file_selector插件的内存问题
         return await _pickVideoFileAndroid();
       }
@@ -292,7 +293,7 @@ class FilePickerService {
       // 注：现在直接返回路径，由播放器处理文件读取
       
       // macOS沙盒下创建安全书签
-      if (Platform.isMacOS) {
+      if (io.Platform.isMacOS) {
         await SecurityBookmarkService.createBookmark(filePath);
         // 同时为父目录创建书签，便于下次文件选择
         final parentDir = p.dirname(filePath);
@@ -358,7 +359,7 @@ class FilePickerService {
       initialDirectory ??= await _getLastDirectory(_lastSubtitleDirKey);
       
       // macOS上尝试恢复之前的书签访问
-      if (Platform.isMacOS && initialDirectory != null) {
+      if (io.Platform.isMacOS && initialDirectory != null) {
         final resolvedPath = await SecurityBookmarkService.resolveBookmark(initialDirectory);
         if (resolvedPath != null) {
           initialDirectory = resolvedPath;
@@ -369,7 +370,7 @@ class FilePickerService {
       XTypeGroup subtitleGroup = XTypeGroup(
         label: '字幕文件',
         extensions: const ['srt', 'ass', 'ssa', 'sub'],
-        uniformTypeIdentifiers: Platform.isIOS 
+        uniformTypeIdentifiers: io.Platform.isIOS 
             ? ['public.text', 'public.plain-text'] 
             : null,
       );
@@ -386,7 +387,7 @@ class FilePickerService {
       }
       
       // macOS沙盒下创建安全书签
-      if (Platform.isMacOS) {
+      if (io.Platform.isMacOS) {
         await SecurityBookmarkService.createBookmark(file.path);
         // 同时为父目录创建书签
         final parentDir = p.dirname(file.path);
@@ -411,7 +412,7 @@ class FilePickerService {
       initialDirectory ??= await _getLastDirectory(_lastDirKey);
       
       // macOS上尝试恢复之前的书签访问
-      if (Platform.isMacOS && initialDirectory != null) {
+      if (io.Platform.isMacOS && initialDirectory != null) {
         final resolvedPath = await SecurityBookmarkService.resolveBookmark(initialDirectory);
         if (resolvedPath != null) {
           initialDirectory = resolvedPath;
@@ -419,11 +420,11 @@ class FilePickerService {
       }
       
       // iOS上的特殊处理
-      if (Platform.isIOS) {
+      if (io.Platform.isIOS) {
         // iOS上目前file_selector的getDirectoryPath功能受限
         // 仅返回文档目录
         try {
-          final Directory appDocDir = await StorageService.getAppStorageDirectory();
+          final io.Directory appDocDir = await StorageService.getAppStorageDirectory();
           _saveLastDirectory(appDocDir.path, _lastDirKey);
           return _normalizePath(appDocDir.path);
         } catch (e) {
@@ -441,7 +442,7 @@ class FilePickerService {
         }
         
         // macOS沙盒下创建安全书签
-        if (Platform.isMacOS) {
+        if (io.Platform.isMacOS) {
           await SecurityBookmarkService.createBookmark(selectedDirectory);
         }
         
@@ -488,20 +489,20 @@ class FilePickerService {
   // 获取文件的有效路径(处理iOS路径问题)
   Future<String?> getValidFilePath(String originalPath) async {
     // macOS沙盒下首先尝试恢复书签访问
-    if (Platform.isMacOS) {
+    if (io.Platform.isMacOS) {
       final resolvedPath = await SecurityBookmarkService.resolveBookmark(originalPath);
-      if (resolvedPath != null && File(resolvedPath).existsSync()) {
+      if (resolvedPath != null && io.File(resolvedPath).existsSync()) {
         return resolvedPath;
       }
     }
     
     // 首先检查原始路径是否可访问
-    if (File(originalPath).existsSync()) {
+    if (io.File(originalPath).existsSync()) {
       return originalPath;
     }
     
     // 处理iOS的/private前缀
-    if (Platform.isIOS) {
+    if (io.Platform.isIOS) {
       String alternativePath;
       if (originalPath.startsWith('/private')) {
         alternativePath = originalPath.replaceFirst('/private', '');
@@ -509,17 +510,17 @@ class FilePickerService {
         alternativePath = '/private$originalPath';
       }
       
-      if (File(alternativePath).existsSync()) {
+      if (io.File(alternativePath).existsSync()) {
         return alternativePath;
       }
       
       // 检查文件是否可能在文档目录中
       try {
-        final Directory appDocDir = await StorageService.getAppStorageDirectory();
+        final io.Directory appDocDir = await StorageService.getAppStorageDirectory();
         final fileName = p.basename(originalPath);
         final docPath = '${appDocDir.path}/Videos/$fileName';
         
-        if (File(docPath).existsSync()) {
+        if (io.File(docPath).existsSync()) {
           return docPath;
         }
       } catch (e) {

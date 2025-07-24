@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'watch_history_model.dart';
 import '../utils/storage_service.dart';
+import 'dart:io' as io;
 
 class WatchHistoryDatabase {
   static Database? _database;
@@ -32,11 +33,11 @@ class WatchHistoryDatabase {
     }
     
     // 使用StorageService获取正确的存储目录
-    final Directory storageDir = await StorageService.getAppStorageDirectory();
+    final io.Directory storageDir = await StorageService.getAppStorageDirectory();
     final String dbPath = path.join(storageDir.path, _dbName);
     
     // 确保目录存在
-    final dbDir = Directory(path.dirname(dbPath));
+    final dbDir = io.Directory(path.dirname(dbPath));
     if (!dbDir.existsSync()) {
       dbDir.createSync(recursive: true);
     }
@@ -143,7 +144,7 @@ class WatchHistoryDatabase {
       try {
         final jsonFilePath = await _getJsonFilePath();
         if (jsonFilePath != null) {
-          final jsonFile = File(jsonFilePath);
+          final jsonFile = io.File(jsonFilePath);
           if (jsonFile.existsSync()) {
             // 先创建备份，以防万一
             final backupPath = '$jsonFilePath.bak.migrated';
@@ -181,12 +182,12 @@ class WatchHistoryDatabase {
       final jsonFilePath = await _getJsonFilePath();
       if (jsonFilePath == null) return;
       
-      final directory = Directory(path.dirname(jsonFilePath));
+      final directory = io.Directory(path.dirname(jsonFilePath));
       if (!directory.existsSync()) return;
       
-      final List<FileSystemEntity> entities = await directory.list().toList();
+      final List<io.FileSystemEntity> entities = await directory.list().toList();
       for (var entity in entities) {
-        if (entity is File && 
+        if (entity is io.File && 
             (entity.path.endsWith('.bak') || 
              entity.path.contains('.bak.') || 
              entity.path.contains('.recovered.'))) {
@@ -207,7 +208,7 @@ class WatchHistoryDatabase {
   Future<String?> _getJsonFilePath() async {
     try {
       // 使用StorageService获取正确的存储目录
-      final Directory storageDir = await StorageService.getAppStorageDirectory();
+      final io.Directory storageDir = await StorageService.getAppStorageDirectory();
       
       return path.join(storageDir.path, 'watch_history.json');
     } catch (e) {

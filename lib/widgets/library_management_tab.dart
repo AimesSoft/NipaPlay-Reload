@@ -1,5 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'dart:io';
+import 'dart:io' as io;
 import 'dart:ui';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -32,7 +33,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   static const String _lastScannedDirectoryPickerPathKey = 'last_scanned_dir_picker_path';
   static const String _librarySortOptionKey = 'library_sort_option'; // 新增键用于保存排序选项
 
-  final Map<String, List<FileSystemEntity>> _expandedFolderContents = {};
+  final Map<String, List<io.FileSystemEntity>> _expandedFolderContents = {};
   final Set<String> _loadingFolders = {};
   final ScrollController _listScrollController = ScrollController();
   
@@ -90,16 +91,16 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
 
     // --- iOS平台逻辑 ---
-    if (Platform.isIOS) {
+    if (io.Platform.isIOS) {
       // 使用StorageService获取应用存储目录
-      final Directory appDir = await StorageService.getAppStorageDirectory();
+      final io.Directory appDir = await StorageService.getAppStorageDirectory();
       await scanService.startDirectoryScan(appDir.path, skipPreviouslyMatchedUnwatched: false); // Ensure full scan for new folder
       return; 
     }
     // --- End iOS平台逻辑 ---
     
     // Android和桌面平台分开处理
-    if (Platform.isAndroid) {
+    if (io.Platform.isAndroid) {
       // 获取Android版本
       final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
       
@@ -130,7 +131,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       
              // 验证选择的目录是否可访问
       bool accessCheck = false;
-      if (Platform.isAndroid) {
+      if (io.Platform.isAndroid) {
         // 使用原生方法检查目录权限
         final dirCheck = await AndroidStorageHelper.checkDirectoryPermissions(selectedDirectory);
         accessCheck = dirCheck['canRead'] == true && dirCheck['canWrite'] == true;
@@ -170,8 +171,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
 
     // 仅iOS平台需要检查是否为内部路径
-    if (Platform.isIOS) {
-      final Directory appDir = await StorageService.getAppStorageDirectory();
+    if (io.Platform.isIOS) {
+      final io.Directory appDir = await StorageService.getAppStorageDirectory();
       final String appPath = appDir.path;
   
       // Normalize paths to handle potential '/private' prefix discrepancy on iOS
@@ -214,10 +215,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
     
     // Android平台检查是否有访问所选文件夹的权限
-    if (Platform.isAndroid) {
+    if (io.Platform.isAndroid) {
       try {
         // 尝试读取文件夹内容以检查权限
-        final dir = Directory(selectedDirectory);
+        final dir = io.Directory(selectedDirectory);
         await dir.list().first.timeout(const Duration(seconds: 2), onTimeout: () {
           throw TimeoutException('无法访问文件夹');
         });
@@ -284,15 +285,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
   }
 
-  Future<List<FileSystemEntity>> _getDirectoryContents(String path) async {
-    final List<FileSystemEntity> contents = [];
-    final directory = Directory(path);
+  Future<List<io.FileSystemEntity>> _getDirectoryContents(String path) async {
+    final List<io.FileSystemEntity> contents = [];
+    final io.Directory directory = io.Directory(path);
     if (await directory.exists()) {
       try {
         await for (var entity in directory.list(recursive: false, followLinks: false)) {
-          if (entity is Directory) {
+          if (entity is io.Directory) {
             contents.add(entity);
-          } else if (entity is File) {
+          } else if (entity is io.File) {
             String extension = p.extension(entity.path).toLowerCase();
             if (extension == '.mp4' || extension == '.mkv') {
               contents.add(entity);
@@ -314,11 +315,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   // 排序内容的方法
-  void _sortContents(List<FileSystemEntity> contents) {
+  void _sortContents(List<io.FileSystemEntity> contents) {
     contents.sort((a, b) {
       // 总是优先显示文件夹
-      if (a is Directory && b is File) return -1;
-      if (a is File && b is Directory) return 1;
+      if (a is io.Directory && b is io.File) return -1;
+      if (a is io.File && b is io.Directory) return 1;
       
       // 同种类型文件按选择的排序方式排序
       int result = 0;
@@ -352,8 +353,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           break;
         case 4: // 大小升序（小到大）
           try {
-            final aSize = a is File ? a.lengthSync() : 0;
-            final bSize = b is File ? b.lengthSync() : 0;
+            final aSize = a is io.File ? a.lengthSync() : 0;
+            final bSize = b is io.File ? b.lengthSync() : 0;
             result = aSize.compareTo(bSize);
           } catch (e) {
             // 如果获取大小失败，回退到文件名排序
@@ -362,8 +363,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           break;
         case 5: // 大小降序（大到小）
           try {
-            final aSize = a is File ? a.lengthSync() : 0;
-            final bSize = b is File ? b.lengthSync() : 0;
+            final aSize = a is io.File ? a.lengthSync() : 0;
+            final bSize = b is io.File ? b.lengthSync() : 0;
             result = bSize.compareTo(aSize);
           } catch (e) {
             // 如果获取大小失败，回退到文件名排序
@@ -395,7 +396,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
   }
 
-  List<Widget> _buildFileSystemNodes(List<FileSystemEntity> entities, String parentPath, int depth) {
+  List<Widget> _buildFileSystemNodes(List<io.FileSystemEntity> entities, String parentPath, int depth) {
     if (entities.isEmpty && !_loadingFolders.contains(parentPath)) {
       return [Padding(
         padding: EdgeInsets.only(left: depth * 16.0 + 16.0, top: 8.0, bottom: 8.0),
@@ -405,7 +406,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     
     return entities.map<Widget>((entity) {
       final indent = EdgeInsets.only(left: depth * 16.0);
-      if (entity is Directory) {
+      if (entity is io.Directory) {
         final dirPath = entity.path;
         return Padding(
           padding: indent,
@@ -423,7 +424,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 : _buildFileSystemNodes(_expandedFolderContents[dirPath] ?? [], dirPath, depth + 1),
           ),
         );
-      } else if (entity is File) {
+      } else if (entity is io.File) {
         return Padding(
           padding: indent,
           child: ListTile(
@@ -587,7 +588,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     
     String dialogContent = "未发现任何视频文件。以下是向NipaPlay添加视频的方法：\n\n";
     
-    if (Platform.isIOS) {
+    if (io.Platform.isIOS) {
       dialogContent += "1. 打开iOS「文件」应用\n";
       dialogContent += "2. 浏览到包含您视频的文件夹\n";
       dialogContent += "3. 长按视频文件，选择「分享」\n";
@@ -595,7 +596,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       dialogContent += "或者：\n";
       dialogContent += "1. 通过iTunes文件共享功能\n";
       dialogContent += "2. 从电脑直接拷贝视频到NipaPlay文件夹\n";
-    } else if (Platform.isAndroid) {
+    } else if (io.Platform.isAndroid) {
       dialogContent += "1. 确保将视频文件存放在易于访问的文件夹中\n";
       dialogContent += "2. 您可以创建专门的文件夹，如「Movies」或「Anime」\n";
       dialogContent += "3. 确保文件夹权限设置正确，应用可以访问\n";
@@ -605,7 +606,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       dialogContent += "- 建议使用标准的媒体文件夹如Pictures、Movies或Documents\n";
     }
     
-    if (Platform.isIOS) {
+    if (io.Platform.isIOS) {
       dialogContent += "\n添加完文件后，点击上方的「扫描NipaPlay文件夹」按钮刷新媒体库。";
     } else {
       dialogContent += "\n添加完文件后，点击上方的「添加并扫描文件夹」按钮选择您存放视频的文件夹。";
@@ -666,7 +667,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 检查并显示权限状态
   Future<void> _checkAndShowPermissionStatus() async {
-    if (!Platform.isAndroid) return;
+    if (!io.Platform.isAndroid) return;
     
     // 显示加载提示
     if (mounted) {
@@ -784,7 +785,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         if (externalDirs != null && externalDirs.isNotEmpty) {
           String baseDir = externalDirs[0].path;
           baseDir = baseDir.substring(0, baseDir.indexOf('Android'));
-          final moviesDir = Directory('${baseDir}Movies');
+          final moviesDir = io.Directory('${baseDir}Movies');
           
           if (await moviesDir.exists()) {
             moviesPath = moviesDir.path;
@@ -804,13 +805,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             baseDir = baseDir.substring(0, baseDir.indexOf('Android'));
             
             // 检查DCIM目录
-            final dcimDir = Directory('${baseDir}DCIM');
+            final dcimDir = io.Directory('${baseDir}DCIM');
             if (await dcimDir.exists()) {
               moviesPath = dcimDir.path;
               debugPrint('找到DCIM目录: $moviesPath');
             } else {
               // 尝试Download目录
-              final downloadDir = Directory('${baseDir}Download');
+              final downloadDir = io.Directory('${baseDir}Download');
               if (await downloadDir.exists()) {
                 moviesPath = downloadDir.path;
                 debugPrint('找到Download目录: $moviesPath');
@@ -902,6 +903,21 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            '''媒体文件夹管理功能在Web浏览器中不可用。
+此功能需要访问本地文件系统，但Web应用无法获取相关权限。
+请在Windows、macOS、Android或iOS客户端中使用此功能。''',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
+          ),
+        ),
+      );
+    }
+
     final scanService = Provider.of<ScanService>(context);
     // final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false); // Keep if needed for other actions
 
@@ -918,14 +934,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               Row(
                 children: [
                   // 重置存储路径按钮 - 只在Android平台显示，macOS平台不支持自定义存储路径
-                  if (Platform.isAndroid)
+                  if (io.Platform.isAndroid)
                     IconButton(
                       icon: const Icon(Icons.settings_backup_restore),
                       tooltip: '重置存储路径',
                       color: Colors.white70,
                       onPressed: scanService.isScanning ? null : _clearCustomStoragePath,
                     ),
-                  if (Platform.isAndroid)
+                  if (io.Platform.isAndroid)
                     IconButton(
                       icon: const Icon(Icons.security),
                       tooltip: '检查权限状态',
@@ -1022,13 +1038,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 borderRadius: BorderRadius.circular(12),
                 child: Center(
                   child: FutureBuilder<bool>(
-                    future: Platform.isAndroid ? _isAndroid13Plus() : Future.value(false),
+                    future: io.Platform.isAndroid ? _isAndroid13Plus() : Future.value(false),
                     builder: (context, snapshot) {
                       String buttonText = '添加并扫描文件夹'; // 默认文本
                       
-                      if (Platform.isIOS) {
+                      if (io.Platform.isIOS) {
                         buttonText = '扫描NipaPlay文件夹';
-                      } else if (Platform.isAndroid) {
+                      } else if (io.Platform.isAndroid) {
                         // 如果future完成且为true，说明是Android 13+
                         if (snapshot.hasData && snapshot.data == true) {
                           buttonText = '扫描视频文件夹';
@@ -1216,7 +1232,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         Expanded(
           child: scanService.scannedFolders.isEmpty && !scanService.isScanning
               ? const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)))
-              : Platform.isAndroid || Platform.isIOS
+              : io.Platform.isAndroid || io.Platform.isIOS
                 ? ListView.builder(
                     controller: _listScrollController,
                     itemCount: scanService.scannedFolders.length,
@@ -1395,7 +1411,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 辅助方法：检查是否为Android 13+
   Future<bool> _isAndroid13Plus() async {
-    if (!Platform.isAndroid) return false;
+    if (!io.Platform.isAndroid) return false;
     final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
     return sdkVersion >= 33;
   }

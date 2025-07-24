@@ -4,7 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:flutter/foundation.dart';
 
 // 导入 glassmorphism 插件
 String backgroundImageUrl = (globals.isDesktop || globals.isTablet)
@@ -77,6 +78,13 @@ class _BackgroundWithBlurState extends State<BackgroundWithBlur> {
         fit: BoxFit.cover,
       );
     } else if (globals.backgroundImageMode == '自定义') {
+      if (kIsWeb) {
+        // Web平台不支持本地文件，回退到默认图片
+        return Image.asset(
+          backgroundImageUrl,
+          fit: BoxFit.cover,
+        );
+      }
       final file = File(globals.customBackgroundPath);
       if (file.existsSync()) {
         return Image.file(

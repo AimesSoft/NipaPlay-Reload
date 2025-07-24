@@ -773,17 +773,26 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   /// 实际执行控制器创建的方法
   bool _actuallyCreateController() {
     try {
-      File file = File(_mediaPath);
-      
-      // 检查文件是否存在
-      if (!file.existsSync() && !_mediaPath.startsWith('http')) {
-        print('[VideoPlayerAdapter] 警告: 文件不存在: $_mediaPath');
-      }
-      
-      if (_mediaPath.startsWith('http://') || _mediaPath.startsWith('https://')) {
-        _controller = VideoPlayerController.networkUrl(Uri.parse(_mediaPath));
+      // Web平台和非Web平台使用不同的逻辑
+      if (kIsWeb) {
+        // Web平台：只处理URL（包括blob URL）
+        if (_mediaPath.startsWith('blob:') || _mediaPath.startsWith('http')) {
+          _controller = VideoPlayerController.networkUrl(Uri.parse(_mediaPath));
+        } else {
+          print('[VideoPlayerAdapter] Web平台不支持的媒体路径: $_mediaPath');
+          return false; // 在Web上不支持本地文件路径
+        }
       } else {
-        _controller = VideoPlayerController.file(file);
+        // 非Web平台：处理文件路径和网络URL
+        if (_mediaPath.startsWith('http://') || _mediaPath.startsWith('https://')) {
+          _controller = VideoPlayerController.networkUrl(Uri.parse(_mediaPath));
+        } else {
+          File file = File(_mediaPath);
+          if (!file.existsSync()) {
+            print('[VideoPlayerAdapter] 警告: 文件不存在: $_mediaPath');
+          }
+          _controller = VideoPlayerController.file(file);
+        }
       }
       
       // 设置音量
@@ -811,13 +820,23 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
       
       // 特殊处理：如果由于某种原因创建失败，尝试不同的方法
       try {
-        if (_mediaPath.startsWith('http://') || _mediaPath.startsWith('https://')) {
-          _controller = VideoPlayerController.network(_mediaPath);
+        // Web平台和非Web平台使用不同的逻辑
+        if (kIsWeb) {
+          if (_mediaPath.startsWith('blob:') || _mediaPath.startsWith('http')) {
+            // network() is deprecated, but we keep it for the fallback logic
+            _controller = VideoPlayerController.network(_mediaPath);
+          } else {
+            return false;
+          }
         } else {
-          // 获取文件的规范路径
-          File file = File(_mediaPath);
-          String canonicalPath = file.absolute.path;
-          _controller = VideoPlayerController.file(File(canonicalPath));
+          if (_mediaPath.startsWith('http://') || _mediaPath.startsWith('https://')) {
+            _controller = VideoPlayerController.network(_mediaPath);
+          } else {
+            // 获取文件的规范路径
+            File file = File(_mediaPath);
+            String canonicalPath = file.absolute.path;
+            _controller = VideoPlayerController.file(File(canonicalPath));
+          }
         }
         
         // 设置音量

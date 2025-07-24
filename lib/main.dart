@@ -1,6 +1,7 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:media_kit/media_kit.dart' if (dart.library.html) 'package:media_kit/media_kit.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -9,7 +10,8 @@ import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/widgets/menu_button.dart';
 import 'package:nipaplay/widgets/system_resource_display.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/window_manager.dart'
+    if (dart.library.html) 'package:nipaplay/utils/mock_window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
 import 'pages/settings_page.dart';
@@ -58,6 +60,11 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  if (!kIsWeb) {
+    // 确保仅在非Web平台初始化窗口管理器
+    await windowManager.ensureInitialized();
+  }
 
   // 初始化调试日志服务（在最前面初始化，这样可以收集启动过程的日志）
   final debugLogService = DebugLogService();
@@ -67,7 +74,7 @@ void main(List<String> args) async {
   String? launchFilePath;
   
   // 桌面平台通过命令行参数传入
-  if (args.isNotEmpty && globals.isDesktop) {
+  if (!kIsWeb && args.isNotEmpty && globals.isDesktop) {
     final filePath = args.first;
     if (await File(filePath).exists()) {
       launchFilePath = filePath;
@@ -76,7 +83,7 @@ void main(List<String> args) async {
   }
   
   // Android平台通过Intent传入
-  if (Platform.isAndroid) {
+  if (!kIsWeb && Platform.isAndroid) {
     final intentFilePath = await FileAssociationService.getOpenFileUri();
     if (intentFilePath != null && await FileAssociationService.validateFilePath(intentFilePath)) {
       launchFilePath = intentFilePath;
@@ -104,7 +111,7 @@ void main(List<String> args) async {
   });
 
   // 增加Flutter引擎内存限制，减少OOM风险
-  if (Platform.isAndroid) {
+  if (!kIsWeb && Platform.isAndroid) {
     // 为隔离区和图像解码设置更高的内存限制
     const int maxMemoryMB = 256; // 设置为256MB
     try {
@@ -120,7 +127,9 @@ void main(List<String> args) async {
   }
 
   // 初始化MediaKit
-  MediaKit.ensureInitialized();
+  if (!kIsWeb) {
+    MediaKit.ensureInitialized();
+  }
 
   // 添加全局异常捕获
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -131,7 +140,7 @@ void main(List<String> args) async {
   };
 
   // 在应用启动时为iOS请求相册权限
-  // if (Platform.isIOS) {
+  // if (!kIsWeb && Platform.isIOS) {
   //   print("[App Startup] Attempting to request photos permission for iOS...");
   //   PermissionStatus photoStatus = await Permission.photos.request();
   //   print("[App Startup] iOS Photos permission status: $photoStatus");
@@ -149,7 +158,7 @@ void main(List<String> args) async {
   // }
 
   // 请求Android存储权限
-  if (Platform.isAndroid) {
+  if (!kIsWeb && Platform.isAndroid) {
     debugPrint("正在请求Android存储权限...");
     
     // 先检查当前权限状态
@@ -205,108 +214,114 @@ void main(List<String> args) async {
     debugPrint("最终存储权限状态: $finalStatus, 管理存储权限状态: $manageStatus");
   }
   // 设置方法通道处理器
-  menuChannel.setMethodCallHandler((call) async {
-    print('[Dart] 收到方法调用: ${call.method}');
-    
-    if (call.method == 'uploadVideo') {
-      try {
-        // 获取UI上下文
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
+  if (!kIsWeb) {
+    menuChannel.setMethodCallHandler((call) async {
+      print('[Dart] 收到方法调用: ${call.method}');
+      
+      if (call.method == 'uploadVideo') {
+        try {
+          // 获取UI上下文
+          final context = navigatorKey.currentState?.overlay?.context;
+          if (context == null) {
+            print('[Dart] 错误: 无法获取UI上下文');
+            return '错误: 无法获取UI上下文';
+          }
+          
+          // 延迟确保UI准备好
+          Future.microtask(() {
+            print('[Dart] 启动文件选择器');
+            _showGlobalUploadDialog(context);
+          });
+          
+          return '正在显示文件选择器';
+        } catch (e) {
+          print('[Dart] 错误: $e');
+          return '错误: $e';
         }
-        
-        // 延迟确保UI准备好
-        Future.microtask(() {
-          print('[Dart] 启动文件选择器');
-          _showGlobalUploadDialog(context);
-        });
-        
-        return '正在显示文件选择器';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openVideoPlayback') {
-      try {
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
+      } else if (call.method == 'openVideoPlayback') {
+        try {
+          final context = navigatorKey.currentState?.overlay?.context;
+          if (context == null) {
+            print('[Dart] 错误: 无法获取UI上下文');
+            return '错误: 无法获取UI上下文';
+          }
+          
+          Future.microtask(() {
+            _navigateToPage(context, 0); // 切换到视频播放页面（索引0）
+          });
+          
+          return '正在切换到视频播放页面';
+        } catch (e) {
+          print('[Dart] 错误: $e');
+          return '错误: $e';
         }
-        
-        Future.microtask(() {
-          _navigateToPage(context, 0); // 切换到视频播放页面（索引0）
-        });
-        
-        return '正在切换到视频播放页面';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openMediaLibrary') {
-      try {
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
+      } else if (call.method == 'openMediaLibrary') {
+        try {
+          final context = navigatorKey.currentState?.overlay?.context;
+          if (context == null) {
+            print('[Dart] 错误: 无法获取UI上下文');
+            return '错误: 无法获取UI上下文';
+          }
+          
+          Future.microtask(() {
+            _navigateToPage(context, 1); // 切换到媒体库页面（索引1）
+          });
+          
+          return '正在切换到媒体库页面';
+        } catch (e) {
+          print('[Dart] 错误: $e');
+          return '错误: $e';
         }
-        
-        Future.microtask(() {
-          _navigateToPage(context, 1); // 切换到媒体库页面（索引1）
-        });
-        
-        return '正在切换到媒体库页面';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openNewSeries') {
-      try {
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
+      } else if (call.method == 'openNewSeries') {
+        try {
+          final context = navigatorKey.currentState?.overlay?.context;
+          if (context == null) {
+            print('[Dart] 错误: 无法获取UI上下文');
+            return '错误: 无法获取UI上下文';
+          }
+          
+          Future.microtask(() {
+            _navigateToPage(context, 2); // 切换到新番更新页面（索引2）
+          });
+          
+          return '正在切换到新番更新页面';
+        } catch (e) {
+          print('[Dart] 错误: $e');
+          return '错误: $e';
         }
-        
-        Future.microtask(() {
-          _navigateToPage(context, 2); // 切换到新番更新页面（索引2）
-        });
-        
-        return '正在切换到新番更新页面';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openSettings') {
-      try {
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
+      } else if (call.method == 'openSettings') {
+        try {
+          final context = navigatorKey.currentState?.overlay?.context;
+          if (context == null) {
+            print('[Dart] 错误: 无法获取UI上下文');
+            return '错误: 无法获取UI上下文';
+          }
+          
+          Future.microtask(() {
+            _navigateToPage(context, 3); // 切换到设置页面（索引3）
+          });
+          
+          return '正在切换到设置页面';
+        } catch (e) {
+          print('[Dart] 错误: $e');
+          return '错误: $e';
         }
-        
-        Future.microtask(() {
-          _navigateToPage(context, 3); // 切换到设置页面（索引3）
-        });
-        
-        return '正在切换到设置页面';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
       }
-    }
-    
-    // 默认返回空字符串
-    return '';
-  });
+      
+      // 默认返回空字符串
+      return '';
+    });
+  }
 
   // 创建应用所需的目录结构
-  await _initializeAppDirectories();
+  if (!kIsWeb) {
+    await _initializeAppDirectories();
+  }
 
   // 检查网络连接
-  _checkNetworkConnection();
+  if (!kIsWeb) {
+    _checkNetworkConnection();
+  }
 
   // 预加载播放器内核设置
   await PlayerFactory.initialize();
@@ -315,7 +330,7 @@ void main(List<String> args) async {
   await DanmakuKernelFactory.initialize();
 
   // 初始化安全书签服务 (仅限 macOS)
-  if (Platform.isMacOS) {
+  if (!kIsWeb && Platform.isMacOS) {
     try {
       await SecurityBookmarkService.restoreAllBookmarks();
       debugPrint('SecurityBookmarkService 书签恢复完成');
@@ -355,7 +370,7 @@ void main(List<String> args) async {
     }),
     
     // 清理过期的弹幕缓存
-    DanmakuCacheManager.clearExpiredCache(),
+    if (!kIsWeb) DanmakuCacheManager.clearExpiredCache(),
     
     // 初始化 BangumiService
     BangumiService.instance.initialize(),
@@ -387,21 +402,26 @@ void main(List<String> args) async {
     }
 
     // 初始化系统资源监控（所有平台）
-    SystemResourceMonitor.initialize();
+    if (!kIsWeb) {
+      SystemResourceMonitor.initialize();
+    }
 
     if (globals.isDesktop) {
-      windowManager.ensureInitialized();
-      WindowOptions windowOptions = const WindowOptions(
-        skipTaskbar: false,
-        titleBarStyle: TitleBarStyle.hidden,
-        title: "NipaPlay",
-      );
-      windowManager.waitUntilReadyToShow(windowOptions, () async {
-        await windowManager.setMinimumSize(const Size(600, 400));
-        await windowManager.maximize();
-        await windowManager.show();
-        await windowManager.focus();
-      });
+      if (!kIsWeb) {
+        const WindowOptions windowOptions = WindowOptions(
+          skipTaskbar: false,
+          titleBarStyle: TitleBarStyle.hidden,
+          title: "NipaPlay",
+        );
+        if (!kIsWeb) {
+          windowManager.waitUntilReadyToShow(windowOptions, () async {
+            await windowManager.setMinimumSize(const Size(600, 400));
+            await windowManager.maximize();
+            await windowManager.show();
+            await windowManager.focus();
+          });
+        }
+      }
     }
 
     runApp(
@@ -463,6 +483,7 @@ void main(List<String> args) async {
 
 // 初始化应用所需的所有目录
 Future<void> _initializeAppDirectories() async {
+  if (kIsWeb) return;
   try {
     // Linux平台先处理数据迁移，然后创建目录
     // 其他平台直接创建目录（getAppStorageDirectory内部会处理Linux迁移）
@@ -483,6 +504,7 @@ Future<void> _initializeAppDirectories() async {
 
 // 检查网络连接
 Future<void> _checkNetworkConnection() async {
+  if (kIsWeb) return;
   debugPrint('==================== 网络连接诊断开始 ====================');
   debugPrint('设备系统: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
   debugPrint('设备类型: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : Platform.isMacOS ? 'macOS' : '其他'}');
@@ -580,6 +602,7 @@ Future<void> _checkNetworkConnection() async {
 
 // 确保临时目录存在
 Future<void> _ensureTemporaryDirectoryExists() async {
+  if (kIsWeb) return;
   try {
     // 使用StorageService获取应用目录
     final appDir = await StorageService.getAppStorageDirectory();
@@ -615,6 +638,34 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
 
   @override
   Widget build(BuildContext context) {
+    Widget app = Consumer<ThemeNotifier>(
+      builder: (context, themeNotifier, child) {
+        // 移除全局键盘快捷键注册，避免干扰文本输入
+        return MaterialApp(
+          title: 'NipaPlay',
+          debugShowCheckedModeBanner: false,
+          color: Colors.transparent,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeNotifier.themeMode,
+          navigatorKey: navigatorKey,
+          home: MainPage(launchFilePath: widget.launchFilePath),
+          builder: (context, appChild) {
+            return Stack(
+              children: [
+                appChild!, // The app's content
+                if (_isDragging && !kIsWeb) const DragDropOverlay(),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (kIsWeb) {
+      return app;
+    }
+
     return DropTarget(
       onDragEntered: (details) {
         setState(() {
@@ -639,33 +690,12 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
           _handleDroppedFile(filePath);
         }
       },
-      child: Consumer<ThemeNotifier>(
-        builder: (context, themeNotifier, child) {
-          // 移除全局键盘快捷键注册，避免干扰文本输入
-          return MaterialApp(
-            title: 'NipaPlay',
-            debugShowCheckedModeBanner: false,
-            color: Colors.transparent,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: themeNotifier.themeMode,
-            navigatorKey: navigatorKey,
-            home: MainPage(launchFilePath: widget.launchFilePath),
-            builder: (context, appChild) {
-              return Stack(
-                children: [
-                  appChild!, // The app's content
-                  if (_isDragging) const DragDropOverlay(),
-                ],
-              );
-            },
-          );
-        },
-      ),
+      child: app,
     );
   }
 
   void _handleDroppedFile(String filePath) async {
+    if (kIsWeb) return;
     try {
       debugPrint('[DragDrop] Handling dropped file: $filePath');
       
@@ -716,8 +746,10 @@ class MainPage extends StatefulWidget {
   MainPageState createState() => MainPageState();
 }
 
-class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, WindowListener {
-  bool isMaximized = false;
+class MainPageState extends State<MainPage> with TickerProviderStateMixin {
+  bool _isMaximized = false; // 用于跟踪窗口最大化状态
+  late AnimationController _animationController;
+  bool get isMenuOpen => _animationController.value == 1.0;
   TabController? globalTabController;
   bool _showSplash = true;
 
@@ -762,27 +794,33 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   @override
   void initState() {
     super.initState();
-    globalTabController = TabController(length: 4, vsync: this, initialIndex: 0);
-    globalTabController?.addListener(() {
-      if (globalTabController != null) { 
-        debugPrint('[MainPageState] globalTabController listener: index=${globalTabController!.index}, previousIndex=${globalTabController!.previousIndex}, indexIsChanging=${globalTabController!.indexIsChanging}, animationValue=${globalTabController!.animation?.value.toStringAsFixed(2)}');
-      }
-    });
-    debugPrint('[MainPageState] initState: globalTabController listener ADDED.');
-    
-    // 处理启动时的文件路径
-    if (widget.launchFilePath != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _handleLaunchFile(widget.launchFilePath!);
-      });
-    }
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
 
-    // 窗口管理器初始化
-    if (globals.winLinDesktop) {
-      windowManager.addListener(this);
-      _checkWindowMaximizedState();
-    }
-    _startSplashScreenSequence();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      globalTabController =
+          TabController(length: 4, vsync: this, initialIndex: 0);
+      globalTabController?.addListener(() {
+        if (globalTabController!.indexIsChanging) {
+          FocusScope.of(context).unfocus();
+        }
+      });
+      setState(() {}); // 触发一次构建以确保 TabController 可用
+
+      // 处理启动时的文件路径
+      if (widget.launchFilePath != null) {
+        _handleLaunchFile(widget.launchFilePath!);
+      }
+
+      // 窗口管理器初始化
+      if (!kIsWeb && globals.winLinDesktop) {
+        // windowManager.addListener(this);
+        _checkWindowMaximizedState();
+      }
+      _startSplashScreenSequence();
+    });
   }
 
   void _startSplashScreenSequence() {
@@ -861,11 +899,11 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
 
   // 检查窗口是否已最大化
   Future<void> _checkWindowMaximizedState() async {
-    if (globals.winLinDesktop) {
+    if (!kIsWeb) {
       final maximized = await windowManager.isMaximized();
-      if (maximized != isMaximized) {
+      if (mounted) {
         setState(() {
-          isMaximized = maximized;
+          _isMaximized = maximized;
         });
       }
     }
@@ -891,12 +929,12 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   void dispose() {
     _tabChangeNotifier?.removeListener(_onTabChangeRequested); // Temporarily remove
     globalTabController?.dispose();
-    if (globals.winLinDesktop) {
-      windowManager.removeListener(this);
+    if (!kIsWeb && globals.winLinDesktop) {
+      // windowManager.removeListener(this);
     }
     
     // 清理安全书签资源 (仅限 macOS)
-    if (Platform.isMacOS) {
+    if (!kIsWeb && Platform.isMacOS) {
       try {
         SecurityBookmarkService.cleanup();
         debugPrint('SecurityBookmarkService 清理完成');
@@ -906,14 +944,16 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     }
     
     // 释放系统资源监控，移除桌面平台限制
-    SystemResourceMonitor.dispose();
+    if (!kIsWeb) {
+      SystemResourceMonitor.dispose();
+    }
     
     super.dispose();
   }
 
   // 切换窗口大小
   void _toggleWindowSize() async {
-    if (globals.winLinDesktop) {
+    if (!kIsWeb && globals.winLinDesktop) {
       if (await windowManager.isMaximized()) {
         await windowManager.unmaximize();
       } else {
@@ -924,37 +964,15 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   }
 
   void _minimizeWindow() async {
-    await windowManager.minimize();
+    if (!kIsWeb) {
+      await windowManager.minimize();
+    }
   }
 
   void _closeWindow() async {
-    await windowManager.close();
-  }
-
-  // WindowListener回调
-  @override
-  void onWindowMaximize() {
-    setState(() {
-      isMaximized = true;
-    });
-  }
-
-  @override
-  void onWindowUnmaximize() {
-    setState(() {
-      isMaximized = false;
-    });
-  }
-
-  @override
-  void onWindowResize() {
-    _checkWindowMaximizedState();
-  }
-
-  @override
-  void onWindowEvent(String eventName) {
-    // 监听所有窗口事件，可以在这里添加日志
-    // print('窗口事件: $eventName');
+    if (!kIsWeb) {
+      await windowManager.close();
+    }
   }
 
   @override
@@ -991,7 +1009,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
             child: GestureDetector(
               onDoubleTap: _toggleWindowSize,
               onPanStart: (details) async {
-                if (globals.winLinDesktop) {
+                if (!kIsWeb && globals.winLinDesktop) {
                   await windowManager.startDragging();
                 }
               },
@@ -1013,7 +1031,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
                 height: globals.isPhone && globals.isMobile ? 55 : 40,
                 color: Colors.transparent,
                 child: WindowControlButtons(
-                  isMaximized: isMaximized,
+                  isMaximized: _isMaximized,
                   onMinimize: _minimizeWindow,
                   onMaximizeRestore: _toggleWindowSize,
                   onClose: _closeWindow,

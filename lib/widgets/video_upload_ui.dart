@@ -1,14 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import '../utils/video_player_state.dart';
-import 'dart:io';
+import 'dart:io' as io;
+import 'package:universal_html/html.dart' as web_html;
 import 'package:image_picker/image_picker.dart';
 import '../widgets/blur_dialog.dart';
 import '../widgets/blur_snackbar.dart';
 import '../utils/globals.dart' as globals;
 import 'package:permission_handler/permission_handler.dart';
 import '../services/file_picker_service.dart';
+import 'package:file_picker/file_picker.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -138,7 +141,33 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
 
   Future<void> _handleUploadVideo() async {
     try {
-      if (globals.isPhone) {
+      if (kIsWeb) {
+        // Web 平台逻辑
+        final videoState = context.read<VideoPlayerState>();
+        videoState.setPreInitLoadingState('正在准备视频文件...');
+        
+        FilePickerResult? result = await FilePicker.platform.pickFiles(
+          type: FileType.video,
+        );
+
+        if (result != null && result.files.single.bytes != null) {
+          final fileBytes = result.files.single.bytes!;
+          final fileName = result.files.single.name;
+          
+          final blob = web_html.Blob([fileBytes]);
+          final url = web_html.Url.createObjectUrlFromBlob(blob);
+
+          Future.microtask(() async {
+            await videoState.initializePlayer(
+              fileName, // 使用文件名作为标识
+              actualPlayUrl: url,
+            );
+          });
+        } else {
+          // 用户取消了选择
+          videoState.resetPlayer();
+        }
+      } else if (globals.isPhone) {
         // 手机端弹窗选择来源
         final source = await BlurDialog.show<String>(
           context: context,
@@ -163,7 +192,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
         if (!mounted) return; // 检查 mounted 状态
 
         if (source == 'album') {
-          if (Platform.isAndroid) { // 只在 Android 上使用 permission_handler
+          if (io.Platform.isAndroid) { // 只在 Android 上使用 permission_handler
             PermissionStatus photoStatus;
             PermissionStatus videoStatus;
             // 请求照片和视频权限 (Android 13+ 需要)
@@ -203,7 +232,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
                 BlurSnackBar.show(context, '需要相册和视频权限才能选择');
               }
             }
-          } else if (Platform.isIOS) { // 在 iOS 上直接尝试选择
+          } else if (io.Platform.isIOS) { // 在 iOS 上直接尝试选择
             print("iOS: Bypassing permission_handler, directly calling ImagePicker.");
             await _pickMediaFromGallery(); 
           } else { // 其他平台 (如果支持，也直接尝试)
