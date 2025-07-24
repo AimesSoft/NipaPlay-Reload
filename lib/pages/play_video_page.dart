@@ -13,6 +13,7 @@ import '../widgets/send_danmaku_button.dart';
 import '../widgets/send_danmaku_dialog.dart';
 import '../player_abstraction/player_abstraction.dart';
 import '../widgets/blur_dialog.dart';
+import '../widgets/blur_snackbar.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -203,9 +204,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                               final currentTime = videoState.position.inSeconds.toDouble();
 
                               if (episodeId == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('无法获取剧集信息，无法发送弹幕')),
-                                );
+                                BlurSnackBar.show(context, '无法获取剧集信息，无法发送弹幕');
                                 if (wasPlaying) await videoState.player.playDirectly();
                                 return;
                               }
