@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
@@ -199,6 +199,7 @@ class ScanService with ChangeNotifier {
   /// 计算文件夹的hash值
   /// 基于文件夹内所有视频文件的路径、大小和修改时间
   Future<String> _calculateFolderHash(String folderPath) async {
+    if (kIsWeb) return ''; // Web平台无法访问本地文件系统
     try {
       final directory = Directory(folderPath);
       if (!await directory.exists()) {
@@ -242,6 +243,7 @@ class ScanService with ChangeNotifier {
 
   /// 检查文件夹是否有变化
   Future<bool> _hasFolderChanged(String folderPath) async {
+    if (kIsWeb) return false; // 在Web上，假设没有变化
     final currentHash = await _calculateFolderHash(folderPath);
     final cachedHash = _folderHashCache[folderPath];
     
@@ -257,6 +259,7 @@ class ScanService with ChangeNotifier {
 
   /// 更新文件夹hash缓存
   Future<void> _updateFolderHash(String folderPath) async {
+    if (kIsWeb) return;
     final currentHash = await _calculateFolderHash(folderPath);
     if (currentHash.isNotEmpty) {
       _folderHashCache[folderPath] = currentHash;
@@ -273,6 +276,7 @@ class ScanService with ChangeNotifier {
 
   /// 清理不存在文件夹的hash缓存
   Future<void> _cleanupFolderHashCache() async {
+    if (kIsWeb) return;
     final keysToRemove = <String>[];
     
     for (final folderPath in _folderHashCache.keys) {
@@ -305,6 +309,7 @@ class ScanService with ChangeNotifier {
 
   /// 启动时执行变化检测
   Future<void> _performStartupChangeDetection() async {
+    if (kIsWeb) return;
     if (_scannedFolders.isEmpty) {
       return;
     }
@@ -333,6 +338,7 @@ class ScanService with ChangeNotifier {
 
   /// 详细检测文件夹变化，包括子文件夹级别的变化
   Future<FolderChangeInfo?> _detectDetailedFolderChanges(String folderPath) async {
+    if (kIsWeb) return null;
     final directory = Directory(folderPath);
     if (!await directory.exists()) {
       // 文件夹已删除
@@ -397,6 +403,7 @@ class ScanService with ChangeNotifier {
 
   /// 计算文件夹内所有子文件夹和视频文件的hash
   Future<Map<String, String>> _calculateSubFolderHashes(String folderPath) async {
+    if (kIsWeb) return {};
     final Map<String, String> subHashes = {};
     final directory = Directory(folderPath);
 
@@ -498,6 +505,11 @@ class ScanService with ChangeNotifier {
   }
 
   Future<void> rescanAllFolders({bool skipPreviouslyMatchedUnwatched = true}) async {
+    if (kIsWeb) {
+      _updateScanMessage("Web版不支持扫描本地媒体库。");
+      _updateScanState(scanning: false, completed: true);
+      return;
+    }
     if (_isScanning) {
       _updateScanMessage("已有扫描任务在进行中，请稍后开始全面刷新。");
       return;
@@ -600,6 +612,13 @@ class ScanService with ChangeNotifier {
       bool skipPreviouslyMatchedUnwatched = false
     }
   ) async {
+    if (kIsWeb) {
+      _updateScanMessage("Web版不支持扫描本地媒体库。");
+      if (!isPartOfBatch) {
+        _updateScanState(scanning: false, completed: true);
+      }
+      return;
+    }
     if (!isPartOfBatch && _isScanning) {
       _updateScanMessage("已有扫描任务在进行中，请稍后。");
       return;
@@ -860,6 +879,10 @@ class ScanService with ChangeNotifier {
   }
 
   Future<void> removeScannedFolder(String folderPath) async {
+    if (kIsWeb) {
+      _updateScanMessage("Web版不支持扫描本地媒体库。");
+      return;
+    }
     if (_scannedFolders.contains(folderPath)) {
       // First, perform the cleanup of associated media records
       try {

@@ -1,5 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' as io;
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import '../utils/storage_service.dart';
 
@@ -36,7 +38,7 @@ class DanmakuCacheManager {
         return isValid;
       }
 
-      final file = File(await _getCacheFilePath(episodeId));
+      final file = io.File(await _getCacheFilePath(episodeId));
       if (!await file.exists()) {
         //////debugPrint('缓存文件不存在');
         return false;
@@ -72,6 +74,7 @@ class DanmakuCacheManager {
     int animeId, 
     List<dynamic> comments
   ) async {
+    if (kIsWeb) return;
     try {
       final jsonData = {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -83,7 +86,7 @@ class DanmakuCacheManager {
       _memoryCache[episodeId] = jsonData;
 
       // 异步保存到文件
-      final file = File(await _getCacheFilePath(episodeId));
+      final file = io.File(await _getCacheFilePath(episodeId));
       await file.writeAsString(json.encode(jsonData));
     } catch (e) {
       //////debugPrint('保存弹幕缓存失败: $e');
@@ -91,6 +94,7 @@ class DanmakuCacheManager {
   }
 
   static Future<List<dynamic>?> getDanmakuFromCache(String episodeId) async {
+    if (kIsWeb) return null;
     try {
       //////debugPrint('尝试从缓存获取弹幕: $episodeId');
       // 首先检查内存缓存
@@ -122,7 +126,7 @@ class DanmakuCacheManager {
       }
 
       //////debugPrint('从文件缓存获取弹幕');
-      final file = File(await _getCacheFilePath(episodeId));
+      final file = io.File(await _getCacheFilePath(episodeId));
       final jsonData = json.decode(await file.readAsString());
       final comments = jsonData['comments'] as List<dynamic>;
       //////debugPrint('返回 ${comments.length} 条弹幕');
@@ -134,6 +138,7 @@ class DanmakuCacheManager {
   }
 
   static Future<void> clearExpiredCache() async {
+    if (kIsWeb) return;
     try {
       // 清理内存缓存
       final now = DateTime.now();
@@ -155,7 +160,7 @@ class DanmakuCacheManager {
         entity.path.contains(_cacheKeyPrefix)).toList();
 
       for (var file in files) {
-        if (file is File) {
+        if (file is io.File) {
           try {
             final jsonData = json.decode(await file.readAsString());
             final timestamp = jsonData['timestamp'] as int;

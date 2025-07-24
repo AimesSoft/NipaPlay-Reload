@@ -1,5 +1,5 @@
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'android_storage_helper.dart'; // 导入Android存储帮助类
@@ -15,6 +15,7 @@ class StorageService {
   
   // 保存自定义存储路径
   static Future<bool> saveCustomStoragePath(String path) async {
+    if (kIsWeb) return false;
     try {
       debugPrint('保存自定义存储路径: $path');
       final prefs = await SharedPreferences.getInstance();
@@ -29,6 +30,7 @@ class StorageService {
   
   // 获取保存的自定义存储路径
   static Future<String?> getCustomStoragePath() async {
+    if (kIsWeb) return null;
     if (_currentStoragePath != null) {
       return _currentStoragePath;
     }
@@ -49,6 +51,7 @@ class StorageService {
   
   // 清除保存的自定义存储路径
   static Future<bool> clearCustomStoragePath() async {
+    if (kIsWeb) return false;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_customStoragePathKey);
@@ -63,6 +66,7 @@ class StorageService {
   
   // 检查路径是否是有效的存储目录
   static Future<bool> isValidStorageDirectory(String path) async {
+    if (kIsWeb) return false;
     try {
       // 针对Android平台的特殊处理
       if (Platform.isAndroid) {
@@ -138,6 +142,7 @@ class StorageService {
 
   // 主应用存储目录
   static Future<Directory> getAppStorageDirectory() async {
+    if (kIsWeb) return Directory('web');
     // Linux平台特殊处理 - 使用XDG规范目录并处理迁移
     if (Platform.isLinux) {
       return _getLinuxStorageDirectory();
@@ -149,6 +154,7 @@ class StorageService {
   
   // 通用存储目录处理（除Linux外的所有平台）
   static Future<Directory> _getUniversalStorageDirectory() async {
+    if (kIsWeb) return Directory('web');
     try {
       // macOS平台需要处理数据迁移
       if (Platform.isMacOS) {
@@ -244,6 +250,7 @@ class StorageService {
   
   // Linux平台存储目录处理
   static Future<Directory> _getLinuxStorageDirectory() async {
+    if (kIsWeb) return Directory('web');
     try {
       // 先检查是否需要迁移
       if (await LinuxStorageMigration.needsMigration()) {
@@ -294,6 +301,7 @@ class StorageService {
   
   // 获取临时目录
   static Future<Directory> getTempDirectory() async {
+    if (kIsWeb) return Directory('web/temp');
     final appDir = await getAppStorageDirectory();
     final tempDir = Directory('${appDir.path}/temp');
     if (!await tempDir.exists()) {
@@ -304,6 +312,7 @@ class StorageService {
   
   // 获取缓存目录
   static Future<Directory> getCacheDirectory() async {
+    if (kIsWeb) return Directory('web/cache');
     final appDir = await getAppStorageDirectory();
     final cacheDir = Directory('${appDir.path}/cache');
     if (!await cacheDir.exists()) {
@@ -314,6 +323,7 @@ class StorageService {
   
   // 获取下载目录
   static Future<Directory> getDownloadsDirectory() async {
+    if (kIsWeb) return Directory('web/downloads');
     final appDir = await getAppStorageDirectory();
     final downloadsDir = Directory('${appDir.path}/downloads');
     if (!await downloadsDir.exists()) {
@@ -324,6 +334,7 @@ class StorageService {
   
   // 获取视频目录
   static Future<Directory> getVideosDirectory() async {
+    if (kIsWeb) return Directory('web/videos');
     final appDir = await getAppStorageDirectory();
     final videosDir = Directory('${appDir.path}/videos');
     if (!await videosDir.exists()) {

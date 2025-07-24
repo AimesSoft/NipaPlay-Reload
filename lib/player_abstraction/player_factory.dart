@@ -1,4 +1,4 @@
-import 'package:fvp/mdk.dart' as mdk; // MDK import is isolated here
+import 'package:fvp/mdk.dart' if (dart.library.html) 'package:nipaplay/utils/mock_mdk.dart' as mdk; // MDK import is isolated here
 import './abstract_player.dart';
 import './mdk_player_adapter.dart';
 import './video_player_adapter.dart'; // 导入新的适配器
@@ -28,6 +28,12 @@ class PlayerFactory {
   
   // 初始化方法，在应用启动时调用
   static Future<void> initialize() async {
+    if (kIsWeb) {
+      _cachedKernelType = PlayerKernelType.videoPlayer;
+      _hasLoadedSettings = true;
+      debugPrint('[PlayerFactory] Web平台，强制使用 Video Player 内核');
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final kernelTypeIndex = prefs.getInt(_playerKernelTypeKey);
@@ -81,13 +87,19 @@ class PlayerFactory {
   
   // 创建播放器实例
   AbstractPlayer createPlayer({PlayerKernelType? kernelType}) {
+    // 如果是Web平台，强制使用VideoPlayer
+    if (kIsWeb) {
+      debugPrint('[PlayerFactory] Web平台，强制创建 Video Player 播放器');
+      return VideoPlayerAdapter();
+    }
+    
     // 如果没有指定内核类型，从缓存或设置中读取
     kernelType ??= getKernelType();
     
     switch (kernelType) {
       case PlayerKernelType.mdk:
         debugPrint('[PlayerFactory] 创建 MDK 播放器');
-        return MdkPlayerAdapter(mdk.Player());
+        return MdkPlayerAdapter();
       case PlayerKernelType.videoPlayer:
         debugPrint('[PlayerFactory] 创建 Video Player 播放器');
         return VideoPlayerAdapter();
@@ -106,6 +118,10 @@ class PlayerFactory {
   
   // 保存内核设置
   static Future<void> saveKernelType(PlayerKernelType type) async {
+    if (kIsWeb) {
+      debugPrint('[PlayerFactory] Web平台不支持更改播放器内核');
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_playerKernelTypeKey, type.index);

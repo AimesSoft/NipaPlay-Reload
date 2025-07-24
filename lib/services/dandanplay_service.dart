@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
 import 'dart:async';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -340,6 +341,9 @@ class DandanplayService {
   }
 
   static Future<Map<String, dynamic>> getVideoInfo(String videoPath) async {
+    if (kIsWeb) {
+      throw Exception('Web版不支持从本地文件获取视频信息。');
+    }
     try {
       final appSecret = await getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
@@ -469,6 +473,7 @@ class DandanplayService {
   }
 
   static Future<String> _d(File file) async {
+    if (kIsWeb) return '';
     const int maxBytes = 16 * 1024 * 1024; // 16MB
     final bytes = await file.openRead(0, maxBytes).expand((chunk) => chunk).toList();
     return md5.convert(bytes).toString();

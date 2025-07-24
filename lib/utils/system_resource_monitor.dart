@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:convert';
 import 'dart:math';
-import 'package:fvp/mdk.dart'; // 导入MDK库
+import 'package:fvp/mdk.dart' if (dart.library.html) 'package:nipaplay/utils/mock_mdk.dart'; // 导入MDK库
 import 'package:nipaplay/player_abstraction/player_factory.dart'; // 导入播放器工厂
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
 
@@ -79,6 +79,11 @@ class SystemResourceMonitor {
       
       // 获取弹幕内核类型
       _instance._updateDanmakuKernelType();
+    } else {
+      _instance._playerKernelType = "Video Player";
+      _instance._danmakuKernelType = "CPU";
+      _instance._mdkVersion = "N/A";
+      _instance._activeDecoder = "浏览器解码";
     }
   }
   
@@ -187,6 +192,11 @@ class SystemResourceMonitor {
   
   /// 通用方法更新CPU和内存使用情况
   void _updateCpuAndMemoryUsage() {
+    if (kIsWeb) {
+      _cpuUsage = 0.0;
+      _memoryUsageMB = 0.0;
+      return;
+    }
     // 模拟CPU使用率
     // 实际上Flutter不提供直接获取CPU使用率的API
     // 这里使用一种启发式方法，根据帧率和内存变化率估算CPU负载

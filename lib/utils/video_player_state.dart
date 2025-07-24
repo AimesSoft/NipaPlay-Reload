@@ -677,7 +677,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     bool isEmbyStream = videoPath.startsWith('emby://');
     
     // 对于本地文件才检查存在性，网络URL和流媒体默认认为"存在"
-    bool fileExists = isNetworkUrl || isJellyfinStream || isEmbyStream;
+    bool fileExists = isNetworkUrl || isJellyfinStream || isEmbyStream || kIsWeb;
     
     // 为网络URL添加特定日志
     if (isNetworkUrl) {
@@ -1354,12 +1354,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 设置空媒体源，释放当前媒体相关资源
       player.media = '';
 
-      // 通知垃圾回收
-      if (Platform.isIOS || Platform.isMacOS) {
-        Future.delayed(const Duration(milliseconds: 50), () {
-          // 在iOS/macOS上可能需要额外步骤来释放资源
-          player.media = '';
-        });
+      if (!kIsWeb) {
+        // 通知垃圾回收
+        if (Platform.isIOS || Platform.isMacOS) {
+          Future.delayed(const Duration(milliseconds: 50), () {
+            // 在iOS/macOS上可能需要额外步骤来释放资源
+            player.media = '';
+          });
+        }
       }
     } catch (e) {
       //debugPrint('释放纹理资源时出错: $e');
@@ -1791,7 +1793,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     WakelockPlus.disable();
     //debugPrint("Wakelock disabled on dispose.");
-    windowManager.removeListener(this);
+    if (!kIsWeb) {
+      windowManager.removeListener(this);
+    }
     _playerKernelChangeSubscription?.cancel(); // 取消播放器内核切换事件订阅
     _danmakuKernelChangeSubscription?.cancel(); // 取消弹幕内核切换事件订阅
     super.dispose();
@@ -1799,6 +1803,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 设置窗口管理器监听器
   void _setupWindowManagerListener() {
+    if (kIsWeb) return;
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       windowManager.addListener(this);
     }
@@ -1884,6 +1889,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 切换全屏状态（仅用于桌面平台）
   Future<void> toggleFullscreen() async {
+    if (kIsWeb) return;
     if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
     if (_isFullscreenTransitioning) return;
 
@@ -2176,6 +2182,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 计算文件前16MB数据的MD5哈希值
   Future<String> _calculateFileHash(String filePath) async {
+    if (kIsWeb) {
+      // 在Web平台上，我们没有直接的文件访问权限，所以返回一个基于路径的哈希值
+      return md5.convert(utf8.encode(filePath)).toString();
+    }
     try {
       final file = File(filePath);
       if (!file.existsSync()) {
@@ -2270,6 +2280,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 触发图片缓存刷新，使新缩略图可见
   void _triggerImageCacheRefresh(String imagePath) {
+    if (kIsWeb) return; // Web平台不支持文件操作
     try {
       // 从图片缓存中移除该图片
       ////debugPrint('刷新图片缓存: $imagePath');

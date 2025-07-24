@@ -1,6 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'dart:io';
 
 class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _enablePageAnimationKey = 'enable_page_animation';
@@ -20,6 +21,9 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   
   // 根据平台返回默认动画设置
   bool _getDefaultAnimationValue() {
+    if (kIsWeb) {
+      return false; // Web平台默认禁用动画
+    }
     // 在移动端设备上默认启用动画
     if (Platform.isIOS || Platform.isAndroid) {
       return true;
