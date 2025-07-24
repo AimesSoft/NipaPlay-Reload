@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
@@ -693,7 +694,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       notifyListeners();
     }
     
-    if (!isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+    if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
       // 使用FilePickerService处理文件路径问题
       if (Platform.isIOS) {
         final filePickerService = FilePickerService();
@@ -732,6 +733,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         final File videoFile = File(videoPath);
         fileExists = videoFile.existsSync();
       }
+    } else if (kIsWeb) {
+      // Web平台，我们相信传入的blob URL是有效的
+      debugPrint('Web平台，跳过文件存在性检查');
     } else {
       debugPrint('检测到网络URL或流媒体: $videoPath');
     }

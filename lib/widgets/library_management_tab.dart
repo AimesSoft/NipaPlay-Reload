@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:ui';
@@ -902,6 +903,21 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            '''媒体文件夹管理功能在Web浏览器中不可用。
+此功能需要访问本地文件系统，但Web应用无法获取相关权限。
+请在Windows、macOS、Android或iOS客户端中使用此功能。''',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
+          ),
+        ),
+      );
+    }
+
     final scanService = Provider.of<ScanService>(context);
     // final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false); // Keep if needed for other actions
 
