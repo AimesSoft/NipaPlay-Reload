@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
 
@@ -16,13 +17,21 @@ import '../models/watch_history_database.dart';
 import '../utils/storage_service.dart';
 
 /// video_player 插件的适配器，实现 AbstractPlayer 接口
-class VideoPlayerAdapter implements AbstractPlayer {
+class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   VideoPlayerController? _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
   String _mediaPath = '';
   PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
   double _volume = 1.0;
   double _playbackRate = 1.0;
+
+  // 时间插值器相关字段
+  Ticker? _ticker;
+  Duration _interpolatedPosition = Duration.zero;
+  Duration _lastActualPosition = Duration.zero;
+  int _lastPositionTimestamp = 0;
+  bool _wasPlaying = false; // 新增状态跟踪标志
+
   final List<int> _activeSubtitleTracks = [];
   final List<int> _activeAudioTracks = [];
   final Map<String, String> _properties = {};
@@ -34,6 +43,31 @@ class VideoPlayerAdapter implements AbstractPlayer {
   
   VideoPlayerAdapter() {
     print('[VideoPlayerAdapter] 初始化');
+    _initializeTicker();
+  }
+
+  @override
+  Ticker createTicker(TickerCallback onTick) {
+    return Ticker(onTick);
+  }
+
+  void _initializeTicker() {
+    _ticker = createTicker(_onTick);
+  }
+
+  void _onTick(Duration elapsed) {
+    if (_controller?.value.isPlaying ?? false) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_lastPositionTimestamp == 0) { // Safety check
+        _lastPositionTimestamp = now;
+      }
+      final delta = now - _lastPositionTimestamp;
+      _interpolatedPosition = _lastActualPosition + Duration(milliseconds: (delta * _playbackRate).toInt());
+
+      if (_controller!.value.duration > Duration.zero && _interpolatedPosition > _controller!.value.duration) {
+        _interpolatedPosition = _controller!.value.duration;
+      }
+    }
   }
 
   @override
@@ -98,6 +132,9 @@ class VideoPlayerAdapter implements AbstractPlayer {
           // 直接调用内部方法，不使用异步
           // 否则VideoPlayerState可能无法识别状态变化
           _controller!.play();
+          // _lastActualPosition = _controller?.value.position ?? _lastActualPosition; // 移除这里的校准
+          // _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch; // 移除这里的校准
+          // _ticker?.start(); // Ticker的启动交给监听器
           
           // 确保异步方法也被调用，以进行验证和重试
           playDirectly();
@@ -105,12 +142,19 @@ class VideoPlayerAdapter implements AbstractPlayer {
           
         case PlayerPlaybackState.paused:
           _controller!.pause();
+          // _ticker?.stop(); // Ticker的停止交给监听器
+          // _interpolatedPosition = _controller?.value.position ?? _interpolatedPosition; // 移除这里的校准
+          // _lastActualPosition = _interpolatedPosition; // 移除这里的校准
           pauseDirectly();
           break;
           
         case PlayerPlaybackState.stopped:
           _controller!.pause();
+          _ticker?.stop(); // 停止是明确的，可以立即停止Ticker
           _controller!.seekTo(Duration.zero);
+          _interpolatedPosition = Duration.zero;
+          _lastActualPosition = Duration.zero;
+          _lastPositionTimestamp = 0;
           break;
       }
     } catch (e) {
@@ -150,6 +194,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
         
         // 完全取消所有监听器
         _controller!.removeListener(_controllerListener);
+        _ticker?.stop();
         
         // 清空_textureId，这样UI会提前知道资源已释放
         _textureIdNotifier.value = null;
@@ -162,6 +207,9 @@ class VideoPlayerAdapter implements AbstractPlayer {
         _controller = null;
         
         // 重置位置
+        _interpolatedPosition = Duration.zero;
+        _lastActualPosition = Duration.zero;
+        _lastPositionTimestamp = 0;
         _mediaInfo = PlayerMediaInfo(duration: 0, specificErrorMessage: _mediaInfo.specificErrorMessage); // 保留可能已设置的错误信息
       }
     } catch (e) {
@@ -197,7 +245,7 @@ class VideoPlayerAdapter implements AbstractPlayer {
   @override
   int get position {
     if (_controller == null || !_controller!.value.isInitialized) return 0;
-    return _controller!.value.position.inMilliseconds;
+    return _interpolatedPosition.inMilliseconds;
   }
 
   @override
@@ -436,10 +484,14 @@ class VideoPlayerAdapter implements AbstractPlayer {
     
     final duration = Duration(milliseconds: position);
     _controller!.seekTo(duration);
+    _interpolatedPosition = duration;
+    _lastActualPosition = duration;
+    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
   }
 
   @override
   void dispose() {
+    _ticker?.dispose();
     _disposeController();
   }
 
@@ -789,6 +841,24 @@ class VideoPlayerAdapter implements AbstractPlayer {
     
     try {
       final value = _controller!.value;
+      final isPlaying = value.isPlaying;
+
+      // 状态机：只在播放状态发生改变时进行校准
+      if (isPlaying != _wasPlaying) {
+        if (isPlaying) {
+          // 状态从 暂停 -> 播放
+          _lastActualPosition = value.position;
+          _interpolatedPosition = value.position;
+          _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+          _ticker?.start();
+        } else {
+          // 状态从 播放 -> 暂停
+          _ticker?.stop();
+          _interpolatedPosition = value.position;
+          _lastActualPosition = value.position;
+        }
+        _wasPlaying = isPlaying;
+      }
       
       // 报告错误
       if (value.hasError) {

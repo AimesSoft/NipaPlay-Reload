@@ -69,6 +69,36 @@ class WatchHistoryItem {
       videoHash: json['videoHash'], // 添加视频哈希值
     );
   }
+
+  WatchHistoryItem copyWith({
+    String? filePath,
+    String? animeName,
+    String? episodeTitle,
+    int? episodeId,
+    int? animeId,
+    double? watchProgress,
+    int? lastPosition,
+    int? duration,
+    DateTime? lastWatchTime,
+    String? thumbnailPath,
+    bool? isFromScan,
+    String? videoHash,
+  }) {
+    return WatchHistoryItem(
+      filePath: filePath ?? this.filePath,
+      animeName: animeName ?? this.animeName,
+      episodeTitle: episodeTitle ?? this.episodeTitle,
+      episodeId: episodeId ?? this.episodeId,
+      animeId: animeId ?? this.animeId,
+      watchProgress: watchProgress ?? this.watchProgress,
+      lastPosition: lastPosition ?? this.lastPosition,
+      duration: duration ?? this.duration,
+      lastWatchTime: lastWatchTime ?? this.lastWatchTime,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+      isFromScan: isFromScan ?? this.isFromScan,
+      videoHash: videoHash ?? this.videoHash,
+    );
+  }
 }
 
 class WatchHistoryManager {

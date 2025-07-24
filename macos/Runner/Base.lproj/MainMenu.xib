@@ -33,19 +33,25 @@
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="menu-separator"/>
-                            <menuItem title="媒体库" keyEquivalent="1" id="media-library-menu-item">
+                            <menuItem title="视频播放" keyEquivalent="1" id="video-playback-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="openVideoPlayback:" target="Voe-Tx-rLC" id="video-playback-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="媒体库" keyEquivalent="2" id="media-library-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openMediaLibrary:" target="Voe-Tx-rLC" id="media-library-action"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="新番更新" keyEquivalent="2" id="new-series-menu-item">
+                            <menuItem title="新番更新" keyEquivalent="3" id="new-series-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openNewSeries:" target="Voe-Tx-rLC" id="new-series-action"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="设置" keyEquivalent="3" id="settings-menu-item">
+                            <menuItem title="设置" keyEquivalent="4" id="settings-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openSettings:" target="Voe-Tx-rLC" id="settings-action"/>

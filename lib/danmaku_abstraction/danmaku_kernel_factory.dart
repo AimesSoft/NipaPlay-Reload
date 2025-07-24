@@ -1,62 +1,66 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
-/// 弹幕内核类型枚举
-enum DanmakuKernelType {
-  /// 内置弹幕渲染器
-  nipaPlay,
+/// 弹幕渲染引擎枚举
+enum DanmakuRenderEngine {
+  /// CPU 渲染引擎
+  cpu,
 
-  /// Canvas_Danmaku 渲染器
-  canvasDanmaku,
-
-  /// Flutter GPU + Custom Shaders 渲染器
-  flutterGPUDanmaku,
+  /// GPU 渲染引擎
+  gpu,
 }
 
-/// 负责读写弹幕内核设置以及提供默认值的工厂类。
-///
-/// 与现有的 `PlayerFactory` 设计保持一致，便于在设置界面与业务代码中统一调用。
+/// 负责读写弹幕渲染引擎设置的工厂类
 class DanmakuKernelFactory {
-  static const String _danmakuKernelTypeKey = 'danmaku_kernel_type';
-  static DanmakuKernelType _cachedType = DanmakuKernelType.canvasDanmaku;
+  static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
+  static DanmakuRenderEngine _cachedEngine = DanmakuRenderEngine.cpu;
   static bool _initialized = false;
 
-  /// 初始化方法，在应用启动时尽早调用（如 main.dart 的 runApp 之前）。
+  // 添加StreamController用于广播内核切换事件
+  static final StreamController<DanmakuRenderEngine> _kernelChangeController = StreamController<DanmakuRenderEngine>.broadcast();
+  static Stream<DanmakuRenderEngine> get onKernelChanged => _kernelChangeController.stream;
+
+  /// 初始化方法，在应用启动时尽早调用
   static Future<void> initialize() async {
     await _preloadSettings();
   }
 
-  /// 预加载设置并缓存，避免每次都读取SharedPreferences
+  /// 预加载设置并缓存
   static Future<void> _preloadSettings() async {
     if (_initialized) return;
     
     try {
       final prefs = await SharedPreferences.getInstance();
-      final typeIndex = prefs.getInt(_danmakuKernelTypeKey);
+      final engineIndex = prefs.getInt(_danmakuRenderEngineKey);
       
-      if (typeIndex != null && typeIndex >= 0 && typeIndex < DanmakuKernelType.values.length) {
-        _cachedType = DanmakuKernelType.values[typeIndex];
+      if (engineIndex != null && engineIndex >= 0 && engineIndex < DanmakuRenderEngine.values.length) {
+        _cachedEngine = DanmakuRenderEngine.values[engineIndex];
       } else {
-        // 如果没有保存的值或值无效，使用默认值
-        _cachedType = DanmakuKernelType.canvasDanmaku;
+        _cachedEngine = DanmakuRenderEngine.cpu; // 默认使用 CPU
       }
     } catch (e) {
-      _cachedType = DanmakuKernelType.canvasDanmaku;
+      _cachedEngine = DanmakuRenderEngine.cpu;
     }
     
     _initialized = true;
   }
 
-  /// 获取当前弹幕内核类型
-  static DanmakuKernelType getKernelType() {
-    return _cachedType;
+  /// 获取当前弹幕渲染引擎
+  static DanmakuRenderEngine getKernelType() {
+    return _cachedEngine;
   }
 
-  /// 保存弹幕内核设置
-  static Future<void> saveKernelType(DanmakuKernelType type) async {
+  /// 保存弹幕渲染引擎设置
+  static Future<void> saveKernelType(DanmakuRenderEngine engine) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_danmakuKernelTypeKey, type.index);
-      _cachedType = type;
+      await prefs.setInt(_danmakuRenderEngineKey, engine.index);
+      final oldEngine = _cachedEngine;
+      _cachedEngine = engine;
+
+      if (oldEngine != engine) {
+        _kernelChangeController.add(engine);
+      }
     } catch (e) {
       // ignore
     }

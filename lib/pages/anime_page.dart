@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
@@ -26,6 +25,8 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/widgets/jellyfin_media_library_view.dart';
 import 'package:nipaplay/widgets/emby_media_library_view.dart';
+import '../services/playback_service.dart';
+import '../models/playable_item.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -124,11 +125,6 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) async {
     debugPrint('[AnimePage] _onWatchHistoryItemTap: Received item: $item');
-    debugPrint('[AnimePage] item.animeName: ${item.animeName}');
-    debugPrint('[AnimePage] item.filePath: ${item.filePath}');
-    debugPrint('[AnimePage] item.episodeTitle: ${item.episodeTitle}');
-  
-    bool tabChangeLogicExecuted = false; // Flag to ensure one-shot execution
 
     // 检查是否为网络URL或流媒体协议URL
     final isNetworkUrl = item.filePath.startsWith('http://') || item.filePath.startsWith('https://');
@@ -138,92 +134,54 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     bool fileExists = false;
     String filePath = item.filePath;
     String? actualPlayUrl;
-    
+
     if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol) {
-      // 对于网络URL和流媒体协议，跳过本地文件检查
       fileExists = true;
-      debugPrint('[AnimePage] 检测到流媒体URL，跳过文件存在性检查: ${item.filePath}');
-      
-      // 如果是Jellyfin协议，需要获取实际的HTTP流媒体URL
       if (isJellyfinProtocol) {
         try {
-          // 从jellyfin://协议URL中提取itemId
           final jellyfinId = item.filePath.replaceFirst('jellyfin://', '');
-          debugPrint('[AnimePage] 解析Jellyfin ID: $jellyfinId');
-          
-          // 使用JellyfinService获取实际的HTTP流媒体URL
           final jellyfinService = JellyfinService.instance;
           if (jellyfinService.isConnected) {
             actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
-            debugPrint('[AnimePage] 获取到Jellyfin流媒体URL: $actualPlayUrl');
           } else {
             BlurSnackBar.show(context, '未连接到Jellyfin服务器');
             return;
           }
         } catch (e) {
-          debugPrint('[AnimePage] 获取Jellyfin流媒体URL失败: $e');
-          BlurSnackBar.show(context, '获取流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
           return;
         }
       }
       
-      // 如果是Emby协议，需要获取实际的HTTP流媒体URL
       if (isEmbyProtocol) {
         try {
-          // 从emby://协议URL中提取itemId
           final embyId = item.filePath.replaceFirst('emby://', '');
-          debugPrint('[AnimePage] 解析Emby ID: $embyId');
-          
-          // 使用EmbyService获取实际的HTTP流媒体URL
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
             actualPlayUrl = embyService.getStreamUrl(embyId);
-            debugPrint('[AnimePage] 获取到Emby流媒体URL: $actualPlayUrl');
           } else {
             BlurSnackBar.show(context, '未连接到Emby服务器');
             return;
           }
         } catch (e) {
-          debugPrint('[AnimePage] 获取Emby流媒体URL失败: $e');
-          BlurSnackBar.show(context, '获取流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取Emby流媒体URL失败: $e');
           return;
         }
       }
     } else {
-      // 对于本地文件进行存在性检查
       final videoFile = File(item.filePath);
       fileExists = videoFile.existsSync();
       
-      // 在iOS系统上，有时文件路径可能会有/private前缀，或者没有这个前缀，尝试两种路径
       if (!fileExists && Platform.isIOS) {
-        String altPath = filePath;
-        if (filePath.startsWith('/private')) {
-          // 尝试去掉/private前缀
-          altPath = filePath.replaceFirst('/private', '');
-        } else {
-          // 尝试添加/private前缀
-          altPath = '/private$filePath';
-        }
+        String altPath = filePath.startsWith('/private') 
+            ? filePath.replaceFirst('/private', '') 
+            : '/private$filePath';
         
         final File altFile = File(altPath);
-        fileExists = altFile.existsSync();
-        if (fileExists) {
-          // 如果找到了文件，更新路径
+        if (altFile.existsSync()) {
           filePath = altPath;
-          // 创建新的项目以便传递更新后的路径
-          item = WatchHistoryItem(
-            filePath: filePath,
-            animeName: item.animeName,
-            episodeTitle: item.episodeTitle,
-            episodeId: item.episodeId,
-            animeId: item.animeId,
-            watchProgress: item.watchProgress,
-            lastPosition: item.lastPosition,
-            duration: item.duration,
-            lastWatchTime: item.lastWatchTime,
-            thumbnailPath: item.thumbnailPath,
-            isFromScan: item.isFromScan,
-          );
+          item = item.copyWith(filePath: filePath);
+          fileExists = true;
         }
       }
     }
@@ -233,103 +191,17 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       return;
     }
 
-    if (_videoPlayerState == null) {
-      try {
-        _videoPlayerState =
-            Provider.of<VideoPlayerState>(context, listen: false);
-      } catch (e) {
-        BlurSnackBar.show(context, '播放器初始化失败，请重试');
-        return;
-      }
-    }
+    final playableItem = PlayableItem(
+      videoPath: item.filePath,
+      title: item.animeName,
+      subtitle: item.episodeTitle,
+      animeId: item.animeId,
+      episodeId: item.episodeId,
+      historyItem: item,
+      actualPlayUrl: actualPlayUrl,
+    );
 
-    final videoState = _videoPlayerState!;
-    setState(() {
-      _loadingVideo = true;
-      _loadingMessages = ['正在初始化播放器...'];
-    });
-
-    late final VoidCallback statusListener;
-    late final VoidCallback playbackFinishListener;
-
-    statusListener = () {
-      debugPrint('[AnimePage] statusListener triggered. Player status: ${videoState.status}, mounted: $mounted, tabChangeLogicExecuted: $tabChangeLogicExecuted');
-      if (!mounted) {
-        debugPrint('[AnimePage] statusListener: Not mounted, removing listener.');
-        videoState.removeListener(statusListener);
-        return;
-      }
-      if (videoState.statusMessages.isNotEmpty &&
-          videoState.statusMessages.last != _loadingMessages.last) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _loadingMessages = List<String>.from(videoState.statusMessages);
-            });
-          }
-        });
-      }
-      if ((videoState.status == PlayerStatus.ready ||
-          videoState.status == PlayerStatus.playing) && !tabChangeLogicExecuted) {
-        tabChangeLogicExecuted = true; // Set flag immediately
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          debugPrint('[AnimePage] statusListener (postFrame): Executing tab change and UI update.');
-          if (mounted) {
-            setState(() {
-              _loadingVideo = false;
-            });
-            debugPrint('[AnimePage] statusListener (postFrame): Calling changeTab(0).');
-            try {
-              MainPageState? mainPageState = MainPageState.of(context);
-              if (mainPageState != null && mainPageState.globalTabController != null) {
-                if (mainPageState.globalTabController!.index != 0) {
-                  mainPageState.globalTabController!.animateTo(0);
-                  debugPrint('[AnimePage] statusListener (postFrame): Directly called mainPageState.globalTabController.animateTo(0)');
-                } else {
-                  debugPrint('[AnimePage] statusListener (postFrame): mainPageState.globalTabController is already at index 0.');
-                }
-              } else {
-                debugPrint('[AnimePage] statusListener (postFrame): Could not find MainPageState or globalTabController. Falling back to TabChangeNotifier.');
-                // Fallback if direct access fails for some reason
-                Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
-              }
-            } catch (e) {
-              debugPrint("[AnimePage] statusListener (postFrame): Error directly changing tab or using fallback: $e");
-            }
-          }
-          debugPrint('[AnimePage] statusListener (postFrame): Removing self (statusListener).');
-          videoState.removeListener(statusListener);
-        });
-      } else if (tabChangeLogicExecuted && (videoState.status == PlayerStatus.ready || videoState.status == PlayerStatus.playing)) {
-        debugPrint('[AnimePage] statusListener: Player ready/playing BUT tabChangeLogicExecuted is true. Ensuring listener is removed.');
-        videoState.removeListener(statusListener);
-      }
-    };
-
-    playbackFinishListener = () {
-      if (!mounted) {
-        videoState.removeListener(playbackFinishListener);
-        return;
-      }
-      if (videoState.status == PlayerStatus.paused &&
-          videoState.progress > 0.9) {
-        videoState.removeListener(playbackFinishListener);
-        final provider = context.read<WatchHistoryProvider>();
-        provider.refresh();
-      }
-    };
-
-    videoState.addListener(statusListener);
-    videoState.addListener(playbackFinishListener);
-    debugPrint('[AnimePage] _onWatchHistoryItemTap: Added statusListener and playbackFinishListener. Calling initializePlayer.');
-    
-    // 根据是否是流媒体协议决定传递参数
-    if ((isJellyfinProtocol || isEmbyProtocol) && actualPlayUrl != null) {
-      debugPrint('[AnimePage] 使用流媒体URL播放: $actualPlayUrl');
-      videoState.initializePlayer(item.filePath, historyItem: item, actualPlayUrl: actualPlayUrl);
-    } else {
-      videoState.initializePlayer(item.filePath, historyItem: item);
-    }
+    await PlaybackService().play(playableItem);
   }
 
   String _formatDuration(Duration duration) {

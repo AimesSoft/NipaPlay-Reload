@@ -5,6 +5,7 @@ import FlutterMacOS
 class AppDelegate: FlutterAppDelegate {
   // 直接创建全局引用
   var uploadMenuItem: NSMenuItem?
+  var videoPlaybackMenuItem: NSMenuItem?
   var mediaLibraryMenuItem: NSMenuItem?
   var newSeriesMenuItem: NSMenuItem?
   var settingsMenuItem: NSMenuItem?
@@ -134,6 +135,12 @@ class AppDelegate: FlutterAppDelegate {
     print("[AppDelegate] 菜单点击: 上传视频")
     invokeFlutterMethod("uploadVideo")
   }
+
+  // 打开视频播放
+  @objc func openVideoPlayback(_ sender: Any?) {
+      print("[AppDelegate] 菜单点击: 视频播放")
+      invokeFlutterMethod("openVideoPlayback")
+  }
   
   // 打开媒体库
   @objc func openMediaLibrary(_ sender: Any?) {
@@ -165,17 +172,32 @@ class AppDelegate: FlutterAppDelegate {
     // 立即创建通道
     let channel = FlutterMethodChannel(name: "custom_menu_channel", binaryMessenger: controller.engine.binaryMessenger)
     
-    // 调用方法
-    print("[AppDelegate] 调用\(method)方法")
-    channel.invokeMethod(method, arguments: arguments) { result in
-      if let error = result as? FlutterError {
-        print("[AppDelegate] 调用失败: \(error.message ?? "未知错误")")
-        self.showSimpleAlert(message: "操作失败: \(error.message ?? "未知错误")")
-      }
-      else {
-        print("[AppDelegate] 调用成功")
-      }
+    // 定义一个操作映射
+    let methodActions: [String: () -> Void] = [
+        "uploadVideo": { channel.invokeMethod("uploadVideo", arguments: arguments, result: self.handleFlutterResult) },
+        "openVideoPlayback": { channel.invokeMethod("openVideoPlayback", arguments: arguments, result: self.handleFlutterResult) },
+        "openMediaLibrary": { channel.invokeMethod("openMediaLibrary", arguments: arguments, result: self.handleFlutterResult) },
+        "openNewSeries": { channel.invokeMethod("openNewSeries", arguments: arguments, result: self.handleFlutterResult) },
+        "openSettings": { channel.invokeMethod("openSettings", arguments: arguments, result: self.handleFlutterResult) }
+    ]
+
+    if let action = methodActions[method] {
+        print("[AppDelegate] 调用\(method)方法")
+        action()
+    } else {
+        print("[AppDelegate] 未知的Flutter方法: \(method)")
+        showSimpleAlert(message: "未知的操作")
     }
+  }
+
+  // 统一处理Flutter调用结果
+  private func handleFlutterResult(result: Any?) {
+      if let error = result as? FlutterError {
+          print("[AppDelegate] 调用失败: \(error.message ?? "未知错误")")
+          self.showSimpleAlert(message: "操作失败: \(error.message ?? "未知错误")")
+      } else {
+          print("[AppDelegate] 调用成功")
+      }
   }
   
   // 简化的警告显示
@@ -256,10 +278,10 @@ class AppDelegate: FlutterAppDelegate {
   
   // 检查Flutter是否准备好
   private func isFlutterReady() -> Bool {
-    guard let controller = self.mainFlutterWindow?.contentViewController as? FlutterViewController else {
+    guard let _ = self.mainFlutterWindow?.contentViewController as? FlutterViewController else {
       return false
     }
-    return controller.engine.binaryMessenger != nil
+    return true
   }
   
   // 发送文件路径到Flutter

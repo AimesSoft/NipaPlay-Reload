@@ -18,6 +18,8 @@ import '../providers/appearance_settings_provider.dart'; // 添加外观设置Pr
 import '../widgets/switchable_view.dart'; // 添加SwitchableView组件
 import '../widgets/tag_search_widget.dart'; // 添加标签搜索组件
 import '../widgets/rating_dialog.dart'; // 添加评分对话框
+import '../services/playback_service.dart';
+import '../models/playable_item.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -26,6 +28,13 @@ class AnimeDetailPage extends StatefulWidget {
 
   @override
   State<AnimeDetailPage> createState() => _AnimeDetailPageState();
+  
+  static void popIfOpen() {
+    if (_AnimeDetailPageState._openPageContext != null && _AnimeDetailPageState._openPageContext!.mounted) {
+      Navigator.of(_AnimeDetailPageState._openPageContext!).pop();
+      _AnimeDetailPageState._openPageContext = null;
+    }
+  }
   
   static Future<WatchHistoryItem?> show(BuildContext context, int animeId) {
     // 获取外观设置Provider
@@ -71,6 +80,7 @@ class AnimeDetailPage extends StatefulWidget {
 
 class _AnimeDetailPageState extends State<AnimeDetailPage>
     with SingleTickerProviderStateMixin {
+  static BuildContext? _openPageContext;
   final BangumiService _bangumiService = BangumiService.instance;
   BangumiAnime? _detailedAnime;
   bool _isLoading = true;
@@ -110,6 +120,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   @override
   void initState() {
     super.initState();
+    _openPageContext = context;
     _tabController = TabController(length: 2, vsync: this);
     
     // 添加TabController监听
@@ -131,6 +142,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   void dispose() {
+    if (_openPageContext == context) {
+      _openPageContext = null;
+    }
     _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
     super.dispose();
@@ -754,11 +768,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   final WatchHistoryItem? historyItemToPlay;
                   if (historySnapshot.connectionState == ConnectionState.done &&
                       historySnapshot.data != null) {
-                    // If we have snapshot data (meaning local file potentially exists)
                     historyItemToPlay = historySnapshot.data!;
                   } else {
-                    // If snapshot is not done, or no data, means we don't have a WatchHistoryItem for it yet.
-                    // This case implies it's an API episode not yet scanned/played.
                     BlurSnackBar.show(context, '媒体库中找不到此剧集的视频文件');
                     return;
                   }
@@ -766,14 +777,25 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   if (historyItemToPlay.filePath.isNotEmpty) {
                     final file = File(historyItemToPlay.filePath);
                     if (await file.exists()) {
-                      if (mounted) Navigator.pop(context, historyItemToPlay);
+                      // ** NEW LOGIC **
+                      // 使用 PlaybackService 播放
+                      final playableItem = PlayableItem(
+                        videoPath: historyItemToPlay.filePath,
+                        title: anime.nameCn,
+                        subtitle: episode.title,
+                        animeId: anime.id,
+                        episodeId: episode.id,
+                        historyItem: historyItemToPlay,
+                      );
+                      await PlaybackService().play(playableItem);
+
+                      // 关闭详情页
+                      if (mounted) Navigator.pop(context);
                     } else {
                       BlurSnackBar.show(
                           context, '文件已不存在于: ${historyItemToPlay.filePath}');
                     }
                   } else {
-                    // This case should ideally not be reached if historyItemToPlay is from WatchHistoryManager
-                    // and filePath is required by WatchHistoryItem.
                     BlurSnackBar.show(context, '该剧集记录缺少文件路径');
                   }
                 },

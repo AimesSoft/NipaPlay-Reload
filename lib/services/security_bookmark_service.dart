@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -34,13 +33,13 @@ class SecurityBookmarkService {
         final bookmarkBase64 = base64Encode(result);
         await prefs.setString(bookmarkKey, bookmarkBase64);
         
-        print('[SecurityBookmark] 创建书签成功: $path');
+        //print('[SecurityBookmark] 创建书签成功: $path');
         return true;
       }
       
       return false;
     } catch (e) {
-      print('[SecurityBookmark] 创建书签失败: $e');
+      //print('[SecurityBookmark] 创建书签失败: $e');
       return false;
     }
   }
@@ -57,7 +56,7 @@ class SecurityBookmarkService {
       final bookmarkBase64 = prefs.getString(bookmarkKey);
       
       if (bookmarkBase64 == null || bookmarkBase64.isEmpty) {
-        print('[SecurityBookmark] 未找到书签数据: $originalPath');
+        //print('[SecurityBookmark] 未找到书签数据: $originalPath');
         return null;
       }
       
@@ -76,11 +75,11 @@ class SecurityBookmarkService {
           _activeResources.add(resolvedPath);
           await _saveActiveResources();
           
-          print('[SecurityBookmark] 解析书签成功: $resolvedPath (stale: $isStale)');
+          //print('[SecurityBookmark] 解析书签成功: $resolvedPath (stale: $isStale)');
           
           // 如果书签过时，尝试重新创建
           if (isStale) {
-            print('[SecurityBookmark] 书签已过时，尝试重新创建');
+            //print('[SecurityBookmark] 书签已过时，尝试重新创建');
             await createBookmark(resolvedPath);
           }
           
@@ -90,7 +89,7 @@ class SecurityBookmarkService {
       
       return null;
     } catch (e) {
-      print('[SecurityBookmark] 解析书签失败: $e');
+      //print('[SecurityBookmark] 解析书签失败: $e');
       return null;
     }
   }
@@ -109,9 +108,9 @@ class SecurityBookmarkService {
       _activeResources.remove(path);
       await _saveActiveResources();
       
-      print('[SecurityBookmark] 停止访问安全作用域资源: $path');
+      //print('[SecurityBookmark] 停止访问安全作用域资源: $path');
     } catch (e) {
-      print('[SecurityBookmark] 停止访问安全作用域资源失败: $e');
+      //print('[SecurityBookmark] 停止访问安全作用域资源失败: $e');
     }
   }
   
@@ -131,13 +130,13 @@ class SecurityBookmarkService {
           if (originalPath.isNotEmpty) {
             final resolvedPath = await resolveBookmark(originalPath);
             if (resolvedPath != null) {
-              print('[SecurityBookmark] 恢复书签: $originalPath -> $resolvedPath');
+              //print('[SecurityBookmark] 恢复书签: $originalPath -> $resolvedPath');
             }
           }
         }
       }
     } catch (e) {
-      print('[SecurityBookmark] 恢复书签失败: $e');
+      //print('[SecurityBookmark] 恢复书签失败: $e');
     }
   }
   
@@ -182,9 +181,9 @@ class SecurityBookmarkService {
         await stopAccessingResource(path);
       }
       
-      print('[SecurityBookmark] 删除书签: $path');
+      //print('[SecurityBookmark] 删除书签: $path');
     } catch (e) {
-      print('[SecurityBookmark] 删除书签失败: $e');
+      //print('[SecurityBookmark] 删除书签失败: $e');
     }
   }
   
@@ -218,7 +217,7 @@ class SecurityBookmarkService {
       final activeList = _activeResources.toList();
       await prefs.setStringList(_activeResourcesKey, activeList);
     } catch (e) {
-      print('[SecurityBookmark] 保存活跃资源列表失败: $e');
+      //print('[SecurityBookmark] 保存活跃资源列表失败: $e');
     }
   }
   
@@ -229,7 +228,7 @@ class SecurityBookmarkService {
       final activeList = prefs.getStringList(_activeResourcesKey) ?? [];
       _activeResources.addAll(activeList);
     } catch (e) {
-      print('[SecurityBookmark] 加载活跃资源列表失败: $e');
+      //print('[SecurityBookmark] 加载活跃资源列表失败: $e');
     }
   }
 }

@@ -10,7 +10,7 @@ import 'package:nipaplay/providers/developer_options_provider.dart';
 /// 系统资源显示组件
 /// 用于在界面右上角显示当前CPU使用率、内存使用和帧率
 class SystemResourceDisplay extends StatefulWidget {
-  const SystemResourceDisplay({Key? key}) : super(key: key);
+  const SystemResourceDisplay({super.key});
 
   @override
   State<SystemResourceDisplay> createState() => _SystemResourceDisplayState();

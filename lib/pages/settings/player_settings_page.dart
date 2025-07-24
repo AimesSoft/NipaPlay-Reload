@@ -23,17 +23,18 @@ class PlayerSettingsPage extends StatefulWidget {
 class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   static const String _selectedDecodersKey = 'selected_decoders';
   static const String _playerKernelTypeKey = 'player_kernel_type';
+  static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
   
   List<String> _availableDecoders = [];
   List<String> _selectedDecoders = [];
   late DecoderManager _decoderManager;
   String _playerCoreName = "MDK";
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
-  DanmakuKernelType _selectedDanmakuKernelType = DanmakuKernelType.nipaPlay;
+  DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.cpu;
   
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();
-  final GlobalKey _danmakuKernelDropdownKey = GlobalKey();
+  final GlobalKey _danmakuRenderEngineDropdownKey = GlobalKey();
 
   @override
   void initState() {
@@ -50,7 +51,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _getAvailableDecoders();
     _loadDecoderSettings();
     _loadPlayerKernelSettings();
-    _loadDanmakuKernelSettings();
+    _loadDanmakuRenderEngineSettings();
   }
 
   Future<void> _loadPlayerKernelSettings() async {
@@ -81,11 +82,11 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   Future<void> _savePlayerKernelSettings(PlayerKernelType kernelType) async {
     // 使用新的静态方法保存设置
     await PlayerFactory.saveKernelType(kernelType);
-    
-    if (_selectedKernelType != kernelType && context.mounted) {
-      _showRestartDialog();
+
+    if (context.mounted) {
+      BlurSnackBar.show(context, '播放器内核已切换');
     }
-    
+
     setState(() {
       _selectedKernelType = kernelType;
       _updatePlayerCoreName();
@@ -201,29 +202,22 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
   }
 
-  Future<void> _loadDanmakuKernelSettings() async {
+  Future<void> _loadDanmakuRenderEngineSettings() async {
     setState(() {
-      _selectedDanmakuKernelType = DanmakuKernelFactory.getKernelType();
+      _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
     });
-    
-    // 更新系统资源监视器中的弹幕内核类型
-    SystemResourceMonitor().updateDanmakuKernelType();
   }
 
-  Future<void> _saveDanmakuKernelSettings(DanmakuKernelType kernelType) async {
-    await DanmakuKernelFactory.saveKernelType(kernelType);
+  Future<void> _saveDanmakuRenderEngineSettings(DanmakuRenderEngine engine) async {
+    await DanmakuKernelFactory.saveKernelType(engine);
     
-    // 如果切换了弹幕内核，需要提示重启应用
-    if (_selectedDanmakuKernelType != kernelType && context.mounted) {
-      _showRestartDanmakuDialog();
+    if (context.mounted) {
+      BlurSnackBar.show(context, '弹幕渲染引擎已切换');
     }
     
     setState(() {
-      _selectedDanmakuKernelType = kernelType;
+      _selectedDanmakuRenderEngine = engine;
     });
-    
-    // 更新系统资源监视器中的弹幕内核类型
-    SystemResourceMonitor().updateDanmakuKernelType();
   }
   
   void _showRestartDanmakuDialog() {
@@ -266,14 +260,12 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
   }
 
-  String _getDanmakuKernelDescription(DanmakuKernelType type) {
-    switch (type) {
-      case DanmakuKernelType.nipaPlay:
-        return 'NipaPlay 内置弹幕渲染器\n根据视频时间轴移动绘制弹幕，受视频帧率波动影响\n支持轨道分配、弹幕合并、防重叠等高级功能';
-      case DanmakuKernelType.canvasDanmaku:
-        return 'Canvas_Danmaku 渲染器\n基于CustomPainter，使用动画系统进行绘制弹幕\n性能更佳，功耗更低';
-      case DanmakuKernelType.flutterGPUDanmaku:
-        return 'Flutter GPU 弹幕渲染器\n使用Flutter GPU API和自定义着色器，目前仅支持顶部弹幕';
+  String _getDanmakuRenderEngineDescription(DanmakuRenderEngine engine) {
+    switch (engine) {
+      case DanmakuRenderEngine.cpu:
+        return 'CPU 渲染引擎\n使用 Flutter Widget 进行绘制，兼容性好，但在低端设备上弹幕量大时可能卡顿。';
+      case DanmakuRenderEngine.gpu:
+        return 'GPU 渲染引擎 (实验性)\n使用自定义着色器和字体图集，性能更高，功耗更低，但目前仍在开发中。';
     }
   }
 
@@ -282,13 +274,10 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     return ListView(
       children: [
         ListTile(
-          title: Text("播放器内核", style: getTitleTextStyle(context)),
-          subtitle: Text(
-            _getPlayerKernelDescription(_selectedKernelType),
-            style: TextStyle(
-              color: Colors.grey[200],
-              fontSize: 12,
-            ),
+          title: const Text("播放器内核", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          subtitle: const Text(
+            "选择播放器使用的核心引擎",
+            style: TextStyle(color: Colors.white70),
           ),
           trailing: BlurDropdown<PlayerKernelType>(
             dropdownKey: _playerKernelDropdownKey,
@@ -318,46 +307,37 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           ),
         ),
         
-        const Divider(),
+        const Divider(color: Colors.white12, height: 1),
         
         ListTile(
-          title: Text("弹幕内核", style: getTitleTextStyle(context)),
-          subtitle: Text(
-            _getDanmakuKernelDescription(_selectedDanmakuKernelType),
-            style: TextStyle(
-              color: Colors.grey[200],
-              fontSize: 12,
-            ),
+          title: const Text("弹幕渲染引擎", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          subtitle: const Text(
+            "选择弹幕的渲染方式",
+            style: TextStyle(color: Colors.white70),
           ),
-          trailing: BlurDropdown<DanmakuKernelType>(
-            dropdownKey: _danmakuKernelDropdownKey,
+          trailing: BlurDropdown<DanmakuRenderEngine>(
+            dropdownKey: _danmakuRenderEngineDropdownKey,
             items: [
               DropdownMenuItemData(
-                title: "NipaPlay",
-                value: DanmakuKernelType.nipaPlay,
-                isSelected: _selectedDanmakuKernelType == DanmakuKernelType.nipaPlay,
-                description: _getDanmakuKernelDescription(DanmakuKernelType.nipaPlay),
+                title: "CPU 渲染",
+                value: DanmakuRenderEngine.cpu,
+                isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
+                description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
               ),
               DropdownMenuItemData(
-                title: "Canvas_Danmaku(试验性)",
-                value: DanmakuKernelType.canvasDanmaku,
-                isSelected: _selectedDanmakuKernelType == DanmakuKernelType.canvasDanmaku,
-                description: _getDanmakuKernelDescription(DanmakuKernelType.canvasDanmaku),
-              ),
-              DropdownMenuItemData(
-                title: "Flutter GPU(试验性)",
-                value: DanmakuKernelType.flutterGPUDanmaku,
-                isSelected: _selectedDanmakuKernelType == DanmakuKernelType.flutterGPUDanmaku,
-                description: _getDanmakuKernelDescription(DanmakuKernelType.flutterGPUDanmaku),
+                title: "GPU 渲染 (实验性)",
+                value: DanmakuRenderEngine.gpu,
+                isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
+                description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
               ),
             ],
-            onItemSelected: (kernelType) {
-              _saveDanmakuKernelSettings(kernelType);
+            onItemSelected: (engine) {
+              _saveDanmakuRenderEngineSettings(engine);
             },
           ),
         ),
         
-        const Divider(),
+        const Divider(color: Colors.white12, height: 1),
         
         if (_selectedKernelType == PlayerKernelType.mdk) ...[
           // 这里可以添加解码器相关设置

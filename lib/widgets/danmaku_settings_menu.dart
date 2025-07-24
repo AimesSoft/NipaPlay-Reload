@@ -217,6 +217,25 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+              // 弹幕透明度
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SettingsSlider(
+                      value: videoState.danmakuOpacity,
+                      onChanged: (v) => videoState.setDanmakuOpacity(v),
+                      label: '弹幕透明度',
+                      displayTextBuilder: (v) => '${(v * 100).toInt()}%',
+                      min: 0.0,
+                      max: 1.0,
+                    ),
+                    const SizedBox(height: 4),
+                    const SettingsHintText('拖动滑块调整弹幕透明度'),
+                  ],
+                ),
+              ),
               // 弹幕堆叠开关
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
@@ -431,25 +450,6 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       ],
                     );
                   }
-                ),
-              ),
-              // 弹幕透明度
-              Container(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SettingsSlider(
-                      value: videoState.danmakuOpacity,
-                      onChanged: (v) => videoState.setDanmakuOpacity(v),
-                      label: '弹幕透明度',
-                      displayTextBuilder: (v) => '${(v * 100).toInt()}%',
-                      min: 0.0,
-                      max: 1.0,
-                    ),
-                    const SizedBox(height: 4),
-                    const SettingsHintText('拖动滑块调整弹幕透明度'),
-                  ],
                 ),
               ),
             ],

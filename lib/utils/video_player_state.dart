@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
+import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
@@ -60,6 +61,8 @@ enum PlayerStatus {
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
+  StreamSubscription? _playerKernelChangeSubscription; // 添加播放器内核切换事件订阅
+  StreamSubscription? _danmakuKernelChangeSubscription; // 添加弹幕内核切换事件订阅
   BuildContext? _context;
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
@@ -390,6 +393,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 加载播放速度设置
     await _loadPlaybackRate();
+
+    // 订阅播放器内核切换事件
+    _playerKernelChangeSubscription = PlayerFactory.onKernelChanged.listen((_) {
+      _reinitializePlayer();
+    });
+
+    // 订阅弹幕内核切换事件
+    _danmakuKernelChangeSubscription = DanmakuKernelFactory.onKernelChanged.listen((newKernel) {
+      _reinitializeDanmaku(newKernel);
+    });
 
     // Ensure wakelock is disabled on initialization
     try {
@@ -1033,7 +1046,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           debugPrint('检测到手动匹配的弹幕ID，直接加载: episodeId=$_episodeId, animeId=$_animeId');
           try {
             _setStatus(PlayerStatus.recognizing, message: '正在加载手动匹配的弹幕...');
-            loadDanmaku(_episodeId.toString(), _animeId.toString());
+            await loadDanmaku(_episodeId.toString(), _animeId.toString());
           } catch (e) {
             debugPrint('加载手动匹配的弹幕失败: $e');
             // 如果手动匹配的弹幕加载失败，清空弹幕列表但不重新识别
@@ -1775,6 +1788,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     WakelockPlus.disable();
     //debugPrint("Wakelock disabled on dispose.");
     windowManager.removeListener(this);
+    _playerKernelChangeSubscription?.cancel(); // 取消播放器内核切换事件订阅
+    _danmakuKernelChangeSubscription?.cancel(); // 取消弹幕内核切换事件订阅
     super.dispose();
   }
 
@@ -2007,8 +2022,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 notifyListeners();
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载完成 (${_danmakuList.length}条)');
                 
-                // 移除GPU弹幕字符集预构建调用
-                // await _prebuildGPUDanmakuCharsetIfNeeded();
+                // 如果是GPU模式，预构建字符集
+                await _prebuildGPUDanmakuCharsetIfNeeded();
               } catch (e) {
                 //debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
@@ -2527,7 +2542,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     setDanmakuStacking(!_danmakuStacking);
   }
 
-  void loadDanmaku(String episodeId, String animeIdStr) async {
+  Future<void> loadDanmaku(String episodeId, String animeIdStr) async {
     try {
       debugPrint('尝试为episodeId=$episodeId, animeId=$animeIdStr加载弹幕');
       _setStatus(PlayerStatus.recognizing, message: '正在加载弹幕...');
@@ -2629,7 +2644,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _updateMergedDanmakuList();
         
         // 移除GPU弹幕字符集预构建调用
-        // await _prebuildGPUDanmakuCharsetIfNeeded();
+        await _prebuildGPUDanmakuCharsetIfNeeded();
         
         _setStatus(PlayerStatus.playing,
             message: '弹幕加载完成 (${danmakuData['count']}条)');
@@ -2716,28 +2731,32 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 更新合并后的弹幕列表
   void _updateMergedDanmakuList() {
-    _danmakuList.clear();
+    final List<Map<String, dynamic>> mergedList = [];
     
     // 合并所有启用的轨道
     for (final trackId in _danmakuTracks.keys) {
       if (_danmakuTrackEnabled[trackId] == true) {
         final trackData = _danmakuTracks[trackId]!;
         final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
-        _danmakuList.addAll(trackDanmaku);
+        mergedList.addAll(trackDanmaku);
       }
     }
     
     // 重新排序
-    _danmakuList.sort((a, b) {
+    mergedList.sort((a, b) {
       final timeA = (a['time'] as double?) ?? 0.0;
       final timeB = (b['time'] as double?) ?? 0.0;
       return timeA.compareTo(timeB);
     });
     
-    // 更新到弹幕控制器
-    danmakuController?.loadDanmaku(_danmakuList.map((e) => e).toList());
+    // 替换为新的列表实例，以触发Widget更新
+    _danmakuList = mergedList;
+    
+    // 通过更新key来强制刷新DanmakuOverlay
+    _danmakuOverlayKey = 'danmaku_${DateTime.now().millisecondsSinceEpoch}';
     
     debugPrint('弹幕轨道合并完成，总计${_danmakuList.length}条弹幕');
+    notifyListeners(); // 确保通知UI更新
   }
 
   // GPU弹幕字符集预构建（如果需要）
@@ -2745,7 +2764,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       // 检查当前是否使用GPU弹幕内核
       final kernelType = DanmakuKernelFactory.getKernelType();
-      if (kernelType != DanmakuKernelType.flutterGPUDanmaku) {
+      if (kernelType != DanmakuRenderEngine.gpu) {
         return; // 不是GPU内核，跳过
       }
       
@@ -3929,7 +3948,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         try {
           // 使用已有的episodeId和animeId直接加载弹幕，跳过文件哈希计算
           _setStatus(PlayerStatus.recognizing, message: '正在为Jellyfin流媒体加载弹幕...');
-          loadDanmaku(historyItem.episodeId.toString(), historyItem.animeId.toString());
+          await loadDanmaku(historyItem.episodeId.toString(), historyItem.animeId.toString());
           
           // 更新当前实例的弹幕ID
           _episodeId = historyItem.episodeId;
@@ -4395,5 +4414,154 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _uiUpdateTicker!.start();
     
     debugPrint('启动UI更新Ticker，弹幕内核：${DanmakuKernelFactory.getKernelType()}');
+  }
+
+  // 重新初始化播放器（用于切换内核）
+  Future<void> _reinitializePlayer() async {
+    debugPrint('[VideoPlayerState] 接收到内核切换事件，开始重新初始化播放器...');
+
+    // 1. 保存当前播放状态
+    final currentPath = _currentVideoPath;
+    final currentPosition = _position;
+    final currentDuration = _duration;
+    final currentProgress = _progress;
+    final currentVolume = player.volume;
+    final wasPlaying = _status == PlayerStatus.playing;
+    final historyItem = WatchHistoryItem(
+      filePath: currentPath ?? '',
+      animeName: _animeTitle ?? '',
+      episodeTitle: _episodeTitle,
+      episodeId: _episodeId,
+      animeId: _animeId,
+      lastPosition: currentPosition.inMilliseconds,
+      duration: currentDuration.inMilliseconds,
+      watchProgress: currentProgress,
+      lastWatchTime: DateTime.now(),
+    );
+
+    if (currentPath == null) {
+      debugPrint('[VideoPlayerState] 没有正在播放的视频，无需重新初始化。');
+      // 如果没有视频在播放，只需要创建一个新的播放器实例以备后用
+      player.dispose();
+      player = Player();
+      _subtitleManager.updatePlayer(player);
+      _decoderManager.updatePlayer(player);
+      debugPrint('[VideoPlayerState] 已创建新的空播放器实例。');
+      return;
+    }
+
+    // 2. 释放旧播放器资源
+    await resetPlayer();
+
+    // 3. 创建新的播放器实例（Player()工厂会自动使用新的内核）
+    player = Player();
+    _subtitleManager.updatePlayer(player); // 更新字幕管理器中的播放器实例
+    _decoderManager.updatePlayer(player); // 更新解码器管理器中的播放器实例
+
+    // 4. 重新初始化播放
+    await initializePlayer(currentPath, historyItem: historyItem);
+
+    // 5. 恢复播放状态
+    if (hasVideo) {
+      player.volume = currentVolume;
+      seekTo(currentPosition);
+      if (wasPlaying) {
+        play();
+      } else {
+        pause();
+      }
+      debugPrint('[VideoPlayerState] 播放器重新初始化完成，已恢复播放状态。');
+    } else {
+      debugPrint('[VideoPlayerState] 播放器重新初始化完成，但未能恢复播放（可能视频加载失败）。');
+    }
+  }
+
+  // 重新初始化弹幕渲染器
+  void _reinitializeDanmaku(DanmakuRenderEngine newKernel) {
+    debugPrint('接收到弹幕内核切换事件: $newKernel');
+
+    // 更新系统资源监视器中的状态
+    SystemResourceMonitor().updateDanmakuKernelType();
+    
+    // 重新创建弹幕控制器
+    danmakuController = _createDanmakuController(newKernel);
+    
+    // 重新加载当前弹幕数据
+    if (_danmakuList.isNotEmpty) {
+      danmakuController?.loadDanmaku(_danmakuList);
+      debugPrint('已将 ${_danmakuList.length} 条弹幕重新加载到新的弹幕控制器');
+    }
+
+    // 通知UI刷新，以便DanmakuOverlay可以重建
+    notifyListeners();
+  }
+
+  /// 创建弹幕控制器
+  dynamic _createDanmakuController(DanmakuRenderEngine kernelType) {
+    // 根据内核类型创建不同的弹幕控制器
+    switch (kernelType) {
+      case DanmakuRenderEngine.cpu:
+        // 返回CPU弹幕的控制器（如果需要）
+        // 假设这里返回一个通用的控制器或null
+        return null;
+      case DanmakuRenderEngine.gpu:
+        // GPU渲染在Widget层处理，这里不直接创建控制器
+        return null;
+      default:
+        return null;
+    }
+  }
+
+  // 添加一条新弹幕到当前列表
+  void addDanmaku(Map<String, dynamic> danmaku) {
+    if (danmaku.containsKey('time') && danmaku.containsKey('content')) {
+      _danmakuList.add(danmaku);
+      // 按时间重新排序
+      _danmakuList.sort((a, b) {
+        final timeA = (a['time'] as double?) ?? 0.0;
+        final timeB = (b['time'] as double?) ?? 0.0;
+        return timeA.compareTo(timeB);
+      });
+      notifyListeners();
+      debugPrint('已添加新弹幕到列表: ${danmaku['content']}');
+    }
+  }
+
+  // 将一条新弹幕添加到指定的轨道，如果轨道不存在则创建
+  void addDanmakuToNewTrack(Map<String, dynamic> danmaku, {String trackName = '我的弹幕'}) {
+    if (danmaku.containsKey('time') && danmaku.containsKey('content')) {
+      final trackId = 'local_$trackName';
+
+      // 检查轨道是否存在
+      if (!_danmakuTracks.containsKey(trackId)) {
+        // 如果轨道不存在，创建新轨道
+        _danmakuTracks[trackId] = {
+          'name': trackName,
+          'source': 'local',
+          'danmakuList': <Map<String, dynamic>>[],
+          'count': 0,
+          'loadTime': DateTime.now(),
+        };
+        _danmakuTrackEnabled[trackId] = true; // 默认启用新轨道
+      }
+
+      // 添加弹幕到轨道
+      final trackDanmaku = _danmakuTracks[trackId]!['danmakuList'] as List<Map<String, dynamic>>;
+      trackDanmaku.add(danmaku);
+      _danmakuTracks[trackId]!['count'] = trackDanmaku.length;
+
+      // 重新计算合并后的弹幕列表
+      _updateMergedDanmakuList();
+
+      debugPrint('已将新弹幕添加到轨道 "$trackName": ${danmaku['content']}');
+    }
+  }
+
+  // 确保视频信息中包含格式化后的动画标题和集数标题
+  static void _ensureVideoInfoTitles(Map<String, dynamic> videoInfo) {
+    if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
+      final match = videoInfo['matches'][0];
+      // ... existing code ...
+    }
   }
 }

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 //////全局变量/////
 double mobileThreshold = 550;
 double blurPower = 0;
@@ -114,7 +116,7 @@ class DialogSizes {
       generalDialogHeight = 400.0;
     }
     
-    print('[DialogSizes] 初始化完成 - 屏幕: ${screenWidth}x${screenHeight}, 登录框: $loginDialogHeight, 服务器框: $serverDialogHeight');
+    print('[DialogSizes] 初始化完成 - 屏幕: ${screenWidth}x$screenHeight, 登录框: $loginDialogHeight, 服务器框: $serverDialogHeight');
   }
   
   /// 获取适合的对话框宽度

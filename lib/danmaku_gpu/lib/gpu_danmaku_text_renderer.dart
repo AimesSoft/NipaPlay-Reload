@@ -1,21 +1,92 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_text_renderer.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'gpu_danmaku_item.dart';
 import 'dynamic_font_atlas.dart';
 import 'gpu_danmaku_config.dart';
 import 'dart:math' as math;
 
 /// GPU弹幕文本渲染器
-/// 
+///
 /// 负责处理弹幕文本的描边和填充渲染
-class GPUDanmakuTextRenderer {
+class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
   final DynamicFontAtlas _fontAtlas;
-  final GPUDanmakuConfig config;
-  
-  GPUDanmakuTextRenderer({
+  GPUDanmakuConfig config;
+
+  GpuDanmakuTextRenderer({
     required DynamicFontAtlas fontAtlas,
     required this.config,
   }) : _fontAtlas = fontAtlas;
+
+  @override
+  Widget build(
+    BuildContext context,
+    DanmakuContentItem content,
+    double fontSize,
+    double opacity,
+  ) {
+    // 确保文本已经添加到图集
+    _fontAtlas.addText(content.text);
+    if (content.countText != null) {
+      _fontAtlas.addText(content.countText!);
+    }
+
+    final gpuItem = GPUDanmakuItem(
+      text: content.text,
+      timeOffset: 0, // time is not used for rendering appearance
+      type: content.type,
+      color: content.color,
+      createdAt: 0, // id is not used for rendering appearance
+    );
+
+    return CustomPaint(
+      painter: _GpuDanmakuPainter(
+        renderer: this,
+        item: gpuItem,
+        opacity: opacity,
+        fontSizeMultiplier: content.fontSizeMultiplier,
+        countText: content.countText,
+      ),
+      // 根据文本内容估算尺寸，以便CustomPaint有正确的绘制区域
+      size: Size(
+        calculateTextWidth(
+          content.text + (content.countText ?? ''),
+          scale: 0.5 * content.fontSizeMultiplier,
+        ),
+        config.fontSize * content.fontSizeMultiplier,
+      ),
+    );
+  }
+
+  /// 通用的渲染方法
+  void render({
+    required Canvas canvas,
+    required String text,
+    required Offset offset,
+    required double opacity,
+    double fontSizeMultiplier = 1.0,
+    String? countText,
+    Color color = Colors.white,
+    DanmakuItemType type = DanmakuItemType.scroll,
+  }) {
+    final tempItem = GPUDanmakuItem(
+      text: text,
+      color: color,
+      type: type,
+      timeOffset: 0,
+      createdAt: 0,
+    );
+    renderItem(
+      canvas,
+      tempItem,
+      offset.dx,
+      offset.dy,
+      opacity,
+      fontSizeMultiplier: fontSizeMultiplier,
+      countText: countText,
+    );
+  }
 
   /// 根据文字颜色判断使用的描边颜色，与 NipaPlay 保持一致
   Color _getShadowColor(Color textColor) {
@@ -32,7 +103,7 @@ class GPUDanmakuTextRenderer {
   }
 
   /// 渲染单个弹幕项目的文本
-  /// 
+  ///
   /// 参数:
   /// - canvas: 画布
   /// - item: 弹幕项目
@@ -49,21 +120,33 @@ class GPUDanmakuTextRenderer {
     double opacity, {
     double scale = 0.5,
     double fontSizeMultiplier = 1.0,
+    String? countText,
   }) {
-    if (_fontAtlas.atlasTexture == null) return;
-    
     // 守卫：确保弹幕所需字符都已在图集中
     if (!_fontAtlas.isReady(item.text)) {
+      _fontAtlas.addText(item.text);
       return;
     }
 
-    // 🔥 新增：保存当前画布状态，以便应用透明度
-    canvas.save();
+    if (countText != null && !_fontAtlas.isReady(countText)) {
+      _fontAtlas.addText(countText);
+      return;
+    }
+
+    final texture = _fontAtlas.atlasTexture;
+    if (texture == null) return;
     
-    // 🔥 新增：应用透明度到整个绘制层，而不是修改颜色值
-    if (opacity < 1.0) {
+    final bool needsOpacityLayer = opacity < 1.0;
+
+    // 🔥 修改：仅在需要时创建透明层
+    if (needsOpacityLayer) {
+      final width = calculateTextWidth(
+        item.text + (countText ?? ''),
+        scale: scale * fontSizeMultiplier,
+      );
+      final height = config.fontSize * fontSizeMultiplier;
       canvas.saveLayer(
-        Rect.fromLTWH(x, y, calculateTextWidth(item.text, scale: scale * fontSizeMultiplier), config.fontSize * fontSizeMultiplier),
+        Rect.fromLTWH(x, y, width, height),
         Paint()..color = Colors.white.withOpacity(opacity),
       );
     }
@@ -125,6 +208,64 @@ class GPUDanmakuTextRenderer {
       currentX += charWidthScaled;
     }
 
+    // --- 绘制合并弹幕数量 ---
+    if (countText != null) {
+      final countFillTransforms = <RSTransform>[];
+      final countFillRects = <Rect>[];
+      final countFillColors = <Color>[];
+      final countStrokeTransforms = <RSTransform>[];
+      final countStrokeRects = <Rect>[];
+      final countStrokeColors = <Color>[];
+      final countShadowColor = _getShadowColor(Colors.white);
+
+      for (var char in countText.runes) {
+        final charStr = String.fromCharCode(char);
+        final charInfo = _fontAtlas.getCharRect(charStr);
+        if (charInfo == null) continue;
+
+        final adjustedScale = 0.5 * (25.0 / config.fontSize); // 固定大小
+        final charWidthScaled = charInfo.width * adjustedScale;
+        final charHeightScaled = charInfo.height * adjustedScale;
+        final charCenterX = currentX + charWidthScaled / 2;
+        final charCenterY = y + charHeightScaled / 2;
+
+        final offsets = [
+          Offset(-strokeOffset, -strokeOffset), Offset(strokeOffset, -strokeOffset),
+          Offset(strokeOffset, strokeOffset),   Offset(-strokeOffset, strokeOffset),
+          Offset(0, -strokeOffset),             Offset(0, strokeOffset),
+          Offset(-strokeOffset, 0),             Offset(strokeOffset, 0),
+        ];
+
+        for (final offset in offsets) {
+          countStrokeTransforms.add(RSTransform.fromComponents(
+            rotation: 0, scale: adjustedScale,
+            anchorX: charInfo.width / 2, anchorY: charInfo.height / 2,
+            translateX: charCenterX + offset.dx, translateY: charCenterY + offset.dy,
+          ));
+          countStrokeRects.add(charInfo);
+          countStrokeColors.add(countShadowColor);
+        }
+
+        countFillTransforms.add(RSTransform.fromComponents(
+          rotation: 0, scale: adjustedScale,
+          anchorX: charInfo.width / 2, anchorY: charInfo.height / 2,
+          translateX: charCenterX, translateY: charCenterY,
+        ));
+        countFillRects.add(charInfo);
+        countFillColors.add(Colors.white);
+
+        currentX += charWidthScaled;
+      }
+
+      strokeTransforms.addAll(countStrokeTransforms);
+      strokeRects.addAll(countStrokeRects);
+      strokeColors.addAll(countStrokeColors);
+      fillTransforms.addAll(countFillTransforms);
+      fillRects.addAll(countFillRects);
+      fillColors.addAll(countFillColors);
+    }
+
+
     // 执行绘制
     final paint = Paint()..filterQuality = FilterQuality.low; // 设置采样质量为low，实现抗锯齿
 
@@ -154,12 +295,14 @@ class GPUDanmakuTextRenderer {
       );
     }
     
-    // 🔥 新增：恢复画布状态
-    canvas.restore();
+    // 🔥 修改：仅在创建了透明层时恢复画布状态
+    if (needsOpacityLayer) {
+      canvas.restore();
+    }
   }
 
   /// 批量渲染弹幕项目
-  /// 
+  ///
   /// 参数:
   /// - canvas: 画布
   /// - items: 弹幕项目列表
@@ -222,7 +365,7 @@ class GPUDanmakuTextRenderer {
   }
 
   /// 计算弹幕文本的实际渲染宽度
-  /// 
+  ///
   /// 使用字体图集中的字符信息计算，比TextPainter更准确
   double calculateTextWidth(String text, {double scale = 0.5}) {
     if (_fontAtlas.atlasTexture == null) return 0.0;
@@ -246,5 +389,42 @@ class GPUDanmakuTextRenderer {
   /// 添加文本到字体图集
   void addTextToAtlas(String text) {
     _fontAtlas.addText(text);
+  }
+}
+
+class _GpuDanmakuPainter extends CustomPainter {
+  final GpuDanmakuTextRenderer renderer;
+  final GPUDanmakuItem item;
+  final double opacity;
+  final double fontSizeMultiplier;
+  final String? countText;
+
+  _GpuDanmakuPainter({
+    required this.renderer,
+    required this.item,
+    required this.opacity,
+    required this.fontSizeMultiplier,
+    this.countText,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    renderer.renderItem(
+      canvas,
+      item,
+      0, // x
+      0, // y
+      opacity,
+      fontSizeMultiplier: fontSizeMultiplier,
+      countText: countText,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _GpuDanmakuPainter oldDelegate) {
+    return oldDelegate.item != item ||
+        oldDelegate.opacity != opacity ||
+        oldDelegate.fontSizeMultiplier != fontSizeMultiplier ||
+        oldDelegate.countText != countText;
   }
 } 

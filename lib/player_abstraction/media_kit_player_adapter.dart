@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -12,7 +13,7 @@ import './player_enums.dart';
 import './player_data_models.dart';
 
 /// MediaKit播放器适配器
-class MediaKitPlayerAdapter implements AbstractPlayer {
+class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   final Player _player;
   late final VideoController _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
@@ -36,6 +37,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   Timer? _jellyfinRetryTimer;
   String? _lastJellyfinMediaPath;
 
+  // 时间插值器相关字段
+  Ticker? _ticker;
+  Duration _interpolatedPosition = Duration.zero;
+  Duration _lastActualPosition = Duration.zero;
+  int _lastPositionTimestamp = 0;
+
   final Map<PlayerMediaType, List<String>> _decoders = {
     PlayerMediaType.video: [],
     PlayerMediaType.audio: [],
@@ -48,7 +55,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   double _playbackRate = 1.0;
   
   MediaKitPlayerAdapter() : _player = Player(
-    configuration: PlayerConfiguration(
+    configuration: const PlayerConfiguration(
       libass: true,
       bufferSize: 32 * 1024 * 1024,
       logLevel: MPVLogLevel.debug,
@@ -68,6 +75,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     });
     _addEventListeners();
     _setupDefaultTrackSelectionBehavior();
+    _initializeTicker();
   }
   
   void _initializeHardwareDecoding() {
@@ -146,6 +154,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
           : (_player.state.position.inMilliseconds > 0 
               ? PlayerPlaybackState.paused 
               : PlayerPlaybackState.stopped);
+      if (playing) {
+        _lastActualPosition = _player.state.position;
+        _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+        _ticker?.start();
+      } else {
+        _ticker?.stop();
+        _interpolatedPosition = _player.state.position;
+        _lastActualPosition = _player.state.position;
+      }
     });
     
     _player.stream.tracks.listen(_updateMediaInfo);
@@ -323,7 +340,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
         if ((width == null || width == 0) && (_player.state.width != null && _player.state.width! > 0)) {
           width = _player.state.width;
           height = _player.state.height;
-          debugPrint('[MediaKit] 从_player.state获取视频尺寸: ${width}x${height}');
+          debugPrint('[MediaKit] 从_player.state获取视频尺寸: ${width}x$height');
         }
         
         return PlayerVideoStreamInfo(
@@ -480,7 +497,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
       final updatedVideoStreams = _mediaInfo.video!.map((stream) {
         // 如果当前宽高为0，则使用新的宽高
         if (stream.codec.width == 0 || stream.codec.height == 0) {
-          debugPrint('[MediaKit] 更新视频流尺寸: ${stream.codec.width}x${stream.codec.height} -> ${width}x${height}');
+          debugPrint('[MediaKit] 更新视频流尺寸: ${stream.codec.width}x${stream.codec.height} -> ${width}x$height');
           return PlayerVideoStreamInfo(
             codec: PlayerVideoCodecParams(
               width: width,
@@ -730,8 +747,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
     final title = (subInfo.title ?? '').toLowerCase();
     final lang = (subInfo.language ?? '').toLowerCase();
     // Also check metadata which might have more accurate original values from media_kit tracks
-    final metadataTitle = (subInfo.metadata['title'] as String? ?? '').toLowerCase();
-    final metadataLang = (subInfo.metadata['language'] as String? ?? '').toLowerCase();
+    final metadataTitle = (subInfo.metadata['title'] ?? '').toLowerCase();
+    final metadataLang = (subInfo.metadata['language'] ?? '').toLowerCase();
 
     final patterns = [
       'chi', 'chs', 'zh', '中文', '简体', '繁体', 'simplified', 'traditional', 
@@ -789,8 +806,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
           for (int i = 0; i < _mediaInfo.subtitle!.length; i++) {
               final subInfo = _mediaInfo.subtitle![i];
               // Use original title and language from metadata for more reliable matching against keywords
-              final titleLower = (subInfo.metadata['title'] as String? ?? subInfo.title ?? '').toLowerCase();
-              final langLower = (subInfo.metadata['language'] as String? ?? subInfo.language ?? '').toLowerCase();
+              final titleLower = (subInfo.metadata['title'] ?? subInfo.title ?? '').toLowerCase();
+              final langLower = (subInfo.metadata['language'] ?? subInfo.language ?? '').toLowerCase();
 
               bool isSimplified = titleLower.contains('simplified') || titleLower.contains('简体') ||
                                   langLower.contains('zh-hans') || langLower.contains('zh-cn') || langLower.contains('sc');
@@ -881,12 +898,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   set state(PlayerPlaybackState value) {
     switch (value) {
       case PlayerPlaybackState.stopped:
+        _ticker?.stop();
         _player.stop();
         break;
       case PlayerPlaybackState.paused:
+        _ticker?.stop();
         _player.pause();
         break;
       case PlayerPlaybackState.playing:
+        _ticker?.start();
         _player.play();
         break;
     }
@@ -1037,7 +1057,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   }
   
   @override
-  int get position => _player.state.position.inMilliseconds;
+  int get position => _interpolatedPosition.inMilliseconds;
   
   @override
   bool get supportsExternalSubtitles => true;
@@ -1145,12 +1165,17 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   
   @override
   void seek({required int position}) {
-    _player.seek(Duration(milliseconds: position));
+    final seekPosition = Duration(milliseconds: position);
+    _player.seek(seekPosition);
+    _interpolatedPosition = seekPosition;
+    _lastActualPosition = seekPosition;
+    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
   }
   
   @override
   void dispose() {
     _isDisposed = true;
+    _ticker?.dispose();
     _trackSubscription?.cancel(); 
     _jellyfinRetryTimer?.cancel(); 
     _player.dispose();
@@ -1191,7 +1216,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
       }
       
       if (bytes != null) {
-        debugPrint('MediaKit: 成功获取截图，大小: ${bytes.length} 字节，尺寸: ${actualWidth}x${actualHeight}');
+        debugPrint('MediaKit: 成功获取截图，大小: ${bytes.length} 字节，尺寸: ${actualWidth}x$actualHeight');
         final String base64Image = base64Encode(bytes);
         if (base64Image.length > 200) {
           debugPrint('MediaKit: 截图BASE64(截断): ${base64Image.substring(0, 100)}...${base64Image.substring(base64Image.length - 100)}');
@@ -1384,6 +1409,31 @@ class MediaKitPlayerAdapter implements AbstractPlayer {
   @override
   void setPlaybackRate(double rate) {
     playbackRate = rate; // 这将调用setter
+  }
+
+  // 实现 TickerProvider 的 createTicker 方法
+  @override
+  Ticker createTicker(TickerCallback onTick) {
+    return Ticker(onTick);
+  }
+
+  void _initializeTicker() {
+    _ticker = createTicker(_onTick);
+  }
+
+  void _onTick(Duration elapsed) {
+    if (_player.state.playing) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_lastPositionTimestamp == 0) {
+        _lastPositionTimestamp = now;
+      }
+      final delta = now - _lastPositionTimestamp;
+      _interpolatedPosition = _lastActualPosition + Duration(milliseconds: (delta * _player.state.rate).toInt());
+
+      if (_player.state.duration > Duration.zero && _interpolatedPosition > _player.state.duration) {
+        _interpolatedPosition = _player.state.duration;
+      }
+    }
   }
 }
 

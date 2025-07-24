@@ -166,10 +166,11 @@ class _ThemeModePageState extends State<ThemeModePage> {
       backgroundColor: Colors.transparent,
       body: Padding(
         padding: const EdgeInsets.all(0),
-        child: Column(
+        child: ListView(
           children: [
             ListTile(
-              title: Text("主题模式", style: getTitleTextStyle(context)),
+              title: const Text("主题模式", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: const Text("选择应用界面的颜色主题", style: TextStyle(color: Colors.white70)),
               trailing: BlurDropdown<ThemeMode>(
                 dropdownKey: _dropdownKey,
                 items: [
@@ -200,8 +201,10 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 },
               ),
             ),
+            const Divider(color: Colors.white12, height: 1),
             ListTile(
-              title: Text("毛玻璃效果", style: getTitleTextStyle(context)),
+              title: const Text("毛玻璃效果", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: const Text("调整界面元素的模糊强度", style: TextStyle(color: Colors.white70)),
               trailing: BlurDropdown<int>(
                 dropdownKey: _blurDropdownKey,
                 items: [
@@ -245,8 +248,10 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 },
               ),
             ),
+            const Divider(color: Colors.white12, height: 1),
             ListTile(
-              title: Text("背景图像", style: getTitleTextStyle(context)),
+              title: const Text("背景图像", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: const Text("设置应用主界面的背景图片", style: TextStyle(color: Colors.white70)),
               trailing: BlurDropdown<String>(
                 dropdownKey: _backgroundImageDropdownKey,
                 items: [
@@ -277,9 +282,11 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 },
               ),
             ),
+            const Divider(color: Colors.white12, height: 1),
             // 改为使用与"过滤成人内容"一模一样的开关样式
             SwitchListTile(
-              title: Text("页面滑动动画（关闭提升性能）", style: getTitleTextStyle(context)),
+              title: const Text("页面滑动动画", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: const Text("关闭可提升在低性能设备上的流畅度", style: TextStyle(color: Colors.white70)),
               value: appearanceSettings.enablePageAnimation,
               onChanged: (value) {
                 appearanceSettings.setEnablePageAnimation(value);
@@ -292,6 +299,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
               inactiveThumbColor: Colors.white,
               inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
             ),
+            const Divider(color: Colors.white12, height: 1),
           ],
         ),
       ),

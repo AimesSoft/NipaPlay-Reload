@@ -9,6 +9,10 @@ import '../widgets/back_button_widget.dart';
 import '../widgets/anime_info_widget.dart';
 import '../utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
+import '../widgets/send_danmaku_button.dart';
+import '../widgets/send_danmaku_dialog.dart';
+import '../player_abstraction/player_abstraction.dart';
+import '../widgets/blur_dialog.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -23,6 +27,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _isHoveringAnimeInfo = false;
   bool _isHoveringBackButton = false;
   double _horizontalDragDistance = 0.0;
+  final GlobalKey<SendDanmakuDialogContentState> _danmakuDialogKey = GlobalKey();
 
   @override
   void initState() {
@@ -148,26 +153,83 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       duration: const Duration(milliseconds: 150),
                       child: IgnorePointer(
                         ignoring: !videoState.showControls,
-                        child: Row(
-                          children: [
-                            MouseRegion(
-                              cursor: _isHoveringBackButton
+                        child: Padding(
+                          padding: EdgeInsets.only(left: globals.isPhone ? 24.0 : 0.0),
+                          child: Row(
+                            children: [
+                              MouseRegion(
+                                cursor: _isHoveringBackButton
+                                    ? SystemMouseCursors.click
+                                    : SystemMouseCursors.basic,
+                                onEnter: (_) => setState(() => _isHoveringBackButton = true),
+                                onExit: (_) => setState(() => _isHoveringBackButton = false),
+                                child: BackButtonWidget(videoState: videoState),
+                              ),
+                              const SizedBox(width: 10.0),
+                              MouseRegion(
+                                cursor: _isHoveringAnimeInfo 
                                   ? SystemMouseCursors.click
                                   : SystemMouseCursors.basic,
-                              onEnter: (_) => setState(() => _isHoveringBackButton = true),
-                              onExit: (_) => setState(() => _isHoveringBackButton = false),
-                              child: BackButtonWidget(videoState: videoState),
-                            ),
-                            const SizedBox(width: 10.0),
-                            MouseRegion(
-                              cursor: _isHoveringAnimeInfo 
-                                ? SystemMouseCursors.click
-                                : SystemMouseCursors.basic,
-                              onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
-                              onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
-                              child: AnimeInfoWidget(videoState: videoState),
-                            ),
-                          ],
+                                onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
+                                onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
+                                child: AnimeInfoWidget(videoState: videoState),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: AnimatedOpacity(
+                        opacity: videoState.showControls ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 150),
+                        child: IgnorePointer(
+                          ignoring: !videoState.showControls,
+                          child: SendDanmakuButton(
+                            onPressed: () async {
+                              final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+                              final wasPlaying = videoState.player.state == PlaybackState.playing;
+
+                              if (wasPlaying) {
+                                await videoState.player.pauseDirectly();
+                              }
+
+                              final episodeId = videoState.episodeId;
+                              final currentTime = videoState.position.inSeconds.toDouble();
+
+                              if (episodeId == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('无法获取剧集信息，无法发送弹幕')),
+                                );
+                                if (wasPlaying) await videoState.player.playDirectly();
+                                return;
+                              }
+
+                              await BlurDialog.show(
+                                context: context,
+                                title: '发送弹幕',
+                                contentWidget: SendDanmakuDialogContent(
+                                  episodeId: episodeId,
+                                  currentTime: currentTime,
+                                  onDanmakuSent: (danmaku) {
+                                    // 将新弹幕添加到播放器状态中
+                                    videoState.addDanmakuToNewTrack(danmaku);
+                                  },
+                                ),
+                                // Actions are now handled inside the dialog
+                                actions: [],
+                              );
+
+                              if (wasPlaying) {
+                                await videoState.player.playDirectly();
+                              }
+                            },
+                          ),
                         ),
                       ),
                     ),

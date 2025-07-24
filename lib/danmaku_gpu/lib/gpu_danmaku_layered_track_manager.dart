@@ -217,8 +217,7 @@ class GPUDanmakuLayeredTrackManager {
         return y.clamp(0.0, screenHeight - config.fontSize);
       case DanmakuTrackType.bottom:
         // 底部弹幕从屏幕底部开始，向上排列
-        final totalHeight = _maxTracksPerLayer * (config.fontSize + config.danmakuBottomMargin);
-        final y = screenHeight - totalHeight + localTrackId * (config.fontSize + config.danmakuBottomMargin);
+        final y = screenHeight - (localTrackId + 1) * (config.fontSize + config.danmakuBottomMargin);
         // 确保弹幕不会超出屏幕底部边界
         return y.clamp(0.0, screenHeight - config.fontSize);
     }
