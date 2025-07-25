@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,101 +20,135 @@ class SearchService {
 
   /// 获取搜索配置（用于高级搜索）
   Future<SearchConfig> getSearchConfig({String source = 'anidb'}) async {
-    // 检查内存缓存
-    if (_cachedConfig != null && 
-        _configCacheTime != null && 
-        DateTime.now().difference(_configCacheTime!) < _configCacheDuration) {
-      return _cachedConfig!;
-    }
-
-    // 检查本地缓存
-    final prefs = await SharedPreferences.getInstance();
-    final cachedString = prefs.getString(_configCacheKey);
-    if (cachedString != null) {
+    // Web环境下的实现
+    if (kIsWeb) {
       try {
-        final data = json.decode(cachedString);
-        final timestamp = data['timestamp'] as int;
-        final now = DateTime.now().millisecondsSinceEpoch;
-        
-        if (now - timestamp <= _configCacheDuration.inMilliseconds) {
-          _cachedConfig = SearchConfig.fromJson(data['config']);
-          _configCacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-          debugPrint('[搜索服务] 从本地缓存加载搜索配置');
-          return _cachedConfig!;
+        final response = await http.get(Uri.parse('/api/search/config'));
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes));
+          return SearchConfig.fromJson(data);
+        } else {
+          throw Exception('Failed to load search config from API: ${response.statusCode}');
         }
       } catch (e) {
-        debugPrint('[搜索服务] 解析缓存的搜索配置失败: $e');
+        throw Exception('Failed to connect to the search config API: $e');
       }
-    }
+    } else {
+      // 检查内存缓存
+      if (_cachedConfig != null &&
+          _configCacheTime != null &&
+          DateTime.now().difference(_configCacheTime!) < _configCacheDuration) {
+        return _cachedConfig!;
+      }
 
-    // 从网络获取
-    try {
-      final url = '$_baseUrl/search/adv/config?source=$source';
-      final response = await _makeAuthenticatedRequest(url);
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true) {
-          _cachedConfig = SearchConfig.fromJson(data);
-          _configCacheTime = DateTime.now();
+      // 检查本地缓存
+      final prefs = await SharedPreferences.getInstance();
+      final cachedString = prefs.getString(_configCacheKey);
+      if (cachedString != null) {
+        try {
+          final data = json.decode(cachedString);
+          final timestamp = data['timestamp'] as int;
+          final now = DateTime.now().millisecondsSinceEpoch;
 
-          // 保存到本地缓存
-          final cacheData = {
-            'timestamp': _configCacheTime!.millisecondsSinceEpoch,
-            'config': data,
-          };
-          await prefs.setString(_configCacheKey, json.encode(cacheData));
-          
-          debugPrint('[搜索服务] 成功获取搜索配置，标签数量: ${_cachedConfig!.tags.length}');
-          return _cachedConfig!;
-        } else {
-          throw Exception('API返回错误: ${data['errorMessage']}');
+          if (now - timestamp <= _configCacheDuration.inMilliseconds) {
+            _cachedConfig = SearchConfig.fromJson(data['config']);
+            _configCacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+            debugPrint('[搜索服务] 从本地缓存加载搜索配置');
+            return _cachedConfig!;
+          }
+        } catch (e) {
+          debugPrint('[搜索服务] 解析缓存的搜索配置失败: $e');
         }
-      } else {
-        throw Exception('HTTP错误: ${response.statusCode}');
       }
-    } catch (e) {
-      debugPrint('[搜索服务] 获取搜索配置失败: $e');
-      rethrow;
+
+      // 从网络获取
+      try {
+        final url = '$_baseUrl/search/adv/config?source=$source';
+        final response = await _makeAuthenticatedRequest(url);
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] == true) {
+            _cachedConfig = SearchConfig.fromJson(data);
+            _configCacheTime = DateTime.now();
+
+            // 保存到本地缓存
+            final cacheData = {
+              'timestamp': _configCacheTime!.millisecondsSinceEpoch,
+              'config': data,
+            };
+            await prefs.setString(_configCacheKey, json.encode(cacheData));
+
+            debugPrint('[搜索服务] 成功获取搜索配置，标签数量: ${_cachedConfig!.tags.length}');
+            return _cachedConfig!;
+          } else {
+            throw Exception('API返回错误: ${data['errorMessage']}');
+          }
+        } else {
+          throw Exception('HTTP错误: ${response.statusCode}');
+        }
+      } catch (e) {
+        debugPrint('[搜索服务] 获取搜索配置失败: $e');
+        rethrow;
+      }
     }
   }
 
   /// 根据文本标签搜索动画
   Future<SearchResult> searchAnimeByTags(List<String> tags) async {
-    if (tags.isEmpty) {
-      throw ArgumentError('标签列表不能为空');
-    }
-
-    if (tags.length > 10) {
-      throw ArgumentError('标签数量不能超过10个');
-    }
-
-    for (String tag in tags) {
-      if (tag.length > 50) {
-        throw ArgumentError('单个标签长度不能超过50个字符');
-      }
-    }
-
-    try {
-      final tagsString = tags.join(',');
-      final url = '$_baseUrl/search/tag?tags=${Uri.encodeComponent(tagsString)}';
-      final response = await _makeAuthenticatedRequest(url);
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true) {
-          final result = SearchResult.fromTagSearchJson(data);
-          debugPrint('[搜索服务] 文本标签搜索成功，找到 ${result.animes.length} 个结果');
-          return result;
+    // Web环境下的实现
+    if (kIsWeb) {
+      try {
+        final response = await http.post(
+          Uri.parse('/api/search/by-tags'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'tags': tags}),
+        );
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes));
+          return SearchResult.fromTagSearchJson(data);
         } else {
-          throw Exception('API返回错误: ${data['errorMessage']}');
+          throw Exception('Failed to search by tags from API: ${response.statusCode}');
         }
-      } else {
-        throw Exception('HTTP错误: ${response.statusCode}');
+      } catch (e) {
+        throw Exception('Failed to connect to the search by tags API: $e');
       }
-    } catch (e) {
-      debugPrint('[搜索服务] 文本标签搜索失败: $e');
-      rethrow;
+    } else {
+      if (tags.isEmpty) {
+        throw ArgumentError('标签列表不能为空');
+      }
+
+      if (tags.length > 10) {
+        throw ArgumentError('标签数量不能超过10个');
+      }
+
+      for (String tag in tags) {
+        if (tag.length > 50) {
+          throw ArgumentError('单个标签长度不能超过50个字符');
+        }
+      }
+
+      try {
+        final tagsString = tags.join(',');
+        final url = '$_baseUrl/search/tag?tags=${Uri.encodeComponent(tagsString)}';
+        final response = await _makeAuthenticatedRequest(url);
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] == true) {
+            final result = SearchResult.fromTagSearchJson(data);
+            debugPrint('[搜索服务] 文本标签搜索成功，找到 ${result.animes.length} 个结果');
+            return result;
+          } else {
+            throw Exception('API返回错误: ${data['errorMessage']}');
+          }
+        } else {
+          throw Exception('HTTP错误: ${response.statusCode}');
+        }
+      } catch (e) {
+        debugPrint('[搜索服务] 文本标签搜索失败: $e');
+        rethrow;
+      }
     }
   }
 
@@ -130,56 +165,84 @@ class SearchService {
     bool? restricted,
     int sort = 0,
   }) async {
-    try {
-      final queryParams = <String, String>{
-        'source': source,
-        'minRate': minRate.toString(),
-        'maxRate': maxRate.toString(),
-        'sort': sort.toString(),
-      };
-
-      if (keyword != null && keyword.isNotEmpty) {
-        queryParams['keyword'] = keyword;
-      }
-
-      if (type != null) {
-        queryParams['type'] = type.toString();
-      }
-
-      if (tagIds != null && tagIds.isNotEmpty) {
-        queryParams['tags'] = tagIds.join(',');
-      }
-
-      if (year != null) {
-        queryParams['year'] = year.toString();
-      }
-
-      if (month != null) {
-        queryParams['month'] = month.toString();
-      }
-
-      if (restricted != null) {
-        queryParams['restricted'] = restricted.toString();
-      }
-
-      final uri = Uri.parse('$_baseUrl/search/adv').replace(queryParameters: queryParams);
-      final response = await _makeAuthenticatedRequest(uri.toString());
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true) {
-          final result = SearchResult.fromAdvancedSearchJson(data);
-          debugPrint('[搜索服务] 高级搜索成功，找到 ${result.animes.length} 个结果');
-          return result;
+    // Web环境下的实现
+    if (kIsWeb) {
+      try {
+        final body = {
+          'keyword': keyword,
+          'type': type,
+          'tagIds': tagIds,
+          'year': year,
+          'minRate': minRate,
+          'maxRate': maxRate,
+          'sort': sort,
+        };
+        final response = await http.post(
+          Uri.parse('/api/search/advanced'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(body),
+        );
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes));
+          return SearchResult.fromAdvancedSearchJson(data);
         } else {
-          throw Exception('API返回错误: ${data['errorMessage']}');
+          throw Exception('Failed to perform advanced search from API: ${response.statusCode}');
         }
-      } else {
-        throw Exception('HTTP错误: ${response.statusCode}');
+      } catch (e) {
+        throw Exception('Failed to connect to the advanced search API: $e');
       }
-    } catch (e) {
-      debugPrint('[搜索服务] 高级搜索失败: $e');
-      rethrow;
+    } else {
+      try {
+        final queryParams = <String, String>{
+          'source': source,
+          'minRate': minRate.toString(),
+          'maxRate': maxRate.toString(),
+          'sort': sort.toString(),
+        };
+
+        if (keyword != null && keyword.isNotEmpty) {
+          queryParams['keyword'] = keyword;
+        }
+
+        if (type != null) {
+          queryParams['type'] = type.toString();
+        }
+
+        if (tagIds != null && tagIds.isNotEmpty) {
+          queryParams['tags'] = tagIds.join(',');
+        }
+
+        if (year != null) {
+          queryParams['year'] = year.toString();
+        }
+
+        if (month != null) {
+          queryParams['month'] = month.toString();
+        }
+
+        if (restricted != null) {
+          queryParams['restricted'] = restricted.toString();
+        }
+
+        final uri = Uri.parse('$_baseUrl/search/adv').replace(queryParameters: queryParams);
+        final response = await _makeAuthenticatedRequest(uri.toString());
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] == true) {
+            final result = SearchResult.fromAdvancedSearchJson(data);
+            debugPrint('[搜索服务] 高级搜索成功，找到 ${result.animes.length} 个结果');
+            return result;
+          } else {
+            throw Exception('API返回错误: ${data['errorMessage']}');
+          }
+        } else {
+          throw Exception('HTTP错误: ${response.statusCode}');
+        }
+      } catch (e) {
+        debugPrint('[搜索服务] 高级搜索失败: $e');
+        rethrow;
+      }
     }
   }
 
@@ -189,7 +252,7 @@ class SearchService {
       const String appId = DandanplayService.appId;
       final String appSecret = await DandanplayService.getAppSecret();
       final int timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      
+
       final Uri parsedUri = Uri.parse(url);
       final String apiPath = parsedUri.path;
       final String signature = DandanplayService.generateSignature(appId, timestamp, apiPath, appSecret);
@@ -241,7 +304,7 @@ class SearchService {
   Future<void> clearCache() async {
     _cachedConfig = null;
     _configCacheTime = null;
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_configCacheKey);
     debugPrint('[搜索服务] 缓存已清除');

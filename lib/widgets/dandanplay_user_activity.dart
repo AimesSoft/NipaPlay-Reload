@@ -1,8 +1,10 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import '../services/dandanplay_service.dart';
 import '../pages/anime_detail_page.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class DandanplayUserActivity extends StatefulWidget {
   const DandanplayUserActivity({super.key});
@@ -432,6 +434,29 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
     required String subtitle,
     Widget? trailing,
   }) {
+    // 处理图片URL，如果是Web版本，使用代理
+    String? imageUrl = item['imageUrl'];
+    if (kIsWeb && imageUrl != null && imageUrl.isNotEmpty) {
+      // 在Web端创建代理URL
+      try {
+        // 获取当前URL
+        final currentUrl = Uri.base.toString();
+        final uri = Uri.parse(currentUrl);
+        String baseUrl = '${uri.scheme}://${uri.host}';
+        
+        if (uri.port != 80 && uri.port != 443) {
+          baseUrl += ':${uri.port}';
+        }
+        
+        // 对URL进行Base64编码，以便在查询参数中安全传输
+        final encodedUrl = base64Url.encode(utf8.encode(imageUrl));
+        imageUrl = '$baseUrl/api/image_proxy?url=$encodedUrl';
+      } catch (e) {
+        debugPrint('[用户活动] 无法创建代理URL: $e');
+        // 保持原始URL
+      }
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: BackdropFilter(
@@ -457,13 +482,14 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
                     // 封面图片
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
-                      child: item['imageUrl'] != null
+                      child: imageUrl != null
                           ? Image.network(
-                              item['imageUrl'],
+                              imageUrl,
                               width: 40,
                               height: 60,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
+                                debugPrint('[用户活动] 图片加载失败: $error, URL: $imageUrl');
                                 return Container(
                                   width: 40,
                                   height: 60,

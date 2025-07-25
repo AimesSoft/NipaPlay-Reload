@@ -323,6 +323,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         airWeekday != null && _weekdays.containsKey(airWeekday)
             ? _weekdays[airWeekday]!
             : '待定';
+    
+    // -- 开始修改 --
+    String coverImageUrl = anime.imageUrl;
+    if (kIsWeb) {
+      final encodedUrl = base64Url.encode(utf8.encode(anime.imageUrl));
+      coverImageUrl = '/api/image_proxy?url=$encodedUrl';
+    }
+    // -- 结束修改 --
+
     final bangumiRatingValue = anime.ratingDetails?['Bangumi评分'];
     String bangumiEvaluationText = '';
     if (bangumiRatingValue is num &&
@@ -413,7 +422,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: CachedNetworkImageWidget(
-                          imageUrl: anime.imageUrl,
+                          imageUrl: coverImageUrl, // 使用处理后的URL
                           width: 130,
                           height: 195,
                           fit: BoxFit.cover))),

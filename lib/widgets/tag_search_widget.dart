@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -52,7 +54,7 @@ class _TagSearchModalState extends State<TagSearchModal>
   int? _selectedYear;
   double _minRating = 0.0;
   double _maxRating = 10.0;
-  int _sortOption = 0;
+  final int _sortOption = 0;
   List<SearchResultAnime> _advancedSearchResults = [];
   List<SearchResultAnime> _displayedAdvancedResults = []; // 当前显示的结果
   bool _isAdvancedSearching = false;
@@ -872,7 +874,9 @@ class _TagSearchModalState extends State<TagSearchModal>
                         borderRadius: BorderRadius.circular(8),
                         child: anime.imageUrl != null
                             ? CachedNetworkImageWidget(
-                                imageUrl: anime.imageUrl!,
+                                imageUrl: kIsWeb
+                                    ? '/api/image_proxy?url=${base64Url.encode(utf8.encode(anime.imageUrl!))}'
+                                    : anime.imageUrl!,
                                 fit: BoxFit.cover,
                               )
                             : const Icon(
@@ -1097,9 +1101,9 @@ class _TagSearchModalState extends State<TagSearchModal>
                 child: Row(
                   children: [
                     // 左边的标签
-                    Text(
+                    const Text(
                       '年份',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -1287,7 +1291,9 @@ class _TagSearchModalState extends State<TagSearchModal>
                         borderRadius: BorderRadius.circular(8),
                         child: anime.imageUrl != null
                             ? CachedNetworkImageWidget(
-                                imageUrl: anime.imageUrl!,
+                                imageUrl: kIsWeb
+                                    ? '/api/image_proxy?url=${base64Url.encode(utf8.encode(anime.imageUrl!))}'
+                                    : anime.imageUrl!,
                                 fit: BoxFit.cover,
                               )
                             : const Icon(

@@ -127,4 +127,24 @@ class SearchResultAnime {
       intro: json['intro'],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'animeId': animeId,
+      'bangumiId': bangumiId,
+      'animeTitle': animeTitle,
+      'type': type,
+      'typeDescription': typeDescription,
+      'imageUrl': imageUrl,
+      'startDate': startDate,
+      'episodeCount': episodeCount,
+      'rating': rating,
+      'isFavorited': isFavorited,
+      'rank': rank,
+      'searchKeyword': searchKeyword,
+      'isOnAir': isOnAir,
+      'isRestricted': isRestricted,
+      'intro': intro,
+    };
+  }
 } 

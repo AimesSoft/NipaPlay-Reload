@@ -1,10 +1,11 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/dandanplay_user_activity.dart';
 import '../../utils/globals.dart' as globals;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -38,8 +39,31 @@ class _AccountPageState extends State<AccountPage> {
   void _updateAvatarUrl() {
     if (_username.contains('@qq.com')) {
       final qqNumber = _username.split('@')[0];
+      String url = 'http://q.qlogo.cn/headimg_dl?dst_uin=$qqNumber&spec=640';
+      
+      // 如果是Web版本，使用图片代理
+      if (kIsWeb) {
+        try {
+          // 获取当前URL
+          final currentUrl = Uri.base.toString();
+          final uri = Uri.parse(currentUrl);
+          String baseUrl = '${uri.scheme}://${uri.host}';
+          
+          if (uri.port != 80 && uri.port != 443) {
+            baseUrl += ':${uri.port}';
+          }
+          
+          // 对URL进行Base64编码，以便在查询参数中安全传输
+          final encodedUrl = base64Url.encode(utf8.encode(url));
+          url = '$baseUrl/api/image_proxy?url=$encodedUrl';
+        } catch (e) {
+          debugPrint('[账户页面] 无法创建代理URL: $e');
+          // 保持原始URL
+        }
+      }
+      
       setState(() {
-        _avatarUrl = 'http://q.qlogo.cn/headimg_dl?dst_uin=$qqNumber&spec=640';
+        _avatarUrl = url;
       });
     } else {
       setState(() {
