@@ -26,17 +26,21 @@ class AutoNextEpisodeService {
   
   // 开始自动播放下一话的倒计时
   void startAutoNextEpisode(BuildContext context, String currentVideoPath) {
-    if (_isCountingDown) return;
+    debugPrint('[AutoNext] startAutoNextEpisode called, _isCountingDown=$_isCountingDown, context=${context != null}, mounted=${(context is Element) ? (context as Element).mounted : 'unknown'}');
+    if (_isCountingDown) {
+      debugPrint('[AutoNext] _isCountingDown为true，直接return，不触发自动连播');
+      return;
+    }
     
     debugPrint('[自动播放] 开始检查下一话: $currentVideoPath');
     
     // 查找下一话
     final nextEpisode = _findNextEpisode(currentVideoPath);
-    if (nextEpisode == null) {
-      debugPrint('[自动播放] 没有找到下一话');
-      _showNoNextEpisodeMessage(context);
-      return;
-    }
+    // if (nextEpisode == null) {
+    //   debugPrint('[自动播放] 没有找到下一话');
+    //   _showNoNextEpisodeMessage(context);
+    //   return;
+    // }
     
     _nextEpisodePath = nextEpisode;
     _countdownSeconds = 10;
@@ -44,12 +48,14 @@ class AutoNextEpisodeService {
     
     debugPrint('[自动播放] 找到下一话: $nextEpisode，开始倒计时');
     
+    debugPrint('[AutoNext] 调用_startCountdown, nextEpisode=$_nextEpisodePath');
     // 显示初始倒计时消息
-    _startCountdown(context, nextEpisode);
+    _startCountdown(context, nextEpisode ?? '');
   }
   
   // 取消自动播放
   void cancelAutoNext() {
+    debugPrint('[AutoNext] cancelAutoNext called, _isCountingDown=$_isCountingDown');
     _isCancelled = true;
     if (_countdownTimer != null) {
       _countdownTimer!.cancel();
@@ -104,8 +110,7 @@ class AutoNextEpisodeService {
   
   // 显示倒计时消息
   void _startCountdown(BuildContext context, String nextEpisodePath) {
-    print('[自动播放] 找到下一话: $nextEpisodePath，开始倒计时');
-    
+    debugPrint('[AutoNext] _startCountdown called, nextEpisodePath=$nextEpisodePath, _countdownSeconds=$_countdownSeconds');
     _countdownSeconds = 10;
     _isCancelled = false;
     
@@ -117,13 +122,17 @@ class AutoNextEpisodeService {
         print('[自动播放] 用户取消自动播放');
         _isCancelled = true;
         _countdownTimer?.cancel();
+        debugPrint('[AutoNext] 倒计时被用户取消');
       },
     );
     
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      debugPrint('[AutoNext] 倒计时tick, 剩余秒数: $_countdownSeconds, _isCancelled=$_isCancelled');
       if (_isCancelled) {
         timer.cancel();
         CountdownSnackBar.hide();
+        debugPrint('[AutoNext] 倒计时tick检测到_isCancelled，提前结束');
+        _isCountingDown = false;
         return;
       }
       
@@ -134,7 +143,7 @@ class AutoNextEpisodeService {
         CountdownSnackBar.hide();
         
         if (!_isCancelled) {
-          print('[自动播放] 开始播放下一话: $nextEpisodePath');
+          debugPrint('[AutoNext] 倒计时结束，调用_playNextEpisode, nextEpisodePath=$nextEpisodePath');
           _playNextEpisode(context, nextEpisodePath);
         }
       } else {
@@ -151,20 +160,26 @@ class AutoNextEpisodeService {
   
   // 播放下一话
   void _playNextEpisode(BuildContext context, String nextEpisodePath) {
-    if (nextEpisodePath.isEmpty) return;
-    
+    debugPrint('[AutoNext] _playNextEpisode called, nextEpisodePath=$nextEpisodePath');
+    // 优先调用VideoPlayerState的playNextEpisode，兼容Jellyfin/Emby等特殊情况
+    try {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.playNextEpisode();
+      BlurSnackBar.show(context, '正在尝试播放下一话...');
+      // 如果playNextEpisode能正确处理，直接return，不再走下面的本地文件逻辑
+      return;
+    } catch (e) {
+      debugPrint('[自动播放] playNextEpisode()调用失败，回退到本地文件逻辑: $e');
+      // 继续走原有本地文件查找逻辑
+    }
+    // ====== 原有本地文件播放逻辑保留 ======
     try {
       debugPrint('[自动播放] 开始播放下一话: $nextEpisodePath');
-      
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      
-      // 检查文件是否存在
       final file = File(nextEpisodePath);
       if (!file.existsSync()) {
         throw Exception('下一话文件不存在: $nextEpisodePath');
       }
-      
-      // 播放下一话
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       videoState.initializePlayer(nextEpisodePath);
       
       final fileName = _getEpisodeDisplayName(nextEpisodePath);
@@ -194,4 +209,4 @@ class AutoNextEpisodeService {
   
   // 获取下一话路径
   String? get nextEpisodePath => _nextEpisodePath;
-} 
+}

@@ -651,6 +651,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Future<void> initializePlayer(String videoPath,
       {WatchHistoryItem? historyItem, String? historyFilePath, String? actualPlayUrl}) async {
+    // 每次切换新视频时，重置自动连播倒计时状态，防止高强度测试下卡死
+    try {
+      AutoNextEpisodeService.instance.cancelAutoNext();
+    } catch (e) {
+      debugPrint('[自动连播] 重置AutoNextEpisodeService状态失败: $e');
+    }
     if (_status == PlayerStatus.loading ||
         _status == PlayerStatus.recognizing) {
       _setStatus(PlayerStatus.idle, message: "取消了之前的加载任务", clearPreviousMessages: true);
