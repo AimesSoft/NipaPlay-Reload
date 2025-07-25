@@ -1575,6 +1575,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   void seekTo(Duration position) {
+    // 仅在自动连播倒计时期间，用户seek才取消自动连播
+    try {
+      if (AutoNextEpisodeService.instance.isCountingDown) {
+        AutoNextEpisodeService.instance.cancelAutoNext();
+        debugPrint('[自动连播] 用户seek时取消自动连播倒计时');
+      }
+    } catch (e) {
+      debugPrint('[自动连播] seekTo时取消自动播放失败: $e');
+    }
     if (!hasVideo) return;
 
     try {
