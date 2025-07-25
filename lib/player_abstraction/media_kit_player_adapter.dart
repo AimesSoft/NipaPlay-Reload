@@ -157,7 +157,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       if (playing) {
         _lastActualPosition = _player.state.position;
         _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
-        _ticker?.start();
+        if (_ticker != null && !_ticker!.isActive) {
+          _ticker!.start();
+        }
       } else {
         _ticker?.stop();
         _interpolatedPosition = _player.state.position;
@@ -906,7 +908,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         _player.pause();
         break;
       case PlayerPlaybackState.playing:
-        _ticker?.start();
+        if (_ticker != null && !_ticker!.isActive) {
+          _ticker!.start();
+        }
         _player.play();
         break;
     }
