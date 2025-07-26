@@ -356,7 +356,9 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
     
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        final totalFilteredCount = videoState.danmakuList.length - videoState.getFilteredDanmakuList().length;
+        final totalDanmakuCount = videoState.totalDanmakuCount;
+    final filteredDanmakuCount = videoState.danmakuList.length;
+    final totalFilteredCount = totalDanmakuCount - filteredDanmakuCount;
         
         return BaseSettingsMenu(
           title: '弹幕列表 ${_allSortedDanmakus.isNotEmpty ? "(${_allSortedDanmakus.length}条)" : ""}',

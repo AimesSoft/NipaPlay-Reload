@@ -120,6 +120,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕屏蔽词
   static const String _danmakuBlockWordsKey = 'danmaku_block_words';
   List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
+  int _totalDanmakuCount = 0; // 添加一个字段来存储总弹幕数
   
   // 添加播放速度相关状态
   static const String _playbackRateKey = 'playback_rate';
@@ -349,6 +350,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get blockBottomDanmaku => _blockBottomDanmaku;
   bool get blockScrollDanmaku => _blockScrollDanmaku;
   List<String> get danmakuBlockWords => _danmakuBlockWords;
+  int get totalDanmakuCount => _totalDanmakuCount;
 
   // 获取是否处于最终加载阶段
   bool get isInFinalLoadingPhase => _isInFinalLoadingPhase;
@@ -2636,10 +2638,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         notifyListeners();
         
         // 加载弹幕到控制器
-        final filteredDanmaku = cachedDanmaku.where((d) => !shouldBlockDanmaku(d)).toList();
-        danmakuController?.loadDanmaku(filteredDanmaku);
+        danmakuController?.loadDanmaku(cachedDanmaku);
         _setStatus(PlayerStatus.playing,
-            message: '从缓存加载弹幕完成 (${filteredDanmaku.length}条)');
+            message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
         
         // 解析弹幕数据并添加到弹弹play轨道
         final parsedDanmaku = await compute(parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
@@ -2806,13 +2807,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       return timeA.compareTo(timeB);
     });
     
-    // 替换为新的列表实例，以触发Widget更新
-    _danmakuList = mergedList;
+    _totalDanmakuCount = mergedList.length;
+    final filteredList = mergedList.where((d) => !shouldBlockDanmaku(d)).toList();
+    _danmakuList = filteredList;
+
+    danmakuController?.clearDanmaku();
+    danmakuController?.loadDanmaku(filteredList);
     
     // 通过更新key来强制刷新DanmakuOverlay
     _danmakuOverlayKey = 'danmaku_${DateTime.now().millisecondsSinceEpoch}';
     
-    debugPrint('弹幕轨道合并完成，总计${_danmakuList.length}条弹幕');
+    debugPrint('弹幕轨道合并及过滤完成，显示${_danmakuList.length}条，总计${mergedList.length}条');
     notifyListeners(); // 确保通知UI更新
   }
 
@@ -3554,7 +3559,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _blockTopDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_blockTopDanmakuKey, block);
-      notifyListeners();
+      _updateMergedDanmakuList();
     }
   }
   
@@ -3571,7 +3576,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _blockBottomDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_blockBottomDanmakuKey, block);
-      notifyListeners();
+      _updateMergedDanmakuList();
     }
   }
   
@@ -3588,7 +3593,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _blockScrollDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_blockScrollDanmakuKey, block);
-      notifyListeners();
+      _updateMergedDanmakuList();
     }
   }
   
@@ -3615,7 +3620,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (word.isNotEmpty && !_danmakuBlockWords.contains(word)) {
       _danmakuBlockWords.add(word);
       await _saveDanmakuBlockWords();
-      notifyListeners();
+      _updateMergedDanmakuList();
     }
   }
   
@@ -3624,7 +3629,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_danmakuBlockWords.contains(word)) {
       _danmakuBlockWords.remove(word);
       await _saveDanmakuBlockWords();
-      notifyListeners();
+      _updateMergedDanmakuList();
     }
   }
   

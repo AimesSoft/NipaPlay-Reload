@@ -207,8 +207,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
       builder: (context, videoState, child) {
         final tracks = videoState.danmakuTracks;
         final trackEnabled = videoState.danmakuTrackEnabled;
-        final totalDanmakuCount = videoState.danmakuList.length;
-        final filteredDanmakuCount = videoState.getFilteredDanmakuList().length;
+        final totalDanmakuCount = videoState.totalDanmakuCount;
+    final filteredDanmakuCount = videoState.danmakuList.length;
 
         return BaseSettingsMenu(
           title: '弹幕轨道',
