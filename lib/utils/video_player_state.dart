@@ -940,31 +940,54 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
 
-      // 优先选择包含sm或中文相关的字幕轨道
+      // 优先选择简体中文相关的字幕轨道
       if (player.mediaInfo.subtitle != null) {
         final subtitles = player.mediaInfo.subtitle!;
         int? preferredSubtitleIndex;
 
-        // 首先尝试查找包含sm或中文相关的字幕
+        // 定义简体和繁体中文的关键字
+        const simplifiedKeywords = ['简体', '简中', 'chs', 'sc', 'simplified'];
+        const traditionalKeywords = ['繁體', '繁体', 'cht', 'tc', 'traditional'];
+
+        // 优先级 1: 查找简体中文轨道
         for (var i = 0; i < subtitles.length; i++) {
           final track = subtitles[i];
           final fullString = track.toString().toLowerCase();
-
-          // 检查标题中是否包含sm或中文相关关键词
-          if (fullString.contains('sm') ||
-              fullString.contains('zh') ||
-              fullString.contains('chi') ||
-              fullString.contains('中文') ||
-              fullString.contains('简体') ||
-              fullString.contains('繁体')) {
+          if (simplifiedKeywords.any((kw) => fullString.contains(kw))) {
             preferredSubtitleIndex = i;
-            break;
+            debugPrint('VideoPlayerState: 自动选择简体中文字幕: ${track.title ?? fullString}');
+            break; // 找到最佳匹配，跳出循环
+          }
+        }
+
+        // 优先级 2: 如果没有找到简体，则查找繁体中文轨道
+        if (preferredSubtitleIndex == null) {
+          for (var i = 0; i < subtitles.length; i++) {
+            final track = subtitles[i];
+            final fullString = track.toString().toLowerCase();
+            if (traditionalKeywords.any((kw) => fullString.contains(kw))) {
+              preferredSubtitleIndex = i;
+              debugPrint('VideoPlayerState: 自动选择繁体中文字幕: ${track.title ?? fullString}');
+              break;
+            }
+          }
+        }
+
+        // 优先级 3: 如果还没有，则查找任何语言代码为中文的轨道 (chi/zho)
+        if (preferredSubtitleIndex == null) {
+          for (var i = 0; i < subtitles.length; i++) {
+            final track = subtitles[i];
+            if (track.language == 'chi' || track.language == 'zho') {
+              preferredSubtitleIndex = i;
+              debugPrint('VideoPlayerState: 自动选择语言代码为中文的字幕: ${track.title ?? track.toString().toLowerCase()}');
+              break;
+            }
           }
         }
 
         // 如果找到了优先的字幕轨道，就激活它
         if (preferredSubtitleIndex != null) {
-          player.activeSubtitleTracks = [preferredSubtitleIndex + 1]; // MDK 字幕轨道从 1 开始
+          player.activeSubtitleTracks = [preferredSubtitleIndex];
           
           // 更新字幕轨道信息
           if (player.mediaInfo.subtitle != null && 
@@ -976,6 +999,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               'isActive': true,
             });
           }
+        } else {
+          debugPrint('VideoPlayerState: 未找到符合条件的中文字幕轨道，将使用播放器默认设置。');
         }
         
         // 无论是否有优先字幕轨道，都更新所有字幕轨道信息
@@ -2611,9 +2636,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         notifyListeners();
         
         // 加载弹幕到控制器
-        danmakuController?.loadDanmaku(cachedDanmaku);
+        final filteredDanmaku = cachedDanmaku.where((d) => !shouldBlockDanmaku(d)).toList();
+        danmakuController?.loadDanmaku(filteredDanmaku);
         _setStatus(PlayerStatus.playing,
-            message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
+            message: '从缓存加载弹幕完成 (${filteredDanmaku.length}条)');
         
         // 解析弹幕数据并添加到弹弹play轨道
         final parsedDanmaku = await compute(parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
@@ -2655,7 +2681,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('成功从网络加载弹幕，共${danmakuData['count']}条');
         
         // 加载弹幕到控制器
-        danmakuController?.loadDanmaku(danmakuData['comments']);
+        final filteredDanmaku = danmakuData['comments'].where((d) => !shouldBlockDanmaku(d)).toList();
+        danmakuController?.loadDanmaku(filteredDanmaku);
         
         // 解析弹幕数据并添加到弹弹play轨道
         final parsedDanmaku = await compute(parseDanmakuListInBackground, danmakuData['comments'] as List<dynamic>?);
@@ -3612,18 +3639,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   
   // 检查弹幕是否应该被屏蔽
   bool shouldBlockDanmaku(Map<String, dynamic> danmaku) {
-    // 检查弹幕类型是否应该被屏蔽
-    final type = danmaku['type'] as String? ?? 'scroll';
+    final String type = danmaku['type']?.toString() ?? '';
+    final String content = danmaku['content']?.toString() ?? '';
+
     if (_blockTopDanmaku && type == 'top') return true;
     if (_blockBottomDanmaku && type == 'bottom') return true;
     if (_blockScrollDanmaku && type == 'scroll') return true;
-    
-    // 检查弹幕内容是否包含屏蔽词
-    final content = danmaku['content'] as String? ?? '';
+
     for (final word in _danmakuBlockWords) {
-      if (content.contains(word)) return true;
+      if (content.contains(word)) {
+        return true;
+      }
     }
-    
     return false;
   }
   

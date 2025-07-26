@@ -29,6 +29,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   // 存储外部字幕信息的列表
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
+  VideoPlayerState? _videoPlayerState; // Add this member variable
   
   @override
   void initState() {
@@ -38,26 +39,19 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     // 设置自动加载字幕的回调
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return; // Add mounted check
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      videoState.onExternalSubtitleAutoLoaded = _handleAutoLoadedSubtitle;
+      _videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false); // Assign here
+      _videoPlayerState!.onExternalSubtitleAutoLoaded = _handleAutoLoadedSubtitle;
       
       // 检查当前是否有激活的外部字幕
-      _checkCurrentExternalSubtitle(videoState);
+      _checkCurrentExternalSubtitle(_videoPlayerState!);
     });
   }
   
   @override
   void dispose() {
     // 清除回调
-    // It's safer to check if context is still valid or if the provider can be accessed.
-    // However, typically, VideoPlayerState might outlive this menu.
-    // If VideoPlayerState is disposed before this, it could lead to errors.
-    // For now, let's assume VideoPlayerState is still valid.
-    // Consider adding a mounted check before accessing Provider if issues persist.
-    if (mounted) {
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      videoState.onExternalSubtitleAutoLoaded = null;
-    }
+    // Use the stored _videoPlayerState to clear the callback
+    _videoPlayerState?.onExternalSubtitleAutoLoaded = null;
     super.dispose();
   }
   
