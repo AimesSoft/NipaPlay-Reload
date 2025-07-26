@@ -483,6 +483,8 @@ jobs:
           sudo apt-get install -y fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
           # Install additional libs that might be needed
           sudo apt-get install -y libasound2-dev libass-dev
+          # Install keybinder-3.0 for hotkey_manager
+          sudo apt-get install -y libkeybinder-3.0-dev
 
       - name: Build Linux
         if: matrix.target == 'Linux'
