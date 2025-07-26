@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'tooltip_bubble.dart';
+import '../utils/shortcut_tooltip_manager.dart'; // 使用新的快捷键提示管理器
 
 class SendDanmakuButton extends StatefulWidget {
   final VoidCallback onPressed;
@@ -21,12 +22,18 @@ class _SendDanmakuButtonState extends State<SendDanmakuButton> {
 
   @override
   Widget build(BuildContext context) {
+    // 获取快捷键文本
+    final tooltipManager = ShortcutTooltipManager();
+    final shortcutText = tooltipManager.getShortcutText('send_danmaku');
+    final tooltipText = shortcutText.isEmpty ? '发送弹幕' : '发送弹幕 ($shortcutText)';
+    debugPrint('[SendDanmakuButton] 快捷键文本: $shortcutText, 提示文本: $tooltipText');
+    
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: TooltipBubble(
-        text: '发送弹幕',
-        showOnRight: false,
+        text: tooltipText,
+        showOnRight: true,
         verticalOffset: 8,
         child: GestureDetector(
           onTapDown: (_) => setState(() => _isPressed = true),

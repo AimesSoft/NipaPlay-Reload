@@ -133,32 +133,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             },
           ),
           ListTile(
-            title: const Text("远程访问",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(
-                  const RemoteAccessPage(),
-                  "远程访问"
-                  );
-            },
-          ),
-          ListTile(
-            title: const Text("远程媒体库",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(
-                  const RemoteMediaLibraryPage(),
-                  "远程媒体库"
-                  );
-            },
-          ),
-          ListTile(
             title: const Text("播放器",
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
@@ -185,6 +159,32 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                     );
               },
             ),
+          ListTile(
+            title: const Text("远程访问",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(
+                  const RemoteAccessPage(),
+                  "远程访问"
+                  );
+            },
+          ),
+          ListTile(
+            title: const Text("远程媒体库",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(
+                  const RemoteMediaLibraryPage(),
+                  "远程媒体库"
+                  );
+            },
+          ),
           // 开发者选项
           ListTile(
             title: const Text("开发者选项",

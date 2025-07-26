@@ -51,6 +51,9 @@ class _TooltipBubbleState extends State<TooltipBubble> {
     final size = renderBox.size;
     final bubbleWidth = _getBubbleWidth();
     final bubbleHeight = _getBubbleHeight();
+    
+    // 添加调试日志
+    //debugPrint('[TooltipBubble] 显示气泡，文本: "${widget.text}", 宽度: $bubbleWidth');
 
     double left;
     double top;
@@ -102,7 +105,19 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout(minWidth: 0, maxWidth: double.infinity);
-    return textPainter.width + widget.padding * 2 + 4;
+    
+    // 增加额外的宽度，确保组合键能够完整显示
+    final String lowerText = widget.text.toLowerCase();
+    if (lowerText.contains('shift') || 
+        lowerText.contains('ctrl') || 
+        lowerText.contains('command') || 
+        lowerText.contains('tab') || 
+        lowerText.contains('alt') || 
+        lowerText.contains('esc')) {
+      return textPainter.width + widget.padding * 2 + 20;
+    } else {
+      return textPainter.width + widget.padding * 2 + 4;
+    }
   }
 
   double _getBubbleHeight() {
@@ -184,6 +199,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
                   style: textStyle,
                   maxLines: 1,
                   overflow: TextOverflow.visible,
+                  //textAlign: TextAlign.center,
                 ),
               ),
             ),

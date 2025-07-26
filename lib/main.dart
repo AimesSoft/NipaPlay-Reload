@@ -51,6 +51,9 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:nipaplay/widgets/drag_drop_overlay.dart';
 import 'providers/service_provider.dart';
 import 'utils/platform_utils.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
+import 'services/hotkey_service_initializer.dart';
+import 'utils/shortcut_tooltip_manager.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -60,6 +63,11 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化hotkey_manager
+  if (globals.isDesktop) {
+    await hotKeyManager.unregisterAll();
+  }
 
   // 初始化调试日志服务（在最前面初始化，这样可以收集启动过程的日志）
   final debugLogService = DebugLogService();
@@ -349,7 +357,8 @@ void main(List<String> args) async {
 
       return results[0] as String;
     }),
-    // 加载并保存默认快捷键设置
+    // 加载并保存默认快捷键设置 - 已由HotkeyService处理，不再需要
+    /*
     Future(() async {
       await KeyboardShortcuts.loadShortcuts();
       // 如果没有保存的快捷键，保存默认值
@@ -357,6 +366,7 @@ void main(List<String> args) async {
         await KeyboardShortcuts.saveShortcuts();
       }
     }),
+    */
     
     // 清理过期的弹幕缓存
     DanmakuCacheManager.clearExpiredCache(),
@@ -682,9 +692,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
       // 检查是否存在历史记录
       WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
 
-      if (historyItem == null) {
-        // 如果不存在，创建一个临时的
-        historyItem = WatchHistoryItem(
+      historyItem ??= WatchHistoryItem(
           filePath: filePath,
           animeName: path.basenameWithoutExtension(filePath),
           watchProgress: 0,
@@ -692,7 +700,6 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
           duration: 0,
           lastWatchTime: DateTime.now(),
         );
-      }
 
       final playableItem = PlayableItem(
         videoPath: filePath,
@@ -793,6 +800,18 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       _checkWindowMaximizedState();
     }
     _startSplashScreenSequence();
+
+    // 初始化热键服务
+    if (globals.isDesktop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        // 先初始化热键服务
+        await HotkeyServiceInitializer().initialize(context);
+        
+        // 再初始化快捷键提示管理器
+        debugPrint('[MainPage] 初始化快捷键提示管理器');
+        ShortcutTooltipManager();
+      });
+    }
   }
 
   void _startSplashScreenSequence() {
@@ -840,9 +859,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       // 检查是否存在历史记录
       WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
 
-      if (historyItem == null) {
-        // 如果不存在，创建一个临时的
-        historyItem = WatchHistoryItem(
+      historyItem ??= WatchHistoryItem(
           filePath: filePath,
           animeName: path.basenameWithoutExtension(filePath),
           watchProgress: 0,
@@ -850,7 +867,6 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
           duration: 0,
           lastWatchTime: DateTime.now(),
         );
-      }
 
       final playableItem = PlayableItem(
         videoPath: filePath,
@@ -917,6 +933,11 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     
     // 释放系统资源监控，移除桌面平台限制
     SystemResourceMonitor.dispose();
+
+    // 清理热键服务
+    if (globals.isDesktop) {
+      HotkeyServiceInitializer().dispose();
+    }
     
     super.dispose();
   }
@@ -1101,9 +1122,7 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
     // 检查是否存在历史记录
     WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
 
-    if (historyItem == null) {
-      // 如果不存在，创建一个临时的
-      historyItem = WatchHistoryItem(
+    historyItem ??= WatchHistoryItem(
         filePath: filePath,
         animeName: path.basenameWithoutExtension(filePath),
         watchProgress: 0,
@@ -1111,7 +1130,6 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
         duration: 0,
         lastWatchTime: DateTime.now(),
       );
-    }
 
     final playableItem = PlayableItem(
       videoPath: filePath,

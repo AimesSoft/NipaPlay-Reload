@@ -20,6 +20,8 @@ import 'media_info_helper.dart';
 import '../services/danmaku_cache_manager.dart';
 import '../models/watch_history_model.dart';
 import '../models/watch_history_database.dart'; // 导入观看记录数据库
+import '../widgets/blur_dialog.dart';
+import '../widgets/send_danmaku_dialog.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:path/path.dart' as p; // Added import for path package
@@ -48,6 +50,7 @@ import '../player_abstraction/media_kit_player_adapter.dart'; // 导入MediaKitP
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
 import 'package:flutter/scheduler.dart'; // 添加Ticker导入
+import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -3950,38 +3953,34 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         orElse: () => externalSubtitles.first,
       );
       // 如果没有中文，选择默认字幕或第一个
-      if (preferredSubtitle == null) {
-        preferredSubtitle = externalSubtitles.firstWhere(
+      preferredSubtitle ??= externalSubtitles.firstWhere(
           (track) => track['isDefault'] == true,
           orElse: () => externalSubtitles.first,
         );
+      final subtitleIndex = preferredSubtitle['index'];
+      final subtitleCodec = preferredSubtitle['codec'];
+      final subtitleTitle = preferredSubtitle['title'];
+      debugPrint('[Emby字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
+      // 下载字幕文件
+      final subtitleFilePath = await EmbyService.instance.downloadSubtitleFile(
+        itemId,
+        subtitleIndex,
+        subtitleCodec,
+      );
+      if (subtitleFilePath != null) {
+        debugPrint('[Emby字幕] 字幕文件下载成功: $subtitleFilePath');
+        // 等待播放器完全初始化
+        // TODO: [技术债] 此处使用固定延迟等待播放器初始化，非常不可靠。
+        // 在网络或设备性能较差时可能导致字幕加载失败。
+        // 后续应重构为监听播放器的 isInitialized 状态。
+        await Future.delayed(const Duration(milliseconds: 1000));
+        // 加载外挂字幕
+        _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
+        debugPrint('[Emby字幕] 外挂字幕加载完成');
+      } else {
+        debugPrint('[Emby字幕] 字幕文件下载失败');
       }
-      if (preferredSubtitle != null) {
-        final subtitleIndex = preferredSubtitle['index'];
-        final subtitleCodec = preferredSubtitle['codec'];
-        final subtitleTitle = preferredSubtitle['title'];
-        debugPrint('[Emby字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
-        // 下载字幕文件
-        final subtitleFilePath = await EmbyService.instance.downloadSubtitleFile(
-          itemId,
-          subtitleIndex,
-          subtitleCodec,
-        );
-        if (subtitleFilePath != null) {
-          debugPrint('[Emby字幕] 字幕文件下载成功: $subtitleFilePath');
-          // 等待播放器完全初始化
-          // TODO: [技术债] 此处使用固定延迟等待播放器初始化，非常不可靠。
-          // 在网络或设备性能较差时可能导致字幕加载失败。
-          // 后续应重构为监听播放器的 isInitialized 状态。
-          await Future.delayed(const Duration(milliseconds: 1000));
-          // 加载外挂字幕
-          _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
-          debugPrint('[Emby字幕] 外挂字幕加载完成');
-        } else {
-          debugPrint('[Emby字幕] 字幕文件下载失败');
-        }
-      }
-    } catch (e) {
+        } catch (e) {
       debugPrint('[Emby字幕] 加载外挂字幕时出错: $e');
     }
   }
@@ -4625,5 +4624,47 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final match = videoInfo['matches'][0];
       // ... existing code ...
     }
+  }
+
+  // 显示发送弹幕对话框
+  void showSendDanmakuDialog() {
+    if (_context == null || !hasVideo) {
+      debugPrint('[VideoPlayerState] 无法显示发送弹幕对话框：上下文为空或没有视频');
+      return;
+    }
+
+    final wasPlaying = player.state == PlaybackState.playing;
+
+    if (wasPlaying) {
+      player.pauseDirectly();
+    }
+
+    final episodeId = this.episodeId;
+    final currentTime = position.inSeconds.toDouble();
+
+    if (episodeId == null) {
+      ScaffoldMessenger.of(_context!).showSnackBar(
+        const SnackBar(content: Text('无法获取剧集信息，无法发送弹幕'))
+      );
+      if (wasPlaying) player.playDirectly();
+      return;
+    }
+    
+    // 使用弹幕对话框管理器显示对话框
+    DanmakuDialogManager().showSendDanmakuDialog(
+      context: _context!,
+      episodeId: episodeId,
+      currentTime: currentTime,
+      onDanmakuSent: (danmaku) {
+        // 将新弹幕添加到播放器状态中
+        addDanmakuToNewTrack(danmaku);
+      },
+      onDialogClosed: () {
+        if (wasPlaying) {
+          player.playDirectly();
+        }
+      },
+      wasPlaying: wasPlaying,
+    );
   }
 }

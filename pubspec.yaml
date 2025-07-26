@@ -78,6 +78,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   charset_converter: ^2.1.1
   system_info2: ^3.0.1
+  hotkey_manager: ^0.2.3
 
 dev_dependencies:
   flutter_test:

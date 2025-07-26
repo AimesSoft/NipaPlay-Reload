@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import '../utils/video_player_state.dart';
 import '../utils/keyboard_shortcuts.dart';
+import '../utils/shortcut_tooltip_manager.dart'; // 添加新的快捷键提示管理器
 import '../utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
@@ -38,6 +39,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   int _tapCount = 0;
   static const _doubleTapTimeout = Duration(milliseconds: 300);
   bool _isProcessingTap = false;
+  
+  // 快捷键提示管理器
+  final ShortcutTooltipManager _tooltipManager = ShortcutTooltipManager();
   
   // 添加上一话/下一话按钮的状态变量
   bool _isPreviousEpisodePressed = false;
@@ -198,19 +202,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
         return Focus(
           canRequestFocus: true,
           autofocus: true,
-          child: RawKeyboardListener(
-            focusNode: videoState.focusNode,
-            onKey: (event) {
-              if (event is! RawKeyDownEvent) {
-                return;
-              }
-              //////debugPrint('RawKeyboardListener 收到按键事件: ${event.logicalKey}');
-              // 消费事件，防止事件继续传播
-              final result = KeyboardShortcuts.handleKeyEvent(event, context);
-              if (result == KeyEventResult.handled) {
-                return;
-              }
-            },
+          // 移除RawKeyboardListener，使用普通的Container替代
+          child: Container(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: _handleTap,
@@ -281,7 +274,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                 isHovered: _isPreviousEpisodeHovered,
                                                 onHover: (value) => setState(() => _isPreviousEpisodeHovered = value),
                                                 onPressed: (value) => setState(() => _isPreviousEpisodePressed = value),
-                                                tooltip: canPlayPrevious ? '上一话' : '无法播放上一话',
+                                                tooltip: canPlayPrevious 
+                                                  ? _tooltipManager.formatActionWithShortcut('previous_episode', '上一话')
+                                                  : '无法播放上一话',
                                                 useAnimatedSwitcher: true,
                                               ),
                                             );
@@ -304,10 +299,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           isHovered: _isRewindHovered,
                                           onHover: (value) => setState(() => _isRewindHovered = value),
                                           onPressed: (value) => setState(() => _isRewindPressed = value),
-                                          tooltip: KeyboardShortcuts.formatActionWithShortcut(
-                                            '快退 10 秒',
-                                            KeyboardShortcuts.getShortcutText('rewind')
-                                          ),
+                                          tooltip: _tooltipManager.formatActionWithShortcut('rewind', '快退 10 秒'),
                                           useAnimatedSwitcher: true,
                                         ),
                                       
@@ -335,10 +327,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         isHovered: _isPlayHovered,
                                         onHover: (value) => setState(() => _isPlayHovered = value),
                                         onPressed: (value) => setState(() => _isPlayPressed = value),
-                                        tooltip: KeyboardShortcuts.formatActionWithShortcut(
-                                          videoState.status == PlayerStatus.playing ? '暂停' : '播放',
-                                          KeyboardShortcuts.getShortcutText('play_pause')
-                                        ),
+                                        tooltip: videoState.status == PlayerStatus.playing 
+                                          ? _tooltipManager.formatActionWithShortcut('play_pause', '暂停')
+                                          : _tooltipManager.formatActionWithShortcut('play_pause', '播放'),
                                         useAnimatedSwitcher: true,
                                       ),
                                       
@@ -358,10 +349,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           isHovered: _isForwardHovered,
                                           onHover: (value) => setState(() => _isForwardHovered = value),
                                           onPressed: (value) => setState(() => _isForwardPressed = value),
-                                          tooltip: KeyboardShortcuts.formatActionWithShortcut(
-                                            '快进 10 秒',
-                                            KeyboardShortcuts.getShortcutText('forward')
-                                          ),
+                                          tooltip: _tooltipManager.formatActionWithShortcut('forward', '快进 10 秒'),
                                           useAnimatedSwitcher: true,
                                         ),
                                         
@@ -386,7 +374,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                 isHovered: _isNextEpisodeHovered,
                                                 onHover: (value) => setState(() => _isNextEpisodeHovered = value),
                                                 onPressed: (value) => setState(() => _isNextEpisodePressed = value),
-                                                tooltip: canPlayNext ? '下一话' : '无法播放下一话',
+                                                tooltip: canPlayNext 
+                                                  ? _tooltipManager.formatActionWithShortcut('next_episode', '下一话')
+                                                  : '无法播放下一话',
                                                 useAnimatedSwitcher: true,
                                               ),
                                             );
@@ -493,9 +483,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           ? (videoState.isAppBarHidden ? '显示菜单栏' : '隐藏菜单栏')
                                           : globals.isPhone
                                             ? (videoState.isFullscreen ? '退出全屏' : '全屏')
-                                            : KeyboardShortcuts.formatActionWithShortcut(
-                                                videoState.isFullscreen ? '退出全屏' : '全屏',
-                                                KeyboardShortcuts.getShortcutText('fullscreen')
+                                            : _tooltipManager.formatActionWithShortcut(
+                                                'fullscreen',
+                                                videoState.isFullscreen ? '退出全屏' : '全屏'
                                               ),
                                         useCustomAnimation: true,
                                       ),

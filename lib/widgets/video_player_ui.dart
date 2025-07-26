@@ -47,7 +47,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   @override
   void initState() {
     super.initState();
-    _focusNode.onKey = _handleKeyEvent;
+    // 移除键盘事件处理
+    // _focusNode.onKey = _handleKeyEvent;
     
     // 使用安全的方式初始化，避免在卸载后访问context
     _safeInitialize();
@@ -108,7 +109,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
       if (!mounted) return;
       
       try {
-        _registerKeyboardShortcuts();
+        // 移除键盘快捷键注册
+        // _registerKeyboardShortcuts();
         
         // 安全获取视频状态
         final videoState = Provider.of<VideoPlayerState>(context, listen: false);
@@ -125,64 +127,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     });
   }
 
-  void _registerKeyboardShortcuts() {
-    if (!mounted) return;
-    
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    
-    KeyboardShortcuts.registerActionHandler('play_pause', () {
-      if (videoState.hasVideo) {
-        videoState.togglePlayPause();
-      }
-    });
-
-    KeyboardShortcuts.registerActionHandler('fullscreen', () {
-      videoState.toggleFullscreen();
-    });
-
-    KeyboardShortcuts.registerActionHandler('rewind', () {
-      if (videoState.hasVideo) {
-        final newPosition = videoState.position - const Duration(seconds: 10);
-        videoState.seekTo(newPosition);
-      }
-    });
-
-    KeyboardShortcuts.registerActionHandler('forward', () {
-      if (videoState.hasVideo) {
-        final newPosition = videoState.position + const Duration(seconds: 10);
-        videoState.seekTo(newPosition);
-      }
-    });
-
-    KeyboardShortcuts.registerActionHandler('toggle_danmaku', () {
-      videoState.toggleDanmakuVisible();
-    });
-
-    KeyboardShortcuts.registerActionHandler('volume_up', () {
-      if (videoState.hasVideo) {
-        videoState.increaseVolume();
-      }
-    });
-
-    KeyboardShortcuts.registerActionHandler('volume_down', () {
-      if (videoState.hasVideo) {
-        videoState.decreaseVolume();
-      }
-    });
-    
-    // 注册上一话/下一话的动作处理器
-    KeyboardShortcuts.registerActionHandler('previous_episode', () {
-      if (videoState.canPlayPreviousEpisode) {
-        videoState.playPreviousEpisode();
-      }
-    });
-
-    KeyboardShortcuts.registerActionHandler('next_episode', () {
-      if (videoState.canPlayNextEpisode) {
-        videoState.playNextEpisode();
-      }
-    });
-  }
+  // 移除键盘快捷键注册方法
+  // void _registerKeyboardShortcuts() { ... }
 
   void _resetMouseHideTimer() {
     _mouseMoveTimer?.cancel();
@@ -329,9 +275,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     _doubleTapTimer?.cancel();
     _mouseMoveTimer?.cancel();
     
-    // 清理键盘快捷键注册
+    // 清理键盘快捷键注册 - 已由HotkeyService处理，不再需要
     // 注意：KeyboardShortcuts没有提供unregisterActionHandler方法
     // 我们可以替换之前注册的处理程序为空函数，以防止在组件卸载后被调用
+    /*
     try {
       if (!mounted) {
         // 用空函数替换所有注册的处理程序
@@ -346,23 +293,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     } catch (e) {
       print('清理VideoPlayerUI键盘快捷键时出错: $e');
     }
+    */
     
     super.dispose();
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, RawKeyEvent event) {
-    debugPrint('[VideoPlayerUI] _handleKeyEvent: ${event.logicalKey}');
-    if (event is! RawKeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
-
-    final result = KeyboardShortcuts.handleKeyEvent(event, context);
-    if (result == KeyEventResult.handled) {
-      return result;
-    }
-
-    return KeyEventResult.ignored;
-  }
+  // 移除键盘事件处理方法
+  // KeyEventResult _handleKeyEvent(FocusNode node, RawKeyEvent event) { ... }
 
   @override
   Widget build(BuildContext context) {
