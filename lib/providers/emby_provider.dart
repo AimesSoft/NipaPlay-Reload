@@ -44,16 +44,15 @@ class EmbyProvider extends ChangeNotifier {
       await _embyService.loadSavedSettings();
       _isInitialized = true;
       
-      print('EmbyProvider: EmbyService初始化完成，连接状态: ${_embyService.isConnected}');
+      print('EmbyProvider: EmbyService初始化完成，初始连接状态: ${_embyService.isConnected}');
       
-      if (_embyService.isConnected) {
-        print('EmbyProvider: Emby已连接，正在加载媒体项目...');
-        await loadMediaItems();
-        await loadMovieItems();
-        print('EmbyProvider: 媒体项目加载完成，数量: ${_mediaItems.length}');
-      } else {
-        print('EmbyProvider: Emby未连接，跳过媒体项目加载');
-      }
+      // 添加连接状态监听器
+      _embyService.addConnectionStateListener(_onConnectionStateChanged);
+      
+      // 由于连接验证现在是异步的，我们不再等待它完成
+      // 如果连接验证成功，会在后续的异步操作中自动加载媒体项目
+      print('EmbyProvider: 连接验证将在后台异步进行');
+      
     } catch (e) {
       print('EmbyProvider: 初始化过程中发生异常: $e');
       _hasError = true;
@@ -61,8 +60,20 @@ class EmbyProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('EmbyProvider: 初始化完成，最终连接状态: ${_embyService.isConnected}');
+      print('EmbyProvider: 初始化完成');
     }
+  }
+  
+  /// 连接状态变化回调
+  void _onConnectionStateChanged(bool isConnected) {
+    print('EmbyProvider: 连接状态变化 - isConnected: $isConnected');
+    if (isConnected) {
+      print('EmbyProvider: Emby已连接，开始加载媒体项目...');
+      // 异步加载媒体项目，不阻塞UI
+      loadMediaItems();
+      loadMovieItems();
+    }
+    notifyListeners();
   }
   
   // 加载Emby媒体项

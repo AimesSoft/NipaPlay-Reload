@@ -78,28 +78,37 @@ class ManualDanmakuMatcher {
 
       final appSecret = await DandanplayService.getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/bangumi';
+      final apiPath = '/api/v2/bangumi/$animeId';
       
       final url = 'https://api.dandanplay.net/api/v2/bangumi/$animeId';
       
+      final signature = DandanplayService.generateSignature(DandanplayService.appId, timestamp, apiPath, appSecret);
+      
+      final headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'X-AppId': DandanplayService.appId,
+        'X-Signature': signature,
+        'X-Timestamp': '$timestamp',
+        'Accept': 'application/json',
+      };
+      
       final response = await http.get(
         Uri.parse(url),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(DandanplayService.appId, timestamp, apiPath, appSecret),
-          'X-Timestamp': '$timestamp',
-          'Accept': 'application/json',
-        },
+        headers: headers,
       );
       
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        
-        final List<Map<String, dynamic>> episodes = [];
-        
-        if (data.containsKey('episodes') && data['episodes'] is List) {
-          final List<dynamic> episodesData = data['episodes'];
+      if (response.statusCode != 200) {
+        throw Exception('获取剧集列表失败，状态码: ${response.statusCode}');
+      }
+      
+      final data = json.decode(response.body);
+      
+      final List<Map<String, dynamic>> episodes = [];
+      
+      if (data.containsKey('bangumi') && data['bangumi'] is Map<String, dynamic>) {
+        final bangumi = data['bangumi'] as Map<String, dynamic>;
+        if (bangumi.containsKey('episodes') && bangumi['episodes'] is List) {
+          final List<dynamic> episodesData = bangumi['episodes'];
           
           for (var episode in episodesData) {
             if (episode is Map<String, dynamic>) {
@@ -110,35 +119,45 @@ class ManualDanmakuMatcher {
               });
             }
           }
-        } else if (data.containsKey('animes') && data['animes'] is List) {
-          final List<dynamic> animesData = data['animes'];
-          
-          for (var anime in animesData) {
-            if (anime is Map<String, dynamic> && 
-                anime.containsKey('episodes') && 
-                anime['episodes'] is List) {
-              final List<dynamic> episodesData = anime['episodes'];
-              
-              for (var episode in episodesData) {
-                if (episode is Map<String, dynamic>) {
-                  episodes.add({
-                    'episodeId': episode['episodeId'],
-                    'episodeTitle': episode['episodeTitle'],
-                    'episodeNumber': episode['episodeNumber'],
-                  });
-                }
+        }
+      } else if (data.containsKey('episodes') && data['episodes'] is List) {
+        final List<dynamic> episodesData = data['episodes'];
+        
+        for (var episode in episodesData) {
+          if (episode is Map<String, dynamic>) {
+            episodes.add({
+              'episodeId': episode['episodeId'],
+              'episodeTitle': episode['episodeTitle'],
+              'episodeNumber': episode['episodeNumber'],
+            });
+          }
+        }
+      } else if (data.containsKey('animes') && data['animes'] is List) {
+        final List<dynamic> animesData = data['animes'];
+        
+        for (var anime in animesData) {
+          if (anime is Map<String, dynamic> && 
+              anime.containsKey('episodes') && 
+              anime['episodes'] is List) {
+            final List<dynamic> episodesData = anime['episodes'];
+            
+            for (var episode in episodesData) {
+              if (episode is Map<String, dynamic>) {
+                episodes.add({
+                  'episodeId': episode['episodeId'],
+                  'episodeTitle': episode['episodeTitle'],
+                  'episodeNumber': episode['episodeNumber'],
+                });
               }
             }
           }
         }
-        
-        if (episodes.isNotEmpty) {
-          return episodes;
-        } else {
-          throw Exception('未找到剧集信息');
-        }
+      }
+      
+      if (episodes.isNotEmpty) {
+        return episodes;
       } else {
-        throw Exception('获取剧集列表失败，状态码: ${response.statusCode}');
+        throw Exception('未找到剧集信息');
       }
     } catch (e) {
       rethrow;

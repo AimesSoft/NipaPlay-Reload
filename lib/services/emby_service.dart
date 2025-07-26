@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -44,29 +45,62 @@ class EmbyService {
     print('Emby loadSavedSettings: serverUrl=$_serverUrl, username=$_username, hasToken=${_accessToken != null}, userId=$_userId');
     
     if (_serverUrl != null && _accessToken != null && _userId != null) {
-      try {
-        print('Emby: 尝试验证保存的连接信息...');
-        // 尝试验证保存的令牌是否仍然有效
-        final response = await _makeAuthenticatedRequest('/emby/System/Info');
-        _isConnected = response.statusCode == 200;
-        
-        print('Emby: 令牌验证结果 - HTTP ${response.statusCode}, 连接状态: $_isConnected');
-        
-        if (_isConnected) {
-          print('Emby: 连接验证成功，正在加载媒体库...');
-          // 加载可用媒体库
-          await loadAvailableLibraries();
-          print('Emby: 媒体库加载完成，可用库数量: ${_availableLibraries.length}');
-        } else {
-          print('Emby: 连接验证失败 - HTTP ${response.statusCode}');
-        }
-      } catch (e) {
-        print('Emby: 连接验证过程中发生异常: $e');
-        _isConnected = false;
-      }
+      // 异步验证连接，不阻塞初始化流程
+      _validateConnectionAsync();
     } else {
       print('Emby: 缺少必要的连接信息，跳过自动连接');
       _isConnected = false;
+    }
+  }
+  
+  /// 异步验证连接状态，不阻塞主流程
+  Future<void> _validateConnectionAsync() async {
+    try {
+      print('Emby: 开始异步验证保存的连接信息...');
+      // 尝试验证保存的令牌是否仍然有效，设置5秒超时
+      final response = await _makeAuthenticatedRequest('/emby/System/Info')
+          .timeout(const Duration(seconds: 5));
+      _isConnected = response.statusCode == 200;
+      
+      print('Emby: 令牌验证结果 - HTTP ${response.statusCode}, 连接状态: $_isConnected');
+      
+      if (_isConnected) {
+        print('Emby: 连接验证成功，正在加载媒体库...');
+        // 加载可用媒体库
+        await loadAvailableLibraries();
+        print('Emby: 媒体库加载完成，可用库数量: ${_availableLibraries.length}');
+        // 通知连接状态变化
+        _notifyConnectionStateChanged();
+      } else {
+        print('Emby: 连接验证失败 - HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Emby: 连接验证过程中发生异常: $e');
+      _isConnected = false;
+    }
+  }
+  
+  // 连接状态变化回调列表
+  final List<Function(bool)> _connectionStateCallbacks = [];
+  
+  /// 添加连接状态变化监听器
+  void addConnectionStateListener(Function(bool) callback) {
+    _connectionStateCallbacks.add(callback);
+  }
+  
+  /// 移除连接状态变化监听器
+  void removeConnectionStateListener(Function(bool) callback) {
+    _connectionStateCallbacks.remove(callback);
+  }
+  
+  /// 通知连接状态变化
+  void _notifyConnectionStateChanged() {
+    for (final callback in _connectionStateCallbacks) {
+      try {
+        callback(_isConnected);
+      } catch (e) {
+        print('Emby: 连接状态回调执行失败: $e');
+      }
     }
   }
   
@@ -161,7 +195,7 @@ class EmbyService {
     _selectedLibraryIds = [];
   }
   
-  Future<http.Response> _makeAuthenticatedRequest(String path, {String method = 'GET', Map<String, dynamic>? body}) async {
+  Future<http.Response> _makeAuthenticatedRequest(String path, {String method = 'GET', Map<String, dynamic>? body, Duration? timeout}) async {
     if (_accessToken == null) {
       throw Exception('未连接到 Emby 服务器');
     }
@@ -171,25 +205,32 @@ class EmbyService {
       'Content-Type': 'application/json',
       'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0", Token="$_accessToken"',
     };
+    
+    // 设置默认超时时间为10秒
+    final requestTimeout = timeout ?? const Duration(seconds: 10);
+    
     http.Response response;
     try {
       switch (method.toUpperCase()) {
         case 'GET':
-          response = await http.get(uri, headers: headers);
+          response = await http.get(uri, headers: headers).timeout(requestTimeout);
           break;
         case 'POST':
-          response = await http.post(uri, headers: headers, body: body != null ? json.encode(body) : null);
+          response = await http.post(uri, headers: headers, body: body != null ? json.encode(body) : null).timeout(requestTimeout);
           break;
         case 'PUT':
-          response = await http.put(uri, headers: headers, body: body != null ? json.encode(body) : null);
+          response = await http.put(uri, headers: headers, body: body != null ? json.encode(body) : null).timeout(requestTimeout);
           break;
         case 'DELETE':
-          response = await http.delete(uri, headers: headers);
+          response = await http.delete(uri, headers: headers).timeout(requestTimeout);
           break;
         default:
           throw Exception('不支持的 HTTP 方法: $method');
       }
     } catch (e) {
+      if (e is TimeoutException) {
+        throw Exception('请求Emby服务器超时: ${e.message}');
+      }
       throw Exception('请求Emby服务器失败: $e');
     }
     if (response.statusCode >= 400) {
