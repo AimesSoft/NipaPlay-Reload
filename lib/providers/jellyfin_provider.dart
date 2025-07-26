@@ -41,10 +41,12 @@ class JellyfinProvider extends ChangeNotifier {
       await _jellyfinService.loadSavedSettings();
       _isInitialized = true;
       
-      if (_jellyfinService.isConnected) {
-        await loadMediaItems();
-        await loadMovieItems();
-      }
+      // 添加连接状态监听器
+      _jellyfinService.addConnectionStateListener(_onConnectionStateChanged);
+      
+      print('JellyfinProvider: JellyfinService初始化完成，初始连接状态: ${_jellyfinService.isConnected}');
+      print('JellyfinProvider: 连接验证将在后台异步进行');
+      
     } catch (e) {
       _hasError = true;
       _errorMessage = e.toString();
@@ -52,6 +54,18 @@ class JellyfinProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+  
+  /// 连接状态变化回调
+  void _onConnectionStateChanged(bool isConnected) {
+    print('JellyfinProvider: 连接状态变化 - isConnected: $isConnected');
+    if (isConnected) {
+      print('JellyfinProvider: Jellyfin已连接，开始加载媒体项目...');
+      // 异步加载媒体项目，不阻塞UI
+      loadMediaItems();
+      loadMovieItems();
+    }
+    notifyListeners();
   }
   
   // 加载Jellyfin媒体项
