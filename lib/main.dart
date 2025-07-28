@@ -54,6 +54,7 @@ import 'utils/platform_utils.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'services/hotkey_service_initializer.dart';
 import 'utils/shortcut_tooltip_manager.dart';
+import 'utils/hotkey_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -738,6 +739,10 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   TabController? globalTabController;
   bool _showSplash = true;
 
+  // 用于热键管理
+  bool _hotkeysAreRegistered = false;
+  VideoPlayerState? _videoPlayerState;
+
   // Static method to find MainPageState from context
   static MainPageState? of(BuildContext context) {
     return context.findAncestorStateOfType<MainPageState>();
@@ -776,15 +781,34 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     }
   }
 
+  void _manageHotkeys() {
+    final videoState = _videoPlayerState;
+    if (videoState == null || !mounted) return;
+
+    final tabIndex = globalTabController?.index ?? -1;
+    final shouldBeRegistered = tabIndex == 0 && videoState.hasVideo;
+
+    if (shouldBeRegistered && !_hotkeysAreRegistered) {
+      HotkeyService().registerHotkeys();
+      _hotkeysAreRegistered = true;
+    } else if (!shouldBeRegistered && _hotkeysAreRegistered) {
+      HotkeyService().unregisterHotkeys();
+      _hotkeysAreRegistered = false;
+    }
+  }
+
+  void _onTabChange() {
+    if (globalTabController != null) {
+      debugPrint('[MainPageState] globalTabController listener: index=${globalTabController!.index}, previousIndex=${globalTabController!.previousIndex}, indexIsChanging=${globalTabController!.indexIsChanging}, animationValue=${globalTabController!.animation?.value.toStringAsFixed(2)}');
+    }
+    _manageHotkeys();
+  }
+
   @override
   void initState() {
     super.initState();
     globalTabController = TabController(length: 4, vsync: this, initialIndex: 0);
-    globalTabController?.addListener(() {
-      if (globalTabController != null) { 
-        debugPrint('[MainPageState] globalTabController listener: index=${globalTabController!.index}, previousIndex=${globalTabController!.previousIndex}, indexIsChanging=${globalTabController!.indexIsChanging}, animationValue=${globalTabController!.animation?.value.toStringAsFixed(2)}');
-      }
-    });
+    globalTabController?.addListener(_onTabChange);
     debugPrint('[MainPageState] initState: globalTabController listener ADDED.');
     
     // 处理启动时的文件路径
@@ -911,11 +935,22 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     _tabChangeNotifier ??= Provider.of<TabChangeNotifier>(context);
     _tabChangeNotifier?.removeListener(_onTabChangeRequested);
     _tabChangeNotifier?.addListener(_onTabChangeRequested);
+
+    // 添加VideoPlayerState监听
+    final newVideoPlayerState = Provider.of<VideoPlayerState>(context);
+    if (newVideoPlayerState != _videoPlayerState) {
+        _videoPlayerState?.removeListener(_manageHotkeys);
+        _videoPlayerState = newVideoPlayerState;
+        _videoPlayerState?.addListener(_manageHotkeys);
+    }
+    _manageHotkeys(); // 初始状态检查
   }
 
   @override
   void dispose() {
     _tabChangeNotifier?.removeListener(_onTabChangeRequested); // Temporarily remove
+    globalTabController?.removeListener(_onTabChange);
+    _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();
     if (globals.winLinDesktop) {
       windowManager.removeListener(this);

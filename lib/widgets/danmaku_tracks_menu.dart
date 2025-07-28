@@ -233,7 +233,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.info_outline,
                       color: Colors.white,
                       size: 20,
@@ -243,9 +243,9 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             '弹幕轨道总览',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -277,6 +277,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
               // 轨道列表
               ...tracks.entries.map((entry) {
                 final trackId = entry.key;
+                if (trackId == 'timeline') return const SizedBox.shrink(); // 不在列表中显示时间轴轨道
                 final trackData = entry.value;
                 final isEnabled = trackEnabled[trackId] ?? false;
                 final trackName = trackData['name'] as String;
@@ -360,7 +361,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                               onTap: () => videoState.removeDanmakuTrack(trackId),
                               child: Container(
                                 padding: const EdgeInsets.all(4),
-                                child: Icon(
+                                child: const Icon(
                                   Icons.delete_outline,
                                   color: Colors.white,
                                   size: 18,
@@ -372,7 +373,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                     ),
                   ),
                 );
-              }).toList(),
+              }),
 
               // 添加本地弹幕轨道按钮
               _isLoadingLocalDanmaku
@@ -380,7 +381,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                     padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                     child: Row(
                       children: [
-                        SizedBox(
+                        const SizedBox(
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(

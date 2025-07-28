@@ -193,16 +193,13 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final backgroundColor = isDarkMode 
-            ? const Color.fromARGB(255, 130, 130, 130).withOpacity(0.5)
-            : const Color.fromARGB(255, 193, 193, 193).withOpacity(0.5);
-        final borderColor = Colors.white.withOpacity(0.5);
+        // 移除颜色随模式变化的逻辑，直接使用统一的毛玻璃效果
+        final backgroundColor = Colors.white.withOpacity(0.15);
+        final borderColor = Colors.white.withOpacity(0.3);
 
         return Focus(
           canRequestFocus: true,
           autofocus: true,
-          // 移除RawKeyboardListener，使用普通的Container替代
           child: Container(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -215,19 +212,25 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                     child: Padding(
                       padding: EdgeInsets.only(
                         bottom: videoState.controlBarHeight,
-                        left: globals.isPhone ? 20 : 100,
-                        right: globals.isPhone ? 20 : 100,
+                        left:20,
+                        right:20,
                       ),
                       child: MouseRegion(
                         onEnter: (_) => videoState.setControlsHovered(true),
                         onExit: (_) => videoState.setControlsHovered(false),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.horizontal(
+                            left: Radius.circular(30),
+                            right: Radius.circular(30),
+                          ),
                           child: BackdropFilter(
                             filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
                             child: Container(
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(15),
+                                borderRadius: BorderRadius.horizontal(
+                                  left: Radius.circular(30),
+                                  right: Radius.circular(30),
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withOpacity(0.2),
@@ -238,10 +241,13 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                 ],
                               ),
                               child: Container(
-                                height: 60,
+                                height: 45,
                                 decoration: BoxDecoration(
                                   color: backgroundColor,
-                                  borderRadius: BorderRadius.circular(15),
+                                  borderRadius: BorderRadius.horizontal(
+                                    left: Radius.circular(30),
+                                    right: Radius.circular(30),
+                                  ),
                                   border: Border.all(
                                     color: borderColor,
                                     width: 0.5,
@@ -251,8 +257,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                   padding: EdgeInsets.symmetric(
                                     horizontal: globals.isPhone ? 6 : 20,
                                   ),
-                                                                      child: Row(
-                                      children: [
+                                  child: Row(
+                                    children: [
                                         // 上一话按钮
                                         Consumer<VideoPlayerState>(
                                           builder: (context, videoState, child) {
@@ -429,11 +435,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           textBaseline: TextBaseline.alphabetic,
                                         ),
                                         textAlign: TextAlign.center,
-                                        child: SizedBox(
-                                          width: 140,
-                                          child: Text(
-                                            '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
-                                          ),
+                                        child: Text(
+                                          '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
+                                          softWrap: false,
+                                          overflow: TextOverflow.visible,
                                         ),
                                       ),
                                       

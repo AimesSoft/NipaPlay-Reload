@@ -236,6 +236,94 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+              // 弹幕屏蔽词
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
+                child: Consumer<VideoPlayerState>(
+                  builder: (context, videoState, child) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              '弹幕屏蔽词',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            // 毛玻璃效果的白色添加按钮
+                            BlurButton(
+                              icon: Icons.add,
+                              text: '添加',
+                              onTap: () => _addBlockWord(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // 添加输入框
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                            child: Container(
+                              height: 40, // 设置固定高度
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _hasBlockWordError 
+                                    ? Colors.redAccent.withOpacity(0.8) 
+                                    : Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Center( // 使用Center包装确保垂直居中
+                                child: TextField(
+                                  controller: _blockWordController,
+                                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                                  textAlignVertical: TextAlignVertical.center,
+                                  decoration: InputDecoration(
+                                    hintText: '输入要屏蔽的关键词',
+                                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0), // 垂直padding设为0
+                                    isDense: true,
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.clear, color: Colors.white70, size: 18),
+                                      onPressed: () => _blockWordController.clear(),
+                                      tooltip: '',
+                                      padding: EdgeInsets.zero,
+                                      visualDensity: VisualDensity.compact,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => _addBlockWord(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // 错误信息
+                        if (_hasBlockWordError)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, left: 12),
+                            child: Text(
+                              _blockWordErrorMessage,
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                        _buildBlockWordsList(),
+                        const SettingsHintText('包含屏蔽词的弹幕将被过滤不显示'),
+                      ],
+                    );
+                  }
+                ),
+              ),
               // 弹幕堆叠开关
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
@@ -364,92 +452,32 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   }
                 ),
               ),
-              // 弹幕屏蔽词
+              // 时间轴告知开关（移到最底部）
               Padding(
-                padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
-                child: Consumer<VideoPlayerState>(
-                  builder: (context, videoState, child) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              '弹幕屏蔽词',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            // 毛玻璃效果的白色添加按钮
-                            BlurButton(
-                              icon: Icons.add,
-                              text: '添加',
-                              onTap: () => _addBlockWord(),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // 添加输入框
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                            child: Container(
-                              height: 40, // 设置固定高度
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: _hasBlockWordError 
-                                    ? Colors.redAccent.withOpacity(0.8) 
-                                    : Colors.white.withOpacity(0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Center( // 使用Center包装确保垂直居中
-                                child: TextField(
-                                  controller: _blockWordController,
-                                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                                  textAlignVertical: TextAlignVertical.center,
-                                  decoration: InputDecoration(
-                                    hintText: '输入要屏蔽的关键词',
-                                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0), // 垂直padding设为0
-                                    isDense: true,
-                                    suffixIcon: IconButton(
-                                      icon: const Icon(Icons.clear, color: Colors.white70, size: 18),
-                                      onPressed: () => _blockWordController.clear(),
-                                      tooltip: '',
-                                      padding: EdgeInsets.zero,
-                                      visualDensity: VisualDensity.compact,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                                  ),
-                                  onSubmitted: (_) => _addBlockWord(),
-                                ),
-                              ),
-                            ),
+                        const Text(
+                          '时间轴告知',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
                           ),
                         ),
-                        // 错误信息
-                        if (_hasBlockWordError)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4, left: 12),
-                            child: Text(
-                              _blockWordErrorMessage,
-                              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                            ),
-                          ),
-                        const SizedBox(height: 8),
-                        _buildBlockWordsList(),
-                        const SettingsHintText('包含屏蔽词的弹幕将被过滤不显示'),
+                        Switch(
+                          value: videoState.isTimelineDanmakuEnabled,
+                          onChanged: (value) {
+                            videoState.toggleTimelineDanmaku(value);
+                          },
+                        ),
                       ],
-                    );
-                  }
+                    ),
+                    const SettingsHintText('在视频特定进度(25%/50%/75%/90%)显示弹幕提示'),
+                  ],
                 ),
               ),
             ],

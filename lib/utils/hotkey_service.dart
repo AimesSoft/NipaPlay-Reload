@@ -34,16 +34,33 @@ class HotkeyService extends ChangeNotifier {
   Future<void> initialize(BuildContext context) async {
     _context = context;
     
-    // 初始化hotkey_manager
+    // 初始化hotkey_manager，但不注册任何热键
     await hotKeyManager.unregisterAll();
     
     // 加载快捷键配置
     await loadShortcuts();
     
-    // 注册热键
+    // 不在此处注册热键，等待明确调用
+    debugPrint('[HotkeyService] 初始化完成，等待指令注册热键');
+  }
+  
+  // 注册热键
+  Future<void> registerHotkeys() async {
+    // 避免重复注册
+    if (_registeredHotkeys.isNotEmpty) {
+      return;
+    }
     await registerAllHotkeys();
-    
-    debugPrint('[HotkeyService] 初始化完成');
+  }
+  
+  // 注销热键
+  Future<void> unregisterHotkeys() async {
+    if (_registeredHotkeys.isEmpty) {
+      return;
+    }
+    await hotKeyManager.unregisterAll();
+    // 清空已注册列表，以便下次可以重新注册
+    _registeredHotkeys.clear();
   }
   
   // 加载保存的快捷键配置

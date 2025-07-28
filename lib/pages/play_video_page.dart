@@ -14,6 +14,7 @@ import '../widgets/send_danmaku_dialog.dart';
 import '../player_abstraction/player_abstraction.dart';
 import '../widgets/blur_dialog.dart';
 import '../widgets/blur_snackbar.dart';
+import '../utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -193,6 +194,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           ignoring: !videoState.showControls,
                           child: SendDanmakuButton(
                             onPressed: () async {
+                              final hotkeyService = HotkeyService();
                               final videoState = Provider.of<VideoPlayerState>(context, listen: false);
                               final wasPlaying = videoState.player.state == PlaybackState.playing;
 
@@ -209,6 +211,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                 return;
                               }
 
+                              hotkeyService.unregisterHotkeys(); // 注销热键
+
                               await BlurDialog.show(
                                 context: context,
                                 title: '发送弹幕',
@@ -223,6 +227,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                                 // Actions are now handled inside the dialog
                                 actions: [],
                               );
+
+                              // 重新注册热键
+                              hotkeyService.registerHotkeys();
 
                               if (wasPlaying) {
                                 await videoState.player.playDirectly();

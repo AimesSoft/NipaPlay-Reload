@@ -26,7 +26,7 @@ class _SendDanmakuButtonState extends State<SendDanmakuButton> {
     final tooltipManager = ShortcutTooltipManager();
     final shortcutText = tooltipManager.getShortcutText('send_danmaku');
     final tooltipText = shortcutText.isEmpty ? '发送弹幕' : '发送弹幕 ($shortcutText)';
-    debugPrint('[SendDanmakuButton] 快捷键文本: $shortcutText, 提示文本: $tooltipText');
+    //debugPrint('[SendDanmakuButton] 快捷键文本: $shortcutText, 提示文本: $tooltipText');
     
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),

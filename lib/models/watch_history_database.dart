@@ -222,7 +222,7 @@ class WatchHistoryDatabase {
     final db = await database;
     
     // 添加调试日志
-    debugPrint('数据库保存历史记录: filePath=${item.filePath}, animeName=${item.animeName}, episodeId=${item.episodeId}, animeId=${item.animeId}');
+    //debugPrint('数据库保存历史记录: filePath=${item.filePath}, animeName=${item.animeName}, episodeId=${item.episodeId}, animeId=${item.animeId}');
     
     try {
       await db.insert(

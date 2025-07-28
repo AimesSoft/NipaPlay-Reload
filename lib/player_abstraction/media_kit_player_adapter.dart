@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:media_kit/media_kit.dart';
@@ -1220,16 +1218,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }
       
       if (bytes != null) {
-        debugPrint('MediaKit: 成功获取截图，大小: ${bytes.length} 字节，尺寸: ${actualWidth}x$actualHeight');
+       // debugPrint('MediaKit: 成功获取截图，大小: ${bytes.length} 字节，尺寸: ${actualWidth}x$actualHeight');
         final String base64Image = base64Encode(bytes);
-        if (base64Image.length > 200) {
-          debugPrint('MediaKit: 截图BASE64(截断): ${base64Image.substring(0, 100)}...${base64Image.substring(base64Image.length - 100)}');
-        } else {
-          debugPrint('MediaKit: 截图BASE64: $base64Image');
-        }
-        if (bytes.length > 16) {
-          debugPrint('MediaKit: 截图头16字节: ${bytes.sublist(0, 16).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
-        }
         return PlayerFrame(
           bytes: bytes,
           width: actualWidth,

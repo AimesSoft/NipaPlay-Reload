@@ -16,6 +16,7 @@ import 'dart:convert';
 import '../services/dandanplay_service.dart';
 import '../services/jellyfin_service.dart';
 import '../services/emby_service.dart';
+import '../services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'media_info_helper.dart';
 import '../services/danmaku_cache_manager.dart';
 import '../models/watch_history_model.dart';
@@ -23,6 +24,7 @@ import '../models/watch_history_database.dart'; // 导入观看记录数据库
 import '../widgets/blur_dialog.dart';
 import '../widgets/send_danmaku_dialog.dart';
 import 'package:image/image.dart' as img;
+import '../widgets/blur_snackbar.dart';
 
 import 'package:path/path.dart' as p; // Added import for path package
 import 'package:path_provider/path_provider.dart'; // Added for getTemporaryDirectory
@@ -51,6 +53,7 @@ import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内�
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
 import 'package:flutter/scheduler.dart'; // 添加Ticker导入
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
+import 'hotkey_service.dart'; // Added import for HotkeyService
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -119,6 +122,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _blockTopDanmaku = false; // 默认不屏蔽顶部弹幕
   bool _blockBottomDanmaku = false; // 默认不屏蔽底部弹幕
   bool _blockScrollDanmaku = false; // 默认不屏蔽滚动弹幕
+  
+  // 时间轴告知弹幕轨道状态
+  bool _isTimelineDanmakuEnabled = true;
   
   // 弹幕屏蔽词
   static const String _danmakuBlockWordsKey = 'danmaku_block_words';
@@ -266,6 +272,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
   int? get animeId => _animeId; // 添加动画ID getter
   int? get episodeId => _episodeId; // 添加剧集ID getter
+  
+  // 获取时间轴告知弹幕轨道状态
+  bool get isTimelineDanmakuEnabled => _isTimelineDanmakuEnabled;
   
   // 添加setter方法以支持手动匹配后立即更新标题
   void setAnimeTitle(String? title) {
@@ -1161,6 +1170,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 尝试自动检测和加载字幕
       await _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
 
+      // 切换视频后重新注册热键
+      try {
+        final hotkeyService = HotkeyService();
+        await hotkeyService.registerHotkeys();
+        debugPrint('[VideoPlayerState] 切换视频后重新注册热键成功');
+      } catch (e) {
+        debugPrint('[VideoPlayerState] 切换视频后重新注册热键失败: $e');
+      }
+
       // 等待一小段时间确保播放器状态稳定
       await Future.delayed(const Duration(milliseconds: 300));
 
@@ -1284,8 +1302,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final item = WatchHistoryItem(
         filePath: path,
         animeName: initialAnimeName,
-        episodeId: _episodeId, // 使用从 historyItem 传入的 episodeId
-        animeId: _animeId, // 使用从 historyItem 传入的 animeId
+        episodeId: _episodeId,
+        animeId: _animeId,
         lastPosition: _position.inMilliseconds,
         duration: _duration.inMilliseconds,
         watchProgress: _progress,
@@ -1474,7 +1492,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_status == PlayerStatus.playing) {
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
       player.pauseDirectly().then((_) {
-        debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
+        //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
         _setStatus(PlayerStatus.paused, message: '已暂停');
       }).catchError((e) {
         debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
@@ -1498,7 +1516,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
       player.playDirectly().then((_) {
-        debugPrint('[VideoPlayerState] playDirectly() 调用成功');
+        //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
         // 设置状态
         _setStatus(PlayerStatus.playing, message: '开始播放');
         
@@ -4190,7 +4208,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           }
         } else if (result.filePath != null) {
           // 从文件系统找到的文件，需要创建基本的历史记录
-          await initializePlayer(result.filePath!);
+          final historyItemForPrevVideo = await WatchHistoryDatabase.instance.getHistoryByFilePath(result.filePath!);
+          await initializePlayer(result.filePath!, historyItem: historyItemForPrevVideo);
         }
       } else {
         debugPrint('[上一话] ${result.message}');
@@ -4280,7 +4299,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           }
         } else if (result.filePath != null) {
           // 从文件系统找到的文件，需要创建基本的历史记录
-          await initializePlayer(result.filePath!);
+          final historyItemForNextVideo = await WatchHistoryDatabase.instance.getHistoryByFilePath(result.filePath!);
+          await initializePlayer(result.filePath!, historyItem: historyItemForNextVideo);
         }
       } else {
         debugPrint('[下一话] ${result.message}');
@@ -4628,43 +4648,61 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 显示发送弹幕对话框
   void showSendDanmakuDialog() {
-    if (_context == null || !hasVideo) {
-      debugPrint('[VideoPlayerState] 无法显示发送弹幕对话框：上下文为空或没有视频');
-      return;
-    }
-
-    final wasPlaying = player.state == PlaybackState.playing;
-
-    if (wasPlaying) {
-      player.pauseDirectly();
-    }
-
-    final episodeId = this.episodeId;
-    final currentTime = position.inSeconds.toDouble();
-
-    if (episodeId == null) {
-      ScaffoldMessenger.of(_context!).showSnackBar(
-        const SnackBar(content: Text('无法获取剧集信息，无法发送弹幕'))
+    debugPrint('[VideoPlayerState] 快捷键触发发送弹幕');
+    
+    // 先检查是否已经有弹幕对话框在显示
+    final dialogManager = DanmakuDialogManager();
+    
+    // 如果已经在显示弹幕对话框，则关闭它，否则显示新对话框
+    if (!dialogManager.handleSendDanmakuHotkey()) {
+      // 对话框未显示，显示新对话框
+      // 检查是否能发送弹幕
+      if (episodeId == null) {
+        if (_context != null) {
+          // 使用BlurSnackBar显示提示
+          BlurSnackBar.show(_context!, '无法获取剧集信息，无法发送弹幕');
+        }
+        return;
+      }
+      
+      DanmakuDialogManager().showSendDanmakuDialog(
+        context: _context!,
+        episodeId: episodeId!,
+        currentTime: position.inSeconds.toDouble(),
+        onDanmakuSent: (danmaku) {
+          addDanmakuToNewTrack(danmaku);
+        },
+        onDialogClosed: () {
+          if (player.state == PlaybackState.playing) {
+            player.playDirectly();
+          }
+        },
+        wasPlaying: player.state == PlaybackState.playing,
       );
-      if (wasPlaying) player.playDirectly();
-      return;
+    }
+  }
+
+  // 切换时间轴告知弹幕轨道
+  void toggleTimelineDanmaku(bool enabled) {
+    _isTimelineDanmakuEnabled = enabled;
+    
+    if (enabled) {
+      // 生成并添加时间轴弹幕轨道
+      final timelineDanmaku = TimelineDanmakuService.generateTimelineDanmaku(_duration);
+      _danmakuTracks['timeline'] = {
+        'name': timelineDanmaku['name'],
+        'source': timelineDanmaku['source'],
+        'danmakuList': timelineDanmaku['comments'],
+        'count': timelineDanmaku['count'],
+      };
+      _danmakuTrackEnabled['timeline'] = true;
+    } else {
+      // 移除时间轴弹幕轨道
+      _danmakuTracks.remove('timeline');
+      _danmakuTrackEnabled.remove('timeline');
     }
     
-    // 使用弹幕对话框管理器显示对话框
-    DanmakuDialogManager().showSendDanmakuDialog(
-      context: _context!,
-      episodeId: episodeId,
-      currentTime: currentTime,
-      onDanmakuSent: (danmaku) {
-        // 将新弹幕添加到播放器状态中
-        addDanmakuToNewTrack(danmaku);
-      },
-      onDialogClosed: () {
-        if (wasPlaying) {
-          player.playDirectly();
-        }
-      },
-      wasPlaying: wasPlaying,
-    );
+    _updateMergedDanmakuList();
+    notifyListeners();
   }
 }

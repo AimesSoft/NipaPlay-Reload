@@ -76,14 +76,12 @@ class ShortcutTooltipManager extends ChangeNotifier {
   
   // 获取动作的提示文本
   String getTooltip(String action) {
-    debugPrint('[ShortcutTooltipManager] 获取提示文本: $action, 结果: ${_shortcutTooltips[action] ?? _getActionLabel(action) ?? action}');
     return _shortcutTooltips[action] ?? _getActionLabel(action) ?? action;
   }
   
   // 获取动作的快捷键文本
   String getShortcutText(String action) {
     final shortcut = _hotkeyService.getShortcutText(action);
-    debugPrint('[ShortcutTooltipManager] 获取快捷键文本: $action, 结果: $shortcut');
     return shortcut;
   }
   
@@ -93,7 +91,6 @@ class ShortcutTooltipManager extends ChangeNotifier {
     final shortcut = getShortcutText(action);
     
     final result = shortcut.isEmpty ? label : '$label ($shortcut)';
-    debugPrint('[ShortcutTooltipManager] 格式化动作和快捷键: $action, label: $label, shortcut: $shortcut, 结果: $result');
     return result;
   }
   
