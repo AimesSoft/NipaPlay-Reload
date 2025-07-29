@@ -14,6 +14,10 @@ class JellyfinProvider extends ChangeNotifier {
   List<JellyfinMovieInfo> _movieItems = [];
   Map<String, JellyfinMediaItemDetail> _mediaDetailsCache = {};
   Map<String, JellyfinMovieInfo> _movieDetailsCache = {};
+  
+  // 排序相关状态
+  String _currentSortBy = 'DateCreated,SortName';
+  String _currentSortOrder = 'Descending';
 
   // Getters
   bool get isInitialized => _isInitialized;
@@ -27,6 +31,10 @@ class JellyfinProvider extends ChangeNotifier {
   List<String> get selectedLibraryIds => _jellyfinService.selectedLibraryIds;
   String? get serverUrl => _jellyfinService.serverUrl;
   String? get username => _jellyfinService.username;
+  
+  // 排序相关getter
+  String get currentSortBy => _currentSortBy;
+  String get currentSortOrder => _currentSortOrder;
 
   // 初始化Jellyfin Provider
   Future<void> initialize() async {
@@ -78,7 +86,10 @@ class JellyfinProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      _mediaItems = await _jellyfinService.getLatestMediaItems();
+      _mediaItems = await _jellyfinService.getLatestMediaItems(
+        sortBy: _currentSortBy,
+        sortOrder: _currentSortOrder,
+      );
     } catch (e) {
       _hasError = true;
       _errorMessage = e.toString();
@@ -182,6 +193,19 @@ class JellyfinProvider extends ChangeNotifier {
   // 将Jellyfin媒体项转换为WatchHistoryItem
   List<WatchHistoryItem> convertToWatchHistoryItems() {
     return _mediaItems.map((item) => item.toWatchHistoryItem()).toList();
+  }
+  
+  // 更新排序设置并重新加载媒体项
+  Future<void> updateSortSettings(String sortBy, String sortOrder) async {
+    print('JellyfinProvider: 更新排序设置 - sortBy: $sortBy, sortOrder: $sortOrder');
+    if (_currentSortBy != sortBy || _currentSortOrder != sortOrder) {
+      _currentSortBy = sortBy;
+      _currentSortOrder = sortOrder;
+      print('JellyfinProvider: 排序设置已更新，开始重新加载媒体项');
+      await loadMediaItems();
+    } else {
+      print('JellyfinProvider: 排序设置未变化，跳过重新加载');
+    }
   }
   
   // 将Jellyfin电影项转换为WatchHistoryItem

@@ -242,11 +242,21 @@ class JellyfinService {
     await prefs.setStringList('jellyfin_selected_libraries', _selectedLibraryIds);
   }
   
-  Future<List<JellyfinMediaItem>> getLatestMediaItems({int limit = 99999}) async {
+  Future<List<JellyfinMediaItem>> getLatestMediaItems({
+    int limit = 99999,
+    String? sortBy,
+    String? sortOrder,
+  }) async {
     if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty) {
       return [];
     }
+    
+    // 默认排序参数
+    final defaultSortBy = sortBy ?? 'DateCreated,SortName';
+    final defaultSortOrder = sortOrder ?? 'Descending';
+    
+    print('JellyfinService: 获取媒体项 - sortBy: $defaultSortBy, sortOrder: $defaultSortOrder');
     
     List<JellyfinMediaItem> allItems = [];
     
@@ -266,7 +276,7 @@ class JellyfinService {
           String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
           
           final response = await _makeAuthenticatedRequest(
-            '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=DateCreated,SortName&SortOrder=Descending&Limit=$limit&userId=$_userId'
+            '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit&userId=$_userId'
           );
           
           if (response.statusCode == 200) {
@@ -287,8 +297,12 @@ class JellyfinService {
       }
     }
     
-    // 按最近添加日期排序
-    allItems.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
+    // 如果服务器端排序失败或需要客户端排序，则进行本地排序
+    // 注意：当使用自定义排序时，我们依赖服务器端的排序结果
+    if (sortBy == null && sortOrder == null) {
+      // 默认情况下按最近添加日期排序
+      allItems.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
+    }
     
     // 限制总数
     if (allItems.length > limit) {
