@@ -10,6 +10,7 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/widgets/jellyfin_server_dialog.dart';
 import 'package:nipaplay/widgets/floating_action_glass_button.dart';
+import 'package:nipaplay/widgets/jellyfin_sort_dialog.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 class JellyfinMediaLibraryView extends StatefulWidget {
@@ -93,7 +94,12 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
     }
 
     try {
-      final mediaItems = await jellyfinService.getLatestMediaItems(limit: 99999);
+      final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+      final mediaItems = await jellyfinService.getLatestMediaItems(
+        limit: 99999,
+        sortBy: jellyfinProvider.currentSortBy,
+        sortOrder: jellyfinProvider.currentSortOrder,
+      );
       if (mounted) {
         setState(() {
           _jellyfinMediaItems = mediaItems;
@@ -131,6 +137,28 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
         widget.onPlayEpisode?.call(result);
       }
     });
+  }
+
+  Future<void> _showSortDialog() async {
+    print('JellyfinMediaLibraryView: 显示排序对话框');
+    final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+    print('JellyfinMediaLibraryView: 当前排序设置 - sortBy: ${jellyfinProvider.currentSortBy}, sortOrder: ${jellyfinProvider.currentSortOrder}');
+    
+    final result = await JellyfinSortDialog.show(
+      context,
+      currentSortBy: jellyfinProvider.currentSortBy,
+      currentSortOrder: jellyfinProvider.currentSortOrder,
+    );
+    
+    if (result != null && mounted) {
+      print('JellyfinMediaLibraryView: 用户选择了新的排序设置 - sortBy: ${result['sortBy']}, sortOrder: ${result['sortOrder']}');
+      await jellyfinProvider.updateSortSettings(
+        result['sortBy']!,
+        result['sortOrder']!,
+      );
+    } else {
+      print('JellyfinMediaLibraryView: 用户取消了排序设置');
+    }
   }
 
   @override
@@ -211,10 +239,23 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
       );
     }
 
-    return Stack(
-      children: [
-        RepaintBoundary(
-          child: Platform.isAndroid || Platform.isIOS
+    return Consumer<JellyfinProvider>(
+      builder: (context, jellyfinProvider, child) {
+        // 当JellyfinProvider的媒体项更新时，同步更新本地状态
+        if (_jellyfinMediaItems != jellyfinProvider.mediaItems) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _jellyfinMediaItems = jellyfinProvider.mediaItems;
+              });
+            }
+          });
+        }
+        
+        return Stack(
+          children: [
+            RepaintBoundary(
+              child: Platform.isAndroid || Platform.isIOS
               ? GridView.builder(
                   controller: _gridScrollController,
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -282,6 +323,17 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
                   ),
                 ),
         ),
+        // 排序按钮
+        Positioned(
+          right: 16,
+          bottom: 80,
+          child: FloatingActionGlassButton(
+            iconData: Ionicons.funnel_outline,
+            onPressed: _showSortDialog,
+            description: 'Jellyfin排序设置\n选择排序方式和顺序\n支持多种排序选项',
+          ),
+        ),
+        // 设置按钮
         Positioned(
           right: 16,
           bottom: 16,
@@ -292,6 +344,8 @@ class _JellyfinMediaLibraryViewState extends State<JellyfinMediaLibraryView> wit
           ),
         ),
       ],
+    );
+      },
     );
   }
 }
