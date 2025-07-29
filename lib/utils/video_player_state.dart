@@ -16,6 +16,7 @@ import 'dart:convert';
 import '../services/dandanplay_service.dart';
 import '../services/jellyfin_service.dart';
 import '../services/emby_service.dart';
+import '../services/jellyfin_playback_sync_service.dart';
 import '../services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'media_info_helper.dart';
 import '../services/danmaku_cache_manager.dart';
@@ -94,6 +95,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isControlsHovered = false;
   bool _isSeeking = false;
   final FocusNode _focusNode = FocusNode();
+  
+  // 添加重置标志，防止在重置过程中更新历史记录
+  bool _isResetting = false;
   static const String _lastVideoKey = 'last_video_path';
   static const String _lastPositionKey = 'last_video_position';
   static const String _videoPositionsKey = 'video_positions';
@@ -658,7 +662,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     final positions = prefs.getString(_videoPositionsKey) ?? '{}';
     final Map<String, dynamic> positionMap =
         Map<String, dynamic>.from(json.decode(positions));
-    return positionMap[path] ?? 0;
+    final position = positionMap[path] ?? 0;
+    return position;
   }
 
 
@@ -1043,6 +1048,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
       _duration = Duration(milliseconds: player.mediaInfo.duration);
 
+      // 对于Jellyfin流媒体，先进行同步，再获取播放位置
+      bool isJellyfinStream = videoPath.startsWith('jellyfin://');
+      if (isJellyfinStream) {
+        await _initializeWatchHistory(videoPath);
+      }
+
       // 获取上次播放位置
       final lastPosition = await _getVideoPosition(videoPath);
       debugPrint(
@@ -1074,8 +1085,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _setStatus(PlayerStatus.paused, message: '已暂停');
       }
 
-      // 初始化基础的观看记录（只在没有记录时创建新记录）
-      await _initializeWatchHistory(videoPath);
+      // 对于非Jellyfin流媒体，在获取播放位置后初始化观看记录
+      if (!isJellyfinStream) {
+        await _initializeWatchHistory(videoPath);
+      }
 
       //debugPrint('10. 开始识别视频和加载弹幕...');
       // 针对Jellyfin流媒体视频的特殊处理
@@ -1237,10 +1250,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 初始化观看记录
   Future<void> _initializeWatchHistory(String path) async {
     try {
+      
       // 先检查是否已存在观看记录
       final existingHistory = await WatchHistoryManager.getHistoryItem(path);
 
       if (existingHistory != null) {
+
+        
         // 如果已存在记录，只更新播放进度和时间相关信息
         // 对于Jellyfin流媒体，如果有友好名称，则使用友好名称
         String finalAnimeName = existingHistory.animeName;
@@ -1272,7 +1288,35 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           thumbnailPath: existingHistory.thumbnailPath,
         );
 
-        await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        // Jellyfin同步：如果是Jellyfin流媒体，进行播放记录同步
+        if (isJellyfinStream) {
+          try {
+    
+            final itemId = path.replaceFirst('jellyfin://', '');
+            final syncService = JellyfinPlaybackSyncService();
+            // 使用原始历史记录进行同步，而不是新创建的记录
+            final syncedHistory = await syncService.syncOnPlayStart(itemId, existingHistory);
+            if (syncedHistory != null) {
+              // 使用同步后的历史记录
+              await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
+              // 同时更新SharedPreferences中的播放位置
+              await _saveVideoPosition(path, syncedHistory.lastPosition);
+              debugPrint('Jellyfin同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
+              // 报告播放开始
+              await syncService.reportPlaybackStart(itemId, syncedHistory);
+            } else {
+              await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+              // 报告播放开始
+              await syncService.reportPlaybackStart(itemId, updatedHistory);
+            }
+          } catch (e) {
+            debugPrint('Jellyfin同步失败，使用本地记录: $e');
+            await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+          }
+        } else {
+          await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        }
+        
         if (_context != null && _context!.mounted) {
           _context!.read<WatchHistoryProvider>().refresh();
         }
@@ -1323,13 +1367,36 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Future<void> resetPlayer() async {
     try {
+      _isResetting = true; // 设置重置标志
+      
       // 在停止播放前保存最后的观看记录
       if (_currentVideoPath != null) {
         await _updateWatchHistory();
       }
       
+      // Jellyfin同步：如果是Jellyfin流媒体，停止同步
+      if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+        try {
+          final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
+          final syncService = JellyfinPlaybackSyncService();
+          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          if (historyItem != null) {
+            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+          }
+        } catch (e) {
+          debugPrint('Jellyfin播放停止同步失败: $e');
+        }
+      }
+      
       // 重置解码器信息
       SystemResourceMonitor().setActiveDecoder("未知");
+
+      // 先停止UI更新Ticker，防止错误检测在重置过程中运行
+      if (_uiUpdateTicker != null) {
+        _uiUpdateTicker!.stop();
+        _uiUpdateTicker!.dispose();
+        _uiUpdateTicker = null;
+      }
 
       // 清除字幕设置（使用空字符串表示清除外部字幕）
       player.setMedia("", MediaType.subtitle);
@@ -1394,6 +1461,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } catch (e) {
       //debugPrint('重置播放器时出错: $e');
       rethrow;
+    } finally {
+      _isResetting = false; // 清除重置标志
     }
   }
 
@@ -1500,6 +1569,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         player.state = PlaybackState.paused;
         _setStatus(PlayerStatus.paused, message: '已暂停');
       });
+      
+      // Jellyfin同步：如果是Jellyfin流媒体，报告暂停状态
+      if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+        try {
+          final syncService = JellyfinPlaybackSyncService();
+          syncService.reportPlaybackPaused(_position.inMilliseconds);
+        } catch (e) {
+          debugPrint('Jellyfin暂停状态报告失败: $e');
+        }
+      }
       
       _saveCurrentPositionToHistory();
       // 在暂停时触发截图
@@ -1813,6 +1892,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 在销毁前进行一次截图
     if (hasVideo) {
       _captureConditionalScreenshot("销毁前");
+    }
+    
+    // Jellyfin同步：如果是Jellyfin流媒体，停止同步
+    if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+      try {
+        final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
+        final syncService = JellyfinPlaybackSyncService();
+        // 注意：dispose方法不能是async，所以这里使用同步方式处理
+        // 在dispose中我们只清理同步服务状态，不发送网络请求
+        syncService.dispose();
+      } catch (e) {
+        debugPrint('Jellyfin播放销毁同步失败: $e');
+      }
     }
     
     player.dispose();
@@ -2905,7 +2997,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 更新观看记录
   Future<void> _updateWatchHistory() async {
-    if (_currentVideoPath == null) return;
+    if (_currentVideoPath == null) {
+      return;
+    }
+
+    // 防止在播放器重置过程中更新历史记录
+    if (_isResetting) {
+      return;
+    }
+    
+    if (_status == PlayerStatus.idle || _status == PlayerStatus.error) {
+      return;
+    }
 
     try {
       // 使用 Provider 获取播放记录
@@ -2970,6 +3073,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           isFromScan: existingHistory.isFromScan,
         );
 
+        // Jellyfin同步：如果是Jellyfin流媒体，同步播放进度（每秒同步一次）
+        if (isJellyfinStream) {
+          try {
+            // 每秒同步一次，提供更及时的进度更新
+            if (_position.inMilliseconds % 1000 < 100) {
+              final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
+              final syncService = JellyfinPlaybackSyncService();
+              await syncService.syncCurrentProgress(_position.inMilliseconds);
+            }
+          } catch (e) {
+            debugPrint('Jellyfin播放进度同步失败: $e');
+          }
+        }
+        
         // 通过 Provider 更新记录
         if (_context != null && _context!.mounted) {
           await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
@@ -4140,6 +4257,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       debugPrint('[上一话] 开始使用剧集导航服务查找上一话');
       
+      // Jellyfin同步：如果是Jellyfin流媒体，先报告播放停止
+      if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+        try {
+          final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
+          final syncService = JellyfinPlaybackSyncService();
+          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          if (historyItem != null) {
+            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            debugPrint('[上一话] Jellyfin播放停止报告完成');
+          }
+        } catch (e) {
+          debugPrint('[上一话] Jellyfin播放停止报告失败: $e');
+        }
+      }
+      
       // 暂停当前视频
       if (_status == PlayerStatus.playing) {
         togglePlayPause();
@@ -4229,7 +4361,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     
     try {
-      debugPrint('[下一话] 开始使用剧集导航服务查找下一话');
+      debugPrint('[下一话] 开始使用剧集导航服务查找下一话 (自动播放触发)');
+      
+      // Jellyfin同步：如果是Jellyfin流媒体，先报告播放停止
+      if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+        try {
+          final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
+          final syncService = JellyfinPlaybackSyncService();
+          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          if (historyItem != null) {
+            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            debugPrint('[下一话] Jellyfin播放停止报告完成');
+          }
+        } catch (e) {
+          debugPrint('[下一话] Jellyfin播放停止报告失败: $e');
+        }
+      }
       
       // 暂停当前视频
       if (_status == PlayerStatus.playing) {
@@ -4398,6 +4545,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 debugPrint(
                     'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
                 
+                // Jellyfin同步：如果是Jellyfin流媒体，报告播放结束
+                if (_currentVideoPath!.startsWith('jellyfin://')) {
+                  _handleJellyfinPlaybackEnd(_currentVideoPath!);
+                }
+                
                 // 触发自动播放下一话
                 if (_context != null && _context!.mounted) {
                   AutoNextEpisodeService.instance.startAutoNextEpisode(_context!, _currentVideoPath!);
@@ -4420,15 +4572,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 (_currentVideoPath!.contains('jellyfin://') || _currentVideoPath!.contains('emby://')) &&
                 _status == PlayerStatus.loading;
             
-            if (isTemporaryInvalid) {
-              // 临时的无效状态，跳过本次更新，不报错
-              debugPrint('VideoPlayerState: 检测到临时的无效播放器数据 (position: $playerPosition, duration: $playerDuration)，可能是字幕操作等导致，跳过本次更新');
-              return;
-            }
+            // 检查是否是播放器正在重置过程中
+            final bool isPlayerResetting = player.state == PlaybackState.stopped && 
+                (_status == PlayerStatus.idle || _status == PlayerStatus.error);
             
-            if (isJellyfinInitializing) {
-              // Jellyfin流媒体正在初始化，跳过错误检测
-              debugPrint('VideoPlayerState: Jellyfin流媒体正在初始化中，跳过无效数据检测 (position: $playerPosition, duration: $playerDuration)');
+            // 检查是否正在执行resetPlayer操作
+            final bool isInResetProcess = _currentVideoPath == null && _status == PlayerStatus.idle;
+            
+            if (isTemporaryInvalid || isJellyfinInitializing || isPlayerResetting || isInResetProcess || _isResetting) {
+              // 跳过错误检测的各种情况
               return;
             }
             
@@ -4704,5 +4856,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     _updateMergedDanmakuList();
     notifyListeners();
+  }
+  
+  /// 处理Jellyfin播放结束的同步
+  Future<void> _handleJellyfinPlaybackEnd(String videoPath) async {
+    try {
+      final itemId = videoPath.replaceFirst('jellyfin://', '');
+      final syncService = JellyfinPlaybackSyncService();
+      final historyItem = await WatchHistoryManager.getHistoryItem(videoPath);
+      if (historyItem != null) {
+        await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: true);
+      }
+    } catch (e) {
+      debugPrint('Jellyfin播放结束同步失败: $e');
+    }
   }
 }

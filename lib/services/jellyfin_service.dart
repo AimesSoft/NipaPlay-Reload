@@ -26,6 +26,8 @@ class JellyfinService {
   bool get isConnected => _isConnected;
   String? get serverUrl => _serverUrl;
   String? get username => _username;
+  String? get accessToken => _accessToken;
+  String? get userId => _userId;
   List<JellyfinLibrary> get availableLibraries => _availableLibraries;
   List<String> get selectedLibraryIds => _selectedLibraryIds;
   
