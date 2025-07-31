@@ -19,6 +19,7 @@ class DanmakuContainer extends StatefulWidget {
   final double opacity;
   final String status; // 添加播放状态参数
   final double playbackRate; // 添加播放速度参数
+  final double displayArea; // 弹幕轨道显示区域
   final Function(List<PositionedDanmakuItem>)? onLayoutCalculated;
 
   const DanmakuContainer({
@@ -31,6 +32,7 @@ class DanmakuContainer extends StatefulWidget {
     required this.opacity,
     required this.status, // 添加播放状态参数
     required this.playbackRate, // 添加播放速度参数
+    required this.displayArea, // 弹幕轨道显示区域
     this.onLayoutCalculated,
   });
 
@@ -511,10 +513,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       return widget.currentTime - danmakuTime > 10;
     });
     
-    // 计算可用轨道数，考虑弹幕高度和间距
+    // 计算可用轨道数，考虑弹幕高度和间距以及显示区域
     final adjustedDanmakuHeight = isMerged ? _danmakuHeight * _calcMergedFontSizeMultiplier(mergeCount) : _danmakuHeight;
     final trackHeight = adjustedDanmakuHeight + _verticalSpacing;
-    final maxTracks = ((screenHeight - adjustedDanmakuHeight - _verticalSpacing) / trackHeight).floor();
+    final effectiveHeight = screenHeight * widget.displayArea; // 根据显示区域调整有效高度
+    final maxTracks = ((effectiveHeight - adjustedDanmakuHeight - _verticalSpacing) / trackHeight).floor();
     
     // 根据弹幕类型分配轨道
     if (type == 'scroll') {

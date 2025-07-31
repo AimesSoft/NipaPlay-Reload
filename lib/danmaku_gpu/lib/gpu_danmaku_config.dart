@@ -1,4 +1,5 @@
 import '../../utils/globals.dart' as globals;
+import '../../utils/video_player_state.dart';
 
 /// GPU弹幕配置类
 ///
@@ -30,6 +31,15 @@ class GPUDanmakuConfig {
     this.screenUsageRatio = 1.0,
     this.scrollScreensPerSecond = 0.1,
   }) : fontSize = fontSize ?? (globals.isPhone ? 20.0 : 30.0);
+
+  /// 从VideoPlayerState创建配置
+  factory GPUDanmakuConfig.fromVideoPlayerState(VideoPlayerState videoState) {
+    return GPUDanmakuConfig(
+      fontSize: videoState.actualDanmakuFontSize,
+      trackHeightMultiplier: videoState.danmakuTrackHeightMultiplier,
+      screenUsageRatio: videoState.danmakuDisplayArea,
+    );
+  }
 
   /// 计算轨道高度
   double get trackHeight => fontSize * trackHeightMultiplier;

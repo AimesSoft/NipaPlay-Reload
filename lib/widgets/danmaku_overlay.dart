@@ -56,6 +56,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
                   opacity: widget.opacity,
                   status: videoState.status.toString(),
                   playbackRate: videoState.playbackRate,
+                  displayArea: videoState.danmakuDisplayArea,
                   onLayoutCalculated: (danmaku) {
                     // Update state with the calculated positions
                     // a little hacky to avoid setState() called during build
@@ -70,13 +71,17 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
                 ),
               ),
               // This is the actual GPU renderer
-              GPUDanmakuOverlay(
-                positionedDanmaku: _positionedDanmaku,
-                isPlaying: widget.isPlaying,
-                config: GPUDanmakuConfig(fontSize: widget.fontSize),
-                isVisible: widget.isVisible,
-                opacity: widget.opacity,
-                currentTime: widget.currentPosition / 1000,
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  return GPUDanmakuOverlay(
+                    positionedDanmaku: _positionedDanmaku,
+                    isPlaying: widget.isPlaying,
+                    config: GPUDanmakuConfig.fromVideoPlayerState(videoState),
+                    isVisible: widget.isVisible,
+                    opacity: widget.opacity,
+                    currentTime: widget.currentPosition / 1000,
+                  );
+                },
               ),
             ],
           );
@@ -92,6 +97,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           opacity: widget.opacity,
           status: videoState.status.toString(),
           playbackRate: videoState.playbackRate,
+          displayArea: videoState.danmakuDisplayArea,
         );
       },
     );
