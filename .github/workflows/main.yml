@@ -482,7 +482,7 @@ jobs:
           # Install packaging tools
           sudo apt-get install -y fuse libfuse2 libqt5svg5 p7zip-full rpm desktop-file-utils
           # Install additional libs that might be needed
-          sudo apt-get install -y libasound2-dev libass-dev
+          sudo apt-get install -y libasound2-dev libass-dev libmpv-dev
           # Install keybinder-3.0 for hotkey_manager
           sudo apt-get install -y libkeybinder-3.0-dev
 
@@ -674,7 +674,7 @@ jobs:
           echo '  echo "请安装: sudo apt install libmpv1 mpv (Ubuntu/Debian)"' >> "${RUN_SCRIPT_PATH}"
           echo '  echo "或者:   sudo dnf install mpv-libs mpv (Fedora)"' >> "${RUN_SCRIPT_PATH}"
           echo '  echo "或者:   sudo pacman -S mpv (Arch)"' >> "${RUN_SCRIPT_PATH}"
-          echo '  echo "' >> "${RUN_SCRIPT_PATH}"
+          echo '  echo ""' >> "${RUN_SCRIPT_PATH}"
           echo 'fi' >> "${RUN_SCRIPT_PATH}"
           echo '' >> "${RUN_SCRIPT_PATH}"
           echo '# Print library path for debugging' >> "${RUN_SCRIPT_PATH}"
