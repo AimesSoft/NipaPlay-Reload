@@ -69,9 +69,21 @@ dependencies:
   sqflite: ^2.3.2
   sqflite_common_ffi: ^2.3.3  # 用于桌面平台
   video_player: 2.9.5
-  media_kit: ^1.2.0
-  media_kit_video: ^1.3.0
-  media_kit_libs_video: ^1.0.6
+  media_kit:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./media_kit
+  media_kit_video:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./media_kit_video
+  media_kit_libs_video:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./libs/universal/media_kit_libs_video
   qr_flutter: ^4.1.0  # 用于生成二维码
   flutter_svg: ^2.0.14  # 用于显示SVG图标
   desktop_drop: ^0.6.1
@@ -174,3 +186,46 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Add dependency_overrides for all media_kit related packages
+dependency_overrides:
+  media_kit:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./media_kit
+  media_kit_video:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./media_kit_video
+  media_kit_libs_video:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./libs/universal/media_kit_libs_video
+  media_kit_libs_linux:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./libs/linux/media_kit_libs_linux
+  media_kit_libs_ios_video:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./libs/ios/media_kit_libs_ios_video
+  media_kit_libs_android_video:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./libs/android/media_kit_libs_android_video
+  media_kit_libs_windows_video:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./libs/windows/media_kit_libs_windows_video
+  media_kit_libs_macos_video:
+    git:
+      url: https://github.com/Shinokawa/media-kit.git
+      ref: main
+      path: ./libs/macos/media_kit_libs_macos_video
