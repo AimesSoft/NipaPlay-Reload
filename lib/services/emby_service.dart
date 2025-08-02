@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/emby_model.dart';
 import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class EmbyService {
   static final EmbyService instance = EmbyService._internal();
@@ -21,6 +22,40 @@ class EmbyService {
   bool _isConnected = false;
   List<EmbyLibrary> _availableLibraries = [];
   List<String> _selectedLibraryIds = [];
+
+  // Client information cache
+  String? _cachedClientInfo;
+
+  // Get dynamic client information
+  Future<String> _getClientInfo() async {
+    if (_cachedClientInfo != null) {
+      return _cachedClientInfo!;
+    }
+
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final appName = packageInfo.appName.isNotEmpty ? packageInfo.appName : 'NipaPlay';
+      final version = packageInfo.version.isNotEmpty ? packageInfo.version : '1.4.9';
+      
+      String platform = 'Flutter';
+      if (!kIsWeb && !kDebugMode) {
+        try {
+          platform = Platform.operatingSystem;
+          // Capitalize first letter
+          platform = platform[0].toUpperCase() + platform.substring(1);
+        } catch (e) {
+          platform = 'Flutter';
+        }
+      }
+
+      _cachedClientInfo = 'MediaBrowser Client="$appName", Device="$platform", DeviceId="$appName-$platform", Version="$version"';
+      return _cachedClientInfo!;
+    } catch (e) {
+      // Fallback to static values
+      _cachedClientInfo = 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.4.9"';
+      return _cachedClientInfo!;
+    }
+  }
 
   // Getters
   bool get isConnected => _isConnected;
@@ -130,11 +165,12 @@ class EmbyService {
       }
       
       // 认证用户
+      final clientInfo = await _getClientInfo();
       final authResponse = await http.post(
         Uri.parse('$_serverUrl/emby/Users/AuthenticateByName'),
         headers: {
           'Content-Type': 'application/json',
-          'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0"',
+          'X-Emby-Authorization': clientInfo,
         },
         body: json.encode({
           'Username': username,
@@ -201,9 +237,11 @@ class EmbyService {
     }
     
     final uri = Uri.parse('$_serverUrl$path');
+    final clientInfo = await _getClientInfo();
+    final authHeader = clientInfo + ', Token="$_accessToken"';
     final headers = {
       'Content-Type': 'application/json',
-      'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0", Token="$_accessToken"',
+      'X-Emby-Authorization': authHeader,
     };
     
     // 设置默认超时时间为10秒
