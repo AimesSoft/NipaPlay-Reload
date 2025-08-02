@@ -1355,8 +1355,37 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       );
 
       //debugPrint('创建全新的观看记录: 动画=${item.animeName}');
-      // 保存到历史记录
-      await WatchHistoryManager.addOrUpdateHistory(item);
+      
+      // Jellyfin同步：如果是Jellyfin流媒体，也需要进行播放记录同步
+      bool isJellyfinStream = path.startsWith('jellyfin://');
+      if (isJellyfinStream) {
+        try {
+          final itemId = path.replaceFirst('jellyfin://', '');
+          final syncService = JellyfinPlaybackSyncService();
+          // 对于新创建的记录，也进行同步检查
+          final syncedHistory = await syncService.syncOnPlayStart(itemId, item);
+          if (syncedHistory != null) {
+            // 使用同步后的历史记录
+            await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
+            // 同时更新SharedPreferences中的播放位置
+            await _saveVideoPosition(path, syncedHistory.lastPosition);
+            debugPrint('Jellyfin同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
+            // 报告播放开始
+            await syncService.reportPlaybackStart(itemId, syncedHistory);
+          } else {
+            await WatchHistoryManager.addOrUpdateHistory(item);
+            // 报告播放开始
+            await syncService.reportPlaybackStart(itemId, item);
+          }
+        } catch (e) {
+          debugPrint('Jellyfin同步失败（新记录），使用本地记录: $e');
+          await WatchHistoryManager.addOrUpdateHistory(item);
+        }
+      } else {
+        // 保存到历史记录
+        await WatchHistoryManager.addOrUpdateHistory(item);
+      }
+      
       if (_context != null && _context!.mounted) {
         _context!.read<WatchHistoryProvider>().refresh();
       }
