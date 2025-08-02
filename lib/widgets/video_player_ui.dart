@@ -36,12 +36,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   // <<< ADDED: Hold a reference to VideoPlayerState for managing the callback
   VideoPlayerState? _videoPlayerStateInstance;
 
-  double getFontSize() {
-    if (globals.isPhone) {
-      return 20.0;
-    } else {
-      return 30.0;
-    }
+  double getFontSize(VideoPlayerState videoState) {
+    return videoState.actualDanmakuFontSize;
   }
 
   @override
@@ -375,7 +371,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                           currentPosition: videoState.position.inMilliseconds.toDouble(),
                                           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
                                           isPlaying: videoState.status == PlayerStatus.playing,
-                                          fontSize: getFontSize(),
+                                          fontSize: getFontSize(videoState),
                                           isVisible: videoState.danmakuVisible,
                                           opacity: videoState.mappedDanmakuOpacity,
                                         );
@@ -440,7 +436,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                           currentPosition: videoState.position.inMilliseconds.toDouble(),
                                           videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
                                           isPlaying: videoState.status == PlayerStatus.playing,
-                                          fontSize: getFontSize(),
+                                          fontSize: getFontSize(videoState),
                                           isVisible: videoState.danmakuVisible,
                                           opacity: videoState.mappedDanmakuOpacity,
                                         );

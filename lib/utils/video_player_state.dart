@@ -135,6 +135,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
   int _totalDanmakuCount = 0; // 添加一个字段来存储总弹幕数
   
+  // 弹幕字体大小设置
+  static const String _danmakuFontSizeKey = 'danmaku_font_size';
+  double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
+  
+  // 弹幕轨道显示区域设置
+  static const String _danmakuDisplayAreaKey = 'danmaku_display_area';
+  double _danmakuDisplayArea = 1.0; // 默认全屏显示（1.0=全部，0.67=2/3，0.33=1/3）
+  
   // 添加播放速度相关状态
   static const String _playbackRateKey = 'playback_rate';
   double _playbackRate = 2.0; // 默认2倍速
@@ -268,6 +276,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get danmakuOpacity => _danmakuOpacity;
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;
+  double get danmakuFontSize => _danmakuFontSize;
+  double get danmakuDisplayArea => _danmakuDisplayArea;
   bool get danmakuStacking => _danmakuStacking;
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
@@ -409,6 +419,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 加载弹幕屏蔽词
     await _loadDanmakuBlockWords();
+    
+    // 加载弹幕字体大小和显示区域
+    await _loadDanmakuFontSize();
+    await _loadDanmakuDisplayArea();
     
     // 加载播放速度设置
     await _loadPlaybackRate();
@@ -3924,6 +3938,62 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         setPlaybackRate(1.0);
       }
     }
+  }
+  
+  // 弹幕字体大小和显示区域相关方法
+  
+  // 加载弹幕字体大小
+  Future<void> _loadDanmakuFontSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    _danmakuFontSize = prefs.getDouble(_danmakuFontSizeKey) ?? 0.0;
+    notifyListeners();
+  }
+
+  // 设置弹幕字体大小
+  Future<void> setDanmakuFontSize(double fontSize) async {
+    if (_danmakuFontSize != fontSize) {
+      _danmakuFontSize = fontSize;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_danmakuFontSizeKey, fontSize);
+      notifyListeners();
+    }
+  }
+
+  // 获取实际使用的弹幕字体大小
+  double get actualDanmakuFontSize {
+    if (_danmakuFontSize <= 0) {
+      // 使用默认值
+      return globals.isPhone ? 20.0 : 30.0;
+    }
+    return _danmakuFontSize;
+  }
+
+  // 加载弹幕轨道显示区域
+  Future<void> _loadDanmakuDisplayArea() async {
+    final prefs = await SharedPreferences.getInstance();
+    _danmakuDisplayArea = prefs.getDouble(_danmakuDisplayAreaKey) ?? 1.0;
+    notifyListeners();
+  }
+
+  // 设置弹幕轨道显示区域
+  Future<void> setDanmakuDisplayArea(double area) async {
+    if (_danmakuDisplayArea != area) {
+      _danmakuDisplayArea = area;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_danmakuDisplayAreaKey, area);
+      notifyListeners();
+    }
+  }
+
+  // 获取弹幕轨道间距倍数（基于字体大小计算）
+  double get danmakuTrackHeightMultiplier {
+    // 使用默认的轨道高度倍数1.5，根据字体大小的比例调整
+    const double baseMultiplier = 1.5;
+    const double baseFontSize = 30.0; // 基准字体大小
+    final double currentFontSize = actualDanmakuFontSize;
+    
+    // 保持轨道间距与字体大小的比例关系
+    return baseMultiplier * (currentFontSize / baseFontSize);
   }
   
   // 获取当前活跃解码器，代理到解码器管理器

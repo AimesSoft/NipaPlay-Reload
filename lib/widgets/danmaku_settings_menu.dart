@@ -236,6 +236,60 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+              // 弹幕字体大小
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SettingsSlider(
+                      value: videoState.danmakuFontSize <= 0 ? videoState.actualDanmakuFontSize : videoState.danmakuFontSize,
+                      onChanged: (v) => videoState.setDanmakuFontSize(v),
+                      label: '弹幕字体大小',
+                      displayTextBuilder: (v) => '${v.toStringAsFixed(1)}px',
+                      min: 12.0,
+                      max: 60.0,
+                      step: 0.5, // 0.5间隔
+                    ),
+                    const SizedBox(height: 4),
+                    const SettingsHintText('调整弹幕文字的大小，轨道间距会自动适配'),
+                  ],
+                ),
+              ),
+              // 弹幕轨道显示区域
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SettingsSlider(
+                      value: videoState.danmakuDisplayArea,
+                      onChanged: (v) {
+                        // 将连续值映射到离散值
+                        double area;
+                        if (v < 0.5) {
+                          area = 0.33; // 1/3
+                        } else if (v < 0.83) {
+                          area = 0.67; // 2/3
+                        } else {
+                          area = 1.0; // 全部
+                        }
+                        videoState.setDanmakuDisplayArea(area);
+                      },
+                      label: '轨道显示区域',
+                      displayTextBuilder: (v) {
+                        if (v <= 0.34) return '1/3 屏幕';
+                        if (v <= 0.68) return '2/3 屏幕';
+                        return '全屏';
+                      },
+                      min: 0.33,
+                      max: 1.0,
+                    ),
+                    const SizedBox(height: 4),
+                    const SettingsHintText('设置弹幕轨道在屏幕上的显示范围'),
+                  ],
+                ),
+              ),
               // 弹幕屏蔽词
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
