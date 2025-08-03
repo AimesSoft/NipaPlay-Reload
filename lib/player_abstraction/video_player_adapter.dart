@@ -798,6 +798,16 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
       // 设置音量
       _controller!.setVolume(_volume);
       
+      // 重新应用播放速度设置
+      if (_playbackRate != 1.0) {
+        try {
+          _controller!.setPlaybackSpeed(_playbackRate);
+          debugPrint('VideoPlayer: 重新应用播放速度设置: ${_playbackRate}x');
+        } catch (e) {
+          debugPrint('VideoPlayer: 重新应用播放速度失败: $e');
+        }
+      }
+      
       // 添加详细的状态监听器
       _controller!.addListener(_controllerListener);
       
@@ -841,6 +851,16 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         
         // 设置音量
         _controller!.setVolume(_volume);
+        
+        // 重新应用播放速度设置
+        if (_playbackRate != 1.0) {
+          try {
+            _controller!.setPlaybackSpeed(_playbackRate);
+            debugPrint('VideoPlayer: 重新应用播放速度设置 (fallback): ${_playbackRate}x');
+          } catch (e) {
+            debugPrint('VideoPlayer: 重新应用播放速度失败 (fallback): $e');
+          }
+        }
         
         // 添加详细的状态监听器
         _controller!.addListener(_controllerListener);

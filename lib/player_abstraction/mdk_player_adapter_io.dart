@@ -1,6 +1,6 @@
 import 'package:fvp/mdk.dart' as mdk;
 import 'package:flutter/foundation.dart';
-import 'dart:typed_data'; // Required for Uint8List
+// Required for Uint8List
 import './abstract_player.dart';
 import './player_enums.dart';
 import './player_data_models.dart';
@@ -164,7 +164,13 @@ class MdkPlayerAdapter implements AbstractPlayer {
   void _applyInitialSettings() {
     try {
       _mdkPlayer.setProperty('auto_load', '0');
+      // 重新应用播放速度设置
+      if (_playbackRate != 1.0) {
+        _mdkPlayer.playbackRate = _playbackRate;
+        debugPrint('MDK: 初始化时应用播放速度: ${_playbackRate}x');
+      }
     } catch (e) {
+      debugPrint('MDK: 初始化设置失败: $e');
     }
   }
 
@@ -179,8 +185,10 @@ class MdkPlayerAdapter implements AbstractPlayer {
   set playbackRate(double value) {
     _playbackRate = value;
     try {
-      _mdkPlayer.setProperty('speed', value.toString());
+      _mdkPlayer.playbackRate = value;
+      debugPrint('MDK: 设置播放速度: ${value}x');
     } catch (e) {
+      debugPrint('MDK: 设置播放速度失败: $e');
     }
   }
 
@@ -268,7 +276,12 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   Future<void> prepare() async {
     try {
-      _mdkPlayer.prepare(); 
+      _mdkPlayer.prepare();
+      // prepare后重新应用播放速度，确保设置生效
+      if (_playbackRate != 1.0) {
+        _mdkPlayer.playbackRate = _playbackRate;
+        debugPrint('MDK: prepare后应用播放速度: ${_playbackRate}x');
+      }
     } catch (e) {
       rethrow;
     }

@@ -100,25 +100,33 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
     switch (widget.content.type) {
       case DanmakuItemType.scroll:
         // 滚动弹幕：从右到左
-        if (timeDiff < 0) {
+        const duration = 10.0; // 保持10秒的移动时间
+        const earlyStartTime = 1.0; // 提前1秒开始
+        
+        if (timeDiff < -earlyStartTime) {
           // 弹幕还未出现
           _xPosition = screenWidth;
           _opacity = 0;
-        } else if (timeDiff > 10) {
+        } else if (timeDiff > duration) {
           // 弹幕已经消失
           _xPosition = -danmakuWidth;
           _opacity = 0;
         } else {
-          // 弹幕正在滚动
+          // 🔥 修复：弹幕从更远的屏幕外开始，确保时间轴时间点时刚好在屏幕边缘
+          final extraDistance = (screenWidth + danmakuWidth) / 10; // 额外距离
+          final startX = screenWidth + extraDistance; // 起始位置
+          final totalDistance = extraDistance + screenWidth + danmakuWidth; // 总移动距离
+          final totalDuration = duration + earlyStartTime; // 总时长11秒
+          
           if (_isPaused) {
-            // 视频暂停时，根据暂停时间计算位置，同时考虑屏幕宽度变化带来的影响
-            // 固定使用暂停时间而不使用当前时间，确保停留在暂停时的相对位置
-            final timeFraction = (_pauseTime - widget.danmakuTime) / 10;
-            // 根据当前屏幕宽度重新计算绝对位置
-            _xPosition = screenWidth - timeFraction * (screenWidth + danmakuWidth);
+            // 视频暂停时，根据暂停时间计算位置
+            final pauseTimeDiff = _pauseTime - widget.danmakuTime;
+            final adjustedPauseTime = pauseTimeDiff + earlyStartTime; // 调整到[0, 11]范围
+            _xPosition = startX - (adjustedPauseTime / totalDuration) * totalDistance;
           } else {
             // 正常滚动
-            _xPosition = screenWidth - (timeDiff / 10) * (screenWidth + danmakuWidth);
+            final adjustedTime = timeDiff + earlyStartTime; // 调整到[0, 11]范围
+            _xPosition = startX - (adjustedTime / totalDuration) * totalDistance;
           }
           
           // 只在弹幕进入屏幕时显示

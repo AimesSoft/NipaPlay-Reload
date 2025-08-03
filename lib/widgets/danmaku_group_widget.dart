@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
-import 'single_danmaku.dart';
 
 class DanmakuGroupWidget extends StatelessWidget {
   final List<Map<String, dynamic>> danmakus;
@@ -73,14 +72,24 @@ class DanmakuGroupWidget extends StatelessWidget {
       final danmakuWidth = textPainter.width;
       switch (danmakuType) {
         case DanmakuItemType.scroll:
-          if (timeDiff < 0) {
+          const duration = 10.0; // 保持10秒的移动时间
+          const earlyStartTime = 1.0; // 提前1秒开始
+          
+          if (timeDiff < -earlyStartTime) {
             x = screenWidth;
             localOpacity = 0;
-          } else if (timeDiff > 10) {
+          } else if (timeDiff > duration) {
             x = -danmakuWidth;
             localOpacity = 0;
           } else {
-            x = screenWidth - (timeDiff / 10) * (screenWidth + danmakuWidth);
+            // 🔥 修复：弹幕从更远的屏幕外开始，确保时间轴时间点时刚好在屏幕边缘
+            final extraDistance = (screenWidth + danmakuWidth) / 10; // 额外距离
+            final startX = screenWidth + extraDistance; // 起始位置
+            final totalDistance = extraDistance + screenWidth + danmakuWidth; // 总移动距离
+            final adjustedTime = timeDiff + earlyStartTime; // 调整到[0, 11]范围
+            final totalDuration = duration + earlyStartTime; // 总时长11秒
+            
+            x = startX - (adjustedTime / totalDuration) * totalDistance;
             if (x > screenWidth || x + danmakuWidth < 0) {
               localOpacity = 0;
             }

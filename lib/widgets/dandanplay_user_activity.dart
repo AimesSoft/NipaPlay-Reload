@@ -93,12 +93,18 @@ class _DandanplayUserActivityState extends State<DandanplayUserActivity> with Si
             
             if (anime['episodes'] != null && (anime['episodes'] as List).isNotEmpty) {
               final episodes = anime['episodes'] as List;
-              // 找到最后观看的剧集
+              DateTime? latestWatchTime;
+              // 找到最后观看的剧集，通过比较 lastWatched 时间
               for (final episode in episodes) {
                 if (episode['lastWatched'] != null) {
-                  lastEpisodeTitle = episode['episodeTitle'] as String?;
-                  lastWatchedTime = episode['lastWatched'] as String?;
-                  break;
+                  final currentWatchTime = DateTime.tryParse(episode['lastWatched'] as String);
+                  if (currentWatchTime != null) {
+                    if (latestWatchTime == null || currentWatchTime.isAfter(latestWatchTime)) {
+                      latestWatchTime = currentWatchTime;
+                      lastEpisodeTitle = episode['episodeTitle'] as String?;
+                      lastWatchedTime = episode['lastWatched'] as String?;
+                    }
+                  }
                 }
               }
             }

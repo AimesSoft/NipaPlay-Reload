@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import '../utils/video_player_state.dart';
-import '../utils/keyboard_shortcuts.dart';
+
 import '../utils/shortcut_tooltip_manager.dart'; // 添加新的快捷键提示管理器
 import '../utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
@@ -219,7 +219,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                         onEnter: (_) => videoState.setControlsHovered(true),
                         onExit: (_) => videoState.setControlsHovered(false),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.horizontal(
+                          borderRadius: const BorderRadius.horizontal(
                             left: Radius.circular(30),
                             right: Radius.circular(30),
                           ),
@@ -227,7 +227,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                             filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
                             child: Container(
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.horizontal(
+                                borderRadius: const BorderRadius.horizontal(
                                   left: Radius.circular(30),
                                   right: Radius.circular(30),
                                 ),
@@ -244,7 +244,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                 height: 45,
                                 decoration: BoxDecoration(
                                   color: backgroundColor,
-                                  borderRadius: BorderRadius.horizontal(
+                                  borderRadius: const BorderRadius.horizontal(
                                     left: Radius.circular(30),
                                     right: Radius.circular(30),
                                   ),

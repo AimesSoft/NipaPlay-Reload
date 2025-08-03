@@ -872,10 +872,22 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
                 double offstageX = newSize.width;
 
                 if (danmakuType == DanmakuItemType.scroll) {
-                  const duration = 10.0; // Use fixed duration of 10 seconds
-                  final totalDistance = newSize.width + textWidth;
+                  const duration = 10.0; // 保持10秒的移动时间
+                  const earlyStartTime = 1.0; // 提前1秒开始
                   final elapsed = widget.currentTime - time;
-                  xPosition = newSize.width - (elapsed / duration) * totalDistance;
+                  
+                  if (elapsed >= -earlyStartTime && elapsed <= duration) {
+                    // 🔥 修复：弹幕从更远的屏幕外开始，确保时间轴时间点时刚好在屏幕边缘
+                    final extraDistance = (newSize.width + textWidth) / 10; // 额外距离
+                    final startX = newSize.width + extraDistance; // 起始位置
+                    final totalDistance = extraDistance + newSize.width + textWidth; // 总移动距离
+                    final adjustedElapsed = elapsed + earlyStartTime; // 调整到[0, 11]范围
+                    final totalDuration = duration + earlyStartTime; // 总时长11秒
+                    
+                    xPosition = startX - (adjustedElapsed / totalDuration) * totalDistance;
+                  } else {
+                    xPosition = elapsed < -earlyStartTime ? newSize.width : -textWidth;
+                  }
                   offstageX = newSize.width;
                 } else {
                   xPosition = (newSize.width - textWidth) / 2;

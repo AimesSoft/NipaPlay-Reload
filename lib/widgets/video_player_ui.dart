@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/video_player_state.dart';
-import '../utils/keyboard_shortcuts.dart';
 import '../utils/globals.dart' as globals;
 import 'video_upload_ui.dart';
 import 'vertical_indicator.dart';
@@ -271,25 +270,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     _doubleTapTimer?.cancel();
     _mouseMoveTimer?.cancel();
     
-    // 清理键盘快捷键注册 - 已由HotkeyService处理，不再需要
-    // 注意：KeyboardShortcuts没有提供unregisterActionHandler方法
-    // 我们可以替换之前注册的处理程序为空函数，以防止在组件卸载后被调用
-    /*
-    try {
-      if (!mounted) {
-        // 用空函数替换所有注册的处理程序
-        KeyboardShortcuts.registerActionHandler('play_pause', () {});
-        KeyboardShortcuts.registerActionHandler('fullscreen', () {});
-        KeyboardShortcuts.registerActionHandler('rewind', () {});
-        KeyboardShortcuts.registerActionHandler('forward', () {});
-        KeyboardShortcuts.registerActionHandler('toggle_danmaku', () {});
-        KeyboardShortcuts.registerActionHandler('volume_up', () {});
-        KeyboardShortcuts.registerActionHandler('volume_down', () {});
-      }
-    } catch (e) {
-      print('清理VideoPlayerUI键盘快捷键时出错: $e');
-    }
-    */
+
     
     super.dispose();
   }

@@ -18,7 +18,6 @@ import 'pages/new_series_page.dart';
 import 'utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
-import 'package:nipaplay/utils/keyboard_shortcuts.dart';
 import 'services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'models/watch_history_model.dart';
@@ -59,7 +58,7 @@ import 'utils/hotkey_service.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
 const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
-bool _channelHandlerRegistered = false;
+
 final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<DefaultTabController>>();
 
 void main(List<String> args) async {
@@ -358,16 +357,7 @@ void main(List<String> args) async {
 
       return results[0] as String;
     }),
-    // 加载并保存默认快捷键设置 - 已由HotkeyService处理，不再需要
-    /*
-    Future(() async {
-      await KeyboardShortcuts.loadShortcuts();
-      // 如果没有保存的快捷键，保存默认值
-      if (!await KeyboardShortcuts.hasSavedShortcuts()) {
-        await KeyboardShortcuts.saveShortcuts();
-      }
-    }),
-    */
+
     
     // 清理过期的弹幕缓存
     DanmakuCacheManager.clearExpiredCache(),
@@ -804,38 +794,65 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     _manageHotkeys();
   }
 
+  int _defaultPageIndex = 0;
+
   @override
   void initState() {
     super.initState();
-    globalTabController = TabController(length: 4, vsync: this, initialIndex: 0);
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _initializeController();
+    _initializeListeners();
+    _postFrameCallbacks();
+  }
+
+  Future<void> _initializeController() async {
+    final prefs = await SharedPreferences.getInstance();
+    _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
+    
+    if (mounted) {
+      globalTabController = TabController(
+        length: 4,
+        vsync: this,
+        initialIndex: _defaultPageIndex,
+      );
+      debugPrint('[MainPageState] TabController initialized with index: $_defaultPageIndex');
+    }
+  }
+
+  void _initializeListeners() {
     globalTabController?.addListener(_onTabChange);
     debugPrint('[MainPageState] initState: globalTabController listener ADDED.');
-    
-    // 处理启动时的文件路径
-    if (widget.launchFilePath != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _handleLaunchFile(widget.launchFilePath!);
-      });
-    }
 
-    // 窗口管理器初始化
     if (globals.winLinDesktop) {
       windowManager.addListener(this);
-      _checkWindowMaximizedState();
     }
-    _startSplashScreenSequence();
+  }
 
-    // 初始化热键服务
-    if (globals.isDesktop) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        // 先初始化热键服务
-        await HotkeyServiceInitializer().initialize(context);
-        
-        // 再初始化快捷键提示管理器
-        debugPrint('[MainPage] 初始化快捷键提示管理器');
-        ShortcutTooltipManager();
-      });
-    }
+  void _postFrameCallbacks() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.launchFilePath != null) {
+        _handleLaunchFile(widget.launchFilePath!);
+      }
+
+      if (globals.winLinDesktop) {
+        _checkWindowMaximizedState();
+      }
+      
+      _startSplashScreenSequence();
+
+      if (globals.isDesktop) {
+        _initializeHotkeys();
+      }
+    });
+  }
+  
+  void _initializeHotkeys() async {
+    await HotkeyServiceInitializer().initialize(context);
+    debugPrint('[MainPage] 初始化快捷键提示管理器');
+    ShortcutTooltipManager();
   }
 
   void _startSplashScreenSequence() {
@@ -843,35 +860,17 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
-      final prefs = await SharedPreferences.getInstance();
-      final defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
+      // 直接使用已加载的 _defaultPageIndex, 不再需要动画切换
+      // 如果需要启动动画，可以在这里实现
+      
+      // 延迟一段时间后隐藏启动画面
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      const switchDelay = Duration(milliseconds: 200);
-      const initialDelay = Duration(milliseconds: 300);
-
-      Timer(initialDelay, () async {
-        if (!mounted) return;
-        globalTabController?.animateTo(1);
-        await Future.delayed(switchDelay);
-
-        if (!mounted) return;
-        globalTabController?.animateTo(2);
-        await Future.delayed(switchDelay);
-
-        if (!mounted) return;
-        globalTabController?.animateTo(3);
-        await Future.delayed(switchDelay);
-
-        if (!mounted) return;
-        globalTabController?.animateTo(defaultPageIndex);
-        await Future.delayed(switchDelay);
-
-        if (mounted) {
-          setState(() {
-            _showSplash = false;
-          });
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _showSplash = false;
+        });
+      }
     });
   }
 

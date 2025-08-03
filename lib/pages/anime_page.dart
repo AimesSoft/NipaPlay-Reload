@@ -68,8 +68,8 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
 }
 
 class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
-  bool _loadingVideo = false;
-  List<String> _loadingMessages = ['正在初始化播放器...'];
+  final bool _loadingVideo = false;
+  final List<String> _loadingMessages = ['正在初始化播放器...'];
   VideoPlayerState? _videoPlayerState;
   final ScrollController _mainPageScrollController = ScrollController(); // Used for NestedScrollView
   final ScrollController _watchHistoryListScrollController = ScrollController();

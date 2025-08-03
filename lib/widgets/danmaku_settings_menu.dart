@@ -217,7 +217,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
-              // 弹幕透明度
+              // 弹幕不透明度
               Container(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -226,13 +226,13 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     SettingsSlider(
                       value: videoState.danmakuOpacity,
                       onChanged: (v) => videoState.setDanmakuOpacity(v),
-                      label: '弹幕透明度',
+                      label: '弹幕不透明度',
                       displayTextBuilder: (v) => '${(v * 100).toInt()}%',
                       min: 0.0,
                       max: 1.0,
                     ),
                     const SizedBox(height: 4),
-                    const SettingsHintText('拖动滑块调整弹幕透明度'),
+                    const SettingsHintText('拖动滑块调整弹幕不透明度'),
                   ],
                 ),
               ),
@@ -542,7 +542,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   }
 }
 
-// 新增弹幕透明度滑块组件
+// 新增弹幕不透明度滑块组件
 class _DanmakuOpacitySlider extends StatefulWidget {
   final VideoPlayerState videoState;
   const _DanmakuOpacitySlider({required this.videoState});
@@ -640,7 +640,7 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          '弹幕透明度',
+          '弹幕不透明度',
           style: TextStyle(
             color: Colors.white,
             fontSize: 14,
@@ -773,7 +773,7 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
           ),
         ),
         const SizedBox(height: 4),
-        const SettingsHintText('拖动滑块调整弹幕透明度'),
+        const SettingsHintText('拖动滑块调整弹幕不透明度'),
       ],
     );
   }
