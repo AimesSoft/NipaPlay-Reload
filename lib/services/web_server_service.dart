@@ -6,9 +6,9 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_static/shelf_static.dart';
 import 'package:shelf_cors_headers/shelf_cors_headers.dart';
 import 'package:path/path.dart' as p;
-import '../utils/storage_service.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 import 'web_api_service.dart';
-import '../utils/asset_helper.dart';
+import 'package:nipaplay/utils/asset_helper.dart';
 import 'package:flutter/foundation.dart';
 
 class WebServerService {
@@ -58,7 +58,7 @@ class WebServerService {
         ..mount('/api/', _webApiService.handler);
 
       final cascade = Cascade()
-          .add(apiRouter)
+          .add(apiRouter.call)
           .add(staticHandler);
 
       final handler = const Pipeline()

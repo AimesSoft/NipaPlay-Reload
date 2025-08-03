@@ -13,17 +13,17 @@ import 'package:http/http.dart' as http;
 
 import 'globals.dart' as globals;
 import 'dart:convert';
-import '../services/dandanplay_service.dart';
-import '../services/jellyfin_service.dart';
-import '../services/emby_service.dart';
-import '../services/jellyfin_playback_sync_service.dart';
-import '../services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
+import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
+import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'media_info_helper.dart';
-import '../services/danmaku_cache_manager.dart';
-import '../models/watch_history_model.dart';
-import '../models/watch_history_database.dart'; // 导入观看记录数据库
+import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
-import '../widgets/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 
 import 'package:path/path.dart' as p; // Added import for path package
 // Added for getTemporaryDirectory
@@ -33,17 +33,17 @@ import '../providers/watch_history_provider.dart';
 import 'danmaku_parser.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brightness
-import '../widgets/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
-import '../widgets/volume_indicator.dart'; // Added import for VolumeIndicator widget
-import '../widgets/seek_indicator.dart'; // Added import for SeekIndicator widget
-import '../widgets/speed_boost_indicator.dart'; // Added import for SpeedBoostIndicator widget
+import 'package:nipaplay/widgets/nipaplay_theme/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
+import 'package:nipaplay/widgets/nipaplay_theme/volume_indicator.dart'; // Added import for VolumeIndicator widget
+import 'package:nipaplay/widgets/nipaplay_theme/seek_indicator.dart'; // Added import for SeekIndicator widget
+import 'package:nipaplay/widgets/nipaplay_theme/speed_boost_indicator.dart'; // Added import for SpeedBoostIndicator widget
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
-import '../services/file_picker_service.dart'; // Added import for FilePickerService
+import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'decoder_manager.dart'; // 导入解码器管理器
-import '../services/episode_navigation_service.dart'; // 导入剧集导航服务
-import '../services/auto_next_episode_service.dart';
+import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧集导航服务
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
 // 导入MediaKitPlayerAdapter
@@ -539,7 +539,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                   right: videoState.isBrightnessIndicatorVisible ? 20.0 : 0.0, 
                   top: globals.isPhone ? 100.0 : 250.0,
                   bottom: globals.isPhone ? 100.0 : 250.0,
-                  // We need to import '../widgets/brightness_indicator.dart'
+                  // We need to import 'package:nipaplay/widgets/nipaplay_theme/brightness_indicator.dart'
                   // Assuming it's available, otherwise this will fail.
                   // For the edit tool, I should ensure imports are handled if I introduce new types.
                   // However, BrightnessIndicator is an existing type.

@@ -12,9 +12,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import './abstract_player.dart';
 import './player_enums.dart';
 import './player_data_models.dart';
-import '../models/watch_history_model.dart';
-import '../models/watch_history_database.dart';
-import '../utils/storage_service.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 
 /// video_player 插件的适配器，实现 AbstractPlayer 接口
 class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {

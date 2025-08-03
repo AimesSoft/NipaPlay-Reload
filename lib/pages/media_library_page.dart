@@ -2,22 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/models/bangumi_model.dart'; // Needed for _fetchedAnimeDetails
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/bangumi_service.dart'; // Needed for getAnimeDetails
-import 'package:nipaplay/widgets/anime_card.dart';
-import 'package:nipaplay/pages/anime_detail_page.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
+import 'package:nipaplay/widgets/fluent_ui/fluent_anime_card.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
-import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/widgets/jellyfin_server_dialog.dart'; 
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_server_dialog.dart'; 
 import 'dart:io'; 
 import 'dart:async';
 import 'dart:ui'; 
 import 'package:nipaplay/providers/jellyfin_provider.dart';
-import 'package:nipaplay/widgets/floating_action_glass_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/widgets/blur_dialog.dart';
-import 'package:nipaplay/widgets/emby_server_dialog.dart';
-import 'package:nipaplay/widgets/media_server_selection_sheet.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/emby_server_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/media_server_selection_sheet.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -309,7 +310,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
 
   void _navigateToAnimeDetail(int animeId) {
     // 直接显示详情页，不等待预加载完成
-    AnimeDetailPage.show(context, animeId).then((WatchHistoryItem? result) {
+    ThemedAnimeDetail.show(context, animeId).then((WatchHistoryItem? result) {
       if (result != null && result.filePath.isNotEmpty) {
         // filePath is from WatchHistoryItem, which should be non-empty if an episode was chosen
         
@@ -442,7 +443,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                   itemBuilder: (context, index) {
                     // 判断是否超出当前屏幕过多，实现按需渲染
                     // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
-                    final useOptimizedRendering = index > 11;
+                    // final useOptimizedRendering = index > 11; // 暂未使用
                     final historyItem = _uniqueLibraryItems[index];
                     final animeId = historyItem.animeId;
 
@@ -468,7 +469,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                         }
                     }
 
-                    return AnimeCard(
+                    return _buildAnimeCard(
                       key: ValueKey(animeId ?? historyItem.filePath), 
                       name: nameToDisplay, 
                       imageUrl: imageUrlToDisplay,
@@ -516,7 +517,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                     itemBuilder: (context, index) {
                       // 判断是否超出当前屏幕过多，实现按需渲染
                       // 前12个项目(约前两行)使用完整渲染，后面的使用优化渲染
-                      final useOptimizedRendering = index > 11;
+                      // final useOptimizedRendering = index > 11; // 暂未使用
                       final historyItem = _uniqueLibraryItems[index];
                       final animeId = historyItem.animeId;
 
@@ -542,7 +543,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                           }
                       }
 
-                      return AnimeCard(
+                      return _buildAnimeCard(
                         key: ValueKey(animeId ?? historyItem.filePath), 
                         name: nameToDisplay, 
                         imageUrl: imageUrlToDisplay,
@@ -580,6 +581,43 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
         );
       },
     );
+  }
+
+  // 根据主题选择合适的AnimeCard组件
+  Widget _buildAnimeCard({
+    required Key key,
+    required String name,
+    required String imageUrl,
+    required String? source,
+    required double? rating,
+    required Map<String, dynamic>? ratingDetails,
+    required VoidCallback onTap,
+  }) {
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    
+    if (uiThemeProvider.isFluentUITheme) {
+      // 使用 FluentUI 版本
+      return FluentAnimeCard(
+        key: key,
+        name: name,
+        imageUrl: imageUrl,
+        source: source,
+        rating: rating,
+        ratingDetails: ratingDetails,
+        onTap: onTap,
+      );
+    } else {
+      // 使用 Material 版本（保持原有逻辑）
+      return AnimeCard(
+        key: key,
+        name: name,
+        imageUrl: imageUrl,
+        source: source,
+        rating: rating,
+        ratingDetails: ratingDetails,
+        onTap: onTap,
+      );
+    }
   }
 
   Widget _buildGlassButton({

@@ -2,15 +2,15 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
-import '../models/watch_history_model.dart';
-import '../models/watch_history_database.dart';
-import '../models/jellyfin_model.dart';
-import '../models/emby_model.dart';
-import '../services/jellyfin_service.dart';
-import '../services/emby_service.dart';
-import '../services/jellyfin_episode_mapping_service.dart';
-import '../services/emby_episode_mapping_service.dart';
-import '../services/dandanplay_service.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
+import 'package:nipaplay/models/jellyfin_model.dart';
+import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
+import 'package:nipaplay/services/emby_episode_mapping_service.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 
 /// 剧集导航结果
 class EpisodeNavigationResult {
@@ -194,7 +194,7 @@ class EpisodeNavigationService {
         final seasonId = embyMapping['emby_season_id'] as String?;
 
         if (previousEmbyIndexNumber != null && previousDandanplayEpisodeId != null && seriesId != null && seasonId != null) {
-          debugPrint('[数据库导航] 通过Emby映射服务找到上一集: 第${previousEmbyIndexNumber}集，弹幕ID=${previousDandanplayEpisodeId}，动画ID=${previousDandanplayAnimeId}');
+          debugPrint('[数据库导航] 通过Emby映射服务找到上一集: 第$previousEmbyIndexNumber集，弹幕ID=$previousDandanplayEpisodeId，动画ID=$previousDandanplayAnimeId');
           
           // 通过Emby API获取上一集的详细信息
           try {
@@ -206,7 +206,7 @@ class EpisodeNavigationService {
               // 使用上一集的正确动画ID和剧集ID创建历史项
               final historyItem = await _createEmbyHistoryItem(previousEpisode, previousDandanplayAnimeId ?? animeId, previousDandanplayEpisodeId);
               
-              debugPrint('[数据库导航] 成功创建上一集历史项: ${previousEpisode.name}，使用弹幕ID: animeId=${previousDandanplayAnimeId ?? animeId}, episodeId=${previousDandanplayEpisodeId}');
+              debugPrint('[数据库导航] 成功创建上一集历史项: ${previousEpisode.name}，使用弹幕ID: animeId=${previousDandanplayAnimeId ?? animeId}, episodeId=$previousDandanplayEpisodeId');
               return EpisodeNavigationResult.success(
                 historyItem: historyItem,
                 message: '从Emby映射服务找到上一话：${previousEpisode.name}',
@@ -232,7 +232,7 @@ class EpisodeNavigationService {
         final seasonId = jellyfinMapping['jellyfin_season_id'] as String?;
 
         if (previousJellyfinIndexNumber != null && previousDandanplayEpisodeId != null && seriesId != null && seasonId != null) {
-          debugPrint('[数据库导航] 通过Jellyfin映射服务找到上一集: 第${previousJellyfinIndexNumber}集，弹幕ID=${previousDandanplayEpisodeId}，动画ID=${previousDandanplayAnimeId}');
+          debugPrint('[数据库导航] 通过Jellyfin映射服务找到上一集: 第$previousJellyfinIndexNumber集，弹幕ID=$previousDandanplayEpisodeId，动画ID=$previousDandanplayAnimeId');
           
           // 通过Jellyfin API获取上一集的详细信息
           try {
@@ -244,7 +244,7 @@ class EpisodeNavigationService {
               // 使用上一集的正确动画ID和剧集ID创建历史项
               final historyItem = await _createJellyfinHistoryItem(previousEpisode, previousDandanplayAnimeId ?? animeId, previousDandanplayEpisodeId);
               
-              debugPrint('[数据库导航] 成功创建上一集历史项: ${previousEpisode.name}，使用弹幕ID: animeId=${previousDandanplayAnimeId ?? animeId}, episodeId=${previousDandanplayEpisodeId}');
+              debugPrint('[数据库导航] 成功创建上一集历史项: ${previousEpisode.name}，使用弹幕ID: animeId=${previousDandanplayAnimeId ?? animeId}, episodeId=$previousDandanplayEpisodeId');
               return EpisodeNavigationResult.success(
                 historyItem: historyItem,
                 message: '从Jellyfin映射服务找到上一话：${previousEpisode.name}',
@@ -319,7 +319,7 @@ class EpisodeNavigationService {
         final seasonId = embyMapping['emby_season_id'] as String?;
 
         if (nextEmbyIndexNumber != null && nextDandanplayEpisodeId != null && seriesId != null && seasonId != null) {
-          debugPrint('[数据库导航] 通过Emby映射服务找到下一集: 第${nextEmbyIndexNumber}集，弹幕ID=${nextDandanplayEpisodeId}，动画ID=${nextDandanplayAnimeId}');
+          debugPrint('[数据库导航] 通过Emby映射服务找到下一集: 第$nextEmbyIndexNumber集，弹幕ID=$nextDandanplayEpisodeId，动画ID=$nextDandanplayAnimeId');
           
           // 通过Emby API获取下一集的详细信息
           try {
@@ -331,7 +331,7 @@ class EpisodeNavigationService {
               // 使用下一集的正确动画ID和剧集ID创建历史项
               final historyItem = await _createEmbyHistoryItem(nextEpisode, nextDandanplayAnimeId ?? animeId, nextDandanplayEpisodeId);
               
-              debugPrint('[数据库导航] 成功创建下一集历史项: ${nextEpisode.name}，使用弹幕ID: animeId=${nextDandanplayAnimeId ?? animeId}, episodeId=${nextDandanplayEpisodeId}');
+              debugPrint('[数据库导航] 成功创建下一集历史项: ${nextEpisode.name}，使用弹幕ID: animeId=${nextDandanplayAnimeId ?? animeId}, episodeId=$nextDandanplayEpisodeId');
               return EpisodeNavigationResult.success(
                 historyItem: historyItem,
                 message: '从Emby映射服务找到下一话：${nextEpisode.name}',
@@ -357,7 +357,7 @@ class EpisodeNavigationService {
         final seasonId = jellyfinMapping['jellyfin_season_id'] as String?;
 
         if (nextJellyfinIndexNumber != null && nextDandanplayEpisodeId != null && seriesId != null && seasonId != null) {
-          debugPrint('[数据库导航] 通过Jellyfin映射服务找到下一集: 第${nextJellyfinIndexNumber}集，弹幕ID=${nextDandanplayEpisodeId}，动画ID=${nextDandanplayAnimeId}');
+          debugPrint('[数据库导航] 通过Jellyfin映射服务找到下一集: 第$nextJellyfinIndexNumber集，弹幕ID=$nextDandanplayEpisodeId，动画ID=$nextDandanplayAnimeId');
           
           // 通过Jellyfin API获取下一集的详细信息
           try {
@@ -369,7 +369,7 @@ class EpisodeNavigationService {
               // 使用下一集的正确动画ID和剧集ID创建历史项
               final historyItem = await _createJellyfinHistoryItem(nextEpisode, nextDandanplayAnimeId ?? animeId, nextDandanplayEpisodeId);
               
-              debugPrint('[数据库导航] 成功创建下一集历史项: ${nextEpisode.name}，使用弹幕ID: animeId=${nextDandanplayAnimeId ?? animeId}, episodeId=${nextDandanplayEpisodeId}');
+              debugPrint('[数据库导航] 成功创建下一集历史项: ${nextEpisode.name}，使用弹幕ID: animeId=${nextDandanplayAnimeId ?? animeId}, episodeId=$nextDandanplayEpisodeId');
               return EpisodeNavigationResult.success(
                 historyItem: historyItem,
                 message: '从Jellyfin映射服务找到下一话：${nextEpisode.name}',

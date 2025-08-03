@@ -6,8 +6,8 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'single_danmaku.dart';
 import 'dart:math';
 import 'package:provider/provider.dart';
-import '../utils/video_player_state.dart';
-import '../utils/globals.dart' as globals;
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'danmaku_group_widget.dart';
 
 class DanmakuContainer extends StatefulWidget {

@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../widgets/blur_snackbar.dart';
-import '../widgets/countdown_snackbar.dart';
-import '../utils/video_player_state.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/countdown_snackbar.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 class AutoNextEpisodeService {
@@ -26,7 +26,7 @@ class AutoNextEpisodeService {
   
   // 开始自动播放下一话的倒计时
   void startAutoNextEpisode(BuildContext context, String currentVideoPath) {
-    debugPrint('[AutoNext] startAutoNextEpisode called, _isCountingDown=$_isCountingDown, context=${context != null}, mounted=${(context is Element) ? (context as Element).mounted : 'unknown'}');
+    debugPrint('[AutoNext] startAutoNextEpisode called, _isCountingDown=$_isCountingDown, context=${context != null}, mounted=${(context is Element) ? (context).mounted : 'unknown'}');
     if (_isCountingDown) {
       debugPrint('[AutoNext] _isCountingDown为true，直接return，不触发自动连播');
       return;

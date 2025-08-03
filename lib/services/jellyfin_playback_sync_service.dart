@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../models/watch_history_model.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
 import 'jellyfin_service.dart';
 
 /// 简化的Jellyfin播放记录同步服务
@@ -206,7 +206,7 @@ class JellyfinPlaybackSyncService {
     // Jellyfin ticks 转换为毫秒：1 tick = 100 nanoseconds = 0.0001 milliseconds
     final positionMs = (positionTicks / 10000).round(); // 转换为毫秒
     
-    debugPrint('[JellyfinSync] 服务器播放位置: ${positionTicks} ticks = ${positionMs} ms (约${(positionMs / 1000 / 60).toStringAsFixed(1)}分钟)');
+    debugPrint('[JellyfinSync] 服务器播放位置: $positionTicks ticks = $positionMs ms (约${(positionMs / 1000 / 60).toStringAsFixed(1)}分钟)');
     
     return WatchHistoryItem(
       filePath: originalHistory.filePath,
@@ -261,7 +261,7 @@ class JellyfinPlaybackSyncService {
   
   /// 生成播放会话ID
   String _generatePlaySessionId() {
-    return 'nipaplay_${DateTime.now().millisecondsSinceEpoch}_${_currentItemId}';
+    return 'nipaplay_${DateTime.now().millisecondsSinceEpoch}_$_currentItemId';
   }
   
   /// 发送认证请求

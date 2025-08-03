@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/widgets/video_player_widget.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/video_player_widget.dart';
 import 'package:provider/provider.dart';
-import '../utils/video_player_state.dart';
-import '../widgets/vertical_indicator.dart';
-import '../utils/globals.dart' as globals;
-import '../widgets/video_controls_overlay.dart';
-import '../widgets/back_button_widget.dart';
-import '../widgets/anime_info_widget.dart';
-import '../utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/vertical_indicator.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/widgets/nipaplay_theme/video_controls_overlay.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/back_button_widget.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/anime_info_widget.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
-import '../widgets/send_danmaku_button.dart';
-import '../widgets/send_danmaku_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_dialog.dart';
 import '../player_abstraction/player_abstraction.dart';
-import '../widgets/blur_dialog.dart';
-import '../widgets/blur_snackbar.dart';
-import '../utils/hotkey_service.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;

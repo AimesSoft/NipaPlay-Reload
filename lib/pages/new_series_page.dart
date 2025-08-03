@@ -1,24 +1,26 @@
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/bangumi_service.dart';
-import '../models/bangumi_model.dart';
-import '../models/watch_history_model.dart';
-import '../utils/image_cache_manager.dart';
+import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../services/dandanplay_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../pages/anime_detail_page.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
 import 'package:provider/provider.dart';
-import '../utils/video_player_state.dart';
-import '../widgets/loading_overlay.dart';
-import 'package:nipaplay/widgets/floating_action_glass_button.dart';
-import '../widgets/blur_snackbar.dart';
-import '../widgets/anime_card.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/loading_overlay.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
+import 'package:nipaplay/widgets/fluent_ui/fluent_anime_card.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/pages/fluent_new_series_page.dart';
 import 'package:nipaplay/main.dart';
-import '../widgets/tag_search_widget.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/tag_search_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class NewSeriesPage extends StatefulWidget {
@@ -220,6 +222,14 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   @override
   Widget build(BuildContext context) {
     super.build(context); // Added for AutomaticKeepAliveClientMixin
+    
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    
+    // 如果是Fluent UI主题，使用专门的Fluent UI页面
+    if (uiThemeProvider.isFluentUITheme) {
+      return const FluentNewSeriesPage();
+    }
+    
     //debugPrint('[NewSeriesPage build] START - isLoading: $_isLoading, error: $_error, animes.length: ${_animes.length}');
     
     // Outer Stack to handle the new LoadingOverlay for video loading
@@ -353,16 +363,33 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   }
 
   Widget _buildAnimeCard(BuildContext context, BangumiAnime anime, {Key? key}) {
-    return AnimeCard(
-      key: key,
-      name: anime.nameCn,
-      imageUrl: anime.imageUrl,
-      isOnAir: false,
-      source: 'Bangumi',
-      rating: anime.rating,
-      ratingDetails: anime.ratingDetails,
-      onTap: () => _showAnimeDetail(anime),
-    );
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    
+    if (uiThemeProvider.isFluentUITheme) {
+      // 使用 FluentUI 版本
+      return FluentAnimeCard(
+        key: key,
+        name: anime.nameCn,
+        imageUrl: anime.imageUrl,
+        isOnAir: false,
+        source: 'Bangumi',
+        rating: anime.rating,
+        ratingDetails: anime.ratingDetails,
+        onTap: () => _showAnimeDetail(anime),
+      );
+    } else {
+      // 使用 Material 版本（保持原有逻辑）
+      return AnimeCard(
+        key: key,
+        name: anime.nameCn,
+        imageUrl: anime.imageUrl,
+        isOnAir: false,
+        source: 'Bangumi',
+        rating: anime.rating,
+        ratingDetails: anime.ratingDetails,
+        onTap: () => _showAnimeDetail(anime),
+      );
+    }
   }
 
   String _formatDate(String? dateStr) {
@@ -383,8 +410,8 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   }
 
   Future<void> _showAnimeDetail(BangumiAnime animeFromList) async {
-    // 使用新的静态show方法，而不是TransparentPageRoute
-    final result = await AnimeDetailPage.show(context, animeFromList.id);
+    // 使用主题适配的显示方法
+    final result = await ThemedAnimeDetail.show(context, animeFromList.id);
 
     if (result is WatchHistoryItem) {
       // If a WatchHistoryItem is returned, handle playing the episode

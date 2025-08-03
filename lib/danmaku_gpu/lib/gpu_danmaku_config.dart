@@ -1,5 +1,5 @@
-import '../../utils/globals.dart' as globals;
-import '../../utils/video_player_state.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/video_player_state.dart';
 
 /// GPU弹幕配置类
 ///

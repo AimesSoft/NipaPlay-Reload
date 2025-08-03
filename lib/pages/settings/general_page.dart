@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
-import 'package:nipaplay/widgets/blur_dialog.dart';
-import 'package:nipaplay/widgets/blur_dropdown.dart';
-import 'package:nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Define the key for SharedPreferences

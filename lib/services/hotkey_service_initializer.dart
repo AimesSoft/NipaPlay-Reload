@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../utils/hotkey_service.dart';
+import 'package:nipaplay/utils/hotkey_service.dart';
 
 /// 热键服务初始化器，用于在应用程序启动时初始化HotkeyService
 class HotkeyServiceInitializer {

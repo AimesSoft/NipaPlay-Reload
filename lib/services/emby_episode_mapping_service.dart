@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
-import '../models/emby_model.dart';
-import '../models/watch_history_database.dart';
+import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
 
 /// Emby剧集映射服务
 /// 
@@ -283,7 +283,7 @@ class EmbyEpisodeMappingService {
       final offset = targetEmbyIndex - referenceEmbyIndex;
       final predictedEpisodeId = referenceDandanplayEpisodeId + offset;
       
-      debugPrint('[Emby映射服务] 基于已有映射推算: 参考第${referenceEmbyIndex}集(ID=${referenceDandanplayEpisodeId}) -> 预测第${targetEmbyIndex}集(ID=${predictedEpisodeId})');
+      debugPrint('[Emby映射服务] 基于已有映射推算: 参考第$referenceEmbyIndex集(ID=$referenceDandanplayEpisodeId) -> 预测第$targetEmbyIndex集(ID=$predictedEpisodeId)');
       
       // 自动记录这个预测的映射
       await recordEpisodeMapping(
@@ -445,7 +445,7 @@ class EmbyEpisodeMappingService {
 
       if (nextMappingResults.isNotEmpty) {
         final nextMapping = nextMappingResults.first;
-        debugPrint('[Emby映射服务] ✅ 找到下一集的现有映射: ${nextMapping}');
+        debugPrint('[Emby映射服务] ✅ 找到下一集的现有映射: $nextMapping');
         debugPrint('[Emby映射服务] - 下一集集号: ${nextMapping['emby_index_number']}');
         debugPrint('[Emby映射服务] - 下一集弹幕ID: ${nextMapping['dandanplay_episode_id']}');
         return Map<String, dynamic>.from(nextMapping);
@@ -476,9 +476,9 @@ class EmbyEpisodeMappingService {
         final predictedEpisodeId = referenceDandanplayEpisodeId + offset;
         
         debugPrint('[Emby映射服务] 基于已有映射推算下一集:');
-        debugPrint('[Emby映射服务] - 参考: 第${referenceEmbyIndex}集 -> DandanPlay ID: ${referenceDandanplayEpisodeId}');
+        debugPrint('[Emby映射服务] - 参考: 第$referenceEmbyIndex集 -> DandanPlay ID: $referenceDandanplayEpisodeId');
         debugPrint('[Emby映射服务] - 偏移量: $offset');
-        debugPrint('[Emby映射服务] - 预测: 第${nextEmbyIndexNumber}集 -> DandanPlay ID: ${predictedEpisodeId}');
+        debugPrint('[Emby映射服务] - 预测: 第$nextEmbyIndexNumber集 -> DandanPlay ID: $predictedEpisodeId');
         
         // 返回预测的映射信息
         final predictedMapping = {
@@ -577,7 +577,7 @@ class EmbyEpisodeMappingService {
         final offset = previousEmbyIndexNumber - referenceEmbyIndex;
         final predictedEpisodeId = referenceDandanplayEpisodeId + offset;
         
-        debugPrint('[Emby映射服务] 基于已有映射推算上一集: 参考第${referenceEmbyIndex}集(ID=${referenceDandanplayEpisodeId}) -> 预测第${previousEmbyIndexNumber}集(ID=${predictedEpisodeId})');
+        debugPrint('[Emby映射服务] 基于已有映射推算上一集: 参考第$referenceEmbyIndex集(ID=$referenceDandanplayEpisodeId) -> 预测第$previousEmbyIndexNumber集(ID=$predictedEpisodeId)');
         
         // 返回预测的映射信息
         final predictedMapping = {

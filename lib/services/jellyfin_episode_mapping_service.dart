@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
-import '../models/jellyfin_model.dart';
-import '../models/watch_history_database.dart';
+import 'package:nipaplay/models/jellyfin_model.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
 
 /// Jellyfin剧集映射服务
 /// 
@@ -270,7 +270,7 @@ class JellyfinEpisodeMappingService {
       final offset = targetJellyfinIndex - referenceJellyfinIndex;
       final predictedEpisodeId = referenceDandanplayEpisodeId + offset;
       
-      debugPrint('[映射服务] 基于已有映射推算: 参考第${referenceJellyfinIndex}集(ID=${referenceDandanplayEpisodeId}) -> 预测第${targetJellyfinIndex}集(ID=${predictedEpisodeId})');
+      debugPrint('[映射服务] 基于已有映射推算: 参考第$referenceJellyfinIndex集(ID=$referenceDandanplayEpisodeId) -> 预测第$targetJellyfinIndex集(ID=$predictedEpisodeId)');
       
       // 自动记录这个预测的映射
       await recordEpisodeMapping(
@@ -432,7 +432,7 @@ class JellyfinEpisodeMappingService {
 
       if (nextMappingResults.isNotEmpty) {
         final nextMapping = nextMappingResults.first;
-        debugPrint('[映射服务] ✅ 找到下一集的现有映射: ${nextMapping}');
+        debugPrint('[映射服务] ✅ 找到下一集的现有映射: $nextMapping');
         debugPrint('[映射服务] - 下一集集号: ${nextMapping['jellyfin_index_number']}');
         debugPrint('[映射服务] - 下一集弹幕ID: ${nextMapping['dandanplay_episode_id']}');
         return Map<String, dynamic>.from(nextMapping);
@@ -463,9 +463,9 @@ class JellyfinEpisodeMappingService {
         final predictedEpisodeId = referenceDandanplayEpisodeId + offset;
         
         debugPrint('[映射服务] 基于已有映射推算下一集:');
-        debugPrint('[映射服务] - 参考: 第${referenceJellyfinIndex}集 -> DandanPlay ID: ${referenceDandanplayEpisodeId}');
+        debugPrint('[映射服务] - 参考: 第$referenceJellyfinIndex集 -> DandanPlay ID: $referenceDandanplayEpisodeId');
         debugPrint('[映射服务] - 偏移量: $offset');
-        debugPrint('[映射服务] - 预测: 第${nextJellyfinIndexNumber}集 -> DandanPlay ID: ${predictedEpisodeId}');
+        debugPrint('[映射服务] - 预测: 第$nextJellyfinIndexNumber集 -> DandanPlay ID: $predictedEpisodeId');
         
         // 返回预测的映射信息
         final predictedMapping = {
@@ -564,7 +564,7 @@ class JellyfinEpisodeMappingService {
         final offset = previousJellyfinIndexNumber - referenceJellyfinIndex;
         final predictedEpisodeId = referenceDandanplayEpisodeId + offset;
         
-        debugPrint('[映射服务] 基于已有映射推算上一集: 参考第${referenceJellyfinIndex}集(ID=${referenceDandanplayEpisodeId}) -> 预测第${previousJellyfinIndexNumber}集(ID=${predictedEpisodeId})');
+        debugPrint('[映射服务] 基于已有映射推算上一集: 参考第$referenceJellyfinIndex集(ID=$referenceDandanplayEpisodeId) -> 预测第$previousJellyfinIndexNumber集(ID=$predictedEpisodeId)');
         
         // 返回预测的映射信息
         return {

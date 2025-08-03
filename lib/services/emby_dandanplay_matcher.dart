@@ -9,7 +9,7 @@ import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'dart:ui';
-import 'package:nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 
 /// 负责将Emby媒体与DandanPlay的内容匹配，以获取弹幕和元数据
 class EmbyDandanplayMatcher {

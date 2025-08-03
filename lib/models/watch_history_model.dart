@@ -3,7 +3,7 @@ import 'package:path/path.dart' as path;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'watch_history_database.dart'; // 添加引入数据库类
-import '../utils/storage_service.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 
 class WatchHistoryItem {
   String filePath;

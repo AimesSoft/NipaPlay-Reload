@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/jellyfin_model.dart';
+import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 
@@ -718,7 +718,7 @@ class JellyfinService {
     if (quality != null) params.add('quality=$quality');
     
     if (params.isNotEmpty) {
-      url += '?' + params.join('&');
+      url += '?${params.join('&')}';
     }
     
     return url;

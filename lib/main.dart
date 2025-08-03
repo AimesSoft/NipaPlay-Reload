@@ -6,9 +6,9 @@ import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
-import 'package:nipaplay/widgets/custom_scaffold.dart';
-import 'package:nipaplay/widgets/menu_button.dart';
-import 'package:nipaplay/widgets/system_resource_display.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/custom_scaffold.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/menu_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
@@ -31,10 +31,13 @@ import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/pages/fluent_main_page.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'services/security_bookmark_service.dart';
-import 'widgets/blur_snackbar.dart';
+import 'widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/utils/page_prewarmer.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
@@ -42,12 +45,12 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
-import 'package:nipaplay/widgets/splash_screen.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/splash_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:nipaplay/widgets/drag_drop_overlay.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/drag_drop_overlay.dart';
 import 'providers/service_provider.dart';
 import 'utils/platform_utils.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -426,6 +429,7 @@ void main(List<String> args) async {
           ChangeNotifierProvider(create: (_) => ScanService()),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider(create: (_) => UIThemeProvider()),
           ChangeNotifierProvider.value(value: debugLogService),
           ChangeNotifierProvider(create: (context) { // 修改 JellyfinProvider 的创建方式
             final jellyfinProvider = JellyfinProvider();
@@ -650,27 +654,64 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
           _handleDroppedFile(filePath);
         }
       },
-      child: Consumer<ThemeNotifier>(
-        builder: (context, themeNotifier, child) {
-          // 移除全局键盘快捷键注册，避免干扰文本输入
-          return MaterialApp(
-            title: 'NipaPlay',
-            debugShowCheckedModeBanner: false,
-            color: Colors.transparent,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: themeNotifier.themeMode,
-            navigatorKey: navigatorKey,
-            home: MainPage(launchFilePath: widget.launchFilePath),
-            builder: (context, appChild) {
-              return Stack(
-                children: [
-                  appChild!, // The app's content
-                  if (_isDragging) const DragDropOverlay(),
-                ],
-              );
-            },
-          );
+      child: Consumer2<ThemeNotifier, UIThemeProvider>(
+        builder: (context, themeNotifier, uiThemeProvider, child) {
+          // 等待UI主题初始化完成，避免竞态条件
+          if (!uiThemeProvider.isInitialized) {
+            return MaterialApp(
+              title: 'NipaPlay',
+              debugShowCheckedModeBanner: false,
+              home: const SplashScreen(), // 显示启动屏幕
+              builder: (context, appChild) {
+                return Stack(
+                  children: [
+                    appChild!,
+                    if (_isDragging) const DragDropOverlay(),
+                  ],
+                );
+              },
+            );
+          }
+          
+          // 根据UI主题选择使用哪套应用框架
+          if (uiThemeProvider.isFluentUITheme && (globals.isDesktop || globals.isTablet)) {
+            // 桌面端使用 Fluent UI
+            return fluent.FluentApp(
+              title: 'NipaPlay',
+              debugShowCheckedModeBanner: false,
+              theme: fluent.FluentThemeData.dark(),
+              navigatorKey: navigatorKey,
+              home: FluentMainPage(launchFilePath: widget.launchFilePath),
+              builder: (context, appChild) {
+                return Stack(
+                  children: [
+                    appChild!, // The app's content
+                    if (_isDragging) const DragDropOverlay(),
+                  ],
+                );
+              },
+            );
+          } else {
+            // 默认使用 Material Design
+            return MaterialApp(
+              title: 'NipaPlay',
+              debugShowCheckedModeBanner: false,
+              color: Colors.transparent,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeNotifier.themeMode,
+              navigatorKey: navigatorKey,
+              home: MainPage(launchFilePath: widget.launchFilePath),
+              builder: (context, appChild) {
+                return Stack(
+                  children: [
+                    appChild!, // The app's content
+                    if (_isDragging) const DragDropOverlay(),
+                  ],
+                );
+              },
+            );
+          }
         },
       ),
     );

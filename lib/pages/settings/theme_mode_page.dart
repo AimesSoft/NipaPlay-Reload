@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
-import 'package:nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,8 +10,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 

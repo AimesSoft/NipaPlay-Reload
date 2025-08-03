@@ -4,7 +4,7 @@ import 'danmaku_container.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
 import 'package:provider/provider.dart';
-import '../utils/video_player_state.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class DanmakuOverlay extends StatefulWidget {
