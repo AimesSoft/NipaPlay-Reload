@@ -2,7 +2,7 @@
 Name=NipaPlay
 Comment=A cross platform danmaku video player.
 Comment[zh_CN]=一款跨平台本地弹幕视频播放器。
-Exec=nipaplay %f
+Exec=/opt/nipaplay/NipaPlay %f
 Icon=io.github.MCDFsteve.NipaPlay-Reload
 Terminal=false
 Type=Application
