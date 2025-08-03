@@ -4,6 +4,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
+import 'package:nipaplay/widgets/fluent_ui/fluent_history_all_dialog.dart';
+import 'package:nipaplay/widgets/fluent_ui/fluent_watch_history_list.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/widgets/fluent_ui/fluent_media_library_tabs.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -265,12 +269,26 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                         child: SizedBox(
                           height: 180,
                           child: RepaintBoundary(
-                            child: isLoadingHistory && history.isEmpty
-                                ? const Center(child: CircularProgressIndicator())
-                                : history.isEmpty
-                                    ? _buildEmptyState(
-                                        message: "暂无观看记录，已扫描的视频可在媒体库查看")
-                                    : _buildWatchHistoryList(history),
+                            child: Builder(
+                              builder: (context) {
+                                if (isLoadingHistory && history.isEmpty) {
+                                  return const Center(child: CircularProgressIndicator());
+                                }
+                                
+                                final uiThemeProvider = Provider.of<UIThemeProvider>(context);
+                                if (uiThemeProvider.isFluentUITheme) {
+                                  return FluentWatchHistoryList(
+                                    history: history,
+                                    onItemTap: _onWatchHistoryItemTap,
+                                    onShowMore: () => _showAllHistory(history),
+                                  );
+                                }
+
+                                return history.isEmpty
+                                    ? _buildEmptyState(message: "暂无观看记录，已扫描的视频可在媒体库查看")
+                                    : _buildWatchHistoryList(history);
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -288,10 +306,22 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                       const SliverToBoxAdapter(child: SizedBox(height: 8)),
                     ];
                   },
-                  body: _MediaLibraryTabs(
-                    initialIndex: _currentTabIndex,
-                    onPlayEpisode: _onWatchHistoryItemTap,
-                    mediaLibraryVersion: _mediaLibraryVersion,
+                  body: Builder(
+                    builder: (context) {
+                      final uiThemeProvider = Provider.of<UIThemeProvider>(context);
+                      if (uiThemeProvider.isFluentUITheme) {
+                        return FluentMediaLibraryTabs(
+                          initialIndex: _currentTabIndex,
+                          onPlayEpisode: _onWatchHistoryItemTap,
+                          mediaLibraryVersion: _mediaLibraryVersion,
+                        );
+                      }
+                      return _MediaLibraryTabs(
+                        initialIndex: _currentTabIndex,
+                        onPlayEpisode: _onWatchHistoryItemTap,
+                        mediaLibraryVersion: _mediaLibraryVersion,
+                      );
+                    },
                   ),
                 ),
                 if (_loadingVideo)
@@ -664,15 +694,29 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   
   // 显示所有历史记录的对话框
   void _showAllHistory(List<WatchHistoryItem> allHistory) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => HistoryAllModal(
-        history: allHistory,
-        onItemTap: _onWatchHistoryItemTap,
-      ),
-    );
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    if (uiThemeProvider.isFluentUITheme) {
+      showDialog(
+        context: context,
+        builder: (context) => FluentHistoryAllDialog(
+          history: allHistory,
+          onItemTap: (item) {
+            Navigator.of(context).pop();
+            _onWatchHistoryItemTap(item);
+          },
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (context) => HistoryAllModal(
+          history: allHistory,
+          onItemTap: _onWatchHistoryItemTap,
+        ),
+      );
+    }
   }
 }
 
