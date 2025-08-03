@@ -618,7 +618,7 @@ jobs:
           export LD_LIBRARY_PATH="${APPDIR}/lib:${LD_LIBRARY_PATH}"
           chmod +x "${APPDIR}/${APP_NAME}"
           
-          ./linuxdeployqt "${APPDIR}/${APP_NAME}" -appimage -bundle-non-qt-libs
+          ./linuxdeployqt "${APPDIR}/${APP_NAME}" -unsupported-allow-new-glibc -appimage -bundle-non-qt-libs
           
           echo "Listing *.AppImage files in current directory after linuxdeployqt:"
           ls -la *.AppImage || echo "No AppImage found in current directory."
