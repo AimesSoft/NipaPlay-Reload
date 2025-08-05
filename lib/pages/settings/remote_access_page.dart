@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/service_provider.dart';
-import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
@@ -305,15 +305,15 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.link,
                 color: Colors.white70,
                 size: 20,
               ),
-              const SizedBox(width: 16),
-              const Text(
+              SizedBox(width: 16),
+              Text(
                 '访问地址',
                 style: TextStyle(
                   color: Colors.white,

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import '../../services/jellyfin_episode_mapping_service.dart';
-import '../../widgets/blur_snackbar.dart';
-import '../../widgets/blur_dialog.dart';
+import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 
 class JellyfinMappingManagementPage extends StatefulWidget {
   const JellyfinMappingManagementPage({super.key});

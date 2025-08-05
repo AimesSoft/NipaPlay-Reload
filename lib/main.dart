@@ -6,9 +6,9 @@ import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
-import 'package:nipaplay/widgets/custom_scaffold.dart';
-import 'package:nipaplay/widgets/menu_button.dart';
-import 'package:nipaplay/widgets/system_resource_display.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/custom_scaffold.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/menu_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
@@ -18,7 +18,6 @@ import 'pages/new_series_page.dart';
 import 'utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
-import 'package:nipaplay/utils/keyboard_shortcuts.dart';
 import 'services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'models/watch_history_model.dart';
@@ -32,10 +31,13 @@ import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/pages/fluent_main_page.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'services/security_bookmark_service.dart';
-import 'widgets/blur_snackbar.dart';
+import 'widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/utils/page_prewarmer.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
@@ -43,12 +45,12 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
-import 'package:nipaplay/widgets/splash_screen.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/splash_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:nipaplay/widgets/drag_drop_overlay.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/drag_drop_overlay.dart';
 import 'providers/service_provider.dart';
 import 'utils/platform_utils.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -59,7 +61,7 @@ import 'utils/hotkey_service.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
 const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
-bool _channelHandlerRegistered = false;
+
 final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<DefaultTabController>>();
 
 void main(List<String> args) async {
@@ -358,16 +360,7 @@ void main(List<String> args) async {
 
       return results[0] as String;
     }),
-    // 加载并保存默认快捷键设置 - 已由HotkeyService处理，不再需要
-    /*
-    Future(() async {
-      await KeyboardShortcuts.loadShortcuts();
-      // 如果没有保存的快捷键，保存默认值
-      if (!await KeyboardShortcuts.hasSavedShortcuts()) {
-        await KeyboardShortcuts.saveShortcuts();
-      }
-    }),
-    */
+
     
     // 清理过期的弹幕缓存
     DanmakuCacheManager.clearExpiredCache(),
@@ -436,6 +429,7 @@ void main(List<String> args) async {
           ChangeNotifierProvider(create: (_) => ScanService()),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider(create: (_) => UIThemeProvider()),
           ChangeNotifierProvider.value(value: debugLogService),
           ChangeNotifierProvider(create: (context) { // 修改 JellyfinProvider 的创建方式
             final jellyfinProvider = JellyfinProvider();
@@ -660,27 +654,64 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
           _handleDroppedFile(filePath);
         }
       },
-      child: Consumer<ThemeNotifier>(
-        builder: (context, themeNotifier, child) {
-          // 移除全局键盘快捷键注册，避免干扰文本输入
-          return MaterialApp(
-            title: 'NipaPlay',
-            debugShowCheckedModeBanner: false,
-            color: Colors.transparent,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: themeNotifier.themeMode,
-            navigatorKey: navigatorKey,
-            home: MainPage(launchFilePath: widget.launchFilePath),
-            builder: (context, appChild) {
-              return Stack(
-                children: [
-                  appChild!, // The app's content
-                  if (_isDragging) const DragDropOverlay(),
-                ],
-              );
-            },
-          );
+      child: Consumer2<ThemeNotifier, UIThemeProvider>(
+        builder: (context, themeNotifier, uiThemeProvider, child) {
+          // 等待UI主题初始化完成，避免竞态条件
+          if (!uiThemeProvider.isInitialized) {
+            return MaterialApp(
+              title: 'NipaPlay',
+              debugShowCheckedModeBanner: false,
+              home: const SplashScreen(), // 显示启动屏幕
+              builder: (context, appChild) {
+                return Stack(
+                  children: [
+                    appChild!,
+                    if (_isDragging) const DragDropOverlay(),
+                  ],
+                );
+              },
+            );
+          }
+          
+          // 根据UI主题选择使用哪套应用框架
+          if (uiThemeProvider.isFluentUITheme && (globals.isDesktop || globals.isTablet)) {
+            // 桌面端使用 Fluent UI
+            return fluent.FluentApp(
+              title: 'NipaPlay',
+              debugShowCheckedModeBanner: false,
+              theme: fluent.FluentThemeData.dark(),
+              navigatorKey: navigatorKey,
+              home: FluentMainPage(launchFilePath: widget.launchFilePath),
+              builder: (context, appChild) {
+                return Stack(
+                  children: [
+                    appChild!, // The app's content
+                    if (_isDragging) const DragDropOverlay(),
+                  ],
+                );
+              },
+            );
+          } else {
+            // 默认使用 Material Design
+            return MaterialApp(
+              title: 'NipaPlay',
+              debugShowCheckedModeBanner: false,
+              color: Colors.transparent,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeNotifier.themeMode,
+              navigatorKey: navigatorKey,
+              home: MainPage(launchFilePath: widget.launchFilePath),
+              builder: (context, appChild) {
+                return Stack(
+                  children: [
+                    appChild!, // The app's content
+                    if (_isDragging) const DragDropOverlay(),
+                  ],
+                );
+              },
+            );
+          }
         },
       ),
     );
@@ -804,38 +835,65 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     _manageHotkeys();
   }
 
+  int _defaultPageIndex = 0;
+
   @override
   void initState() {
     super.initState();
-    globalTabController = TabController(length: 4, vsync: this, initialIndex: 0);
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _initializeController();
+    _initializeListeners();
+    _postFrameCallbacks();
+  }
+
+  Future<void> _initializeController() async {
+    final prefs = await SharedPreferences.getInstance();
+    _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
+    
+    if (mounted) {
+      globalTabController = TabController(
+        length: 4,
+        vsync: this,
+        initialIndex: _defaultPageIndex,
+      );
+      debugPrint('[MainPageState] TabController initialized with index: $_defaultPageIndex');
+    }
+  }
+
+  void _initializeListeners() {
     globalTabController?.addListener(_onTabChange);
     debugPrint('[MainPageState] initState: globalTabController listener ADDED.');
-    
-    // 处理启动时的文件路径
-    if (widget.launchFilePath != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _handleLaunchFile(widget.launchFilePath!);
-      });
-    }
 
-    // 窗口管理器初始化
     if (globals.winLinDesktop) {
       windowManager.addListener(this);
-      _checkWindowMaximizedState();
     }
-    _startSplashScreenSequence();
+  }
 
-    // 初始化热键服务
-    if (globals.isDesktop) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        // 先初始化热键服务
-        await HotkeyServiceInitializer().initialize(context);
-        
-        // 再初始化快捷键提示管理器
-        debugPrint('[MainPage] 初始化快捷键提示管理器');
-        ShortcutTooltipManager();
-      });
-    }
+  void _postFrameCallbacks() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.launchFilePath != null) {
+        _handleLaunchFile(widget.launchFilePath!);
+      }
+
+      if (globals.winLinDesktop) {
+        _checkWindowMaximizedState();
+      }
+      
+      _startSplashScreenSequence();
+
+      if (globals.isDesktop) {
+        _initializeHotkeys();
+      }
+    });
+  }
+  
+  void _initializeHotkeys() async {
+    await HotkeyServiceInitializer().initialize(context);
+    debugPrint('[MainPage] 初始化快捷键提示管理器');
+    ShortcutTooltipManager();
   }
 
   void _startSplashScreenSequence() {
@@ -843,35 +901,17 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
-      final prefs = await SharedPreferences.getInstance();
-      final defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
+      // 直接使用已加载的 _defaultPageIndex, 不再需要动画切换
+      // 如果需要启动动画，可以在这里实现
+      
+      // 延迟一段时间后隐藏启动画面
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      const switchDelay = Duration(milliseconds: 200);
-      const initialDelay = Duration(milliseconds: 300);
-
-      Timer(initialDelay, () async {
-        if (!mounted) return;
-        globalTabController?.animateTo(1);
-        await Future.delayed(switchDelay);
-
-        if (!mounted) return;
-        globalTabController?.animateTo(2);
-        await Future.delayed(switchDelay);
-
-        if (!mounted) return;
-        globalTabController?.animateTo(3);
-        await Future.delayed(switchDelay);
-
-        if (!mounted) return;
-        globalTabController?.animateTo(defaultPageIndex);
-        await Future.delayed(switchDelay);
-
-        if (mounted) {
-          setState(() {
-            _showSplash = false;
-          });
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _showSplash = false;
+        });
+      }
     });
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:provider/provider.dart';
-import '../utils/video_player_state.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 
 class SpeedBoostIndicator extends StatelessWidget {
   const SpeedBoostIndicator({super.key});
@@ -26,16 +26,16 @@ class SpeedBoostIndicator extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12.0),
                       border: Border.all(color: Colors.white.withOpacity(0.7), width: 0.5),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.fast_forward_rounded,
                           color: Color.fromARGB(139, 255, 255, 255),
                           size: 20,
                         ),
-                        const SizedBox(width: 8),
-                        const Text(
+                        SizedBox(width: 8),
+                        Text(
                           "2x 倍速",
                           style: TextStyle(
                             color: Color.fromARGB(139, 255, 255, 255),

@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import '../utils/hotkey_service.dart';
-import '../widgets/blur_dialog.dart';
-import '../utils/globals.dart' as globals;
+import 'package:nipaplay/utils/hotkey_service.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/message_helper.dart';
 import 'dart:ui';
 
 class ShortcutsSettingsPage extends StatefulWidget {
@@ -286,11 +287,11 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     
     // 如果是无法识别的键，显示提示并返回
     if (keyText.contains('PhysicalKeyboard') || keyText.contains('#')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('无法识别的键位: ${event.physicalKey}'),
-          duration: const Duration(seconds: 2),
-        ),
+      MessageHelper.showMessage(
+        context,
+        '无法识别的键位: ${event.physicalKey}',
+        isError: true,
+        duration: const Duration(seconds: 2),
       );
       _stopRecording();
       return;
@@ -306,7 +307,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     // 构建快捷键文本
     String shortcut = '';
     if (modifiers.isNotEmpty) {
-      shortcut = modifiers.join('+') + '+' + keyText;
+      shortcut = '${modifiers.join('+')}+$keyText';
     } else {
       shortcut = keyText;
     }
@@ -407,7 +408,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                         const Divider(color: Colors.white12, height: 1),
                       ],
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
       ),
@@ -446,13 +447,13 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
   
   // 构建快捷键按钮，使用与BlurButton一致的样式
   Widget _buildShortcutButton(String shortcut, VoidCallback onPressed) {
-    bool _isHovered = false;
+    bool isHovered = false;
     
     return StatefulBuilder(
       builder: (context, setState) {
         return MouseRegion(
-          onEnter: (_) => setState(() => _isHovered = true),
-          onExit: (_) => setState(() => _isHovered = false),
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: BackdropFilter(
@@ -462,17 +463,17 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                 curve: Curves.easeOutCubic,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: _isHovered 
+                  color: isHovered 
                     ? Colors.white.withOpacity(0.4) 
                     : Colors.white.withOpacity(0.18),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: _isHovered 
+                    color: isHovered 
                       ? Colors.white.withOpacity(0.7) 
                       : Colors.white.withOpacity(0.25),
-                    width: _isHovered ? 1.0 : 0.5,
+                    width: isHovered ? 1.0 : 0.5,
                   ),
-                  boxShadow: _isHovered
+                  boxShadow: isHovered
                     ? [
                         BoxShadow(
                           color: Colors.white.withOpacity(0.25),
@@ -487,11 +488,11 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                   child: AnimatedDefaultTextStyle(
                     duration: const Duration(milliseconds: 300),
                     style: TextStyle(
-                      color: _isHovered
+                      color: isHovered
                         ? Colors.white 
                         : Colors.white.withOpacity(0.8),
                       fontSize: 14,
-                      fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
+                      fontWeight: isHovered ? FontWeight.w500 : FontWeight.normal,
                     ),
                     child: Text(shortcut.isEmpty ? '点击设置' : shortcut),
                   ),

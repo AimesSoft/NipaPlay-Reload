@@ -5,8 +5,8 @@ import 'package:nipaplay/pages/settings/theme_mode_page.dart'; // 导入 ThemeMo
 import 'package:nipaplay/pages/settings/general_page.dart';
 import 'package:nipaplay/pages/settings/developer_options_page.dart'; // 导入开发者选项页面
 import 'package:nipaplay/utils/theme_notifier.dart';
-import 'package:nipaplay/widgets/custom_scaffold.dart';
-import 'package:nipaplay/widgets/responsive_container.dart'; // 导入响应式容器
+import 'package:nipaplay/widgets/nipaplay_theme/custom_scaffold.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/responsive_container.dart'; // 导入响应式容器
 import 'package:nipaplay/pages/settings/about_page.dart'; // 导入 AboutPage
 import 'package:nipaplay/utils/globals.dart' as globals; // 导入包含 isDesktop 的全局变量文件
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
@@ -14,6 +14,7 @@ import 'package:nipaplay/pages/settings/account_page.dart';
 import 'package:nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
 import 'package:nipaplay/pages/settings/remote_media_library_page.dart'; // 导入远程媒体库设置页面
 import 'package:nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
+import 'package:nipaplay/pages/settings/ui_theme_page.dart'; // 导入UI主题设置页面
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -116,6 +117,19 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               _handleItemTap(
                   ThemeModePage(themeNotifier: themeNotifier), // 目标页面
                   "外观设置" // 移动端 AppBar 标题
+                  );
+            },
+          ),
+          ListTile(
+            title: const Text("主题（实验性）",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(
+                  const UIThemePage(),
+                  "主题设置"
                   );
             },
           ),

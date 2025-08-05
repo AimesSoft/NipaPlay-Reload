@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/widgets/video_player_widget.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/video_player_widget.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/widgets/fluent_ui/fluent_send_danmaku_dialog.dart';
+import 'package:nipaplay/widgets/fluent_ui/fluent_video_controls_overlay.dart';
 import 'package:provider/provider.dart';
-import '../utils/video_player_state.dart';
-import '../widgets/vertical_indicator.dart';
-import '../utils/globals.dart' as globals;
-import '../widgets/video_controls_overlay.dart';
-import '../widgets/back_button_widget.dart';
-import '../widgets/anime_info_widget.dart';
-import '../utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/vertical_indicator.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/widgets/nipaplay_theme/video_controls_overlay.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/back_button_widget.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/anime_info_widget.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
-import '../widgets/send_danmaku_button.dart';
-import '../widgets/send_danmaku_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_dialog.dart';
 import '../player_abstraction/player_abstraction.dart';
-import '../widgets/blur_dialog.dart';
-import '../widgets/blur_snackbar.dart';
-import '../utils/hotkey_service.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -122,149 +125,163 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context);
+
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         return WillPopScope(
           onWillPop: _handleWillPop,
           child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          color: videoState.hasVideo 
-              ? Colors.black 
-              : Colors.transparent,
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            body: Stack(
-              fit: StackFit.expand,
-              children: [
-                const Positioned.fill(
-                  child: VideoPlayerWidget(),
-                ),
-                if (videoState.hasVideo) ...[
-                  // 弹幕已经在VideoPlayerWidget内部处理，这里不需要重复创建
-                  Consumer<VideoPlayerState>(
-                    builder: (context, videoState, _) {
-                      return VerticalIndicator(videoState: videoState);
-                    },
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            color: videoState.hasVideo ? Colors.black : Colors.transparent,
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Stack(
+                fit: StackFit.expand,
+                children: [
+                  const Positioned.fill(
+                    child: VideoPlayerWidget(),
                   ),
-                  Positioned(
-                    top: 16.0,
-                    left: 16.0,
-                    child: AnimatedOpacity(
-                      opacity: videoState.showControls ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: IgnorePointer(
-                        ignoring: !videoState.showControls,
-                        child: Padding(
-                          padding: EdgeInsets.only(left: globals.isPhone ? 24.0 : 0.0),
-                          child: Row(
-                            children: [
-                              MouseRegion(
-                                cursor: _isHoveringBackButton
-                                    ? SystemMouseCursors.click
-                                    : SystemMouseCursors.basic,
-                                onEnter: (_) => setState(() => _isHoveringBackButton = true),
-                                onExit: (_) => setState(() => _isHoveringBackButton = false),
-                                child: BackButtonWidget(videoState: videoState),
-                              ),
-                              const SizedBox(width: 10.0),
-                              MouseRegion(
-                                cursor: _isHoveringAnimeInfo 
-                                  ? SystemMouseCursors.click
-                                  : SystemMouseCursors.basic,
-                                onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
-                                onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
-                                child: AnimeInfoWidget(videoState: videoState),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: AnimatedOpacity(
-                        opacity: videoState.showControls ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 150),
-                        child: IgnorePointer(
-                          ignoring: !videoState.showControls,
-                          child: SendDanmakuButton(
-                            onPressed: () async {
-                              final hotkeyService = HotkeyService();
-                              final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-                              final wasPlaying = videoState.player.state == PlaybackState.playing;
-
-                              if (wasPlaying) {
-                                await videoState.player.pauseDirectly();
-                              }
-
-                              final episodeId = videoState.episodeId;
-                              final currentTime = videoState.position.inSeconds.toDouble();
-
-                              if (episodeId == null) {
-                                BlurSnackBar.show(context, '无法获取剧集信息，无法发送弹幕');
-                                if (wasPlaying) await videoState.player.playDirectly();
-                                return;
-                              }
-
-                              hotkeyService.unregisterHotkeys(); // 注销热键
-
-                              await BlurDialog.show(
-                                context: context,
-                                title: '发送弹幕',
-                                contentWidget: SendDanmakuDialogContent(
-                                  episodeId: episodeId,
-                                  currentTime: currentTime,
-                                  onDanmakuSent: (danmaku) {
-                                    // 将新弹幕添加到播放器状态中
-                                    videoState.addDanmakuToNewTrack(danmaku);
-                                  },
-                                ),
-                                // Actions are now handled inside the dialog
-                                actions: [],
-                              );
-
-                              // 重新注册热键
-                              hotkeyService.registerHotkeys();
-
-                              if (wasPlaying) {
-                                await videoState.player.playDirectly();
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (globals.isPhone && videoState.isFullscreen)
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 60,
-                      child: GestureDetector(
-                        onHorizontalDragStart: _handleSideSwipeDragStart,
-                        onHorizontalDragUpdate: _handleSideSwipeDragUpdate,
-                        onHorizontalDragEnd: _handleSideSwipeDragEnd,
-                        behavior: HitTestBehavior.translucent,
-                        dragStartBehavior: DragStartBehavior.down,
-                        child: Container(
-                        ),
-                      ),
-                    ),
+                  if (videoState.hasVideo)
+                    uiThemeProvider.isFluentUITheme
+                        ? const FluentVideoControlsOverlay()
+                        : _buildMaterialControls(videoState),
                 ],
-                if (videoState.hasVideo)
-                  const VideoControlsOverlay(),
-              ],
+              ),
             ),
           ),
-        ),
         );
       },
     );
+  }
+
+  Widget _buildMaterialControls(VideoPlayerState videoState) {
+    return Stack(
+      children: [
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, _) {
+            return VerticalIndicator(videoState: videoState);
+          },
+        ),
+        Positioned(
+          top: 16.0,
+          left: 16.0,
+          child: AnimatedOpacity(
+            opacity: videoState.showControls ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 150),
+            child: IgnorePointer(
+              ignoring: !videoState.showControls,
+              child: Padding(
+                padding: EdgeInsets.only(left: globals.isPhone ? 24.0 : 0.0),
+                child: Row(
+                  children: [
+                    MouseRegion(
+                      cursor: _isHoveringBackButton ? SystemMouseCursors.click : SystemMouseCursors.basic,
+                      onEnter: (_) => setState(() => _isHoveringBackButton = true),
+                      onExit: (_) => setState(() => _isHoveringBackButton = false),
+                      child: BackButtonWidget(videoState: videoState),
+                    ),
+                    const SizedBox(width: 10.0),
+                    MouseRegion(
+                      cursor: _isHoveringAnimeInfo ? SystemMouseCursors.click : SystemMouseCursors.basic,
+                      onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
+                      onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
+                      child: AnimeInfoWidget(videoState: videoState),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
+          top: 0,
+          bottom: 0,
+          child: Center(
+            child: AnimatedOpacity(
+              opacity: videoState.showControls ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 150),
+              child: IgnorePointer(
+                ignoring: !videoState.showControls,
+                child: SendDanmakuButton(
+                  onPressed: () => _showSendDanmakuDialog(videoState),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (globals.isPhone && videoState.isFullscreen)
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 60,
+            child: GestureDetector(
+              onHorizontalDragStart: _handleSideSwipeDragStart,
+              onHorizontalDragUpdate: _handleSideSwipeDragUpdate,
+              onHorizontalDragEnd: _handleSideSwipeDragEnd,
+              behavior: HitTestBehavior.translucent,
+              dragStartBehavior: DragStartBehavior.down,
+              child: Container(),
+            ),
+          ),
+        const VideoControlsOverlay(),
+      ],
+    );
+  }
+
+  Future<void> _showSendDanmakuDialog(VideoPlayerState videoState) async {
+    final hotkeyService = HotkeyService();
+    final wasPlaying = videoState.player.state == PlaybackState.playing;
+
+    if (wasPlaying) {
+      await videoState.player.pauseDirectly();
+    }
+
+    final episodeId = videoState.episodeId;
+    final currentTime = videoState.position.inSeconds.toDouble();
+
+    if (episodeId == null) {
+      BlurSnackBar.show(context, '无法获取剧集信息，无法发送弹幕');
+      if (wasPlaying) await videoState.player.playDirectly();
+      return;
+    }
+
+    hotkeyService.unregisterHotkeys();
+
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    if (uiThemeProvider.isFluentUITheme) {
+      await showDialog(
+        context: context,
+        builder: (context) => FluentSendDanmakuDialog(
+          episodeId: episodeId,
+          currentTime: currentTime,
+          onDanmakuSent: (danmaku) {
+            videoState.addDanmakuToNewTrack(danmaku);
+          },
+        ),
+      );
+    } else {
+      await BlurDialog.show(
+        context: context,
+        title: '发送弹幕',
+        contentWidget: SendDanmakuDialogContent(
+          episodeId: episodeId,
+          currentTime: currentTime,
+          onDanmakuSent: (danmaku) {
+            videoState.addDanmakuToNewTrack(danmaku);
+          },
+        ),
+        actions: [],
+      );
+    }
+
+    hotkeyService.registerHotkeys();
+
+    if (wasPlaying) {
+      await videoState.player.playDirectly();
+    }
   }
 } 

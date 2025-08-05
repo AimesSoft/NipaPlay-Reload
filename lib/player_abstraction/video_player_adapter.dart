@@ -12,9 +12,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import './abstract_player.dart';
 import './player_enums.dart';
 import './player_data_models.dart';
-import '../models/watch_history_model.dart';
-import '../models/watch_history_database.dart';
-import '../utils/storage_service.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 
 /// video_player 插件的适配器，实现 AbstractPlayer 接口
 class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
@@ -798,6 +798,16 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
       // 设置音量
       _controller!.setVolume(_volume);
       
+      // 重新应用播放速度设置
+      if (_playbackRate != 1.0) {
+        try {
+          _controller!.setPlaybackSpeed(_playbackRate);
+          debugPrint('VideoPlayer: 重新应用播放速度设置: ${_playbackRate}x');
+        } catch (e) {
+          debugPrint('VideoPlayer: 重新应用播放速度失败: $e');
+        }
+      }
+      
       // 添加详细的状态监听器
       _controller!.addListener(_controllerListener);
       
@@ -841,6 +851,16 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         
         // 设置音量
         _controller!.setVolume(_volume);
+        
+        // 重新应用播放速度设置
+        if (_playbackRate != 1.0) {
+          try {
+            _controller!.setPlaybackSpeed(_playbackRate);
+            debugPrint('VideoPlayer: 重新应用播放速度设置 (fallback): ${_playbackRate}x');
+          } catch (e) {
+            debugPrint('VideoPlayer: 重新应用播放速度失败 (fallback): $e');
+          }
+        }
         
         // 添加详细的状态监听器
         _controller!.addListener(_controllerListener);

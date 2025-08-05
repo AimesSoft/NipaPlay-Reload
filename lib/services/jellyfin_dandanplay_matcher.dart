@@ -10,7 +10,7 @@ import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
-import 'package:nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 
 /// 负责将Jellyfin媒体与DandanPlay的内容匹配，以获取弹幕和元数据
 class JellyfinDandanplayMatcher {
@@ -356,12 +356,8 @@ class JellyfinDandanplayMatcher {
         selectedMatch = result;
         
         // 如果用户通过对话框选择了匹配项，记录日志
-        if (selectedMatch != null) {
-          debugPrint('用户选择了匹配项: ${selectedMatch['animeTitle']}');
-        } else {
-          debugPrint('用户跳过了匹配');
-        }
-      } else {
+        debugPrint('用户选择了匹配项: ${selectedMatch['animeTitle']}');
+            } else {
         // 非对话框模式下（例如预计算），如果匹配项不为空，则自动选择第一个
         if (animeMatches.isNotEmpty) {
           selectedMatch = animeMatches.first;

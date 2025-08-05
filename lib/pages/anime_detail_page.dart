@@ -1,29 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
-import '../services/bangumi_service.dart';
-import '../models/bangumi_model.dart';
-import '../models/watch_history_model.dart';
-import '../widgets/cached_network_image_widget.dart';
-// import '../widgets/translation_button.dart'; // Removed
+import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/cached_network_image_widget.dart';
+// import 'package:nipaplay/widgets/nipaplay_theme/translation_button.dart'; // Removed
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 // import 'dart:convert'; // No longer needed for local translation state
 // import 'package:http/http.dart' as http; // No longer needed for local translation state
-import '../services/dandanplay_service.dart'; // 重新添加DandanplayService导入
-import '../widgets/blur_snackbar.dart'; // Added for blur snackbar
+import 'package:nipaplay/services/dandanplay_service.dart'; // 重新添加DandanplayService导入
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart'; // Added for blur snackbar
 import 'package:provider/provider.dart'; // 重新添加
-// import '../utils/video_player_state.dart'; // Removed from here
+// import 'package:nipaplay/utils/video_player_state.dart'; // Removed from here
 import 'dart:io'; // Added for File operations
-// import '../utils/tab_change_notifier.dart'; // Removed from here
+// import 'package:nipaplay/utils/tab_change_notifier.dart'; // Removed from here
 import '../providers/appearance_settings_provider.dart'; // 添加外观设置Provider
-import '../widgets/switchable_view.dart'; // 添加SwitchableView组件
-import '../widgets/tag_search_widget.dart'; // 添加标签搜索组件
-import '../widgets/rating_dialog.dart'; // 添加评分对话框
-import '../services/playback_service.dart';
-import '../models/playable_item.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/switchable_view.dart'; // 添加SwitchableView组件
+import 'package:nipaplay/widgets/nipaplay_theme/tag_search_widget.dart'; // 添加标签搜索组件
+import 'package:nipaplay/widgets/nipaplay_theme/rating_dialog.dart'; // 添加评分对话框
+import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:nipaplay/pages/fluent_anime_detail_page.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -41,6 +43,23 @@ class AnimeDetailPage extends StatefulWidget {
   }
   
   static Future<WatchHistoryItem?> show(BuildContext context, int animeId) {
+    // 检查当前UI主题，自动选择适合的版本
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    
+    if (uiThemeProvider.isFluentUITheme) {
+      // 使用 Fluent UI 版本
+      return fluent.showDialog<WatchHistoryItem>(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => FluentAnimeDetailPage(animeId: animeId),
+      );
+    } else {
+      // 使用 Material 版本（保持原有逻辑）
+      return _showMaterialDialog(context, animeId);
+    }
+  }
+  
+  static Future<WatchHistoryItem?> _showMaterialDialog(BuildContext context, int animeId) {
     // 获取外观设置Provider
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
     final enableAnimation = appearanceSettings.enablePageAnimation;

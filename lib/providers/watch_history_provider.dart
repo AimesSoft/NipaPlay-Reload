@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../models/watch_history_model.dart';
-import '../models/watch_history_database.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
 import 'dart:io';
-import '../services/file_picker_service.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 
 class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];

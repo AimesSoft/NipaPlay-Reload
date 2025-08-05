@@ -10,46 +10,43 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'keyboard_shortcuts.dart';
+
 import 'globals.dart' as globals;
 import 'dart:convert';
-import '../services/dandanplay_service.dart';
-import '../services/jellyfin_service.dart';
-import '../services/emby_service.dart';
-import '../services/jellyfin_playback_sync_service.dart';
-import '../services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
+import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
+import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'media_info_helper.dart';
-import '../services/danmaku_cache_manager.dart';
-import '../models/watch_history_model.dart';
-import '../models/watch_history_database.dart'; // 导入观看记录数据库
-import '../widgets/blur_dialog.dart';
-import '../widgets/send_danmaku_dialog.dart';
+import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
-import '../widgets/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 
 import 'package:path/path.dart' as p; // Added import for path package
-import 'package:path_provider/path_provider.dart'; // Added for getTemporaryDirectory
+// Added for getTemporaryDirectory
 import 'package:crypto/crypto.dart';
 import 'package:provider/provider.dart';
 import '../providers/watch_history_provider.dart';
-import 'package:flutter/foundation.dart';
 import 'danmaku_parser.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brightness
-import '../widgets/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
-import '../widgets/volume_indicator.dart'; // Added import for VolumeIndicator widget
-import '../widgets/seek_indicator.dart'; // Added import for SeekIndicator widget
-import '../widgets/speed_boost_indicator.dart'; // Added import for SpeedBoostIndicator widget
+import 'package:nipaplay/widgets/nipaplay_theme/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
+import 'package:nipaplay/widgets/nipaplay_theme/volume_indicator.dart'; // Added import for VolumeIndicator widget
+import 'package:nipaplay/widgets/nipaplay_theme/seek_indicator.dart'; // Added import for SeekIndicator widget
+import 'package:nipaplay/widgets/nipaplay_theme/speed_boost_indicator.dart'; // Added import for SpeedBoostIndicator widget
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
-import '../services/file_picker_service.dart'; // Added import for FilePickerService
+import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'decoder_manager.dart'; // 导入解码器管理器
-import '../services/episode_navigation_service.dart'; // 导入剧集导航服务
-import '../services/auto_next_episode_service.dart';
+import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧集导航服务
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
-import '../player_abstraction/media_kit_player_adapter.dart'; // 导入MediaKitPlayerAdapter
+// 导入MediaKitPlayerAdapter
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
 import 'package:flutter/scheduler.dart'; // 添加Ticker导入
@@ -404,10 +401,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _startUiUpdateTimer(); // 启动UI更新定时器（已包含位置保存功能）
     _setupWindowManagerListener();
     _focusNode.requestFocus();
-    KeyboardShortcuts.loadShortcuts();
     await _loadLastVideo();
     await _loadControlBarHeight(); // 加载保存的控制栏高度
-    await _loadDanmakuOpacity(); // 加载保存的弹幕透明度
+    await _loadDanmakuOpacity(); // 加载保存的弹幕不透明度
     await _loadDanmakuVisible(); // 加载弹幕可见性
     await _loadMergeDanmaku(); // 加载弹幕合并设置
     await _loadDanmakuStacking(); // 加载弹幕堆叠设置
@@ -543,7 +539,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                   right: videoState.isBrightnessIndicatorVisible ? 20.0 : 0.0, 
                   top: globals.isPhone ? 100.0 : 250.0,
                   bottom: globals.isPhone ? 100.0 : 250.0,
-                  // We need to import '../widgets/brightness_indicator.dart'
+                  // We need to import 'package:nipaplay/widgets/nipaplay_theme/brightness_indicator.dart'
                   // Assuming it's available, otherwise this will fail.
                   // For the edit tool, I should ensure imports are handled if I introduce new types.
                   // However, BrightnessIndicator is an existing type.
@@ -1208,6 +1204,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
       // 等待一小段时间确保播放器状态稳定
       await Future.delayed(const Duration(milliseconds: 300));
+
+      // 应用保存的播放速度设置
+      if (hasVideo && _playbackRate != 1.0) {
+        player.setPlaybackRate(_playbackRate);
+        debugPrint('VideoPlayerState: 应用保存的播放速度设置: ${_playbackRate}x');
+      }
 
       // 再次检查播放器实际状态并同步 _status
       if (player.state == PlaybackState.playing) {
@@ -2670,14 +2672,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     notifyListeners();
   }
 
-  // 加载弹幕透明度
+  // 加载弹幕不透明度
   Future<void> _loadDanmakuOpacity() async {
     final prefs = await SharedPreferences.getInstance();
     _danmakuOpacity = prefs.getDouble(_danmakuOpacityKey) ?? 1.0;
     notifyListeners();
   }
 
-  // 保存弹幕透明度
+  // 保存弹幕不透明度
   Future<void> setDanmakuOpacity(double opacity) async {
     _danmakuOpacity = opacity;
     final prefs = await SharedPreferences.getInstance();
@@ -4758,6 +4760,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     final currentDuration = _duration;
     final currentProgress = _progress;
     final currentVolume = player.volume;
+    final currentPlaybackRate = _playbackRate; // 保存当前播放速度
     final wasPlaying = _status == PlayerStatus.playing;
     final historyItem = WatchHistoryItem(
       filePath: currentPath ?? '',
@@ -4796,6 +4799,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 5. 恢复播放状态
     if (hasVideo) {
       player.volume = currentVolume;
+      // 恢复播放速度设置
+      if (currentPlaybackRate != 1.0) {
+        player.setPlaybackRate(currentPlaybackRate);
+        debugPrint('[VideoPlayerState] 恢复播放速度设置: ${currentPlaybackRate}x');
+      }
       seekTo(currentPosition);
       if (wasPlaying) {
         play();

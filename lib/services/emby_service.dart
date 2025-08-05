@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/emby_model.dart';
+import 'package:nipaplay/models/emby_model.dart';
 import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';

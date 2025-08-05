@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import '../../widgets/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});

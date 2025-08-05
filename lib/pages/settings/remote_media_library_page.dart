@@ -5,10 +5,10 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
-import 'package:nipaplay/widgets/jellyfin_server_dialog.dart';
-import 'package:nipaplay/widgets/emby_server_dialog.dart';
-import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_server_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/emby_server_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class RemoteMediaLibraryPage extends StatefulWidget {

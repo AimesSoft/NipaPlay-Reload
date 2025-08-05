@@ -7,9 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/log_share_service.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
-import 'package:nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/widgets/blur_dialog.dart';
-import 'package:nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
@@ -249,7 +249,6 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
 
   // 显示更多选项对话框
   void _showMoreOptions(BuildContext context) {
-    final scaffoldMessengerState = ScaffoldMessenger.of(context);
     final navigatorState = Navigator.of(context);
     
     showModalBottomSheet(

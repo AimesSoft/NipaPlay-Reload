@@ -1,4 +1,4 @@
-import '../services/web_server_service.dart';
+import 'package:nipaplay/services/web_server_service.dart';
 import 'jellyfin_provider.dart';
 import 'emby_provider.dart';
 import 'watch_history_provider.dart';

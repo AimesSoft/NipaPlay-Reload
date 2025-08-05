@@ -6,8 +6,8 @@ import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:provider/provider.dart';
-import '../models/bangumi_model.dart';
-import '../models/watch_history_model.dart';
+import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -112,7 +112,7 @@ class PagePrewarmer {
       // 异步刷新需要更新的番剧数据
       if (needRefreshAnimeIds.isNotEmpty) {
         // 限制同时刷新的数量，避免过多请求
-        final refreshLimit = 5;
+        const refreshLimit = 5;
         final animeIdsToRefresh = needRefreshAnimeIds.take(refreshLimit).toList();
         
         debugPrint('[页面预热] 开始刷新 ${animeIdsToRefresh.length} 条番剧数据');

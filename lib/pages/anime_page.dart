@@ -4,29 +4,33 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
+import 'package:nipaplay/widgets/fluent_ui/fluent_history_all_dialog.dart';
+import 'package:nipaplay/widgets/fluent_ui/fluent_watch_history_list.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/widgets/fluent_ui/fluent_media_library_tabs.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import '../utils/video_player_state.dart';
-import '../widgets/loading_overlay.dart';
-import '../utils/tab_change_notifier.dart';
-import '../widgets/loading_placeholder.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/loading_overlay.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
 import '../providers/appearance_settings_provider.dart';
-import '../pages/media_library_page.dart';
-import '../widgets/library_management_tab.dart';
+import 'package:nipaplay/pages/media_library_page.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
-import '../widgets/blur_snackbar.dart';
-import '../widgets/history_all_modal.dart';
-import '../widgets/switchable_view.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/history_all_modal.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/switchable_view.dart';
 import 'package:nipaplay/main.dart';
-import '../services/jellyfin_service.dart';
-import '../services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
-import 'package:nipaplay/widgets/jellyfin_media_library_view.dart';
-import 'package:nipaplay/widgets/emby_media_library_view.dart';
-import '../services/playback_service.dart';
-import '../models/playable_item.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_media_library_view.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/emby_media_library_view.dart';
+import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/models/playable_item.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -68,8 +72,8 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
 }
 
 class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
-  bool _loadingVideo = false;
-  List<String> _loadingMessages = ['正在初始化播放器...'];
+  final bool _loadingVideo = false;
+  final List<String> _loadingMessages = ['正在初始化播放器...'];
   VideoPlayerState? _videoPlayerState;
   final ScrollController _mainPageScrollController = ScrollController(); // Used for NestedScrollView
   final ScrollController _watchHistoryListScrollController = ScrollController();
@@ -265,12 +269,26 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                         child: SizedBox(
                           height: 180,
                           child: RepaintBoundary(
-                            child: isLoadingHistory && history.isEmpty
-                                ? const Center(child: CircularProgressIndicator())
-                                : history.isEmpty
-                                    ? _buildEmptyState(
-                                        message: "暂无观看记录，已扫描的视频可在媒体库查看")
-                                    : _buildWatchHistoryList(history),
+                            child: Builder(
+                              builder: (context) {
+                                if (isLoadingHistory && history.isEmpty) {
+                                  return const Center(child: CircularProgressIndicator());
+                                }
+                                
+                                final uiThemeProvider = Provider.of<UIThemeProvider>(context);
+                                if (uiThemeProvider.isFluentUITheme) {
+                                  return FluentWatchHistoryList(
+                                    history: history,
+                                    onItemTap: _onWatchHistoryItemTap,
+                                    onShowMore: () => _showAllHistory(history),
+                                  );
+                                }
+
+                                return history.isEmpty
+                                    ? _buildEmptyState(message: "暂无观看记录，已扫描的视频可在媒体库查看")
+                                    : _buildWatchHistoryList(history);
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -288,10 +306,22 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                       const SliverToBoxAdapter(child: SizedBox(height: 8)),
                     ];
                   },
-                  body: _MediaLibraryTabs(
-                    initialIndex: _currentTabIndex,
-                    onPlayEpisode: _onWatchHistoryItemTap,
-                    mediaLibraryVersion: _mediaLibraryVersion,
+                  body: Builder(
+                    builder: (context) {
+                      final uiThemeProvider = Provider.of<UIThemeProvider>(context);
+                      if (uiThemeProvider.isFluentUITheme) {
+                        return FluentMediaLibraryTabs(
+                          initialIndex: _currentTabIndex,
+                          onPlayEpisode: _onWatchHistoryItemTap,
+                          mediaLibraryVersion: _mediaLibraryVersion,
+                        );
+                      }
+                      return _MediaLibraryTabs(
+                        initialIndex: _currentTabIndex,
+                        onPlayEpisode: _onWatchHistoryItemTap,
+                        mediaLibraryVersion: _mediaLibraryVersion,
+                      );
+                    },
                   ),
                 ),
                 if (_loadingVideo)
@@ -664,15 +694,29 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   
   // 显示所有历史记录的对话框
   void _showAllHistory(List<WatchHistoryItem> allHistory) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => HistoryAllModal(
-        history: allHistory,
-        onItemTap: _onWatchHistoryItemTap,
-      ),
-    );
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    if (uiThemeProvider.isFluentUITheme) {
+      showDialog(
+        context: context,
+        builder: (context) => FluentHistoryAllDialog(
+          history: allHistory,
+          onItemTap: (item) {
+            Navigator.of(context).pop();
+            _onWatchHistoryItemTap(item);
+          },
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (context) => HistoryAllModal(
+          history: allHistory,
+          onItemTap: _onWatchHistoryItemTap,
+        ),
+      );
+    }
   }
 }
 

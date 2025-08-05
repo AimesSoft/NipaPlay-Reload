@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../models/playable_item.dart';
-import '../utils/video_player_state.dart';
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
-import '../utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import '../main.dart'; // 导入 main.dart 以访问 navigatorKey
-import '../pages/anime_detail_page.dart';
+import 'package:nipaplay/pages/anime_detail_page.dart';
 
 class PlaybackService {
   static final PlaybackService _instance = PlaybackService._internal();

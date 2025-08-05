@@ -1,8 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../models/watch_history_model.dart';
-import '../models/watch_history_database.dart';
-import '../providers/watch_history_provider.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
 
 /// 同步弹幕信息到观看历史记录
 ///

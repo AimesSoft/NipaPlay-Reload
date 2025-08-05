@@ -3,7 +3,7 @@ import 'dart:io' as io;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
-import '../utils/storage_service.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 
 class DanmakuCacheManager {
   static const String _cacheKeyPrefix = 'danmaku_cache_';

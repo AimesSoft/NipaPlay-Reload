@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/search_model.dart';
+import 'package:nipaplay/models/search_model.dart';
 import './dandanplay_service.dart';
 
 class SearchService {
