@@ -454,11 +454,11 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
               try {
                 MainPageState? mainPageState = MainPageState.of(context);
                 if (mainPageState != null && mainPageState.globalTabController != null) {
-                  if (mainPageState.globalTabController!.index != 0) {
-                    mainPageState.globalTabController!.animateTo(0);
-                    debugPrint('[NewSeriesPage _handlePlayEpisode] Directly called mainPageState.globalTabController.animateTo(0)');
+                  if (mainPageState.globalTabController!.index != 1) {
+                    mainPageState.globalTabController!.animateTo(1);
+                    debugPrint('[NewSeriesPage _handlePlayEpisode] Directly called mainPageState.globalTabController.animateTo(1)');
                   } else {
-                    debugPrint('[NewSeriesPage _handlePlayEpisode] mainPageState.globalTabController is already at index 0.');
+                    debugPrint('[NewSeriesPage _handlePlayEpisode] mainPageState.globalTabController is already at index 1.');
                   }
                 } else {
                   debugPrint('[NewSeriesPage _handlePlayEpisode] Could not find MainPageState or globalTabController.');

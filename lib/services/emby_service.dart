@@ -344,6 +344,103 @@ class EmbyService {
     await prefs.setStringList('emby_selected_libraries', libraryIds);
   }
   
+  // 按特定媒体库获取最新内容
+  Future<List<EmbyMediaItem>> getLatestMediaItemsByLibrary(
+    String libraryId, {
+    int limit = 20,
+    String? sortBy,
+    String? sortOrder,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected) {
+      return [];
+    }
+    
+    try {
+      // 默认排序参数
+      final defaultSortBy = sortBy ?? 'DateCreated,SortName';
+      final defaultSortOrder = sortOrder ?? 'Descending';
+      
+      // 首先获取媒体库信息以确定类型
+      final libraryResponse = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$libraryId'
+      );
+      
+      if (libraryResponse.statusCode != 200) {
+        return [];
+      }
+      
+      final libraryData = json.decode(libraryResponse.body);
+      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      
+      // 根据媒体库类型选择不同的IncludeItemTypes
+      String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+      
+      final response = await _makeAuthenticatedRequest(
+        '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'];
+        
+        return items
+            .map((item) => EmbyMediaItem.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      print('Error fetching media items for library $libraryId: $e');
+    }
+    
+    return [];
+  }
+  
+  // 按特定媒体库获取随机内容
+  Future<List<EmbyMediaItem>> getRandomMediaItemsByLibrary(
+    String libraryId, {
+    int limit = 20,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected) {
+      return [];
+    }
+    
+    try {
+      // 首先获取媒体库信息以确定类型
+      final libraryResponse = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$libraryId'
+      );
+      
+      if (libraryResponse.statusCode != 200) {
+        return [];
+      }
+      
+      final libraryData = json.decode(libraryResponse.body);
+      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      
+      // 根据媒体库类型选择不同的IncludeItemTypes
+      String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+      
+      // 使用Emby的随机排序获取随机内容
+      final response = await _makeAuthenticatedRequest(
+        '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=Random&Limit=$limit'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'];
+        
+        return items
+            .map((item) => EmbyMediaItem.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      print('Error fetching random media items for library $libraryId: $e');
+    }
+    
+    return [];
+  }
+  
   Future<List<EmbyMediaItem>> getLatestMediaItems({
     int limitPerLibrary = 99999, 
     int totalLimit = 99999,

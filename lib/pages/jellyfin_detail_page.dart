@@ -1209,7 +1209,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                 // 先提前通知TabChangeNotifier
                 if (tabChangeNotifier != null) {
                   debugPrint('初始化播放器 - 步骤2：使用TabChangeNotifier切换到播放页面');
-                  tabChangeNotifier.changeTab(0); // 提前通知切换到播放页面
+                  tabChangeNotifier.changeTab(1); // 提前通知切换到播放页面
                 } else {
                   debugPrint('初始化播放器 - 步骤2：TabChangeNotifier为空，无法切换页面');
                 }

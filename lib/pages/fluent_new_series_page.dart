@@ -213,7 +213,7 @@ class _FluentNewSeriesPageState extends State<FluentNewSeriesPage>
           try {
             MainPageState? mainPageState = MainPageState.of(context);
             if (mainPageState?.globalTabController != null) {
-              mainPageState!.globalTabController!.animateTo(0);
+              mainPageState!.globalTabController!.animateTo(1);
             }
           } catch (e) {
             debugPrint("Error switching to player tab: $e");
