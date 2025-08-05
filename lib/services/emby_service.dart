@@ -344,13 +344,25 @@ class EmbyService {
     await prefs.setStringList('emby_selected_libraries', libraryIds);
   }
   
-  Future<List<EmbyMediaItem>> getLatestMediaItems({int limitPerLibrary = 99999, int totalLimit = 99999}) async {
+  Future<List<EmbyMediaItem>> getLatestMediaItems({
+    int limitPerLibrary = 99999, 
+    int totalLimit = 99999,
+    String? sortBy,
+    String? sortOrder,
+  }) async {
     if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty || _userId == null) {
       return [];
     }
 
     List<EmbyMediaItem> allItems = [];
+    
+    // 默认排序参数
+    final defaultSortBy = sortBy ?? 'DateCreated';
+    final defaultSortOrder = sortOrder ?? 'Descending';
+    
+    print('EmbyService: 获取媒体项 - sortBy: $defaultSortBy, sortOrder: $defaultSortOrder');
+    
     try {
       for (final libraryId in _selectedLibraryIds) {
         try {
@@ -373,8 +385,8 @@ class EmbyService {
           'Recursive': 'true',
           'Limit': limitPerLibrary.toString(),
               'Fields': 'Overview,Genres,People,Studios,ProviderIds,DateCreated,PremiereDate,CommunityRating,ProductionYear',
-          'SortBy': 'DateCreated',
-          'SortOrder': 'Descending',
+          'SortBy': defaultSortBy,
+          'SortOrder': defaultSortOrder,
         };
 
         final queryString = Uri(queryParameters: queryParameters).query;
@@ -398,11 +410,15 @@ class EmbyService {
         }
       }
 
-      // 按添加日期降序排序所有收集的项目
-      allItems.sort((a, b) {
-        // 使用 EmbyMediaItem 中的 dateAdded 字段进行排序
-        return b.dateAdded.compareTo(a.dateAdded);
-      });
+      // 如果服务器端排序失败或需要客户端排序，则进行本地排序
+      // 注意：当使用自定义排序时，我们依赖服务器端的排序结果
+      if (sortBy == null && sortOrder == null) {
+        // 默认情况下按添加日期降序排序所有收集的项目
+        allItems.sort((a, b) {
+          // 使用 EmbyMediaItem 中的 dateAdded 字段进行排序
+          return b.dateAdded.compareTo(a.dateAdded);
+        });
+      }
 
       // 应用总数限制
       if (allItems.length > totalLimit) {

@@ -12,8 +12,6 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
-import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_sort_dialog.dart';
-import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/storage_service.dart'; // 导入StorageService
 import 'package:permission_handler/permission_handler.dart'; // 导入权限处理库
@@ -583,29 +581,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
   }
   
-  // 显示Jellyfin排序对话框
-  Future<void> _showJellyfinSortDialog() async {
-    final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-    if (!jellyfinProvider.isConnected) {
-      BlurSnackBar.show(context, 'Jellyfin未连接，请先连接Jellyfin服务器');
-      return;
-    }
-    
-    final result = await JellyfinSortDialog.show(
-      context,
-      currentSortBy: jellyfinProvider.currentSortBy,
-      currentSortOrder: jellyfinProvider.currentSortOrder,
-    );
-    
-    if (result != null && mounted) {
-      await jellyfinProvider.updateSortSettings(
-        result['sortBy']!,
-        result['sortOrder']!,
-      );
-      BlurSnackBar.show(context, 'Jellyfin排序设置已更新');
-    }
-  }
-
   // 显示文件导入指导弹窗
   void _showFileImportGuideDialog() {
     if (!mounted) return;
@@ -1024,18 +999,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                               await scanService.rescanAllFolders(); // skipPreviouslyMatchedUnwatched defaults to true
                             }
                           },
-                  ),
-                  // Jellyfin排序按钮
-                  Consumer<JellyfinProvider>(
-                    builder: (context, jellyfinProvider, child) {
-                      if (!jellyfinProvider.isConnected) return const SizedBox.shrink();
-                      return IconButton(
-                        icon: const Icon(Ionicons.funnel_outline),
-                        tooltip: 'Jellyfin排序设置',
-                        color: Colors.white70,
-                        onPressed: scanService.isScanning ? null : _showJellyfinSortDialog,
-                      );
-                    },
                   ),
                 ],
               ),
