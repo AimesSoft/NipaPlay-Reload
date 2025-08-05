@@ -17,6 +17,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
+import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
@@ -1060,7 +1061,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
       // 对于Jellyfin流媒体，先进行同步，再获取播放位置
       bool isJellyfinStream = videoPath.startsWith('jellyfin://');
-      if (isJellyfinStream) {
+      bool isEmbyStream = videoPath.startsWith('emby://');
+      if (isJellyfinStream || isEmbyStream) {
         await _initializeWatchHistory(videoPath);
       }
 
@@ -1095,8 +1097,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _setStatus(PlayerStatus.paused, message: '已暂停');
       }
 
-      // 对于非Jellyfin流媒体，在获取播放位置后初始化观看记录
-      if (!isJellyfinStream) {
+      // 对于非流媒体，在获取播放位置后初始化观看记录
+      if (!isJellyfinStream && !isEmbyStream) {
         await _initializeWatchHistory(videoPath);
       }
 
@@ -1329,6 +1331,30 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             debugPrint('Jellyfin同步失败，使用本地记录: $e');
             await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
           }
+        } else if (isEmbyStream) {
+          // Emby同步：如果是Emby流媒体，进行播放记录同步
+          try {
+            final itemId = path.replaceFirst('emby://', '');
+            final syncService = EmbyPlaybackSyncService();
+            // 使用原始历史记录进行同步，而不是新创建的记录
+            final syncedHistory = await syncService.syncOnPlayStart(itemId, existingHistory);
+            if (syncedHistory != null) {
+              // 使用同步后的历史记录
+              await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
+              // 同时更新SharedPreferences中的播放位置
+              await _saveVideoPosition(path, syncedHistory.lastPosition);
+              debugPrint('Emby同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
+              // 报告播放开始
+              await syncService.reportPlaybackStart(itemId, syncedHistory);
+            } else {
+              await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+              // 报告播放开始
+              await syncService.reportPlaybackStart(itemId, updatedHistory);
+            }
+          } catch (e) {
+            debugPrint('Emby同步失败，使用本地记录: $e');
+            await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+          }
         } else {
           await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
         }
@@ -1372,8 +1398,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
       //debugPrint('创建全新的观看记录: 动画=${item.animeName}');
       
-      // Jellyfin同步：如果是Jellyfin流媒体，也需要进行播放记录同步
+      // 流媒体同步：如果是Jellyfin或Emby流媒体，也需要进行播放记录同步
       bool isJellyfinStream = path.startsWith('jellyfin://');
+      bool isEmbyStream = path.startsWith('emby://');
+      
       if (isJellyfinStream) {
         try {
           final itemId = path.replaceFirst('jellyfin://', '');
@@ -1395,6 +1423,29 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           }
         } catch (e) {
           debugPrint('Jellyfin同步失败（新记录），使用本地记录: $e');
+          await WatchHistoryManager.addOrUpdateHistory(item);
+        }
+      } else if (isEmbyStream) {
+        try {
+          final itemId = path.replaceFirst('emby://', '');
+          final syncService = EmbyPlaybackSyncService();
+          // 对于新创建的记录，也进行同步检查
+          final syncedHistory = await syncService.syncOnPlayStart(itemId, item);
+          if (syncedHistory != null) {
+            // 使用同步后的历史记录
+            await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
+            // 同时更新SharedPreferences中的播放位置
+            await _saveVideoPosition(path, syncedHistory.lastPosition);
+            debugPrint('Emby同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
+            // 报告播放开始
+            await syncService.reportPlaybackStart(itemId, syncedHistory);
+          } else {
+            await WatchHistoryManager.addOrUpdateHistory(item);
+            // 报告播放开始
+            await syncService.reportPlaybackStart(itemId, item);
+          }
+        } catch (e) {
+          debugPrint('Emby同步失败（新记录），使用本地记录: $e');
           await WatchHistoryManager.addOrUpdateHistory(item);
         }
       } else {
@@ -1430,6 +1481,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           }
         } catch (e) {
           debugPrint('Jellyfin播放停止同步失败: $e');
+        }
+      }
+      
+      // Emby同步：如果是Emby流媒体，停止同步
+      if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+        try {
+          final itemId = _currentVideoPath!.replaceFirst('emby://', '');
+          final syncService = EmbyPlaybackSyncService();
+          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          if (historyItem != null) {
+            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+          }
+        } catch (e) {
+          debugPrint('Emby播放停止同步失败: $e');
         }
       }
       
@@ -1622,6 +1687,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           syncService.reportPlaybackPaused(_position.inMilliseconds);
         } catch (e) {
           debugPrint('Jellyfin暂停状态报告失败: $e');
+        }
+      }
+      
+      // Emby同步：如果是Emby流媒体，报告暂停状态
+      if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+        try {
+          final syncService = EmbyPlaybackSyncService();
+          syncService.reportPlaybackPaused(_position.inMilliseconds);
+        } catch (e) {
+          debugPrint('Emby暂停状态报告失败: $e');
         }
       }
       
@@ -1949,6 +2024,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         syncService.dispose();
       } catch (e) {
         debugPrint('Jellyfin播放销毁同步失败: $e');
+      }
+    }
+    
+    // Emby同步：如果是Emby流媒体，停止同步
+    if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+      try {
+        final itemId = _currentVideoPath!.replaceFirst('emby://', '');
+        final syncService = EmbyPlaybackSyncService();
+        // 注意：dispose方法不能是async，所以这里使用同步方式处理
+        // 在dispose中我们只清理同步服务状态，不发送网络请求
+        syncService.dispose();
+      } catch (e) {
+        debugPrint('Emby播放销毁同步失败: $e');
       }
     }
     
@@ -3129,6 +3217,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             }
           } catch (e) {
             debugPrint('Jellyfin播放进度同步失败: $e');
+          }
+        }
+        
+        // Emby同步：如果是Emby流媒体，同步播放进度（每秒同步一次）
+        if (isEmbyStream) {
+          try {
+            // 每秒同步一次，提供更及时的进度更新
+            if (_position.inMilliseconds % 1000 < 100) {
+              final itemId = _currentVideoPath!.replaceFirst('emby://', '');
+              final syncService = EmbyPlaybackSyncService();
+              await syncService.syncCurrentProgress(_position.inMilliseconds);
+            }
+          } catch (e) {
+            debugPrint('Emby播放进度同步失败: $e');
           }
         }
         
@@ -4373,6 +4475,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
       
+      // Emby同步：如果是Emby流媒体，先报告播放停止
+      if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+        try {
+          final itemId = _currentVideoPath!.replaceFirst('emby://', '');
+          final syncService = EmbyPlaybackSyncService();
+          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          if (historyItem != null) {
+            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            debugPrint('[上一话] Emby播放停止报告完成');
+          }
+        } catch (e) {
+          debugPrint('[上一话] Emby播放停止报告失败: $e');
+        }
+      }
+      
       // 暂停当前视频
       if (_status == PlayerStatus.playing) {
         togglePlayPause();
@@ -4476,6 +4593,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           }
         } catch (e) {
           debugPrint('[下一话] Jellyfin播放停止报告失败: $e');
+        }
+      }
+      
+      // Emby同步：如果是Emby流媒体，先报告播放停止
+      if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+        try {
+          final itemId = _currentVideoPath!.replaceFirst('emby://', '');
+          final syncService = EmbyPlaybackSyncService();
+          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          if (historyItem != null) {
+            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            debugPrint('[下一话] Emby播放停止报告完成');
+          }
+        } catch (e) {
+          debugPrint('[下一话] Emby播放停止报告失败: $e');
         }
       }
       
@@ -4649,6 +4781,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 // Jellyfin同步：如果是Jellyfin流媒体，报告播放结束
                 if (_currentVideoPath!.startsWith('jellyfin://')) {
                   _handleJellyfinPlaybackEnd(_currentVideoPath!);
+                }
+                
+                // Emby同步：如果是Emby流媒体，报告播放结束
+                if (_currentVideoPath!.startsWith('emby://')) {
+                  _handleEmbyPlaybackEnd(_currentVideoPath!);
                 }
                 
                 // 触发自动播放下一话
@@ -4976,6 +5113,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
     } catch (e) {
       debugPrint('Jellyfin播放结束同步失败: $e');
+    }
+  }
+  
+  /// 处理Emby播放结束的同步
+  Future<void> _handleEmbyPlaybackEnd(String videoPath) async {
+    try {
+      final itemId = videoPath.replaceFirst('emby://', '');
+      final syncService = EmbyPlaybackSyncService();
+      final historyItem = await WatchHistoryManager.getHistoryItem(videoPath);
+      if (historyItem != null) {
+        await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: true);
+      }
+    } catch (e) {
+      debugPrint('Emby播放结束同步失败: $e');
     }
   }
 }

@@ -60,6 +60,8 @@ class EmbyService {
   bool get isConnected => _isConnected;
   String? get serverUrl => _serverUrl;
   String? get username => _username;
+  String? get accessToken => _accessToken;
+  String? get userId => _userId;
   List<EmbyLibrary> get availableLibraries => _availableLibraries;
   List<String> get selectedLibraryIds => _selectedLibraryIds;
   
