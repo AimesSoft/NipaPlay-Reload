@@ -591,6 +591,80 @@ class JellyfinService {
     }
   }
   
+  /// 获取相邻剧集（使用Jellyfin的adjacentTo参数作为简单的上下集导航）
+  /// 返回当前剧集前后各一集的剧集列表，不依赖弹幕映射
+  Future<List<JellyfinEpisodeInfo>> getAdjacentEpisodes(String currentEpisodeId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+    
+    try {
+      // 使用adjacentTo参数获取相邻剧集，限制3个结果（上一集、当前集、下一集）
+      final response = await _makeAuthenticatedRequest(
+        '/Items?adjacentTo=$currentEpisodeId&limit=3&fields=Overview,MediaSources'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'] ?? [];
+        
+        final episodes = items
+            .map((item) => JellyfinEpisodeInfo.fromJson(item))
+            .toList();
+        
+        // 按集数排序确保顺序正确
+        episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+        
+        debugPrint('[JellyfinService] 获取到${episodes.length}个相邻剧集');
+        return episodes;
+      } else {
+        debugPrint('[JellyfinService] 获取相邻剧集失败: HTTP ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('[JellyfinService] 获取相邻剧集出错: $e');
+      return [];
+    }
+  }
+  
+  /// 简单获取下一集（不依赖弹幕映射）
+  Future<JellyfinEpisodeInfo?> getNextEpisode(String currentEpisodeId) async {
+    final adjacentEpisodes = await getAdjacentEpisodes(currentEpisodeId);
+    
+    if (adjacentEpisodes.isEmpty) return null;
+    
+    // 找到当前剧集的位置
+    final currentIndex = adjacentEpisodes.indexWhere((ep) => ep.id == currentEpisodeId);
+    
+    if (currentIndex != -1 && currentIndex < adjacentEpisodes.length - 1) {
+      final nextEpisode = adjacentEpisodes[currentIndex + 1];
+      debugPrint('[JellyfinService] 找到下一集: ${nextEpisode.name}');
+      return nextEpisode;
+    }
+    
+    debugPrint('[JellyfinService] 没有找到下一集');
+    return null;
+  }
+  
+  /// 简单获取上一集（不依赖弹幕映射）
+  Future<JellyfinEpisodeInfo?> getPreviousEpisode(String currentEpisodeId) async {
+    final adjacentEpisodes = await getAdjacentEpisodes(currentEpisodeId);
+    
+    if (adjacentEpisodes.isEmpty) return null;
+    
+    // 找到当前剧集的位置
+    final currentIndex = adjacentEpisodes.indexWhere((ep) => ep.id == currentEpisodeId);
+    
+    if (currentIndex > 0) {
+      final previousEpisode = adjacentEpisodes[currentIndex - 1];
+      debugPrint('[JellyfinService] 找到上一集: ${previousEpisode.name}');
+      return previousEpisode;
+    }
+    
+    debugPrint('[JellyfinService] 没有找到上一集');
+    return null;
+  }
+
   // 获取流媒体URL
   String getStreamUrl(String itemId) {
     if (!_isConnected || _accessToken == null) {

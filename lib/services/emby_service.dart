@@ -630,6 +630,80 @@ class EmbyService {
     return null;
   }
   
+  /// 获取相邻剧集（使用Emby的AdjacentTo参数作为简单的上下集导航）
+  /// 返回当前剧集前后各一集的剧集列表，不依赖弹幕映射
+  Future<List<EmbyEpisodeInfo>> getAdjacentEpisodes(String currentEpisodeId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Emby服务器');
+    }
+    
+    try {
+      // 使用AdjacentTo参数获取相邻剧集，限制3个结果（上一集、当前集、下一集）
+      final response = await _makeAuthenticatedRequest(
+        '/emby/Users/$_userId/Items?AdjacentTo=$currentEpisodeId&Limit=3&Fields=Overview,MediaSources'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'] ?? [];
+        
+        final episodes = items
+            .map((item) => EmbyEpisodeInfo.fromJson(item))
+            .toList();
+        
+        // 按集数排序确保顺序正确
+        episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+        
+        debugPrint('[EmbyService] 获取到${episodes.length}个相邻剧集');
+        return episodes;
+      } else {
+        debugPrint('[EmbyService] 获取相邻剧集失败: HTTP ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('[EmbyService] 获取相邻剧集出错: $e');
+      return [];
+    }
+  }
+  
+  /// 简单获取下一集（不依赖弹幕映射）
+  Future<EmbyEpisodeInfo?> getNextEpisode(String currentEpisodeId) async {
+    final adjacentEpisodes = await getAdjacentEpisodes(currentEpisodeId);
+    
+    if (adjacentEpisodes.isEmpty) return null;
+    
+    // 找到当前剧集的位置
+    final currentIndex = adjacentEpisodes.indexWhere((ep) => ep.id == currentEpisodeId);
+    
+    if (currentIndex != -1 && currentIndex < adjacentEpisodes.length - 1) {
+      final nextEpisode = adjacentEpisodes[currentIndex + 1];
+      debugPrint('[EmbyService] 找到下一集: ${nextEpisode.name}');
+      return nextEpisode;
+    }
+    
+    debugPrint('[EmbyService] 没有找到下一集');
+    return null;
+  }
+  
+  /// 简单获取上一集（不依赖弹幕映射）
+  Future<EmbyEpisodeInfo?> getPreviousEpisode(String currentEpisodeId) async {
+    final adjacentEpisodes = await getAdjacentEpisodes(currentEpisodeId);
+    
+    if (adjacentEpisodes.isEmpty) return null;
+    
+    // 找到当前剧集的位置
+    final currentIndex = adjacentEpisodes.indexWhere((ep) => ep.id == currentEpisodeId);
+    
+    if (currentIndex > 0) {
+      final previousEpisode = adjacentEpisodes[currentIndex - 1];
+      debugPrint('[EmbyService] 找到上一集: ${previousEpisode.name}');
+      return previousEpisode;
+    }
+    
+    debugPrint('[EmbyService] 没有找到上一集');
+    return null;
+  }
+  
   String getStreamUrl(String itemId) {
     if (!_isConnected || _accessToken == null) {
       return '';

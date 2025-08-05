@@ -4428,6 +4428,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       return true;
     }
     
+    // 如果是流媒体，可以使用简单导航（Jellyfin/Emby的adjacentTo API）
+    if (navigationService.canUseStreamingNavigation(_currentVideoPath!)) {
+      return true;
+    }
+    
     return false;
   }
   
@@ -4444,6 +4449,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 如果是本地文件，可以使用文件系统导航
     if (navigationService.canUseFileSystemNavigation(_currentVideoPath!)) {
+      return true;
+    }
+    
+    // 如果是流媒体，可以使用简单导航（Jellyfin/Emby的adjacentTo API）
+    if (navigationService.canUseStreamingNavigation(_currentVideoPath!)) {
       return true;
     }
     
