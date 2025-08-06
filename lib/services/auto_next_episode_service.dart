@@ -36,11 +36,13 @@ class AutoNextEpisodeService {
     
     // 查找下一话
     final nextEpisode = _findNextEpisode(currentVideoPath);
-    // if (nextEpisode == null) {
-    //   debugPrint('[自动播放] 没有找到下一话');
-    //   _showNoNextEpisodeMessage(context);
-    //   return;
-    // }
+    
+    // 只对本地文件进行检查，流媒体和网络URL跳过检查（保持原有行为）
+    if (nextEpisode == null && _isLocalFile(currentVideoPath)) {
+      debugPrint('[自动播放] 本地视频没有找到下一话，不显示倒计时');
+      _showNoNextEpisodeMessage(context);
+      return;
+    }
     
     _nextEpisodePath = nextEpisode;
     _countdownSeconds = 10;
@@ -106,6 +108,14 @@ class AutoNextEpisodeService {
       debugPrint('[自动播放] 查找下一话失败: $e');
       return null;
     }
+  }
+  
+  // 判断是否为本地文件
+  bool _isLocalFile(String filePath) {
+    // 不是HTTP URL 且不是流媒体协议的就是本地文件
+    return !filePath.startsWith('http') && 
+           !filePath.startsWith('jellyfin://') && 
+           !filePath.startsWith('emby://');
   }
   
   // 显示倒计时消息

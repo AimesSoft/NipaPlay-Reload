@@ -259,6 +259,23 @@ void main(List<String> args) async {
         print('[Dart] 错误: $e');
         return '错误: $e';
       }
+    } else if (call.method == 'openHome') {
+      try {
+        final context = navigatorKey.currentState?.overlay?.context;
+        if (context == null) {
+          print('[Dart] 错误: 无法获取UI上下文');
+          return '错误: 无法获取UI上下文';
+        }
+        
+        Future.microtask(() {
+          _navigateToPage(context, 0); // 切换到主页（索引0）
+        });
+        
+        return '正在切换到主页';
+      } catch (e) {
+        print('[Dart] 错误: $e');
+        return '错误: $e';
+      }
     } else if (call.method == 'openMediaLibrary') {
       try {
         final context = navigatorKey.currentState?.overlay?.context;

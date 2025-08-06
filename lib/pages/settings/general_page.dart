@@ -77,10 +77,11 @@ class _GeneralPageState extends State<GeneralPage> {
               trailing: BlurDropdown<int>(
                 dropdownKey: _defaultPageDropdownKey,
                 items: [
-                  DropdownMenuItemData(title: "视频播放", value: 0, isSelected: _defaultPageIndex == 0),
-                  DropdownMenuItemData(title: "媒体库", value: 1, isSelected: _defaultPageIndex == 1),
-                  DropdownMenuItemData(title: "新番更新", value: 2, isSelected: _defaultPageIndex == 2),
-                  DropdownMenuItemData(title: "设置", value: 3, isSelected: _defaultPageIndex == 3),
+                  DropdownMenuItemData(title: "主页", value: 0, isSelected: _defaultPageIndex == 0),
+                  DropdownMenuItemData(title: "视频播放", value: 1, isSelected: _defaultPageIndex == 1),
+                  DropdownMenuItemData(title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
+                  DropdownMenuItemData(title: "新番更新", value: 3, isSelected: _defaultPageIndex == 3),
+                  DropdownMenuItemData(title: "设置", value: 4, isSelected: _defaultPageIndex == 4),
                 ],
                 onItemSelected: (index) {
                   setState(() {

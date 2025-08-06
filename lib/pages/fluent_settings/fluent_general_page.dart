@@ -20,6 +20,7 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
   bool _isLoading = true;
 
   final List<String> _pageNames = [
+    '主页',
     '视频播放',
     '媒体库',
     '新番更新',

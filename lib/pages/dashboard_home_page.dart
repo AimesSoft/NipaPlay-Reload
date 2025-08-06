@@ -1,8 +1,11 @@
 import 'dart:ui';
 import 'dart:math' as math;
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
@@ -20,8 +23,6 @@ import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 
 class DashboardHomePage extends StatefulWidget {
@@ -100,12 +101,20 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   
   void _setupProviderListeners() {
     // 监听Jellyfin连接状态变化
-    final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-    jellyfinProvider.addListener(_onJellyfinStateChanged);
+    try {
+      final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+      jellyfinProvider.addListener(_onJellyfinStateChanged);
+    } catch (e) {
+      print('DashboardHomePage: 添加JellyfinProvider监听器失败: $e');
+    }
     
     // 监听Emby连接状态变化
-    final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-    embyProvider.addListener(_onEmbyStateChanged);
+    try {
+      final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
+      embyProvider.addListener(_onEmbyStateChanged);
+    } catch (e) {
+      print('DashboardHomePage: 添加EmbyProvider监听器失败: $e');
+    }
   }
   
   void _onJellyfinStateChanged() {
@@ -140,30 +149,46 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
   @override
   void dispose() {
+    print('DashboardHomePage: 开始销毁Widget');
+    
     // 清理定时器和ValueNotifier
     _autoSwitchTimer?.cancel();
     _heroBannerIndexNotifier.dispose();
     
-    // 移除监听器
+    // 移除监听器 - 使用更安全的方式
     try {
-      final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-      jellyfinProvider.removeListener(_onJellyfinStateChanged);
+      if (mounted) {
+        final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+        jellyfinProvider.removeListener(_onJellyfinStateChanged);
+        print('DashboardHomePage: JellyfinProvider监听器已移除');
+      }
     } catch (e) {
-      // Provider可能已经被销毁，忽略错误
+      print('DashboardHomePage: 移除JellyfinProvider监听器失败: $e');
     }
     
     try {
-      final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-      embyProvider.removeListener(_onEmbyStateChanged);
+      if (mounted) {
+        final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
+        embyProvider.removeListener(_onEmbyStateChanged);
+        print('DashboardHomePage: EmbyProvider监听器已移除');
+      }
     } catch (e) {
-      // Provider可能已经被销毁，忽略错误
+      print('DashboardHomePage: 移除EmbyProvider监听器失败: $e');
     }
     
-    _heroBannerPageController.dispose();
-    _mainScrollController.dispose();
-    _continueWatchingScrollController.dispose();
-    _recentJellyfinScrollController.dispose();
-    _recentEmbyScrollController.dispose();
+    // 销毁ScrollController
+    try {
+      _heroBannerPageController.dispose();
+      _mainScrollController.dispose();
+      _continueWatchingScrollController.dispose();
+      _recentJellyfinScrollController.dispose();
+      _recentEmbyScrollController.dispose();
+      print('DashboardHomePage: ScrollController已销毁');
+    } catch (e) {
+      print('DashboardHomePage: 销毁ScrollController失败: $e');
+    }
+    
+    print('DashboardHomePage: Widget销毁完成');
     super.dispose();
   }
 
@@ -282,78 +307,66 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         print('从${allCandidates.length}个候选项目中随机选择了${selectedCandidates.length}个');
       }
 
-      // 第三步：只为选中的7个项目获取详细信息
+      // 第三步：并行处理选中的7个项目，获取详细信息
       List<RecommendedItem> finalItems = [];
       
-      for (var item in selectedCandidates) {
+      // 并行处理所有候选项目
+      final itemFutures = selectedCandidates.map((item) async {
         try {
           if (item is JellyfinMediaItem) {
-            // 处理Jellyfin项目
+            // 处理Jellyfin项目 - 并行获取图片和详细信息
             final jellyfinService = JellyfinService.instance;
-            final backdropUrl = jellyfinService.getImageUrl(item.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95);
-            String? logoUrl;
-            try {
-              logoUrl = jellyfinService.getImageUrl(item.id, type: 'Logo');
-            } catch (e) {
-              logoUrl = null;
-            }
             
-            String subtitle = '暂无简介信息';
-            try {
-              final detail = await jellyfinService.getMediaItemDetails(item.id);
-              subtitle = detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
-            } catch (e) {
-              print('获取Jellyfin详细信息失败: $e');
-              subtitle = item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
-            }
+            // 并行获取背景图片、Logo图片和详细信息
+            final results = await Future.wait([
+              _tryGetJellyfinImage(jellyfinService, item.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+              _tryGetJellyfinImage(jellyfinService, item.id, ['Logo', 'Thumb']),
+              _getJellyfinItemSubtitle(jellyfinService, item),
+            ]);
             
-            finalItems.add(RecommendedItem(
+            final backdropUrl = results[0];
+            final logoUrl = results[1];
+            final subtitle = results[2];
+            
+            return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: subtitle,
+              subtitle: subtitle ?? '暂无简介信息',
               backgroundImageUrl: backdropUrl,
               logoImageUrl: logoUrl,
               source: RecommendedItemSource.jellyfin,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
-            ));
-            print('处理Jellyfin推荐项: ${item.name}');
+            );
             
           } else if (item is EmbyMediaItem) {
-            // 处理Emby项目
+            // 处理Emby项目 - 并行获取图片和详细信息
             final embyService = EmbyService.instance;
-            final backdropUrl = embyService.getImageUrl(item.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95);
-            String? logoUrl;
-            try {
-              logoUrl = embyService.getImageUrl(item.id, type: 'Logo');
-            } catch (e) {
-              logoUrl = null;
-            }
             
-            String subtitle = '暂无简介信息';
-            try {
-              final detail = await embyService.getMediaItemDetails(item.id);
-              subtitle = detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
-            } catch (e) {
-              print('获取Emby详细信息失败: $e');
-              subtitle = item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
-            }
+            // 并行获取背景图片、Logo图片和详细信息
+            final results = await Future.wait([
+              _tryGetEmbyImage(embyService, item.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+              _tryGetEmbyImage(embyService, item.id, ['Logo', 'Thumb']),
+              _getEmbyItemSubtitle(embyService, item),
+            ]);
             
-            finalItems.add(RecommendedItem(
+            final backdropUrl = results[0];
+            final logoUrl = results[1];
+            final subtitle = results[2];
+            
+            return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: subtitle,
+              subtitle: subtitle ?? '暂无简介信息',
               backgroundImageUrl: backdropUrl,
               logoImageUrl: logoUrl,
               source: RecommendedItemSource.emby,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
-            ));
-            print('处理Emby推荐项: ${item.name}');
+            );
             
           } else if (item is WatchHistoryItem) {
             // 处理本地媒体库项目
             String subtitle = '暂无简介信息';
             String? backgroundImageUrl;
-            String? logoUrl;
             
             // 尝试获取Bangumi详细信息
             if (item.animeId != null) {
@@ -362,29 +375,31 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 final animeDetail = await bangumiService.getAnimeDetails(item.animeId!);
                 subtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : '暂无简介信息';
                 backgroundImageUrl = animeDetail.imageUrl;
-                // 本地媒体库通常没有logo，使用背景图片
-                logoUrl = null;
               } catch (e) {
                 print('获取Bangumi详细信息失败 (animeId: ${item.animeId}): $e');
-                subtitle = '暂无简介信息';
               }
             }
             
-            finalItems.add(RecommendedItem(
+            return RecommendedItem(
               id: item.animeId?.toString() ?? item.filePath,
               title: item.animeName.isNotEmpty ? item.animeName : (item.episodeTitle ?? '未知动画'),
               subtitle: subtitle,
               backgroundImageUrl: backgroundImageUrl,
-              logoImageUrl: logoUrl,
+              logoImageUrl: null, // 本地媒体库通常没有logo
               source: RecommendedItemSource.local,
               rating: null, // 本地媒体库暂时不支持评分
-            ));
-            print('处理本地推荐项: ${item.animeName}');
+            );
           }
         } catch (e) {
           print('处理推荐项目失败: $e');
+          return null;
         }
-      }
+        return null;
+      });
+      
+      // 等待所有项目处理完成
+      final processedItems = await Future.wait(itemFutures);
+      finalItems = processedItems.where((item) => item != null).cast<RecommendedItem>().toList();
 
       // 如果还不够7个，添加占位符
       while (finalItems.length < 7) {
@@ -895,6 +910,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return GestureDetector(
       onTap: () => _onRecommendedItemTap(item),
       child: Container(
+        key: ValueKey('hero_banner_${item.id}_${item.source.name}'), // 添加唯一key
         margin: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -914,6 +930,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             if (item.backgroundImageUrl != null)
               Image.network(
                 item.backgroundImageUrl!,
+                key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'), // 更具体的key
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
@@ -924,7 +941,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     ),
                   );
                 },
-                errorBuilder: (context, error, stackTrace) => Container(color: Colors.white10),
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.white10,
+                  child: const Center(
+                    child: Icon(Icons.broken_image, color: Colors.white30),
+                  ),
+                ),
               )
             else
               Container(
@@ -1032,7 +1054,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               right: MediaQuery.of(context).size.width * 0.3, // 留出右侧空间
               top: 0,
               bottom: 0,
-              child: Center(
+              child: Align(
+                alignment: Alignment.centerLeft, // 左对齐而不是居中
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -1088,6 +1111,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return GestureDetector(
       onTap: () => _onRecommendedItemTap(item),
       child: Container(
+        key: ValueKey('small_card_${item.id}_${item.source.name}_$index'), // 添加唯一key包含索引
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
@@ -1107,6 +1131,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             if (item.backgroundImageUrl != null)
               Image.network(
                 item.backgroundImageUrl!,
+                key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'), // 更具体的key
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
@@ -1121,7 +1146,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     ),
                   );
                 },
-                errorBuilder: (context, error, stackTrace) => Container(color: Colors.white10),
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.white10,
+                  child: const Center(
+                    child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
+                  ),
+                ),
               )
             else
               Container(
@@ -1191,7 +1221,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 ),
               ),
             
-            // 左下角小Logo
+            // 左下角小Logo（如果有的话）
             if (item.logoImageUrl != null)
               Positioned(
                 left: 8,
@@ -1221,29 +1251,35 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 ),
               ),
             
-            // 标题（右下角，如果没有Logo时显示）
-            if (item.logoImageUrl == null)
-              Positioned(
-                left: 8,
-                right: 8,
-                bottom: 8,
-                child: Text(
-                  item.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black,
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+            // 右下角标题（总是显示，不论是否有Logo）
+            Positioned(
+              right: 8,
+              bottom: 8,
+              left: item.logoImageUrl != null ? 136 : 8, // 如果有Logo就避开它
+              child: Text(
+                item.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black,
+                      blurRadius: 8,
+                      offset: Offset(1, 1),
+                    ),
+                    Shadow(
+                      color: Colors.black,
+                      blurRadius: 4,
+                      offset: Offset(0, 0),
+                    ),
+                  ],
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
               ),
+            ),
           ],
         ),
       ),
@@ -1355,6 +1391,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return GestureDetector(
       onTap: () => _onWatchHistoryItemTap(item),
       child: SizedBox(
+        key: ValueKey('continue_${item.animeId ?? 0}_${item.filePath.hashCode}'), // 添加唯一key
         width: 280, // 增加宽度使卡片更大
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1474,9 +1511,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Widget _buildMediaCard(dynamic item, Function(dynamic) onItemTap) {
     String name = '';
     String imageUrl = '';
+    String uniqueId = '';
     
     if (item is JellyfinMediaItem) {
       name = item.name;
+      uniqueId = 'jellyfin_${item.id}';
       try {
         imageUrl = JellyfinService.instance.getImageUrl(item.id);
       } catch (e) {
@@ -1484,6 +1523,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       }
     } else if (item is EmbyMediaItem) {
       name = item.name;
+      uniqueId = 'emby_${item.id}';
       try {
         imageUrl = EmbyService.instance.getImageUrl(item.id);
       } catch (e) {
@@ -1491,9 +1531,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       }
     } else if (item is WatchHistoryItem) {
       name = item.animeName.isNotEmpty ? item.animeName : (item.episodeTitle ?? '未知动画');
+      uniqueId = 'history_${item.animeId ?? 0}_${item.filePath.hashCode}';
       imageUrl = item.thumbnailPath ?? '';
     } else if (item is LocalAnimeItem) {
       name = item.animeName;
+      uniqueId = 'local_${item.animeId}_${item.animeName}';
       imageUrl = item.imageUrl ?? '';
     }
 
@@ -1501,6 +1543,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       width: 150,
       height: 280,
       child: AnimeCard(
+        key: ValueKey(uniqueId), // 添加唯一key防止widget复用导致的缓存混乱
         name: name,
         imageUrl: imageUrl,
         onTap: () => onItemTap(item),
@@ -1730,38 +1773,35 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     await PlaybackService().play(playableItem);
   }
   
-  // 构建导航按钮（参考悬浮按钮样式）
+  // 构建导航按钮 - 更透明，点击时才有模糊效果
   Widget _buildNavigationButton({
     required IconData icon, 
     required VoidCallback onTap,
   }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.1),
-              width: 1,
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: onTap,
-              child: Center(
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.1), // 更透明的背景
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.05),
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          // 点击时的涟漪效果会自动提供视觉反馈
+          splashColor: Colors.white.withOpacity(0.2),
+          highlightColor: Colors.white.withOpacity(0.1),
+          child: Center(
+            child: Icon(
+              icon,
+              color: Colors.white.withOpacity(0.8),
+              size: 20,
             ),
           ),
         ),
@@ -1849,4 +1889,169 @@ class LocalAnimeItem {
     required this.addedTime, // 改为添加时间
     required this.latestEpisode,
   });
+}
+
+// 辅助方法：尝试获取Jellyfin图片 - 并行验证版本
+Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
+  // 构建所有可能的图片URL
+  List<MapEntry<String, String>> imageUrlCandidates = [];
+  
+  for (String imageType in imageTypes) {
+    try {
+      String imageUrl;
+      if (imageType == 'Backdrop') {
+        imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
+      } else {
+        imageUrl = service.getImageUrl(itemId, type: imageType);
+      }
+      
+      if (imageUrl.isNotEmpty) {
+        imageUrlCandidates.add(MapEntry(imageType, imageUrl));
+      }
+    } catch (e) {
+      print('Jellyfin构建${imageType}图片URL失败: $e');
+    }
+  }
+  
+  if (imageUrlCandidates.isEmpty) {
+    print('Jellyfin无法构建任何图片URL');
+    return null;
+  }
+  
+  // 并行验证所有URL
+  final validationFutures = imageUrlCandidates.map((entry) async {
+    try {
+      final isValid = await _validateImageUrl(entry.value);
+      return isValid ? entry : null;
+    } catch (e) {
+      print('Jellyfin验证${entry.key}图片失败: $e');
+      return null;
+    }
+  });
+  
+  final validationResults = await Future.wait(validationFutures);
+  
+  // 按优先级顺序返回第一个有效的URL
+  for (String imageType in imageTypes) {
+    for (var result in validationResults) {
+      if (result != null && result.key == imageType) {
+        print('Jellyfin获取到${imageType}图片: ${result.value}');
+        return result.value;
+      }
+    }
+  }
+  
+  print('Jellyfin未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
+  return null;
+}
+
+// 辅助方法：尝试获取Emby图片 - 并行验证版本
+Future<String?> _tryGetEmbyImage(EmbyService service, String itemId, List<String> imageTypes) async {
+  // 构建所有可能的图片URL
+  List<MapEntry<String, String>> imageUrlCandidates = [];
+  
+  for (String imageType in imageTypes) {
+    try {
+      String imageUrl;
+      if (imageType == 'Backdrop') {
+        imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
+      } else {
+        imageUrl = service.getImageUrl(itemId, type: imageType);
+      }
+      
+      if (imageUrl.isNotEmpty) {
+        imageUrlCandidates.add(MapEntry(imageType, imageUrl));
+      }
+    } catch (e) {
+      print('Emby构建${imageType}图片URL失败: $e');
+    }
+  }
+  
+  if (imageUrlCandidates.isEmpty) {
+    print('Emby无法构建任何图片URL');
+    return null;
+  }
+  
+  // 并行验证所有URL
+  final validationFutures = imageUrlCandidates.map((entry) async {
+    try {
+      final isValid = await _validateImageUrl(entry.value);
+      return isValid ? entry : null;
+    } catch (e) {
+      print('Emby验证${entry.key}图片失败: $e');
+      return null;
+    }
+  });
+  
+  final validationResults = await Future.wait(validationFutures);
+  
+  // 按优先级顺序返回第一个有效的URL
+  for (String imageType in imageTypes) {
+    for (var result in validationResults) {
+      if (result != null && result.key == imageType) {
+        print('Emby获取到${imageType}图片: ${result.value}');
+        return result.value;
+      }
+    }
+  }
+  
+  print('Emby未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
+  return null;
+}
+
+// 辅助方法：获取Jellyfin项目简介
+Future<String> _getJellyfinItemSubtitle(JellyfinService service, JellyfinMediaItem item) async {
+  try {
+    final detail = await service.getMediaItemDetails(item.id);
+    return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
+  } catch (e) {
+    print('获取Jellyfin详细信息失败: $e');
+    return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
+  }
+}
+
+// 辅助方法：获取Emby项目简介
+Future<String> _getEmbyItemSubtitle(EmbyService service, EmbyMediaItem item) async {
+  try {
+    final detail = await service.getMediaItemDetails(item.id);
+    return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
+  } catch (e) {
+    print('获取Emby详细信息失败: $e');
+    return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
+  }
+}
+
+// 辅助方法：验证图片URL是否有效 - 优化版本
+Future<bool> _validateImageUrl(String url) async {
+  try {
+    final response = await http.head(Uri.parse(url)).timeout(
+      const Duration(seconds: 2), // 减少超时时间到2秒
+      onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
+    );
+    
+    // 检查HTTP状态码是否成功
+    if (response.statusCode != 200) {
+      return false;
+    }
+    
+    // 检查Content-Type是否为图片类型
+    final contentType = response.headers['content-type'];
+    if (contentType == null || !contentType.startsWith('image/')) {
+      return false;
+    }
+    
+    // 检查Content-Length，如果太小可能不是有效图片
+    final contentLength = response.headers['content-length'];
+    if (contentLength != null) {
+      final length = int.tryParse(contentLength);
+      if (length != null && length < 100) {
+        return false;
+      }
+    }
+    
+    return true;
+  } catch (e) {
+    // 不打印验证失败日志，减少控制台输出
+    return false;
+  }
 }
