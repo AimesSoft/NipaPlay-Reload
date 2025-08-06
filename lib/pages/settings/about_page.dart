@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/services/update_service.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -15,11 +16,14 @@ class AboutPage extends StatefulWidget {
 
 class _AboutPageState extends State<AboutPage> {
   String _version = '加载中...';
+  UpdateInfo? _updateInfo;
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
+    // 静默检查更新，不显示加载状态
+    _checkForUpdates();
   }
 
   Future<void> _loadVersion() async {
@@ -36,6 +40,29 @@ class _AboutPageState extends State<AboutPage> {
           _version = '获取失败';
         });
       }
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    // 静默检查更新，不显示加载状态
+    debugPrint('开始检查更新...');
+    try {
+      final updateInfo = await UpdateService.checkForUpdates();
+      debugPrint('检查更新完成: 当前版本=${updateInfo.currentVersion}, 最新版本=${updateInfo.latestVersion}, 有更新=${updateInfo.hasUpdate}');
+      if (updateInfo.hasUpdate) {
+        debugPrint('发现新版本: ${updateInfo.latestVersion}, 下载链接: ${updateInfo.releaseUrl}');
+      }
+      if (updateInfo.error != null) {
+        debugPrint('检查更新时出现错误: ${updateInfo.error}');
+      }
+      if (mounted) {
+        setState(() {
+          _updateInfo = updateInfo;
+        });
+      }
+    } catch (e) {
+      // 静默处理错误，不影响用户体验
+      debugPrint('检查更新失败: $e');
     }
   }
 
@@ -79,10 +106,54 @@ class _AboutPageState extends State<AboutPage> {
               },
             ),
             const SizedBox(height: 24),
-            Text(
-              'NipaPlay Reload 当前版本: $_version', // App Name
-              style: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
+            // 版本信息，点击跳转到releases页面（如果有更新）
+            GestureDetector(
+              onTap: _updateInfo?.hasUpdate == true 
+                  ? () => _launchURL(_updateInfo!.releaseUrl) 
+                  : null,
+              child: MouseRegion(
+                cursor: _updateInfo?.hasUpdate == true 
+                    ? SystemMouseCursors.click 
+                    : SystemMouseCursors.basic,
+                child: Stack(
+                  children: [
+                    Text(
+                      'NipaPlay Reload 当前版本: $_version',
+                      style: textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: _updateInfo?.hasUpdate == true 
+                            ? Colors.lightBlueAccent[100] 
+                            : Colors.white,
+                        decoration: _updateInfo?.hasUpdate == true 
+                            ? TextDecoration.underline 
+                            : null,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    // NEW 标识
+                    if (_updateInfo?.hasUpdate == true)
+                      Positioned(
+                        top: -5,
+                        right: -15,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'NEW',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 24),
 
@@ -147,6 +218,50 @@ class _AboutPageState extends State<AboutPage> {
                         const SizedBox(width: 8),
                         Text(
                           'MCDFsteve/NipaPlay-Reload',
+                          style: TextStyle(
+                            color: Colors.cyanAccent[100],
+                            decoration: TextDecoration.underline,
+                            decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => _launchURL('https://qm.qq.com/q/w9j09QJn4Q'),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // QQ企鹅图标样式
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.blue[400]!,
+                                Colors.blue[700]!,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.chat_bubble_rounded,
+                              color: Colors.white,
+                              size: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'QQ群: 712139588',
                           style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
