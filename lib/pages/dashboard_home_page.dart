@@ -1393,15 +1393,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                       minHeight: 4,
                     ),
                   ),
-                  
-                  // 播放图标（中心）
-                  const Center(
-                    child: Icon(
-                      Icons.play_circle_filled,
-                      color: Colors.white,
-                      size: 50, // 增加播放图标大小
-                    ),
-                  ),
                 ],
               ),
             ),

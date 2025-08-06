@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 /// 日志条目模型
 class LogEntry {
@@ -128,8 +129,12 @@ class DebugLogService extends ChangeNotifier {
       _logEntries.removeFirst();
     }
 
-    // 通知监听器
-    notifyListeners();
+    // 延迟通知监听器，避免在构建阶段调用
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isCollecting) {
+        notifyListeners();
+      }
+    });
   }
 
   /// 手动添加日志
@@ -180,7 +185,7 @@ class DebugLogService extends ChangeNotifier {
   void clearLogs() {
     _logEntries.clear();
     addLog('日志已清空', level: 'INFO', tag: 'LogService');
-    notifyListeners();
+    // 移除直接调用 notifyListeners()，因为 addLog 中的 _addLogEntry 已经处理了
   }
 
   /// 根据标签过滤日志
