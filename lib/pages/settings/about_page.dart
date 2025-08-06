@@ -107,52 +107,59 @@ class _AboutPageState extends State<AboutPage> {
             ),
             const SizedBox(height: 24),
             // 版本信息，点击跳转到releases页面（如果有更新）
-            GestureDetector(
-              onTap: _updateInfo?.hasUpdate == true 
-                  ? () => _launchURL(_updateInfo!.releaseUrl) 
-                  : null,
-              child: MouseRegion(
-                cursor: _updateInfo?.hasUpdate == true 
-                    ? SystemMouseCursors.click 
-                    : SystemMouseCursors.basic,
-                child: Stack(
-                  children: [
-                    Text(
-                      'NipaPlay Reload 当前版本: $_version',
-                      style: textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: _updateInfo?.hasUpdate == true 
-                            ? Colors.lightBlueAccent[100] 
-                            : Colors.white,
-                        decoration: _updateInfo?.hasUpdate == true 
-                            ? TextDecoration.underline 
-                            : null,
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  GestureDetector(
+                    onTap: _updateInfo?.hasUpdate == true 
+                        ? () => _launchURL(_updateInfo!.releaseUrl) 
+                        : null,
+                    child: MouseRegion(
+                      cursor: _updateInfo?.hasUpdate == true 
+                          ? SystemMouseCursors.click 
+                          : SystemMouseCursors.basic,
+                      child: Text(
+                        'NipaPlay Reload 当前版本: $_version',
+                        style: textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
-                    // NEW 标识
-                    if (_updateInfo?.hasUpdate == true)
-                      Positioned(
-                        top: -5,
-                        right: -15,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            'NEW',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                  ),
+                  // NEW 标识 - 独立定位
+                  if (_updateInfo?.hasUpdate == true)
+                    Positioned(
+                      top: -8,
+                      right: -8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.red.withOpacity(0.3),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
                             ),
+                          ],
+                        ),
+                        child: const Text(
+                          'NEW',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 24),
