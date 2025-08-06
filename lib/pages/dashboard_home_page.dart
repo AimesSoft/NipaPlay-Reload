@@ -55,6 +55,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   final ScrollController _recentJellyfinScrollController = ScrollController();
   final ScrollController _recentEmbyScrollController = ScrollController();
   
+  // 动态媒体库的ScrollController映射
+  final Map<String, ScrollController> _jellyfinLibraryScrollControllers = {};
+  final Map<String, ScrollController> _embyLibraryScrollControllers = {};
+  ScrollController? _localLibraryScrollController;
+  
   // 自动切换相关
   Timer? _autoSwitchTimer;
   bool _isAutoSwitching = true;
@@ -72,6 +77,28 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       _setupProviderListeners();
       _startAutoSwitch();
     });
+  }
+  
+  // 获取或创建Jellyfin媒体库的ScrollController
+  ScrollController _getJellyfinLibraryScrollController(String libraryName) {
+    if (!_jellyfinLibraryScrollControllers.containsKey(libraryName)) {
+      _jellyfinLibraryScrollControllers[libraryName] = ScrollController();
+    }
+    return _jellyfinLibraryScrollControllers[libraryName]!;
+  }
+  
+  // 获取或创建Emby媒体库的ScrollController
+  ScrollController _getEmbyLibraryScrollController(String libraryName) {
+    if (!_embyLibraryScrollControllers.containsKey(libraryName)) {
+      _embyLibraryScrollControllers[libraryName] = ScrollController();
+    }
+    return _embyLibraryScrollControllers[libraryName]!;
+  }
+  
+  // 获取或创建本地媒体库的ScrollController
+  ScrollController _getLocalLibraryScrollController() {
+    _localLibraryScrollController ??= ScrollController();
+    return _localLibraryScrollController!;
   }
   
   void _startAutoSwitch() {
@@ -105,7 +132,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
       jellyfinProvider.addListener(_onJellyfinStateChanged);
     } catch (e) {
-      print('DashboardHomePage: 添加JellyfinProvider监听器失败: $e');
+      debugPrint('DashboardHomePage: 添加JellyfinProvider监听器失败: $e');
     }
     
     // 监听Emby连接状态变化
@@ -113,21 +140,21 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
       embyProvider.addListener(_onEmbyStateChanged);
     } catch (e) {
-      print('DashboardHomePage: 添加EmbyProvider监听器失败: $e');
+      debugPrint('DashboardHomePage: 添加EmbyProvider监听器失败: $e');
     }
   }
   
   void _onJellyfinStateChanged() {
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
-      print('DashboardHomePage: Widget已销毁，跳过Jellyfin状态变化处理');
+      debugPrint('DashboardHomePage: Widget已销毁，跳过Jellyfin状态变化处理');
       return;
     }
     
     final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-    print('DashboardHomePage: Jellyfin连接状态变化 - isConnected: ${jellyfinProvider.isConnected}, mounted: $mounted');
+    debugPrint('DashboardHomePage: Jellyfin连接状态变化 - isConnected: ${jellyfinProvider.isConnected}, mounted: $mounted');
     if (jellyfinProvider.isConnected && mounted) {
-      print('DashboardHomePage: Jellyfin连接状态变化，准备刷新数据');
+      debugPrint('DashboardHomePage: Jellyfin连接状态变化，准备刷新数据');
       _loadData();
     }
   }
@@ -135,21 +162,21 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void _onEmbyStateChanged() {
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
-      print('DashboardHomePage: Widget已销毁，跳过Emby状态变化处理');
+      debugPrint('DashboardHomePage: Widget已销毁，跳过Emby状态变化处理');
       return;
     }
     
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-    print('DashboardHomePage: Emby连接状态变化 - isConnected: ${embyProvider.isConnected}, mounted: $mounted');
+    debugPrint('DashboardHomePage: Emby连接状态变化 - isConnected: ${embyProvider.isConnected}, mounted: $mounted');
     if (embyProvider.isConnected && mounted) {
-      print('DashboardHomePage: Emby连接状态变化，准备刷新数据');
+      debugPrint('DashboardHomePage: Emby连接状态变化，准备刷新数据');
       _loadData();
     }
   }
 
   @override
   void dispose() {
-    print('DashboardHomePage: 开始销毁Widget');
+    debugPrint('DashboardHomePage: 开始销毁Widget');
     
     // 清理定时器和ValueNotifier
     _autoSwitchTimer?.cancel();
@@ -160,20 +187,20 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       if (mounted) {
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
         jellyfinProvider.removeListener(_onJellyfinStateChanged);
-        print('DashboardHomePage: JellyfinProvider监听器已移除');
+        debugPrint('DashboardHomePage: JellyfinProvider监听器已移除');
       }
     } catch (e) {
-      print('DashboardHomePage: 移除JellyfinProvider监听器失败: $e');
+      debugPrint('DashboardHomePage: 移除JellyfinProvider监听器失败: $e');
     }
     
     try {
       if (mounted) {
         final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
         embyProvider.removeListener(_onEmbyStateChanged);
-        print('DashboardHomePage: EmbyProvider监听器已移除');
+        debugPrint('DashboardHomePage: EmbyProvider监听器已移除');
       }
     } catch (e) {
-      print('DashboardHomePage: 移除EmbyProvider监听器失败: $e');
+      debugPrint('DashboardHomePage: 移除EmbyProvider监听器失败: $e');
     }
     
     // 销毁ScrollController
@@ -183,25 +210,40 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       _continueWatchingScrollController.dispose();
       _recentJellyfinScrollController.dispose();
       _recentEmbyScrollController.dispose();
-      print('DashboardHomePage: ScrollController已销毁');
+      
+      // 销毁动态创建的ScrollController
+      for (final controller in _jellyfinLibraryScrollControllers.values) {
+        controller.dispose();
+      }
+      _jellyfinLibraryScrollControllers.clear();
+      
+      for (final controller in _embyLibraryScrollControllers.values) {
+        controller.dispose();
+      }
+      _embyLibraryScrollControllers.clear();
+      
+      _localLibraryScrollController?.dispose();
+      _localLibraryScrollController = null;
+      
+      debugPrint('DashboardHomePage: ScrollController已销毁');
     } catch (e) {
-      print('DashboardHomePage: 销毁ScrollController失败: $e');
+      debugPrint('DashboardHomePage: 销毁ScrollController失败: $e');
     }
     
-    print('DashboardHomePage: Widget销毁完成');
+    debugPrint('DashboardHomePage: Widget销毁完成');
     super.dispose();
   }
 
   Future<void> _loadData() async {
-    print('DashboardHomePage: _loadData 被调用 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
+    debugPrint('DashboardHomePage: _loadData 被调用 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
     
     // 防止重复加载和检查Widget状态
     if (_isLoadingRecommended || !mounted) {
-      print('DashboardHomePage: 跳过数据加载 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
+      debugPrint('DashboardHomePage: 跳过数据加载 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
       return;
     }
     
-    print('DashboardHomePage: 开始加载数据');
+    debugPrint('DashboardHomePage: 开始加载数据');
     await Future.wait([
       _loadRecommendedContent(),
       _loadRecentContent(),
@@ -209,17 +251,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     // 再次检查Widget状态
     if (mounted) {
-      print('DashboardHomePage: 数据加载完成');
+      debugPrint('DashboardHomePage: 数据加载完成');
     }
   }
 
   Future<void> _loadRecommendedContent() async {
     if (!mounted) {
-      print('DashboardHomePage: Widget已销毁，跳过推荐内容加载');
+      debugPrint('DashboardHomePage: Widget已销毁，跳过推荐内容加载');
       return;
     }
     
-    print('DashboardHomePage: 开始加载推荐内容');
+    debugPrint('DashboardHomePage: 开始加载推荐内容');
     setState(() {
       _isLoadingRecommended = true;
     });
@@ -238,9 +280,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             try {
               final libraryItems = await jellyfinService.getRandomMediaItemsByLibrary(library.id, limit: 50);
               allCandidates.addAll(libraryItems);
-              print('从Jellyfin媒体库 ${library.name} 收集到 ${libraryItems.length} 个候选项目');
+              debugPrint('从Jellyfin媒体库 ${library.name} 收集到 ${libraryItems.length} 个候选项目');
             } catch (e) {
-              print('获取Jellyfin媒体库 ${library.name} 随机内容失败: $e');
+              debugPrint('获取Jellyfin媒体库 ${library.name} 随机内容失败: $e');
             }
           }
         }
@@ -256,9 +298,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             try {
               final libraryItems = await embyService.getRandomMediaItemsByLibrary(library.id, limit: 50);
               allCandidates.addAll(libraryItems);
-              print('从Emby媒体库 ${library.name} 收集到 ${libraryItems.length} 个候选项目');
+              debugPrint('从Emby媒体库 ${library.name} 收集到 ${libraryItems.length} 个候选项目');
             } catch (e) {
-              print('获取Emby媒体库 ${library.name} 随机内容失败: $e');
+              debugPrint('获取Emby媒体库 ${library.name} 随机内容失败: $e');
             }
           }
         }
@@ -293,9 +335,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           localItems.shuffle(math.Random());
           final selectedLocalItems = localItems.take(math.min(30, localItems.length)).toList();
           allCandidates.addAll(selectedLocalItems);
-          print('从本地媒体库收集到 ${selectedLocalItems.length} 个候选项目');
+          debugPrint('从本地媒体库收集到 ${selectedLocalItems.length} 个候选项目');
         } catch (e) {
-          print('获取本地媒体库随机内容失败: $e');
+          debugPrint('获取本地媒体库随机内容失败: $e');
         }
       }
 
@@ -304,7 +346,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       if (allCandidates.isNotEmpty) {
         allCandidates.shuffle(math.Random());
         selectedCandidates = allCandidates.take(7).toList();
-        print('从${allCandidates.length}个候选项目中随机选择了${selectedCandidates.length}个');
+        debugPrint('从${allCandidates.length}个候选项目中随机选择了${selectedCandidates.length}个');
       }
 
       // 第三步：并行处理选中的7个项目，获取详细信息
@@ -376,7 +418,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 subtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : '暂无简介信息';
                 backgroundImageUrl = animeDetail.imageUrl;
               } catch (e) {
-                print('获取Bangumi详细信息失败 (animeId: ${item.animeId}): $e');
+                debugPrint('获取Bangumi详细信息失败 (animeId: ${item.animeId}): $e');
               }
             }
             
@@ -391,7 +433,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             );
           }
         } catch (e) {
-          print('处理推荐项目失败: $e');
+          debugPrint('处理推荐项目失败: $e');
           return null;
         }
         return null;
@@ -424,9 +466,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           _startAutoSwitch();
         }
       }
-      print('推荐内容加载完成，总共 ${finalItems.length} 个项目');
+      debugPrint('推荐内容加载完成，总共 ${finalItems.length} 个项目');
     } catch (e) {
-      print('加载推荐内容失败: $e');
+      debugPrint('加载推荐内容失败: $e');
       if (mounted) {
         setState(() {
           _isLoadingRecommended = false;
@@ -436,7 +478,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   Future<void> _loadRecentContent() async {
-    print('DashboardHomePage: 开始加载最近内容');
+    debugPrint('DashboardHomePage: 开始加载最近内容');
     try {
       // 从Jellyfin按媒体库获取最近添加
       final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
@@ -453,10 +495,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               
               if (libraryItems.isNotEmpty) {
                 _recentJellyfinItemsByLibrary[library.name] = libraryItems;
-                print('Jellyfin媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+                debugPrint('Jellyfin媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
               }
             } catch (e) {
-              print('获取Jellyfin媒体库 ${library.name} 最近内容失败: $e');
+              debugPrint('获取Jellyfin媒体库 ${library.name} 最近内容失败: $e');
             }
           }
         }
@@ -477,10 +519,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               
               if (libraryItems.isNotEmpty) {
                 _recentEmbyItemsByLibrary[library.name] = libraryItems;
-                print('Emby媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+                debugPrint('Emby媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
               }
             } catch (e) {
-              print('获取Emby媒体库 ${library.name} 最近内容失败: $e');
+              debugPrint('获取Emby媒体库 ${library.name} 最近内容失败: $e');
             }
           }
         }
@@ -521,7 +563,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   }
                 }
               } catch (e) {
-                print('获取文件 ${item.filePath} 修改时间失败: $e');
+                debugPrint('获取文件 ${item.filePath} 修改时间失败: $e');
                 // 如果无法获取文件时间，使用观看时间作为替代
                 if (latestAddedItems.containsKey(item.animeId!)) {
                   if (item.lastWatchTime.isAfter(latestAddedItems[item.animeId!]!.lastWatchTime)) {
@@ -550,7 +592,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           try {
             localAnimeItems = await Future.wait(futures);
           } catch (e) {
-            print('批量获取番组信息失败: $e');
+            debugPrint('批量获取番组信息失败: $e');
             // 如果批量获取失败，创建基本的项目
             for (var entry in latestAddedItems.entries) {
               try {
@@ -570,7 +612,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   latestEpisode: entry.value,
                 ));
               } catch (e) {
-                print('创建本地动画项目失败: $e');
+                debugPrint('创建本地动画项目失败: $e');
               }
             }
           }
@@ -584,9 +626,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           }
           
           _localAnimeItems = localAnimeItems;
-          print('本地媒体库获取到 ${_localAnimeItems.length} 个项目');
+          debugPrint('本地媒体库获取到 ${_localAnimeItems.length} 个项目');
         } catch (e) {
-          print('获取本地媒体库最近内容失败: $e');
+          debugPrint('获取本地媒体库最近内容失败: $e');
         }
       }
 
@@ -596,7 +638,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         });
       }
     } catch (e) {
-      print('加载最近内容失败: $e');
+      debugPrint('加载最近内容失败: $e');
     }
   }
 
@@ -629,7 +671,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     _buildRecentSection(
                       title: 'Jellyfin - 新增${entry.key}',
                       items: entry.value,
-                      scrollController: ScrollController(),
+                      scrollController: _getJellyfinLibraryScrollController(entry.key),
                       onItemTap: (item) => _onJellyfinItemTap(item as JellyfinMediaItem),
                     ),
                     const SizedBox(height: 32),
@@ -640,7 +682,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     _buildRecentSection(
                       title: 'Emby - 新增${entry.key}',
                       items: entry.value,
-                      scrollController: ScrollController(),
+                      scrollController: _getEmbyLibraryScrollController(entry.key),
                       onItemTap: (item) => _onEmbyItemTap(item as EmbyMediaItem),
                     ),
                     const SizedBox(height: 32),
@@ -651,7 +693,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     _buildRecentSection(
                       title: '本地媒体库 - 最近添加',
                       items: _localAnimeItems,
-                      scrollController: ScrollController(),
+                      scrollController: _getLocalLibraryScrollController(),
                       onItemTap: (item) => _onLocalAnimeItemTap(item as LocalAnimeItem),
                     ),
                     const SizedBox(height: 32),
@@ -1648,7 +1690,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       imageUrl = animeDetail.imageUrl;
       backdropImageUrl = animeDetail.imageUrl; // Bangumi通常只有一个图片，用作背景
     } catch (e) {
-      print('获取Bangumi图片信息失败 (animeId: $animeId): $e');
+      debugPrint('获取Bangumi图片信息失败 (animeId: $animeId): $e');
       // 如果Bangumi失败，可以尝试弹弹play
       // 这里暂时留空，后续可以扩展
     }
@@ -1662,7 +1704,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         addedTime = stat.modified;
       }
     } catch (e) {
-      print('获取文件修改时间失败: $e');
+      debugPrint('获取文件修改时间失败: $e');
       // 保留默认值
     }
     
@@ -1679,6 +1721,54 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void _navigateToJellyfinDetail(String jellyfinId) {
     JellyfinDetailPage.show(context, jellyfinId).then((result) {
       if (result != null) {
+        // 检查是否需要获取实际播放URL
+        String? actualPlayUrl;
+        final isJellyfinProtocol = result.filePath.startsWith('jellyfin://');
+        final isEmbyProtocol = result.filePath.startsWith('emby://');
+        
+        if (isJellyfinProtocol) {
+          try {
+            final jellyfinId = result.filePath.replaceFirst('jellyfin://', '');
+            final jellyfinService = JellyfinService.instance;
+            if (jellyfinService.isConnected) {
+              actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            } else {
+              BlurSnackBar.show(context, '未连接到Jellyfin服务器');
+              return;
+            }
+          } catch (e) {
+            BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
+            return;
+          }
+        } else if (isEmbyProtocol) {
+          try {
+            final embyId = result.filePath.replaceFirst('emby://', '');
+            final embyService = EmbyService.instance;
+            if (embyService.isConnected) {
+              actualPlayUrl = embyService.getStreamUrl(embyId);
+            } else {
+              BlurSnackBar.show(context, '未连接到Emby服务器');
+              return;
+            }
+          } catch (e) {
+            BlurSnackBar.show(context, '获取Emby流媒体URL失败: $e');
+            return;
+          }
+        }
+        
+        // 创建PlayableItem并播放
+        final playableItem = PlayableItem(
+          videoPath: result.filePath,
+          title: result.animeName,
+          subtitle: result.episodeTitle,
+          animeId: result.animeId,
+          episodeId: result.episodeId,
+          historyItem: result,
+          actualPlayUrl: actualPlayUrl,
+        );
+        
+        PlaybackService().play(playableItem);
+        
         // 刷新观看历史
         Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
       }
@@ -1688,6 +1778,54 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void _navigateToEmbyDetail(String embyId) {
     EmbyDetailPage.show(context, embyId).then((result) {
       if (result != null) {
+        // 检查是否需要获取实际播放URL
+        String? actualPlayUrl;
+        final isJellyfinProtocol = result.filePath.startsWith('jellyfin://');
+        final isEmbyProtocol = result.filePath.startsWith('emby://');
+        
+        if (isJellyfinProtocol) {
+          try {
+            final jellyfinId = result.filePath.replaceFirst('jellyfin://', '');
+            final jellyfinService = JellyfinService.instance;
+            if (jellyfinService.isConnected) {
+              actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            } else {
+              BlurSnackBar.show(context, '未连接到Jellyfin服务器');
+              return;
+            }
+          } catch (e) {
+            BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
+            return;
+          }
+        } else if (isEmbyProtocol) {
+          try {
+            final embyId = result.filePath.replaceFirst('emby://', '');
+            final embyService = EmbyService.instance;
+            if (embyService.isConnected) {
+              actualPlayUrl = embyService.getStreamUrl(embyId);
+            } else {
+              BlurSnackBar.show(context, '未连接到Emby服务器');
+              return;
+            }
+          } catch (e) {
+            BlurSnackBar.show(context, '获取Emby流媒体URL失败: $e');
+            return;
+          }
+        }
+        
+        // 创建PlayableItem并播放
+        final playableItem = PlayableItem(
+          videoPath: result.filePath,
+          title: result.animeName,
+          subtitle: result.episodeTitle,
+          animeId: result.animeId,
+          episodeId: result.episodeId,
+          historyItem: result,
+          actualPlayUrl: actualPlayUrl,
+        );
+        
+        PlaybackService().play(playableItem);
+        
         // 刷新观看历史
         Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
       }
@@ -1842,6 +1980,171 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       ),
     );
   }
+
+  // 辅助方法：尝试获取Jellyfin图片 - 并行验证版本
+  Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
+    // 构建所有可能的图片URL
+    List<MapEntry<String, String>> imageUrlCandidates = [];
+    
+    for (String imageType in imageTypes) {
+      try {
+        String imageUrl;
+        if (imageType == 'Backdrop') {
+          imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
+        } else {
+          imageUrl = service.getImageUrl(itemId, type: imageType);
+        }
+        
+        if (imageUrl.isNotEmpty) {
+          imageUrlCandidates.add(MapEntry(imageType, imageUrl));
+        }
+      } catch (e) {
+        debugPrint('Jellyfin构建${imageType}图片URL失败: $e');
+      }
+    }
+    
+    if (imageUrlCandidates.isEmpty) {
+      debugPrint('Jellyfin无法构建任何图片URL');
+      return null;
+    }
+    
+    // 并行验证所有URL
+    final validationFutures = imageUrlCandidates.map((entry) async {
+      try {
+        final isValid = await _validateImageUrl(entry.value);
+        return isValid ? entry : null;
+      } catch (e) {
+        debugPrint('Jellyfin验证${entry.key}图片失败: $e');
+        return null;
+      }
+    });
+    
+    final validationResults = await Future.wait(validationFutures);
+    
+    // 按优先级顺序返回第一个有效的URL
+    for (String imageType in imageTypes) {
+      for (var result in validationResults) {
+        if (result != null && result.key == imageType) {
+          debugPrint('Jellyfin获取到${imageType}图片: ${result.value}');
+          return result.value;
+        }
+      }
+    }
+    
+    debugPrint('Jellyfin未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
+    return null;
+  }
+
+  // 辅助方法：尝试获取Emby图片 - 并行验证版本
+  Future<String?> _tryGetEmbyImage(EmbyService service, String itemId, List<String> imageTypes) async {
+    // 构建所有可能的图片URL
+    List<MapEntry<String, String>> imageUrlCandidates = [];
+    
+    for (String imageType in imageTypes) {
+      try {
+        String imageUrl;
+        if (imageType == 'Backdrop') {
+          imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
+        } else {
+          imageUrl = service.getImageUrl(itemId, type: imageType);
+        }
+        
+        if (imageUrl.isNotEmpty) {
+          imageUrlCandidates.add(MapEntry(imageType, imageUrl));
+        }
+      } catch (e) {
+        debugPrint('Emby构建${imageType}图片URL失败: $e');
+      }
+    }
+    
+    if (imageUrlCandidates.isEmpty) {
+      debugPrint('Emby无法构建任何图片URL');
+      return null;
+    }
+    
+    // 并行验证所有URL
+    final validationFutures = imageUrlCandidates.map((entry) async {
+      try {
+        final isValid = await _validateImageUrl(entry.value);
+        return isValid ? entry : null;
+      } catch (e) {
+        debugPrint('Emby验证${entry.key}图片失败: $e');
+        return null;
+      }
+    });
+    
+    final validationResults = await Future.wait(validationFutures);
+    
+    // 按优先级顺序返回第一个有效的URL
+    for (String imageType in imageTypes) {
+      for (var result in validationResults) {
+        if (result != null && result.key == imageType) {
+          debugPrint('Emby获取到${imageType}图片: ${result.value}');
+          return result.value;
+        }
+      }
+    }
+    
+    debugPrint('Emby未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
+    return null;
+  }
+
+  // 辅助方法：获取Jellyfin项目简介
+  Future<String> _getJellyfinItemSubtitle(JellyfinService service, JellyfinMediaItem item) async {
+    try {
+      final detail = await service.getMediaItemDetails(item.id);
+      return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
+    } catch (e) {
+      debugPrint('获取Jellyfin详细信息失败: $e');
+      return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
+    }
+  }
+
+  // 辅助方法：获取Emby项目简介
+  Future<String> _getEmbyItemSubtitle(EmbyService service, EmbyMediaItem item) async {
+    try {
+      final detail = await service.getMediaItemDetails(item.id);
+      return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
+    } catch (e) {
+      debugPrint('获取Emby详细信息失败: $e');
+      return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
+    }
+  }
+
+  // 辅助方法：验证图片URL是否有效 - 优化版本
+  Future<bool> _validateImageUrl(String url) async {
+    try {
+      final response = await http.head(Uri.parse(url)).timeout(
+        const Duration(seconds: 2), // 减少超时时间到2秒
+        onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
+      );
+      
+      // 检查HTTP状态码是否成功
+      if (response.statusCode != 200) {
+        return false;
+      }
+      
+      // 检查Content-Type是否为图片类型
+      final contentType = response.headers['content-type'];
+      if (contentType == null || !contentType.startsWith('image/')) {
+        return false;
+      }
+      
+      // 检查Content-Length，如果太小可能不是有效图片
+      final contentLength = response.headers['content-length'];
+      if (contentLength != null) {
+        final length = int.tryParse(contentLength);
+        if (length != null && length < 100) {
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      // 不打印验证失败日志，减少控制台输出
+      return false;
+    }
+  }
 }
 
 // 推荐内容数据模型
@@ -1889,169 +2192,4 @@ class LocalAnimeItem {
     required this.addedTime, // 改为添加时间
     required this.latestEpisode,
   });
-}
-
-// 辅助方法：尝试获取Jellyfin图片 - 并行验证版本
-Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
-  // 构建所有可能的图片URL
-  List<MapEntry<String, String>> imageUrlCandidates = [];
-  
-  for (String imageType in imageTypes) {
-    try {
-      String imageUrl;
-      if (imageType == 'Backdrop') {
-        imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
-      } else {
-        imageUrl = service.getImageUrl(itemId, type: imageType);
-      }
-      
-      if (imageUrl.isNotEmpty) {
-        imageUrlCandidates.add(MapEntry(imageType, imageUrl));
-      }
-    } catch (e) {
-      print('Jellyfin构建${imageType}图片URL失败: $e');
-    }
-  }
-  
-  if (imageUrlCandidates.isEmpty) {
-    print('Jellyfin无法构建任何图片URL');
-    return null;
-  }
-  
-  // 并行验证所有URL
-  final validationFutures = imageUrlCandidates.map((entry) async {
-    try {
-      final isValid = await _validateImageUrl(entry.value);
-      return isValid ? entry : null;
-    } catch (e) {
-      print('Jellyfin验证${entry.key}图片失败: $e');
-      return null;
-    }
-  });
-  
-  final validationResults = await Future.wait(validationFutures);
-  
-  // 按优先级顺序返回第一个有效的URL
-  for (String imageType in imageTypes) {
-    for (var result in validationResults) {
-      if (result != null && result.key == imageType) {
-        print('Jellyfin获取到${imageType}图片: ${result.value}');
-        return result.value;
-      }
-    }
-  }
-  
-  print('Jellyfin未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
-  return null;
-}
-
-// 辅助方法：尝试获取Emby图片 - 并行验证版本
-Future<String?> _tryGetEmbyImage(EmbyService service, String itemId, List<String> imageTypes) async {
-  // 构建所有可能的图片URL
-  List<MapEntry<String, String>> imageUrlCandidates = [];
-  
-  for (String imageType in imageTypes) {
-    try {
-      String imageUrl;
-      if (imageType == 'Backdrop') {
-        imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
-      } else {
-        imageUrl = service.getImageUrl(itemId, type: imageType);
-      }
-      
-      if (imageUrl.isNotEmpty) {
-        imageUrlCandidates.add(MapEntry(imageType, imageUrl));
-      }
-    } catch (e) {
-      print('Emby构建${imageType}图片URL失败: $e');
-    }
-  }
-  
-  if (imageUrlCandidates.isEmpty) {
-    print('Emby无法构建任何图片URL');
-    return null;
-  }
-  
-  // 并行验证所有URL
-  final validationFutures = imageUrlCandidates.map((entry) async {
-    try {
-      final isValid = await _validateImageUrl(entry.value);
-      return isValid ? entry : null;
-    } catch (e) {
-      print('Emby验证${entry.key}图片失败: $e');
-      return null;
-    }
-  });
-  
-  final validationResults = await Future.wait(validationFutures);
-  
-  // 按优先级顺序返回第一个有效的URL
-  for (String imageType in imageTypes) {
-    for (var result in validationResults) {
-      if (result != null && result.key == imageType) {
-        print('Emby获取到${imageType}图片: ${result.value}');
-        return result.value;
-      }
-    }
-  }
-  
-  print('Emby未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
-  return null;
-}
-
-// 辅助方法：获取Jellyfin项目简介
-Future<String> _getJellyfinItemSubtitle(JellyfinService service, JellyfinMediaItem item) async {
-  try {
-    final detail = await service.getMediaItemDetails(item.id);
-    return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
-  } catch (e) {
-    print('获取Jellyfin详细信息失败: $e');
-    return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
-  }
-}
-
-// 辅助方法：获取Emby项目简介
-Future<String> _getEmbyItemSubtitle(EmbyService service, EmbyMediaItem item) async {
-  try {
-    final detail = await service.getMediaItemDetails(item.id);
-    return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
-  } catch (e) {
-    print('获取Emby详细信息失败: $e');
-    return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
-  }
-}
-
-// 辅助方法：验证图片URL是否有效 - 优化版本
-Future<bool> _validateImageUrl(String url) async {
-  try {
-    final response = await http.head(Uri.parse(url)).timeout(
-      const Duration(seconds: 2), // 减少超时时间到2秒
-      onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
-    );
-    
-    // 检查HTTP状态码是否成功
-    if (response.statusCode != 200) {
-      return false;
-    }
-    
-    // 检查Content-Type是否为图片类型
-    final contentType = response.headers['content-type'];
-    if (contentType == null || !contentType.startsWith('image/')) {
-      return false;
-    }
-    
-    // 检查Content-Length，如果太小可能不是有效图片
-    final contentLength = response.headers['content-length'];
-    if (contentLength != null) {
-      final length = int.tryParse(contentLength);
-      if (length != null && length < 100) {
-        return false;
-      }
-    }
-    
-    return true;
-  } catch (e) {
-    // 不打印验证失败日志，减少控制台输出
-    return false;
-  }
 }
