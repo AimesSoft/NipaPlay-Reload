@@ -10,6 +10,7 @@ import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/emby_server_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
+import 'package:nipaplay/widgets/emby_sort_dialog.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 class EmbyMediaLibraryView extends StatefulWidget {
@@ -93,8 +94,13 @@ class _EmbyMediaLibraryViewState extends State<EmbyMediaLibraryView> with Automa
     }
 
     try {
-      // final mediaItems = await embyService.getLatestMediaItems(limit: 200); // 旧的调用方式
-      final mediaItems = await embyService.getLatestMediaItems(totalLimit: 99999, limitPerLibrary: 99999); // 新的调用方式
+      final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
+      final mediaItems = await embyService.getLatestMediaItems(
+        totalLimit: 99999, 
+        limitPerLibrary: 99999,
+        sortBy: embyProvider.currentSortBy,
+        sortOrder: embyProvider.currentSortOrder,
+      );
       if (mounted) {
         setState(() {
           _embyMediaItems = mediaItems;
@@ -117,6 +123,28 @@ class _EmbyMediaLibraryViewState extends State<EmbyMediaLibraryView> with Automa
     _embyRefreshTimer = Timer.periodic(const Duration(minutes: 60), (timer) {
       _loadEmbyData();
     });
+  }
+
+  Future<void> _showSortDialog() async {
+    print('EmbyMediaLibraryView: 显示排序对话框');
+    final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
+    print('EmbyMediaLibraryView: 当前排序设置 - sortBy: ${embyProvider.currentSortBy}, sortOrder: ${embyProvider.currentSortOrder}');
+    
+    final result = await EmbySortDialog.show(
+      context,
+      currentSortBy: embyProvider.currentSortBy,
+      currentSortOrder: embyProvider.currentSortOrder,
+    );
+    
+    if (result != null && mounted) {
+      print('EmbyMediaLibraryView: 用户选择了新的排序设置 - sortBy: ${result['sortBy']}, sortOrder: ${result['sortOrder']}');
+      await embyProvider.updateSortSettings(
+        result['sortBy']!,
+        result['sortOrder']!,
+      );
+    } else {
+      print('EmbyMediaLibraryView: 用户取消了排序设置');
+    }
   }
 
   Future<void> _showEmbyServerDialog() async {
@@ -212,9 +240,22 @@ class _EmbyMediaLibraryViewState extends State<EmbyMediaLibraryView> with Automa
       );
     }
 
-    return Stack(
-      children: [
-        RepaintBoundary(
+    return Consumer<EmbyProvider>(
+      builder: (context, embyProvider, child) {
+        // 当EmbyProvider的媒体项更新时，同步更新本地状态
+        if (_embyMediaItems != embyProvider.mediaItems) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _embyMediaItems = embyProvider.mediaItems;
+              });
+            }
+          });
+        }
+        
+        return Stack(
+          children: [
+            RepaintBoundary(
           child: Platform.isAndroid || Platform.isIOS
               ? GridView.builder(
                   controller: _gridScrollController,
@@ -283,6 +324,17 @@ class _EmbyMediaLibraryViewState extends State<EmbyMediaLibraryView> with Automa
                   ),
                 ),
         ),
+        // 排序按钮
+        Positioned(
+          right: 16,
+          bottom: 80,
+          child: FloatingActionGlassButton(
+            iconData: Ionicons.funnel_outline,
+            onPressed: _showSortDialog,
+            description: 'Emby排序设置\n选择排序方式和顺序\n支持多种排序选项',
+          ),
+        ),
+        // 设置按钮
         Positioned(
           right: 16,
           bottom: 16,
@@ -293,6 +345,8 @@ class _EmbyMediaLibraryViewState extends State<EmbyMediaLibraryView> with Automa
           ),
         ),
       ],
+    );
+      },
     );
   }
 }

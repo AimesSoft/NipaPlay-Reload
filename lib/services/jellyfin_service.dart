@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class JellyfinService {
   static final JellyfinService instance = JellyfinService._internal();
@@ -21,6 +22,40 @@ class JellyfinService {
   bool _isConnected = false;
   List<JellyfinLibrary> _availableLibraries = [];
   List<String> _selectedLibraryIds = [];
+
+  // Client information cache
+  String? _cachedClientInfo;
+
+  // Get dynamic client information
+  Future<String> _getClientInfo() async {
+    if (_cachedClientInfo != null) {
+      return _cachedClientInfo!;
+    }
+
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final appName = packageInfo.appName.isNotEmpty ? packageInfo.appName : 'NipaPlay';
+      final version = packageInfo.version.isNotEmpty ? packageInfo.version : '1.4.9';
+      
+      String platform = 'Flutter';
+      if (!kIsWeb && !kDebugMode) {
+        try {
+          platform = Platform.operatingSystem;
+          // Capitalize first letter
+          platform = platform[0].toUpperCase() + platform.substring(1);
+        } catch (e) {
+          platform = 'Flutter';
+        }
+      }
+
+      _cachedClientInfo = 'MediaBrowser Client="$appName", Device="$platform", DeviceId="$appName-$platform", Version="$version"';
+      return _cachedClientInfo!;
+    } catch (e) {
+      // Fallback to static values
+      _cachedClientInfo = 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.4.9"';
+      return _cachedClientInfo!;
+    }
+  }
 
   // Getters
   bool get isConnected => _isConnected;
@@ -129,11 +164,12 @@ class JellyfinService {
       }
       
       // 认证用户
+      final clientInfo = await _getClientInfo();
       final authResponse = await http.post(
         Uri.parse('$_serverUrl/Users/AuthenticateByName'),
         headers: {
           'Content-Type': 'application/json',
-          'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0"',
+          'X-Emby-Authorization': clientInfo,
         },
         body: json.encode({
           'Username': username,
@@ -240,6 +276,103 @@ class JellyfinService {
     // 保存选择的媒体库到SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('jellyfin_selected_libraries', _selectedLibraryIds);
+  }
+  
+  // 按特定媒体库获取最新内容
+  Future<List<JellyfinMediaItem>> getLatestMediaItemsByLibrary(
+    String libraryId, {
+    int limit = 20,
+    String? sortBy,
+    String? sortOrder,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected) {
+      return [];
+    }
+    
+    try {
+      // 默认排序参数
+      final defaultSortBy = sortBy ?? 'DateCreated,SortName';
+      final defaultSortOrder = sortOrder ?? 'Descending';
+      
+      // 首先获取媒体库信息以确定类型
+      final libraryResponse = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$libraryId'
+      );
+      
+      if (libraryResponse.statusCode != 200) {
+        return [];
+      }
+      
+      final libraryData = json.decode(libraryResponse.body);
+      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      
+      // 根据媒体库类型选择不同的IncludeItemTypes
+      String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+      
+      final response = await _makeAuthenticatedRequest(
+        '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit&userId=$_userId'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'];
+        
+        return items
+            .map((item) => JellyfinMediaItem.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      print('Error fetching media items for library $libraryId: $e');
+    }
+    
+    return [];
+  }
+  
+  // 按特定媒体库获取随机内容
+  Future<List<JellyfinMediaItem>> getRandomMediaItemsByLibrary(
+    String libraryId, {
+    int limit = 20,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected) {
+      return [];
+    }
+    
+    try {
+      // 首先获取媒体库信息以确定类型
+      final libraryResponse = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$libraryId'
+      );
+      
+      if (libraryResponse.statusCode != 200) {
+        return [];
+      }
+      
+      final libraryData = json.decode(libraryResponse.body);
+      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      
+      // 根据媒体库类型选择不同的IncludeItemTypes
+      String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+      
+      // 使用Jellyfin的随机排序获取随机内容
+      final response = await _makeAuthenticatedRequest(
+        '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=Random&Limit=$limit&userId=$_userId'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'];
+        
+        return items
+            .map((item) => JellyfinMediaItem.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      print('Error fetching random media items for library $libraryId: $e');
+    }
+    
+    return [];
   }
   
   Future<List<JellyfinMediaItem>> getLatestMediaItems({
@@ -555,6 +688,80 @@ class JellyfinService {
     }
   }
   
+  /// 获取相邻剧集（使用Jellyfin的adjacentTo参数作为简单的上下集导航）
+  /// 返回当前剧集前后各一集的剧集列表，不依赖弹幕映射
+  Future<List<JellyfinEpisodeInfo>> getAdjacentEpisodes(String currentEpisodeId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+    
+    try {
+      // 使用adjacentTo参数获取相邻剧集，限制3个结果（上一集、当前集、下一集）
+      final response = await _makeAuthenticatedRequest(
+        '/Items?adjacentTo=$currentEpisodeId&limit=3&fields=Overview,MediaSources'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'] ?? [];
+        
+        final episodes = items
+            .map((item) => JellyfinEpisodeInfo.fromJson(item))
+            .toList();
+        
+        // 按集数排序确保顺序正确
+        episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+        
+        debugPrint('[JellyfinService] 获取到${episodes.length}个相邻剧集');
+        return episodes;
+      } else {
+        debugPrint('[JellyfinService] 获取相邻剧集失败: HTTP ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('[JellyfinService] 获取相邻剧集出错: $e');
+      return [];
+    }
+  }
+  
+  /// 简单获取下一集（不依赖弹幕映射）
+  Future<JellyfinEpisodeInfo?> getNextEpisode(String currentEpisodeId) async {
+    final adjacentEpisodes = await getAdjacentEpisodes(currentEpisodeId);
+    
+    if (adjacentEpisodes.isEmpty) return null;
+    
+    // 找到当前剧集的位置
+    final currentIndex = adjacentEpisodes.indexWhere((ep) => ep.id == currentEpisodeId);
+    
+    if (currentIndex != -1 && currentIndex < adjacentEpisodes.length - 1) {
+      final nextEpisode = adjacentEpisodes[currentIndex + 1];
+      debugPrint('[JellyfinService] 找到下一集: ${nextEpisode.name}');
+      return nextEpisode;
+    }
+    
+    debugPrint('[JellyfinService] 没有找到下一集');
+    return null;
+  }
+  
+  /// 简单获取上一集（不依赖弹幕映射）
+  Future<JellyfinEpisodeInfo?> getPreviousEpisode(String currentEpisodeId) async {
+    final adjacentEpisodes = await getAdjacentEpisodes(currentEpisodeId);
+    
+    if (adjacentEpisodes.isEmpty) return null;
+    
+    // 找到当前剧集的位置
+    final currentIndex = adjacentEpisodes.indexWhere((ep) => ep.id == currentEpisodeId);
+    
+    if (currentIndex > 0) {
+      final previousEpisode = adjacentEpisodes[currentIndex - 1];
+      debugPrint('[JellyfinService] 找到上一集: ${previousEpisode.name}');
+      return previousEpisode;
+    }
+    
+    debugPrint('[JellyfinService] 没有找到上一集');
+    return null;
+  }
+
   // 获取流媒体URL
   String getStreamUrl(String itemId) {
     if (!_isConnected || _accessToken == null) {
@@ -731,8 +938,10 @@ class JellyfinService {
     }
     
     final Uri uri = Uri.parse('$_serverUrl$endpoint');
+    final clientInfo = await _getClientInfo();
+    final authHeader = clientInfo + ', Token="$_accessToken"';
     final Map<String, String> headers = {
-      'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0", Token="$_accessToken"',
+      'X-Emby-Authorization': authHeader,
     };
     
     if (body != null) {

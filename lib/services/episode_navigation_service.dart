@@ -700,7 +700,27 @@ class EpisodeNavigationService {
 
       return EpisodeNavigationResult.failure('已经是第一集');
     } catch (e) {
-      debugPrint('[Jellyfin导航] 获取上一话时出错：$e');
+      debugPrint('[Jellyfin导航] 传统导航方式失败: $e，尝试使用简单API导航');
+      
+      // 回退到简单的API导航：使用adjacentTo参数
+      try {
+        final currentEpisodeId = _parseJellyfinUrl(currentFilePath)?['episodeId'];
+        if (currentEpisodeId != null) {
+          final previousEpisode = await JellyfinService.instance.getPreviousEpisode(currentEpisodeId);
+          if (previousEpisode != null) {
+            // 创建不带弹幕映射的历史项（会进行自动匹配）
+            final historyItem = await _createJellyfinHistoryItem(previousEpisode, null, null);
+            
+            return EpisodeNavigationResult.success(
+              historyItem: historyItem,
+              message: '找到上一话：${previousEpisode.name}（简单导航）',
+            );
+          }
+        }
+      } catch (simpleApiError) {
+        debugPrint('[Jellyfin导航] 简单API导航也失败: $simpleApiError');
+      }
+      
       return EpisodeNavigationResult.failure('Jellyfin导航出错：$e');
     }
   }
@@ -841,7 +861,27 @@ class EpisodeNavigationService {
 
       return EpisodeNavigationResult.failure('已经是最后一集');
     } catch (e) {
-      debugPrint('[Jellyfin导航] 获取下一话时出错：$e');
+      debugPrint('[Jellyfin导航] 传统导航方式失败: $e，尝试使用简单API导航');
+      
+      // 回退到简单的API导航：使用adjacentTo参数
+      try {
+        final currentEpisodeId = _parseJellyfinUrl(currentFilePath)?['episodeId'];
+        if (currentEpisodeId != null) {
+          final nextEpisode = await JellyfinService.instance.getNextEpisode(currentEpisodeId);
+          if (nextEpisode != null) {
+            // 创建不带弹幕映射的历史项（会进行自动匹配）
+            final historyItem = await _createJellyfinHistoryItem(nextEpisode, null, null);
+            
+            return EpisodeNavigationResult.success(
+              historyItem: historyItem,
+              message: '找到下一话：${nextEpisode.name}（简单导航）',
+            );
+          }
+        }
+      } catch (simpleApiError) {
+        debugPrint('[Jellyfin导航] 简单API导航也失败: $simpleApiError');
+      }
+      
       return EpisodeNavigationResult.failure('Jellyfin导航出错：$e');
     }
   }
@@ -943,6 +983,11 @@ class EpisodeNavigationService {
   /// 检查是否可以使用文件系统导航
   bool canUseFileSystemNavigation(String filePath) {
     return !_isStreamingUrl(filePath);
+  }
+
+  /// 检查是否可以使用流媒体简单导航（Jellyfin/Emby的adjacentTo API）
+  bool canUseStreamingNavigation(String filePath) {
+    return _isJellyfinUrl(filePath) || _isEmbyUrl(filePath);
   }
 
   /// Emby模式：获取上一话
@@ -1081,7 +1126,27 @@ class EpisodeNavigationService {
 
       return EpisodeNavigationResult.failure('已经是第一集');
     } catch (e) {
-      debugPrint('[Emby导航] 获取上一话时出错：$e');
+      debugPrint('[Emby导航] 传统导航方式失败: $e，尝试使用简单API导航');
+      
+      // 回退到简单的API导航：使用AdjacentTo参数
+      try {
+        final currentEpisodeId = _parseEmbyUrl(currentFilePath)?['episodeId'];
+        if (currentEpisodeId != null) {
+          final previousEpisode = await EmbyService.instance.getPreviousEpisode(currentEpisodeId);
+          if (previousEpisode != null) {
+            // 创建不带弹幕映射的历史项（会进行自动匹配）
+            final historyItem = await _createEmbyHistoryItem(previousEpisode, null, null);
+            
+            return EpisodeNavigationResult.success(
+              historyItem: historyItem,
+              message: '找到上一话：${previousEpisode.name}（简单导航）',
+            );
+          }
+        }
+      } catch (simpleApiError) {
+        debugPrint('[Emby导航] 简单API导航也失败: $simpleApiError');
+      }
+      
       return EpisodeNavigationResult.failure('Emby导航出错：$e');
     }
   }
@@ -1222,7 +1287,27 @@ class EpisodeNavigationService {
 
       return EpisodeNavigationResult.failure('已经是最后一集');
     } catch (e) {
-      debugPrint('[Emby导航] 获取下一话时出错：$e');
+      debugPrint('[Emby导航] 传统导航方式失败: $e，尝试使用简单API导航');
+      
+      // 回退到简单的API导航：使用AdjacentTo参数
+      try {
+        final currentEpisodeId = _parseEmbyUrl(currentFilePath)?['episodeId'];
+        if (currentEpisodeId != null) {
+          final nextEpisode = await EmbyService.instance.getNextEpisode(currentEpisodeId);
+          if (nextEpisode != null) {
+            // 创建不带弹幕映射的历史项（会进行自动匹配）
+            final historyItem = await _createEmbyHistoryItem(nextEpisode, null, null);
+            
+            return EpisodeNavigationResult.success(
+              historyItem: historyItem,
+              message: '找到下一话：${nextEpisode.name}（简单导航）',
+            );
+          }
+        }
+      } catch (simpleApiError) {
+        debugPrint('[Emby导航] 简单API导航也失败: $simpleApiError');
+      }
+      
       return EpisodeNavigationResult.failure('Emby导航出错：$e');
     }
   }

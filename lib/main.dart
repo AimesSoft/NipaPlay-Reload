@@ -15,6 +15,7 @@ import 'pages/anime_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/play_video_page.dart';
 import 'pages/new_series_page.dart';
+import 'pages/dashboard_home_page.dart';
 import 'utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
@@ -250,7 +251,7 @@ void main(List<String> args) async {
         }
         
         Future.microtask(() {
-          _navigateToPage(context, 0); // 切换到视频播放页面（索引0）
+          _navigateToPage(context, 1); // 切换到视频播放页面（索引1）
         });
         
         return '正在切换到视频播放页面';
@@ -267,7 +268,7 @@ void main(List<String> args) async {
         }
         
         Future.microtask(() {
-          _navigateToPage(context, 1); // 切换到媒体库页面（索引1）
+          _navigateToPage(context, 2); // 切换到媒体库页面（索引2）
         });
         
         return '正在切换到媒体库页面';
@@ -284,7 +285,7 @@ void main(List<String> args) async {
         }
         
         Future.microtask(() {
-          _navigateToPage(context, 2); // 切换到新番更新页面（索引2）
+          _navigateToPage(context, 3); // 切换到新番更新页面（索引3）
         });
         
         return '正在切换到新番更新页面';
@@ -301,7 +302,7 @@ void main(List<String> args) async {
         }
         
         Future.microtask(() {
-          _navigateToPage(context, 3); // 切换到设置页面（索引3）
+          _navigateToPage(context, 4); // 切换到设置页面（索引4）
         });
         
         return '正在切换到设置页面';
@@ -752,6 +753,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
 class MainPage extends StatefulWidget {
   final String? launchFilePath;
   final List<Widget> pages = [
+    const DashboardHomePage(),
     const PlayVideoPage(),
     const AnimePage(),
     const NewSeriesPage(),
@@ -817,7 +819,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     if (videoState == null || !mounted) return;
 
     final tabIndex = globalTabController?.index ?? -1;
-    final shouldBeRegistered = tabIndex == 0 && videoState.hasVideo;
+    final shouldBeRegistered = tabIndex == 1 && videoState.hasVideo;
 
     if (shouldBeRegistered && !_hotkeysAreRegistered) {
       HotkeyService().registerHotkeys();
@@ -855,7 +857,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     
     if (mounted) {
       globalTabController = TabController(
-        length: 4,
+        length: 5,
         vsync: this,
         initialIndex: _defaultPageIndex,
       );

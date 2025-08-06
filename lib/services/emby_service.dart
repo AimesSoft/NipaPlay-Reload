@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class EmbyService {
   static final EmbyService instance = EmbyService._internal();
@@ -21,10 +22,46 @@ class EmbyService {
   List<EmbyLibrary> _availableLibraries = [];
   List<String> _selectedLibraryIds = [];
 
+  // Client information cache
+  String? _cachedClientInfo;
+
+  // Get dynamic client information
+  Future<String> _getClientInfo() async {
+    if (_cachedClientInfo != null) {
+      return _cachedClientInfo!;
+    }
+
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final appName = packageInfo.appName.isNotEmpty ? packageInfo.appName : 'NipaPlay';
+      final version = packageInfo.version.isNotEmpty ? packageInfo.version : '1.4.9';
+      
+      String platform = 'Flutter';
+      if (!kIsWeb && !kDebugMode) {
+        try {
+          platform = Platform.operatingSystem;
+          // Capitalize first letter
+          platform = platform[0].toUpperCase() + platform.substring(1);
+        } catch (e) {
+          platform = 'Flutter';
+        }
+      }
+
+      _cachedClientInfo = 'MediaBrowser Client="$appName", Device="$platform", DeviceId="$appName-$platform", Version="$version"';
+      return _cachedClientInfo!;
+    } catch (e) {
+      // Fallback to static values
+      _cachedClientInfo = 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.4.9"';
+      return _cachedClientInfo!;
+    }
+  }
+
   // Getters
   bool get isConnected => _isConnected;
   String? get serverUrl => _serverUrl;
   String? get username => _username;
+  String? get accessToken => _accessToken;
+  String? get userId => _userId;
   List<EmbyLibrary> get availableLibraries => _availableLibraries;
   List<String> get selectedLibraryIds => _selectedLibraryIds;
   
@@ -129,11 +166,12 @@ class EmbyService {
       }
       
       // 认证用户
+      final clientInfo = await _getClientInfo();
       final authResponse = await http.post(
         Uri.parse('$_serverUrl/emby/Users/AuthenticateByName'),
         headers: {
           'Content-Type': 'application/json',
-          'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0"',
+          'X-Emby-Authorization': clientInfo,
         },
         body: json.encode({
           'Username': username,
@@ -200,9 +238,11 @@ class EmbyService {
     }
     
     final uri = Uri.parse('$_serverUrl$path');
+    final clientInfo = await _getClientInfo();
+    final authHeader = clientInfo + ', Token="$_accessToken"';
     final headers = {
       'Content-Type': 'application/json',
-      'X-Emby-Authorization': 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.0.0", Token="$_accessToken"',
+      'X-Emby-Authorization': authHeader,
     };
     
     // 设置默认超时时间为10秒
@@ -304,13 +344,122 @@ class EmbyService {
     await prefs.setStringList('emby_selected_libraries', libraryIds);
   }
   
-  Future<List<EmbyMediaItem>> getLatestMediaItems({int limitPerLibrary = 99999, int totalLimit = 99999}) async {
+  // 按特定媒体库获取最新内容
+  Future<List<EmbyMediaItem>> getLatestMediaItemsByLibrary(
+    String libraryId, {
+    int limit = 20,
+    String? sortBy,
+    String? sortOrder,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected) {
+      return [];
+    }
+    
+    try {
+      // 默认排序参数
+      final defaultSortBy = sortBy ?? 'DateCreated,SortName';
+      final defaultSortOrder = sortOrder ?? 'Descending';
+      
+      // 首先获取媒体库信息以确定类型
+      final libraryResponse = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$libraryId'
+      );
+      
+      if (libraryResponse.statusCode != 200) {
+        return [];
+      }
+      
+      final libraryData = json.decode(libraryResponse.body);
+      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      
+      // 根据媒体库类型选择不同的IncludeItemTypes
+      String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+      
+      final response = await _makeAuthenticatedRequest(
+        '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'];
+        
+        return items
+            .map((item) => EmbyMediaItem.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      print('Error fetching media items for library $libraryId: $e');
+    }
+    
+    return [];
+  }
+  
+  // 按特定媒体库获取随机内容
+  Future<List<EmbyMediaItem>> getRandomMediaItemsByLibrary(
+    String libraryId, {
+    int limit = 20,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected) {
+      return [];
+    }
+    
+    try {
+      // 首先获取媒体库信息以确定类型
+      final libraryResponse = await _makeAuthenticatedRequest(
+        '/Users/$_userId/Items/$libraryId'
+      );
+      
+      if (libraryResponse.statusCode != 200) {
+        return [];
+      }
+      
+      final libraryData = json.decode(libraryResponse.body);
+      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      
+      // 根据媒体库类型选择不同的IncludeItemTypes
+      String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+      
+      // 使用Emby的随机排序获取随机内容
+      final response = await _makeAuthenticatedRequest(
+        '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=Random&Limit=$limit'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'];
+        
+        return items
+            .map((item) => EmbyMediaItem.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      print('Error fetching random media items for library $libraryId: $e');
+    }
+    
+    return [];
+  }
+  
+  Future<List<EmbyMediaItem>> getLatestMediaItems({
+    int limitPerLibrary = 99999, 
+    int totalLimit = 99999,
+    String? sortBy,
+    String? sortOrder,
+  }) async {
     if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty || _userId == null) {
       return [];
     }
 
     List<EmbyMediaItem> allItems = [];
+    
+    // 默认排序参数
+    final defaultSortBy = sortBy ?? 'DateCreated';
+    final defaultSortOrder = sortOrder ?? 'Descending';
+    
+    print('EmbyService: 获取媒体项 - sortBy: $defaultSortBy, sortOrder: $defaultSortOrder');
+    
     try {
       for (final libraryId in _selectedLibraryIds) {
         try {
@@ -333,8 +482,8 @@ class EmbyService {
           'Recursive': 'true',
           'Limit': limitPerLibrary.toString(),
               'Fields': 'Overview,Genres,People,Studios,ProviderIds,DateCreated,PremiereDate,CommunityRating,ProductionYear',
-          'SortBy': 'DateCreated',
-          'SortOrder': 'Descending',
+          'SortBy': defaultSortBy,
+          'SortOrder': defaultSortOrder,
         };
 
         final queryString = Uri(queryParameters: queryParameters).query;
@@ -358,11 +507,15 @@ class EmbyService {
         }
       }
 
-      // 按添加日期降序排序所有收集的项目
-      allItems.sort((a, b) {
-        // 使用 EmbyMediaItem 中的 dateAdded 字段进行排序
-        return b.dateAdded.compareTo(a.dateAdded);
-      });
+      // 如果服务器端排序失败或需要客户端排序，则进行本地排序
+      // 注意：当使用自定义排序时，我们依赖服务器端的排序结果
+      if (sortBy == null && sortOrder == null) {
+        // 默认情况下按添加日期降序排序所有收集的项目
+        allItems.sort((a, b) {
+          // 使用 EmbyMediaItem 中的 dateAdded 字段进行排序
+          return b.dateAdded.compareTo(a.dateAdded);
+        });
+      }
 
       // 应用总数限制
       if (allItems.length > totalLimit) {
@@ -571,6 +724,80 @@ class EmbyService {
     }
     
     debugPrint('[EmbyService] 返回null，无法获取剧集详情');
+    return null;
+  }
+  
+  /// 获取相邻剧集（使用Emby的AdjacentTo参数作为简单的上下集导航）
+  /// 返回当前剧集前后各一集的剧集列表，不依赖弹幕映射
+  Future<List<EmbyEpisodeInfo>> getAdjacentEpisodes(String currentEpisodeId) async {
+    if (!_isConnected) {
+      throw Exception('未连接到Emby服务器');
+    }
+    
+    try {
+      // 使用AdjacentTo参数获取相邻剧集，限制3个结果（上一集、当前集、下一集）
+      final response = await _makeAuthenticatedRequest(
+        '/emby/Users/$_userId/Items?AdjacentTo=$currentEpisodeId&Limit=3&Fields=Overview,MediaSources'
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'] ?? [];
+        
+        final episodes = items
+            .map((item) => EmbyEpisodeInfo.fromJson(item))
+            .toList();
+        
+        // 按集数排序确保顺序正确
+        episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+        
+        debugPrint('[EmbyService] 获取到${episodes.length}个相邻剧集');
+        return episodes;
+      } else {
+        debugPrint('[EmbyService] 获取相邻剧集失败: HTTP ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('[EmbyService] 获取相邻剧集出错: $e');
+      return [];
+    }
+  }
+  
+  /// 简单获取下一集（不依赖弹幕映射）
+  Future<EmbyEpisodeInfo?> getNextEpisode(String currentEpisodeId) async {
+    final adjacentEpisodes = await getAdjacentEpisodes(currentEpisodeId);
+    
+    if (adjacentEpisodes.isEmpty) return null;
+    
+    // 找到当前剧集的位置
+    final currentIndex = adjacentEpisodes.indexWhere((ep) => ep.id == currentEpisodeId);
+    
+    if (currentIndex != -1 && currentIndex < adjacentEpisodes.length - 1) {
+      final nextEpisode = adjacentEpisodes[currentIndex + 1];
+      debugPrint('[EmbyService] 找到下一集: ${nextEpisode.name}');
+      return nextEpisode;
+    }
+    
+    debugPrint('[EmbyService] 没有找到下一集');
+    return null;
+  }
+  
+  /// 简单获取上一集（不依赖弹幕映射）
+  Future<EmbyEpisodeInfo?> getPreviousEpisode(String currentEpisodeId) async {
+    final adjacentEpisodes = await getAdjacentEpisodes(currentEpisodeId);
+    
+    if (adjacentEpisodes.isEmpty) return null;
+    
+    // 找到当前剧集的位置
+    final currentIndex = adjacentEpisodes.indexWhere((ep) => ep.id == currentEpisodeId);
+    
+    if (currentIndex > 0) {
+      final previousEpisode = adjacentEpisodes[currentIndex - 1];
+      debugPrint('[EmbyService] 找到上一集: ${previousEpisode.name}');
+      return previousEpisode;
+    }
+    
+    debugPrint('[EmbyService] 没有找到上一集');
     return null;
   }
   

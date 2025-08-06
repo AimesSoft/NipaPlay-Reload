@@ -1206,7 +1206,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                 debugPrint('初始化播放器 - 步骤2：播放器初始化完成');
                 
                 // 初始化成功后，切换到播放器标签页并关闭当前页面
-                tabChangeNotifier?.changeTab(0);
+                tabChangeNotifier?.changeTab(1);
                 debugPrint('初始化播放器 - 步骤3：已切换到播放器标签页');
                 
                 // 关闭详情页面

@@ -14,6 +14,10 @@ class EmbyProvider extends ChangeNotifier {
   List<EmbyMovieInfo> _movieItems = [];
   Map<String, EmbyMediaItemDetail> _mediaDetailsCache = {};
   Map<String, EmbyMovieInfo> _movieDetailsCache = {};
+  
+  // 排序相关状态
+  String _currentSortBy = 'DateCreated';
+  String _currentSortOrder = 'Descending';
 
   // Getters
   bool get isInitialized => _isInitialized;
@@ -27,6 +31,10 @@ class EmbyProvider extends ChangeNotifier {
   List<String> get selectedLibraryIds => _embyService.selectedLibraryIds;
   String? get serverUrl => _embyService.serverUrl;
   String? get username => _embyService.username;
+  
+  // 排序相关getter
+  String get currentSortBy => _currentSortBy;
+  String get currentSortOrder => _currentSortOrder;
 
   // 初始化Emby Provider
   Future<void> initialize() async {
@@ -86,7 +94,10 @@ class EmbyProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      _mediaItems = await _embyService.getLatestMediaItems();
+      _mediaItems = await _embyService.getLatestMediaItems(
+        sortBy: _currentSortBy,
+        sortOrder: _currentSortOrder,
+      );
     } catch (e) {
       _hasError = true;
       _errorMessage = e.toString();
@@ -195,6 +206,19 @@ class EmbyProvider extends ChangeNotifier {
   // 将Emby电影项转换为WatchHistoryItem
   List<WatchHistoryItem> convertMoviesToWatchHistoryItems() {
     return _movieItems.map((item) => item.toWatchHistoryItem()).toList();
+  }
+  
+  // 更新排序设置并重新加载媒体项
+  Future<void> updateSortSettings(String sortBy, String sortOrder) async {
+    print('EmbyProvider: 更新排序设置 - sortBy: $sortBy, sortOrder: $sortOrder');
+    if (_currentSortBy != sortBy || _currentSortOrder != sortOrder) {
+      _currentSortBy = sortBy;
+      _currentSortOrder = sortOrder;
+      print('EmbyProvider: 排序设置已更新，开始重新加载媒体项');
+      await loadMediaItems();
+    } else {
+      print('EmbyProvider: 排序设置未变化，跳过重新加载');
+    }
   }
   
   // 获取流媒体URL
