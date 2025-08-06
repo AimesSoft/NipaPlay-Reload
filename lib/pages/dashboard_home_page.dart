@@ -1884,6 +1884,171 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       ),
     );
   }
+
+  // 辅助方法：尝试获取Jellyfin图片 - 并行验证版本
+  Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
+    // 构建所有可能的图片URL
+    List<MapEntry<String, String>> imageUrlCandidates = [];
+    
+    for (String imageType in imageTypes) {
+      try {
+        String imageUrl;
+        if (imageType == 'Backdrop') {
+          imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
+        } else {
+          imageUrl = service.getImageUrl(itemId, type: imageType);
+        }
+        
+        if (imageUrl.isNotEmpty) {
+          imageUrlCandidates.add(MapEntry(imageType, imageUrl));
+        }
+      } catch (e) {
+        debugPrint('Jellyfin构建${imageType}图片URL失败: $e');
+      }
+    }
+    
+    if (imageUrlCandidates.isEmpty) {
+      debugPrint('Jellyfin无法构建任何图片URL');
+      return null;
+    }
+    
+    // 并行验证所有URL
+    final validationFutures = imageUrlCandidates.map((entry) async {
+      try {
+        final isValid = await _validateImageUrl(entry.value);
+        return isValid ? entry : null;
+      } catch (e) {
+        debugPrint('Jellyfin验证${entry.key}图片失败: $e');
+        return null;
+      }
+    });
+    
+    final validationResults = await Future.wait(validationFutures);
+    
+    // 按优先级顺序返回第一个有效的URL
+    for (String imageType in imageTypes) {
+      for (var result in validationResults) {
+        if (result != null && result.key == imageType) {
+          debugPrint('Jellyfin获取到${imageType}图片: ${result.value}');
+          return result.value;
+        }
+      }
+    }
+    
+    debugPrint('Jellyfin未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
+    return null;
+  }
+
+  // 辅助方法：尝试获取Emby图片 - 并行验证版本
+  Future<String?> _tryGetEmbyImage(EmbyService service, String itemId, List<String> imageTypes) async {
+    // 构建所有可能的图片URL
+    List<MapEntry<String, String>> imageUrlCandidates = [];
+    
+    for (String imageType in imageTypes) {
+      try {
+        String imageUrl;
+        if (imageType == 'Backdrop') {
+          imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
+        } else {
+          imageUrl = service.getImageUrl(itemId, type: imageType);
+        }
+        
+        if (imageUrl.isNotEmpty) {
+          imageUrlCandidates.add(MapEntry(imageType, imageUrl));
+        }
+      } catch (e) {
+        debugPrint('Emby构建${imageType}图片URL失败: $e');
+      }
+    }
+    
+    if (imageUrlCandidates.isEmpty) {
+      debugPrint('Emby无法构建任何图片URL');
+      return null;
+    }
+    
+    // 并行验证所有URL
+    final validationFutures = imageUrlCandidates.map((entry) async {
+      try {
+        final isValid = await _validateImageUrl(entry.value);
+        return isValid ? entry : null;
+      } catch (e) {
+        debugPrint('Emby验证${entry.key}图片失败: $e');
+        return null;
+      }
+    });
+    
+    final validationResults = await Future.wait(validationFutures);
+    
+    // 按优先级顺序返回第一个有效的URL
+    for (String imageType in imageTypes) {
+      for (var result in validationResults) {
+        if (result != null && result.key == imageType) {
+          debugPrint('Emby获取到${imageType}图片: ${result.value}');
+          return result.value;
+        }
+      }
+    }
+    
+    debugPrint('Emby未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
+    return null;
+  }
+
+  // 辅助方法：获取Jellyfin项目简介
+  Future<String> _getJellyfinItemSubtitle(JellyfinService service, JellyfinMediaItem item) async {
+    try {
+      final detail = await service.getMediaItemDetails(item.id);
+      return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
+    } catch (e) {
+      debugPrint('获取Jellyfin详细信息失败: $e');
+      return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
+    }
+  }
+
+  // 辅助方法：获取Emby项目简介
+  Future<String> _getEmbyItemSubtitle(EmbyService service, EmbyMediaItem item) async {
+    try {
+      final detail = await service.getMediaItemDetails(item.id);
+      return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
+    } catch (e) {
+      debugPrint('获取Emby详细信息失败: $e');
+      return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
+    }
+  }
+
+  // 辅助方法：验证图片URL是否有效 - 优化版本
+  Future<bool> _validateImageUrl(String url) async {
+    try {
+      final response = await http.head(Uri.parse(url)).timeout(
+        const Duration(seconds: 2), // 减少超时时间到2秒
+        onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
+      );
+      
+      // 检查HTTP状态码是否成功
+      if (response.statusCode != 200) {
+        return false;
+      }
+      
+      // 检查Content-Type是否为图片类型
+      final contentType = response.headers['content-type'];
+      if (contentType == null || !contentType.startsWith('image/')) {
+        return false;
+      }
+      
+      // 检查Content-Length，如果太小可能不是有效图片
+      final contentLength = response.headers['content-length'];
+      if (contentLength != null) {
+        final length = int.tryParse(contentLength);
+        if (length != null && length < 100) {
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      // 不打印验证失败日志，减少控制台输出
+      return false;
+    }
+  }
 }
 
 // 推荐内容数据模型
@@ -1931,169 +2096,4 @@ class LocalAnimeItem {
     required this.addedTime, // 改为添加时间
     required this.latestEpisode,
   });
-}
-
-// 辅助方法：尝试获取Jellyfin图片 - 并行验证版本
-Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
-  // 构建所有可能的图片URL
-  List<MapEntry<String, String>> imageUrlCandidates = [];
-  
-  for (String imageType in imageTypes) {
-    try {
-      String imageUrl;
-      if (imageType == 'Backdrop') {
-        imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
-      } else {
-        imageUrl = service.getImageUrl(itemId, type: imageType);
-      }
-      
-      if (imageUrl.isNotEmpty) {
-        imageUrlCandidates.add(MapEntry(imageType, imageUrl));
-      }
-    } catch (e) {
-      debugPrint('Jellyfin构建${imageType}图片URL失败: $e');
-    }
-  }
-  
-  if (imageUrlCandidates.isEmpty) {
-    debugPrint('Jellyfin无法构建任何图片URL');
-    return null;
-  }
-  
-  // 并行验证所有URL
-  final validationFutures = imageUrlCandidates.map((entry) async {
-    try {
-      final isValid = await _validateImageUrl(entry.value);
-      return isValid ? entry : null;
-    } catch (e) {
-      debugPrint('Jellyfin验证${entry.key}图片失败: $e');
-      return null;
-    }
-  });
-  
-  final validationResults = await Future.wait(validationFutures);
-  
-  // 按优先级顺序返回第一个有效的URL
-  for (String imageType in imageTypes) {
-    for (var result in validationResults) {
-      if (result != null && result.key == imageType) {
-        debugPrint('Jellyfin获取到${imageType}图片: ${result.value}');
-        return result.value;
-      }
-    }
-  }
-  
-  debugPrint('Jellyfin未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
-  return null;
-}
-
-// 辅助方法：尝试获取Emby图片 - 并行验证版本
-Future<String?> _tryGetEmbyImage(EmbyService service, String itemId, List<String> imageTypes) async {
-  // 构建所有可能的图片URL
-  List<MapEntry<String, String>> imageUrlCandidates = [];
-  
-  for (String imageType in imageTypes) {
-    try {
-      String imageUrl;
-      if (imageType == 'Backdrop') {
-        imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
-      } else {
-        imageUrl = service.getImageUrl(itemId, type: imageType);
-      }
-      
-      if (imageUrl.isNotEmpty) {
-        imageUrlCandidates.add(MapEntry(imageType, imageUrl));
-      }
-    } catch (e) {
-      debugPrint('Emby构建${imageType}图片URL失败: $e');
-    }
-  }
-  
-  if (imageUrlCandidates.isEmpty) {
-    debugPrint('Emby无法构建任何图片URL');
-    return null;
-  }
-  
-  // 并行验证所有URL
-  final validationFutures = imageUrlCandidates.map((entry) async {
-    try {
-      final isValid = await _validateImageUrl(entry.value);
-      return isValid ? entry : null;
-    } catch (e) {
-      debugPrint('Emby验证${entry.key}图片失败: $e');
-      return null;
-    }
-  });
-  
-  final validationResults = await Future.wait(validationFutures);
-  
-  // 按优先级顺序返回第一个有效的URL
-  for (String imageType in imageTypes) {
-    for (var result in validationResults) {
-      if (result != null && result.key == imageType) {
-        debugPrint('Emby获取到${imageType}图片: ${result.value}');
-        return result.value;
-      }
-    }
-  }
-  
-  debugPrint('Emby未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
-  return null;
-}
-
-// 辅助方法：获取Jellyfin项目简介
-Future<String> _getJellyfinItemSubtitle(JellyfinService service, JellyfinMediaItem item) async {
-  try {
-    final detail = await service.getMediaItemDetails(item.id);
-    return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
-  } catch (e) {
-    debugPrint('获取Jellyfin详细信息失败: $e');
-    return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
-  }
-}
-
-// 辅助方法：获取Emby项目简介
-Future<String> _getEmbyItemSubtitle(EmbyService service, EmbyMediaItem item) async {
-  try {
-    final detail = await service.getMediaItemDetails(item.id);
-    return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
-  } catch (e) {
-    debugPrint('获取Emby详细信息失败: $e');
-    return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
-  }
-}
-
-// 辅助方法：验证图片URL是否有效 - 优化版本
-Future<bool> _validateImageUrl(String url) async {
-  try {
-    final response = await http.head(Uri.parse(url)).timeout(
-      const Duration(seconds: 2), // 减少超时时间到2秒
-      onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
-    );
-    
-    // 检查HTTP状态码是否成功
-    if (response.statusCode != 200) {
-      return false;
-    }
-    
-    // 检查Content-Type是否为图片类型
-    final contentType = response.headers['content-type'];
-    if (contentType == null || !contentType.startsWith('image/')) {
-      return false;
-    }
-    
-    // 检查Content-Length，如果太小可能不是有效图片
-    final contentLength = response.headers['content-length'];
-    if (contentLength != null) {
-      final length = int.tryParse(contentLength);
-      if (length != null && length < 100) {
-        return false;
-      }
-    }
-    
-    return true;
-  } catch (e) {
-    // 不打印验证失败日志，减少控制台输出
-    return false;
-  }
 }
