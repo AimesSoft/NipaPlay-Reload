@@ -33,6 +33,12 @@
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="menu-separator"/>
+                            <menuItem title="主页" keyEquivalent="h" id="home-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="openHome:" target="Voe-Tx-rLC" id="home-action"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="视频播放" keyEquivalent="1" id="video-playback-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>

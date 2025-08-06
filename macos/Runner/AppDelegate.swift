@@ -142,6 +142,12 @@ class AppDelegate: FlutterAppDelegate {
       invokeFlutterMethod("openVideoPlayback")
   }
   
+  // 打开主页
+  @objc func openHome(_ sender: Any?) {
+    print("[AppDelegate] 菜单点击: 主页")
+    invokeFlutterMethod("openHome")
+  }
+  
   // 打开媒体库
   @objc func openMediaLibrary(_ sender: Any?) {
     print("[AppDelegate] 菜单点击: 媒体库")
@@ -176,6 +182,7 @@ class AppDelegate: FlutterAppDelegate {
     let methodActions: [String: () -> Void] = [
         "uploadVideo": { channel.invokeMethod("uploadVideo", arguments: arguments, result: self.handleFlutterResult) },
         "openVideoPlayback": { channel.invokeMethod("openVideoPlayback", arguments: arguments, result: self.handleFlutterResult) },
+        "openHome": { channel.invokeMethod("openHome", arguments: arguments, result: self.handleFlutterResult) },
         "openMediaLibrary": { channel.invokeMethod("openMediaLibrary", arguments: arguments, result: self.handleFlutterResult) },
         "openNewSeries": { channel.invokeMethod("openNewSeries", arguments: arguments, result: self.handleFlutterResult) },
         "openSettings": { channel.invokeMethod("openSettings", arguments: arguments, result: self.handleFlutterResult) }

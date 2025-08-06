@@ -338,18 +338,18 @@ class _TagSearchModalState extends State<TagSearchModal>
                 }
                 
                 if (mainPageState != null && mainPageState.globalTabController != null) {
-                  if (mainPageState.globalTabController!.index != 0) {
-                    mainPageState.globalTabController!.animateTo(0);
-                    debugPrint('[TagSearchWidget] 成功切换到播放页面 (tab 0)');
+                  if (mainPageState.globalTabController!.index != 1) {
+                    mainPageState.globalTabController!.animateTo(1);
+                    debugPrint('[TagSearchWidget] 成功切换到播放页面 (tab 1)');
                   } else {
-                    debugPrint('[TagSearchWidget] 已经在播放页面 (tab 0)');
+                    debugPrint('[TagSearchWidget] 已经在播放页面 (tab 1)');
                   }
                 } else {
                   debugPrint('[TagSearchWidget] 无法获取MainPageState，尝试备用方案');
                   // 备用方案：使用TabChangeNotifier
                   try {
                     final tabNotifier = Provider.of<TabChangeNotifier>(rootContext, listen: false);
-                    tabNotifier.changeTab(0);
+                    tabNotifier.changeTab(1);
                     debugPrint('[TagSearchWidget] 使用TabChangeNotifier成功切换页面');
                   } catch (e) {
                     debugPrint('[TagSearchWidget] TabChangeNotifier也失败: $e');
