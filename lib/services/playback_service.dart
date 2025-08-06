@@ -25,8 +25,8 @@ class PlaybackService {
       return;
     }
 
-    // 1. 切换回主页面 (Tab 0)
-    Provider.of<TabChangeNotifier>(context, listen: false).changeTab(0);
+    // 1. 切换到视频播放页面 (Tab 1)
+    Provider.of<TabChangeNotifier>(context, listen: false).changeTab(1);
 
     // 等待一小段时间以确保页面切换完成
     await Future.delayed(const Duration(milliseconds: 100));
