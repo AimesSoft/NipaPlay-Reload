@@ -1721,6 +1721,54 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void _navigateToJellyfinDetail(String jellyfinId) {
     JellyfinDetailPage.show(context, jellyfinId).then((result) {
       if (result != null) {
+        // 检查是否需要获取实际播放URL
+        String? actualPlayUrl;
+        final isJellyfinProtocol = result.filePath.startsWith('jellyfin://');
+        final isEmbyProtocol = result.filePath.startsWith('emby://');
+        
+        if (isJellyfinProtocol) {
+          try {
+            final jellyfinId = result.filePath.replaceFirst('jellyfin://', '');
+            final jellyfinService = JellyfinService.instance;
+            if (jellyfinService.isConnected) {
+              actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            } else {
+              BlurSnackBar.show(context, '未连接到Jellyfin服务器');
+              return;
+            }
+          } catch (e) {
+            BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
+            return;
+          }
+        } else if (isEmbyProtocol) {
+          try {
+            final embyId = result.filePath.replaceFirst('emby://', '');
+            final embyService = EmbyService.instance;
+            if (embyService.isConnected) {
+              actualPlayUrl = embyService.getStreamUrl(embyId);
+            } else {
+              BlurSnackBar.show(context, '未连接到Emby服务器');
+              return;
+            }
+          } catch (e) {
+            BlurSnackBar.show(context, '获取Emby流媒体URL失败: $e');
+            return;
+          }
+        }
+        
+        // 创建PlayableItem并播放
+        final playableItem = PlayableItem(
+          videoPath: result.filePath,
+          title: result.animeName,
+          subtitle: result.episodeTitle,
+          animeId: result.animeId,
+          episodeId: result.episodeId,
+          historyItem: result,
+          actualPlayUrl: actualPlayUrl,
+        );
+        
+        PlaybackService().play(playableItem);
+        
         // 刷新观看历史
         Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
       }
@@ -1730,6 +1778,54 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void _navigateToEmbyDetail(String embyId) {
     EmbyDetailPage.show(context, embyId).then((result) {
       if (result != null) {
+        // 检查是否需要获取实际播放URL
+        String? actualPlayUrl;
+        final isJellyfinProtocol = result.filePath.startsWith('jellyfin://');
+        final isEmbyProtocol = result.filePath.startsWith('emby://');
+        
+        if (isJellyfinProtocol) {
+          try {
+            final jellyfinId = result.filePath.replaceFirst('jellyfin://', '');
+            final jellyfinService = JellyfinService.instance;
+            if (jellyfinService.isConnected) {
+              actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            } else {
+              BlurSnackBar.show(context, '未连接到Jellyfin服务器');
+              return;
+            }
+          } catch (e) {
+            BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
+            return;
+          }
+        } else if (isEmbyProtocol) {
+          try {
+            final embyId = result.filePath.replaceFirst('emby://', '');
+            final embyService = EmbyService.instance;
+            if (embyService.isConnected) {
+              actualPlayUrl = embyService.getStreamUrl(embyId);
+            } else {
+              BlurSnackBar.show(context, '未连接到Emby服务器');
+              return;
+            }
+          } catch (e) {
+            BlurSnackBar.show(context, '获取Emby流媒体URL失败: $e');
+            return;
+          }
+        }
+        
+        // 创建PlayableItem并播放
+        final playableItem = PlayableItem(
+          videoPath: result.filePath,
+          title: result.animeName,
+          subtitle: result.episodeTitle,
+          animeId: result.animeId,
+          episodeId: result.episodeId,
+          historyItem: result,
+          actualPlayUrl: actualPlayUrl,
+        );
+        
+        PlaybackService().play(playableItem);
+        
         // 刷新观看历史
         Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
       }
