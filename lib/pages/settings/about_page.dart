@@ -243,29 +243,7 @@ class _AboutPageState extends State<AboutPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // QQ企鹅图标样式
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Colors.blue[400]!,
-                                Colors.blue[700]!,
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.chat_bubble_rounded,
-                              color: Colors.white,
-                              size: 12,
-                            ),
-                          ),
-                        ),
+                        Icon(Ionicons.chatbubbles_outline, color: Colors.white.withOpacity(0.8), size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'QQ群: 712139588',

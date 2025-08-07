@@ -69,11 +69,7 @@ class BlurDialog {
                 maxHeight: screenSize.height * 0.8, // 最大高度限制
                 maxWidth: dialogWidth, // 最大宽度限制
               ),
-              child: IntrinsicWidth(
-                child: Container(
-                  constraints: const BoxConstraints(
-                    minWidth: 200, // 最小宽度，防止过窄
-                  ),
+              child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
                     gradient: LinearGradient(
@@ -130,9 +126,7 @@ class BlurDialog {
                                 textAlign: TextAlign.center, // 内容文本居中
                               ),
                             if (contentWidget != null)
-                              Expanded(
-                                child: contentWidget,
-                              ),
+                              contentWidget,
                             
                             // 按钮区域 - 底部居中
                             if (actions != null) ...[
@@ -167,7 +161,6 @@ class BlurDialog {
                     ),
                   ),
                 ),
-              ),
             ),
           ),
         );
