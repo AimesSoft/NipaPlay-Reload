@@ -43,8 +43,12 @@
 ## 应用截图
 <div align="center">
   <p><strong>主界面</strong></p>
-  <img src="others/%E4%B8%BB%E7%95%8C%E9%9D%A2.png" width="70%" alt="主界面">
-  <img src="others/%E4%B8%BB%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="主界面-手机">
+  <img src="others/%E4%B8%BB%E9%A1%B5.png" width="70%" alt="主界面">
+  <img src="others/%E4%B8%BB%E9%A1%B5-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="主界面-手机">
+
+  <p><strong>视频播放页面</strong></p>
+  <img src="others/%E4%B8%BB%E7%95%8C%E9%9D%A2.png" width="70%" alt="视频播放页面">
+  <img src="others/%E4%B8%BB%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="视频播放页面-手机">
 
   <p><strong>新番更新界面</strong></p>
   <img src="others/%E6%96%B0%E7%95%AA%E6%9B%B4%E6%96%B0%E7%95%8C%E9%9D%A2.png" width="70%" alt="新番更新界面">
@@ -53,6 +57,14 @@
   <p><strong>新番详情界面</strong></p>
   <img src="others/%E6%96%B0%E7%95%AA%E8%AF%A6%E6%83%85%E7%95%8C%E9%9D%A2.png" width="70%" alt="新番详情界面">
   <img src="others/%E6%96%B0%E7%95%AA%E8%AF%A6%E6%83%85%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="新番详情界面-手机">
+
+  <p><strong>流媒体详情页面</strong></p>
+  <img src="others/%E6%B5%81%E5%AA%92%E4%BD%93%E8%AF%A6%E6%83%85%E9%A1%B5%E9%9D%A2.png" width="70%" alt="流媒体详情页面">
+  <img src="others/%E6%B5%81%E5%AA%92%E4%BD%93%E8%AF%A6%E6%83%85%E7%95%8C%E9%9D%A2-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="流媒体详情页面-手机">
+
+  <p><strong>流媒体媒体库</strong></p>
+  <img src="others/%E6%B5%81%E5%AA%92%E4%BD%93%E5%AA%92%E4%BD%93%E5%BA%93.png" width="70%" alt="流媒体媒体库">
+  <img src="others/%E6%B5%81%E5%AA%92%E4%BD%93%E5%AA%92%E4%BD%93%E5%BA%93-%E6%89%8B%E6%9C%BA.png" width="18.6%" alt="流媒体媒体库-手机">
 
   <p><strong>播放界面</strong></p>
   <img src="others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2.png" width="70%" alt="播放界面">
