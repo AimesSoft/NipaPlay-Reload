@@ -69,48 +69,30 @@ jobs:
         run: |
           echo "::set-output name=version::$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)"
       
-      # Setup Android keystore (for Android)
-      - name: Setup Android keystore
-        if: matrix.target == 'Android'
-        run: |
-          echo "${{ secrets.ENCODED_KEYSTORE }}" | base64 -di > android/app/upload-keystore.jks
-          echo "${{ secrets.KEY_PROPERTIES }}" > android/key.properties
-      
-      # Setup Flutter
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2.12.0
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: 'stable'
-          cache: true
-      
-      # Cache CocoaPods (for iOS/macOS)
-      - name: Cache Pod
-        if: matrix.cache_pod_key != null
-        uses: actions/cache@v4
-        with:
-          key: ${{ matrix.cache_pod_key }}
-          path: ${{ matrix.cache_pod_path }}
-          restore-keys: ${{ matrix.cache_pod_key }}-${{ hashFiles(matrix.cache_pod_restore_keys_hash_file) }}
-      
-      # Setup JDK for Android
-      - name: Setup JDK 21 (Android)
-        if: matrix.target == 'Android'
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-          cache: gradle
-
-      # Build Android
+      # Build Android (unsigned)
       - name: Build Android
         if: matrix.target == 'Android'
+        run: flutter build apk --release --split-per-abi
+
+      # Sign Android release
+      - name: Sign Android release
+        if: matrix.target == 'Android'
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: build/app/outputs/apk/release
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        
+      - name: Rename Android Artifacts
+        if: matrix.target == 'Android'
         run: |
-          flutter build apk --release --split-per-abi
-          cd build/app/outputs/apk/release
-          mv app-arm64-v8a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk
-          mv app-armeabi-v7a-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm32.apk
-          mv app-x86_64-release.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-x86_64.apk
+          cd ${{ steps.sign_app.outputs.signedReleaseFileDirectory }}
+          mv app-arm64-v8a-release-signed.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk
+          mv app-armeabi-v7a-release-signed.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm32.apk
+          mv app-x86_64-release-signed.apk NipaPlay-${{ steps.get_version.outputs.version }}-Android-x86_64.apk
       
       # Xcode build for iOS/macOS
       - name: Build Xcode (iOS/macOS)
