@@ -49,22 +49,34 @@ class BlurLoginDialog extends StatefulWidget {
 
 class _BlurLoginDialogState extends State<BlurLoginDialog> {
   final Map<String, TextEditingController> _controllers = {};
+  final Map<String, FocusNode> _focusNodes = {};
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // 为每个字段创建控制器
+    // 为每个字段创建控制器和焦点节点
     for (final field in widget.fields) {
       _controllers[field.key] = TextEditingController(text: field.initialValue);
+      _focusNodes[field.key] = FocusNode();
     }
+    
+    // 在下一帧自动聚焦到第一个输入框（适用于Android TV）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.fields.isNotEmpty && mounted) {
+        _focusNodes[widget.fields.first.key]?.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
-    // 释放所有控制器
+    // 释放所有控制器和焦点节点
     for (final controller in _controllers.values) {
       controller.dispose();
+    }
+    for (final focusNode in _focusNodes.values) {
+      focusNode.dispose();
     }
     super.dispose();
   }
@@ -173,20 +185,27 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
                         ...widget.fields.asMap().entries.map((entry) {
                           final index = entry.key;
                           final field = entry.value;
+                          final isLastField = index == widget.fields.length - 1;
+                          final nextField = isLastField ? null : widget.fields[index + 1];
+                          
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 16),
                             child: TextField(
                               controller: _controllers[field.key],
+                              focusNode: _focusNodes[field.key],
                               style: const TextStyle(color: Colors.white),
                               obscureText: field.isPassword,
-                              textInputAction: index == widget.fields.length - 1 
+                              textInputAction: isLastField 
                                   ? TextInputAction.done 
                                   : TextInputAction.next,
                               onSubmitted: (value) {
-                                if (index == widget.fields.length - 1) {
+                                if (isLastField) {
                                   if (!_isLoading) _handleLogin();
                                 } else {
-                                  FocusScope.of(context).nextFocus();
+                                  // 明确移动到下一个字段的焦点
+                                  if (nextField != null) {
+                                    _focusNodes[nextField.key]?.requestFocus();
+                                  }
                                 }
                               },
                               decoration: InputDecoration(
