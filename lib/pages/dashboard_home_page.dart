@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -13,10 +14,12 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
 import 'package:nipaplay/pages/jellyfin_detail_page.dart';
 import 'package:nipaplay/pages/emby_detail_page.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
@@ -76,6 +79,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupProviderListeners();
       _startAutoSwitch();
+      
+      // 延迟检查WatchHistoryProvider状态，如果已经加载完成但数据为空则重新加载
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+          if (watchHistoryProvider.isLoaded && _localAnimeItems.isEmpty && _recommendedItems.length <= 7) {
+            debugPrint('DashboardHomePage: 延迟检查发现WatchHistoryProvider已加载但数据为空，重新加载数据');
+            _loadData();
+          }
+        }
+      });
     });
   }
   
@@ -142,6 +156,22 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     } catch (e) {
       debugPrint('DashboardHomePage: 添加EmbyProvider监听器失败: $e');
     }
+    
+    // 监听WatchHistoryProvider的加载状态变化
+    try {
+      final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      watchHistoryProvider.addListener(_onWatchHistoryStateChanged);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 添加WatchHistoryProvider监听器失败: $e');
+    }
+    
+    // 监听ScanService的扫描完成状态变化
+    try {
+      final scanService = Provider.of<ScanService>(context, listen: false);
+      scanService.addListener(_onScanServiceStateChanged);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 添加ScanService监听器失败: $e');
+    }
   }
   
   void _onJellyfinStateChanged() {
@@ -173,6 +203,50 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       _loadData();
     }
   }
+  
+  void _onWatchHistoryStateChanged() {
+    // 检查Widget是否仍然处于活动状态
+    if (!mounted) {
+      debugPrint('DashboardHomePage: Widget已销毁，跳过WatchHistory状态变化处理');
+      return;
+    }
+    
+    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+    debugPrint('DashboardHomePage: WatchHistory加载状态变化 - isLoaded: ${watchHistoryProvider.isLoaded}, mounted: $mounted');
+    if (watchHistoryProvider.isLoaded && mounted) {
+      debugPrint('DashboardHomePage: WatchHistory加载完成，准备刷新数据');
+      _loadData();
+    }
+  }
+  
+  void _onScanServiceStateChanged() {
+    // 检查Widget是否仍然处于活动状态
+    if (!mounted) {
+      debugPrint('DashboardHomePage: Widget已销毁，跳过ScanService状态变化处理');
+      return;
+    }
+    
+    final scanService = Provider.of<ScanService>(context, listen: false);
+    debugPrint('DashboardHomePage: ScanService状态变化 - scanJustCompleted: ${scanService.scanJustCompleted}, mounted: $mounted');
+    
+    if (scanService.scanJustCompleted && mounted) {
+      debugPrint('DashboardHomePage: 扫描完成，刷新WatchHistoryProvider和本地媒体库数据');
+      
+      // 刷新WatchHistoryProvider以获取最新的扫描结果
+      try {
+        final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+        watchHistoryProvider.refresh();
+      } catch (e) {
+        debugPrint('DashboardHomePage: 刷新WatchHistoryProvider失败: $e');
+      }
+      
+      // 重新加载本地媒体库数据
+      _loadData();
+      
+      // 确认扫描完成事件已处理
+      scanService.acknowledgeScanCompleted();
+    }
+  }
 
   @override
   void dispose() {
@@ -201,6 +275,26 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       }
     } catch (e) {
       debugPrint('DashboardHomePage: 移除EmbyProvider监听器失败: $e');
+    }
+    
+    try {
+      if (mounted) {
+        final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+        watchHistoryProvider.removeListener(_onWatchHistoryStateChanged);
+        debugPrint('DashboardHomePage: WatchHistoryProvider监听器已移除');
+      }
+    } catch (e) {
+      debugPrint('DashboardHomePage: 移除WatchHistoryProvider监听器失败: $e');
+    }
+    
+    try {
+      if (mounted) {
+        final scanService = Provider.of<ScanService>(context, listen: false);
+        scanService.removeListener(_onScanServiceStateChanged);
+        debugPrint('DashboardHomePage: ScanService监听器已移除');
+      }
+    } catch (e) {
+      debugPrint('DashboardHomePage: 移除ScanService监听器失败: $e');
     }
     
     // 销毁ScrollController
@@ -339,6 +433,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         } catch (e) {
           debugPrint('获取本地媒体库随机内容失败: $e');
         }
+      } else {
+        debugPrint('WatchHistoryProvider未加载完成，跳过本地媒体库推荐内容收集');
       }
 
       // 第二步：从所有候选中随机选择7个
@@ -630,6 +726,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         } catch (e) {
           debugPrint('获取本地媒体库最近内容失败: $e');
         }
+      } else {
+        debugPrint('WatchHistoryProvider未加载完成，跳过本地媒体库最近内容加载');
+        _localAnimeItems = []; // 清空本地项目列表
       }
 
       if (mounted) {
@@ -741,49 +840,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             );
         },
       ),
-      floatingActionButton: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: _isLoadingRecommended 
-                  ? Colors.white.withOpacity(0.2) 
-                  : Colors.white.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.1),
-                width: 1,
-              ),
+      floatingActionButton: _isLoadingRecommended 
+          ? FloatingActionGlassButton(
+              iconData: Icons.refresh_rounded,
+              onPressed: () {}, // 加载中时禁用
+              description: '正在刷新...',
+            )
+          : FloatingActionGlassButton(
+              iconData: Icons.refresh_rounded,
+              onPressed: _loadData,
+              description: ' 刷新主页',
             ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(28),
-                onTap: _isLoadingRecommended ? null : _loadData,
-                child: Center(
-                  child: _isLoadingRecommended
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Icon(
-                          Icons.refresh,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -888,57 +955,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 ),
               ),
             ],
-          ),
-          
-          // 左侧切换按钮
-          Positioned(
-            left: 16,
-            top: 0,
-            bottom: 0,
-            child: Center(
-              child: _buildNavigationButton(
-                icon: Icons.chevron_left,
-                onTap: () {
-                  _stopAutoSwitch();
-                  _currentHeroBannerIndex = (_currentHeroBannerIndex - 1 + 5) % 5;
-                  _heroBannerIndexNotifier.value = _currentHeroBannerIndex;
-                  _heroBannerPageController.animateToPage(
-                    _currentHeroBannerIndex,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  );
-                  Timer(const Duration(seconds: 3), () {
-                    _resumeAutoSwitch();
-                  });
-                },
-              ),
-            ),
-          ),
-          
-          // 右侧切换按钮（距离左侧PageView区域右边缘相同距离）
-          Positioned(
-            // 计算：左侧PageView占2/3宽度，减去12px间距，再减去16px边距保持对称
-            right: (MediaQuery.of(context).size.width - 32) / 3 + 12 + 16,
-            top: 0,
-            bottom: 0,
-            child: Center(
-              child: _buildNavigationButton(
-                icon: Icons.chevron_right,
-                onTap: () {
-                  _stopAutoSwitch();
-                  _currentHeroBannerIndex = (_currentHeroBannerIndex + 1) % 5;
-                  _heroBannerIndexNotifier.value = _currentHeroBannerIndex;
-                  _heroBannerPageController.animateToPage(
-                    _currentHeroBannerIndex,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  );
-                  Timer(const Duration(seconds: 3), () {
-                    _resumeAutoSwitch();
-                  });
-                },
-              ),
-            ),
           ),
           
           // 页面指示器
@@ -1360,13 +1376,23 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         return const SizedBox.shrink();
     }
     
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(8),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white.withOpacity(1.0),
+              width: 1,
+            ),
+          ),
+          child: iconWidget,
+        ),
       ),
-      child: iconWidget,
     );
   }
 
@@ -1409,18 +1435,31 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             else
               SizedBox(
                 height: 280, // 增加高度以适应更大的卡片样式
-                child: ListView.builder(
-                  controller: _continueWatchingScrollController,
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: math.min(validHistory.length, 10),
-                  itemBuilder: (context, index) {
-                    final item = validHistory[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: _buildContinueWatchingCard(item),
-                    );
+                child: Listener(
+                  onPointerSignal: (event) {
+                    // 支持鼠标滚轮滚动
+                    if (event is PointerScrollEvent) {
+                      final scrollDelta = event.scrollDelta.dy;
+                      _continueWatchingScrollController.animateTo(
+                        _continueWatchingScrollController.offset + scrollDelta,
+                        duration: const Duration(milliseconds: 100),
+                        curve: Curves.ease,
+                      );
+                    }
                   },
+                  child: ListView.builder(
+                    controller: _continueWatchingScrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: math.min(validHistory.length, 10),
+                    itemBuilder: (context, index) {
+                      final item = validHistory[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: _buildContinueWatchingCard(item),
+                      );
+                    },
+                  ),
                 ),
               ),
           ],
@@ -1532,18 +1571,31 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         const SizedBox(height: 16),
         SizedBox(
           height: 280,
-          child: ListView.builder(
-            controller: scrollController,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: _buildMediaCard(item, onItemTap),
-              );
+          child: Listener(
+            onPointerSignal: (event) {
+              // 支持鼠标滚轮滚动
+              if (event is PointerScrollEvent) {
+                final scrollDelta = event.scrollDelta.dy;
+                scrollController.animateTo(
+                  scrollController.offset + scrollDelta,
+                  duration: const Duration(milliseconds: 100),
+                  curve: Curves.ease,
+                );
+              }
             },
+            child: ListView.builder(
+              controller: scrollController,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _buildMediaCard(item, onItemTap),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -1911,43 +1963,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     await PlaybackService().play(playableItem);
   }
   
-  // 构建导航按钮 - 更透明，点击时才有模糊效果
-  Widget _buildNavigationButton({
-    required IconData icon, 
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.1), // 更透明的背景
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.05),
-          width: 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          // 点击时的涟漪效果会自动提供视觉反馈
-          splashColor: Colors.white.withOpacity(0.2),
-          highlightColor: Colors.white.withOpacity(0.1),
-          child: Center(
-            child: Icon(
-              icon,
-              color: Colors.white.withOpacity(0.8),
-              size: 20,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-  
-  // 构建页面指示器（分离出来避免不必要的重建）
+  // 构建页面指示器（分离出来避免不必要的重建），支持点击
   Widget _buildPageIndicator() {
     return Positioned(
       bottom: 16,
@@ -1961,16 +1977,33 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (index) {
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: index == currentIndex
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.4),
+                return GestureDetector(
+                  onTap: () {
+                    // 点击圆点时切换到对应页面
+                    _stopAutoSwitch();
+                    _currentHeroBannerIndex = index;
+                    _heroBannerIndexNotifier.value = index;
+                    _heroBannerPageController.animateToPage(
+                      index,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                    // 停止自动切换3秒后恢复
+                    Timer(const Duration(seconds: 3), () {
+                      _resumeAutoSwitch();
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: index == currentIndex
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.4),
+                    ),
                   ),
                 );
               }),
