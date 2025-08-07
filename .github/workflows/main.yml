@@ -75,6 +75,18 @@ jobs:
         run: |
           echo "::set-output name=version::$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)"
       
+      # Setup Android SDK and build-tools
+      - name: Setup Android SDK
+        if: matrix.target == 'Android'
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        if: matrix.target == 'Android'
+        run: |
+          sdkmanager "build-tools;29.0.3"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+
       # Build Android (unsigned)
       - name: Build Android
         if: matrix.target == 'Android'
