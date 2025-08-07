@@ -972,13 +972,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         margin: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -1046,30 +1039,40 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               Positioned(
                 top: 16,
                 right: 16,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.star,
-                        color: Colors.amber,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        item.rating!.toStringAsFixed(1),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(1.0),
+                          width: 1,
                         ),
                       ),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.star_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            item.rating!.toStringAsFixed(1),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1141,7 +1144,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     // 剧情简介（只显示2行）
                     if (item.subtitle.isNotEmpty)
                       Text(
-                        item.subtitle,
+                        item.subtitle.replaceAll('<br>', ' ').replaceAll('<br/>', ' ').replaceAll('<br />', ' '),
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 14,
@@ -1251,30 +1254,40 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               Positioned(
                 top: 8,
                 right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.star,
-                        color: Colors.amber,
-                        size: 12,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        item.rating!.toStringAsFixed(1),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(1.0),
+                          width: 1,
                         ),
                       ),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.star_rounded,
+                            color: Colors.white,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            item.rating!.toStringAsFixed(1),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
