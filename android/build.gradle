@@ -36,6 +36,8 @@ allprojects {
             force 'org.bouncycastle:bcprov-jdk18on:1.77'
             force 'org.bouncycastle:bcpkix-jdk18on:1.77'
             force 'org.bouncycastle:bcutil-jdk18on:1.77'
+            force 'net.bytebuddy:byte-buddy:1.14.12'
+            force 'net.bytebuddy:byte-buddy-agent:1.14.12'
         }
     }
 }

@@ -67,14 +67,14 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '24'
+          java-version: '21'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-          cache-key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v3
+          cache-key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v4
       
       # Get app version
       - name: Get app version
