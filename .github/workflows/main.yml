@@ -948,13 +948,7 @@ jobs:
           JSON_SAFE_HISTORY=$(echo "$COMMIT_HISTORY" | sed 's/\\/\\\\/g' | sed 's/"/\"/g' | awk '{printf "%s\n", $0}' ORS='')
 
           # Prepare the prompt for the AI
-          PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 git commit 记录，为我生成一份精美的、使用 Markdown 格式的中文更新日志。请在日志中清晰地标注每次更新分别来自哪一次 commit (使用 commit hash)，如果 commit 信息中提到了 PR (#<number>) 或 Issue (#<number>)，也请一并展示。请确保排版优雅，重点突出。
-
-以下是 commit 记录：
-
-${JSON_SAFE_HISTORY}
-
-请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话。"
+          PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 git commit 记录，为我生成一份精美的、使用 Markdown 格式的中文更新日志。请在日志中清晰地标注每次更新分别来自哪一次 commit (使用 commit hash)，如果 commit 信息中提到了 PR (#<number>) 或 Issue (#<number>)，也请一并展示。请确保排版优雅，重点突出。以下是 commit 记录：${JSON_SAFE_HISTORY}请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话。"
 
           # Create the JSON payload using jq
           JSON_PAYLOAD=$(jq -n \
