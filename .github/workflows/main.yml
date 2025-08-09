@@ -266,14 +266,14 @@ jobs:
       - name: Package macOS .dmg
         if: matrix.target == 'macOS'
         run: |
-          brew install create-dmg imagemagick
+          brew install coreutils create-dmg imagemagick
           chmod +x dmg.sh
           
           # Set up environment for GUI operations in CI
           export DISPLAY=:99
           
           # Try to create DMG with timeout and retry mechanism
-          timeout 300 ./dmg.sh || {
+          gtimeout 300 ./dmg.sh || {
             echo "DMG creation timed out or failed, trying fallback approach with layout..."
             
             # Fallback: Create DMG with layout but without complex AppleScript operations
@@ -291,14 +291,14 @@ jobs:
             ln -s /Applications "${temp_dir}/Applications"
             
             # Create the background image with arrow (fallback version)
-            convert -size 800x450 xc:white \
+            magick -size 800x450 xc:white \
               -font Arial-Bold -pointsize 120 -fill '#666666' \
               -gravity center \
-              -draw "text -150,0 'NipaPlay'"
-              -draw "text 150,0 '> '"
+              -draw "text -150,0 'NipaPlay'" \
+              -draw "text 150,0 '> '" \
               "${temp_dir}/.background/background.png" || {
                 # If ImageMagick fails, create simple background
-                convert -size 800x450 xc:'#f0f0f0' "${temp_dir}/.background/background.png"
+                magick -size 800x450 xc:'#f0f0f0' "${temp_dir}/.background/background.png"
               }
             
             # Create DMG with layout (CI-friendly version)
