@@ -103,58 +103,64 @@ class ImageCacheManager {
     final completer = Completer<ui.Image>();
     _loading[url] = completer;
 
-    try {
-      // 检查本地缓存
-      if (!kIsWeb) {
-        final cacheFile = await _getCacheFile(url);
-        if (await cacheFile.exists()) {
-          // 从本地缓存加载
-          final bytes = await cacheFile.readAsBytes();
-          final codec = await ui.instantiateImageCodec(bytes);
-          final frame = await codec.getNextFrame();
-          final image = frame.image;
-          
-          _cache[url] = image;
-          _refCount[url] = 1;
-          completer.complete(image);
-          _loading.remove(url);
-          return image;
+    // 使用一个异步的IIFE（立即执行的函数表达式）来执行加载逻辑
+    // 这样可以更容易地使用try/catch/finally结构
+    () async {
+      try {
+        // 检查本地缓存
+        if (!kIsWeb) {
+          final cacheFile = await _getCacheFile(url);
+          if (await cacheFile.exists()) {
+            final bytes = await cacheFile.readAsBytes();
+            final codec = await ui.instantiateImageCodec(bytes);
+            final frame = await codec.getNextFrame();
+            final image = frame.image;
+            
+            _cache[url] = image;
+            _refCount[url] = 1;
+            _lastAccessed[url] = DateTime.now();
+            completer.complete(image);
+            return; // 加载成功，退出IIFE
+          }
         }
-      }
 
-      // 下载图片
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode != 200) {
-        throw Exception('Failed to load image');
-      }
+        // 从网络下载
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode != 200) {
+          throw Exception('Failed to load image with status code ${response.statusCode}');
+        }
 
-      // 在单独的 isolate 中处理图片
-      final compressedBytes = await compute(_processImageInIsolate, response.bodyBytes);
+        // 在单独的 isolate 中处理图片
+        final compressedBytes = await compute(_processImageInIsolate, response.bodyBytes);
 
-      // 保存到本地缓存
-      if (!kIsWeb) {
-        final cacheFile = await _getCacheFile(url);
-        await cacheFile.writeAsBytes(compressedBytes);
-      }
+        // 保存到本地缓存
+        if (!kIsWeb) {
+          final cacheFile = await _getCacheFile(url);
+          await cacheFile.writeAsBytes(compressedBytes);
+        }
 
-      // 解码压缩后的图片数据
-      final codec = await ui.instantiateImageCodec(compressedBytes);
-      final frame = await codec.getNextFrame();
-      final uiImage = frame.image;
+        // 解码压缩后的图片数据
+        final codec = await ui.instantiateImageCodec(compressedBytes);
+        final frame = await codec.getNextFrame();
+        final uiImage = frame.image;
 
-              // 存入内存缓存
+        // 存入内存缓存
         _cache[url] = uiImage;
         _refCount[url] = 1;
         _lastAccessed[url] = DateTime.now();
         completer.complete(uiImage);
-        _loading.remove(url);
 
-      return uiImage;
-    } catch (e) {
-      _loading.remove(url);
-      completer.completeError(e);
-      rethrow;
-    }
+      } catch (e) {
+        // 如果发生任何错误，都通过completer报告
+        completer.completeError(e);
+      } finally {
+        // 无论成功或失败，都从_loading中移除
+        _loading.remove(url);
+      }
+    }();
+
+    // 立即返回completer.future
+    return completer.future;
   }
 
   Future<void> preloadImages(List<String> urls) async {
