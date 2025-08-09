@@ -938,7 +938,7 @@ jobs:
           fi
 
           # Get commit history since the last tag
-          COMMIT_HISTORY=$(git log $COMMIT_RANGE --pretty=format:'- %s (%h)')
+          COMMIT_HISTORY=$(git log $COMMIT_RANGE --pretty=format:'- %s (%h)%n%b')
           if [ -z "$COMMIT_HISTORY" ]; then
             echo "No new commits since last tag. Using latest commit message as changelog."
             COMMIT_HISTORY=$(git log -1 --pretty=format:'- %s (%h)')
@@ -982,7 +982,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ needs.Build.outputs.version }}
-          name: ${{ needs.Gatekeeper.outputs.release_title }}
+          name: Release v${{ needs.Build.outputs.version }}
           bodyFile: "release_notes.md"
           allowUpdates: true
           artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm
