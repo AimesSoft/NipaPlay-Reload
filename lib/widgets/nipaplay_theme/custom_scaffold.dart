@@ -106,18 +106,18 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                 isScrollable: true,
                 tabs: widget.tabPage,
                 labelColor: Colors.white,
-                dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                dividerHeight: 3.0,
-                indicatorPadding:
-                    const EdgeInsets.only(top: 43, left: 15, right: 15),
                 unselectedLabelColor: Colors.white60,
                 labelPadding: const EdgeInsets.only(bottom: 15.0),
                 tabAlignment: TabAlignment.start,
-                indicator: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
+                // 恢复灰色背景条，并使用自定义指示器
+                dividerColor: const Color.fromARGB(59, 255, 255, 255),
+                dividerHeight: 3.0,
+                indicator: const _CustomTabIndicator(
+                  indicatorHeight: 3.0,
+                  indicatorColor: Colors.white,
+                  radius: 30.0, // 使用大圆角形成药丸形状
                 ),
-                indicatorSize: TabBarIndicatorSize.tab,
+                indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
               ),
             ) : null,
             body: TabControllerScope(
@@ -162,5 +162,47 @@ class TabControllerScope extends InheritedWidget {
   @override
   bool updateShouldNotify(TabControllerScope oldWidget) {
     return enabled != oldWidget.enabled || controller != oldWidget.controller;
+  }
+}
+
+// 自定义Tab指示器
+class _CustomTabIndicator extends Decoration {
+  final double indicatorHeight;
+  final Color indicatorColor;
+  final double radius;
+
+  const _CustomTabIndicator({
+    required this.indicatorHeight,
+    required this.indicatorColor,
+    required this.radius,
+  });
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _CustomPainter(this, onChanged);
+  }
+}
+
+class _CustomPainter extends BoxPainter {
+  final _CustomTabIndicator decoration;
+
+  _CustomPainter(this.decoration, VoidCallback? onChanged)
+      : super(onChanged);
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    assert(configuration.size != null);
+    // 将指示器绘制在TabBar的底部
+    final Rect rect = Offset(
+      offset.dx,
+      (configuration.size!.height - decoration.indicatorHeight),
+    ) & Size(configuration.size!.width, decoration.indicatorHeight);
+    final Paint paint = Paint();
+    paint.color = decoration.indicatorColor;
+    paint.style = PaintingStyle.fill;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
+      paint,
+    );
   }
 }

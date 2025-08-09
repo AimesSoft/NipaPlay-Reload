@@ -1,12 +1,10 @@
 name: Build & Release
 
-# Trigger on push to master branch or with a tag
+# Trigger on push to the main branch
 on:
   push:
     branches:
-      - '**'
-    tags:
-      - '0.*'
+      - 'main'
 
 # If previous workflow is still running, we push again, we will cancel the previous workflow
 concurrency:
@@ -14,8 +12,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  Gatekeeper:
+    name: Check Commit Message
+    runs-on: ubuntu-latest
+    outputs:
+      triggered: ${{ steps.check.outputs.triggered }}
+      release_title: ${{ steps.check.outputs.release_title }}
+    steps:
+      - name: Check commit message for release trigger
+        id: check
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if [[ "$COMMIT_MSG" =~ ([0-9]{4}\.[0-9]{4}) ]]; then
+            echo "✅ Release trigger found in commit message."
+            echo "triggered=true" >> $GITHUB_OUTPUT
+            echo "release_title=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+          else
+            echo "🛑 No release trigger found. Skipping release workflow."
+            echo "triggered=false" >> $GITHUB_OUTPUT
+          fi
+
   Build:
     name: Build ${{ matrix.target }}
+    needs: Gatekeeper
+    if: needs.Gatekeeper.outputs.triggered == 'true'
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
@@ -80,7 +100,7 @@ jobs:
       - name: Get app version
         id: get_version
         run: |
-          echo "::set-output name=version::$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)"
+          echo "version=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)" >> $GITHUB_OUTPUT
       
       # Setup Android SDK and build-tools
       - name: Setup Android SDK
@@ -212,7 +232,7 @@ jobs:
             
             if [ ! -d "${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME}" ]; then
               echo "Error: App bundle ${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME} not found after flutter build."
-              echo "Listing contents of ${APP_BUNDLE_ROOT_DIR}/:"
+              echo "Listing contents of ${APP_BUNDLE_ROOT_DIR}/:
               ls -la "${APP_BUNDLE_ROOT_DIR}/"
               exit 1
             fi
@@ -274,8 +294,8 @@ jobs:
             convert -size 800x450 xc:white \
               -font Arial-Bold -pointsize 120 -fill '#666666' \
               -gravity center \
-              -draw "text -150,0 'NipaPlay'" \
-              -draw "text 150,0 '>'" \
+              -draw "text -150,0 'NipaPlay'"
+              -draw "text 150,0 '> '"
               "${temp_dir}/.background/background.png" || {
                 # If ImageMagick fails, create simple background
                 convert -size 800x450 xc:'#f0f0f0' "${temp_dir}/.background/background.png"
@@ -323,12 +343,12 @@ jobs:
           flutter build windows --release
           $arch = "x64"
           $version = "${{ steps.get_version.outputs.version }}"
-          $DestDir = "build\\windows\\NipaPlay_${version}_Windows_x64"
-          $SrcDir = "build\\windows\\x64\\runner\\Release"
+          $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
+          $SrcDir = "build\windows\x64\runner\Release"
           New-Item -Path $DestDir -ItemType Directory -Force
-          Copy-Item -Path "$SrcDir\\*" -Destination $DestDir -Recurse -Force
-          Copy-Item -Path "windows\\*.dll" -Destination $DestDir -Force
-          Compress-Archive -Path $DestDir -DestinationPath "build\\windows\\NipaPlay_${version}_Windows_x64.zip" -Force
+          Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
+          Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
+          Compress-Archive -Path $DestDir -DestinationPath "build\windows\NipaPlay_${version}_Windows_x64.zip" -Force
 
       # Prepare installer assets for Windows
       - name: Prepare Windows installer assets
@@ -340,15 +360,15 @@ jobs:
           
           $arch = "x64"
           $version = "${{ steps.get_version.outputs.version }}"
-          $BuildDir = "build\\windows\\x64\\runner\\Release"
+          $BuildDir = "build\windows\x64\runner\Release"
           
           # Create installer assets directory
           New-Item -Path "installer_assets" -ItemType Directory -Force
           
           # Copy installer script and assets to build directory
-          Copy-Item -Path "windows\\nipaplay_installer.nsi" -Destination "$BuildDir\\"
-          Copy-Item -Path "installer_assets\\*" -Destination "$BuildDir\\" -Recurse -Force
-          Copy-Item -Path "LICENSE" -Destination "$BuildDir\\" -ErrorAction SilentlyContinue
+          Copy-Item -Path "windows\nipaplay_installer.nsi" -Destination "$BuildDir\"
+          Copy-Item -Path "installer_assets\*" -Destination "$BuildDir\" -Recurse -Force
+          Copy-Item -Path "LICENSE" -Destination "$BuildDir\" -ErrorAction SilentlyContinue
 
       # Create Windows installer with NSIS
       - name: Create Windows installer with NSIS
@@ -360,10 +380,10 @@ jobs:
           
           $arch = "x64"
           $version = "${{ steps.get_version.outputs.version }}"
-          $BuildDir = "build\\windows\\x64\\runner\\Release"
+          $BuildDir = "build\windows\x64\runner\Release"
           
           # Read NSIS script with proper encoding
-          $nsiContent = Get-Content "$BuildDir\\nipaplay_installer.nsi" -Raw -Encoding UTF8
+          $nsiContent = Get-Content "$BuildDir\nipaplay_installer.nsi" -Raw -Encoding UTF8
           
           # Ensure version is in 4-part format for NSIS (X.Y.Z.W)
           $versionParts = $version.Split('.')
@@ -386,7 +406,7 @@ jobs:
           
           # Write file with UTF8 BOM to ensure proper encoding for NSIS
           $utf8BOM = New-Object System.Text.UTF8Encoding $true
-          [System.IO.File]::WriteAllText("$BuildDir\\nipaplay_installer.nsi", $nsiContent, $utf8BOM)
+          [System.IO.File]::WriteAllText("$BuildDir\nipaplay_installer.nsi", $nsiContent, $utf8BOM)
           
           # Download FileAssociation plugin for NSIS with multiple fallback URLs
           $pluginUrls = @(
@@ -395,7 +415,7 @@ jobs:
             "https://raw.githubusercontent.com/nsis-dev/nsis/master/Contrib/FileAssociation/FileAssociation.nsh"
           )
           
-          $pluginPath = "$BuildDir\\FileAssociation.nsh"
+          $pluginPath = "$BuildDir\FileAssociation.nsh"
           $downloadSuccess = $false
           
           foreach ($url in $pluginUrls) {
@@ -441,7 +461,7 @@ jobs:
           }
           
           # Ensure NSIS can find the plugin
-          $nsisIncludeDir = "C:\\Program Files (x86)\\NSIS\\Include"
+          $nsisIncludeDir = "C:\\Program Files (x86)\NSIS\Include"
           if (-not (Test-Path $nsisIncludeDir)) {
             New-Item -ItemType Directory -Force -Path $nsisIncludeDir
           }
@@ -449,7 +469,7 @@ jobs:
           
           # Compile installer with NSIS
           Push-Location $BuildDir
-          $nsisPath = "C:\\Program Files (x86)\\NSIS\\makensis.exe"
+          $nsisPath = "C:\\Program Files (x86)\NSIS\makensis.exe"
           if (!(Test-Path $nsisPath)) {
             throw "NSIS compiler not found at $nsisPath"
           }
@@ -465,14 +485,14 @@ jobs:
           
           # Move and verify installer
           $installerName = "NipaPlay_${version}_Windows_x64_Setup.exe"
-          $installerPath = "$BuildDir\\$installerName"
-          $finalPath = "build\\windows\\$installerName"
+          $installerPath = "$BuildDir\$installerName"
+          $finalPath = "build\windows\$installerName"
           
           if (!(Test-Path $installerPath)) {
             throw "Installer file was not created: $installerPath"
           }
           
-          Move-Item $installerPath "build\\windows\\" -Force
+          Move-Item $installerPath "build\windows\" -Force
           
           if (!(Test-Path $finalPath)) {
             throw "Failed to move installer to final location: $finalPath"
@@ -486,7 +506,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "=== Windows Build Artifacts ==="
-          Get-ChildItem "build\\windows\\" -File | ForEach-Object {
+          Get-ChildItem "build\windows\" -File | ForEach-Object {
             $sizeKB = [math]::Round($_.Length / 1KB, 2)
             Write-Host "$($_.Name) - ${sizeKB} KB"
           }
@@ -704,7 +724,7 @@ jobs:
           echo 'echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"' >> "${RUN_SCRIPT_PATH}"
           echo '' >> "${RUN_SCRIPT_PATH}"
           echo '# Execute the main binary' >> "${RUN_SCRIPT_PATH}"
-          echo "\"\$DIR/${APP_NAME}\" \"\$@\"" >> "${RUN_SCRIPT_PATH}"
+          echo "\"$DIR/${APP_NAME}\" \"$@\"" >> "${RUN_SCRIPT_PATH}"
           chmod +x "${RUN_SCRIPT_PATH}"
           
           # Add an install helper script
@@ -882,17 +902,17 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
 
-  Publish:
-    name: Publish
-    needs: Build
+  Publish: # Renamed from 'Publish Release' to 'Publish' for consistency
+    name: Publish Release
+    needs: [Gatekeeper, Build]
+    if: needs.Gatekeeper.outputs.triggered == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      
-      - name: Make tmp dir
-        run: mkdir /tmp/artifacts
-      
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to get all commit history for changelog
+
       - name: Download all Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -900,49 +920,85 @@ jobs:
       
       - name: List all Artifacts
         run: ls -R /tmp/artifacts
-      
-      - name: Get commit message
-        id: commit_message
-        run: |
-          echo "::set-output name=message::$(git log -1 --pretty=%B)"
 
-      - name: Parse commit message
-        id: parse_commit
+      - name: Generate Changelog with AI
+        id: ai_changelog
         run: |
-          full_message="$(git log -1 --pretty=%B)"
-          title="$(echo "$full_message" | head -n1)"
-          description="$(echo "$full_message" | tail -n +3)"
-          echo "title=$title" >> $GITHUB_OUTPUT
-          echo "description<<EOF" >> $GITHUB_OUTPUT
-          echo "$description" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Install jq to parse JSON response
+          sudo apt-get install -y jq
+
+          # Get the latest and previous tag. If no previous tag, use the first commit.
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous tag found. Using full history."
+            COMMIT_RANGE="$(git rev-list --max-parents=0 HEAD)..HEAD"
+          else
+            echo "Last release was at tag: $LATEST_TAG"
+            COMMIT_RANGE="$LATEST_TAG..HEAD"
+          fi
+
+          # Get commit history since the last tag
+          COMMIT_HISTORY=$(git log $COMMIT_RANGE --pretty=format:'- %s (%h)')
+          if [ -z "$COMMIT_HISTORY" ]; then
+            echo "No new commits since last tag. Using latest commit message as changelog."
+            COMMIT_HISTORY=$(git log -1 --pretty=format:'- %s (%h)')
+          fi
+
+          # Make the history safe for JSON
+          JSON_SAFE_HISTORY=$(echo "$COMMIT_HISTORY" | sed 's/\\/\\\\/g' | sed 's/"/\"/g' | awk '{printf "%s\n", $0}' ORS='')
+
+          # Prepare the prompt for the AI
+          PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 git commit 记录，为我生成一份精美的、使用 Markdown 格式的中文更新日志。请在日志中清晰地标注每次更新分别来自哪一次 commit (使用 commit hash)，如果 commit 信息中提到了 PR (#<number>) 或 Issue (#<number>)，也请一并展示。请确保排版优雅，重点突出。
+
+以下是 commit 记录：
+
+${JSON_SAFE_HISTORY}
+
+请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话。"
+
+          # Create the JSON payload using jq
+          JSON_PAYLOAD=$(jq -n \
+            --arg model "gpt-5" \
+            --argjson temp 0.5 \
+            --arg role "user" \
+            --arg content "$PROMPT" \
+            '{model: $model, temperature: $temp, messages: [{role: $role, content: $content}]}')
+
+          # Call the AI API and save the response
+          echo "Sending request to AI for changelog summary..."
+          AI_RESPONSE=$(curl -s -X POST https://ffmpeg.dfsteve.top/ffmpeg.php \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$JSON_PAYLOAD")
+
+          # Extract the content and write to a file. Fallback to raw commit history on failure.
+          if echo "$AI_RESPONSE" | jq -e '.choices[0].message.content' > /dev/null; then
+            echo "Successfully received changelog from AI."
+            echo "$AI_RESPONSE" | jq -r '.choices[0].message.content' > release_notes.md
+          else
+            echo "Warning: Failed to get a valid response from the AI API. Using raw commit history as fallback."
+            echo "API Response: $AI_RESPONSE"
+            echo -e "# 更新日志\n\n无法从 AI 服务获取本次更新的摘要。以下是自上次发布以来的提交记录：\n\n```\n${COMMIT_HISTORY}\n```" > release_notes.md
+          fi
+          
+          echo "--- Generated Release Notes ---"
+          cat release_notes.md
+          echo "-------------------------------"
 
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ needs.Build.outputs.version }}
-          name: Release v${{ needs.Build.outputs.version }}
-          body: |
-            ## 版本 v${{ needs.Build.outputs.version }}
-
-            ### ${{ steps.parse_commit.outputs.title }}
-
-            ${{ steps.parse_commit.outputs.description }}
-
-            ### 构建信息
-            - 提交: ${{ github.sha }}
-            - 分支: ${{ github.ref_name }}
+          name: ${{ needs.Gatekeeper.outputs.release_title }}
+          bodyFile: "release_notes.md"
           allowUpdates: true
-          # Updated artifacts list to include AppImage, tar.gz and RPM for Linux, plus Windows installers
-          # Separate patterns for different artifact types
           artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm
           artifactErrorsFailBuild: true
           replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-  # Add new job for version update
   UpdateVersion:
-    needs: [Build, Publish]
-    if: github.ref == 'refs/heads/main' && success()
+    needs: [Publish]
+    if: success() # This job runs only if Publish job succeeds
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
