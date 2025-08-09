@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class LoadingPlaceholder extends StatefulWidget {
   final double width;

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
 import 'dart:ui';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 const double iconSize = 25.0; // 图标大小
 const double buttonSize = 28.0; // 按钮大小

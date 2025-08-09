@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:provider/provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/services/update_service.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -272,8 +274,8 @@ class _AboutPageState extends State<AboutPage> {
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
         filter: ImageFilter.blur(
-          sigmaX: 25,
-          sigmaY: 25,
+          sigmaX: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
+          sigmaY: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
         ),
         child: Container(
           decoration: BoxDecoration(

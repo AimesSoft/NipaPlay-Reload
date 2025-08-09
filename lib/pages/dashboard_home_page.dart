@@ -27,6 +27,8 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as path;
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class DashboardHomePage extends StatefulWidget {
   const DashboardHomePage({super.key});

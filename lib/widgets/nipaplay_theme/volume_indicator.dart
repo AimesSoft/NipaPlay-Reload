@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // For Ionicons
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart'; // Assuming VideoPlayerState is in utils
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class VolumeIndicator extends StatelessWidget { // Changed class name
   const VolumeIndicator({super.key});

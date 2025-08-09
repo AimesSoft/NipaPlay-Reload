@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 /// 通用的毛玻璃登录对话框组件
 /// 基于弹弹play登录对话框的样式设计
@@ -134,8 +136,12 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
     // 获取键盘高度，用于动态调整底部间距
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     
+    // 获取模糊效果设置
+    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
+    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
+    
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+      filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
       child: Dialog(
         backgroundColor: Colors.transparent,
         child: SingleChildScrollView(

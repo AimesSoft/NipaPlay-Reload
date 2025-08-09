@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class HistoryAllModal extends StatefulWidget {
   final List<WatchHistoryItem> history;
@@ -95,7 +97,7 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
         width: double.infinity,
         height: double.infinity,
         borderRadius: 20,
-        blur: 20,
+        blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
         alignment: Alignment.center,
         border: 1,
         linearGradient: LinearGradient(
@@ -205,15 +207,6 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
       child: const CircularProgressIndicator(
         strokeWidth: 2,
         valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-      ),
-    );
-  }
-
-  Widget _buildDefaultThumbnail() {
-    return Container(
-      color: Colors.black54,
-      child: const Center(
-        child: Icon(Icons.video_library, color: Colors.white30, size: 24),
       ),
     );
   }

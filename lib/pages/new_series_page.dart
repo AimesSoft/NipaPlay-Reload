@@ -22,6 +22,7 @@ import 'package:nipaplay/pages/fluent_new_series_page.dart';
 import 'package:nipaplay/main.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/tag_search_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -522,8 +523,8 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         borderRadius: BorderRadius.circular(12),
         child: BackdropFilter(
           filter: ImageFilter.blur(
-            sigmaX: 25,
-            sigmaY: 25,
+            sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25.0 : 0.0,
+            sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25.0 : 0.0,
           ),
           child: Container(
             width: double.infinity,

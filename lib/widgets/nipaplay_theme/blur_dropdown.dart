@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/hover_tooltip_bubble.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 // Assume getTitleTextStyle is defined elsewhere, e.g., in theme_utils.dart
 // import 'package:nipaplay/utils/theme_utils.dart';
 
@@ -242,7 +244,10 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      filter: ImageFilter.blur(
+                        sigmaX: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
+                        sigmaY: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
+                      ),
                       child: ListView.builder(
                         shrinkWrap: true,
                         physics: const AlwaysScrollableScrollPhysics(),

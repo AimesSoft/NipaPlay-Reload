@@ -3,6 +3,8 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'tooltip_bubble.dart';
 import 'dart:ui';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class VideoProgressBar extends StatefulWidget {
   final VideoPlayerState videoState;

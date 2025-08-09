@@ -299,6 +299,18 @@ class _ThemeModePageState extends State<ThemeModePage> {
               inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
             ),
             const Divider(color: Colors.white12, height: 1),
+            SwitchListTile(
+              title: const Text("控件毛玻璃效果", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: const Text("关闭后可提升性能，但会失去部分UI透明感", style: TextStyle(color: Colors.white70)),
+              value: appearanceSettings.enableWidgetBlurEffect,
+              onChanged: (value) {
+                appearanceSettings.setEnableWidgetBlurEffect(value);
+              },
+              activeColor: Colors.white,
+              inactiveThumbColor: Colors.white,
+              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
+            ),
+            const Divider(color: Colors.white12, height: 1),
           ],
         ),
       ),

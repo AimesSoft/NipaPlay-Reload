@@ -10,6 +10,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/emby_server_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class RemoteMediaLibraryPage extends StatefulWidget {
   const RemoteMediaLibraryPage({super.key});
@@ -49,8 +50,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
         filter: ImageFilter.blur(
-          sigmaX: 25,
-          sigmaY: 25,
+          sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
+          sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -268,8 +269,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
         filter: ImageFilter.blur(
-          sigmaX: 25,
-          sigmaY: 25,
+          sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
+          sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -487,8 +488,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
         filter: ImageFilter.blur(
-          sigmaX: 25,
-          sigmaY: 25,
+          sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
+          sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
         ),
         child: Container(
           decoration: BoxDecoration(

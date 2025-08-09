@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class BaseSettingsMenu extends StatelessWidget {
   final String title;
@@ -24,6 +25,9 @@ class BaseSettingsMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
+    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 50.0 : 0.0;
+
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -55,7 +59,7 @@ class BaseSettingsMenu extends StatelessWidget {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(15),
                         child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                          filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
                           child: Container(
                             decoration: BoxDecoration(
                               color: backgroundColor,

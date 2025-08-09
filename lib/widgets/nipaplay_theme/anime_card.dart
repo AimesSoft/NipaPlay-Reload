@@ -5,6 +5,8 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/cached_network_image_widget.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/hover_tooltip_bubble.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class AnimeCard extends StatefulWidget {
   final String name;
@@ -42,7 +44,6 @@ class AnimeCard extends StatefulWidget {
 }
 
 class _AnimeCardState extends State<AnimeCard> {
-  bool _isHovering = false;
   late final String _displayImageUrl;
 
   @override
@@ -167,12 +168,15 @@ class _AnimeCardState extends State<AnimeCard> {
             children: [
               // 底层：模糊的封面图背景
               Positioned.fill(
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(
-                    sigmaX: 20,
-                    sigmaY: 20,
+                child: Transform.rotate(
+                  angle: 3.14159, // 180度（π弧度）
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(
+                      sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
+                      sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
+                    ),
+                    child: _buildImage(context, true),
                   ),
-                  child: _buildImage(context, true),
                 ),
               ),
               

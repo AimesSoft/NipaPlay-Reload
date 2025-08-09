@@ -2,7 +2,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
 import 'account_controller.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 /// Material Design版本的账号页面
 class MaterialAccountPage extends StatefulWidget {
@@ -22,132 +25,38 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   void showLoginDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-            child: Container(
-              width: 400,
-              constraints: const BoxConstraints(
-                maxHeight: 400,
-                minHeight: 300,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 0.5,
-                ),
-              ),
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  // 可滚动的内容区域（标题和输入框）
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '登录弹弹play账号',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          TextField(
-                            controller: usernameController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              labelText: '用户名',
-                              labelStyle: TextStyle(color: Colors.white70),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white30),
-                              ),
-                              focusedBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: passwordController,
-                            style: const TextStyle(color: Colors.white),
-                            obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: '密码',
-                              labelStyle: TextStyle(color: Colors.white70),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white30),
-                              ),
-                              focusedBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: isLoading ? null : () async {
-                          await performLogin();
-                          if (isLoggedIn && mounted) {
-                            Navigator.pop(context);
-                          }
-                        },
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  )
-                                : const Text(
-                                    '登录',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    BlurLoginDialog.show(
+      context,
+      title: '登录弹弹play账号',
+      fields: [
+        LoginField(
+          key: 'username',
+          label: '用户名/邮箱',
+          hint: '请输入用户名或邮箱',
+          initialValue: usernameController.text,
         ),
-      ),
+        LoginField(
+          key: 'password',
+          label: '密码',
+          isPassword: true,
+          initialValue: passwordController.text,
+        ),
+      ],
+      loginButtonText: '登录',
+      onLogin: (values) async {
+        usernameController.text = values['username']!;
+        passwordController.text = values['password']!;
+        await performLogin();
+        return LoginResult(success: isLoggedIn);
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
+    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Padding(
@@ -165,13 +74,13 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             ),
             const SizedBox(height: 16),
             if (isLoggedIn) ...[
-              _buildLoggedInView(),
+              _buildLoggedInView(blurValue),
               const SizedBox(height: 16),
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                    filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -188,18 +97,18 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 ),
               ),
             ] else
-              _buildLoggedOutView(),
+              _buildLoggedOutView(blurValue),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLoggedInView() {
+  Widget _buildLoggedInView(double blurValue) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -306,94 +215,23 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     );
   }
 
-  Widget _buildLoggedOutView() {
-    return Center(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.3),
-                width: 0.5,
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.account_circle,
-                  size: 64,
-                  color: Colors.white60,
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  '未登录弹弹play账号',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '登录后可以同步观看记录和个人设置',
-                  style: TextStyle(
-                    color: Colors.white60,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: showLoginDialog,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.blue.withOpacity(0.5),
-                          width: 1,
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.login,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            '登录账号',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+  Widget _buildLoggedOutView(double blurValue) {
+    return Column(
+      children: [
+        ListTile(
+          title: const Text(
+            "登录弹弹play账号",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
+          subtitle: const Text(
+            "登录后可以同步观看记录和个人设置",
+            style: TextStyle(color: Colors.white70),
+          ),
+          trailing: const Icon(Icons.login, color: Colors.white),
+          onTap: showLoginDialog,
         ),
-      ),
+        const Divider(color: Colors.white12, height: 1),
+      ],
     );
   }
 }

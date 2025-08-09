@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
+
 class BlurButton extends StatefulWidget {
   final IconData? icon;
   final String text;
@@ -12,7 +15,7 @@ class BlurButton extends StatefulWidget {
   final double? width;
   final bool expandHorizontally;
   final BorderRadius? borderRadius;
-  
+
   const BlurButton({
     super.key,
     this.icon,
@@ -36,6 +39,9 @@ class _BlurButtonState extends State<BlurButton> {
 
   @override
   Widget build(BuildContext context) {
+    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
+    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
+
     Widget buttonContent = MouseRegion(
       onEnter: (_) {
         setState(() {
@@ -50,39 +56,39 @@ class _BlurButtonState extends State<BlurButton> {
       child: ClipRRect(
         borderRadius: widget.borderRadius ?? BorderRadius.circular(8),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
             padding: widget.padding,
             width: widget.width,
             decoration: BoxDecoration(
-              color: _isHovered 
-                ? Colors.white.withOpacity(0.4) 
-                : Colors.white.withOpacity(0.18),
+              color: _isHovered
+                  ? Colors.white.withOpacity(0.4)
+                  : Colors.white.withOpacity(0.18),
               borderRadius: widget.borderRadius ?? BorderRadius.circular(8),
               border: Border.all(
-                color: _isHovered 
-                  ? Colors.white.withOpacity(0.7) 
-                  : Colors.white.withOpacity(0.25),
+                color: _isHovered
+                    ? Colors.white.withOpacity(0.7)
+                    : Colors.white.withOpacity(0.25),
                 width: _isHovered ? 1.0 : 0.5,
               ),
               boxShadow: _isHovered
-                ? [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.25),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    )
-                  ]
-                : [],
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.25),
+                        blurRadius: 10,
+                        spreadRadius: 1,
+                      )
+                    ]
+                  : [],
             ),
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 300),
               style: TextStyle(
                 color: _isHovered
-                  ? Colors.white 
-                  : Colors.white.withOpacity(0.8),
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.8),
                 fontSize: widget.fontSize,
                 fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
               ),
@@ -99,8 +105,8 @@ class _BlurButtonState extends State<BlurButton> {
                           widget.icon,
                           size: _isHovered ? widget.iconSize + 1 : widget.iconSize,
                           color: _isHovered
-                            ? Colors.white 
-                            : Colors.white.withOpacity(0.8),
+                              ? Colors.white
+                              : Colors.white.withOpacity(0.8),
                         ),
                       ),
                       const SizedBox(width: 4),

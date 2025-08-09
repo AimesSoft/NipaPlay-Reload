@@ -14,6 +14,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 /// 调试日志查看器页面
 /// 提供日志查看、搜索、过滤和导出功能
@@ -268,7 +269,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
           width: double.infinity,
           height: double.infinity,
           borderRadius: 20,
-          blur: 20,
+          blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
           alignment: Alignment.center,
           border: 1,
           linearGradient: LinearGradient(

@@ -5,6 +5,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
 import 'settings_hint_text.dart';
 import 'settings_slider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class ControlBarSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;

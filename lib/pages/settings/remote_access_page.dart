@@ -7,6 +7,8 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class RemoteAccessPage extends StatefulWidget {
   const RemoteAccessPage({super.key});
@@ -190,8 +192,8 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
         filter: ImageFilter.blur(
-          sigmaX: 25,
-          sigmaY: 25,
+          sigmaX: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
+          sigmaY: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
         ),
         child: Container(
           decoration: BoxDecoration(

@@ -1,6 +1,22 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:provider/provider.dart';
+import 'subtitle_tracks_menu.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'control_bar_settings_menu.dart';
+import 'danmaku_settings_menu.dart';
+import 'audio_tracks_menu.dart';
+import 'danmaku_list_menu.dart';
+import 'danmaku_tracks_menu.dart';
+import 'subtitle_list_menu.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'playlist_menu.dart';
+import 'playback_rate_menu.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+
 import 'package:provider/provider.dart';
 import 'subtitle_tracks_menu.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;

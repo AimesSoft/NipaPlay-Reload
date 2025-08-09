@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui'; // For ImageFilter.blur
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class SeekIndicator extends StatelessWidget {
   const SeekIndicator({super.key});

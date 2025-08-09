@@ -7,6 +7,8 @@ import 'dart:async';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class TranslationButton extends StatefulWidget {
   final int animeId;

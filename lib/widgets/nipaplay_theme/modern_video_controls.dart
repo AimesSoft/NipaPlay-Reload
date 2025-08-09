@@ -12,6 +12,7 @@ import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class ModernVideoControls extends StatefulWidget {
   const ModernVideoControls({super.key});

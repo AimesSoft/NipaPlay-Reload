@@ -4,6 +4,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_dialog.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class BlurDialog {
   static Future<T?> show<T>({
@@ -95,7 +96,10 @@ class BlurDialog {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      filter: ImageFilter.blur(
+                        sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
+                        sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Column(

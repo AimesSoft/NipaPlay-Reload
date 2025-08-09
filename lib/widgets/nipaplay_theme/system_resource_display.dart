@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 /// 系统资源显示组件
 /// 用于在界面右上角显示当前CPU使用率、内存使用和帧率

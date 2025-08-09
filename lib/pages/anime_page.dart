@@ -417,7 +417,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                   width: moreButtonWidth,
                   height: 180,
                   borderRadius: 10,
-                  blur: 20,
+                  blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
                   border: 1.5,
                   linearGradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -528,12 +528,15 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
               children: [
                 // 底层：模糊的缩略图背景
                 Positioned.fill(
-                  child: ImageFiltered(
-                    imageFilter: ImageFilter.blur(
-                      sigmaX: 20,
-                      sigmaY: 20,
+                  child: Transform.rotate(
+                    angle: 3.14159, // 180度（π弧度）
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(
+                        sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
+                        sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
+                      ),
+                      child: _getVideoThumbnail(item, isLatestUpdated),
                     ),
-                    child: _getVideoThumbnail(item, isLatestUpdated),
                   ),
                 ),
                 

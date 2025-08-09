@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class SettingsSlider extends StatefulWidget {
   final double value;

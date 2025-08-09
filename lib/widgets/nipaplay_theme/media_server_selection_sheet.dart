@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:provider/provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class MediaServerSelectionSheet extends StatelessWidget {
   const MediaServerSelectionSheet({super.key});
@@ -30,7 +32,7 @@ class MediaServerSelectionSheet extends StatelessWidget {
         width: double.infinity,
         height: double.infinity,
         borderRadius: 20,
-        blur: 20,
+        blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
         alignment: Alignment.center,
         border: 1,
         linearGradient: LinearGradient(
