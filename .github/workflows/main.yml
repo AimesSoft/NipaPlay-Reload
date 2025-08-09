@@ -232,7 +232,7 @@ jobs:
             
             if [ ! -d "${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME}" ]; then
               echo "Error: App bundle ${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME} not found after flutter build."
-              echo "Listing contents of ${APP_BUNDLE_ROOT_DIR}/:
+              echo "Listing contents of ${APP_BUNDLE_ROOT_DIR}/:"
               ls -la "${APP_BUNDLE_ROOT_DIR}/"
               exit 1
             fi
@@ -255,9 +255,9 @@ jobs:
           else
             echo "Warning: mdk.framework.dSYM not found at the revised expected path $DSYM_SOURCE_PATH."
             echo "This script previously checked macos/Pods/fvp/mdk.framework.dSYM."
-            echo "Listing contents of macos/Pods/ (if it exists):"
+            echo "Listing contents of macos/Pods/:"
             ls -la "macos/Pods/" || echo "macos/Pods/ directory does not exist."
-            echo "Listing contents of ${MDK_ARTIFACTS_DIR}/ (if it exists, this is where dSYM was expected):"
+            echo "Listing contents of ${MDK_ARTIFACTS_DIR}/ (this is where dSYM was expected):"
             ls -la "${MDK_ARTIFACTS_DIR}/" || echo "${MDK_ARTIFACTS_DIR}/ directory does not exist or is not accessible."
             echo "Symbolicated crash logs for mdk might not be available."
             # This is a warning, build continues.
