@@ -5,22 +5,18 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 
 class ThemeNotifier with ChangeNotifier {
   ThemeMode _themeMode;
-  double _blurPower;
   String _backgroundImageMode;
   String _customBackgroundPath;
 
   ThemeNotifier({
     ThemeMode initialThemeMode = ThemeMode.system,
-    required double initialBlurPower,
     String initialBackgroundImageMode = "看板娘",
     String initialCustomBackgroundPath = 'assets/backempty.png',
   })  : _themeMode = initialThemeMode,
-        _blurPower = initialBlurPower,
         _backgroundImageMode = initialBackgroundImageMode,
         _customBackgroundPath = initialCustomBackgroundPath;
 
   ThemeMode get themeMode => _themeMode;
-  double get blurPower => _blurPower;
   String get backgroundImageMode => _backgroundImageMode;
   String get customBackgroundPath => _customBackgroundPath;
 
@@ -28,14 +24,6 @@ class ThemeNotifier with ChangeNotifier {
     _themeMode = mode;
     SettingsStorage.saveString('themeMode', mode.toString().split('.').last).then((_) {
       ////////debugPrint('Theme mode saved: ${mode.toString().split('.').last}'); // 添加日志输出
-    });
-    notifyListeners();
-  } 
-
-  set blurPower(double blur) {
-    _blurPower = blur;
-    SettingsStorage.saveDouble('blurPower', _blurPower).then((_) { // 使用 saveDouble
-      ////////debugPrint('Blur power saved: $_blurPower'); // 添加日志输出
     });
     notifyListeners();
   }

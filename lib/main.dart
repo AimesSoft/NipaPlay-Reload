@@ -58,6 +58,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'services/hotkey_service_initializer.dart';
 import 'utils/shortcut_tooltip_manager.dart';
 import 'utils/hotkey_service.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -365,13 +366,11 @@ void main(List<String> args) async {
     // 加载设置
     Future.wait(<Future<dynamic>>[
       SettingsStorage.loadString('themeMode', defaultValue: 'system'),
-      SettingsStorage.loadDouble('blurPower'),
       SettingsStorage.loadString('backgroundImageMode'),
       SettingsStorage.loadString('customBackgroundPath'),
     ]).then((results) {
-      globals.blurPower = results[1] as double;
-      globals.backgroundImageMode = results[2] as String;
-      globals.customBackgroundPath = results[3] as String;
+      globals.backgroundImageMode = results[1] as String;
+      globals.customBackgroundPath = results[2] as String;
 
       // 检查自定义背景路径有效性，发现无效则恢复为默认图片
       _validateCustomBackgroundPath();
@@ -433,11 +432,11 @@ void main(List<String> args) async {
     runApp(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider(create: (_) => SettingsProvider()),
           ChangeNotifierProvider(create: (_) => VideoPlayerState()),
           ChangeNotifierProvider(
             create: (context) => ThemeNotifier(
-              initialThemeMode: initialThemeMode, 
-              initialBlurPower: globals.blurPower,
+              initialThemeMode: initialThemeMode,
               initialBackgroundImageMode: globals.backgroundImageMode,
               initialCustomBackgroundPath: globals.customBackgroundPath,
             ),

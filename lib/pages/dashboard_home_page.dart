@@ -68,6 +68,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   bool _isAutoSwitching = true;
   int _currentHeroBannerIndex = 0;
   late final ValueNotifier<int> _heroBannerIndexNotifier;
+  int? _hoveredIndicatorIndex;
 
   @override
   void initState() {
@@ -1976,7 +1977,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     await PlaybackService().play(playableItem);
   }
   
-  // 构建页面指示器（分离出来避免不必要的重建），支持点击
+  // 构建页面指示器（分离出来避免不必要的重建），支持点击和悬浮效果
   Widget _buildPageIndicator() {
     return Positioned(
       bottom: 16,
@@ -1990,32 +1991,50 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (index) {
-                return GestureDetector(
-                  onTap: () {
-                    // 点击圆点时切换到对应页面
-                    _stopAutoSwitch();
-                    _currentHeroBannerIndex = index;
-                    _heroBannerIndexNotifier.value = index;
-                    _heroBannerPageController.animateToPage(
-                      index,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                    // 停止自动切换3秒后恢复
-                    Timer(const Duration(seconds: 3), () {
-                      _resumeAutoSwitch();
-                    });
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: index == currentIndex
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.4),
+                final bool isHovered = _hoveredIndicatorIndex == index;
+                final bool isSelected = currentIndex == index;
+                double size;
+                if (isSelected && isHovered) {
+                  size = 16.0; // 选中且悬浮时最大
+                } else if (isHovered) {
+                  size = 12.0; // 仅悬浮时变大
+                } else {
+                  size = 8.0; // 默认大小
+                }
+
+                return MouseRegion(
+                  onEnter: (event) => setState(() => _hoveredIndicatorIndex = index),
+                  onExit: (event) => setState(() => _hoveredIndicatorIndex = null),
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      // 点击圆点时切换到对应页面
+                      _stopAutoSwitch();
+                      _currentHeroBannerIndex = index;
+                      _heroBannerIndexNotifier.value = index;
+                      _heroBannerPageController.animateToPage(
+                        index,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                      Timer(const Duration(seconds: 3), () {
+                        _resumeAutoSwitch();
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut,
+                      width: size,
+                      height: size,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected
+                            ? Colors.white
+                            : (isHovered
+                                ? Colors.white.withOpacity(0.8)
+                                : Colors.white.withOpacity(0.5)),
+                      ),
                     ),
                   ),
                 );

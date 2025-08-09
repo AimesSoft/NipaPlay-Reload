@@ -14,6 +14,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 
 class ThemeModePage extends StatefulWidget {
   final ThemeNotifier themeNotifier;
@@ -160,6 +161,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
   Widget build(BuildContext context) {
     // 获取外观设置提供者
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
+    final settingsProvider = context.watch<SettingsProvider>();
     
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -210,40 +212,38 @@ class _ThemeModePageState extends State<ThemeModePage> {
                   DropdownMenuItemData(
                     title: "无",
                     value: 0,
-                    isSelected: widget.themeNotifier.blurPower == 0,
+                    isSelected: settingsProvider.blurPower == 0,
                   ),
                   DropdownMenuItemData(
                     title: "轻微",
                     value: 5,
-                    isSelected: widget.themeNotifier.blurPower == 5,
+                    isSelected: settingsProvider.blurPower == 5,
                   ),
                   DropdownMenuItemData(
                     title: "中等",
                     value: 15,
-                    isSelected: widget.themeNotifier.blurPower == 15,
+                    isSelected: settingsProvider.blurPower == 15,
                   ),
                   DropdownMenuItemData(
                     title: "高",
                     value: 25,
-                    isSelected: widget.themeNotifier.blurPower == 25,
+                    isSelected: settingsProvider.blurPower == 25,
                   ),
                   DropdownMenuItemData(
                     title: "超级",
                     value: 50,
-                    isSelected: widget.themeNotifier.blurPower == 50,
+                    isSelected: settingsProvider.blurPower == 50,
                   ),
                   DropdownMenuItemData(
                     title: "梦幻",
                     value: 100,
-                    isSelected: widget.themeNotifier.blurPower == 100,
+                    isSelected: settingsProvider.blurPower == 100,
                   ),
                 ],
                 onItemSelected: (blur) {
-                  setState(() {
-                    widget.themeNotifier.blurPower =
-                        blur.toDouble(); // 将 blur 转换为 double
-                    _saveBlurPower(blur.toDouble());
-                  });
+                  context
+                      .read<SettingsProvider>()
+                      .setBlurPower(blur.toDouble());
                 },
               ),
             ),
@@ -318,13 +318,6 @@ class _ThemeModePageState extends State<ThemeModePage> {
         modeString = 'system';
     }
     await SettingsStorage.saveString('themeMode', modeString);
-  }
-
-  Future<void> _saveBlurPower(double blur) async {
-    await SettingsStorage.saveDouble('blurPower', blur);
-    setState(() {
-      blurPower = blur;
-    });
   }
 
   Future<void> _saveBackgroundImageMode(String mode) async {
