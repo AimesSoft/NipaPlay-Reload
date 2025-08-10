@@ -248,6 +248,18 @@ class _ThemeModePageState extends State<ThemeModePage> {
               ),
             ),
             const Divider(color: Colors.white12, height: 1),
+            SwitchListTile(
+              title: const Text("控件毛玻璃效果", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: const Text("关闭后可提升性能，但会失去部分UI透明感", style: TextStyle(color: Colors.white70)),
+              value: appearanceSettings.enableWidgetBlurEffect,
+              onChanged: (value) {
+                appearanceSettings.setEnableWidgetBlurEffect(value);
+              },
+              activeColor: Colors.white,
+              inactiveThumbColor: Colors.white,
+              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
+            ),
+            const Divider(color: Colors.white12, height: 1),
             ListTile(
               title: const Text("背景图像", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               subtitle: const Text("设置应用主界面的背景图片", style: TextStyle(color: Colors.white70)),
@@ -293,18 +305,6 @@ class _ThemeModePageState extends State<ThemeModePage> {
                   context, 
                   value ? '已启用页面滑动动画' : '已关闭页面滑动动画'
                 );
-              },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
-            ),
-            const Divider(color: Colors.white12, height: 1),
-            SwitchListTile(
-              title: const Text("控件毛玻璃效果", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: const Text("关闭后可提升性能，但会失去部分UI透明感", style: TextStyle(color: Colors.white70)),
-              value: appearanceSettings.enableWidgetBlurEffect,
-              onChanged: (value) {
-                appearanceSettings.setEnableWidgetBlurEffect(value);
               },
               activeColor: Colors.white,
               inactiveThumbColor: Colors.white,

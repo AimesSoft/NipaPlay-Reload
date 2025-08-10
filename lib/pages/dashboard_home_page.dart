@@ -125,11 +125,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       if (_isAutoSwitching && _recommendedItems.length >= 5 && mounted) {
         _currentHeroBannerIndex = (_currentHeroBannerIndex + 1) % 5;
         _heroBannerIndexNotifier.value = _currentHeroBannerIndex;
-        _heroBannerPageController.animateToPage(
-          _currentHeroBannerIndex,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        if (_heroBannerPageController.hasClients) {
+          _heroBannerPageController.animateToPage(
+            _currentHeroBannerIndex,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
       }
     });
   }
@@ -2360,7 +2362,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+        filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
         child: Container(
           width: 32,
           height: 32,
