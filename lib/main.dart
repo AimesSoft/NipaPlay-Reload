@@ -847,9 +847,6 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   }
 
   void _onTabChange() {
-    if (globalTabController != null) {
-      debugPrint('[MainPageState] globalTabController listener: index=${globalTabController!.index}, previousIndex=${globalTabController!.previousIndex}, indexIsChanging=${globalTabController!.indexIsChanging}, animationValue=${globalTabController!.animation?.value.toStringAsFixed(2)}');
-    }
     _manageHotkeys();
   }
 

@@ -16,6 +16,7 @@ import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/storage_service.dart'; // 导入StorageService
 import 'package:permission_handler/permission_handler.dart'; // 导入权限处理库
 import 'package:nipaplay/utils/android_storage_helper.dart'; // 导入Android存储辅助类
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 // Import MethodChannel
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 
@@ -918,6 +919,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
 
     final scanService = Provider.of<ScanService>(context);
+    final appearanceProvider = Provider.of<AppearanceSettingsProvider>(context);
+    final bool enableBlur = appearanceProvider.enableWidgetBlurEffect;
     // final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false); // Keep if needed for other actions
 
     return Column(
@@ -1011,7 +1014,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             width: double.infinity,
             height: 50,
             borderRadius: 12,
-            blur: 10,
+            blur: enableBlur ? 10 : 0,
             alignment: Alignment.center,
             border: 1,
             linearGradient: LinearGradient(
@@ -1090,7 +1093,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               width: double.infinity,
               height: 50,
               borderRadius: 12,
-              blur: 10,
+              blur: enableBlur ? 10 : 0,
               alignment: Alignment.centerLeft,
               border: 1,
               linearGradient: LinearGradient(

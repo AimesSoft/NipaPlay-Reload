@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_video_upload_control.dart';
 import 'dart:io' as io;
 import 'package:universal_html/html.dart' as web_html;
@@ -47,12 +48,15 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
     }
     
     // 使用 Material 版本（保持原有逻辑）
+    final appearanceProvider = Provider.of<AppearanceSettingsProvider>(context);
+    final bool enableBlur = appearanceProvider.enableWidgetBlurEffect;
+
     return Center(
       child: GlassmorphicContainer(
         width: 300,
         height: 250,
         borderRadius: 20,
-        blur: 20,
+        blur: enableBlur ? 20 : 0,
         alignment: Alignment.center,
         border: 1,
         linearGradient: LinearGradient(
@@ -106,7 +110,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
                           width: 150,
                           height: 50,
                           borderRadius: 12,
-                          blur: 10,
+                          blur: enableBlur ? 10 : 0,
                           alignment: Alignment.center,
                           border: 1,
                           linearGradient: LinearGradient(
