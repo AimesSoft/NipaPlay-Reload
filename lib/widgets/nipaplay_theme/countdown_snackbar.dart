@@ -7,6 +7,7 @@ class CountdownSnackBar {
   static OverlayEntry? _currentOverlayEntry;
   static Function()? _onCancel;
   static ValueNotifier<String>? _messageNotifier;
+  static AnimationController? _controller; // 防泄漏
 
   static void show(
     BuildContext context, 
@@ -24,16 +25,17 @@ class CountdownSnackBar {
     
     final overlay = Overlay.of(context);
     late final OverlayEntry overlayEntry;
-    late final AnimationController controller;
     late final Animation<double> animation;
     
-    controller = AnimationController(
+    // 释放旧控制器
+    _controller?.dispose();
+    _controller = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: Navigator.of(context),
     );
 
     animation = CurvedAnimation(
-      parent: controller,
+      parent: _controller!,
       curve: Curves.easeInOut,
     );
     
@@ -86,7 +88,9 @@ class CountdownSnackBar {
                             TextButton(
                               onPressed: () {
                                 onCancel();
-                                _closeSnackBar(controller, overlayEntry);
+                                if (_controller != null) {
+                                  _closeSnackBar(_controller!, overlayEntry);
+                                }
                               },
                               style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -112,7 +116,9 @@ class CountdownSnackBar {
                               if (onCancel != null) {
                                 onCancel();
                               }
-                              _closeSnackBar(controller, overlayEntry);
+                              if (_controller != null) {
+                                _closeSnackBar(_controller!, overlayEntry);
+                              }
                             },
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
@@ -131,7 +137,7 @@ class CountdownSnackBar {
 
     overlay.insert(overlayEntry);
     _currentOverlayEntry = overlayEntry;
-    controller.forward();
+    _controller!.forward();
   }
 
   static void _closeSnackBar(AnimationController controller, OverlayEntry overlayEntry) {
@@ -141,6 +147,9 @@ class CountdownSnackBar {
         _currentOverlayEntry = null;
         _messageNotifier?.dispose();
         _messageNotifier = null;
+        // 释放控制器
+        _controller?.dispose();
+        _controller = null;
       }
     });
   }
@@ -151,6 +160,8 @@ class CountdownSnackBar {
       _currentOverlayEntry = null;
       _messageNotifier?.dispose();
       _messageNotifier = null;
+      _controller?.dispose();
+      _controller = null;
     }
   }
 

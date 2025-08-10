@@ -33,6 +33,10 @@ class SystemResourceMonitor {
   Timer? _resourceTimer;
   Timer? _fpsTimer;
   
+  // 运行状态与消费者计数（用于按需启动/停止）
+  bool _started = false;
+  int _consumerCount = 0;
+  
   // 记录上一帧时间用于FPS计算
   int _frameCount = 0;
   late DateTime _lastFpsUpdateTime;
@@ -69,7 +73,8 @@ class SystemResourceMonitor {
   static Future<void> initialize() async {
     // 移除桌面平台限制，改为在所有平台上初始化
     if (!kIsWeb) {
-      await _instance._startMonitoring();
+  // 初始化基础信息，但不要默认启动监控（避免在未显示时常驻 Ticker）
+  // 实际启动在有消费者注册时进行。
       
       // 获取并设置MDK版本号
       _instance._initMdkVersion();
@@ -143,13 +148,41 @@ class SystemResourceMonitor {
     _instance._stopMonitoring();
   }
 
+  /// 注册一个使用资源监控数据的消费者（例如一个 UI 组件显示），按需启动监控
+  static void registerConsumer() {
+    _instance._registerConsumer();
+  }
+
+  /// 注销一个消费者，当无消费者时停止监控
+  static void unregisterConsumer() {
+    _instance._unregisterConsumer();
+  }
+
+  void _registerConsumer() {
+    _consumerCount++;
+    if (!_started) {
+      _startMonitoring();
+    }
+  }
+
+  void _unregisterConsumer() {
+    if (_consumerCount > 0) {
+      _consumerCount--;
+    }
+    if (_consumerCount == 0) {
+      _stopMonitoring();
+    }
+  }
+
   /// 开始监控系统资源
   Future<void> _startMonitoring() async {
+  if (_started) return;
     // 初始化FPS测量
     _initFpsMeasurement();
     
     // 初始化系统资源监控
     _startResourceMonitoring();
+  _started = true;
   }
 
   /// 初始化FPS测量
@@ -252,12 +285,14 @@ class SystemResourceMonitor {
 
   /// 停止监控系统资源
   void _stopMonitoring() {
+  if (!_started) return;
     _resourceTimer?.cancel();
     _fpsTimer?.cancel();
     if (_ticker.isTicking) {
       _ticker.stop();
       _ticker.dispose();
     }
+  _started = false;
   }
   
   /// 设置当前活跃的解码器

@@ -13,7 +13,8 @@ enum DanmakuRenderEngine {
 /// 负责读写弹幕渲染引擎设置的工厂类
 class DanmakuKernelFactory {
   static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
-  static DanmakuRenderEngine _cachedEngine = DanmakuRenderEngine.cpu;
+  // Default to GPU if no user setting exists
+  static DanmakuRenderEngine _cachedEngine = DanmakuRenderEngine.gpu;
   static bool _initialized = false;
 
   // 添加StreamController用于广播内核切换事件
@@ -36,10 +37,10 @@ class DanmakuKernelFactory {
       if (engineIndex != null && engineIndex >= 0 && engineIndex < DanmakuRenderEngine.values.length) {
         _cachedEngine = DanmakuRenderEngine.values[engineIndex];
       } else {
-        _cachedEngine = DanmakuRenderEngine.cpu; // 默认使用 CPU
+        _cachedEngine = DanmakuRenderEngine.gpu; // 默认使用 GPU
       }
     } catch (e) {
-      _cachedEngine = DanmakuRenderEngine.cpu;
+      _cachedEngine = DanmakuRenderEngine.gpu;
     }
     
     _initialized = true;

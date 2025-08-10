@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 class BlurSnackBar {
   static OverlayEntry? _currentOverlayEntry;
+  static AnimationController? _controller; // 防止泄漏：保存当前动画控制器
 
   static void show(BuildContext context, String content) {
     if (_currentOverlayEntry != null) {
@@ -14,16 +15,17 @@ class BlurSnackBar {
 
     final overlay = Overlay.of(context);
     late final OverlayEntry overlayEntry;
-    late final AnimationController controller;
     late final Animation<double> animation;
     
-    controller = AnimationController(
+    // 如有旧控制器，先释放
+    _controller?.dispose();
+    _controller = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: Navigator.of(context),
     );
 
     animation = CurvedAnimation(
-      parent: controller,
+      parent: _controller!,
       curve: Curves.easeInOut,
     );
     
@@ -65,10 +67,12 @@ class BlurSnackBar {
                       IconButton(
                         icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                         onPressed: () {
-                          controller.reverse().then((_) {
+              _controller?.reverse().then((_) {
                             overlayEntry.remove();
                             if (_currentOverlayEntry == overlayEntry) {
                               _currentOverlayEntry = null;
+                _controller?.dispose();
+                _controller = null;
                             }
                           });
                         },
@@ -87,14 +91,16 @@ class BlurSnackBar {
 
     overlay.insert(overlayEntry);
     _currentOverlayEntry = overlayEntry;
-    controller.forward();
+  _controller!.forward();
 
     Future.delayed(const Duration(seconds: 2), () {
       if (overlayEntry.mounted) {
-        controller.reverse().then((_) {
+    _controller?.reverse().then((_) {
           overlayEntry.remove();
           if (_currentOverlayEntry == overlayEntry) {
             _currentOverlayEntry = null;
+      _controller?.dispose();
+      _controller = null;
           }
         });
       }

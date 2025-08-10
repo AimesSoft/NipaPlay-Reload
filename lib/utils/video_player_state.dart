@@ -399,7 +399,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       await _loadInitialBrightness(); // Load initial brightness for phone
       await _loadInitialVolume(); // <<< CALL ADDED
     }
-    _startUiUpdateTimer(); // 启动UI更新定时器（已包含位置保存功能）
+  // 不在初始化时启动帧级Ticker，避免空闲/非播放状态也持续产帧
+  _startUiUpdateTimer(); // 仅创建/准备Ticker，是否启动由播放状态决定
     _setupWindowManagerListener();
     _focusNode.requestFocus();
     await _loadLastVideo();
@@ -1703,6 +1704,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _saveCurrentPositionToHistory();
       // 在暂停时触发截图
       _captureConditionalScreenshot("暂停时");
+  // 停止UI更新Ticker，避免继续产帧
+  _uiUpdateTicker?.stop();
       // WakelockPlus.disable(); // Already handled by _setStatus
     }
   }
@@ -1748,6 +1751,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       });
       // _resetHideControlsTimer(); // Temporarily commented out as the method name is uncertain.
       // Please provide the correct method if you want to show controls on play.
+
+      // 确保UI更新Ticker在播放时启动
+      if (_uiUpdateTicker == null) {
+        _startUiUpdateTimer();
+      }
+      if (!(_uiUpdateTicker?.isActive ?? false)) {
+        _uiUpdateTicker!.start();
+      }
     }
   }
 
@@ -4730,16 +4741,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     // 启动UI更新定时器（根据弹幕内核类型设置不同的更新频率，同时处理数据保存）
   void _startUiUpdateTimer() {
-    // 取消现有定时器和Ticker
-    _uiUpdateTimer?.cancel();
-    _uiUpdateTicker?.dispose();
+  // 取消现有定时器；Ticker仅在需要时复用
+  _uiUpdateTimer?.cancel();
+  // 若已有Ticker，先停止，避免重复启动造成持续产帧
+  _uiUpdateTicker?.stop();
     
     // 记录上次更新时间，用于计算时间增量
     _lastTickTime = DateTime.now().millisecondsSinceEpoch;
     
     // 🔥 关键优化：使用Ticker代替Timer.periodic
     // Ticker会与显示刷新率同步，更精确地控制帧率
-    _uiUpdateTicker = Ticker((elapsed) {
+  // 如未创建过，则创建Ticker；注意此Ticker不受TickerMode影响（非Widget上下文），需手动启停
+  _uiUpdateTicker ??= Ticker((elapsed) {
       // 计算从上次更新到现在的时间增量
       final nowTime = DateTime.now().millisecondsSinceEpoch;
       final deltaTime = nowTime - _lastTickTime;
@@ -4890,11 +4903,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
     });
-    
-    // 启动Ticker
-    _uiUpdateTicker!.start();
-    
-    debugPrint('启动UI更新Ticker，弹幕内核：${DanmakuKernelFactory.getKernelType()}');
+
+    // 仅在真正播放时启动Ticker；其他状态保持停止以避免空闲帧
+    if (_status == PlayerStatus.playing) {
+      _uiUpdateTicker!.start();
+      debugPrint('启动UI更新Ticker（playing），弹幕内核：${DanmakuKernelFactory.getKernelType()}');
+    } else {
+      _uiUpdateTicker!.stop();
+      debugPrint('已准备UI更新Ticker但未启动（status=$_status）');
+    }
   }
 
   // 重新初始化播放器（用于切换内核）

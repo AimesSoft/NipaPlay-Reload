@@ -29,7 +29,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardHomePage extends StatefulWidget {
   const DashboardHomePage({super.key});
@@ -61,6 +61,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   
   // 本地媒体库数据 - 使用番组信息而不是观看历史
   List<LocalAnimeItem> _localAnimeItems = [];
+  // 本地媒体库图片持久化缓存（与 MediaLibraryPage 复用同一前缀）
+  final Map<int, String> _localImageCache = {};
+  static const String _localPrefsKeyPrefix = 'media_library_image_url_';
+  bool _isLoadingLocalImages = false;
 
   final PageController _heroBannerPageController = PageController();
   final ScrollController _mainScrollController = ScrollController();
@@ -698,7 +702,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         }
       }
 
-      // 从本地媒体库获取最近添加
+      // 从本地媒体库获取最近添加（优化：不做逐文件stat，按历史记录时间排序，图片懒加载+持久化）
       final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
       if (watchHistoryProvider.isLoaded) {
         try {
@@ -707,96 +711,56 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             !item.filePath.startsWith('jellyfin://') &&
             !item.filePath.startsWith('emby://')
           ).toList();
-          
-          // 按animeId分组，获取每个动画的所有集数，然后找到文件修改时间最新的
-          final Map<int, WatchHistoryItem> latestAddedItems = {};
-          for (var item in localHistory) {
-            if (item.animeId != null) {
-              try {
-                // 获取文件的修改时间
-                final file = File(item.filePath);
-                if (file.existsSync()) {
-                  final stat = file.statSync();
-                  final modifiedTime = stat.modified;
-                  
-                  if (latestAddedItems.containsKey(item.animeId!)) {
-                    // 如果该动画已存在，比较文件修改时间，保留更新的
-                    final existingFile = File(latestAddedItems[item.animeId!]!.filePath);
-                    if (existingFile.existsSync()) {
-                      final existingStat = existingFile.statSync();
-                      if (modifiedTime.isAfter(existingStat.modified)) {
-                        latestAddedItems[item.animeId!] = item;
-                      }
-                    }
-                  } else {
-                    latestAddedItems[item.animeId!] = item;
-                  }
-                }
-              } catch (e) {
-                debugPrint('获取文件 ${item.filePath} 修改时间失败: $e');
-                // 如果无法获取文件时间，使用观看时间作为替代
-                if (latestAddedItems.containsKey(item.animeId!)) {
-                  if (item.lastWatchTime.isAfter(latestAddedItems[item.animeId!]!.lastWatchTime)) {
-                    latestAddedItems[item.animeId!] = item;
-                  }
-                } else {
-                  latestAddedItems[item.animeId!] = item;
-                }
+
+          // 按animeId分组，选取“添加时间”代表：
+          // 优先使用 isFromScan 为 true 的记录的 lastWatchTime（扫描入库时间），否则用最近一次 lastWatchTime
+          final Map<int, WatchHistoryItem> representativeItems = {};
+          final Map<int, DateTime> addedTimeMap = {};
+
+          for (final item in localHistory) {
+            final animeId = item.animeId;
+            if (animeId == null) continue;
+
+            final candidateTime = item.isFromScan ? item.lastWatchTime : item.lastWatchTime;
+            if (!representativeItems.containsKey(animeId)) {
+              representativeItems[animeId] = item;
+              addedTimeMap[animeId] = candidateTime;
+            } else {
+              // 对于同一番组，取时间更新的那条作为代表
+              if (candidateTime.isAfter(addedTimeMap[animeId]!)) {
+                representativeItems[animeId] = item;
+                addedTimeMap[animeId] = candidateTime;
               }
             }
           }
-          
-          // 转换为LocalAnimeItem并获取番组信息
-          List<LocalAnimeItem> localAnimeItems = [];
-          
-          // 并行获取所有番组信息以提高性能
-          final futures = <Future<LocalAnimeItem>>[];
-          for (var entry in latestAddedItems.entries) {
+
+          // 提前从本地持久化中加载图片URL缓存，避免首屏大量网络请求
+          await _loadPersistedLocalImageUrls(addedTimeMap.keys.toSet());
+
+          // 构建 LocalAnimeItem 列表（先用缓存命中图片，未命中先留空，稍后后台补齐）
+          List<LocalAnimeItem> localAnimeItems = representativeItems.entries.map((entry) {
             final animeId = entry.key;
             final latestEpisode = entry.value;
-            
-            futures.add(_createLocalAnimeItem(animeId, latestEpisode));
-          }
-          
-          // 等待所有番组信息获取完成
-          try {
-            localAnimeItems = await Future.wait(futures);
-          } catch (e) {
-            debugPrint('批量获取番组信息失败: $e');
-            // 如果批量获取失败，创建基本的项目
-            for (var entry in latestAddedItems.entries) {
-              try {
-                final file = File(entry.value.filePath);
-                DateTime addedTime = DateTime.now();
-                if (file.existsSync()) {
-                  final stat = file.statSync();
-                  addedTime = stat.modified;
-                }
-                
-                localAnimeItems.add(LocalAnimeItem(
-                  animeId: entry.key,
-                  animeName: entry.value.animeName.isNotEmpty ? entry.value.animeName : '未知动画',
-                  imageUrl: null,
-                  backdropImageUrl: null,
-                  addedTime: addedTime,
-                  latestEpisode: entry.value,
-                ));
-              } catch (e) {
-                debugPrint('创建本地动画项目失败: $e');
-              }
-            }
-          }
-          
-          // 按文件添加时间排序（最新的在前）
+            final addedTime = addedTimeMap[animeId]!;
+            final cachedImg = _localImageCache[animeId];
+            return LocalAnimeItem(
+              animeId: animeId,
+              animeName: latestEpisode.animeName.isNotEmpty ? latestEpisode.animeName : '未知动画',
+              imageUrl: cachedImg,
+              backdropImageUrl: cachedImg,
+              addedTime: addedTime,
+              latestEpisode: latestEpisode,
+            );
+          }).toList();
+
+          // 排序（最新在前）并限制数量
           localAnimeItems.sort((a, b) => b.addedTime.compareTo(a.addedTime));
-          
-          // 限制数量到25个
           if (localAnimeItems.length > 25) {
             localAnimeItems = localAnimeItems.take(25).toList();
           }
-          
+
           _localAnimeItems = localAnimeItems;
-          debugPrint('本地媒体库获取到 ${_localAnimeItems.length} 个项目');
+          debugPrint('本地媒体库获取到 ${_localAnimeItems.length} 个项目（首屏使用缓存图片，后台补齐高清图）');
         } catch (e) {
           debugPrint('获取本地媒体库最近内容失败: $e');
         }
@@ -809,10 +773,85 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         setState(() {
           // 触发UI更新
         });
+
+        // 首屏渲染后，后台限流补齐缺失图片与番组详情（避免阻塞UI）
+        _fetchLocalAnimeImagesInBackground();
       }
     } catch (e) {
       debugPrint('加载最近内容失败: $e');
     }
+  }
+
+  // 加载持久化的本地番组图片URL（与媒体库页复用同一Key前缀）
+  Future<void> _loadPersistedLocalImageUrls(Set<int> animeIds) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final id in animeIds) {
+        if (_localImageCache.containsKey(id)) continue;
+        final url = prefs.getString('$_localPrefsKeyPrefix$id');
+        if (url != null && url.isNotEmpty) {
+          _localImageCache[id] = url;
+        }
+      }
+    } catch (e) {
+      debugPrint('加载本地图片持久化缓存失败: $e');
+    }
+  }
+
+  // 后台抓取缺失的番组图片，限流并写入持久化缓存
+  Future<void> _fetchLocalAnimeImagesInBackground() async {
+    if (_isLoadingLocalImages) return;
+    _isLoadingLocalImages = true;
+    const int maxConcurrent = 3;
+  final inflight = <Future<void>>[];
+
+    for (final item in _localAnimeItems) {
+      final id = item.animeId;
+      if (_localImageCache.containsKey(id)) continue;
+
+      Future<void> task() async {
+        try {
+          final detail = await BangumiService.instance.getAnimeDetails(id);
+          final img = detail.imageUrl;
+          if (img.isNotEmpty) {
+            _localImageCache[id] = img;
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('$_localPrefsKeyPrefix$id', img);
+            } catch (_) {}
+            if (mounted) {
+              // 局部更新对应项的图片字段
+              final idx = _localAnimeItems.indexWhere((e) => e.animeId == id);
+              if (idx != -1) {
+                _localAnimeItems[idx] = LocalAnimeItem(
+                  animeId: _localAnimeItems[idx].animeId,
+                  animeName: _localAnimeItems[idx].animeName,
+                  imageUrl: img,
+                  backdropImageUrl: img,
+                  addedTime: _localAnimeItems[idx].addedTime,
+                  latestEpisode: _localAnimeItems[idx].latestEpisode,
+                );
+              }
+            }
+          }
+        } catch (e) {
+          // 静默失败，避免刷屏
+        }
+      }
+
+      final fut = task();
+      inflight.add(fut);
+      fut.whenComplete(() {
+        inflight.remove(fut);
+      });
+      if (inflight.length >= maxConcurrent) {
+        try { await Future.any(inflight); } catch (_) {}
+      }
+    }
+
+    try { await Future.wait(inflight); } catch (_) {}
+    if (mounted) setState(() {});
+    _isLoadingLocalImages = false;
   }
 
   @override
@@ -1838,45 +1877,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     });
   }
 
-  // 创建本地动画项目的辅助方法
-  Future<LocalAnimeItem> _createLocalAnimeItem(int animeId, WatchHistoryItem latestEpisode) async {
-    String? imageUrl;
-    String? backdropImageUrl;
-    
-    // 尝试从Bangumi获取图片信息
-    try {
-      final bangumiService = BangumiService.instance;
-      final animeDetail = await bangumiService.getAnimeDetails(animeId);
-      imageUrl = animeDetail.imageUrl;
-      backdropImageUrl = animeDetail.imageUrl; // Bangumi通常只有一个图片，用作背景
-    } catch (e) {
-      debugPrint('获取Bangumi图片信息失败 (animeId: $animeId): $e');
-      // 如果Bangumi失败，可以尝试弹弹play
-      // 这里暂时留空，后续可以扩展
-    }
-    
-    // 获取文件的修改时间作为添加时间
-    DateTime addedTime = latestEpisode.lastWatchTime; // 默认使用观看时间
-    try {
-      final file = File(latestEpisode.filePath);
-      if (file.existsSync()) {
-        final stat = file.statSync();
-        addedTime = stat.modified;
-      }
-    } catch (e) {
-      debugPrint('获取文件修改时间失败: $e');
-      // 保留默认值
-    }
-    
-    return LocalAnimeItem(
-      animeId: animeId,
-      animeName: latestEpisode.animeName.isNotEmpty ? latestEpisode.animeName : '未知动画',
-      imageUrl: imageUrl,
-      backdropImageUrl: backdropImageUrl,
-      addedTime: addedTime,
-      latestEpisode: latestEpisode,
-    );
-  }
+  // 已移除旧的创建本地动画项目的重量级方法，改为快速路径+后台补齐。
 
   void _navigateToJellyfinDetail(String jellyfinId) {
     JellyfinDetailPage.show(context, jellyfinId).then((result) {
