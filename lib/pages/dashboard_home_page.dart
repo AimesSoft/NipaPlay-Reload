@@ -46,6 +46,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   List<RecommendedItem> _recommendedItems = [];
   bool _isLoadingRecommended = false; // 改为false，避免初始阻止加载
 
+  // 图片缓存 - 存储下载好的图片对象
+  final Map<String, Image> _cachedImages = {}; // imageUrl -> ui.Image
+
   // 最近添加数据 - 按媒体库分类
   Map<String, List<JellyfinMediaItem>> _recentJellyfinItemsByLibrary = {};
   Map<String, List<EmbyMediaItem>> _recentEmbyItemsByLibrary = {};
@@ -561,10 +564,14 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           _recommendedItems = finalItems;
           _isLoadingRecommended = false;
         });
+        
         // 推荐内容加载完成后启动自动切换
         if (finalItems.length >= 5) {
           _startAutoSwitch();
         }
+        
+        // 立即开始预加载所有推荐图片
+        _preloadAllRecommendedImages(finalItems);
       }
       debugPrint('推荐内容加载完成，总共 ${finalItems.length} 个项目');
     } catch (e) {
@@ -981,11 +988,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 背景图
-            if (item.backgroundImageUrl != null)
+            // 背景图 - 优先使用缓存的图片
+            if (_cachedImages.containsKey(item.backgroundImageUrl))
+              _cachedImages[item.backgroundImageUrl]!
+            else if (item.backgroundImageUrl != null)
               Image.network(
                 item.backgroundImageUrl!,
-                key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'), // 更具体的key
+                key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
@@ -1081,8 +1090,22 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 ),
               ),
             
-            // 左下角Logo
-            if (item.logoImageUrl != null)
+            // 左下角Logo - 优先使用缓存的图片
+            if (_cachedImages.containsKey(item.logoImageUrl))
+              Positioned(
+                left: 32,
+                bottom: 32,
+                child: ClipRect(
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      maxWidth: 200,
+                      maxHeight: 80,
+                    ),
+                    child: _cachedImages[item.logoImageUrl]!,
+                  ),
+                ),
+              )
+            else if (item.logoImageUrl != null)
               Positioned(
                 left: 32,
                 bottom: 32,
@@ -1192,11 +1215,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 背景图
-            if (item.backgroundImageUrl != null)
+            // 背景图 - 优先使用缓存的图片
+            if (_cachedImages.containsKey(item.backgroundImageUrl))
+              _cachedImages[item.backgroundImageUrl]!
+            else if (item.backgroundImageUrl != null)
               Image.network(
                 item.backgroundImageUrl!,
-                key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'), // 更具体的key
+                key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
@@ -1297,7 +1322,20 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               ),
             
             // 左下角小Logo（如果有的话）
-            if (item.logoImageUrl != null)
+            // Logo图片 - 优先使用缓存
+            if (_cachedImages.containsKey(item.logoImageUrl))
+              Positioned(
+                left: 8,
+                bottom: 8,
+                child: Container(
+                  constraints: const BoxConstraints(
+                    maxWidth: 120,
+                    maxHeight: 45,
+                  ),
+                  child: _cachedImages[item.logoImageUrl]!,
+                ),
+              )
+            else if (item.logoImageUrl != null)
               Positioned(
                 left: 8,
                 bottom: 8,
@@ -2126,6 +2164,136 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     } catch (e) {
       debugPrint('从Bangumi API获取图片失败 (bangumiId: $bangumiId): $e');
       return null;
+    }
+  }
+
+  // 预加载所有推荐图片（下载图片对象而不是依赖URL）
+  Future<void> _preloadAllRecommendedImages(List<RecommendedItem> items) async {
+    debugPrint('开始预加载推荐图片...');
+    
+    if (items.length < 7) {
+      debugPrint('推荐项目不足7个，跳过预加载');
+      return;
+    }
+    
+    // 优先加载用户当前能看到的图片：
+    // 1. Hero Banner 当前页的背景图和 Logo
+    // 2. 右侧两个小卡片的图片
+    final currentItem = items[_currentHeroBannerIndex]; // 当前显示的 Hero Banner
+    final rightCard1 = items[5]; // 右上小卡片
+    final rightCard2 = items[6]; // 右下小卡片
+    
+    // 立即加载当前屏幕可见的图片
+    final priorityFutures = <Future<void>>[];
+    
+    // 当前 Hero Banner 的背景图和 Logo
+    if (currentItem.backgroundImageUrl != null && 
+        currentItem.backgroundImageUrl!.isNotEmpty &&
+        !currentItem.backgroundImageUrl!.contains('assets/') &&
+        !_cachedImages.containsKey(currentItem.backgroundImageUrl!)) {
+      priorityFutures.add(_downloadAndCacheImage(currentItem.backgroundImageUrl!, 'background_${currentItem.id}'));
+    }
+    
+    if (currentItem.logoImageUrl != null && 
+        currentItem.logoImageUrl!.isNotEmpty &&
+        !currentItem.logoImageUrl!.contains('assets/') &&
+        !_cachedImages.containsKey(currentItem.logoImageUrl!)) {
+      priorityFutures.add(_downloadAndCacheImage(currentItem.logoImageUrl!, 'logo_${currentItem.id}'));
+    }
+    
+    // 右侧两个小卡片的图片
+    for (final card in [rightCard1, rightCard2]) {
+      if (card.backgroundImageUrl != null && 
+          card.backgroundImageUrl!.isNotEmpty &&
+          !card.backgroundImageUrl!.contains('assets/') &&
+          !_cachedImages.containsKey(card.backgroundImageUrl!)) {
+        priorityFutures.add(_downloadAndCacheImage(card.backgroundImageUrl!, 'background_${card.id}'));
+      }
+      
+      if (card.logoImageUrl != null && 
+          card.logoImageUrl!.isNotEmpty &&
+          !card.logoImageUrl!.contains('assets/') &&
+          !_cachedImages.containsKey(card.logoImageUrl!)) {
+        priorityFutures.add(_downloadAndCacheImage(card.logoImageUrl!, 'logo_${card.id}'));
+      }
+    }
+    
+    // 等待优先图片加载完成
+    if (priorityFutures.isNotEmpty) {
+      try {
+        await Future.wait(priorityFutures, eagerError: false);
+        debugPrint('优先图片加载完成，共加载了 ${priorityFutures.length} 张可见图片');
+        if (mounted) setState(() {}); // 立即更新可见图片
+      } catch (e) {
+        debugPrint('加载优先图片时发生错误: $e');
+      }
+    }
+    
+    // 然后异步加载其他 Hero Banner 页面的图片
+    final backgroundFutures = <Future<void>>[];
+    
+    for (int i = 0; i < 5; i++) { // Hero Banner 只有前5个
+      final item = items[i];
+      
+      // 跳过已经加载的当前项目和右侧卡片项目
+      if (i == _currentHeroBannerIndex || i == 5 || i == 6) continue;
+      
+      // 背景图片
+      if (item.backgroundImageUrl != null && 
+          item.backgroundImageUrl!.isNotEmpty &&
+          !item.backgroundImageUrl!.contains('assets/') &&
+          !_cachedImages.containsKey(item.backgroundImageUrl!)) {
+        backgroundFutures.add(_downloadAndCacheImage(item.backgroundImageUrl!, 'background_${item.id}'));
+      }
+      
+      // Logo图片
+      if (item.logoImageUrl != null && 
+          item.logoImageUrl!.isNotEmpty &&
+          !item.logoImageUrl!.contains('assets/') &&
+          !_cachedImages.containsKey(item.logoImageUrl!)) {
+        backgroundFutures.add(_downloadAndCacheImage(item.logoImageUrl!, 'logo_${item.id}'));
+      }
+    }
+    
+    // 异步加载其他图片，不阻塞UI
+    if (backgroundFutures.isNotEmpty) {
+      Future.wait(backgroundFutures, eagerError: false).then((_) {
+        debugPrint('其他推荐图片预加载完成，共预加载了 ${backgroundFutures.length} 张图片');
+        if (mounted) setState(() {}); // 更新其他图片
+      }).catchError((e) {
+        debugPrint('预加载其他图片时发生错误: $e');
+      });
+    }
+  }
+
+  // 下载并缓存单个图片
+  Future<void> _downloadAndCacheImage(String imageUrl, String cacheKey) async {
+    try {
+      debugPrint('下载图片: $imageUrl');
+      
+      final response = await http.get(Uri.parse(imageUrl)).timeout(
+        const Duration(seconds: 10),
+      );
+      
+      if (response.statusCode == 200) {
+        // 解码图片数据
+        final codec = await instantiateImageCodec(response.bodyBytes);
+        final frame = await codec.getNextFrame();
+        final image = frame.image;
+        
+        // 缓存图片对象
+        _cachedImages[imageUrl] = Image.memory(
+          response.bodyBytes,
+          key: ValueKey(cacheKey),
+          fit: BoxFit.cover,
+        );
+        
+        debugPrint('图片下载并缓存成功: $imageUrl (${image.width}x${image.height})');
+      } else {
+        debugPrint('图片下载失败: $imageUrl, 状态码: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('下载图片时发生错误: $imageUrl, 错误: $e');
     }
   }
 
