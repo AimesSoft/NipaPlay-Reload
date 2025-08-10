@@ -225,7 +225,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                             right: Radius.circular(30),
                           ),
                           child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                            filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 50 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 50 : 0),
                             child: Container(
                               decoration: BoxDecoration(
                                 borderRadius: const BorderRadius.horizontal(

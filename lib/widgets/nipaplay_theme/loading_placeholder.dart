@@ -65,7 +65,7 @@ class _LoadingPlaceholderState extends State<LoadingPlaceholder>
           child: ClipRRect(
             borderRadius: BorderRadius.circular(widget.borderRadius),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 8 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 8 : 0),
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(_opacityAnimation.value * 0.1),

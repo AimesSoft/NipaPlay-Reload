@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:provider/provider.dart';
 // import 'package:nipaplay/utils/globals.dart' as globals; // globals is not used in this snippet
 
 class AnimeInfoWidget extends StatefulWidget {
@@ -48,7 +50,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                 width: double.infinity,
                 height: 48,
                 borderRadius: 24,
-                blur: 20,
+                blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
                 alignment: Alignment.center,
                 border: 1,
                 linearGradient: LinearGradient(

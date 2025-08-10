@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'blur_snackbar.dart';
@@ -67,7 +69,7 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
                 width: 48,
                 height: 48,
                 borderRadius: 25,
-                blur: 30,
+               blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 30 : 0,
                 alignment: Alignment.center,
                 border: 1,
                 linearGradient: LinearGradient(

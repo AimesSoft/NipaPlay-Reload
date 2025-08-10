@@ -183,7 +183,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0),
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),

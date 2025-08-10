@@ -988,6 +988,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   Widget build(BuildContext context) {
+    final bool enableBlur = _appearanceSettings?.enableWidgetBlurEffect ?? true;
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.3),
       body: Padding(
@@ -997,7 +998,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           width: double.infinity,
           height: double.infinity,
           borderRadius: 15,
-          blur: 25,
+          blur: enableBlur ? 25 : 0,
           alignment: Alignment.center,
           border: 0.5,
           linearGradient: LinearGradient(
@@ -1170,6 +1171,9 @@ class _HoverableTagState extends State<_HoverableTag> {
 
   @override
   Widget build(BuildContext context) {
+    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
+    final bool enableBlur = appearanceSettings.enableWidgetBlurEffect;
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
@@ -1185,7 +1189,7 @@ class _HoverableTagState extends State<_HoverableTag> {
                 width: double.infinity,
                 height: double.infinity,
                 borderRadius: 20,
-                blur: 20,
+                blur: enableBlur ? 20 : 0,
                 alignment: Alignment.center,
                 border: 1,
                 linearGradient: LinearGradient(

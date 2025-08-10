@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class RatingDialog extends StatefulWidget {
   final String animeTitle;
@@ -93,7 +95,7 @@ class _RatingDialogState extends State<RatingDialog> {
               width: double.infinity,
               height: double.infinity,
               borderRadius: 15,
-              blur: 25,
+              blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
               alignment: Alignment.center,
               border: 1,
               linearGradient: LinearGradient(

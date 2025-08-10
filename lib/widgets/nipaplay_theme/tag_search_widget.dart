@@ -16,6 +16,7 @@ import 'dart:io';
 import 'package:nipaplay/main.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class TagSearchModal extends StatefulWidget {
   final String? prefilledTag;
@@ -406,7 +407,7 @@ class _TagSearchModalState extends State<TagSearchModal>
         width: double.infinity,
         height: double.infinity,
         borderRadius: 20,
-        blur: 20,
+        blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
         alignment: Alignment.center,
         border: 1,
         linearGradient: LinearGradient(

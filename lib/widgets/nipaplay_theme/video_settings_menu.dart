@@ -523,7 +523,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(15),
                         child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                          filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
                           child: Container(
                             decoration: BoxDecoration(
                               color: backgroundColor,

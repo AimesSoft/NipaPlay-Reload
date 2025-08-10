@@ -29,7 +29,7 @@ class SeekIndicator extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12.0),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 25.0, sigmaY: 25.0),
+                  filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
                     decoration: BoxDecoration(

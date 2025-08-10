@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
 import 'package:nipaplay/utils/shortcut_tooltip_manager.dart'; // 使用新的快捷键提示管理器
 
@@ -46,7 +48,7 @@ class _SendDanmakuButtonState extends State<SendDanmakuButton> {
             width: 48,
             height: 48,
             borderRadius: 25,
-            blur: 30,
+            blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 30 : 0,
             alignment: Alignment.center,
             border: 1,
             linearGradient: LinearGradient(

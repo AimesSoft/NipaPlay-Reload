@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 import 'typing_text.dart'; // 重新导入TypingText
 import 'dart:async'; // 添加Timer的导入
 
@@ -108,8 +110,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
             child: GlassmorphicContainer(
               width: effectiveWidth,
               height: widget.height ?? 100, // 使用固定高度
-              borderRadius: widget.borderRadius,
-              blur: widget.blur,
+              borderRadius: widget.borderRadius,blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
               alignment: Alignment.center,
               border: widget.borderWidth,
               linearGradient: LinearGradient(

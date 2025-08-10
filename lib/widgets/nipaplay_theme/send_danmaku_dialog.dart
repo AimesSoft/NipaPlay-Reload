@@ -1,8 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:provider/provider.dart';
 
 class SendDanmakuDialogContent extends StatefulWidget {
   final int episodeId;
@@ -309,7 +311,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                           width: 120,
                           height: 50,
                           borderRadius: 25,
-                          blur: 20,
+                          blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
                           alignment: Alignment.center,
                           border: 2,
                           linearGradient: LinearGradient(
