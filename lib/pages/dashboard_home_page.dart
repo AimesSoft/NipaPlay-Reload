@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -1418,16 +1417,24 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                '继续播放',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+            Row(
+              children: [
+                const Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      '继续播放',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                if (validHistory.isNotEmpty)
+                  _buildScrollButtons(_continueWatchingScrollController, 292), // 卡片宽度280 + 12边距
+              ],
             ),
             const SizedBox(height: 16),
             if (validHistory.isEmpty)
@@ -1448,31 +1455,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             else
               SizedBox(
                 height: 280, // 增加高度以适应更大的卡片样式
-                child: Listener(
-                  onPointerSignal: (event) {
-                    // 支持鼠标滚轮滚动
-                    if (event is PointerScrollEvent) {
-                      final scrollDelta = event.scrollDelta.dy;
-                      _continueWatchingScrollController.animateTo(
-                        _continueWatchingScrollController.offset + scrollDelta,
-                        duration: const Duration(milliseconds: 100),
-                        curve: Curves.ease,
-                      );
-                    }
+                child: ListView.builder(
+                  controller: _continueWatchingScrollController,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: math.min(validHistory.length, 10),
+                  itemBuilder: (context, index) {
+                    final item = validHistory[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: _buildContinueWatchingCard(item),
+                    );
                   },
-                  child: ListView.builder(
-                    controller: _continueWatchingScrollController,
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: math.min(validHistory.length, 10),
-                    itemBuilder: (context, index) {
-                      final item = validHistory[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: _buildContinueWatchingCard(item),
-                      );
-                    },
-                  ),
                 ),
               ),
           ],
@@ -1570,45 +1564,40 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+        Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ),
-          ),
+            if (items.isNotEmpty)
+              _buildScrollButtons(scrollController, 162), // 卡片宽度150 + 12边距
+          ],
         ),
         const SizedBox(height: 16),
         SizedBox(
           height: 280,
-          child: Listener(
-            onPointerSignal: (event) {
-              // 支持鼠标滚轮滚动
-              if (event is PointerScrollEvent) {
-                final scrollDelta = event.scrollDelta.dy;
-                scrollController.animateTo(
-                  scrollController.offset + scrollDelta,
-                  duration: const Duration(milliseconds: 100),
-                  curve: Curves.ease,
-                );
-              }
+          child: ListView.builder(
+            controller: scrollController,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _buildMediaCard(item, onItemTap),
+              );
             },
-            child: ListView.builder(
-              controller: scrollController,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _buildMediaCard(item, onItemTap),
-                );
-              },
-            ),
           ),
         ),
       ],
@@ -2190,6 +2179,124 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       // 不打印验证失败日志，减少控制台输出
       return false;
     }
+  }
+  
+  // 构建滚动按钮
+  Widget _buildScrollButtons(ScrollController controller, double itemWidth) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, child) {
+              final canScrollLeft = controller.hasClients && controller.offset > 0;
+              return _buildScrollButton(
+                icon: Icons.chevron_left,
+                onTap: canScrollLeft ? () => _scrollToPrevious(controller, itemWidth) : null,
+                enabled: canScrollLeft,
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, child) {
+              final canScrollRight = controller.hasClients && 
+                  controller.offset < controller.position.maxScrollExtent;
+              return _buildScrollButton(
+                icon: Icons.chevron_right,
+                onTap: canScrollRight ? () => _scrollToNext(controller, itemWidth) : null,
+                enabled: canScrollRight,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // 构建单个滚动按钮
+  Widget _buildScrollButton({
+    required IconData icon,
+    required VoidCallback? onTap,
+    bool enabled = true,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: enabled 
+                ? Colors.white.withOpacity(0.2)
+                : Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: enabled
+                  ? Colors.white.withOpacity(0.3)
+                  : Colors.white.withOpacity(0.15),
+              width: 1,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: enabled ? onTap : null,
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: enabled 
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.5),
+                  size: 18,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  // 滚动到上一页
+  void _scrollToPrevious(ScrollController controller, double itemWidth) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final visibleWidth = screenWidth - 32; // 减去左右边距
+    final itemsPerPage = (visibleWidth / itemWidth).floor();
+    final scrollDistance = itemsPerPage * itemWidth;
+    
+    final targetOffset = math.max(0.0, controller.offset - scrollDistance);
+    
+    controller.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+  
+  // 滚动到下一页
+  void _scrollToNext(ScrollController controller, double itemWidth) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final visibleWidth = screenWidth - 32; // 减去左右边距
+    final itemsPerPage = (visibleWidth / itemWidth).floor();
+    final scrollDistance = itemsPerPage * itemWidth;
+    
+    final targetOffset = controller.offset + scrollDistance;
+    final maxScrollExtent = controller.position.maxScrollExtent;
+    
+    // 如果目标位置超过了最大滚动范围，就滚动到最大位置
+    final finalTargetOffset = targetOffset > maxScrollExtent ? maxScrollExtent : targetOffset;
+    
+    controller.animateTo(
+      finalTargetOffset,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 }
 
