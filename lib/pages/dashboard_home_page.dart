@@ -13,9 +13,11 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
@@ -505,15 +507,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             String subtitle = '暂无简介信息';
             String? backgroundImageUrl;
             
-            // 尝试获取Bangumi详细信息
+            // 尝试获取高清图片和详细信息
             if (item.animeId != null) {
               try {
+                // 首先从弹弹play获取详细信息和bangumi ID
                 final bangumiService = BangumiService.instance;
                 final animeDetail = await bangumiService.getAnimeDetails(item.animeId!);
                 subtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : '暂无简介信息';
-                backgroundImageUrl = animeDetail.imageUrl;
+                
+                // 尝试获取高清图片
+                backgroundImageUrl = await _getHighQualityImage(item.animeId!, animeDetail);
               } catch (e) {
-                debugPrint('获取Bangumi详细信息失败 (animeId: ${item.animeId}): $e');
+                debugPrint('获取本地媒体详细信息失败 (animeId: ${item.animeId}): $e');
               }
             }
             
@@ -2014,6 +2019,114 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         ),
       ),
     );
+  }
+
+  
+  // 获取高清图片的方法
+  Future<String?> _getHighQualityImage(int animeId, BangumiAnime animeDetail) async {
+    try {
+      // 首先尝试从弹弹play获取bangumi ID
+      String? bangumiId = await _getBangumiIdFromDandanplay(animeId);
+      
+      if (bangumiId != null && bangumiId.isNotEmpty) {
+        // 如果获取到bangumi ID，尝试从Bangumi API获取高清图片
+        final bangumiImageUrl = await _getBangumiHighQualityImage(bangumiId);
+        if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
+          debugPrint('从Bangumi API获取到高清图片: $bangumiImageUrl');
+          return bangumiImageUrl;
+        }
+      }
+      
+      // 如果Bangumi API失败，回退到弹弹play的图片
+      if (animeDetail.imageUrl.isNotEmpty) {
+        debugPrint('回退到弹弹play图片: ${animeDetail.imageUrl}');
+        return animeDetail.imageUrl;
+      }
+      
+      debugPrint('未能获取到任何图片 (animeId: $animeId)');
+      return null;
+    } catch (e) {
+      debugPrint('获取高清图片失败 (animeId: $animeId): $e');
+      // 出错时回退到弹弹play的图片
+      return animeDetail.imageUrl;
+    }
+  }
+  
+  // 从弹弹play API获取bangumi ID
+  Future<String?> _getBangumiIdFromDandanplay(int animeId) async {
+    try {
+      // 使用弹弹play的番剧详情API获取bangumi ID
+      final Map<String, dynamic> result = await DandanplayService.getBangumiDetails(animeId);
+      
+      if (result['success'] == true && result['bangumi'] != null) {
+        final bangumi = result['bangumi'] as Map<String, dynamic>;
+        
+        // 检查是否有bangumiUrl，从中提取ID
+        final String? bangumiUrl = bangumi['bangumiUrl'] as String?;
+        if (bangumiUrl != null && bangumiUrl.contains('bangumi.tv/subject/')) {
+          // 从URL中提取bangumi ID: https://bangumi.tv/subject/123456
+          final RegExp regex = RegExp(r'bangumi\.tv/subject/(\d+)');
+          final match = regex.firstMatch(bangumiUrl);
+          if (match != null) {
+            final bangumiId = match.group(1);
+            debugPrint('从弹弹play获取到bangumi ID: $bangumiId');
+            return bangumiId;
+          }
+        }
+        
+        // 也检查是否直接有bangumiId字段
+        final dynamic directBangumiId = bangumi['bangumiId'];
+        if (directBangumiId != null) {
+          final String bangumiIdStr = directBangumiId.toString();
+          if (bangumiIdStr.isNotEmpty && bangumiIdStr != '0') {
+            debugPrint('从弹弹play直接获取到bangumi ID: $bangumiIdStr');
+            return bangumiIdStr;
+          }
+        }
+      }
+      
+      debugPrint('弹弹play未返回有效的bangumi ID (animeId: $animeId)');
+      return null;
+    } catch (e) {
+      debugPrint('从弹弹play获取bangumi ID失败 (animeId: $animeId): $e');
+      return null;
+    }
+  }
+  
+  // 从Bangumi API获取高清图片
+  Future<String?> _getBangumiHighQualityImage(String bangumiId) async {
+    try {
+      // 使用Bangumi API的图片接口获取large尺寸的图片
+      // GET /v0/subjects/{subject_id}/image?type=large
+      final String imageApiUrl = 'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large';
+      
+      debugPrint('请求Bangumi图片API: $imageApiUrl');
+      
+      final response = await http.head(
+        Uri.parse(imageApiUrl),
+        headers: {
+          'User-Agent': 'NipaPlay/1.0',
+        },
+      ).timeout(const Duration(seconds: 5));
+      
+      if (response.statusCode == 302) {
+        // Bangumi API返回302重定向到实际图片URL
+        final String? location = response.headers['location'];
+        if (location != null && location.isNotEmpty) {
+          debugPrint('Bangumi API重定向到: $location');
+          return location;
+        }
+      } else if (response.statusCode == 200) {
+        // 有些情况下可能直接返回200
+        return imageApiUrl;
+      }
+      
+      debugPrint('Bangumi图片API响应异常: ${response.statusCode}');
+      return null;
+    } catch (e) {
+      debugPrint('从Bangumi API获取图片失败 (bangumiId: $bangumiId): $e');
+      return null;
+    }
   }
 
   // 辅助方法：尝试获取Jellyfin图片 - 并行验证版本
