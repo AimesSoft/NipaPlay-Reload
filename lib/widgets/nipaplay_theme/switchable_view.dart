@@ -72,7 +72,13 @@ class _SwitchableViewState extends State<SwitchableView> {
         return IndexedStack(
           index: _currentIndex,
           sizing: StackFit.expand,
-          children: widget.children,
+          children: List.generate(
+            widget.children.length,
+            (i) => TickerMode(
+              enabled: i == _currentIndex,
+              child: widget.children[i],
+            ),
+          ),
         );
       }
       
@@ -99,7 +105,13 @@ class _SwitchableViewState extends State<SwitchableView> {
       return IndexedStack(
         index: _currentIndex,
         sizing: StackFit.expand,
-        children: widget.children,
+        children: List.generate(
+          widget.children.length,
+          (i) => TickerMode(
+            enabled: i == _currentIndex,
+            child: widget.children[i],
+          ),
+        ),
       );
     }
   }
