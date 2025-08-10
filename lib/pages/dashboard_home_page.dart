@@ -46,7 +46,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
   // 推荐内容数据
   List<RecommendedItem> _recommendedItems = [];
-  bool _isLoadingRecommended = false; // 改为false，避免初始阻止加载
+  bool _isLoadingRecommended = false;
+  
+  // 待处理的刷新请求
+  bool _pendingRefreshAfterLoad = false;
+  String _pendingRefreshReason = '';
 
   // 图片缓存 - 存储下载好的图片对象
   final Map<String, Image> _cachedImages = {}; // imageUrl -> ui.Image
@@ -192,9 +196,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
     debugPrint('DashboardHomePage: Jellyfin连接状态变化 - isConnected: ${jellyfinProvider.isConnected}, mounted: $mounted');
+    
     if (jellyfinProvider.isConnected && mounted) {
-      debugPrint('DashboardHomePage: Jellyfin连接状态变化，准备刷新数据');
-      _loadData();
+      if (_isLoadingRecommended) {
+        // 如果正在加载，记录待处理的刷新请求
+        _pendingRefreshAfterLoad = true;
+        _pendingRefreshReason = 'Jellyfin连接完成';
+        debugPrint('DashboardHomePage: 正在加载中，记录Jellyfin刷新请求待稍后处理');
+      } else {
+        // 如果未在加载，直接刷新
+        debugPrint('DashboardHomePage: Jellyfin连接完成，立即刷新数据');
+        _loadData();
+      }
     }
   }
   
@@ -207,9 +220,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
     debugPrint('DashboardHomePage: Emby连接状态变化 - isConnected: ${embyProvider.isConnected}, mounted: $mounted');
+    
     if (embyProvider.isConnected && mounted) {
-      debugPrint('DashboardHomePage: Emby连接状态变化，准备刷新数据');
-      _loadData();
+      if (_isLoadingRecommended) {
+        // 如果正在加载，记录待处理的刷新请求
+        _pendingRefreshAfterLoad = true;
+        _pendingRefreshReason = 'Emby连接完成';
+        debugPrint('DashboardHomePage: 正在加载中，记录Emby刷新请求待稍后处理');
+      } else {
+        // 如果未在加载，直接刷新
+        debugPrint('DashboardHomePage: Emby连接完成，立即刷新数据');
+        _loadData();
+      }
     }
   }
   
@@ -222,9 +244,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
     debugPrint('DashboardHomePage: WatchHistory加载状态变化 - isLoaded: ${watchHistoryProvider.isLoaded}, mounted: $mounted');
+    
     if (watchHistoryProvider.isLoaded && mounted) {
-      debugPrint('DashboardHomePage: WatchHistory加载完成，准备刷新数据');
-      _loadData();
+      if (_isLoadingRecommended) {
+        // 如果正在加载，记录待处理的刷新请求
+        _pendingRefreshAfterLoad = true;
+        _pendingRefreshReason = 'WatchHistory加载完成';
+        debugPrint('DashboardHomePage: 正在加载中，记录WatchHistory刷新请求待稍后处理');
+      } else {
+        // 如果未在加载，直接刷新
+        debugPrint('DashboardHomePage: WatchHistory加载完成，立即刷新数据');
+        _loadData();
+      }
     }
   }
   
@@ -340,9 +371,15 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Future<void> _loadData() async {
     debugPrint('DashboardHomePage: _loadData 被调用 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
     
-    // 防止重复加载和检查Widget状态
-    if (_isLoadingRecommended || !mounted) {
-      debugPrint('DashboardHomePage: 跳过数据加载 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
+    // 检查Widget状态
+    if (!mounted) {
+      debugPrint('DashboardHomePage: Widget已销毁，跳过数据加载');
+      return;
+    }
+    
+    // 如果正在加载，先检查是否需要强制重新加载
+    if (_isLoadingRecommended) {
+      debugPrint('DashboardHomePage: 已在加载中，跳过重复调用 - _isLoadingRecommended: $_isLoadingRecommended');
       return;
     }
     
@@ -355,6 +392,21 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     // 再次检查Widget状态
     if (mounted) {
       debugPrint('DashboardHomePage: 数据加载完成');
+    }
+  }
+
+  // 检查并处理待处理的刷新请求
+  void _checkPendingRefresh() {
+    if (_pendingRefreshAfterLoad && mounted) {
+      debugPrint('DashboardHomePage: 处理待处理的刷新请求 - ${_pendingRefreshReason}');
+      _pendingRefreshAfterLoad = false;
+      _pendingRefreshReason = '';
+      // 使用短延迟避免连续调用
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && !_isLoadingRecommended) {
+          _loadData();
+        }
+      });
     }
   }
 
@@ -577,6 +629,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         
         // 立即开始预加载所有推荐图片
         _preloadAllRecommendedImages(finalItems);
+        
+        // 检查是否有待处理的刷新请求
+        _checkPendingRefresh();
       }
       debugPrint('推荐内容加载完成，总共 ${finalItems.length} 个项目');
     } catch (e) {
@@ -585,6 +640,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         setState(() {
           _isLoadingRecommended = false;
         });
+        
+        // 检查是否有待处理的刷新请求
+        _checkPendingRefresh();
       }
     }
   }
