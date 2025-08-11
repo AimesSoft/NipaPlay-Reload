@@ -46,6 +46,19 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
     _initializeTicker();
   }
 
+  // 安全读取 video_player 的纹理ID，避免直接依赖受限API
+  int? _readTextureId() {
+    try {
+      final ctrl = _controller;
+      if (ctrl == null) return null;
+      final dynamic dyn = ctrl;
+      final dynamic tid = dyn.textureId; // 通过dynamic绕过可见性限制
+      if (tid is int?) return tid;
+      if (tid is int) return tid;
+    } catch (_) {}
+    return null;
+  }
+
   @override
   Ticker createTicker(TickerCallback onTick) {
     return Ticker(onTick);
@@ -151,6 +164,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         case PlayerPlaybackState.stopped:
           _controller!.pause();
           _ticker?.stop(); // 停止是明确的，可以立即停止Ticker
+          _wasPlaying = false; // 复位播放状态标志，避免监听器误判
           _controller!.seekTo(Duration.zero);
           _interpolatedPosition = Duration.zero;
           _lastActualPosition = Duration.zero;
@@ -195,16 +209,16 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         // 完全取消所有监听器
         _controller!.removeListener(_controllerListener);
         _ticker?.stop();
+  _wasPlaying = false; // 确保复位，避免后续误触发
         
         // 清空_textureId，这样UI会提前知道资源已释放
         _textureIdNotifier.value = null;
         
         print('[VideoPlayerAdapter] 开始释放控制器资源');
-        _controller!.dispose();
+  _controller!.dispose();
         
-        // 让它立即被标记为null，帮助垃圾回收
-        final oldController = _controller;
-        _controller = null;
+  // 立即置空，帮助垃圾回收
+  _controller = null;
         
         // 重置位置
         _interpolatedPosition = Duration.zero;
@@ -272,11 +286,12 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         await _controller!.pause();
         
         print('[VideoPlayerAdapter] 控制器初始化成功，更新媒体信息');
-        _updateMediaInfo();
-        _textureIdNotifier.value = _controller!.textureId;
+  _updateMediaInfo();
+  final tid = _readTextureId();
+  _textureIdNotifier.value = tid;
         
-        print('[VideoPlayerAdapter] 纹理ID: ${_controller!.textureId}');
-        return _controller!.textureId;
+  print('[VideoPlayerAdapter] 纹理ID: $tid');
+  return tid;
       } catch (e) {
         print('[VideoPlayerAdapter] 初始化失败: $e');
         if (e is PlatformException &&
@@ -305,7 +320,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
       }
     }
     
-    return _controller!.textureId;
+  return _readTextureId();
   }
 
   void _updateMediaInfo() {
@@ -426,19 +441,19 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         throw Exception('控制器为空，无法初始化');
       }
       
-      _updateMediaInfo();
-      _textureIdNotifier.value = _controller!.textureId;
+    _updateMediaInfo();
+    _textureIdNotifier.value = _readTextureId();
       if (_controller != null) {
         await _controller!.pause();
         print('[VideoPlayerAdapter] 初始化后将视频设置为暂停状态');
       }
     } catch (e) {
-      if (e is PlatformException &&
-          (e.message?.contains('无法打开: 不支持此媒体的格式') == true ||
-           e.message?.contains('OSStatus错误-12847') == true ||
-           e.message?.contains('无法打开: 此媒体可能已损坏') == true ||
-           e.message?.contains('OSStatus错误-12848') == true 
-          )) {
+    if (e is PlatformException &&
+      (e.message?.contains('无法打开: 不支持此媒体的格式') == true ||
+       e.message?.contains('OSStatus错误-12847') == true ||
+       e.message?.contains('无法打开: 此媒体可能已损坏') == true ||
+       e.message?.contains('OSStatus错误-12848') == true 
+      )) {
         String errMsg = "视频文件可能已损坏或无法读取。";
         if (e.message?.contains('不支持此媒体的格式') == true || e.message?.contains('OSStatus错误-12847') == true) {
           errMsg = "当前播放内核不支持此视频格式。";
@@ -464,7 +479,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
           if (_controller != null) {
             await _controller!.initialize();
             _updateMediaInfo();
-            _textureIdNotifier.value = _controller!.textureId;
+            _textureIdNotifier.value = _readTextureId();
             await _controller!.pause();
             print('[VideoPlayerAdapter] 恢复成功: 控制器重建并初始化完成');
             return;
@@ -492,6 +507,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   @override
   void dispose() {
     _ticker?.dispose();
+  _wasPlaying = false; // 最终复位
     _disposeController();
   }
 
@@ -516,7 +532,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
     
     // 首先尝试查找与当前媒体文件关联的观看记录，看看是否有animeId
     try {
-      final appDir = await StorageService.getAppStorageDirectory();
+  final appDir = await StorageService.getAppStorageDirectory();
       final videoFileName = _mediaPath.split('/').last;
       
       // 1. 首先尝试从WatchHistoryDatabase获取animeId
@@ -816,7 +832,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         if (_controller != null && !_controller!.value.isInitialized) {
           // 尝试预初始化但不等待结果，以提高用户体验
           _controller!.initialize().then((_) {
-            _textureIdNotifier.value = _controller!.textureId;
+            _textureIdNotifier.value = _readTextureId();
             _updateMediaInfo();
           }).catchError((e) {
             print('[VideoPlayerAdapter] 控制器后台初始化失败: $e');
