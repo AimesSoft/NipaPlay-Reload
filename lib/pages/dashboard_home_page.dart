@@ -649,38 +649,62 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       // 第一步：快速收集所有候选项目（只收集基本信息）
       List<dynamic> allCandidates = [];
 
-      // 从Jellyfin收集候选项目
+      // 从Jellyfin收集候选项目（按媒体库并行）
       final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
       if (jellyfinProvider.isConnected) {
         final jellyfinService = JellyfinService.instance;
-        
+        final jellyfinFutures = <Future<List<JellyfinMediaItem>>>[];
+        final jellyfinLibNames = <String>[];
         for (final library in jellyfinService.availableLibraries) {
           if (jellyfinService.selectedLibraryIds.contains(library.id)) {
-            try {
-              final libraryItems = await jellyfinService.getRandomMediaItemsByLibrary(library.id, limit: 50);
-              allCandidates.addAll(libraryItems);
-              debugPrint('从Jellyfin媒体库 ${library.name} 收集到 ${libraryItems.length} 个候选项目');
-            } catch (e) {
-              debugPrint('获取Jellyfin媒体库 ${library.name} 随机内容失败: $e');
-            }
+            jellyfinLibNames.add(library.name);
+            jellyfinFutures.add(
+              jellyfinService
+                  .getRandomMediaItemsByLibrary(library.id, limit: 50)
+                  .then((items) {
+                    debugPrint('从Jellyfin媒体库 ${library.name} 收集到 ${items.length} 个候选项目');
+                    return items;
+                  })
+                  .catchError((e) {
+                    debugPrint('获取Jellyfin媒体库 ${library.name} 随机内容失败: $e');
+                    return <JellyfinMediaItem>[];
+                  }),
+            );
+          }
+        }
+        if (jellyfinFutures.isNotEmpty) {
+          final results = await Future.wait(jellyfinFutures, eagerError: false);
+          for (final items in results) {
+            allCandidates.addAll(items);
           }
         }
       }
 
-      // 从Emby收集候选项目
+      // 从Emby收集候选项目（按媒体库并行）
       final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
       if (embyProvider.isConnected) {
         final embyService = EmbyService.instance;
-        
+        final embyFutures = <Future<List<EmbyMediaItem>>>[];
         for (final library in embyService.availableLibraries) {
           if (embyService.selectedLibraryIds.contains(library.id)) {
-            try {
-              final libraryItems = await embyService.getRandomMediaItemsByLibrary(library.id, limit: 50);
-              allCandidates.addAll(libraryItems);
-              debugPrint('从Emby媒体库 ${library.name} 收集到 ${libraryItems.length} 个候选项目');
-            } catch (e) {
-              debugPrint('获取Emby媒体库 ${library.name} 随机内容失败: $e');
-            }
+            embyFutures.add(
+              embyService
+                  .getRandomMediaItemsByLibrary(library.id, limit: 50)
+                  .then((items) {
+                    debugPrint('从Emby媒体库 ${library.name} 收集到 ${items.length} 个候选项目');
+                    return items;
+                  })
+                  .catchError((e) {
+                    debugPrint('获取Emby媒体库 ${library.name} 随机内容失败: $e');
+                    return <EmbyMediaItem>[];
+                  }),
+            );
+          }
+        }
+        if (embyFutures.isNotEmpty) {
+          final results = await Future.wait(embyFutures, eagerError: false);
+          for (final items in results) {
+            allCandidates.addAll(items);
           }
         }
       }
@@ -735,41 +759,45 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       final itemFutures = selectedCandidates.map((item) async {
         try {
           if (item is JellyfinMediaItem) {
-            // Jellyfin项目 - 先用基础封面，不等待高清图片
+            // Jellyfin项目 - 首屏即加载 Backdrop/Logo/详情（带验证与回退）
             final jellyfinService = JellyfinService.instance;
-            String? basicImageUrl;
-            try {
-              basicImageUrl = jellyfinService.getImageUrl(item.id);
-            } catch (e) {
-              basicImageUrl = null;
-            }
-            
+            final results = await Future.wait([
+              _tryGetJellyfinImage(jellyfinService, item.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+              _tryGetJellyfinImage(jellyfinService, item.id, ['Logo', 'Thumb']),
+              _getJellyfinItemSubtitle(jellyfinService, item),
+            ]);
+            final backdropUrl = results[0];
+            final logoUrl = results[1];
+            final subtitle = results[2];
+
             return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息',
-              backgroundImageUrl: basicImageUrl,
-              logoImageUrl: null,
+              subtitle: (subtitle?.isNotEmpty == true) ? subtitle! : (item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息'),
+              backgroundImageUrl: backdropUrl,
+              logoImageUrl: logoUrl,
               source: RecommendedItemSource.jellyfin,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
             );
             
           } else if (item is EmbyMediaItem) {
-            // Emby项目 - 先用基础封面，不等待高清图片
+            // Emby项目 - 首屏即加载 Backdrop/Logo/详情（带验证与回退）
             final embyService = EmbyService.instance;
-            String? basicImageUrl;
-            try {
-              basicImageUrl = embyService.getImageUrl(item.id);
-            } catch (e) {
-              basicImageUrl = null;
-            }
-            
+            final results = await Future.wait([
+              _tryGetEmbyImage(embyService, item.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+              _tryGetEmbyImage(embyService, item.id, ['Logo', 'Thumb']),
+              _getEmbyItemSubtitle(embyService, item),
+            ]);
+            final backdropUrl = results[0];
+            final logoUrl = results[1];
+            final subtitle = results[2];
+
             return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息',
-              backgroundImageUrl: basicImageUrl,
-              logoImageUrl: null,
+              subtitle: (subtitle?.isNotEmpty == true) ? subtitle! : (item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息'),
+              backgroundImageUrl: backdropUrl,
+              logoImageUrl: logoUrl,
               source: RecommendedItemSource.emby,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
             );
@@ -861,8 +889,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         _checkPendingRefresh();
       }
       
-      // 第五步：后台异步升级为高清图片
-      _upgradeToHighQualityImages(selectedCandidates, basicItems);
+      // 第五步：后台异步升级为高清图片（仅对本地媒体生效，Jellyfin/Emby已首屏获取完毕）
+      final localCandidates = <dynamic>[];
+      final localBasicItems = <RecommendedItem>[];
+      for (int i = 0; i < selectedCandidates.length && i < basicItems.length; i++) {
+        if (selectedCandidates[i] is WatchHistoryItem) {
+          localCandidates.add(selectedCandidates[i]);
+          localBasicItems.add(basicItems[i]);
+        }
+      }
+      if (localCandidates.isNotEmpty) {
+        _upgradeToHighQualityImages(localCandidates, localBasicItems);
+      }
       
       debugPrint('推荐内容基础加载完成，总共 ${basicItems.length} 个项目，后台正在加载高清图片');
     } catch (e) {
@@ -881,51 +919,55 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Future<void> _loadRecentContent() async {
     debugPrint('DashboardHomePage: 开始加载最近内容');
     try {
-      // 从Jellyfin按媒体库获取最近添加
+      // 从Jellyfin按媒体库获取最近添加（按库并行）
       final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
       if (jellyfinProvider.isConnected) {
         final jellyfinService = JellyfinService.instance;
         _recentJellyfinItemsByLibrary.clear();
-        
-        // 获取选中的媒体库
+        final jfFutures = <Future<void>>[];
         for (final library in jellyfinService.availableLibraries) {
           if (jellyfinService.selectedLibraryIds.contains(library.id)) {
-            try {
-              // 按特定媒体库获取内容
-              final libraryItems = await jellyfinService.getLatestMediaItemsByLibrary(library.id, limit: 25);
-              
-              if (libraryItems.isNotEmpty) {
-                _recentJellyfinItemsByLibrary[library.name] = libraryItems;
-                debugPrint('Jellyfin媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+            jfFutures.add(() async {
+              try {
+                final libraryItems = await jellyfinService.getLatestMediaItemsByLibrary(library.id, limit: 25);
+                if (libraryItems.isNotEmpty) {
+                  _recentJellyfinItemsByLibrary[library.name] = libraryItems;
+                  debugPrint('Jellyfin媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+                }
+              } catch (e) {
+                debugPrint('获取Jellyfin媒体库 ${library.name} 最近内容失败: $e');
               }
-            } catch (e) {
-              debugPrint('获取Jellyfin媒体库 ${library.name} 最近内容失败: $e');
-            }
+            }());
           }
+        }
+        if (jfFutures.isNotEmpty) {
+          await Future.wait(jfFutures, eagerError: false);
         }
       }
 
-      // 从Emby按媒体库获取最近添加
+      // 从Emby按媒体库获取最近添加（按库并行）
       final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
       if (embyProvider.isConnected) {
         final embyService = EmbyService.instance;
         _recentEmbyItemsByLibrary.clear();
-        
-        // 获取选中的媒体库
+        final emFutures = <Future<void>>[];
         for (final library in embyService.availableLibraries) {
           if (embyService.selectedLibraryIds.contains(library.id)) {
-            try {
-              // 按特定媒体库获取内容
-              final libraryItems = await embyService.getLatestMediaItemsByLibrary(library.id, limit: 25);
-              
-              if (libraryItems.isNotEmpty) {
-                _recentEmbyItemsByLibrary[library.name] = libraryItems;
-                debugPrint('Emby媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+            emFutures.add(() async {
+              try {
+                final libraryItems = await embyService.getLatestMediaItemsByLibrary(library.id, limit: 25);
+                if (libraryItems.isNotEmpty) {
+                  _recentEmbyItemsByLibrary[library.name] = libraryItems;
+                  debugPrint('Emby媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+                }
+              } catch (e) {
+                debugPrint('获取Emby媒体库 ${library.name} 最近内容失败: $e');
               }
-            } catch (e) {
-              debugPrint('获取Emby媒体库 ${library.name} 最近内容失败: $e');
-            }
+            }());
           }
+        }
+        if (emFutures.isNotEmpty) {
+          await Future.wait(emFutures, eagerError: false);
         }
       }
 
@@ -2752,54 +2794,108 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
   }
 
-  // 辅助方法：尝试获取Jellyfin图片 - 快速版本，优先返回第一个构建成功的URL
+  // 辅助方法：尝试获取Jellyfin图片 - 带验证与回退，按优先级返回第一个有效URL
   Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
-    // 按优先级顺序尝试构建图片URL，返回第一个成功的
-    for (String imageType in imageTypes) {
+    // 先构建候选URL列表
+    final List<MapEntry<String, String>> candidates = [];
+    for (final imageType in imageTypes) {
       try {
-        String imageUrl;
-        if (imageType == 'Backdrop') {
-          imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
-        } else {
-          imageUrl = service.getImageUrl(itemId, type: imageType);
-        }
-        
-        if (imageUrl.isNotEmpty) {
-          debugPrint('Jellyfin构建${imageType}图片URL成功: ${imageUrl.substring(0, math.min(100, imageUrl.length))}...');
-          return imageUrl; // 直接返回第一个成功构建的URL，不验证
+        final url = imageType == 'Backdrop'
+            ? service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95)
+            : service.getImageUrl(itemId, type: imageType);
+        if (url.isNotEmpty) {
+          candidates.add(MapEntry(imageType, url));
         }
       } catch (e) {
         debugPrint('Jellyfin构建${imageType}图片URL失败: $e');
       }
     }
-    
-    debugPrint('Jellyfin无法构建任何图片URL，尝试类型: ${imageTypes.join(", ")}');
+
+    if (candidates.isEmpty) {
+      debugPrint('Jellyfin无法构建任何图片URL');
+      return null;
+    }
+
+    // 并行验证所有候选URL
+    final validations = await Future.wait(candidates.map((entry) async {
+      final ok = await _validateImageUrl(entry.value);
+      return ok ? entry : null;
+    }));
+
+    // 按优先级返回第一个有效的
+    for (final t in imageTypes) {
+      for (final res in validations) {
+        if (res != null && res.key == t) {
+          debugPrint('Jellyfin获取到${t}有效图片: ${res.value.substring(0, math.min(100, res.value.length))}...');
+          return res.value;
+        }
+      }
+    }
+
+    debugPrint('Jellyfin未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
     return null;
   }
 
-  // 辅助方法：尝试获取Emby图片 - 快速版本，优先返回第一个构建成功的URL
+  // 辅助方法：尝试获取Emby图片 - 带验证与回退，按优先级返回第一个有效URL
   Future<String?> _tryGetEmbyImage(EmbyService service, String itemId, List<String> imageTypes) async {
-    // 按优先级顺序尝试构建图片URL，返回第一个成功的
-    for (String imageType in imageTypes) {
+    final List<MapEntry<String, String>> candidates = [];
+    for (final imageType in imageTypes) {
       try {
-        String imageUrl;
-        if (imageType == 'Backdrop') {
-          imageUrl = service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95);
-        } else {
-          imageUrl = service.getImageUrl(itemId, type: imageType);
-        }
-        
-        if (imageUrl.isNotEmpty) {
-          debugPrint('Emby构建${imageType}图片URL成功: ${imageUrl.substring(0, math.min(100, imageUrl.length))}...');
-          return imageUrl; // 直接返回第一个成功构建的URL，不验证
+        final url = imageType == 'Backdrop'
+            ? service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95)
+            : service.getImageUrl(itemId, type: imageType);
+        if (url.isNotEmpty) {
+          candidates.add(MapEntry(imageType, url));
         }
       } catch (e) {
         debugPrint('Emby构建${imageType}图片URL失败: $e');
       }
     }
-    
-    debugPrint('Emby无法构建任何图片URL，尝试类型: ${imageTypes.join(", ")}');
+
+    if (candidates.isEmpty) {
+      debugPrint('Emby无法构建任何图片URL');
+      return null;
+    }
+
+    final validations = await Future.wait(candidates.map((entry) async {
+      final ok = await _validateImageUrl(entry.value);
+      return ok ? entry : null;
+    }));
+
+    for (final t in imageTypes) {
+      for (final res in validations) {
+        if (res != null && res.key == t) {
+          debugPrint('Emby获取到${t}有效图片: ${res.value.substring(0, math.min(100, res.value.length))}...');
+          return res.value;
+        }
+      }
+    }
+
+    debugPrint('Emby未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
     return null;
+  }
+
+  // 辅助方法：验证图片URL是否有效（HEAD校验，确保非404并且为图片）
+  Future<bool> _validateImageUrl(String url) async {
+    try {
+      final response = await http.head(Uri.parse(url)).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
+      );
+
+      if (response.statusCode != 200) return false;
+      final contentType = response.headers['content-type'];
+      if (contentType == null || !contentType.startsWith('image/')) return false;
+
+      final contentLength = response.headers['content-length'];
+      if (contentLength != null) {
+        final len = int.tryParse(contentLength);
+        if (len != null && len < 100) return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // 辅助方法：获取Jellyfin项目简介
