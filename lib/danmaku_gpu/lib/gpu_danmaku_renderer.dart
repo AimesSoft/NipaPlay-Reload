@@ -132,8 +132,8 @@ class GPUDanmakuRenderer extends CustomPainter with ChangeNotifier {
   /// 更新显示选项
   void updateOptions({GPUDanmakuConfig? newConfig, double? opacity}) {
     bool changed = false;
-    if (newConfig != null && this.config != newConfig) {
-      this.config = newConfig;
+    if (newConfig != null && config != newConfig) {
+      config = newConfig;
       changed = true;
     }
     if (opacity != null && this.opacity != opacity) {

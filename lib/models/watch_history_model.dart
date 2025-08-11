@@ -109,6 +109,13 @@ class WatchHistoryManager {
   static final List<WatchHistoryItem> _cachedItems = []; // 添加内存缓存
   static DateTime _lastWriteTime = DateTime.now(); // 记录最后写入时间
   static bool _migratedToDatabase = false; // 标记是否已迁移到数据库
+  // 控制是否需要重绘的标志
+  static bool _shouldnotifyListeners = true;
+
+  // 设置是否需要重绘的方法
+  static void setShouldnotifyListeners(bool value) {
+    _shouldnotifyListeners = value;
+  }
 
   // 初始化历史记录管理器
   static Future<void> initialize() async {
@@ -573,35 +580,7 @@ class WatchHistoryManager {
       }
     } catch (e) {
       // 如果更新过程中出错，可能是历史记录文件损坏
-      // 尝试修复然后重试
-      try {
-        await _fixHistoryFile();
-        
-        // 重新获取历史记录
-        await _retryLoadCache();
-        
-        // 再次尝试更新，但直接修改内存缓存
-        final existingIndex = _cachedItems.indexWhere(
-          (element) => element.filePath == item.filePath,
-        );
-
-        if (existingIndex != -1) {
-          _cachedItems[existingIndex] = item;
-        } else {
-          _cachedItems.add(item);
-        }
-        
-        // 重新排序
-        _cachedItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
-        
-        // 保存到文件
-        final jsonList = _cachedItems.map((item) => item.toJson()).toList();
-        final jsonString = json.encode(jsonList);
-        final file = io.File(_historyFilePath);
-        await file.writeAsString(jsonString);
-        _lastWriteTime = DateTime.now();
-      } catch (retryError) {
-      }
+      debugPrint('更新观看历史失败: $e');
     } finally {
       _isWriting = false;
     }
