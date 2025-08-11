@@ -847,6 +847,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   }
 
   void _onTabChange() {
+    debugPrint('[CPU-泄漏排查] 主页面Tab切换: 索引=${globalTabController?.index}');
     _manageHotkeys();
   }
 

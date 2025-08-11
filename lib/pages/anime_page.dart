@@ -12,7 +12,6 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/loading_overlay.dart';
-import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
 import '../providers/appearance_settings_provider.dart';
@@ -22,7 +21,6 @@ import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/history_all_modal.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/switchable_view.dart';
-import 'package:nipaplay/main.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
@@ -777,12 +775,14 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
   @override
   void dispose() {
+    debugPrint('[CPU-泄漏排查] _MediaLibraryTabsState dispose 被调用');
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
   }
 
   void _handleTabChange() {
+    debugPrint('[CPU-泄漏排查] TabController索引变化: ${_tabController.index}，indexIsChanging: ${_tabController.indexIsChanging}');
     if (!_tabController.indexIsChanging) return;
     
     if (_currentIndex != _tabController.index) {
@@ -918,7 +918,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 // 内容区域 - 确保占用剩余所有空间
                 Expanded(
                   child: SwitchableView(
-                    enableAnimation: enableAnimation,
+                    enableAnimation: false, // 🔥 CPU优化：强制禁用媒体库内部动画，避免TabBarView同时渲染所有页面
                     currentIndex: _currentIndex,
                     controller: _tabController,
                     physics: enableAnimation 

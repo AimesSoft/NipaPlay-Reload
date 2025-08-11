@@ -38,12 +38,21 @@ class MediaLibraryPage extends StatefulWidget {
   State<MediaLibraryPage> createState() => _MediaLibraryPageState();
 }
 
-class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepAliveClientMixin {
+class _MediaLibraryPageState extends State<MediaLibraryPage> {
+  // 🔥 临时禁用页面保活，测试是否解决CPU泄漏问题
+  // with AutomaticKeepAliveClientMixin {
   List<WatchHistoryItem> _uniqueLibraryItems = []; 
   Map<int, String> _persistedImageUrls = {}; 
   final Map<int, BangumiAnime> _fetchedFullAnimeData = {}; 
   bool _isLoadingInitial = true; 
   String? _error;
+  
+  // 🔥 CPU优化：防止重复处理相同的历史数据
+  int _lastProcessedHistoryHashCode = 0;
+  bool _isBackgroundFetching = false;
+  
+  // 🔥 CPU优化：缓存已构建的卡片Widget
+  final Map<String, Widget> _cardWidgetCache = {};
   
   final ScrollController _gridScrollController = ScrollController();
 
@@ -51,14 +60,17 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
   
   bool _isJellyfinConnected = false;
 
-  @override
-  bool get wantKeepAlive => true;
+  // 🔥 临时禁用页面保活
+  // @override
+  // bool get wantKeepAlive => true;
 
   @override
   void initState() {
+    debugPrint('[媒体库CPU] MediaLibraryPage initState 开始');
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        debugPrint('[媒体库CPU] 开始加载初始数据');
         _loadInitialMediaLibraryData();
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
         _isJellyfinConnected = jellyfinProvider.isConnected; // Initialize
@@ -69,6 +81,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
 
   @override
   void dispose() {
+    debugPrint('[CPU-泄漏排查] MediaLibraryPage dispose 被调用！！！');
     try {
       if (mounted) { 
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
@@ -96,6 +109,15 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
 
   Future<void> _processAndSortHistory(List<WatchHistoryItem> watchHistory) async {
     if (!mounted) return;
+    
+    // 🔥 CPU优化：检查数据是否已经处理过，避免重复处理
+    final currentHashCode = watchHistory.hashCode;
+    if (currentHashCode == _lastProcessedHistoryHashCode) {
+      debugPrint('[媒体库CPU] 跳过重复处理历史数据 - 哈希码: $currentHashCode');
+      return;
+    }
+    debugPrint('[媒体库CPU] 开始处理历史数据 - 哈希码: $currentHashCode (上次: $_lastProcessedHistoryHashCode)');
+    _lastProcessedHistoryHashCode = currentHashCode;
 
     if (watchHistory.isEmpty) {
       setState(() {
@@ -140,6 +162,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
       _uniqueLibraryItems = uniqueAnimeItemsFromHistory;
       _persistedImageUrls = loadedPersistedUrls;
       _isLoadingInitial = false; 
+      // 🔥 CPU优化：清空卡片缓存，因为数据已更新
+      _cardWidgetCache.clear();
     });
     _fetchAndPersistFullDetailsInBackground(); 
   }
@@ -191,9 +215,18 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
   }
 
   Future<void> _fetchAndPersistFullDetailsInBackground() async {
+    // 🔥 CPU优化：防止重复启动后台任务
+    if (_isBackgroundFetching) {
+      debugPrint('[媒体库CPU] 后台获取任务已在进行中，跳过');
+      return;
+    }
+    _isBackgroundFetching = true;
+    
+    debugPrint('[媒体库CPU] 开始后台获取详细信息 - 项目数量: ${_uniqueLibraryItems.length}');
+    final stopwatch = Stopwatch()..start();
     final prefs = await SharedPreferences.getInstance();
     List<Future> pendingRequests = [];
-    const int maxConcurrentRequests = 3;
+    const int maxConcurrentRequests = 2; // 🔥 CPU优化：减少并发请求数量
     
     for (var historyItem in _uniqueLibraryItems) {
       if (historyItem.animeId != null) { 
@@ -205,23 +238,21 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
         Future<void> fetchDetailForItem() async {
           try {
             final animeDetail = await BangumiService.instance.getAnimeDetails(historyItem.animeId!);
+            debugPrint('[媒体库CPU] 获取到动画详情: ${historyItem.animeId} - ${animeDetail.name}');
             if (mounted) {
-              setState(() {
-                _fetchedFullAnimeData[historyItem.animeId!] = animeDetail;
-              });
+              // 🔥 CPU优化：批量更新而不是单个setState
+              _fetchedFullAnimeData[historyItem.animeId!] = animeDetail;
               if (animeDetail.imageUrl.isNotEmpty) {
                 await prefs.setString('$_prefsKeyPrefix${historyItem.animeId!}', animeDetail.imageUrl);
                 if (mounted) {
-                  setState(() {
-                    _persistedImageUrls[historyItem.animeId!] = animeDetail.imageUrl;
-                  });
+                  // 🔥 CPU优化：只更新数据，不立即setState
+                  _persistedImageUrls[historyItem.animeId!] = animeDetail.imageUrl;
                 }
               } else {
                 await prefs.remove('$_prefsKeyPrefix${historyItem.animeId!}');
                 if(mounted && _persistedImageUrls.containsKey(historyItem.animeId!)){
-                  setState(() {
-                    _persistedImageUrls.remove(historyItem.animeId!);
-                  });
+                  // 🔥 CPU优化：只更新数据，不立即setState
+                  _persistedImageUrls.remove(historyItem.animeId!);
                 }
               }
             }
@@ -240,6 +271,16 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
     }
     
     await Future.wait(pendingRequests);
+    
+    // 🔥 CPU优化：最后一次性刷新UI，而不是每个项目都setState
+    if (mounted) {
+      setState(() {
+        // 触发UI重建，显示所有更新的数据
+      });
+    }
+    
+    debugPrint('[媒体库CPU] 后台获取完成 - 耗时: ${stopwatch.elapsedMilliseconds}ms');
+    _isBackgroundFetching = false;
   }
 
   Future<void> _preloadAnimeDetail(int animeId) async {
@@ -273,7 +314,9 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
   
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    // 🔥 移除super.build(context)调用，因为已禁用AutomaticKeepAliveClientMixin
+    // super.build(context);
+    debugPrint('[媒体库CPU] MediaLibraryPage build 被调用 - mounted: $mounted');
     final uiThemeProvider = Provider.of<UIThemeProvider>(context);
 
     // This Consumer ensures that we rebuild when the watch history changes.
@@ -384,8 +427,18 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
               addRepaintBoundaries: true,
               itemCount: _uniqueLibraryItems.length,
               itemBuilder: (context, index) {
+                // 🔥 CPU优化：添加itemBuilder监控
+                if (index % 20 == 0) {
+                  debugPrint('[媒体库CPU] GridView itemBuilder - 索引: $index/${_uniqueLibraryItems.length}');
+                }
                 final historyItem = _uniqueLibraryItems[index];
                 final animeId = historyItem.animeId;
+                
+                // 🔥 CPU优化：使用文件路径作为缓存键，检查是否已缓存
+                final cacheKey = historyItem.filePath;
+                if (_cardWidgetCache.containsKey(cacheKey)) {
+                  return _cardWidgetCache[cacheKey]!;
+                }
 
                 String imageUrlToDisplay = historyItem.thumbnailPath ?? '';
                 String nameToDisplay = historyItem.animeName.isNotEmpty 
@@ -408,7 +461,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                     }
                 }
 
-                return _buildAnimeCard(
+                // 🔥 CPU优化：构建卡片并缓存
+                final card = _buildAnimeCard(
                   key: ValueKey(animeId ?? historyItem.filePath), 
                   name: nameToDisplay, 
                   imageUrl: imageUrlToDisplay,
@@ -427,6 +481,13 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> with AutomaticKeepA
                     }
                   },
                 );
+                
+                // 🔥 CPU优化：缓存卡片Widget，限制缓存大小避免内存泄漏
+                if (_cardWidgetCache.length < 100) { // 限制最多缓存100个卡片
+                  _cardWidgetCache[cacheKey] = card;
+                }
+                
+                return card;
               },
             ),
           ),

@@ -88,12 +88,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void initState() {
     super.initState();
     _heroBannerIndexNotifier = ValueNotifier(0);
-    _loadData();
     
-    // 添加延迟监听，确保Provider已经初始化
+    // 🔥 修复Flutter状态错误：将数据加载移到addPostFrameCallback中
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupProviderListeners();
       _startAutoSwitch();
+      
+      // 🔥 在build完成后安全地加载数据，避免setState during build错误
+      if (mounted) {
+        _loadData();
+      }
       
       // 延迟检查WatchHistoryProvider状态，如果已经加载完成但数据为空则重新加载
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -101,7 +105,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
           if (watchHistoryProvider.isLoaded && _localAnimeItems.isEmpty && _recommendedItems.length <= 7) {
             debugPrint('DashboardHomePage: 延迟检查发现WatchHistoryProvider已加载但数据为空，重新加载数据');
-            _loadData();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _loadData();
+              }
+            });
           }
         }
       });
@@ -208,9 +216,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         _pendingRefreshReason = 'Jellyfin连接完成';
         debugPrint('DashboardHomePage: 正在加载中，记录Jellyfin刷新请求待稍后处理');
       } else {
-        // 如果未在加载，直接刷新
+        // 🔥 修复Flutter状态错误：使用addPostFrameCallback确保不在build期间调用
         debugPrint('DashboardHomePage: Jellyfin连接完成，立即刷新数据');
-        _loadData();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadData();
+          }
+        });
       }
     }
   }
@@ -232,9 +244,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         _pendingRefreshReason = 'Emby连接完成';
         debugPrint('DashboardHomePage: 正在加载中，记录Emby刷新请求待稍后处理');
       } else {
-        // 如果未在加载，直接刷新
+        // 🔥 修复Flutter状态错误：使用addPostFrameCallback确保不在build期间调用
         debugPrint('DashboardHomePage: Emby连接完成，立即刷新数据');
-        _loadData();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadData();
+          }
+        });
       }
     }
   }
@@ -256,9 +272,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         _pendingRefreshReason = 'WatchHistory加载完成';
         debugPrint('DashboardHomePage: 正在加载中，记录WatchHistory刷新请求待稍后处理');
       } else {
-        // 如果未在加载，直接刷新
+        // 🔥 修复Flutter状态错误：使用addPostFrameCallback确保不在build期间调用
         debugPrint('DashboardHomePage: WatchHistory加载完成，立即刷新数据');
-        _loadData();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadData();
+          }
+        });
       }
     }
   }
@@ -284,13 +304,19 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         debugPrint('DashboardHomePage: 刷新WatchHistoryProvider失败: $e');
       }
       
-      // 重新加载本地媒体库数据
-      _loadData();
+      // 🔥 修复Flutter状态错误：使用addPostFrameCallback确保不在build期间调用
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _loadData();
+        }
+      });
       
       // 确认扫描完成事件已处理
       scanService.acknowledgeScanCompleted();
     }
   }
+
+
 
   @override
   void dispose() {
@@ -385,6 +411,21 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     if (_isLoadingRecommended) {
       debugPrint('DashboardHomePage: 已在加载中，跳过重复调用 - _isLoadingRecommended: $_isLoadingRecommended');
       return;
+    }
+    
+    // 🔥 修复仪表盘启动问题：确保WatchHistoryProvider已加载
+    try {
+      final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      if (!watchHistoryProvider.isLoaded && !watchHistoryProvider.isLoading) {
+        debugPrint('DashboardHomePage: WatchHistoryProvider未加载，主动触发加载');
+        await watchHistoryProvider.loadHistory();
+      } else if (watchHistoryProvider.isLoaded) {
+        debugPrint('DashboardHomePage: WatchHistoryProvider已加载完成，历史记录数量: ${watchHistoryProvider.history.length}');
+      } else {
+        debugPrint('DashboardHomePage: WatchHistoryProvider正在加载中...');
+      }
+    } catch (e) {
+      debugPrint('DashboardHomePage: 加载WatchHistoryProvider失败: $e');
     }
     
     debugPrint('DashboardHomePage: 开始加载数据');
@@ -579,7 +620,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 final animeDetail = await bangumiService.getAnimeDetails(item.animeId!);
                 subtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : '暂无简介信息';
                 
-                // 尝试获取高清图片
+                // 恢复原始图片加载逻辑
                 backgroundImageUrl = await _getHighQualityImage(item.animeId!, animeDetail);
               } catch (e) {
                 debugPrint('获取本地媒体详细信息失败 (animeId: ${item.animeId}): $e');
@@ -1848,8 +1889,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             if (result != null) {
               // 刷新观看历史
               Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
-              // 重新加载数据
-              _loadData();
+              // 🔥 修复Flutter状态错误：使用addPostFrameCallback
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _loadData();
+                }
+              });
             }
           });
         }
@@ -1871,8 +1916,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       if (result != null) {
         // 刷新观看历史
         Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
-        // 重新加载数据
-        _loadData();
+        // 🔥 修复Flutter状态错误：使用addPostFrameCallback
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadData();
+          }
+        });
       }
     });
   }

@@ -23,14 +23,14 @@ class SwitchableView extends StatefulWidget {
   final TabController? controller;
 
   const SwitchableView({
-    Key? key,
+    super.key,
     required this.children,
     required this.currentIndex,
     this.enableAnimation = false,
     this.onPageChanged,
     this.physics,
     this.controller,
-  }) : super(key: key);
+  });
 
   @override
   State<SwitchableView> createState() => _SwitchableViewState();
@@ -72,13 +72,7 @@ class _SwitchableViewState extends State<SwitchableView> {
         return IndexedStack(
           index: _currentIndex,
           sizing: StackFit.expand,
-          children: List.generate(
-            widget.children.length,
-            (i) => TickerMode(
-              enabled: i == _currentIndex,
-              child: widget.children[i],
-            ),
-          ),
+          children: widget.children,
         );
       }
       
@@ -101,18 +95,19 @@ class _SwitchableViewState extends State<SwitchableView> {
         ),
       );
     } else {
-      // 禁用动画模式使用IndexedStack
-      return IndexedStack(
-        index: _currentIndex,
-        sizing: StackFit.expand,
-        children: List.generate(
-          widget.children.length,
-          (i) => TickerMode(
-            enabled: i == _currentIndex,
-            child: widget.children[i],
+      // 🔥 CPU优化：改为真正的按需渲染，而不是IndexedStack
+      // IndexedStack会同时构建所有页面导致资源泄漏
+      debugPrint('[CPU-优化] SwitchableView 按需渲染页面索引: $_currentIndex');
+      
+      if (_currentIndex >= 0 && _currentIndex < widget.children.length) {
+        return widget.children[_currentIndex];
+      } else {
+        return Container(
+          child: const Center(
+            child: Text('页面索引超出范围'),
           ),
-        ),
-      );
+        );
+      }
     }
   }
 }
