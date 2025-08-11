@@ -118,37 +118,35 @@ jobs:
       - name: Build and Sign Android
         if: matrix.target == 'Android'
         run: |
-          # 构建分包APK
-          flutter build apk --release --split-per-abi
+          # 只构建arm64架构APK (大幅减少构建时间)
+          flutter build apk --release --target-platform android-arm64
           
           # 创建签名配置文件
           echo "${{ secrets.SIGNING_KEY }}" | base64 -d > keystore.jks
           
-          # 为每个架构的APK签名
-          for arch in "arm64-v8a" "armeabi-v7a" "x86_64"; do
-            input_apk="build/app/outputs/apk/release/app-${arch}-release-unsigned.apk"
-            output_apk="build/app/outputs/apk/release/NipaPlay-${{ steps.get_version.outputs.version }}-Android-${arch/arm64-v8a/arm64}.apk"
-            
-            # 使用zipalign对APK进行对齐
-            $ANDROID_HOME/build-tools/29.0.3/zipalign -v -p 4 \
-              $input_apk \
-              temp-aligned.apk
-            
-            # 使用apksigner对APK进行签名
-            $ANDROID_HOME/build-tools/29.0.3/apksigner sign \
-              --ks keystore.jks \
-              --ks-pass pass:${{ secrets.KEY_STORE_PASSWORD }} \
-              --ks-key-alias ${{ secrets.ALIAS }} \
-              --key-pass pass:${{ secrets.KEY_PASSWORD }} \
-              --out "$output_apk" \
-              temp-aligned.apk
-            
-            # 删除临时文件
-            rm -f temp-aligned.apk
-          done
+          # 为arm64架构的APK签名
+          input_apk="build/app/outputs/apk/release/app-arm64-v8a-release.apk"
+          output_apk="build/app/outputs/apk/release/NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk"
+          
+          # 使用zipalign对APK进行对齐
+          $ANDROID_HOME/build-tools/29.0.3/zipalign -v -p 4 \
+            $input_apk \
+            temp-aligned.apk
+          
+          # 使用apksigner对APK进行签名
+          $ANDROID_HOME/build-tools/29.0.3/apksigner sign \
+            --ks keystore.jks \
+            --ks-pass pass:${{ secrets.KEY_STORE_PASSWORD }} \
+            --ks-key-alias ${{ secrets.ALIAS }} \
+            --key-pass pass:${{ secrets.KEY_PASSWORD }} \
+            --out "$output_apk" \
+            temp-aligned.apk
+          
+          # 删除临时文件
+          rm -f temp-aligned.apk
           
           # 删除未签名的APK和keystore
-          rm -f build/app/outputs/apk/release/app-*-release-unsigned*.apk
+          rm -f build/app/outputs/apk/release/app-*.apk
           rm -f keystore.jks
           
           # 验证最终的APK文件
