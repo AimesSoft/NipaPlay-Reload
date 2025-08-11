@@ -30,6 +30,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardHomePage extends StatefulWidget {
@@ -52,6 +53,14 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 待处理的刷新请求
   bool _pendingRefreshAfterLoad = false;
   String _pendingRefreshReason = '';
+
+  // 播放器状态追踪，用于检测退出播放器时触发刷新
+  bool _wasPlayerActive = false;
+  Timer? _playerStateCheckTimer;
+  
+  // 播放器状态缓存，减少频繁的Provider查询
+  bool _cachedPlayerActiveState = false;
+  DateTime _lastPlayerStateCheck = DateTime.now();
 
   // 图片缓存 - 存储下载好的图片对象
   final Map<String, Image> _cachedImages = {}; // imageUrl -> ui.Image
@@ -208,12 +217,93 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     } catch (e) {
       debugPrint('DashboardHomePage: 添加ScanService监听器失败: $e');
     }
+    
+    // 监听VideoPlayerState的状态变化，用于检测播放器状态
+    try {
+      final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoPlayerState.addListener(_onVideoPlayerStateChanged);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 添加VideoPlayerState监听器失败: $e');
+    }
+  }
+  
+  // 检查播放器是否处于活跃状态（播放中、暂停或准备好播放）
+  bool _isVideoPlayerActive() {
+    try {
+      // 使用缓存机制，避免频繁的Provider查询
+      final now = DateTime.now();
+      const cacheValidDuration = Duration(milliseconds: 100); // 100ms缓存
+      
+      if (now.difference(_lastPlayerStateCheck) < cacheValidDuration) {
+        return _cachedPlayerActiveState;
+      }
+      
+      final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
+      final isActive = videoPlayerState.status == PlayerStatus.playing || 
+             videoPlayerState.status == PlayerStatus.paused ||
+             videoPlayerState.hasVideo ||
+             videoPlayerState.currentVideoPath != null;
+      
+      // 更新缓存
+      _cachedPlayerActiveState = isActive;
+      _lastPlayerStateCheck = now;
+      
+      // 只在状态发生变化时打印调试信息，减少日志噪音
+      if (isActive != _wasPlayerActive) {
+        debugPrint('DashboardHomePage: 播放器活跃状态变化 - $isActive '
+                   '(status: ${videoPlayerState.status}, hasVideo: ${videoPlayerState.hasVideo})');
+      }
+      
+      return isActive;
+    } catch (e) {
+      debugPrint('DashboardHomePage: _isVideoPlayerActive() 出错: $e');
+      return false;
+    }
+  }
+
+  void _onVideoPlayerStateChanged() {
+    if (!mounted) return;
+    
+    final isCurrentlyActive = _isVideoPlayerActive();
+    
+    // 检测播放器从活跃状态变为非活跃状态（退出播放器）
+    if (_wasPlayerActive && !isCurrentlyActive) {
+      debugPrint('DashboardHomePage: 检测到播放器状态变为非活跃，启动延迟检查');
+      
+      // 取消之前的检查Timer
+      _playerStateCheckTimer?.cancel();
+      
+      // 延迟检查，避免快速状态切换时的误触发
+      _playerStateCheckTimer = Timer(const Duration(milliseconds: 1500), () {
+        if (mounted && !_isVideoPlayerActive()) {
+          debugPrint('DashboardHomePage: 确认播放器已退出，异步更新数据');
+          _loadData();
+        } else {
+          debugPrint('DashboardHomePage: 播放器状态已恢复活跃，取消更新');
+        }
+      });
+    }
+    
+    // 如果播放器重新变为活跃状态，取消待处理的更新
+    if (!_wasPlayerActive && isCurrentlyActive) {
+      debugPrint('DashboardHomePage: 播放器重新激活，取消待处理的更新检查');
+      _playerStateCheckTimer?.cancel();
+    }
+    
+    // 更新播放器活跃状态记录
+    _wasPlayerActive = isCurrentlyActive;
   }
   
   void _onJellyfinStateChanged() {
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过Jellyfin状态变化处理');
+      return;
+    }
+    
+    // 如果播放器处于活跃状态（播放或暂停），跳过主页更新
+    if (_isVideoPlayerActive()) {
+      debugPrint('DashboardHomePage: 播放器活跃中，跳过Jellyfin状态变化处理');
       return;
     }
     
@@ -245,6 +335,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       return;
     }
     
+    // 如果播放器处于活跃状态（播放或暂停），跳过主页更新
+    if (_isVideoPlayerActive()) {
+      debugPrint('DashboardHomePage: 播放器活跃中，跳过Emby状态变化处理');
+      return;
+    }
+    
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
     debugPrint('DashboardHomePage: Emby连接状态变化 - isConnected: ${embyProvider.isConnected}, mounted: $mounted');
     
@@ -273,6 +369,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       return;
     }
     
+    // 如果播放器处于活跃状态（播放或暂停），跳过主页更新
+    if (_isVideoPlayerActive()) {
+      debugPrint('DashboardHomePage: 播放器活跃中，跳过WatchHistory状态变化处理');
+      return;
+    }
+    
     final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
     debugPrint('DashboardHomePage: WatchHistory加载状态变化 - isLoaded: ${watchHistoryProvider.isLoaded}, mounted: $mounted');
     
@@ -283,13 +385,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         _pendingRefreshReason = 'WatchHistory加载完成';
         debugPrint('DashboardHomePage: 正在加载中，记录WatchHistory刷新请求待稍后处理');
       } else {
-        // 🔥 修复Flutter状态错误：使用addPostFrameCallback确保不在build期间调用
-        debugPrint('DashboardHomePage: WatchHistory加载完成，立即刷新数据');
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _loadData();
-          }
-        });
+        // 如果未在加载，检查播放器状态后决定是否刷新
+        if (_isVideoPlayerActive()) {
+          debugPrint('DashboardHomePage: WatchHistory加载完成，但播放器活跃中，跳过刷新');
+        } else {
+          debugPrint('DashboardHomePage: WatchHistory加载完成，立即刷新数据');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _loadData();
+            }
+          });
+        }
       }
     }
   }
@@ -298,6 +404,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过ScanService状态变化处理');
+      return;
+    }
+    
+    // 如果播放器处于活跃状态（播放或暂停），跳过主页更新
+    if (_isVideoPlayerActive()) {
+      debugPrint('DashboardHomePage: 播放器活跃中，跳过ScanService状态变化处理');
       return;
     }
     
@@ -335,6 +447,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     // 清理定时器和ValueNotifier
     _autoSwitchTimer?.cancel();
+    _playerStateCheckTimer?.cancel();
+    _playerStateCheckTimer = null;
+    
+    // 重置播放器状态缓存，防止内存泄漏
+    _cachedPlayerActiveState = false;
+    _wasPlayerActive = false;
+    
     _heroBannerIndexNotifier.dispose();
     
     // 移除监听器 - 使用更安全的方式
@@ -378,6 +497,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       debugPrint('DashboardHomePage: 移除ScanService监听器失败: $e');
     }
     
+    try {
+      if (mounted) {
+        final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
+        videoPlayerState.removeListener(_onVideoPlayerStateChanged);
+        debugPrint('DashboardHomePage: VideoPlayerState监听器已移除');
+      }
+    } catch (e) {
+      debugPrint('DashboardHomePage: 移除VideoPlayerState监听器失败: $e');
+    }
+    
     // 销毁ScrollController
     try {
       _heroBannerPageController.dispose();
@@ -416,6 +545,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     // 检查Widget状态
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过数据加载');
+      return;
+    }
+    
+    // 如果播放器处于活跃状态，跳过数据加载
+    if (_isVideoPlayerActive()) {
+      debugPrint('DashboardHomePage: 播放器活跃中，跳过数据加载');
       return;
     }
     
@@ -469,10 +604,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       debugPrint('DashboardHomePage: 处理待处理的刷新请求 - ${_pendingRefreshReason}');
       _pendingRefreshAfterLoad = false;
       _pendingRefreshReason = '';
-      // 使用短延迟避免连续调用
+      // 使用短延迟避免连续调用，并检查播放器状态
       Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted && !_isLoadingRecommended) {
+        if (mounted && !_isLoadingRecommended && !_isVideoPlayerActive()) {
+          debugPrint('DashboardHomePage: 执行待处理的刷新请求');
           _loadData();
+        } else if (_isVideoPlayerActive()) {
+          debugPrint('DashboardHomePage: 播放器活跃中，跳过待处理的刷新请求');
         }
       });
     }
