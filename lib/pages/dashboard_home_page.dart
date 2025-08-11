@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -399,6 +400,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   Future<void> _loadData() async {
+    final stopwatch = Stopwatch()..start();
     debugPrint('DashboardHomePage: _loadData 被调用 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
     
     // 检查Widget状态
@@ -429,15 +431,26 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
     
     debugPrint('DashboardHomePage: 开始加载数据');
-    await Future.wait([
-      _loadRecommendedContent(),
-      _loadRecentContent(),
-    ]);
     
-    // 再次检查Widget状态
-    if (mounted) {
-      debugPrint('DashboardHomePage: 数据加载完成');
+    // 并行加载推荐内容和最近内容
+    try {
+      await Future.wait([
+        _loadRecommendedContent(),
+        _loadRecentContent(),
+      ]);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 并行加载数据时发生错误: $e');
+      // 如果并行加载失败，尝试串行加载
+      try {
+        await _loadRecommendedContent();
+        await _loadRecentContent();
+      } catch (e2) {
+        debugPrint('DashboardHomePage: 串行加载数据也失败: $e2');
+      }
     }
+    
+    stopwatch.stop();
+    debugPrint('DashboardHomePage: 数据加载完成，总耗时: ${stopwatch.elapsedMilliseconds}ms');
   }
 
   // 检查并处理待处理的刷新请求
@@ -551,79 +564,80 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         debugPrint('从${allCandidates.length}个候选项目中随机选择了${selectedCandidates.length}个');
       }
 
-      // 第三步：并行处理选中的7个项目，获取详细信息
-      List<RecommendedItem> finalItems = [];
-      
-      // 并行处理所有候选项目
+      // 第三步：快速构建基础推荐项目，先用缓存的封面图片
+      List<RecommendedItem> basicItems = [];
       final itemFutures = selectedCandidates.map((item) async {
         try {
           if (item is JellyfinMediaItem) {
-            // 处理Jellyfin项目 - 并行获取图片和详细信息
+            // Jellyfin项目 - 先用基础封面，不等待高清图片
             final jellyfinService = JellyfinService.instance;
-            
-            // 并行获取背景图片、Logo图片和详细信息
-            final results = await Future.wait([
-              _tryGetJellyfinImage(jellyfinService, item.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
-              _tryGetJellyfinImage(jellyfinService, item.id, ['Logo', 'Thumb']),
-              _getJellyfinItemSubtitle(jellyfinService, item),
-            ]);
-            
-            final backdropUrl = results[0];
-            final logoUrl = results[1];
-            final subtitle = results[2];
+            String? basicImageUrl;
+            try {
+              basicImageUrl = jellyfinService.getImageUrl(item.id);
+            } catch (e) {
+              basicImageUrl = null;
+            }
             
             return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: subtitle ?? '暂无简介信息',
-              backgroundImageUrl: backdropUrl,
-              logoImageUrl: logoUrl,
+              subtitle: item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息',
+              backgroundImageUrl: basicImageUrl,
+              logoImageUrl: null,
               source: RecommendedItemSource.jellyfin,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
             );
             
           } else if (item is EmbyMediaItem) {
-            // 处理Emby项目 - 并行获取图片和详细信息
+            // Emby项目 - 先用基础封面，不等待高清图片
             final embyService = EmbyService.instance;
-            
-            // 并行获取背景图片、Logo图片和详细信息
-            final results = await Future.wait([
-              _tryGetEmbyImage(embyService, item.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
-              _tryGetEmbyImage(embyService, item.id, ['Logo', 'Thumb']),
-              _getEmbyItemSubtitle(embyService, item),
-            ]);
-            
-            final backdropUrl = results[0];
-            final logoUrl = results[1];
-            final subtitle = results[2];
+            String? basicImageUrl;
+            try {
+              basicImageUrl = embyService.getImageUrl(item.id);
+            } catch (e) {
+              basicImageUrl = null;
+            }
             
             return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: subtitle ?? '暂无简介信息',
-              backgroundImageUrl: backdropUrl,
-              logoImageUrl: logoUrl,
+              subtitle: item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息',
+              backgroundImageUrl: basicImageUrl,
+              logoImageUrl: null,
               source: RecommendedItemSource.emby,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
             );
             
           } else if (item is WatchHistoryItem) {
-            // 处理本地媒体库项目
+            // 本地媒体库项目 - 先用缓存的封面图片
+            String? cachedImageUrl;
             String subtitle = '暂无简介信息';
-            String? backgroundImageUrl;
             
-            // 尝试获取高清图片和详细信息
             if (item.animeId != null) {
+              // 从缓存获取图片URL（来自本地图片缓存）
+              cachedImageUrl = _localImageCache[item.animeId!];
+              
+              // 尝试从SharedPreferences获取已缓存的详情信息
               try {
-                // 首先从弹弹play获取详细信息和bangumi ID
-                final bangumiService = BangumiService.instance;
-                final animeDetail = await bangumiService.getAnimeDetails(item.animeId!);
-                subtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : '暂无简介信息';
-                
-                // 恢复原始图片加载逻辑
-                backgroundImageUrl = await _getHighQualityImage(item.animeId!, animeDetail);
+                final prefs = await SharedPreferences.getInstance();
+                final cacheKey = 'bangumi_detail_${item.animeId!}';
+                final String? cachedString = prefs.getString(cacheKey);
+                if (cachedString != null) {
+                  final data = json.decode(cachedString);
+                  final animeData = data['animeDetail'] as Map<String, dynamic>?;
+                  if (animeData != null) {
+                    final summary = animeData['summary'] as String?;
+                    final imageUrl = animeData['imageUrl'] as String?;
+                    if (summary?.isNotEmpty == true) {
+                      subtitle = summary!;
+                    }
+                    if (cachedImageUrl == null && imageUrl?.isNotEmpty == true) {
+                      cachedImageUrl = imageUrl;
+                    }
+                  }
+                }
               } catch (e) {
-                debugPrint('获取本地媒体详细信息失败 (animeId: ${item.animeId}): $e');
+                // 忽略缓存访问错误
               }
             }
             
@@ -631,27 +645,27 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               id: item.animeId?.toString() ?? item.filePath,
               title: item.animeName.isNotEmpty ? item.animeName : (item.episodeTitle ?? '未知动画'),
               subtitle: subtitle,
-              backgroundImageUrl: backgroundImageUrl,
-              logoImageUrl: null, // 本地媒体库通常没有logo
+              backgroundImageUrl: cachedImageUrl,
+              logoImageUrl: null,
               source: RecommendedItemSource.local,
-              rating: null, // 本地媒体库暂时不支持评分
+              rating: null,
             );
           }
         } catch (e) {
-          debugPrint('处理推荐项目失败: $e');
+          debugPrint('快速构建推荐项目失败: $e');
           return null;
         }
         return null;
       });
       
-      // 等待所有项目处理完成
+      // 等待基础项目构建完成
       final processedItems = await Future.wait(itemFutures);
-      finalItems = processedItems.where((item) => item != null).cast<RecommendedItem>().toList();
+      basicItems = processedItems.where((item) => item != null).cast<RecommendedItem>().toList();
 
       // 如果还不够7个，添加占位符
-      while (finalItems.length < 7) {
-        finalItems.add(RecommendedItem(
-          id: 'placeholder_${finalItems.length}',
+      while (basicItems.length < 7) {
+        basicItems.add(RecommendedItem(
+          id: 'placeholder_${basicItems.length}',
           title: '暂无推荐内容',
           subtitle: '连接媒体服务器以获取推荐内容',
           backgroundImageUrl: null,
@@ -661,24 +675,26 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         ));
       }
 
+      // 第四步：立即显示基础项目
       if (mounted) {
         setState(() {
-          _recommendedItems = finalItems;
+          _recommendedItems = basicItems;
           _isLoadingRecommended = false;
         });
         
         // 推荐内容加载完成后启动自动切换
-        if (finalItems.length >= 5) {
+        if (basicItems.length >= 5) {
           _startAutoSwitch();
         }
-        
-        // 立即开始预加载所有推荐图片
-        _preloadAllRecommendedImages(finalItems);
         
         // 检查是否有待处理的刷新请求
         _checkPendingRefresh();
       }
-      debugPrint('推荐内容加载完成，总共 ${finalItems.length} 个项目');
+      
+      // 第五步：后台异步升级为高清图片
+      _upgradeToHighQualityImages(selectedCandidates, basicItems);
+      
+      debugPrint('推荐内容基础加载完成，总共 ${basicItems.length} 个项目，后台正在加载高清图片');
     } catch (e) {
       debugPrint('加载推荐内容失败: $e');
       if (mounted) {
@@ -839,44 +855,84 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
   }
 
-  // 后台抓取缺失的番组图片，限流并写入持久化缓存
+  // 后台抓取缺失的番组图片，限流并写入持久化缓存（优化版本）
   Future<void> _fetchLocalAnimeImagesInBackground() async {
     if (_isLoadingLocalImages) return;
     _isLoadingLocalImages = true;
+    
+    debugPrint('开始后台获取本地番剧缺失图片，待处理项目: ${_localAnimeItems.length}');
+    
     const int maxConcurrent = 3;
-  final inflight = <Future<void>>[];
+    final inflight = <Future<void>>[];
+    int processedCount = 0;
+    int updatedCount = 0;
 
     for (final item in _localAnimeItems) {
       final id = item.animeId;
-      if (_localImageCache.containsKey(id)) continue;
+      if (_localImageCache.containsKey(id) && 
+          _localImageCache[id]?.isNotEmpty == true) {
+        continue; // 已有缓存且不为空，跳过
+      }
 
       Future<void> task() async {
         try {
-          final detail = await BangumiService.instance.getAnimeDetails(id);
-          final img = detail.imageUrl;
-          if (img.isNotEmpty) {
-            _localImageCache[id] = img;
+          // 先尝试从BangumiService缓存获取
+          String? imageUrl;
+          // String? summary; // 暂时不需要summary变量
+          
+          // 尝试从SharedPreferences获取已缓存的详情
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final cacheKey = 'bangumi_detail_$id';
+            final String? cachedString = prefs.getString(cacheKey);
+            if (cachedString != null) {
+              final data = json.decode(cachedString);
+              final animeData = data['animeDetail'] as Map<String, dynamic>?;
+              if (animeData != null) {
+                imageUrl = animeData['imageUrl'] as String?;
+                // summary = animeData['summary'] as String?; // 不需要summary
+              }
+            }
+          } catch (e) {
+            // 忽略缓存读取错误
+          }
+          
+          // 如果缓存中没有，再从网络获取
+          if (imageUrl?.isEmpty != false) {
+            final detail = await BangumiService.instance.getAnimeDetails(id);
+            imageUrl = detail.imageUrl;
+            // summary = detail.summary; // 不需要summary
+          }
+          
+          if (imageUrl?.isNotEmpty == true) {
+            _localImageCache[id] = imageUrl!;
+            
+            // 异步保存到持久化缓存
             try {
               final prefs = await SharedPreferences.getInstance();
-              await prefs.setString('$_localPrefsKeyPrefix$id', img);
+              await prefs.setString('$_localPrefsKeyPrefix$id', imageUrl);
             } catch (_) {}
+            
             if (mounted) {
-              // 局部更新对应项的图片字段
+              // 批量更新，减少UI重绘次数
               final idx = _localAnimeItems.indexWhere((e) => e.animeId == id);
               if (idx != -1) {
                 _localAnimeItems[idx] = LocalAnimeItem(
                   animeId: _localAnimeItems[idx].animeId,
                   animeName: _localAnimeItems[idx].animeName,
-                  imageUrl: img,
-                  backdropImageUrl: img,
+                  imageUrl: imageUrl,
+                  backdropImageUrl: imageUrl,
                   addedTime: _localAnimeItems[idx].addedTime,
                   latestEpisode: _localAnimeItems[idx].latestEpisode,
                 );
+                updatedCount++;
               }
             }
           }
+          processedCount++;
         } catch (e) {
           // 静默失败，避免刷屏
+          processedCount++;
         }
       }
 
@@ -885,13 +941,28 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       fut.whenComplete(() {
         inflight.remove(fut);
       });
+      
       if (inflight.length >= maxConcurrent) {
-        try { await Future.any(inflight); } catch (_) {}
+        try { 
+          await Future.any(inflight); 
+          // 每处理几个项目就更新一次UI，而不是等全部完成
+          if (updatedCount > 0 && processedCount % 5 == 0 && mounted) {
+            setState(() {});
+          }
+        } catch (_) {}
       }
     }
 
-    try { await Future.wait(inflight); } catch (_) {}
-    if (mounted) setState(() {});
+    try { 
+      await Future.wait(inflight); 
+    } catch (_) {}
+    
+    // 最终更新UI
+    if (mounted && updatedCount > 0) {
+      setState(() {});
+    }
+    
+    debugPrint('本地番剧图片后台获取完成，处理: $processedCount，更新: $updatedCount');
     _isLoadingLocalImages = false;
   }
 
@@ -2298,104 +2369,157 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
   }
 
-  // 预加载所有推荐图片（下载图片对象而不是依赖URL）
-  Future<void> _preloadAllRecommendedImages(List<RecommendedItem> items) async {
-    debugPrint('开始预加载推荐图片...');
+  // 升级为高清图片（后台异步处理）
+  Future<void> _upgradeToHighQualityImages(List<dynamic> candidates, List<RecommendedItem> currentItems) async {
+    debugPrint('开始后台升级为高清图片...');
     
-    if (items.length < 7) {
-      debugPrint('推荐项目不足7个，跳过预加载');
+    if (candidates.isEmpty || currentItems.isEmpty) {
+      debugPrint('无候选项目或当前项目，跳过高清图片升级');
       return;
     }
     
-    // 优先加载用户当前能看到的图片：
-    // 1. Hero Banner 当前页的背景图和 Logo
-    // 2. 右侧两个小卡片的图片
-    final currentItem = items[_currentHeroBannerIndex]; // 当前显示的 Hero Banner
-    final rightCard1 = items[5]; // 右上小卡片
-    final rightCard2 = items[6]; // 右下小卡片
+    // 为每个候选项目升级图片
+    final upgradeFutures = <Future<void>>[];
     
-    // 立即加载当前屏幕可见的图片
-    final priorityFutures = <Future<void>>[];
-    
-    // 当前 Hero Banner 的背景图和 Logo
-    if (currentItem.backgroundImageUrl != null && 
-        currentItem.backgroundImageUrl!.isNotEmpty &&
-        !currentItem.backgroundImageUrl!.contains('assets/') &&
-        !_cachedImages.containsKey(currentItem.backgroundImageUrl!)) {
-      priorityFutures.add(_downloadAndCacheImage(currentItem.backgroundImageUrl!, 'background_${currentItem.id}'));
+    for (int i = 0; i < candidates.length && i < currentItems.length; i++) {
+      final candidate = candidates[i];
+      final currentItem = currentItems[i];
+      
+      upgradeFutures.add(_upgradeItemToHighQuality(candidate, currentItem, i));
     }
     
-    if (currentItem.logoImageUrl != null && 
-        currentItem.logoImageUrl!.isNotEmpty &&
-        !currentItem.logoImageUrl!.contains('assets/') &&
-        !_cachedImages.containsKey(currentItem.logoImageUrl!)) {
-      priorityFutures.add(_downloadAndCacheImage(currentItem.logoImageUrl!, 'logo_${currentItem.id}'));
-    }
-    
-    // 右侧两个小卡片的图片
-    for (final card in [rightCard1, rightCard2]) {
-      if (card.backgroundImageUrl != null && 
-          card.backgroundImageUrl!.isNotEmpty &&
-          !card.backgroundImageUrl!.contains('assets/') &&
-          !_cachedImages.containsKey(card.backgroundImageUrl!)) {
-        priorityFutures.add(_downloadAndCacheImage(card.backgroundImageUrl!, 'background_${card.id}'));
+    // 异步处理所有升级，不阻塞UI
+    Future.wait(upgradeFutures, eagerError: false).then((_) {
+      debugPrint('所有推荐图片升级完成');
+    }).catchError((e) {
+      debugPrint('升级推荐图片时发生错误: $e');
+    });
+  }
+  
+  // 升级单个项目为高清图片
+  Future<void> _upgradeItemToHighQuality(dynamic candidate, RecommendedItem currentItem, int index) async {
+    try {
+      RecommendedItem? upgradedItem;
+      
+      if (candidate is JellyfinMediaItem) {
+        // Jellyfin项目 - 获取高清图片和详细信息
+        final jellyfinService = JellyfinService.instance;
+        
+        // 并行获取背景图片、Logo图片和详细信息
+        final results = await Future.wait([
+          _tryGetJellyfinImage(jellyfinService, candidate.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+          _tryGetJellyfinImage(jellyfinService, candidate.id, ['Logo', 'Thumb']),
+          _getJellyfinItemSubtitle(jellyfinService, candidate),
+        ]);
+        
+        final backdropUrl = results[0];
+        final logoUrl = results[1];
+        final subtitle = results[2];
+        
+        // 如果获取到了更好的图片或信息，创建升级版本
+        if (backdropUrl != currentItem.backgroundImageUrl || 
+            logoUrl != currentItem.logoImageUrl ||
+            subtitle != currentItem.subtitle) {
+          upgradedItem = RecommendedItem(
+            id: currentItem.id,
+            title: currentItem.title,
+            subtitle: subtitle ?? currentItem.subtitle,
+            backgroundImageUrl: backdropUrl ?? currentItem.backgroundImageUrl,
+            logoImageUrl: logoUrl ?? currentItem.logoImageUrl,
+            source: currentItem.source,
+            rating: currentItem.rating,
+          );
+        }
+        
+      } else if (candidate is EmbyMediaItem) {
+        // Emby项目 - 获取高清图片和详细信息
+        final embyService = EmbyService.instance;
+        
+        // 并行获取背景图片、Logo图片和详细信息
+        final results = await Future.wait([
+          _tryGetEmbyImage(embyService, candidate.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+          _tryGetEmbyImage(embyService, candidate.id, ['Logo', 'Thumb']),
+          _getEmbyItemSubtitle(embyService, candidate),
+        ]);
+        
+        final backdropUrl = results[0];
+        final logoUrl = results[1];
+        final subtitle = results[2];
+        
+        // 如果获取到了更好的图片或信息，创建升级版本
+        if (backdropUrl != currentItem.backgroundImageUrl || 
+            logoUrl != currentItem.logoImageUrl ||
+            subtitle != currentItem.subtitle) {
+          upgradedItem = RecommendedItem(
+            id: currentItem.id,
+            title: currentItem.title,
+            subtitle: subtitle ?? currentItem.subtitle,
+            backgroundImageUrl: backdropUrl ?? currentItem.backgroundImageUrl,
+            logoImageUrl: logoUrl ?? currentItem.logoImageUrl,
+            source: currentItem.source,
+            rating: currentItem.rating,
+          );
+        }
+        
+      } else if (candidate is WatchHistoryItem) {
+        // 本地媒体库项目 - 获取高清图片和详细信息
+        String? highQualityImageUrl;
+        String? detailedSubtitle;
+        
+        if (candidate.animeId != null) {
+          try {
+            // 获取详细信息和高清图片
+            final bangumiService = BangumiService.instance;
+            final animeDetail = await bangumiService.getAnimeDetails(candidate.animeId!);
+            detailedSubtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : null;
+            
+            // 获取高清图片
+            highQualityImageUrl = await _getHighQualityImage(candidate.animeId!, animeDetail);
+          } catch (e) {
+            debugPrint('获取本地媒体高清信息失败 (animeId: ${candidate.animeId}): $e');
+          }
+        }
+        
+        // 如果获取到了更好的图片或信息，创建升级版本
+        if (highQualityImageUrl != currentItem.backgroundImageUrl ||
+            detailedSubtitle != currentItem.subtitle) {
+          upgradedItem = RecommendedItem(
+            id: currentItem.id,
+            title: currentItem.title,
+            subtitle: detailedSubtitle ?? currentItem.subtitle,
+            backgroundImageUrl: highQualityImageUrl ?? currentItem.backgroundImageUrl,
+            logoImageUrl: currentItem.logoImageUrl,
+            source: currentItem.source,
+            rating: currentItem.rating,
+          );
+        }
       }
       
-      if (card.logoImageUrl != null && 
-          card.logoImageUrl!.isNotEmpty &&
-          !card.logoImageUrl!.contains('assets/') &&
-          !_cachedImages.containsKey(card.logoImageUrl!)) {
-        priorityFutures.add(_downloadAndCacheImage(card.logoImageUrl!, 'logo_${card.id}'));
-      }
-    }
-    
-    // 等待优先图片加载完成
-    if (priorityFutures.isNotEmpty) {
-      try {
-        await Future.wait(priorityFutures, eagerError: false);
-        debugPrint('优先图片加载完成，共加载了 ${priorityFutures.length} 张可见图片');
-        if (mounted) setState(() {}); // 立即更新可见图片
-      } catch (e) {
-        debugPrint('加载优先图片时发生错误: $e');
-      }
-    }
-    
-    // 然后异步加载其他 Hero Banner 页面的图片
-    final backgroundFutures = <Future<void>>[];
-    
-    for (int i = 0; i < 5; i++) { // Hero Banner 只有前5个
-      final item = items[i];
-      
-      // 跳过已经加载的当前项目和右侧卡片项目
-      if (i == _currentHeroBannerIndex || i == 5 || i == 6) continue;
-      
-      // 背景图片
-      if (item.backgroundImageUrl != null && 
-          item.backgroundImageUrl!.isNotEmpty &&
-          !item.backgroundImageUrl!.contains('assets/') &&
-          !_cachedImages.containsKey(item.backgroundImageUrl!)) {
-        backgroundFutures.add(_downloadAndCacheImage(item.backgroundImageUrl!, 'background_${item.id}'));
+      // 如果有升级版本，更新UI
+      if (upgradedItem != null && mounted) {
+        setState(() {
+          if (index < _recommendedItems.length) {
+            _recommendedItems[index] = upgradedItem!;
+          }
+        });
+        
+        // 预加载新的高清图片
+        if (upgradedItem.backgroundImageUrl != null && upgradedItem.backgroundImageUrl!.isNotEmpty) {
+          _downloadAndCacheImage(upgradedItem.backgroundImageUrl!, 'background_${upgradedItem.id}');
+        }
+        if (upgradedItem.logoImageUrl != null && upgradedItem.logoImageUrl!.isNotEmpty) {
+          _downloadAndCacheImage(upgradedItem.logoImageUrl!, 'logo_${upgradedItem.id}');
+        }
+        
+        debugPrint('项目 ${upgradedItem.title} 已升级为高清版本');
       }
       
-      // Logo图片
-      if (item.logoImageUrl != null && 
-          item.logoImageUrl!.isNotEmpty &&
-          !item.logoImageUrl!.contains('assets/') &&
-          !_cachedImages.containsKey(item.logoImageUrl!)) {
-        backgroundFutures.add(_downloadAndCacheImage(item.logoImageUrl!, 'logo_${item.id}'));
-      }
-    }
-    
-    // 异步加载其他图片，不阻塞UI
-    if (backgroundFutures.isNotEmpty) {
-      Future.wait(backgroundFutures, eagerError: false).then((_) {
-        debugPrint('其他推荐图片预加载完成，共预加载了 ${backgroundFutures.length} 张图片');
-        if (mounted) setState(() {}); // 更新其他图片
-      }).catchError((e) {
-        debugPrint('预加载其他图片时发生错误: $e');
-      });
+    } catch (e) {
+      debugPrint('升级项目 $index 为高清版本失败: $e');
     }
   }
+  
+
 
   // 下载并缓存单个图片
   Future<void> _downloadAndCacheImage(String imageUrl, String cacheKey) async {
@@ -2428,11 +2552,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
   }
 
-  // 辅助方法：尝试获取Jellyfin图片 - 并行验证版本
+  // 辅助方法：尝试获取Jellyfin图片 - 快速版本，优先返回第一个构建成功的URL
   Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
-    // 构建所有可能的图片URL
-    List<MapEntry<String, String>> imageUrlCandidates = [];
-    
+    // 按优先级顺序尝试构建图片URL，返回第一个成功的
     for (String imageType in imageTypes) {
       try {
         String imageUrl;
@@ -2443,50 +2565,21 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         }
         
         if (imageUrl.isNotEmpty) {
-          imageUrlCandidates.add(MapEntry(imageType, imageUrl));
+          debugPrint('Jellyfin构建${imageType}图片URL成功: ${imageUrl.substring(0, math.min(100, imageUrl.length))}...');
+          return imageUrl; // 直接返回第一个成功构建的URL，不验证
         }
       } catch (e) {
         debugPrint('Jellyfin构建${imageType}图片URL失败: $e');
       }
     }
     
-    if (imageUrlCandidates.isEmpty) {
-      debugPrint('Jellyfin无法构建任何图片URL');
-      return null;
-    }
-    
-    // 并行验证所有URL
-    final validationFutures = imageUrlCandidates.map((entry) async {
-      try {
-        final isValid = await _validateImageUrl(entry.value);
-        return isValid ? entry : null;
-      } catch (e) {
-        debugPrint('Jellyfin验证${entry.key}图片失败: $e');
-        return null;
-      }
-    });
-    
-    final validationResults = await Future.wait(validationFutures);
-    
-    // 按优先级顺序返回第一个有效的URL
-    for (String imageType in imageTypes) {
-      for (var result in validationResults) {
-        if (result != null && result.key == imageType) {
-          debugPrint('Jellyfin获取到${imageType}图片: ${result.value}');
-          return result.value;
-        }
-      }
-    }
-    
-    debugPrint('Jellyfin未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
+    debugPrint('Jellyfin无法构建任何图片URL，尝试类型: ${imageTypes.join(", ")}');
     return null;
   }
 
-  // 辅助方法：尝试获取Emby图片 - 并行验证版本
+  // 辅助方法：尝试获取Emby图片 - 快速版本，优先返回第一个构建成功的URL
   Future<String?> _tryGetEmbyImage(EmbyService service, String itemId, List<String> imageTypes) async {
-    // 构建所有可能的图片URL
-    List<MapEntry<String, String>> imageUrlCandidates = [];
-    
+    // 按优先级顺序尝试构建图片URL，返回第一个成功的
     for (String imageType in imageTypes) {
       try {
         String imageUrl;
@@ -2497,42 +2590,15 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         }
         
         if (imageUrl.isNotEmpty) {
-          imageUrlCandidates.add(MapEntry(imageType, imageUrl));
+          debugPrint('Emby构建${imageType}图片URL成功: ${imageUrl.substring(0, math.min(100, imageUrl.length))}...');
+          return imageUrl; // 直接返回第一个成功构建的URL，不验证
         }
       } catch (e) {
         debugPrint('Emby构建${imageType}图片URL失败: $e');
       }
     }
     
-    if (imageUrlCandidates.isEmpty) {
-      debugPrint('Emby无法构建任何图片URL');
-      return null;
-    }
-    
-    // 并行验证所有URL
-    final validationFutures = imageUrlCandidates.map((entry) async {
-      try {
-        final isValid = await _validateImageUrl(entry.value);
-        return isValid ? entry : null;
-      } catch (e) {
-        debugPrint('Emby验证${entry.key}图片失败: $e');
-        return null;
-      }
-    });
-    
-    final validationResults = await Future.wait(validationFutures);
-    
-    // 按优先级顺序返回第一个有效的URL
-    for (String imageType in imageTypes) {
-      for (var result in validationResults) {
-        if (result != null && result.key == imageType) {
-          debugPrint('Emby获取到${imageType}图片: ${result.value}');
-          return result.value;
-        }
-      }
-    }
-    
-    debugPrint('Emby未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
+    debugPrint('Emby无法构建任何图片URL，尝试类型: ${imageTypes.join(", ")}');
     return null;
   }
 
@@ -2558,40 +2624,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
   }
 
-  // 辅助方法：验证图片URL是否有效 - 优化版本
-  Future<bool> _validateImageUrl(String url) async {
-    try {
-      final response = await http.head(Uri.parse(url)).timeout(
-        const Duration(seconds: 2), // 减少超时时间到2秒
-        onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
-      );
-      
-      // 检查HTTP状态码是否成功
-      if (response.statusCode != 200) {
-        return false;
-      }
-      
-      // 检查Content-Type是否为图片类型
-      final contentType = response.headers['content-type'];
-      if (contentType == null || !contentType.startsWith('image/')) {
-        return false;
-      }
-      
-      // 检查Content-Length，如果太小可能不是有效图片
-      final contentLength = response.headers['content-length'];
-      if (contentLength != null) {
-        final length = int.tryParse(contentLength);
-        if (length != null && length < 100) {
-          return false;
-        }
-      }
-      
-      return true;
-    } catch (e) {
-      // 不打印验证失败日志，减少控制台输出
-      return false;
-    }
-  }
+
   
   // 构建滚动按钮
   Widget _buildScrollButtons(ScrollController controller, double itemWidth) {
