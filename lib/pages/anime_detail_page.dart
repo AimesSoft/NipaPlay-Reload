@@ -23,9 +23,6 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
-import 'package:nipaplay/pages/fluent_anime_detail_page.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -43,23 +40,6 @@ class AnimeDetailPage extends StatefulWidget {
   }
   
   static Future<WatchHistoryItem?> show(BuildContext context, int animeId) {
-    // 检查当前UI主题，自动选择适合的版本
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
-    
-    if (uiThemeProvider.isFluentUITheme) {
-      // 使用 Fluent UI 版本
-      return fluent.showDialog<WatchHistoryItem>(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) => FluentAnimeDetailPage(animeId: animeId),
-      );
-    } else {
-      // 使用 Material 版本（保持原有逻辑）
-      return _showMaterialDialog(context, animeId);
-    }
-  }
-  
-  static Future<WatchHistoryItem?> _showMaterialDialog(BuildContext context, int animeId) {
     // 获取外观设置Provider
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
     final enableAnimation = appearanceSettings.enablePageAnimation;
@@ -959,8 +939,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           ),
           indicatorWeight: 3,
           tabs: const [
-            Tab(text: '简介'),
-            Tab(text: '剧集'),
+            Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.document_text_outline, size: 18), SizedBox(width: 8), Text('简介')])),
+            Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.film_outline, size: 18), SizedBox(width: 8), Text('剧集')])),
           ],
         ),
         Expanded(
@@ -988,7 +968,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    final bool enableBlur = _appearanceSettings?.enableWidgetBlurEffect ?? true;
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.3),
       body: Padding(
@@ -998,7 +977,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           width: double.infinity,
           height: double.infinity,
           borderRadius: 15,
-          blur: enableBlur ? 25 : 0,
+          blur: 25,
           alignment: Alignment.center,
           border: 0.5,
           linearGradient: LinearGradient(
@@ -1171,9 +1150,6 @@ class _HoverableTagState extends State<_HoverableTag> {
 
   @override
   Widget build(BuildContext context) {
-    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
-    final bool enableBlur = appearanceSettings.enableWidgetBlurEffect;
-
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
@@ -1189,7 +1165,7 @@ class _HoverableTagState extends State<_HoverableTag> {
                 width: double.infinity,
                 height: double.infinity,
                 borderRadius: 20,
-                blur: enableBlur ? 20 : 0,
+                blur: 20,
                 alignment: Alignment.center,
                 border: 1,
                 linearGradient: LinearGradient(
