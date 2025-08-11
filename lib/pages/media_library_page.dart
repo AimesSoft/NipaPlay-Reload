@@ -230,13 +230,16 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     
     for (var historyItem in _uniqueLibraryItems) {
       if (historyItem.animeId != null) { 
-        if (_fetchedFullAnimeData.containsKey(historyItem.animeId!) || 
-            _persistedImageUrls.containsKey(historyItem.animeId!)) {
-            continue;
-        }
+        // 🔥 修改条件：只要动画ID不为空，就尝试获取详情
+        // 不再跳过已有图片或已缓存的项目
         
         Future<void> fetchDetailForItem() async {
           try {
+            // 如果已经有详细数据，则跳过获取
+            if (_fetchedFullAnimeData.containsKey(historyItem.animeId!)) {
+              return;
+            }
+            
             final animeDetail = await BangumiService.instance.getAnimeDetails(historyItem.animeId!);
             debugPrint('[媒体库CPU] 获取到动画详情: ${historyItem.animeId} - ${animeDetail.name}');
             if (mounted) {
@@ -257,7 +260,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
               }
             }
           } catch (e) {
-            // Silent fail
+            debugPrint('[媒体库CPU] 获取动画详情失败: ${historyItem.animeId} - $e');
           }
         }
         
@@ -481,6 +484,19 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
                     }
                   },
                 );
+                
+                // 调试：打印详细的评分信息
+                if (animeId != null) {
+                  debugPrint('动画 $animeId 详细信息：');
+                  debugPrint('  名称: $nameToDisplay');
+                  debugPrint('  是否存在于_fetchedFullAnimeData: ${_fetchedFullAnimeData.containsKey(animeId)}');
+                  
+                  if (_fetchedFullAnimeData.containsKey(animeId)) {
+                    final animeData = _fetchedFullAnimeData[animeId]!;
+                    debugPrint('  通用评分: ${animeData.rating}');
+                    debugPrint('  评分详情: ${animeData.ratingDetails}');
+                  }
+                }
                 
                 // 🔥 CPU优化：缓存卡片Widget，限制缓存大小避免内存泄漏
                 if (_cardWidgetCache.length < 100) { // 限制最多缓存100个卡片
