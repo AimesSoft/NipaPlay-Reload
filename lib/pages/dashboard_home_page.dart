@@ -811,6 +811,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               // 从缓存获取图片URL（来自本地图片缓存）
               cachedImageUrl = _localImageCache[item.animeId!];
               
+              // 优先读取持久化的高清图缓存（与媒体库页复用同一Key前缀）
+              if (cachedImageUrl == null) {
+                try {
+                  final prefs = await SharedPreferences.getInstance();
+                  final persisted = prefs.getString('$_localPrefsKeyPrefix${item.animeId!}');
+                  if (persisted != null && persisted.isNotEmpty) {
+                    cachedImageUrl = persisted;
+                    _localImageCache[item.animeId!] = persisted; // 写回内存缓存
+                  }
+                } catch (_) {}
+              }
+
               // 尝试从SharedPreferences获取已缓存的详情信息
               try {
                 final prefs = await SharedPreferences.getInstance();
@@ -2507,6 +2519,41 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 获取高清图片的方法
   Future<String?> _getHighQualityImage(int animeId, BangumiAnime animeDetail) async {
     try {
+      // 优先尝试本地缓存中的 bangumiId/bangumiUrl，避免再请求弹弹play
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final cacheKey = 'bangumi_detail_$animeId';
+        final String? cachedString = prefs.getString(cacheKey);
+        if (cachedString != null) {
+          final data = json.decode(cachedString);
+          final animeData = data['animeDetail'] as Map<String, dynamic>?;
+          final bangumi = data['bangumi'] as Map<String, dynamic>?;
+          String? cachedBangumiId;
+          // 1) 直接字段
+          if (bangumi != null && bangumi['bangumiId'] != null && bangumi['bangumiId'].toString().isNotEmpty) {
+            cachedBangumiId = bangumi['bangumiId'].toString();
+          }
+          // 2) 从 bangumiUrl 解析
+          if (cachedBangumiId == null) {
+            final String? bangumiUrl = (bangumi?['bangumiUrl'] as String?) ?? (animeData?['bangumiUrl'] as String?);
+            if (bangumiUrl != null && bangumiUrl.contains('bangumi.tv/subject/')) {
+              final RegExp regex = RegExp(r'bangumi\.tv/subject/(\d+)');
+              final match = regex.firstMatch(bangumiUrl);
+              if (match != null) {
+                cachedBangumiId = match.group(1);
+              }
+            }
+          }
+          if (cachedBangumiId != null && cachedBangumiId.isNotEmpty) {
+            final bangumiImageUrl = await _getBangumiHighQualityImage(cachedBangumiId);
+            if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
+              debugPrint('从缓存的Bangumi信息获取到高清图片: $bangumiImageUrl');
+              return bangumiImageUrl;
+            }
+          }
+        }
+      } catch (_) {}
+
       // 首先尝试从弹弹play获取bangumi ID
       String? bangumiId = await _getBangumiIdFromDandanplay(animeId);
       
@@ -2525,7 +2572,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         return animeDetail.imageUrl;
       }
       
-      debugPrint('未能获取到任何图片 (animeId: $animeId)');
+  debugPrint('未能获取到任何图片 (animeId: $animeId)');
       return null;
     } catch (e) {
       debugPrint('获取高清图片失败 (animeId: $animeId): $e');
@@ -2710,13 +2757,34 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         
         if (candidate.animeId != null) {
           try {
-            // 获取详细信息和高清图片
-            final bangumiService = BangumiService.instance;
-            final animeDetail = await bangumiService.getAnimeDetails(candidate.animeId!);
-            detailedSubtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : null;
-            
-            // 获取高清图片
-            highQualityImageUrl = await _getHighQualityImage(candidate.animeId!, animeDetail);
+            // 先尝试使用持久化缓存，避免重复请求网络
+            final prefs = await SharedPreferences.getInstance();
+            final persisted = prefs.getString('$_localPrefsKeyPrefix${candidate.animeId!}');
+
+            final persistedLooksHQ = persisted != null && persisted.isNotEmpty && _looksHighQualityUrl(persisted);
+
+            if (persistedLooksHQ) {
+              highQualityImageUrl = persisted;
+            } else {
+              // 获取详细信息和高清图片
+              final bangumiService = BangumiService.instance;
+              final animeDetail = await bangumiService.getAnimeDetails(candidate.animeId!);
+              detailedSubtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : null;
+              
+              // 获取高清图片
+              highQualityImageUrl = await _getHighQualityImage(candidate.animeId!, animeDetail);
+
+              // 将获取到的高清图持久化，避免后续重复请求
+              if (highQualityImageUrl != null && highQualityImageUrl.isNotEmpty) {
+                _localImageCache[candidate.animeId!] = highQualityImageUrl;
+                try {
+                  await prefs.setString('$_localPrefsKeyPrefix${candidate.animeId!}', highQualityImageUrl);
+                } catch (_) {}
+              } else if (persisted != null && persisted.isNotEmpty) {
+                // 如果没拿到更好的，只能继续沿用已持久化的（即使它可能是 medium），避免空图
+                highQualityImageUrl = persisted;
+              }
+            }
           } catch (e) {
             debugPrint('获取本地媒体高清信息失败 (animeId: ${candidate.animeId}): $e');
           }
@@ -2760,12 +2828,36 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       debugPrint('升级项目 $index 为高清版本失败: $e');
     }
   }
+
+  // 经验性判断一个图片URL是否"看起来"是高清图
+  bool _looksHighQualityUrl(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('bgm.tv') || lower.contains('type=large') || lower.contains('original')) {
+      return true;
+    }
+    if (lower.contains('medium') || lower.contains('small')) {
+      return false;
+    }
+    // 解析 width= 参数
+    final widthMatch = RegExp(r'[?&]width=(\d+)').firstMatch(lower);
+    if (widthMatch != null) {
+      final w = int.tryParse(widthMatch.group(1)!);
+      if (w != null && w >= 1000) return true;
+    }
+    // 否则未知，默认当作高清，避免不必要的重复网络请求
+    return true;
+  }
   
 
 
   // 下载并缓存单个图片
   Future<void> _downloadAndCacheImage(String imageUrl, String cacheKey) async {
     try {
+      // 已缓存则跳过重复下载
+      if (_cachedImages.containsKey(imageUrl)) {
+        debugPrint('图片已缓存，跳过下载: $imageUrl');
+        return;
+      }
       debugPrint('下载图片: $imageUrl');
       
       final response = await http.get(Uri.parse(imageUrl)).timeout(
