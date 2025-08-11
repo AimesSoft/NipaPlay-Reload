@@ -20,6 +20,7 @@ class SystemResourceDisplay extends StatefulWidget {
 class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   // 用于定期刷新UI的计时器
   Timer? _refreshTimer;
+  bool _registered = false; // 是否已向监控器注册为消费者
   
   // 资源指标
   double _cpuUsage = 0.0;
@@ -36,13 +37,38 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
     
     // 移除桌面平台限制，在所有平台启用
     if (!kIsWeb) {
-      _startUpdating();
+      // 不在这里直接启动更新，等到真正需要显示时再注册与启动
     }
   }
   
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (kIsWeb) return;
+    final devOptions = Provider.of<DeveloperOptionsProvider>(context);
+    _updateRegistration(devOptions.showSystemResources);
+  }
+
+  void _updateRegistration(bool shouldShow) {
+    if (shouldShow && !_registered) {
+      SystemResourceMonitor.registerConsumer();
+      _registered = true;
+      _startUpdating();
+    } else if (!shouldShow && _registered) {
+      SystemResourceMonitor.unregisterConsumer();
+      _registered = false;
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    }
+  }
+
+  @override
   void dispose() {
     _refreshTimer?.cancel();
+    if (_registered) {
+      SystemResourceMonitor.unregisterConsumer();
+      _registered = false;
+    }
     super.dispose();
   }
   
