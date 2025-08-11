@@ -85,6 +85,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   late final ValueNotifier<int> _heroBannerIndexNotifier;
   int? _hoveredIndicatorIndex;
 
+  // 缓存映射，用于存储已绘制的缩略图和最后绘制时间
+  final Map<String, Map<String, dynamic>> _thumbnailCache = {};
+
+  // 追踪已绘制的文件路径
+  final Set<String> _renderedThumbnailPaths = {};
+
+  // 静态变量，用于缓存推荐内容
+  static List<RecommendedItem> _cachedRecommendedItems = [];
+  static DateTime? _lastRecommendedLoadTime;
+
   @override
   void initState() {
     super.initState();
@@ -435,14 +445,14 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     // 并行加载推荐内容和最近内容
     try {
       await Future.wait([
-        _loadRecommendedContent(),
+        _loadRecommendedContent(forceRefresh: true),
         _loadRecentContent(),
       ]);
     } catch (e) {
       debugPrint('DashboardHomePage: 并行加载数据时发生错误: $e');
       // 如果并行加载失败，尝试串行加载
       try {
-        await _loadRecommendedContent();
+        await _loadRecommendedContent(forceRefresh: true);
         await _loadRecentContent();
       } catch (e2) {
         debugPrint('DashboardHomePage: 串行加载数据也失败: $e2');
@@ -468,12 +478,30 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
   }
 
-  Future<void> _loadRecommendedContent() async {
+  Future<void> _loadRecommendedContent({bool forceRefresh = false}) async {
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过推荐内容加载');
       return;
     }
     
+    // 检查是否强制刷新或缓存已过期
+    if (!forceRefresh && _cachedRecommendedItems.isNotEmpty && 
+        _lastRecommendedLoadTime != null && 
+        DateTime.now().difference(_lastRecommendedLoadTime!).inHours < 24) {
+      debugPrint('DashboardHomePage: 使用缓存的推荐内容');
+      setState(() {
+        _recommendedItems = _cachedRecommendedItems;
+        _isLoadingRecommended = false;
+      });
+      
+      // 推荐内容加载完成后启动自动切换
+      if (_recommendedItems.length >= 5) {
+        _startAutoSwitch();
+      }
+      
+      return;
+    }
+
     debugPrint('DashboardHomePage: 开始加载推荐内容');
     setState(() {
       _isLoadingRecommended = true;
@@ -682,6 +710,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           _isLoadingRecommended = false;
         });
         
+        // 缓存推荐内容和加载时间
+        _cachedRecommendedItems = basicItems;
+        _lastRecommendedLoadTime = DateTime.now();
+        
         // 推荐内容加载完成后启动自动切换
         if (basicItems.length >= 5) {
           _startAutoSwitch();
@@ -769,7 +801,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             !item.filePath.startsWith('emby://')
           ).toList();
 
-          // 按animeId分组，选取“添加时间”代表：
+          // 按animeId分组，选取"添加时间"代表：
           // 优先使用 isFromScan 为 true 的记录的 lastWatchTime（扫描入库时间），否则用最近一次 lastWatchTime
           final Map<int, WatchHistoryItem> representativeItems = {};
           final Map<int, DateTime> addedTimeMap = {};
@@ -1906,10 +1938,23 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   Widget _getVideoThumbnail(WatchHistoryItem item) {
+    final now = DateTime.now();
+    
+    // 检查是否存在缓存，并且距离上次绘制未超过10秒
+    if (_thumbnailCache.containsKey(item.filePath)) {
+      final cachedData = _thumbnailCache[item.filePath]!;
+      final lastRenderTime = cachedData['time'] as DateTime;
+      
+      if (now.difference(lastRenderTime).inSeconds < 60) {
+        return cachedData['widget'] as Widget;
+      }
+    }
+
+    print("被重绘了");
     if (item.thumbnailPath != null) {
       final thumbnailFile = File(item.thumbnailPath!);
       if (thumbnailFile.existsSync()) {
-        return FutureBuilder<Uint8List>(
+        final thumbnailWidget = FutureBuilder<Uint8List>(
           future: thumbnailFile.readAsBytes(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -1930,9 +1975,26 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             }
           },
         );
+        
+        // 缓存生成的缩略图和当前时间
+        _thumbnailCache[item.filePath] = {
+          'widget': thumbnailWidget,
+          'time': now
+        };
+        
+        return thumbnailWidget;
       }
     }
-    return _buildDefaultThumbnail();
+
+    final defaultThumbnail = _buildDefaultThumbnail();
+    
+    // 缓存默认缩略图和当前时间
+    _thumbnailCache[item.filePath] = {
+      'widget': defaultThumbnail,
+      'time': now
+    };
+    
+    return defaultThumbnail;
   }
 
   Widget _buildDefaultThumbnail() {
