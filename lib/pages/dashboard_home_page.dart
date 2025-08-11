@@ -2141,8 +2141,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         return cachedData['widget'] as Widget;
       }
     }
-
-    print("被重绘了");
     if (item.thumbnailPath != null) {
       final thumbnailFile = File(item.thumbnailPath!);
       if (thumbnailFile.existsSync()) {
