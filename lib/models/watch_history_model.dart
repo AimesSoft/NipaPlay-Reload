@@ -110,11 +110,11 @@ class WatchHistoryManager {
   static DateTime _lastWriteTime = DateTime.now(); // 记录最后写入时间
   static bool _migratedToDatabase = false; // 标记是否已迁移到数据库
   // 控制是否需要重绘的标志
-  static bool _shouldNotifyListeners = true;
+  static bool _shouldnotifyListeners = true;
 
   // 设置是否需要重绘的方法
-  static void setShouldNotifyListeners(bool value) {
-    _shouldNotifyListeners = value;
+  static void setShouldnotifyListeners(bool value) {
+    _shouldnotifyListeners = value;
   }
 
   // 初始化历史记录管理器

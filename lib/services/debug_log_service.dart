@@ -1,6 +1,5 @@
 import 'dart:collection';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 /// 日志条目模型
@@ -244,6 +243,7 @@ class DebugLogService extends ChangeNotifier {
   }
 
   /// 释放资源
+  @override
   void dispose() {
     stopCollecting();
     _logEntries.clear();

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -571,6 +570,7 @@ class HotkeyService extends ChangeNotifier {
   }
   
   // 清理资源
+  @override
   Future<void> dispose() async {
     await hotKeyManager.unregisterAll();
     _registeredHotkeys.clear();

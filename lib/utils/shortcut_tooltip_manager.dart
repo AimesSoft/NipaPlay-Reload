@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'hotkey_service.dart';
 import 'dart:async';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// 快捷键提示管理器，用于统一管理和更新所有快捷键提示
 class ShortcutTooltipManager extends ChangeNotifier {
