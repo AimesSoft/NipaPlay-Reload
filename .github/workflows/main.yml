@@ -50,7 +50,7 @@ jobs:
           - target: Android
             os: ubuntu-latest
             artifact_name: release-Android
-            artifact_path: build/app/outputs/apk/release/*.apk
+            artifact_path: build/app/outputs/apk/release/NipaPlay-*.apk
           - target: Windows
             os: windows-latest
             artifact_name: release-Windows-x64
@@ -99,8 +99,16 @@ jobs:
       # Get app version
       - name: Get app version
         id: get_version
+        shell: bash
         run: |
-          echo "version=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)" >> $GITHUB_OUTPUT
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            # Use PowerShell for Windows to extract version
+            VERSION=$(pwsh -Command "(Get-Content pubspec.yaml | Select-String -Pattern '^version:' | ForEach-Object { \$_ -replace '^version: ', '' }).Trim()")
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          else
+            # Use grep/cut for Linux/macOS
+            echo "version=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)" >> $GITHUB_OUTPUT
+          fi
       
       # Setup Android SDK and build-tools
       - name: Setup Android SDK
@@ -125,7 +133,7 @@ jobs:
           echo "${{ secrets.SIGNING_KEY }}" | base64 -d > keystore.jks
           
           # 为arm64架构的APK签名
-          input_apk="build/app/outputs/flutter-apk/app-release.apk"
+          input_apk="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           output_apk="build/app/outputs/apk/release/NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk"
           
           # 确保输出目录存在
@@ -149,7 +157,7 @@ jobs:
           rm -f temp-aligned.apk
           
           # 删除未签名的APK和keystore
-          rm -f "$input_apk"
+          rm -f "build/app/outputs/flutter-apk/app-release.apk"
           rm -f keystore.jks
           
           # 验证最终的APK文件
