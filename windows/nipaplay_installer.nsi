@@ -12,7 +12,7 @@ InstallDir "$PROGRAMFILES\NipaPlay"
 InstallDirRegKey HKCU "Software\NipaPlay" "InstallDir"
 RequestExecutionLevel admin
 
-; 版本信息
+; 版本信息 (这些将在构建时被GitHub Actions替换)
 VIProductVersion "1.0.0.0"
 VIAddVersionKey "ProductName" "NipaPlay"
 VIAddVersionKey "CompanyName" "MCDFSteve"

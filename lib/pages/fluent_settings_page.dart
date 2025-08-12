@@ -9,6 +9,7 @@ import 'package:nipaplay/pages/fluent_settings/fluent_remote_access_page.dart';
 import 'package:nipaplay/pages/fluent_settings/fluent_remote_media_library_page.dart';
 import 'package:nipaplay/pages/fluent_settings/fluent_shortcuts_page.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/pages/settings/watch_history_page.dart';
 
 class FluentSettingsPage extends StatefulWidget {
   const FluentSettingsPage({super.key});
@@ -38,6 +39,12 @@ class _FluentSettingsPageState extends State<FluentSettingsPage> {
       icon: const Icon(FluentIcons.settings),
       title: const Text('通用'),
       body: const FluentGeneralPage(),
+    ),
+    PaneItem(
+      key: const ValueKey('watch_history'),
+      icon: const Icon(FluentIcons.history),
+      title: const Text('观看记录'),
+      body: const WatchHistoryPage(),
     ),
     PaneItem(
       key: const ValueKey('player'),

@@ -411,9 +411,9 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
             ),
               indicatorWeight: 3,
               tabs: const [
-              Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.info_outline, size: 18), SizedBox(width: 8), Text('简介')])),
-              Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.video_library_outlined, size: 18), SizedBox(width: 8), Text('剧集')])),
-            ],
+                Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.document_text_outline, size: 18), SizedBox(width: 8), Text('简介')])),
+                Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.film_outline, size: 18), SizedBox(width: 8), Text('剧集')])),
+              ],
           ),
           Expanded(
             child: _isMovie || _tabController == null
