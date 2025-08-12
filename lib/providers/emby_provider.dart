@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -14,6 +15,8 @@ class EmbyProvider extends ChangeNotifier {
   List<EmbyMovieInfo> _movieItems = [];
   Map<String, EmbyMediaItemDetail> _mediaDetailsCache = {};
   Map<String, EmbyMovieInfo> _movieDetailsCache = {};
+  Timer? _notifyTimer;
+  bool _disposed = false;
   
   // 排序相关状态
   String _currentSortBy = 'DateCreated';
@@ -36,6 +39,23 @@ class EmbyProvider extends ChangeNotifier {
   String get currentSortBy => _currentSortBy;
   String get currentSortOrder => _currentSortOrder;
 
+  // 将临近多次状态变化合并为一次通知，降低 UI 抖动
+  void _notifyCoalesced({Duration delay = const Duration(milliseconds: 500)}) {
+    if (_disposed) return;
+    _notifyTimer?.cancel();
+    _notifyTimer = Timer(delay, () {
+      if (_disposed) return;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _notifyTimer?.cancel();
+    super.dispose();
+  }
+
   // 初始化Emby Provider
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -45,7 +65,7 @@ class EmbyProvider extends ChangeNotifier {
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
-    notifyListeners();
+    _notifyCoalesced();
     
     try {
       print('EmbyProvider: 调用EmbyService.loadSavedSettings()...');
@@ -67,7 +87,7 @@ class EmbyProvider extends ChangeNotifier {
       _errorMessage = e.toString();
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _notifyCoalesced();
       print('EmbyProvider: 初始化完成');
     }
   }
@@ -81,7 +101,8 @@ class EmbyProvider extends ChangeNotifier {
       loadMediaItems();
       loadMovieItems();
     }
-    notifyListeners();
+    // 连接状态变化可能伴随后续的媒体加载通知，这里合并通知，避免短时间多次刷新
+    _notifyCoalesced();
   }
   
   // 加载Emby媒体项
@@ -91,7 +112,7 @@ class EmbyProvider extends ChangeNotifier {
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
-    notifyListeners();
+    _notifyCoalesced();
     
     try {
       _mediaItems = await _embyService.getLatestMediaItems(
@@ -104,7 +125,7 @@ class EmbyProvider extends ChangeNotifier {
       _mediaItems = [];
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _notifyCoalesced();
     }
   }
   
@@ -118,6 +139,8 @@ class EmbyProvider extends ChangeNotifier {
       _hasError = true;
       _errorMessage = e.toString();
       _movieItems = [];
+    } finally {
+      _notifyCoalesced();
     }
   }
   
@@ -126,7 +149,7 @@ class EmbyProvider extends ChangeNotifier {
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
-    notifyListeners();
+    _notifyCoalesced();
     
     try {
       final success = await _embyService.connect(serverUrl, username, password);
@@ -143,7 +166,7 @@ class EmbyProvider extends ChangeNotifier {
       return false;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _notifyCoalesced();
     }
   }
   
@@ -154,7 +177,7 @@ class EmbyProvider extends ChangeNotifier {
     _movieItems = [];
     _mediaDetailsCache = {};
     _movieDetailsCache = {};
-    notifyListeners();
+    _notifyCoalesced();
   }
   
   // 更新选中的媒体库
