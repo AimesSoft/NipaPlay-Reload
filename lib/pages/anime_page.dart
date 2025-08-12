@@ -363,7 +363,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         
         // 动态生成标签
         final List<Tab> tabs = [
-          const Tab(text: "媒体库"),
+          const Tab(text: "本地媒体库"),
           const Tab(text: "库管理"),
         ];
         
