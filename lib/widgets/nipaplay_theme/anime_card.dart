@@ -150,7 +150,7 @@ class _AnimeCardState extends State<AnimeCard> {
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: Colors.white.withOpacity(0.2),
               width: 0.5,
@@ -158,7 +158,7 @@ class _AnimeCardState extends State<AnimeCard> {
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.3),
-                blurRadius: 8,
+                blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
             ],

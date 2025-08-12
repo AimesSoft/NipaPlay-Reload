@@ -97,7 +97,7 @@ class _SwitchableViewState extends State<SwitchableView> {
     } else {
       // 🔥 CPU优化：改为真正的按需渲染，而不是IndexedStack
       // IndexedStack会同时构建所有页面导致资源泄漏
-      debugPrint('[CPU-优化] SwitchableView 按需渲染页面索引: $_currentIndex');
+      //debugPrint('[CPU-优化] SwitchableView 按需渲染页面索引: $_currentIndex');
       
       if (_currentIndex >= 0 && _currentIndex < widget.children.length) {
         return widget.children[_currentIndex];

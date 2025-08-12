@@ -198,6 +198,23 @@ class DynamicFontAtlas {
     double y = 0;
     double maxRowHeight = 0;
     const atlasWidth = 2048.0; // 使用更大的图集宽度以容纳更多字符
+    
+    // 🔥 新增：计算字体度量信息，确保包含完整的ascender和descender
+    final fontMetrics = ui.ParagraphBuilder(
+      ui.ParagraphStyle(
+        fontSize: fontSize * 2.0,
+        fontStyle: ui.FontStyle.normal,
+      ),
+    )..addText('Ag😀yg|'); // 使用包含各种字符高度的测试字符串
+    final paragraph = fontMetrics.build();
+    paragraph.layout(const ui.ParagraphConstraints(width: double.infinity));
+    
+    // 计算额外的上下边距，确保包含完整的字符高度
+    final standardHeight = fontSize * 2.0;
+    final actualHeight = paragraph.height;
+    final extraPadding = (actualHeight - standardHeight).clamp(0.0, fontSize * 0.5);
+    final topPadding = extraPadding;
+    final bottomPadding = extraPadding;
 
     final newCharMap = <String, Rect>{};
 
@@ -210,6 +227,9 @@ class DynamicFontAtlas {
         textDirection: TextDirection.ltr,
       );
       textPainter.layout();
+      
+      // 🔥 修改：计算包含上下边距的实际渲染高度
+      final actualCharHeight = textPainter.height + topPadding + bottomPadding;
 
       if (x + textPainter.width > atlasWidth) {
         x = 0;
@@ -217,13 +237,15 @@ class DynamicFontAtlas {
         maxRowHeight = 0;
       }
       
-      textPainter.paint(canvas, Offset(x, y));
+      // 🔥 修改：在绘制时添加顶部边距，确保字符不被裁剪
+      textPainter.paint(canvas, Offset(x, y + topPadding));
 
-      newCharMap[charStr] = Rect.fromLTWH(x, y, textPainter.width, textPainter.height);
+      // 🔥 修改：保存包含完整边距的字符矩形区域
+      newCharMap[charStr] = Rect.fromLTWH(x, y, textPainter.width, actualCharHeight);
       
       x += textPainter.width;
-      if (textPainter.height > maxRowHeight) {
-        maxRowHeight = textPainter.height;
+      if (actualCharHeight > maxRowHeight) {
+        maxRowHeight = actualCharHeight;
       }
     }
 

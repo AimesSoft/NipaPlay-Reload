@@ -49,12 +49,13 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
         countText: content.countText,
       ),
       // 根据文本内容估算尺寸，以便CustomPaint有正确的绘制区域
+      // 🔥 修改：增加额外高度以适应emoji和带descender的字符
       size: Size(
         calculateTextWidth(
           content.text + (content.countText ?? ''),
           scale: 0.5 * content.fontSizeMultiplier,
         ),
-        config.fontSize * content.fontSizeMultiplier,
+        config.fontSize * content.fontSizeMultiplier * 1.4, // 增加40%的高度缓冲
       ),
     );
   }
@@ -138,15 +139,16 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     
     final bool needsOpacityLayer = opacity < 1.0;
 
-    // 🔥 修改：仅在需要时创建透明层
+    // 🔥 修改：仅在需要时创建透明层，增加额外高度以确保字符不被裁剪
     if (needsOpacityLayer) {
       final width = calculateTextWidth(
         item.text + (countText ?? ''),
         scale: scale * fontSizeMultiplier,
       );
-      final height = config.fontSize * fontSizeMultiplier;
+      // 🔥 增加额外高度以适应emoji和带descender的字符
+      final height = config.fontSize * fontSizeMultiplier * 1.4; // 增加40%的高度缓冲
       canvas.saveLayer(
-        Rect.fromLTWH(x, y, width, height),
+        Rect.fromLTWH(x, y + 10, width, height), // 向上偏移10%高度
         Paint()..color = Colors.white.withOpacity(opacity),
       );
     }
@@ -176,7 +178,9 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
       final adjustedScale = scale * fontSizeMultiplier;
       final charWidthScaled = charInfo.width * adjustedScale;
       final charCenterX = currentX + charWidthScaled / 2;
-      final charCenterY = y + config.fontSize * fontSizeMultiplier / 2;
+      // 🔥 修改：调整字符中心Y坐标，考虑字符图集中的实际高度
+      final charHeightScaled = charInfo.height * adjustedScale;
+      final charCenterY = y + charHeightScaled / 2;
 
       // 1. 准备描边层参数 (8个方向)
       final offsets = [
@@ -332,10 +336,11 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
         final item = items[i];
         final position = positions[i];
         final textWidth = calculateTextWidth(item.text, scale: scale);
-        final textHeight = config.fontSize;
+        // 🔥 修改：增加额外高度以适应emoji和带descender的字符
+        final textHeight = config.fontSize * 1.4; // 增加40%的高度缓冲
         
         minX = math.min(minX, position.dx);
-        minY = math.min(minY, position.dy);
+        minY = math.min(minY, position.dy - textHeight * 0.1); // 向上偏移10%高度
         maxX = math.max(maxX, position.dx + textWidth);
         maxY = math.max(maxY, position.dy + textHeight);
       }
