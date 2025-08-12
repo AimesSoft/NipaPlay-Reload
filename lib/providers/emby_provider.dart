@@ -1,7 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class EmbyProvider extends ChangeNotifier {
   final EmbyService _embyService = EmbyService.instance;
@@ -14,10 +17,15 @@ class EmbyProvider extends ChangeNotifier {
   List<EmbyMovieInfo> _movieItems = [];
   Map<String, EmbyMediaItemDetail> _mediaDetailsCache = {};
   Map<String, EmbyMovieInfo> _movieDetailsCache = {};
+  Timer? _notifyTimer;
+  bool _disposed = false;
   
   // 排序相关状态
   String _currentSortBy = 'DateCreated';
   String _currentSortOrder = 'Descending';
+  
+  // 每个媒体库的独立排序设置
+  Map<String, Map<String, String>> _librarySpecificSortSettings = {};
 
   // Getters
   bool get isInitialized => _isInitialized;
@@ -35,6 +43,41 @@ class EmbyProvider extends ChangeNotifier {
   // 排序相关getter
   String get currentSortBy => _currentSortBy;
   String get currentSortOrder => _currentSortOrder;
+  
+  // 获取特定媒体库的排序设置
+  Map<String, String> getLibrarySortSettings(String libraryId) {
+    return _librarySpecificSortSettings[libraryId] ?? {
+      'sortBy': _currentSortBy,
+      'sortOrder': _currentSortOrder,
+    };
+  }
+  
+  // 设置特定媒体库的排序设置
+  void setLibrarySortSettings(String libraryId, String sortBy, String sortOrder) {
+    _librarySpecificSortSettings[libraryId] = {
+      'sortBy': sortBy,
+      'sortOrder': sortOrder,
+    };
+    // 保存到SharedPreferences
+    _saveSortSettings();
+  }
+
+  // 将临近多次状态变化合并为一次通知，降低 UI 抖动
+  void _notifyCoalesced({Duration delay = const Duration(milliseconds: 800)}) {
+    if (_disposed) return;
+    _notifyTimer?.cancel();
+    _notifyTimer = Timer(delay, () {
+      if (_disposed) return;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _notifyTimer?.cancel();
+    super.dispose();
+  }
 
   // 初始化Emby Provider
   Future<void> initialize() async {
@@ -45,11 +88,12 @@ class EmbyProvider extends ChangeNotifier {
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
-    notifyListeners();
+    _notifyCoalesced();
     
     try {
       print('EmbyProvider: 调用EmbyService.loadSavedSettings()...');
-      await _embyService.loadSavedSettings();
+  await _embyService.loadSavedSettings();
+  await _loadSortSettings(); // 加载排序设置
       _isInitialized = true;
       
       print('EmbyProvider: EmbyService初始化完成，初始连接状态: ${_embyService.isConnected}');
@@ -67,7 +111,7 @@ class EmbyProvider extends ChangeNotifier {
       _errorMessage = e.toString();
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _notifyCoalesced();
       print('EmbyProvider: 初始化完成');
     }
   }
@@ -81,7 +125,8 @@ class EmbyProvider extends ChangeNotifier {
       loadMediaItems();
       loadMovieItems();
     }
-    notifyListeners();
+    // 连接状态变化可能伴随后续的媒体加载通知，这里合并通知，避免短时间多次刷新
+    _notifyCoalesced();
   }
   
   // 加载Emby媒体项
@@ -91,7 +136,7 @@ class EmbyProvider extends ChangeNotifier {
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
-    notifyListeners();
+    _notifyCoalesced();
     
     try {
       _mediaItems = await _embyService.getLatestMediaItems(
@@ -104,7 +149,7 @@ class EmbyProvider extends ChangeNotifier {
       _mediaItems = [];
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _notifyCoalesced();
     }
   }
   
@@ -118,6 +163,8 @@ class EmbyProvider extends ChangeNotifier {
       _hasError = true;
       _errorMessage = e.toString();
       _movieItems = [];
+    } finally {
+      _notifyCoalesced();
     }
   }
   
@@ -126,7 +173,7 @@ class EmbyProvider extends ChangeNotifier {
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
-    notifyListeners();
+    _notifyCoalesced();
     
     try {
       final success = await _embyService.connect(serverUrl, username, password);
@@ -143,7 +190,7 @@ class EmbyProvider extends ChangeNotifier {
       return false;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _notifyCoalesced();
     }
   }
   
@@ -154,7 +201,7 @@ class EmbyProvider extends ChangeNotifier {
     _movieItems = [];
     _mediaDetailsCache = {};
     _movieDetailsCache = {};
-    notifyListeners();
+    _notifyCoalesced();
   }
   
   // 更新选中的媒体库
@@ -221,6 +268,18 @@ class EmbyProvider extends ChangeNotifier {
     }
   }
   
+  // 只更新排序设置，不触发媒体重新加载（用于库内容页的外部控制）
+  void updateSortSettingsOnly(String sortBy, String sortOrder) {
+    print('EmbyProvider: 仅更新排序设置 - sortBy: $sortBy, sortOrder: $sortOrder');
+    if (_currentSortBy != sortBy || _currentSortOrder != sortOrder) {
+      _currentSortBy = sortBy;
+      _currentSortOrder = sortOrder;
+      // 不调用 notifyListeners() 以避免触发其他组件重新加载
+    } else {
+      print('EmbyProvider: 排序设置未变化，跳过更新');
+    }
+  }
+  
   // 获取流媒体URL
   String getStreamUrl(String itemId) {
     return _embyService.getStreamUrl(itemId);
@@ -235,5 +294,36 @@ class EmbyProvider extends ChangeNotifier {
       height: height,
       quality: quality,
     );
+  }
+
+  // 保存排序设置到SharedPreferences
+  Future<void> _saveSortSettings() async {
+    if (kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = json.encode(_librarySpecificSortSettings);
+      await prefs.setString('emby_library_sort_settings', jsonString);
+      print('EmbyProvider: 排序设置已保存');
+    } catch (e) {
+      print('EmbyProvider: 保存排序设置失败: $e');
+    }
+  }
+
+  // 加载排序设置
+  Future<void> _loadSortSettings() async {
+    if (kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sortSettingsJson = prefs.getString('emby_library_sort_settings');
+      if (sortSettingsJson != null) {
+        final Map<String, dynamic> decoded = json.decode(sortSettingsJson);
+        _librarySpecificSortSettings = decoded.map((key, value) =>
+            MapEntry(key, Map<String, String>.from(value)));
+        print('EmbyProvider: 加载了媒体库排序设置: $_librarySpecificSortSettings');
+      }
+    } catch (e) {
+      print('EmbyProvider: 加载媒体库排序设置失败: $e');
+      _librarySpecificSortSettings = {};
+    }
   }
 }
