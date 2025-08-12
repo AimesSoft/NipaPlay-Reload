@@ -125,12 +125,15 @@ jobs:
           echo "${{ secrets.SIGNING_KEY }}" | base64 -d > keystore.jks
           
           # 为arm64架构的APK签名
-          input_apk="build/app/outputs/apk/release/app-arm64-v8a-release.apk"
+          input_apk="build/app/outputs/flutter-apk/app-release.apk"
           output_apk="build/app/outputs/apk/release/NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk"
+          
+          # 确保输出目录存在
+          mkdir -p "$(dirname "$output_apk")"
           
           # 使用zipalign对APK进行对齐
           $ANDROID_HOME/build-tools/29.0.3/zipalign -v -p 4 \
-            $input_apk \
+            "$input_apk" \
             temp-aligned.apk
           
           # 使用apksigner对APK进行签名
@@ -146,7 +149,7 @@ jobs:
           rm -f temp-aligned.apk
           
           # 删除未签名的APK和keystore
-          rm -f build/app/outputs/apk/release/app-*.apk
+          rm -f "$input_apk"
           rm -f keystore.jks
           
           # 验证最终的APK文件
