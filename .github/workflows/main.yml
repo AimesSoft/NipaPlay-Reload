@@ -129,15 +129,38 @@ jobs:
           # 只构建arm64架构APK (大幅减少构建时间)
           flutter build apk --release --target-platform android-arm64
           
+          # 检查生成的APK文件
+          echo "检查构建输出目录："
+          ls -la build/app/outputs/flutter-apk/
+          
           # 创建签名配置文件
           echo "${{ secrets.SIGNING_KEY }}" | base64 -d > keystore.jks
           
-          # 为arm64架构的APK签名
-          input_apk="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          # 确定实际生成的APK文件名
+          if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+            input_apk="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          elif [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            input_apk="build/app/outputs/flutter-apk/app-release.apk"
+          else
+            echo "错误：找不到生成的APK文件"
+            echo "可用的文件："
+            ls -la build/app/outputs/flutter-apk/
+            exit 1
+          fi
+          
           output_apk="build/app/outputs/apk/release/NipaPlay-${{ steps.get_version.outputs.version }}-Android-arm64.apk"
+          
+          echo "输入APK: $input_apk"
+          echo "输出APK: $output_apk"
           
           # 确保输出目录存在
           mkdir -p "$(dirname "$output_apk")"
+          
+          # 检查APK文件是否有效
+          if ! unzip -t "$input_apk" >/dev/null 2>&1; then
+            echo "错误：APK文件损坏或无效"
+            exit 1
+          fi
           
           # 使用zipalign对APK进行对齐
           $ANDROID_HOME/build-tools/29.0.3/zipalign -v -p 4 \
@@ -157,7 +180,7 @@ jobs:
           rm -f temp-aligned.apk
           
           # 删除未签名的APK和keystore
-          rm -f "build/app/outputs/flutter-apk/app-release.apk"
+          rm -f "$input_apk"
           rm -f keystore.jks
           
           # 验证最终的APK文件
