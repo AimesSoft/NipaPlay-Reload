@@ -39,17 +39,18 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
             );
           }
 
-          if (historyProvider.history.isEmpty) {
+          // 过滤出真正被观看过的记录（与主页仪表盘保持一致）
+          final validHistory = historyProvider.history.where((item) => item.duration > 0).toList();
+
+          if (validHistory.isEmpty) {
             return _buildEmptyState();
           }
 
-          final history = historyProvider.history;
-
           return ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: history.length,
+            itemCount: validHistory.length,
             itemBuilder: (context, index) {
-              final item = history[index];
+              final item = validHistory[index];
               return _buildWatchHistoryItem(item);
             },
             separatorBuilder: (context, index) => const SizedBox(height: 8),
