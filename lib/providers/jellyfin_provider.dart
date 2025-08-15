@@ -87,9 +87,7 @@ class JellyfinProvider extends ChangeNotifier {
       final sortSettingsJson = prefs.getString('jellyfin_library_sort_settings');
       if (sortSettingsJson != null) {
         final Map<String, dynamic> decoded = json.decode(sortSettingsJson);
-        _librarySpecificSortSettings = decoded.map((key, value) => 
-          MapEntry(key, Map<String, String>.from(value))
-        );
+        _librarySpecificSortSettings = decoded.map((key, value) => MapEntry(key, Map<String, String>.from(value)));
         print('JellyfinProvider: 加载了媒体库排序设置: $_librarySpecificSortSettings');
       }
     } catch (e) {
