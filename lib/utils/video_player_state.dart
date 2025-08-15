@@ -83,6 +83,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _currentVideoPath;
   String _danmakuOverlayKey = 'idle'; // 弹幕覆盖层的稳定key
   Timer? _uiUpdateTimer; // UI更新定时器（包含位置保存和数据持久化功能）
+  // 观看记录节流：记录上一次更新所处的10秒分桶，避免同一时间窗内重复写DB与通知Provider
+  int _lastHistoryUpdateBucket = -1;
+  // （保留占位，若未来要做更细粒度同步节流可再启用）
   // 🔥 新增：Ticker相关字段
   Ticker? _uiUpdateTicker;
   int _lastTickTime = 0;
@@ -1361,7 +1364,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
         
         if (_context != null && _context!.mounted) {
-          _context!.read<WatchHistoryProvider>().refresh();
+          // 仅通知变更的那条记录，避免全量刷新导致的监听风暴
+          await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
         }
         return;
       }
@@ -4787,8 +4791,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             // 保存播放位置（原来在10秒定时器中）
             _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
 
-            // 每10秒更新一次观看记录（减少数据库写入频率）
-            if (_position.inMilliseconds % 10000 < 500) { 
+            // 每10秒更新一次观看记录（使用分桶去抖，避免在窗口内重复调用）
+            final int currentBucket = _position.inMilliseconds ~/ 10000;
+            if (currentBucket != _lastHistoryUpdateBucket) {
+              _lastHistoryUpdateBucket = currentBucket;
               _updateWatchHistory();
             }
 

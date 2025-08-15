@@ -42,6 +42,12 @@ class DashboardHomePage extends StatefulWidget {
 
 class _DashboardHomePageState extends State<DashboardHomePage>
     with AutomaticKeepAliveClientMixin {
+  // 持有Provider实例引用，确保在dispose中能正确移除监听器
+  JellyfinProvider? _jellyfinProviderRef;
+  EmbyProvider? _embyProviderRef;
+  WatchHistoryProvider? _watchHistoryProviderRef;
+  ScanService? _scanServiceRef;
+  VideoPlayerState? _videoPlayerStateRef;
   
   @override
   bool get wantKeepAlive => true;
@@ -188,40 +194,40 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void _setupProviderListeners() {
     // 监听Jellyfin连接状态变化
     try {
-      final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-      jellyfinProvider.addListener(_onJellyfinStateChanged);
+  _jellyfinProviderRef = Provider.of<JellyfinProvider>(context, listen: false);
+  _jellyfinProviderRef!.addListener(_onJellyfinStateChanged);
     } catch (e) {
       debugPrint('DashboardHomePage: 添加JellyfinProvider监听器失败: $e');
     }
     
     // 监听Emby连接状态变化
     try {
-      final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-      embyProvider.addListener(_onEmbyStateChanged);
+  _embyProviderRef = Provider.of<EmbyProvider>(context, listen: false);
+  _embyProviderRef!.addListener(_onEmbyStateChanged);
     } catch (e) {
       debugPrint('DashboardHomePage: 添加EmbyProvider监听器失败: $e');
     }
     
     // 监听WatchHistoryProvider的加载状态变化
     try {
-      final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
-      watchHistoryProvider.addListener(_onWatchHistoryStateChanged);
+  _watchHistoryProviderRef = Provider.of<WatchHistoryProvider>(context, listen: false);
+  _watchHistoryProviderRef!.addListener(_onWatchHistoryStateChanged);
     } catch (e) {
       debugPrint('DashboardHomePage: 添加WatchHistoryProvider监听器失败: $e');
     }
     
     // 监听ScanService的扫描完成状态变化
     try {
-      final scanService = Provider.of<ScanService>(context, listen: false);
-      scanService.addListener(_onScanServiceStateChanged);
+  _scanServiceRef = Provider.of<ScanService>(context, listen: false);
+  _scanServiceRef!.addListener(_onScanServiceStateChanged);
     } catch (e) {
       debugPrint('DashboardHomePage: 添加ScanService监听器失败: $e');
     }
     
     // 监听VideoPlayerState的状态变化，用于检测播放器状态
     try {
-      final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
-      videoPlayerState.addListener(_onVideoPlayerStateChanged);
+  _videoPlayerStateRef = Provider.of<VideoPlayerState>(context, listen: false);
+  _videoPlayerStateRef!.addListener(_onVideoPlayerStateChanged);
     } catch (e) {
       debugPrint('DashboardHomePage: 添加VideoPlayerState监听器失败: $e');
     }
@@ -365,7 +371,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void _onWatchHistoryStateChanged() {
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
-      debugPrint('DashboardHomePage: Widget已销毁，跳过WatchHistory状态变化处理');
       return;
     }
     
@@ -456,53 +461,38 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     _heroBannerIndexNotifier.dispose();
     
-    // 移除监听器 - 使用更安全的方式
+    // 移除监听器 - 使用初始化时保存的实例引用，避免在dispose中再次查找context
     try {
-      if (mounted) {
-        final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-        jellyfinProvider.removeListener(_onJellyfinStateChanged);
-        debugPrint('DashboardHomePage: JellyfinProvider监听器已移除');
-      }
+      _jellyfinProviderRef?.removeListener(_onJellyfinStateChanged);
+      debugPrint('DashboardHomePage: JellyfinProvider监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除JellyfinProvider监听器失败: $e');
     }
     
     try {
-      if (mounted) {
-        final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-        embyProvider.removeListener(_onEmbyStateChanged);
-        debugPrint('DashboardHomePage: EmbyProvider监听器已移除');
-      }
+      _embyProviderRef?.removeListener(_onEmbyStateChanged);
+      debugPrint('DashboardHomePage: EmbyProvider监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除EmbyProvider监听器失败: $e');
     }
     
     try {
-      if (mounted) {
-        final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
-        watchHistoryProvider.removeListener(_onWatchHistoryStateChanged);
-        debugPrint('DashboardHomePage: WatchHistoryProvider监听器已移除');
-      }
+      _watchHistoryProviderRef?.removeListener(_onWatchHistoryStateChanged);
+      debugPrint('DashboardHomePage: WatchHistoryProvider监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除WatchHistoryProvider监听器失败: $e');
     }
     
     try {
-      if (mounted) {
-        final scanService = Provider.of<ScanService>(context, listen: false);
-        scanService.removeListener(_onScanServiceStateChanged);
-        debugPrint('DashboardHomePage: ScanService监听器已移除');
-      }
+      _scanServiceRef?.removeListener(_onScanServiceStateChanged);
+      debugPrint('DashboardHomePage: ScanService监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除ScanService监听器失败: $e');
     }
     
     try {
-      if (mounted) {
-        final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
-        videoPlayerState.removeListener(_onVideoPlayerStateChanged);
-        debugPrint('DashboardHomePage: VideoPlayerState监听器已移除');
-      }
+      _videoPlayerStateRef?.removeListener(_onVideoPlayerStateChanged);
+      debugPrint('DashboardHomePage: VideoPlayerState监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除VideoPlayerState监听器失败: $e');
     }
