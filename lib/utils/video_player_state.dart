@@ -155,7 +155,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   
   // 添加播放速度相关状态
   static const String _playbackRateKey = 'playback_rate';
-  double _playbackRate = 2.0; // 默认2倍速
+  double _playbackRate = 1.0; // 默认1倍速
   bool _isSpeedBoostActive = false; // 是否正在倍速播放（长按状态）
   double _normalPlaybackRate = 1.0; // 正常播放速度
   
@@ -4002,7 +4002,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 加载播放速度设置
   Future<void> _loadPlaybackRate() async {
     final prefs = await SharedPreferences.getInstance();
-    _playbackRate = prefs.getDouble(_playbackRateKey) ?? 2.0;
+    _playbackRate = prefs.getDouble(_playbackRateKey) ?? 1.0; // 默认1倍速
     _normalPlaybackRate = 1.0; // 始终重置为1.0
     notifyListeners();
   }

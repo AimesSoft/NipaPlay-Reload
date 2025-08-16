@@ -168,9 +168,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _player.stream.tracks.listen(_updateMediaInfo);
     
     // 添加对视频尺寸变化的监听
-    debugPrint('[MediaKit] 设置videoParams监听器');
+    //debugPrint('[MediaKit] 设置videoParams监听器');
     _player.stream.videoParams.listen((params) {
-      debugPrint('[MediaKit] 视频参数变化: dw=${params.dw}, dh=${params.dh}');
+      //debugPrint('[MediaKit] 视频参数变化: dw=${params.dw}, dh=${params.dh}');
       // 当视频尺寸可用时，重新更新媒体信息
       if (params.dw != null && params.dh != null && params.dw! > 0 && params.dh! > 0) {
         _updateMediaInfoWithVideoDimensions(params.dw!, params.dh!);
@@ -180,12 +180,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     // 添加对播放状态的监听，在播放时检查视频尺寸
     _player.stream.playing.listen((playing) {
       if (playing) {
-        debugPrint('[MediaKit] 视频开始播放，检查视频尺寸');
+        //debugPrint('[MediaKit] 视频开始播放，检查视频尺寸');
         // 延迟一点时间确保视频已经真正开始播放
         Future.delayed(const Duration(milliseconds: 500), () {
           if (_player.state.width != null && _player.state.height != null && 
               _player.state.width! > 0 && _player.state.height! > 0) {
-            debugPrint('[MediaKit] 播放时获取到视频尺寸: ${_player.state.width}x${_player.state.height}');
+            //debugPrint('[MediaKit] 播放时获取到视频尺寸: ${_player.state.width}x${_player.state.height}');
             // 强制更新媒体信息
             _updateMediaInfoWithVideoDimensions(_player.state.width!, _player.state.height!);
           }
@@ -293,7 +293,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         width = null;
         height = null;
       }
-      debugPrint('[MediaKit] 轨道: id=${track.id}, title=${track.title}, codec=${track.codec}, width=$width, height=$height');
+      //debugPrint('[MediaKit] 轨道: id=${track.id}, title=${track.title}, codec=${track.codec}, width=$width, height=$height');
     }
     
     final realAudioTracks = _filterRealTracks<AudioTrack>(tracks.audio);
@@ -340,7 +340,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         if ((width == null || width == 0) && (_player.state.width != null && _player.state.width! > 0)) {
           width = _player.state.width;
           height = _player.state.height;
-          debugPrint('[MediaKit] 从_player.state获取视频尺寸: ${width}x$height');
+          //debugPrint('[MediaKit] 从_player.state获取视频尺寸: ${width}x$height');
         }
         
         return PlayerVideoStreamInfo(
@@ -354,7 +354,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }).toList();
       // 打印videoStreams的宽高
       for (var vs in videoStreams) {
-        debugPrint('[MediaKit] videoStreams: codec.width=${vs.codec.width}, codec.height=${vs.codec.height}, codecName=${vs.codecName}');
+        //debugPrint('[MediaKit] videoStreams: codec.width=${vs.codec.width}, codec.height=${vs.codec.height}, codecName=${vs.codecName}');
       }
     }
     
@@ -490,14 +490,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   /// 当视频尺寸可用时更新媒体信息
   void _updateMediaInfoWithVideoDimensions(int width, int height) {
-    debugPrint('[MediaKit] _updateMediaInfoWithVideoDimensions: width=$width, height=$height');
+    //debugPrint('[MediaKit] _updateMediaInfoWithVideoDimensions: width=$width, height=$height');
     
     // 更新现有的视频流信息
     if (_mediaInfo.video != null && _mediaInfo.video!.isNotEmpty) {
       final updatedVideoStreams = _mediaInfo.video!.map((stream) {
         // 如果当前宽高为0，则使用新的宽高
         if (stream.codec.width == 0 || stream.codec.height == 0) {
-          debugPrint('[MediaKit] 更新视频流尺寸: ${stream.codec.width}x${stream.codec.height} -> ${width}x$height');
+          //debugPrint('[MediaKit] 更新视频流尺寸: ${stream.codec.width}x${stream.codec.height} -> ${width}x$height');
           return PlayerVideoStreamInfo(
             codec: PlayerVideoCodecParams(
               width: width,
@@ -511,7 +511,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }).toList();
       
       _mediaInfo = _mediaInfo.copyWith(video: updatedVideoStreams);
-      debugPrint('[MediaKit] 媒体信息已更新，视频流尺寸: ${updatedVideoStreams.first.codec.width}x${updatedVideoStreams.first.codec.height}');
+      //debugPrint('[MediaKit] 媒体信息已更新，视频流尺寸: ${updatedVideoStreams.first.codec.width}x${updatedVideoStreams.first.codec.height}');
     }
   }
 
@@ -1087,7 +1087,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   
   @override
   void setMedia(String path, PlayerMediaType type) {
-    debugPrint('[MediaKit] setMedia: path=$path, type=$type');
+    //debugPrint('[MediaKit] setMedia: path=$path, type=$type');
     if (type == PlayerMediaType.subtitle) {
       debugPrint('MediaKitAdapter: setMedia called for SUBTITLE. Path: "$path"');
       if (path.isEmpty) {
@@ -1128,7 +1128,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         if (platform != null && platform.setProperty != null) {
           // 设置video-aspect为-1，让mpv自动保持原始宽高比
           platform.setProperty('video-aspect', '-1');
-          debugPrint('[MediaKit] 设置mpv底层video-aspect为-1（保持原始比例）');
+          //debugPrint('[MediaKit] 设置mpv底层video-aspect为-1（保持原始比例）');
           
           // 延迟检查设置是否生效
           Future.delayed(const Duration(milliseconds: 500), () async {
@@ -1137,14 +1137,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
               if (videoAspect is Future) {
                 videoAspect = await videoAspect;
               }
-              debugPrint('[MediaKit] mpv底层 video-aspect 设置后: $videoAspect');
+              //debugPrint('[MediaKit] mpv底层 video-aspect 设置后: $videoAspect');
             } catch (e) {
-              debugPrint('[MediaKit] 获取mpv底层video-aspect失败: $e');
+              //debugPrint('[MediaKit] 获取mpv底层video-aspect失败: $e');
             }
           });
         }
       } catch (e) {
-        debugPrint('[MediaKit] 设置mpv底层video-aspect失败: $e');
+        //debugPrint('[MediaKit] 设置mpv底层video-aspect失败: $e');
       }
     });
     
@@ -1192,7 +1192,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     try {
       final videoWidth = _player.state.width ?? 1920;
       final videoHeight = _player.state.height ?? 1080;
-      debugPrint('[MediaKit] snapshot: _player.state.width=$videoWidth, _player.state.height=$videoHeight');
+      //debugPrint('[MediaKit] snapshot: _player.state.width=$videoWidth, _player.state.height=$videoHeight');
       final actualWidth = width > 0 ? width : videoWidth;
       final actualHeight = height > 0 ? height : videoHeight;
       

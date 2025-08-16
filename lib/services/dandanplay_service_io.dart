@@ -497,7 +497,12 @@ class DandanplayService {
       final appSecret = await getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/comment/$episodeId';
-      final apiUrl = 'https://api.dandanplay.net$apiPath?withRelated=true&chConvert=1';
+      
+      // 从设置中读取弹幕转换选项
+      final prefs = await SharedPreferences.getInstance();
+      final chConvert = prefs.getBool('danmaku_convert_to_simplified') ?? true ? 1 : 0;
+      
+      final apiUrl = 'https://api.dandanplay.net$apiPath?withRelated=true&chConvert=$chConvert';
       
       ////debugPrint('发送弹幕请求: $apiUrl');
       ////debugPrint('请求头: X-AppId: $appId, X-Timestamp: $timestamp, 是否包含token: ${_token != null}');

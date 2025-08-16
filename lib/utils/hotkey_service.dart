@@ -40,7 +40,7 @@ class HotkeyService extends ChangeNotifier {
     await loadShortcuts();
     
     // 不在此处注册热键，等待明确调用
-    debugPrint('[HotkeyService] 初始化完成，等待指令注册热键');
+    //debugPrint('[HotkeyService] 初始化完成，等待指令注册热键');
   }
   
   // 注册热键
@@ -92,7 +92,7 @@ class HotkeyService extends ChangeNotifier {
           }
         });
       } catch (e) {
-        debugPrint('[HotkeyService] 解析保存的快捷键配置失败: $e，使用默认配置');
+        //debugPrint('[HotkeyService] 解析保存的快捷键配置失败: $e，使用默认配置');
       }
     }
     
@@ -105,7 +105,7 @@ class HotkeyService extends ChangeNotifier {
     // 通知监听者
     notifyListeners();
     
-    debugPrint('[HotkeyService] 加载快捷键配置完成: ${_shortcuts.toString()}');
+    //debugPrint('[HotkeyService] 加载快捷键配置完成: ${_shortcuts.toString()}');
   }
   
   // 保存快捷键配置
@@ -158,14 +158,14 @@ class HotkeyService extends ChangeNotifier {
   Future<void> _registerHotkey(String action, String description, Function handler) async {
     final keyString = _shortcuts[action];
     if (keyString == null) {
-      debugPrint('[HotkeyService] 未找到 $action 的快捷键配置');
+      //debugPrint('[HotkeyService] 未找到 $action 的快捷键配置');
       return;
     }
     
     try {
       final keyInfo = _parseKeyString(keyString);
       if (keyInfo == null) {
-        debugPrint('[HotkeyService] 无法解析快捷键: $keyString');
+        //debugPrint('[HotkeyService] 无法解析快捷键: $keyString');
         return;
       }
       
@@ -178,15 +178,15 @@ class HotkeyService extends ChangeNotifier {
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
-          debugPrint('[HotkeyService] 热键触发: $description ($keyString)');
+          //debugPrint('[HotkeyService] 热键触发: $description ($keyString)');
           handler();
         },
       );
       
       _registeredHotkeys.add(hotKey);
-      debugPrint('[HotkeyService] 已注册热键: $description ($keyString)');
+      //debugPrint('[HotkeyService] 已注册热键: $description ($keyString)');
     } catch (e) {
-      debugPrint('[HotkeyService] 注册热键失败 $description ($keyString): $e');
+      //debugPrint('[HotkeyService] 注册热键失败 $description ($keyString): $e');
     }
   }
   
@@ -201,21 +201,21 @@ class HotkeyService extends ChangeNotifier {
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
-          debugPrint('[HotkeyService] ESC键被按下 - 退出全屏');
+          //debugPrint('[HotkeyService] ESC键被按下 - 退出全屏');
           _handleEscape();
         },
       );
       
       _registeredHotkeys.add(hotKey);
-      debugPrint('[HotkeyService] 已注册ESC热键');
+      //debugPrint('[HotkeyService] 已注册ESC热键');
     } catch (e) {
-      debugPrint('[HotkeyService] 注册ESC热键失败: $e');
+      //debugPrint('[HotkeyService] 注册ESC热键失败: $e');
     }
   }
   
   // 解析键位字符串
   _KeyInfo? _parseKeyString(String keyString) {
-    debugPrint('[HotkeyService] 解析键位字符串: $keyString');
+    //debugPrint('[HotkeyService] 解析键位字符串: $keyString');
     PhysicalKeyboardKey? keyCode;
     List<HotKeyModifier> modifiers = [];
     
@@ -246,15 +246,15 @@ class HotkeyService extends ChangeNotifier {
       
       // 解析主键
       keyCode = _getKeyCodeFromString(keyPart);
-      debugPrint('[HotkeyService] 解析组合键: 修饰键=${modifiers.length}个, 主键=$keyPart, 解析结果=${keyCode != null ? "成功" : "失败"}');
+      //debugPrint('[HotkeyService] 解析组合键: 修饰键=${modifiers.length}个, 主键=$keyPart, 解析结果=${keyCode != null ? "成功" : "失败"}');
     } else {
       // 单键
       keyCode = _getKeyCodeFromString(keyString);
-      debugPrint('[HotkeyService] 解析单键: $keyString, 解析结果=${keyCode != null ? "成功" : "失败"}');
+      //debugPrint('[HotkeyService] 解析单键: $keyString, 解析结果=${keyCode != null ? "成功" : "失败"}');
     }
     
     if (keyCode == null) {
-      debugPrint('[HotkeyService] 键位解析失败: $keyString');
+      //debugPrint('[HotkeyService] 键位解析失败: $keyString');
       return null;
     }
     
@@ -263,7 +263,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 将字符串转换为PhysicalKeyboardKey
   PhysicalKeyboardKey? _getKeyCodeFromString(String keyString) {
-    debugPrint('[HotkeyService] _getKeyCodeFromString: 尝试解析键位字符串: "$keyString"');
+    //debugPrint('[HotkeyService] _getKeyCodeFromString: 尝试解析键位字符串: "$keyString"');
     
     // 特殊键的映射
     switch (keyString) {
@@ -444,14 +444,14 @@ class HotkeyService extends ChangeNotifier {
   // 获取VideoPlayerState实例
   VideoPlayerState? _getVideoPlayerState() {
     if (_context == null) {
-      debugPrint('[HotkeyService] 上下文为空，无法获取VideoPlayerState');
+      //debugPrint('[HotkeyService] 上下文为空，无法获取VideoPlayerState');
       return null;
     }
     
     try {
       return Provider.of<VideoPlayerState>(_context!, listen: false);
     } catch (e) {
-      debugPrint('[HotkeyService] 获取VideoPlayerState失败: $e');
+      //debugPrint('[HotkeyService] 获取VideoPlayerState失败: $e');
       return null;
     }
   }
@@ -525,7 +525,7 @@ class HotkeyService extends ChangeNotifier {
   }
   
   void _handleSendDanmaku() {
-    debugPrint('[HotkeyService] 处理发送弹幕快捷键');
+    //debugPrint('[HotkeyService] 处理发送弹幕快捷键');
     
     // 先检查是否已经有弹幕对话框在显示
     final dialogManager = DanmakuDialogManager();
@@ -549,7 +549,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 更新快捷键
   Future<void> updateShortcut(String action, String shortcut) async {
-    debugPrint('[HotkeyService] 更新快捷键: $action -> $shortcut');
+    //debugPrint('[HotkeyService] 更新快捷键: $action -> $shortcut');
     _shortcuts[action] = shortcut;
     await saveShortcuts();
     await registerAllHotkeys(); // 重新注册所有热键

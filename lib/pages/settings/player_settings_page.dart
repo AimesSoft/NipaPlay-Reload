@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -352,6 +353,34 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               _saveDanmakuRenderEngineSettings(engine);
             },
           ),
+        ),
+        
+        const Divider(color: Colors.white12, height: 1),
+        
+        // 弹幕转换简体中文开关
+        Consumer<SettingsProvider>(
+          builder: (context, settingsProvider, child) {
+            return SwitchListTile(
+              title: const Text(
+                "弹幕转换简体中文",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text(
+                "开启后，繁体中文弹幕将转换为简体中文显示",
+                style: TextStyle(color: Colors.white70),
+              ),
+              value: settingsProvider.danmakuConvertToSimplified,
+              onChanged: (bool value) {
+                settingsProvider.setDanmakuConvertToSimplified(value);
+                if (context.mounted) {
+                  BlurSnackBar.show(context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
+                }
+              },
+              activeColor: Colors.white,
+              inactiveThumbColor: Colors.white,
+              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
+            );
+          },
         ),
         
         const Divider(color: Colors.white12, height: 1),

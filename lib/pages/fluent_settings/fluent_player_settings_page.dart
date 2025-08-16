@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_info_bar.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 
 class FluentPlayerSettingsPage extends StatefulWidget {
   const FluentPlayerSettingsPage({super.key});
@@ -342,6 +343,71 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                   ],
                 ),
               ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // 弹幕设置
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '弹幕设置',
+                          style: FluentTheme.of(context).typography.subtitle,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '配置弹幕显示选项',
+                          style: FluentTheme.of(context).typography.caption,
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // 弹幕转换简体中文开关
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('弹幕转换简体中文'),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '开启后，繁体中文弹幕将转换为简体中文显示',
+                                    style: FluentTheme.of(context).typography.caption,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            ToggleSwitch(
+                              checked: settingsProvider.danmakuConvertToSimplified,
+                              onChanged: (value) {
+                                settingsProvider.setDanmakuConvertToSimplified(value);
+                                // 使用Fluent UI的消息提示
+                                if (context.mounted) {
+                                  displayInfoBar(
+                                    context,
+                                    builder: (context, close) {
+                                      return InfoBar(
+                                        title: Text(value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文'),
+                                        severity: InfoBarSeverity.success,
+                                      );
+                                    },
+                                  );
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
             
             // MDK内核特有设置可以在这里添加
