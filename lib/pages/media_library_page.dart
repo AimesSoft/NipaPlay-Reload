@@ -66,11 +66,11 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
   @override
   void initState() {
-    debugPrint('[媒体库CPU] MediaLibraryPage initState 开始');
+    //debugPrint('[媒体库CPU] MediaLibraryPage initState 开始');
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        debugPrint('[媒体库CPU] 开始加载初始数据');
+        //debugPrint('[媒体库CPU] 开始加载初始数据');
         _loadInitialMediaLibraryData();
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
         _isJellyfinConnected = jellyfinProvider.isConnected; // Initialize
@@ -89,7 +89,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       }
     } catch (e) {
       // ignore: avoid_print
-      print("移除JellyfinProvider监听器时出错: $e");
+      print("移除Provider监听器时出错: $e");
     }
 
     _gridScrollController.dispose();
@@ -113,10 +113,10 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     // 🔥 CPU优化：检查数据是否已经处理过，避免重复处理
     final currentHashCode = watchHistory.hashCode;
     if (currentHashCode == _lastProcessedHistoryHashCode) {
-      debugPrint('[媒体库CPU] 跳过重复处理历史数据 - 哈希码: $currentHashCode');
+      //debugPrint('[媒体库CPU] 跳过重复处理历史数据 - 哈希码: $currentHashCode');
       return;
     }
-    debugPrint('[媒体库CPU] 开始处理历史数据 - 哈希码: $currentHashCode (上次: $_lastProcessedHistoryHashCode)');
+    //debugPrint('[媒体库CPU] 开始处理历史数据 - 哈希码: $currentHashCode (上次: $_lastProcessedHistoryHashCode)');
     _lastProcessedHistoryHashCode = currentHashCode;
 
     if (watchHistory.isEmpty) {
@@ -217,12 +217,12 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   Future<void> _fetchAndPersistFullDetailsInBackground() async {
     // 🔥 CPU优化：防止重复启动后台任务
     if (_isBackgroundFetching) {
-      debugPrint('[媒体库CPU] 后台获取任务已在进行中，跳过');
+      //debugPrint('[媒体库CPU] 后台获取任务已在进行中，跳过');
       return;
     }
     _isBackgroundFetching = true;
     
-    debugPrint('[媒体库CPU] 开始后台获取详细信息 - 项目数量: ${_uniqueLibraryItems.length}');
+    //debugPrint('[媒体库CPU] 开始后台获取详细信息 - 项目数量: ${_uniqueLibraryItems.length}');
     final stopwatch = Stopwatch()..start();
     final prefs = await SharedPreferences.getInstance();
     List<Future> pendingRequests = [];
@@ -241,7 +241,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
             }
             
             final animeDetail = await BangumiService.instance.getAnimeDetails(historyItem.animeId!);
-            debugPrint('[媒体库CPU] 获取到动画详情: ${historyItem.animeId} - ${animeDetail.name}');
+            //debugPrint('[媒体库CPU] 获取到动画详情: ${historyItem.animeId} - ${animeDetail.name}');
             if (mounted) {
               // 🔥 CPU优化：批量更新而不是单个setState
               _fetchedFullAnimeData[historyItem.animeId!] = animeDetail;
@@ -260,7 +260,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
               }
             }
           } catch (e) {
-            debugPrint('[媒体库CPU] 获取动画详情失败: ${historyItem.animeId} - $e');
+            //debugPrint('[媒体库CPU] 获取动画详情失败: ${historyItem.animeId} - $e');
           }
         }
         
@@ -282,7 +282,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       });
     }
     
-    debugPrint('[媒体库CPU] 后台获取完成 - 耗时: ${stopwatch.elapsedMilliseconds}ms');
+    //debugPrint('[媒体库CPU] 后台获取完成 - 耗时: ${stopwatch.elapsedMilliseconds}ms');
     _isBackgroundFetching = false;
   }
 
@@ -319,7 +319,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   Widget build(BuildContext context) {
     // 🔥 移除super.build(context)调用，因为已禁用AutomaticKeepAliveClientMixin
     // super.build(context);
-    debugPrint('[媒体库CPU] MediaLibraryPage build 被调用 - mounted: $mounted');
+    //debugPrint('[媒体库CPU] MediaLibraryPage build 被调用 - mounted: $mounted');
     final uiThemeProvider = Provider.of<UIThemeProvider>(context);
 
     // This Consumer ensures that we rebuild when the watch history changes.
@@ -432,7 +432,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
               itemBuilder: (context, index) {
                 // 🔥 CPU优化：添加itemBuilder监控
                 if (index % 20 == 0) {
-                  debugPrint('[媒体库CPU] GridView itemBuilder - 索引: $index/${_uniqueLibraryItems.length}');
+                  //debugPrint('[媒体库CPU] GridView itemBuilder - 索引: $index/${_uniqueLibraryItems.length}');
                 }
                 final historyItem = _uniqueLibraryItems[index];
                 final animeId = historyItem.animeId;
@@ -487,14 +487,14 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
                 
                 // 调试：打印详细的评分信息
                 if (animeId != null) {
-                  debugPrint('动画 $animeId 详细信息：');
-                  debugPrint('  名称: $nameToDisplay');
-                  debugPrint('  是否存在于_fetchedFullAnimeData: ${_fetchedFullAnimeData.containsKey(animeId)}');
+                  //debugPrint('动画 $animeId 详细信息：');
+                  //debugPrint('  名称: $nameToDisplay');
+                  //debugPrint('  是否存在于_fetchedFullAnimeData: ${_fetchedFullAnimeData.containsKey(animeId)}');
                   
                   if (_fetchedFullAnimeData.containsKey(animeId)) {
                     final animeData = _fetchedFullAnimeData[animeId]!;
-                    debugPrint('  通用评分: ${animeData.rating}');
-                    debugPrint('  评分详情: ${animeData.ratingDetails}');
+                    //debugPrint('  通用评分: ${animeData.rating}');
+                    //debugPrint('  评分详情: ${animeData.ratingDetails}');
                   }
                 }
                 

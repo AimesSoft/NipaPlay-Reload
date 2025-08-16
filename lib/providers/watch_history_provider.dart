@@ -3,6 +3,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'dart:io';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/scan_service.dart';
 
 class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
@@ -13,10 +14,56 @@ class WatchHistoryProvider extends ChangeNotifier {
   
   // 缓存已知无效的文件路径，避免重复检查
   final Set<String> _knownInvalidPaths = {};
+  
+  // ScanService实例，用于监听扫描完成事件
+  ScanService? _scanService;
 
   List<WatchHistoryItem> get history => _history;
   bool get isLoading => _isLoading;
   bool get isLoaded => _isLoaded;
+  
+  // 设置ScanService监听器
+  void setScanService(ScanService scanService) {
+    debugPrint('WatchHistoryProvider: setScanService 被调用');
+    
+    // 移除旧的监听器
+    if (_scanService != null) {
+      debugPrint('WatchHistoryProvider: 移除旧的ScanService监听器');
+      _scanService!.removeListener(_onScanServiceStateChanged);
+    }
+    
+    // 设置新的监听器
+    _scanService = scanService;
+    _scanService!.addListener(_onScanServiceStateChanged);
+    debugPrint('WatchHistoryProvider: 已添加ScanService监听器');
+  }
+  
+  // 扫描状态变化监听器
+  void _onScanServiceStateChanged() {
+    if (_scanService == null) return;
+    
+    debugPrint('WatchHistoryProvider: ScanService状态变化 - scanJustCompleted: ${_scanService!.scanJustCompleted}');
+    
+    if (_scanService!.scanJustCompleted) {
+      debugPrint('WatchHistoryProvider: 检测到扫描完成，自动刷新历史记录');
+      
+      // 延迟刷新，确保扫描结果已保存到数据库
+      Future.delayed(const Duration(milliseconds: 100), () {
+        refresh();
+        // 确认扫描完成事件已处理
+        _scanService!.acknowledgeScanCompleted();
+      });
+    }
+  }
+  
+  @override
+  void dispose() {
+    // 移除监听器
+    if (_scanService != null) {
+      _scanService!.removeListener(_onScanServiceStateChanged);
+    }
+    super.dispose();
+  }
 
   Future<void> loadHistory() async {
     if (_isLoading) return;

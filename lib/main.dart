@@ -39,7 +39,7 @@ import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'services/security_bookmark_service.dart';
 import 'widgets/nipaplay_theme/blur_snackbar.dart';
-import 'package:nipaplay/utils/page_prewarmer.dart';
+
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -462,28 +462,6 @@ void main(List<String> args) async {
         child: NipaPlayApp(launchFilePath: launchFilePath),
       ),
     );
-    // 启动后全局加载一次观看记录
-    Future.microtask(() {
-      final navigator = navigatorKey.currentState;
-      if (navigator != null) {
-        final context = navigator.context;
-        final provider = Provider.of<WatchHistoryProvider>(context, listen: false);
-        provider.loadHistory();
-        
-        // 初始化并启动页面预热过程
-        PagePrewarmer().initialize().then((_) {
-          PagePrewarmer().startPrewarm(context);
-        });
-        
-        // 添加一些测试日志，验证终端输出功能
-        final debugLogService = Provider.of<DebugLogService>(context, listen: false);
-        debugLogService.addLog('NipaPlay 应用启动完成', level: 'INFO', tag: 'App');
-        debugLogService.addLog('终端输出功能已加载，可在设置 -> 开发者选项中查看', level: 'INFO', tag: 'LogService');
-        debugLogService.addLog('这是一条调试信息示例', level: 'DEBUG', tag: 'Demo');
-        debugLogService.addWarning('这是一条警告信息示例', tag: 'Demo');
-        debugLogService.addError('这是一条错误信息示例（仅用于演示）', tag: 'Demo');
-      }
-    });
   });
 }
 
@@ -644,6 +622,30 @@ class NipaPlayApp extends StatefulWidget {
 
 class _NipaPlayAppState extends State<NipaPlayApp> {
   bool _isDragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 启动后设置WatchHistoryProvider监听ScanService
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('_NipaPlayAppState: 应用初始化完成，设置监听器');
+      
+      try {
+        final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+        final scanService = Provider.of<ScanService>(context, listen: false);
+        
+        debugPrint('_NipaPlayAppState: 准备设置WatchHistoryProvider监听ScanService');
+        watchHistoryProvider.setScanService(scanService);
+        debugPrint('_NipaPlayAppState: WatchHistoryProvider监听器设置完成');
+        
+        // 启动历史记录加载
+        watchHistoryProvider.loadHistory();
+        debugPrint('_NipaPlayAppState: 历史记录加载完成');
+      } catch (e) {
+        debugPrint('_NipaPlayAppState: 设置监听器时出错: $e');
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
