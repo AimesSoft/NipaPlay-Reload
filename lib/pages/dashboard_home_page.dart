@@ -104,6 +104,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   final Map<String, Map<String, dynamic>> _thumbnailCache = {};
 
   // 追踪已绘制的文件路径
+  // ignore: unused_field
   final Set<String> _renderedThumbnailPaths = {};
 
   // 静态变量，用于缓存推荐内容
@@ -1184,7 +1185,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     
-    return Scaffold(
+    // 当播放器处于活跃状态时，关闭 Dashboard 上的所有 Ticker（动画/过渡），避免后台动画占用栅格时间。
+    final bool tickerEnabled = !_isVideoPlayerActive();
+
+    return TickerMode(
+      enabled: tickerEnabled,
+      child: Scaffold(
       backgroundColor: Colors.transparent,
       body: Consumer2<JellyfinProvider, EmbyProvider>(
         builder: (context, jellyfinProvider, embyProvider, child) {
@@ -1290,7 +1296,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               onPressed: _loadData,
               description: ' 刷新主页',
             ),
-    );
+        ),
+      );
   }
 
   Widget _buildHeroBanner() {

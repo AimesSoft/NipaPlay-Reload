@@ -801,6 +801,10 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
 
   @override
   Widget build(BuildContext context) {
+    // 弹幕不可见时，彻底不渲染，避免 TextPainter/ParagraphBuilder 开销
+    if (!widget.isVisible) {
+      return const SizedBox.shrink();
+    }
     if (_textRenderer == null) {
       return const SizedBox.shrink();
     }
@@ -818,7 +822,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
 
         return Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            final mergeDanmaku = videoState.danmakuVisible && (videoState.mergeDanmaku ?? false);
+            // 弹幕不可见时仍然避免不必要计算
+            if (!widget.isVisible) {
+              return const SizedBox.shrink();
+            }
+            final mergeDanmaku = videoState.danmakuVisible && videoState.mergeDanmaku;
             final allowStacking = videoState.danmakuStacking;
             final forceRefresh = _getBlockStateHash(videoState) != _lastBlockStateHash;
             if (forceRefresh) {

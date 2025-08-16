@@ -339,27 +339,31 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                               ),
                             ),
                             
-                                                          if (videoState.hasVideo)
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    ignoring: true,
-                                    child: Consumer<VideoPlayerState>(
-                                      builder: (context, videoState, _) {
-                                        // 修改：保持DanmakuOverlay组件始终存在，通过isVisible控制可见性
-                                        // 避免销毁重建导致的延迟问题
-                                        return DanmakuOverlay(
-                                          key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
-                                          currentPosition: videoState.position.inMilliseconds.toDouble(),
-                                          videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
-                                          isPlaying: videoState.status == PlayerStatus.playing,
-                                          fontSize: getFontSize(videoState),
-                                          isVisible: videoState.danmakuVisible,
-                                          opacity: videoState.mappedDanmakuOpacity,
-                                        );
-                                      },
-                                    ),
+                            if (videoState.hasVideo && videoState.danmakuVisible)
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  ignoring: true,
+                                  child: Consumer<VideoPlayerState>(
+                                    builder: (context, videoState, _) {
+                                      // 使用高频时间轴驱动弹幕帧率
+                                      return ValueListenableBuilder<double>(
+                                        valueListenable: videoState.playbackTimeMs,
+                                        builder: (context, posMs, __) {
+                                          return DanmakuOverlay(
+                                            key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
+                                            currentPosition: posMs,
+                                            videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+                                            isPlaying: videoState.status == PlayerStatus.playing,
+                                            fontSize: getFontSize(videoState),
+                                            isVisible: videoState.danmakuVisible,
+                                            opacity: videoState.mappedDanmakuOpacity,
+                                          );
+                                        },
+                                      );
+                                    },
                                   ),
                                 ),
+                              ),
                             
                             if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
                               Positioned.fill(
@@ -404,22 +408,26 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 ),
                               ),
                               
-                              if (videoState.hasVideo)
+                              if (videoState.hasVideo && videoState.danmakuVisible)
                                 Positioned.fill(
                                   child: IgnorePointer(
                                     ignoring: true,
                                     child: Consumer<VideoPlayerState>(
                                       builder: (context, videoState, _) {
-                                        // 修改：保持DanmakuOverlay组件始终存在，通过isVisible控制可见性
-                                        // 避免销毁重建导致的延迟问题
-                                        return DanmakuOverlay(
-                                          key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
-                                          currentPosition: videoState.position.inMilliseconds.toDouble(),
-                                          videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
-                                          isPlaying: videoState.status == PlayerStatus.playing,
-                                          fontSize: getFontSize(videoState),
-                                          isVisible: videoState.danmakuVisible,
-                                          opacity: videoState.mappedDanmakuOpacity,
+                                        // 使用高频时间轴驱动弹幕帧率
+                                        return ValueListenableBuilder<double>(
+                                          valueListenable: videoState.playbackTimeMs,
+                                          builder: (context, posMs, __) {
+                                            return DanmakuOverlay(
+                                              key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
+                                              currentPosition: posMs,
+                                              videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+                                              isPlaying: videoState.status == PlayerStatus.playing,
+                                              fontSize: getFontSize(videoState),
+                                              isVisible: videoState.danmakuVisible,
+                                              opacity: videoState.mappedDanmakuOpacity,
+                                            );
+                                          },
                                         );
                                       },
                                     ),

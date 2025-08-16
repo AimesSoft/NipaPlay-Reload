@@ -89,6 +89,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 🔥 新增：Ticker相关字段
   Ticker? _uiUpdateTicker;
   int _lastTickTime = 0;
+  // 节流：UI刷新与位置保存
+  int _lastUiNotifyMs = 0; // 上次UI刷新时间
+  int _lastSaveTimeMs = 0; // 上次保存时间
+  int _lastSavedPositionMs = -1; // 上次已持久化的位置
+  static const int _uiUpdateIntervalMs = 120; // UI刷新最小间隔（约8.3fps）
+  static const int _positionSaveIntervalMs = 3000; // 位置保存最小间隔
+  static const int _positionSaveDeltaThresholdMs = 2000; // 位置保存位移阈值
+  // 高频时间轴：提供给弹幕的独立时间源（毫秒）
+  final ValueNotifier<double> _playbackTimeMs = ValueNotifier<double>(0);
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
   Timer? _autoHideTimer;
@@ -394,6 +403,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 右边缘悬浮菜单的getter
   bool get isRightEdgeHovered => _isRightEdgeHovered;
+  // 对外暴露的高频播放时间
+  ValueListenable<double> get playbackTimeMs => _playbackTimeMs;
 
   Future<void> _initialize() async {
     if (globals.isPhone) {
@@ -1815,6 +1826,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _position = Duration.zero;
     _progress = 0.0;
     _duration = Duration.zero;
+  _playbackTimeMs.value = 0;
     if (!_isErrorStopping) { // <<< MODIFIED HERE
       _error = null;
     }
@@ -1863,8 +1875,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _setStatus(PlayerStatus.playing);
       }
 
-      // 立即更新UI状态
+  // 立即更新UI状态
       _position = clampedPosition;
+  // 同步高频时间轴，确保弹幕立即跳转
+  _playbackTimeMs.value = _position.inMilliseconds.toDouble();
       if (_duration.inMilliseconds > 0) {
         _progress = clampedPosition.inMilliseconds / _duration.inMilliseconds;
       }
@@ -4751,7 +4765,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   _uiUpdateTicker?.stop();
     
     // 记录上次更新时间，用于计算时间增量
-    _lastTickTime = DateTime.now().millisecondsSinceEpoch;
+  _lastTickTime = DateTime.now().millisecondsSinceEpoch;
+  // 初始化节流时间戳
+  _lastUiNotifyMs = _lastTickTime;
+  _lastSaveTimeMs = _lastTickTime;
+  _lastSavedPositionMs = _position.inMilliseconds;
     
     // 🔥 关键优化：使用Ticker代替Timer.periodic
     // Ticker会与显示刷新率同步，更精确地控制帧率
@@ -4761,6 +4779,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final nowTime = DateTime.now().millisecondsSinceEpoch;
       final deltaTime = nowTime - _lastTickTime;
       _lastTickTime = nowTime;
+      final bool shouldUiNotify = (nowTime - _lastUiNotifyMs) >= _uiUpdateIntervalMs;
       
       // 更新弹幕控制器的时间戳
       if (danmakuController != null) {
@@ -4787,9 +4806,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             _position = Duration(milliseconds: playerPosition);
             _duration = Duration(milliseconds: playerDuration);
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            // 高频时间轴：每帧更新弹幕时间
+            _playbackTimeMs.value = _position.inMilliseconds.toDouble();
             
-            // 保存播放位置（原来在10秒定时器中）
-            _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+            // 节流保存播放位置：时间或位移达到阈值时才写
+            if (_currentVideoPath != null) {
+              final int posMs = _position.inMilliseconds;
+              final bool byTime = (nowTime - _lastSaveTimeMs) >= _positionSaveIntervalMs;
+              final bool byDelta = (_lastSavedPositionMs < 0) || ((posMs - _lastSavedPositionMs).abs() >= _positionSaveDeltaThresholdMs);
+              if (byTime || byDelta) {
+                _saveVideoPosition(_currentVideoPath!, posMs);
+                _lastSaveTimeMs = nowTime;
+                _lastSavedPositionMs = posMs;
+              }
+            }
 
             // 每10秒更新一次观看记录（使用分桶去抖，避免在窗口内重复调用）
             final int currentBucket = _position.inMilliseconds ~/ 10000;
@@ -4824,7 +4854,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               }
             }
             
-            notifyListeners();
+            if (shouldUiNotify) {
+              _lastUiNotifyMs = nowTime;
+              notifyListeners();
+            }
           } else {
             // 错误处理逻辑（原来在10秒定时器中）
             // 当播放器返回无效的 position 或 duration 时
@@ -4897,15 +4930,28 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         } else if (_status == PlayerStatus.paused && _lastSeekPosition != null) {
           // 暂停状态：使用最后一次seek的位置
           _position = _lastSeekPosition!;
+          _playbackTimeMs.value = _position.inMilliseconds.toDouble();
           if (_duration.inMilliseconds > 0) {
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
-            // 保存当前播放位置
-            _saveVideoPosition(_currentVideoPath!, _position.inMilliseconds);
+            // 暂停下也节流保存位置
+            if (_currentVideoPath != null) {
+              final int posMs = _position.inMilliseconds;
+              final bool byTime = (nowTime - _lastSaveTimeMs) >= _positionSaveIntervalMs;
+              final bool byDelta = (_lastSavedPositionMs < 0) || ((posMs - _lastSavedPositionMs).abs() >= _positionSaveDeltaThresholdMs);
+              if (byTime || byDelta) {
+                _saveVideoPosition(_currentVideoPath!, posMs);
+                _lastSaveTimeMs = nowTime;
+                _lastSavedPositionMs = posMs;
+              }
+            }
 
             // 暂停状态下，只在位置变化时更新观看记录
             _updateWatchHistory();
           }
-          notifyListeners();
+          if (shouldUiNotify) {
+            _lastUiNotifyMs = nowTime;
+            notifyListeners();
+          }
         }
       }
     });
