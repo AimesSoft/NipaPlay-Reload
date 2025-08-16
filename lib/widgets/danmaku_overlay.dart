@@ -34,6 +34,10 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.isVisible) {
+      // 弹幕不可见时，彻底不构建，避免文本排版消耗
+      return const SizedBox.shrink();
+    }
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final kernelType = DanmakuKernelFactory.getKernelType();
@@ -88,7 +92,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
         }
 
         // Fallback to CPU rendering
-        return DanmakuContainer(
+  return DanmakuContainer(
           danmakuList: activeDanmakuList,
           currentTime: widget.currentPosition / 1000,
           videoDuration: widget.videoDuration / 1000,
