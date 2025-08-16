@@ -1826,7 +1826,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _position = Duration.zero;
     _progress = 0.0;
     _duration = Duration.zero;
-  _playbackTimeMs.value = 0;
+    _playbackTimeMs.value = 0;
     if (!_isErrorStopping) { // <<< MODIFIED HERE
       _error = null;
     }
@@ -1877,8 +1877,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 立即更新UI状态
       _position = clampedPosition;
-  // 同步高频时间轴，确保弹幕立即跳转
-  _playbackTimeMs.value = _position.inMilliseconds.toDouble();
+      // 同步高频时间轴，确保弹幕立即跳转
+      _playbackTimeMs.value = _position.inMilliseconds.toDouble();
       if (_duration.inMilliseconds > 0) {
         _progress = clampedPosition.inMilliseconds / _duration.inMilliseconds;
       }
