@@ -134,8 +134,16 @@ void main(List<String> args) async {
     }
   }
 
-  // 初始化MediaKit
-  MediaKit.ensureInitialized();
+  // 初始化MediaKit - 添加错误处理防止重复初始化
+  try {
+    MediaKit.ensureInitialized();
+  } catch (e) {
+    debugPrint('MediaKit初始化警告: $e');
+    // 如果是重复初始化错误，可以安全忽略
+    if (!e.toString().contains('invalid reuse after initialization failure')) {
+      rethrow;
+    }
+  }
 
   // 添加全局异常捕获
   FlutterError.onError = (FlutterErrorDetails details) {

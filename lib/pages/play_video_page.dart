@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/video_player_widget.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
@@ -264,9 +265,15 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         ),
       );
     } else {
+      // 检查是否为手机设备
+      final window = WidgetsBinding.instance.window;
+      final size = window.physicalSize / window.devicePixelRatio;
+      final shortestSide = size.width < size.height ? size.width : size.height;
+      final bool isRealPhone = Platform.isIOS || Platform.isAndroid && shortestSide < 600;
+      
       await BlurDialog.show(
         context: context,
-        title: '发送弹幕',
+        title: isRealPhone ? '' : '发送弹幕', // 手机设备不显示标题
         contentWidget: SendDanmakuDialogContent(
           episodeId: episodeId,
           currentTime: currentTime,

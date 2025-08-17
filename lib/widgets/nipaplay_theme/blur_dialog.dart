@@ -61,62 +61,65 @@ class BlurDialog {
         // 获取键盘高度，用于动态调整底部间距
         final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
         
-                return Dialog(
-          backgroundColor: Colors.transparent,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(bottom: keyboardHeight),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: screenSize.height * 0.8, // 最大高度限制
-                maxWidth: dialogWidth, // 最大宽度限制
+        // 检查是否为手机设备和是否有标题
+        final shortestSide = screenSize.width < screenSize.height ? screenSize.width : screenSize.height;
+        final bool isRealPhone = globals.isPhone && shortestSide < 600;
+        final bool hasTitle = title.isNotEmpty;
+        
+        Widget dialogContent = ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: screenSize.height * 0.8, // 最大高度限制
+            maxWidth: dialogWidth, // 最大宽度限制
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withOpacity(0.15),
+                  Colors.white.withOpacity(0.05),
+                ],
               ),
-              child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white.withOpacity(0.15),
-                        Colors.white.withOpacity(0.05),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
+                  sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min, // 关键：让Column根据内容自适应
+                    crossAxisAlignment: CrossAxisAlignment.center, // 居中对齐
+                    children: [
+                      // 标题区域 - 只在有标题时显示
+                      if (hasTitle) ...[
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center, // 标题居中
+                        ),
+                        const SizedBox(height: 20),
                       ],
-                    ),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 20,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(
-                        sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
-                        sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min, // 关键：让Column根据内容自适应
-                          crossAxisAlignment: CrossAxisAlignment.center, // 居中对齐
-                          children: [
-                            // 标题区域 - 居中
-                            Text(
-                              title,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center, // 标题居中
-                            ),
-                            const SizedBox(height: 20),
                             
                             // 内容区域 - 居中，真正的内容自适应
                             if (content != null)
@@ -158,15 +161,33 @@ class BlurDialog {
                                           ))
                                       .toList(),
                                 ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
+                      ],
+                    ],
                   ),
                 ),
+              ),
             ),
           ),
+        );
+        
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: isRealPhone 
+            // 手机设备：固定在屏幕中央，避免键盘遮挡
+            ? Center(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxHeight: screenSize.height - keyboardHeight - 100, // 留出键盘空间
+                    maxWidth: dialogWidth,
+                  ),
+                  child: dialogContent,
+                ),
+              )
+            // 非手机设备保持原有的ScrollView
+            : SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: keyboardHeight),
+                child: dialogContent,
+              ),
         );
       },
     );

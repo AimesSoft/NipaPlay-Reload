@@ -172,9 +172,11 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     BlurButton(
-                      text: '手动匹配弹幕',
+                      text: '手动匹配弹幕 [NEW]',
                       icon: Icons.search,
                       onTap: () async {
+                        debugPrint('=== 弹幕设置菜单：点击手动匹配弹幕按钮 ===');
+                        print('=== 强制输出：手动匹配弹幕按钮被点击！ ===');
                         final result = await ManualDanmakuMatcher.instance.showManualMatchDialog(context);
                           
                         if (result != null) {

@@ -7,6 +7,7 @@ class TypingText extends StatefulWidget {
   final Duration typingSpeed;
   final Duration deleteSpeed;
   final Duration pauseDuration;
+  final VoidCallback? onTextChanged; // 新增：文本变化回调
 
   const TypingText({
     super.key,
@@ -15,6 +16,7 @@ class TypingText extends StatefulWidget {
     this.typingSpeed = const Duration(milliseconds: 50),
     this.deleteSpeed = const Duration(milliseconds: 30),
     this.pauseDuration = const Duration(seconds: 2),
+    this.onTextChanged, // 新增参数
   });
 
   @override
@@ -92,6 +94,9 @@ class _TypingTextState extends State<TypingText> {
             }
           }
         });
+        
+        // 文本变化后调用回调
+        widget.onTextChanged?.call();
       },
     );
   }

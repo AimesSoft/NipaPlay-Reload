@@ -18,9 +18,38 @@ class SendDanmakuButton extends StatefulWidget {
   State<SendDanmakuButton> createState() => _SendDanmakuButtonState();
 }
 
-class _SendDanmakuButtonState extends State<SendDanmakuButton> {
+class _SendDanmakuButtonState extends State<SendDanmakuButton> 
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   bool _isPressed = false;
+  late AnimationController _animationController;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(1.0, 0.0), // 从右侧滑入
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.elasticOut,
+    ));
+    
+    // 启动进入动画
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,14 +59,16 @@ class _SendDanmakuButtonState extends State<SendDanmakuButton> {
     final tooltipText = shortcutText.isEmpty ? '发送弹幕' : '发送弹幕 ($shortcutText)';
     //debugPrint('[SendDanmakuButton] 快捷键文本: $shortcutText, 提示文本: $tooltipText');
     
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: TooltipBubble(
-        text: tooltipText,
-        showOnRight: true,
-        verticalOffset: 8,
-        child: GestureDetector(
+    return SlideTransition(
+      position: _slideAnimation,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: TooltipBubble(
+          text: tooltipText,
+          showOnRight: true,
+          verticalOffset: 8,
+          child: GestureDetector(
           onTapDown: (_) => setState(() => _isPressed = true),
           onTapUp: (_) {
             setState(() => _isPressed = false);
@@ -83,6 +114,7 @@ class _SendDanmakuButtonState extends State<SendDanmakuButton> {
           ),
         ),
       ),
+    ),
     );
   }
 } 

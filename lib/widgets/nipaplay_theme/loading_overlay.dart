@@ -46,6 +46,21 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
   late AnimationController _cursorController;
   late Animation<double> _cursorAnimation;
 
+  // 滚动到底部的通用方法
+  void _scrollToBottom() {
+    if (_scrollController.hasClients && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -63,13 +78,19 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
     super.didUpdateWidget(oldWidget);
     // 当消息列表更新时，滚动到底部
     if (oldWidget.messages != widget.messages) {
+      // 延迟执行，确保新内容已经渲染完成
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
+          // 增加小延迟确保布局完成
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (_scrollController.hasClients && mounted) {
+              _scrollController.animateTo(
+                _scrollController.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          });
         }
       });
     }
@@ -156,6 +177,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                                       typingSpeed: const Duration(milliseconds: 50),
                                       deleteSpeed: const Duration(milliseconds: 30),
                                       pauseDuration: const Duration(seconds: 1),
+                                      onTextChanged: _scrollToBottom, // 每次文本变化时滚动到底部
                                     ),
                                     // 闪烁的下划线光标
                                     Positioned.fill(
@@ -200,13 +222,13 @@ class TypingTextCursor extends StatefulWidget {
   final Duration typingSpeed;
 
   const TypingTextCursor({
-    Key? key,
+    super.key,
     required this.text,
     required this.style,
     required this.cursorAnimation,
     required this.cursorColor,
     required this.typingSpeed,
-  }) : super(key: key);
+  });
 
   @override
   State<TypingTextCursor> createState() => _TypingTextCursorState();

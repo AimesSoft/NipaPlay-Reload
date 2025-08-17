@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// 调试日志查看器页面
 /// 提供日志查看、搜索、过滤和导出功能
@@ -136,6 +137,157 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
       case 'DEBUG':
       default:
         return Colors.grey;
+    }
+  }
+
+  /// 构建日志条目内容，支持不同设备的布局
+  Widget _buildLogEntryContent(LogEntry entry) {
+    // 检查是否为手机设备
+    final screenSize = MediaQuery.of(context).size;
+    final shortestSide = screenSize.width < screenSize.height ? screenSize.width : screenSize.height;
+    final bool isRealPhone = globals.isPhone && shortestSide < 600;
+
+    if (isRealPhone) {
+      // 手机设备：垂直布局，时间-info-标签分三排显示在左侧
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 第一行：时间戳
+          if (_showTimestamp)
+            Text(
+              '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
+              '${entry.timestamp.minute.toString().padLeft(2, '0')}:'
+              '${entry.timestamp.second.toString().padLeft(2, '0')}',
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
+            ),
+          
+          if (_showTimestamp) const SizedBox(height: 4),
+          
+          // 第二行：级别标签
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: _getLevelColor(entry.level),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              entry.level,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 4),
+          
+          // 第三行：标签
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              entry.tag,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // 第四行：消息内容
+          Text(
+            entry.message,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
+      );
+    } else {
+      // 非手机设备：保持原有的水平布局
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 时间戳
+          if (_showTimestamp)
+            SizedBox(
+              width: 80,
+              child: Text(
+                '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
+                '${entry.timestamp.minute.toString().padLeft(2, '0')}:'
+                '${entry.timestamp.second.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          
+          if (_showTimestamp) const SizedBox(width: 8),
+          
+          // 级别标签
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: _getLevelColor(entry.level),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              entry.level,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          
+          const SizedBox(width: 8),
+          
+          // 标签
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              entry.tag,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+              ),
+            ),
+          ),
+          
+          const SizedBox(width: 8),
+          
+          // 消息内容
+          Expanded(
+            child: Text(
+              entry.message,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+        ],
+      );
     }
   }
 
@@ -795,77 +947,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                                   ),
                                 ),
                               ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // 时间戳
-                                  if (_showTimestamp)
-                                    SizedBox(
-                                      width: 80,
-                                      child: Text(
-                                        '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
-                                        '${entry.timestamp.minute.toString().padLeft(2, '0')}:'
-                                        '${entry.timestamp.second.toString().padLeft(2, '0')}',
-                                        style: const TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 12,
-                                          fontFamily: 'monospace',
-                                        ),
-                                      ),
-                                    ),
-                                  
-                                  if (_showTimestamp) const SizedBox(width: 8),
-                                  
-                                  // 级别标签
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: _getLevelColor(entry.level),
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                    child: Text(
-                                      entry.level,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  
-                                  const SizedBox(width: 8),
-                                  
-                                  // 标签
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                    child: Text(
-                                      entry.tag,
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ),
-                                  
-                                  const SizedBox(width: 8),
-                                  
-                                  // 消息内容
-                                  Expanded(
-                                    child: Text(
-                                      entry.message,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontFamily: 'monospace',
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              child: _buildLogEntryContent(entry),
                             ),
                           );
                         },
