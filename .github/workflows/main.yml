@@ -40,7 +40,7 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
     runs-on: ${{ matrix.os }}
     env:
-      FLUTTER_VERSION: 3.29.3
+      FLUTTER_VERSION: 3.35.1
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1 # Set globally to force latest nightly for all platforms
     strategy:
