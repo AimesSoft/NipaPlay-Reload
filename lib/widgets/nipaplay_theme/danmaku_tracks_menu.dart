@@ -5,6 +5,7 @@ import 'base_settings_menu.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 import 'dart:convert';
+import 'dart:io' as io;
 import 'package:file_selector/file_selector.dart';
 
 class DanmakuTracksMenu extends StatefulWidget {
@@ -32,14 +33,20 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
 
     try {
       // 使用文件选择器选择弹幕文件
-      const XTypeGroup jsonTypeGroup = XTypeGroup(
+      final XTypeGroup jsonTypeGroup = XTypeGroup(
         label: 'JSON弹幕文件',
-        extensions: ['json'],
+        extensions: const ['json'],
+        uniformTypeIdentifiers: io.Platform.isIOS 
+            ? ['public.json', 'public.text', 'public.plain-text'] 
+            : null,
       );
       
-      const XTypeGroup xmlTypeGroup = XTypeGroup(
+      final XTypeGroup xmlTypeGroup = XTypeGroup(
         label: 'XML弹幕文件',
-        extensions: ['xml'],
+        extensions: const ['xml'],
+        uniformTypeIdentifiers: io.Platform.isIOS 
+            ? ['public.xml', 'public.text', 'public.plain-text'] 
+            : null,
       );
       
       final XFile? file = await openFile(
@@ -283,20 +290,16 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                 final count = trackData['count'] as int;
                 
                 IconData trackIcon;
-                Color trackColor;
                 
                 switch (source) {
                   case 'dandanplay':
                     trackIcon = Icons.cloud;
-                    trackColor = Colors.white;
                     break;
                   case 'local':
                     trackIcon = Icons.folder;
-                    trackColor = Colors.white;
                     break;
                   default:
                     trackIcon = Icons.track_changes;
-                    trackColor = Colors.white;
                 }
 
                 return Material(
