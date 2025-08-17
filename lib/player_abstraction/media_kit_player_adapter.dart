@@ -194,14 +194,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     });
     
     _trackSubscription = _player.stream.track.listen((trackEvent) {
-      // debugPrint('MediaKitAdapter: Active track changed event received. Subtitle ID from event: ${trackEvent.subtitle.id}, Title: ${trackEvent.subtitle.title}');
+      // //debugPrint('MediaKitAdapter: Active track changed event received. Subtitle ID from event: ${trackEvent.subtitle.id}, Title: ${trackEvent.subtitle.title}');
       // The listener callback itself is not async, so we don't await _handleActiveSubtitleTrackDataChange here.
       // _handleActiveSubtitleTrackDataChange will run its async operations independently.
       _handleActiveSubtitleTrackDataChange(trackEvent.subtitle);
     }, onError: (error) {
-      debugPrint('MediaKitAdapter: Error in player.stream.track: $error');
+      //debugPrint('MediaKitAdapter: Error in player.stream.track: $error');
     }, onDone: () {
-      debugPrint('MediaKitAdapter: player.stream.track was closed.');
+      //debugPrint('MediaKitAdapter: player.stream.track was closed.');
     });
 
     _player.stream.error.listen((error) {
@@ -279,7 +279,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
   
   void _updateMediaInfo(Tracks tracks) {
-    debugPrint('MediaKitAdapter: _updateMediaInfo CALLED. Received tracks: Video=${tracks.video.length}, Audio=${tracks.audio.length}, Subtitle=${tracks.subtitle.length}');
+    //debugPrint('MediaKitAdapter: _updateMediaInfo CALLED. Received tracks: Video=${tracks.video.length}, Audio=${tracks.audio.length}, Subtitle=${tracks.subtitle.length}');
     _printAllTracksInfo(tracks);
     // 打印所有视频轨道的宽高
     final realVideoTracks = _filterRealTracks<VideoTrack>(tracks.video);
@@ -309,7 +309,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     if (_mediaPathForSubtitleStatusCheck == _currentMedia && _currentMedia.isNotEmpty) {
       if (realIncomingSubtitleTracks.isEmpty) {
         _currentMediaHasNoInitiallyEmbeddedSubtitles = true;
-        debugPrint('MediaKitAdapter: _updateMediaInfo - Initial track assessment for $_currentMedia: NO initially embedded subtitles found.');
+        //debugPrint('MediaKitAdapter: _updateMediaInfo - Initial track assessment for $_currentMedia: NO initially embedded subtitles found.');
       } else {
         // Check if all "real" incoming tracks are just 'auto' or 'no' which can happen
         // if the file has tracks but they are not yet fully parsed/identified by media_kit.
@@ -317,7 +317,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         // The _filterRealTracks already filters these out, so if realIncomingSubtitleTracks is not empty,
         // it means there's at least one track that media_kit considers a potential real subtitle track.
         _currentMediaHasNoInitiallyEmbeddedSubtitles = false;
-        debugPrint('MediaKitAdapter: _updateMediaInfo - Initial track assessment for $_currentMedia: Potential initially embedded subtitles PRESENT (count: ${realIncomingSubtitleTracks.length}).');
+        //debugPrint('MediaKitAdapter: _updateMediaInfo - Initial track assessment for $_currentMedia: Potential initially embedded subtitles PRESENT (count: ${realIncomingSubtitleTracks.length}).');
       }
       _mediaPathForSubtitleStatusCheck = ""; // Consumed the check for this media load.
     }
@@ -423,7 +423,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
             rawRepresentation: 'Subtitle: $title (ID: $trackIdStr)',
           )
         ];
-        debugPrint('MediaKitAdapter: _updateMediaInfo - Current media determined to have NO embedded subs. Consolidating ${realIncomingSubtitleTracks.length} incoming external-like tracks (numeric IDs) to 1 (Kept ID: $trackIdStr).');
+        //debugPrint('MediaKitAdapter: _updateMediaInfo - Current media determined to have NO embedded subs. Consolidating ${realIncomingSubtitleTracks.length} incoming external-like tracks (numeric IDs) to 1 (Kept ID: $trackIdStr).');
       } else {
         // Media either has initially embedded subtitles, or incoming tracks don't all fit the "duplicate external" heuristic.
         // Process all incoming real subtitle tracks.
@@ -451,18 +451,18 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
             )
           );
         }
-        debugPrint('MediaKitAdapter: _updateMediaInfo - Populating subtitles from ${realIncomingSubtitleTracks.length} incoming tracks (media may have embedded subs or tracks are diverse). Resulting count: ${resolvedSubtitleStreams.length}');
+        //debugPrint('MediaKitAdapter: _updateMediaInfo - Populating subtitles from ${realIncomingSubtitleTracks.length} incoming tracks (media may have embedded subs or tracks are diverse). Resulting count: ${resolvedSubtitleStreams.length}');
       }
     } else { // realIncomingSubtitleTracks is empty
       // If incoming tracks are empty (e.g. subtitles turned off)
       if (!_currentMediaHasNoInitiallyEmbeddedSubtitles && _mediaInfo.subtitle != null && _mediaInfo.subtitle!.isNotEmpty) {
         // Preserve the existing list if the media was known to have embedded subtitles.
         resolvedSubtitleStreams = _mediaInfo.subtitle;
-        debugPrint('MediaKitAdapter: _updateMediaInfo - Incoming event has NO subtitles, but media was determined to HAVE embedded subs and _mediaInfo already had ${resolvedSubtitleStreams?.length ?? 0}. PRESERVING existing subtitle list.');
+        //debugPrint('MediaKitAdapter: _updateMediaInfo - Incoming event has NO subtitles, but media was determined to HAVE embedded subs and _mediaInfo already had ${resolvedSubtitleStreams?.length ?? 0}. PRESERVING existing subtitle list.');
       } else {
         // Media has no embedded subtitles, or _mediaInfo was already empty.
         resolvedSubtitleStreams = null; 
-        debugPrint('MediaKitAdapter: _updateMediaInfo - Incoming event has NO subtitles. (Media determined to have NO embedded subs, or _mediaInfo was also empty). Setting subtitles to null/empty.');
+        //debugPrint('MediaKitAdapter: _updateMediaInfo - Incoming event has NO subtitles. (Media determined to have NO embedded subs, or _mediaInfo was also empty). Setting subtitles to null/empty.');
       }
     }
 
@@ -484,7 +484,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     // _handleActiveSubtitleTrackDataChange is better for reacting to live changes,
     // but after _mediaInfo is rebuilt, a direct sync is good.
     final currentActualPlayerSubtitleId = _player.state.track.subtitle.id;
-    debugPrint('MediaKitAdapter: _updateMediaInfo - Triggering sync with current actual player subtitle ID: $currentActualPlayerSubtitleId');
+    //debugPrint('MediaKitAdapter: _updateMediaInfo - Triggering sync with current actual player subtitle ID: $currentActualPlayerSubtitleId');
     _performSubtitleSyncLogic(currentActualPlayerSubtitleId);
   }
 
@@ -517,7 +517,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   /// 处理Jellyfin流媒体的轨道信息
   void _handleJellyfinStreamingTracks(Tracks tracks, List<VideoTrack> realVideoTracks, List<AudioTrack> realAudioTracks, List<SubtitleTrack> realSubtitleTracks) {
-    debugPrint('MediaKitAdapter: 处理Jellyfin流媒体轨道信息');
+    //debugPrint('MediaKitAdapter: 处理Jellyfin流媒体轨道信息');
     
     // 对于Jellyfin流媒体，即使轨道信息不完整，也要尝试创建基本的媒体信息
     List<PlayerVideoStreamInfo>? videoStreams;
@@ -526,7 +526,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     
     // 如果真实轨道为空，尝试从原始轨道中提取信息
     if (realVideoTracks.isEmpty && tracks.video.isNotEmpty) {
-      debugPrint('MediaKitAdapter: Jellyfin流媒体视频轨道信息不完整，尝试从原始轨道提取');
+      //debugPrint('MediaKitAdapter: Jellyfin流媒体视频轨道信息不完整，尝试从原始轨道提取');
       videoStreams = [
         PlayerVideoStreamInfo(
           codec: PlayerVideoCodecParams(
@@ -551,7 +551,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
     
     if (realAudioTracks.isEmpty && tracks.audio.isNotEmpty) {
-      debugPrint('MediaKitAdapter: Jellyfin流媒体音频轨道信息不完整，尝试从原始轨道提取');
+      //debugPrint('MediaKitAdapter: Jellyfin流媒体音频轨道信息不完整，尝试从原始轨道提取');
       audioStreams = [
         PlayerAudioStreamInfo(
           codec: PlayerAudioCodecParams(
@@ -612,7 +612,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       subtitle: subtitleStreams,
     );
     
-    debugPrint('MediaKitAdapter: Jellyfin流媒体媒体信息更新完成 - 视频轨道: ${videoStreams?.length ?? 0}, 音频轨道: ${audioStreams?.length ?? 0}');
+    //debugPrint('MediaKitAdapter: Jellyfin流媒体媒体信息更新完成 - 视频轨道: ${videoStreams?.length ?? 0}, 音频轨道: ${audioStreams?.length ?? 0}');
     
     _ensureDefaultTracksSelected();
   }
@@ -621,7 +621,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   Future<void> _handleActiveSubtitleTrackDataChange(SubtitleTrack subtitleData) async { 
     String? idToProcess = subtitleData.id;
     final originalEventId = subtitleData.id; // Keep original event id for logging
-    debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Received event with subtitle ID: "$originalEventId"');
+    //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Received event with subtitle ID: "$originalEventId"');
 
     if (idToProcess == 'auto') {
       try {
@@ -633,10 +633,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           
           dynamic resolvedSidValue;
           if (rawSidProperty is Future) {
-            debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - platform.getProperty(\'sid\') returned a Future. Awaiting...');
+            //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - platform.getProperty(\'sid\') returned a Future. Awaiting...');
             resolvedSidValue = await rawSidProperty;
           } else {
-            debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - platform.getProperty(\'sid\') returned a direct value.');
+            //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - platform.getProperty(\'sid\') returned a direct value.');
             resolvedSidValue = rawSidProperty;
           }
 
@@ -645,21 +645,21 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
             actualMpvSidString = resolvedSidValue.toString(); // Convert to string, as SID can be int or string 'no'/'auto'
           }
           
-          debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Event ID is "auto". Queried platform for actual "sid", got: "$actualMpvSidString" (raw value from getProperty: $resolvedSidValue)');
+          //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Event ID is "auto". Queried platform for actual "sid", got: "$actualMpvSidString" (raw value from getProperty: $resolvedSidValue)');
           
           if (actualMpvSidString != null && actualMpvSidString.isNotEmpty && actualMpvSidString != 'auto' && actualMpvSidString != 'no') {
             // We got a valid, specific track ID from mpv
             idToProcess = actualMpvSidString;
-            debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Using mpv-queried SID: "$idToProcess" instead of event ID "auto"');
+            //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Using mpv-queried SID: "$idToProcess" instead of event ID "auto"');
           } else {
             // Query didn't yield a specific track, or it was still 'auto'/'no'/null. Stick with the event's ID.
-            debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Queried SID is "$actualMpvSidString". Sticking with event ID "$originalEventId".');
+            //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Queried SID is "$actualMpvSidString". Sticking with event ID "$originalEventId".');
           }
         } else {
-           debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Player platform or getProperty method is null. Cannot query actual "sid". Processing event ID "$originalEventId" as is.');
+           //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Player platform or getProperty method is null. Cannot query actual "sid". Processing event ID "$originalEventId" as is.');
         }
       } catch (e, s) {
-        debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Error querying "sid" from platform: $e\nStack trace:\n$s. Processing event ID "$originalEventId" as is.');
+        //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Error querying "sid" from platform: $e\nStack trace:\n$s. Processing event ID "$originalEventId" as is.');
       }
     }
 
@@ -667,12 +667,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       _lastKnownActiveSubtitleId = idToProcess; // Update last known with the ID we decided to process
       _performSubtitleSyncLogic(idToProcess);
     } else {
-      debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Process ID ("$idToProcess") is the same as last known ("$_lastKnownActiveSubtitleId"). No sync triggered.');
+      //debugPrint('MediaKitAdapter: _handleActiveSubtitleTrackDataChange - Process ID ("$idToProcess") is the same as last known ("$_lastKnownActiveSubtitleId"). No sync triggered.');
     }
   }
 
   void _performSubtitleSyncLogic(String? activeMpvSid) {
-    debugPrint('MediaKitAdapter: _performSubtitleSyncLogic CALLED. Using MPV SID: "${activeMpvSid ?? "null"}"');
+    //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic CALLED. Using MPV SID: "${activeMpvSid ?? "null"}"');
     try {
       // It's crucial to call _ensureDefaultTracksSelected *before* we potentially clear _activeSubtitleTracks
       // if activeMpvSid is null/no/auto, especially if _activeSubtitleTracks is currently empty.
@@ -684,7 +684,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       // inside _ensureDefaultTracksSelected helps with this.
 
       final List<PlayerSubtitleStreamInfo>? realSubtitleTracksInMediaInfo = _mediaInfo.subtitle;
-      debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Current _mediaInfo.subtitle track count: ${realSubtitleTracksInMediaInfo?.length ?? 0}');
+      //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Current _mediaInfo.subtitle track count: ${realSubtitleTracksInMediaInfo?.length ?? 0}');
 
       List<int> newActiveTrackIndices = []; 
 
@@ -693,23 +693,23 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           int foundRealIndex = -1;
           for (int i = 0; i < realSubtitleTracksInMediaInfo.length; i++) {
             final mediaInfoTrackMpvId = realSubtitleTracksInMediaInfo[i].metadata['id'];
-            debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Comparing MPV SID "$activeMpvSid" with mediaInfo track MPV ID "$mediaInfoTrackMpvId" at _mediaInfo.subtitle index $i');
+            //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Comparing MPV SID "$activeMpvSid" with mediaInfo track MPV ID "$mediaInfoTrackMpvId" at _mediaInfo.subtitle index $i');
             if (mediaInfoTrackMpvId == activeMpvSid) {
               foundRealIndex = i; 
-              debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Match found! Index in _mediaInfo.subtitle: $foundRealIndex');
+              //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Match found! Index in _mediaInfo.subtitle: $foundRealIndex');
               break;
             }
           }
           if (foundRealIndex != -1) {
             newActiveTrackIndices = [foundRealIndex];
           } else {
-            debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - No match found for MPV SID "$activeMpvSid" in _mediaInfo.subtitle.');
+            //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - No match found for MPV SID "$activeMpvSid" in _mediaInfo.subtitle.');
           }
         } else {
-          debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - No real subtitle tracks in _mediaInfo to match MPV SID "$activeMpvSid".');
+          //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - No real subtitle tracks in _mediaInfo to match MPV SID "$activeMpvSid".');
         }
       } else {
-        debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - MPV SID is "${activeMpvSid ?? "null"}" (null, no, auto, or empty). Clearing active tracks.');
+        //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - MPV SID is "${activeMpvSid ?? "null"}" (null, no, auto, or empty). Clearing active tracks.');
       }
 
       bool hasChanged = false;
@@ -724,20 +724,20 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         }
       }
 
-      debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Calculated newActiveTrackIndices: $newActiveTrackIndices, Current _activeSubtitleTracks: $_activeSubtitleTracks, HasChanged: $hasChanged');
+      //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Calculated newActiveTrackIndices: $newActiveTrackIndices, Current _activeSubtitleTracks: $_activeSubtitleTracks, HasChanged: $hasChanged');
 
       if (hasChanged) {
         _activeSubtitleTracks = List<int>.from(newActiveTrackIndices); 
-        debugPrint('MediaKitAdapter: _activeSubtitleTracks UPDATED (by _performSubtitleSyncLogic). New state: $_activeSubtitleTracks, Based on MPV SID: $activeMpvSid');
+        //debugPrint('MediaKitAdapter: _activeSubtitleTracks UPDATED (by _performSubtitleSyncLogic). New state: $_activeSubtitleTracks, Based on MPV SID: $activeMpvSid');
       } else {
-        debugPrint('MediaKitAdapter: _activeSubtitleTracks UNCHANGED (by _performSubtitleSyncLogic). Current state: $_activeSubtitleTracks, Based on MPV SID: $activeMpvSid');
+        //debugPrint('MediaKitAdapter: _activeSubtitleTracks UNCHANGED (by _performSubtitleSyncLogic). Current state: $_activeSubtitleTracks, Based on MPV SID: $activeMpvSid');
       }
 
     } catch (e, s) {
-      debugPrint('MediaKitAdapter: Error in _performSubtitleSyncLogic: $e\nStack trace:\n$s');
+      //debugPrint('MediaKitAdapter: Error in _performSubtitleSyncLogic: $e\nStack trace:\n$s');
       if (_activeSubtitleTracks.isNotEmpty) {
         _activeSubtitleTracks = []; 
-        debugPrint('MediaKitAdapter: _activeSubtitleTracks cleared due to error in _performSubtitleSyncLogic.');
+        //debugPrint('MediaKitAdapter: _activeSubtitleTracks cleared due to error in _performSubtitleSyncLogic.');
       }
     }
   }
@@ -782,22 +782,22 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
                 }
             }
             if (actualAudioTrackToSet != null) {
-                 debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - 自动选择第一个有效音频轨道: _mediaInfo index=0, ID=${actualAudioTrackToSet.id}');
+                 //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - 自动选择第一个有效音频轨道: _mediaInfo index=0, ID=${actualAudioTrackToSet.id}');
                 _player.setAudioTrack(actualAudioTrackToSet);
             } else {
-                debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - 自动选择音频轨道失败: 未在player.state.tracks.audio中找到ID为 $firstRealAudioTrackMpvId 的轨道');
+                //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - 自动选择音频轨道失败: 未在player.state.tracks.audio中找到ID为 $firstRealAudioTrackMpvId 的轨道');
             }
         }
       }
     } catch (e) {
-      debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - 自动选择第一个有效音频轨道失败: $e');
+      //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - 自动选择第一个有效音频轨道失败: $e');
     }
 
     // Subtitle track selection logic
     // Only attempt to set a default if MPV hasn't already picked a specific track.
     if (_player.state.track.subtitle.id == 'auto' || _player.state.track.subtitle.id == 'no') {
       if (_mediaInfo.subtitle != null && _mediaInfo.subtitle!.isNotEmpty && _activeSubtitleTracks.isEmpty) {
-          debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Attempting to select a default subtitle track as current selection is "${_player.state.track.subtitle.id}" and _activeSubtitleTracks is empty.');
+          //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Attempting to select a default subtitle track as current selection is "${_player.state.track.subtitle.id}" and _activeSubtitleTracks is empty.');
           int preferredSubtitleIndex = -1;
           int firstSimplifiedChineseIndex = -1;
           int firstTraditionalChineseIndex = -1;
@@ -829,13 +829,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
           if (firstSimplifiedChineseIndex != -1) {
               preferredSubtitleIndex = firstSimplifiedChineseIndex;
-              debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Found Preferred: Simplified Chinese subtitle at _mediaInfo index: $preferredSubtitleIndex');
+              //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Found Preferred: Simplified Chinese subtitle at _mediaInfo index: $preferredSubtitleIndex');
           } else if (firstTraditionalChineseIndex != -1) {
               preferredSubtitleIndex = firstTraditionalChineseIndex;
-              debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Found Preferred: Traditional Chinese subtitle at _mediaInfo index: $preferredSubtitleIndex');
+              //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Found Preferred: Traditional Chinese subtitle at _mediaInfo index: $preferredSubtitleIndex');
           } else if (firstGenericChineseIndex != -1) {
               preferredSubtitleIndex = firstGenericChineseIndex;
-              debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Found Preferred: Generic Chinese subtitle at _mediaInfo index: $preferredSubtitleIndex');
+              //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Found Preferred: Generic Chinese subtitle at _mediaInfo index: $preferredSubtitleIndex');
           }
 
           if (preferredSubtitleIndex != -1) {
@@ -851,20 +851,20 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
               }
 
               if (actualSubtitleTrackToSet != null) {
-                  debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Automatically selecting subtitle: _mediaInfo index=$preferredSubtitleIndex, MPV ID=${actualSubtitleTrackToSet.id}, Title=${actualSubtitleTrackToSet.title}');
+                  //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Automatically selecting subtitle: _mediaInfo index=$preferredSubtitleIndex, MPV ID=${actualSubtitleTrackToSet.id}, Title=${actualSubtitleTrackToSet.title}');
                   _player.setSubtitleTrack(actualSubtitleTrackToSet);
                   // Note: _activeSubtitleTracks will be updated by the event stream (_handleActiveSubtitleTrackDataChange -> _performSubtitleSyncLogic)
               } else {
-                  debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Could not find SubtitleTrackData in player.state.tracks.subtitle for MPV ID "$mpvTrackIdToSelect" (from _mediaInfo index $preferredSubtitleIndex). Cannot auto-select default subtitle.');
+                  //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Could not find SubtitleTrackData in player.state.tracks.subtitle for MPV ID "$mpvTrackIdToSelect" (from _mediaInfo index $preferredSubtitleIndex). Cannot auto-select default subtitle.');
               }
           } else {
-            debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - No preferred Chinese subtitle track found in _mediaInfo.subtitle. No default selected by this logic.');
+            //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - No preferred Chinese subtitle track found in _mediaInfo.subtitle. No default selected by this logic.');
           }
       } else {
-         debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Conditions not met for default subtitle selection. _mediaInfo.subtitle empty/null: ${_mediaInfo.subtitle == null || _mediaInfo.subtitle!.isEmpty}, _activeSubtitleTracks not empty: ${_activeSubtitleTracks.isNotEmpty}');
+         //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Conditions not met for default subtitle selection. _mediaInfo.subtitle empty/null: ${_mediaInfo.subtitle == null || _mediaInfo.subtitle!.isEmpty}, _activeSubtitleTracks not empty: ${_activeSubtitleTracks.isNotEmpty}');
       }
     } else {
-        debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Player already has a specific subtitle track selected (ID: ${_player.state.track.subtitle.id}). Skipping default selection logic.');
+        //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Player already has a specific subtitle track selected (ID: ${_player.state.track.subtitle.id}). Skipping default selection logic.');
     }
   }
   
@@ -935,22 +935,22 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   @override
   set activeSubtitleTracks(List<int> value) {
     try {
-      debugPrint('MediaKitAdapter: UI wants to set activeSubtitleTracks (indices in _mediaInfo.subtitle) to: $value');
+      //debugPrint('MediaKitAdapter: UI wants to set activeSubtitleTracks (indices in _mediaInfo.subtitle) to: $value');
       final List<PlayerSubtitleStreamInfo>? mediaInfoSubtitles = _mediaInfo.subtitle;
 
       // Log the current state of _player.state.tracks.subtitle for diagnostics
       if (_player.state.tracks.subtitle.isNotEmpty) {
-          debugPrint('MediaKitAdapter: activeSubtitleTracks setter - _player.state.tracks.subtitle (raw from player):');
+          //debugPrint('MediaKitAdapter: activeSubtitleTracks setter - _player.state.tracks.subtitle (raw from player):');
           for (var track in _player.state.tracks.subtitle) {
               debugPrint('  - ID: ${track.id}, Title: ${track.title ?? 'N/A'}');
           }
       } else {
-          debugPrint('MediaKitAdapter: activeSubtitleTracks setter - _player.state.tracks.subtitle is EMPTY.');
+          //debugPrint('MediaKitAdapter: activeSubtitleTracks setter - _player.state.tracks.subtitle is EMPTY.');
       }
       
       if (value.isEmpty) {
         _player.setSubtitleTrack(SubtitleTrack.no());
-        debugPrint('MediaKitAdapter: UI set no subtitle track. Telling mpv to use "no".');
+        //debugPrint('MediaKitAdapter: UI set no subtitle track. Telling mpv to use "no".');
         // _activeSubtitleTracks should be updated by _performSubtitleSyncLogic via _handleActiveSubtitleTrackDataChange
         return;
       }
@@ -960,7 +960,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       // CRITICAL CHECK: If _mediaInfo has been reset (subtitles are null/empty),
       // do not proceed with trying to set a track based on an outdated index.
       if (mediaInfoSubtitles == null || mediaInfoSubtitles.isEmpty) {
-          debugPrint('MediaKitAdapter: CRITICAL - UI requested track index $uiSelectedMediaInfoIndex, but _mediaInfo.subtitle is currently NULL or EMPTY. This likely means player state was reset externally (e.g., by SubtitleManager clearing tracks). IGNORING this subtitle change request to prevent player stop/crash. The UI should resync with the new player state via listeners.');
+          //debugPrint('MediaKitAdapter: CRITICAL - UI requested track index $uiSelectedMediaInfoIndex, but _mediaInfo.subtitle is currently NULL or EMPTY. This likely means player state was reset externally (e.g., by SubtitleManager clearing tracks). IGNORING this subtitle change request to prevent player stop/crash. The UI should resync with the new player state via listeners.');
           // DO NOT call _player.setSubtitleTrack() here.
           return; // Exit early
       }
@@ -979,25 +979,25 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         }
 
         if (actualSubtitleTrackToSet != null) {
-          debugPrint('MediaKitAdapter: UI selected _mediaInfo index $uiSelectedMediaInfoIndex (MPV ID: $mpvTrackIdToSelect). Setting player subtitle track with SubtitleTrack(id: ${actualSubtitleTrackToSet.id}, title: ${actualSubtitleTrackToSet.title ?? 'N/A'}).');
+          //debugPrint('MediaKitAdapter: UI selected _mediaInfo index $uiSelectedMediaInfoIndex (MPV ID: $mpvTrackIdToSelect). Setting player subtitle track with SubtitleTrack(id: ${actualSubtitleTrackToSet.id}, title: ${actualSubtitleTrackToSet.title ?? 'N/A'}).');
           _player.setSubtitleTrack(actualSubtitleTrackToSet);
       } else {
-          debugPrint('MediaKitAdapter: Could not find SubtitleTrackData in player.state.tracks.subtitle for MPV ID "$mpvTrackIdToSelect" (from UI index $uiSelectedMediaInfoIndex). Setting to "no" as a fallback for this specific failure.');
+          //debugPrint('MediaKitAdapter: Could not find SubtitleTrackData in player.state.tracks.subtitle for MPV ID "$mpvTrackIdToSelect" (from UI index $uiSelectedMediaInfoIndex). Setting to "no" as a fallback for this specific failure.');
           _player.setSubtitleTrack(SubtitleTrack.no());
         }
       } else {
         // This case means mediaInfoSubtitles is NOT empty, but the index is out of bounds.
-        debugPrint('MediaKitAdapter: Invalid UI track index $uiSelectedMediaInfoIndex for a NON-EMPTY _mediaInfo.subtitle list (length: ${mediaInfoSubtitles.length}). Setting to "no" because the requested index is out of bounds.');
+        //debugPrint('MediaKitAdapter: Invalid UI track index $uiSelectedMediaInfoIndex for a NON-EMPTY _mediaInfo.subtitle list (length: ${mediaInfoSubtitles.length}). Setting to "no" because the requested index is out of bounds.');
         _player.setSubtitleTrack(SubtitleTrack.no());
       }
     } catch (e, s) {
-      debugPrint('MediaKitAdapter: Error in "set activeSubtitleTracks": $e\\nStack trace:\\n$s. Setting to "no" as a safety measure.');
+      //debugPrint('MediaKitAdapter: Error in "set activeSubtitleTracks": $e\\nStack trace:\\n$s. Setting to "no" as a safety measure.');
       // Avoid crashing, but set to 'no' if an unexpected error occurs.
       if (!_isDisposed) { // Check if player is disposed before trying to set track
         try {
             _player.setSubtitleTrack(SubtitleTrack.no());
         } catch (playerError) {
-            debugPrint('MediaKitAdapter: Further error trying to set SubtitleTrack.no() in catch block: $playerError');
+            //debugPrint('MediaKitAdapter: Further error trying to set SubtitleTrack.no() in catch block: $playerError');
         }
       }
     }
@@ -1089,13 +1089,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   void setMedia(String path, PlayerMediaType type) {
     //debugPrint('[MediaKit] setMedia: path=$path, type=$type');
     if (type == PlayerMediaType.subtitle) {
-      debugPrint('MediaKitAdapter: setMedia called for SUBTITLE. Path: "$path"');
+      //debugPrint('MediaKitAdapter: setMedia called for SUBTITLE. Path: "$path"');
       if (path.isEmpty) {
-        debugPrint('MediaKitAdapter: setMedia (for subtitle) - Path is empty. Calling player.setSubtitleTrack(SubtitleTrack.no()). Main media and info remain UNCHANGED.');
+        //debugPrint('MediaKitAdapter: setMedia (for subtitle) - Path is empty. Calling player.setSubtitleTrack(SubtitleTrack.no()). Main media and info remain UNCHANGED.');
         if (!_isDisposed) _player.setSubtitleTrack(SubtitleTrack.no());
       } else {
         // Assuming path is a valid file URI or path that media_kit can handle for subtitles
-        debugPrint('MediaKitAdapter: setMedia (for subtitle) - Path is "$path". Calling player.setSubtitleTrack(SubtitleTrack.uri(path)). Main media and info remain UNCHANGED.');
+        //debugPrint('MediaKitAdapter: setMedia (for subtitle) - Path is "$path". Calling player.setSubtitleTrack(SubtitleTrack.uri(path)). Main media and info remain UNCHANGED.');
         if (!_isDisposed) _player.setSubtitleTrack(SubtitleTrack.uri(path));
       }
       // Player events will handle updating _activeSubtitleTracks via _performSubtitleSyncLogic.
@@ -1118,7 +1118,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       mediaOptions[key] = value;
     });
     
-    debugPrint('MediaKitAdapter: 打开媒体 (MAIN VIDEO/AUDIO): $path');
+    //debugPrint('MediaKitAdapter: 打开媒体 (MAIN VIDEO/AUDIO): $path');
     if (!_isDisposed) _player.open(Media(path, extras: mediaOptions), play: false);
     
     // 设置mpv底层video-aspect属性，确保保持原始宽高比
@@ -1152,7 +1152,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     Future.delayed(const Duration(milliseconds: 500), () {
       if(!_isDisposed) { 
       _printAllTracksInfo(_player.state.tracks);
-         debugPrint('MediaKitAdapter: setMedia (MAIN VIDEO/AUDIO) - Delayed block executed. Initial track info printed.');
+         //debugPrint('MediaKitAdapter: setMedia (MAIN VIDEO/AUDIO) - Delayed block executed. Initial track info printed.');
       }
     });
   }
@@ -1286,27 +1286,27 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         ];
         final slangString = preferredSlangs.join(',');
         platform.setProperty?.call("slang", slangString);
-        debugPrint('MediaKitAdapter: Set MPV preferred subtitle languages (slang) to: $slangString');
+        //debugPrint('MediaKitAdapter: Set MPV preferred subtitle languages (slang) to: $slangString');
 
         _player.stream.tracks.listen((tracks) {
           // _updateMediaInfo (called by this listener) will then call _ensureDefaultTracksSelected.
         });
       }
     } catch (e) {
-      debugPrint('MediaKitAdapter: 设置默认轨道选择策略失败: $e');
+      //debugPrint('MediaKitAdapter: 设置默认轨道选择策略失败: $e');
     }
   }
 
   /// 处理流媒体特定错误
   void _handleStreamingError(dynamic error) {
     if (_currentMedia.contains('jellyfin://') || _currentMedia.contains('emby://')) {
-      debugPrint('MediaKitAdapter: 检测到流媒体错误，尝试特殊处理: $error');
+      //debugPrint('MediaKitAdapter: 检测到流媒体错误，尝试特殊处理: $error');
       
       // 检查是否是网络连接问题
       if (error.toString().contains('network') || 
           error.toString().contains('connection') ||
           error.toString().contains('timeout')) {
-        debugPrint('MediaKitAdapter: 流媒体网络连接错误，建议检查网络连接和服务器状态');
+        //debugPrint('MediaKitAdapter: 流媒体网络连接错误，建议检查网络连接和服务器状态');
         _mediaInfo = _mediaInfo.copyWith(
           specificErrorMessage: '流媒体连接失败，请检查网络连接和服务器状态'
         );
@@ -1317,7 +1317,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
                error.toString().contains('unauthorized') ||
                error.toString().contains('401') ||
                error.toString().contains('403')) {
-        debugPrint('MediaKitAdapter: 流媒体认证错误，请检查API密钥和权限');
+        //debugPrint('MediaKitAdapter: 流媒体认证错误，请检查API密钥和权限');
         _mediaInfo = _mediaInfo.copyWith(
           specificErrorMessage: '流媒体认证失败，请检查API密钥和访问权限'
         );
@@ -1327,7 +1327,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       else if (error.toString().contains('format') || 
                error.toString().contains('codec') ||
                error.toString().contains('unsupported')) {
-        debugPrint('MediaKitAdapter: 流媒体格式不支持，可能需要转码');
+        //debugPrint('MediaKitAdapter: 流媒体格式不支持，可能需要转码');
         _mediaInfo = _mediaInfo.copyWith(
           specificErrorMessage: '当前播放内核不支持此流媒体格式，请尝试在服务器端启用转码'
         );
@@ -1335,7 +1335,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }
       // 其他流媒体错误
       else {
-        debugPrint('MediaKitAdapter: 未知流媒体错误');
+        //debugPrint('MediaKitAdapter: 未知流媒体错误');
         _mediaInfo = _mediaInfo.copyWith(
           specificErrorMessage: '流媒体播放失败，请检查服务器配置和网络连接'
         );
@@ -1347,7 +1347,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   /// 尝试Jellyfin流媒体重试
   void _attemptJellyfinRetry(String errorType) {
     if (_jellyfinRetryCount >= _maxJellyfinRetries) {
-      debugPrint('MediaKitAdapter: Jellyfin流媒体重试次数已达上限 ($_maxJellyfinRetries)，停止重试');
+      //debugPrint('MediaKitAdapter: Jellyfin流媒体重试次数已达上限 ($_maxJellyfinRetries)，停止重试');
       return;
     }
     
@@ -1360,12 +1360,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _jellyfinRetryCount++;
     final retryDelay = Duration(seconds: _jellyfinRetryCount * 2); // 递增延迟：2秒、4秒、6秒
     
-    debugPrint('MediaKitAdapter: 准备重试Jellyfin流媒体播放 (第$_jellyfinRetryCount次，延迟${retryDelay.inSeconds}秒)');
+    //debugPrint('MediaKitAdapter: 准备重试Jellyfin流媒体播放 (第$_jellyfinRetryCount次，延迟${retryDelay.inSeconds}秒)');
     
     _jellyfinRetryTimer?.cancel();
     _jellyfinRetryTimer = Timer(retryDelay, () {
       if (!_isDisposed && _currentMedia == _lastJellyfinMediaPath) {
-        debugPrint('MediaKitAdapter: 开始重试Jellyfin流媒体播放');
+        //debugPrint('MediaKitAdapter: 开始重试Jellyfin流媒体播放');
         _retryJellyfinPlayback();
       }
     });
@@ -1376,7 +1376,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     if (_currentMedia.isEmpty) return;
     
     try {
-      debugPrint('MediaKitAdapter: 重试播放Jellyfin流媒体: $_currentMedia');
+      //debugPrint('MediaKitAdapter: 重试播放Jellyfin流媒体: $_currentMedia');
       
       // 停止当前播放
       _player.stop();
@@ -1391,11 +1391,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           });
           
           _player.open(Media(_currentMedia, extras: mediaOptions), play: false);
-          debugPrint('MediaKitAdapter: Jellyfin流媒体重试完成');
+          //debugPrint('MediaKitAdapter: Jellyfin流媒体重试完成');
         }
       });
     } catch (e) {
-      debugPrint('MediaKitAdapter: Jellyfin流媒体重试失败: $e');
+      //debugPrint('MediaKitAdapter: Jellyfin流媒体重试失败: $e');
     }
   }
 

@@ -547,18 +547,12 @@ Future<void> _checkNetworkConnection() async {
     
     // 再测试一个国内的站点
     await Future.delayed(const Duration(seconds: 1));
-    debugPrint('\n测试腾讯连接:');
+    //debugPrint('\n测试腾讯连接:');
     final tencentResult = await NetworkChecker.checkConnection(
       url: 'https://www.qq.com',
       timeout: 5,
       verbose: true,
     );
-    
-    debugPrint('\n腾讯连接状态: ${tencentResult['connected'] ? '成功' : '失败'}');
-    if (tencentResult['connected']) {
-      debugPrint('响应时间: ${tencentResult['duration']}ms');
-      debugPrint('响应大小: ${tencentResult['responseSize']} 字节');
-    }
     
     // 诊断结果总结
     debugPrint('\n==================== 网络诊断结果总结 ====================');
@@ -849,7 +843,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   }
 
   void _onTabChange() {
-    debugPrint('[CPU-泄漏排查] 主页面Tab切换: 索引=${globalTabController?.index}');
+    //debugPrint('[CPU-泄漏排查] 主页面Tab切换: 索引=${globalTabController?.index}');
     _manageHotkeys();
   }
 

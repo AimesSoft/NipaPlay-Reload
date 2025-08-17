@@ -48,7 +48,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   // 仅保留当前标签页索引用于初始化_MediaLibraryTabs
   final int _currentTabIndex = 0;
 
-  int _mediaLibraryVersion = 0;
+  final int _mediaLibraryVersion = 0;
 
   @override
   void initState() {
@@ -289,14 +289,14 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
   @override
   void dispose() {
-    debugPrint('[CPU-泄漏排查] _MediaLibraryTabsState dispose 被调用');
+    //debugPrint('[CPU-泄漏排查] _MediaLibraryTabsState dispose 被调用');
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
   }
 
   void _handleTabChange() {
-    debugPrint('[CPU-泄漏排查] TabController索引变化: ${_tabController.index}，indexIsChanging: ${_tabController.indexIsChanging}');
+    //debugPrint('[CPU-泄漏排查] TabController索引变化: ${_tabController.index}，indexIsChanging: ${_tabController.indexIsChanging}');
     if (!_tabController.indexIsChanging) return;
     
     if (_currentIndex != _tabController.index) {

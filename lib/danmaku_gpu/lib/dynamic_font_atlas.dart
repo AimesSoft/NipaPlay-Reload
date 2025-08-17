@@ -184,7 +184,7 @@ class DynamicFontAtlas {
     
     _isUpdating = false;
     onAtlasUpdated?.call(); // 触发回调
-    debugPrint('DynamicFontAtlas: 图集已动态更新');
+    //debugPrint('DynamicFontAtlas: 图集已动态更新');
   }
   
   // 核心方法：重新生成整个图集

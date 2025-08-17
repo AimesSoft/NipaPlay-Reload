@@ -81,7 +81,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
   @override
   void dispose() {
-    debugPrint('[CPU-泄漏排查] MediaLibraryPage dispose 被调用！！！');
+    //debugPrint('[CPU-泄漏排查] MediaLibraryPage dispose 被调用！！！');
     try {
       if (mounted) { 
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
