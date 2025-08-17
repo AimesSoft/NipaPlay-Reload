@@ -45,6 +45,10 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   // final double _horizontalSpacing = 20.0; // 左右间距（未使用，移除）
   // 文本宽度缓存，减少 TextPainter.layout 开销
   final Map<String, double> _textWidthCache = {};
+  // 文本宽度缓存的容量上限，防止长期运行时无限增长导致内存压力
+  static const int _textWidthCacheLimit = 5000;
+  // 滚动弹幕的总时长（秒），与速度模型一致，避免魔法数字
+  static const double _scrollDurationSeconds = 10.0;
   // 可见窗口的二分索引范围（基于已排序列表）
   int _visibleLeftIndex = 0;
   int _visibleRightIndex = -1;
@@ -429,17 +433,23 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     final adjustedDanmakuHeight = isMerged ? _danmakuHeight * _calcMergedFontSizeMultiplier(mergeCount) : _danmakuHeight;
     final trackHeight = adjustedDanmakuHeight + _verticalSpacing;
     final effectiveHeight = screenHeight * widget.displayArea; // 根据显示区域调整有效高度
-    int maxTracks = ((effectiveHeight - adjustedDanmakuHeight - _verticalSpacing) / trackHeight).floor();
-    // 安全保护：当可用轨道数<=0（极小窗口/显示区域）时，夹紧为至少1条轨道，维持原有堆叠/重叠逻辑
-    if (maxTracks <= 0) {
+    int maxTracks;
+    // 安全保护：当轨道高度<=0（极小窗口/显示区域/字体设置异常）时，夹紧为至少1条轨道，防止除零或负数
+    if (trackHeight <= 0) {
       maxTracks = 1;
+    } else {
+      maxTracks = ((effectiveHeight - adjustedDanmakuHeight - _verticalSpacing) / trackHeight).floor();
+      // 二次防护：计算结果<=0 时也夹紧为 1，维持原有堆叠/重叠逻辑
+      if (maxTracks <= 0) {
+        maxTracks = 1;
+      }
     }
     
     // 根据弹幕类型分配轨道
     if (type == 'scroll') {
       // 使用“每轨道可用时间”贪心分配，避免逐一碰撞
       // 基于恒定速度滚动模型：duration=10s，总距离=S+W
-      final double D = 10.0; // 滚动总时长
+      final double D = _scrollDurationSeconds; // 滚动总时长
       // 安全间距（合并弹幕更大）
       double safetyMargin = screenWidth * _safetyMarginRatio;
       if (isMerged) {
@@ -475,6 +485,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       });
 
       // nextAvailable = time + D * (W + margin) / (S + W)
+      // 解释:
+      //   D = 滚动总时长 (上方变量 D，通常为 10.0 秒)
+      //   W = danmakuWidth (当前弹幕文本宽度)
+      //   margin = safetyMargin (弹幕之间的安全间距)
+      //   S = screenWidth (屏幕宽度)
       final nextAvailable = time + D * ((danmakuWidth + safetyMargin) / (screenWidth + danmakuWidth));
       _scrollLaneNextAvailableUntil[chosenTrack] = nextAvailable;
 
@@ -953,7 +968,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
 
     final width = tp.size.width;
     // 简单容量控制，避免无限增长
-    if (_textWidthCache.length > 5000) {
+    if (_textWidthCache.length > _textWidthCacheLimit) {
       _textWidthCache.clear();
     }
     _textWidthCache[key] = width;
