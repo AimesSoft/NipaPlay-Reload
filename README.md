@@ -55,10 +55,15 @@
       brew upgrade nipaplay-reload
       ```
       
-- **Arch Linux**
-  ```
-  paru -S nipaplay-reload-bin
-  ```
+- **Arch Linux（x86 64）**
+  - 使用`aur`助手
+    ```bash
+    paru -S nipaplay-reload-bin
+    ```
+    > 或
+    ```bash
+    yay -S nipaplay-reload-bin
+    ```
 ## 如何贡献
 
 我们非常欢迎来自社区的各种形式的贡献，无论是代码、文档、设计还是软件分发。为了帮助你更轻松地参与进来，我们为您准备了一套详尽的贡献者指南。
