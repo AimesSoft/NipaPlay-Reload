@@ -38,11 +38,11 @@
 2.  **创建新分支**:
     打开终端，在你的项目文件夹根目录下，运行以下命令：
     ```bash
-    git checkout -b add-my-name-to-about-page
+    git checkout -b feat/add-contributor-name-to-about-page
     ```
     这条命令做了两件事：
     *   `git checkout -b`: 创建一个新分支。
-    *   `add-my-name-to-about-page`: 这是我们给新分支取的名字。一个好的分支名应该能清晰地描述这个分支是做什么的。
+    *   `feat/add-contributor-name-to-about-page`: 这是我们给新分支取的名字。一个好的分支名应该能清晰地描述这个分支是做什么的。
 
     现在，你已经在这个全新的分支上了，可以安全地进行修改了。
 
@@ -98,17 +98,18 @@
     *   `git commit`: 执行提交操作。
     *   `-m`: 表示后面跟着的是提交信息。
     *   `"feat: Add contributor name to about page"`: 这是提交信息，非常重要。一个好的提交信息应该清晰地描述这次提交做了什么。我们通常使用一种格式，比如 `feat:` 表示新增功能，`fix:` 表示修复 bug。
+        >   更多有关提交信息的规范可以参考[约定式提交](https://www.conventionalcommits.org/zh-hans/v1.0.0/)
 
 ### 第 4 步：推送到 GitHub (Push)
 
 现在，这个提交只存在于你的本地电脑上。我们需要把它推送到你在 GitHub 上的 Fork 仓库。
 
 ```bash
-git push origin add-my-name-to-about-page
+git push origin feat/add-contributor-name-to-about-page
 ```
 *   `git push`: 执行推送操作。
 *   `origin`: 代表你在 GitHub 上的 Fork 仓库。
-*   `add-my-name-to-about-page`: 我们要推送的分支名。
+*   `feat/add-contributor-name-to-about-page`: 我们要推送的分支名。
 
 ### 第 5 步：创建拉取请求 (Pull Request)
 
