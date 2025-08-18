@@ -1063,3 +1063,67 @@ jobs:
           git add pubspec.yaml
           git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
           git push origin refs/heads/main
+
+  UpdateHomebrewTap:
+    name: Update Homebrew Tap
+    needs: [Publish]
+    if: success()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Homebrew Tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: Shinokawa/homebrew-nipaplay-reload
+          path: homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Get Version
+        id: get_version
+        run: echo "version=${{ needs.Build.outputs.version }}" >> $GITHUB_OUTPUT
+
+      - name: Calculate SHA256 of the DMG
+        id: shasum
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          DMG_URL="https://github.com/MCDFsteve/NipaPlay-Reload/releases/download/v${VERSION}/NipaPlay_${VERSION}_macOS_Universal.dmg"
+          
+          echo "Downloading DMG from ${DMG_URL}..."
+          curl -sL -o NipaPlay.dmg "${DMG_URL}"
+          
+          echo "Calculating SHA256..."
+          SHA256=$(shasum -a 256 NipaPlay.dmg | awk '{print $1}')
+          
+          echo "SHA256 is ${SHA256}"
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+
+      - name: Update Cask file
+        run: |
+          CASK_FILE="homebrew-tap/Casks/nipaplay-reload.rb"
+          VERSION="${{ steps.get_version.outputs.version }}"
+          SHA256="${{ steps.shasum.outputs.sha256 }}"
+          
+          echo "Updating ${CASK_FILE} to version ${VERSION}"
+          
+          sed -i 's/^  version ".*"$/  version "'"$VERSION"'"/' "${CASK_FILE}"
+          sed -i 's/^  sha256 ".*"$/  sha256 "'"$SHA256"'"/' "${CASK_FILE}"
+          
+          echo "--- Cask file content after update ---"
+          cat "${CASK_FILE}"
+          echo "--------------------------------------"
+
+      - name: Commit and push Cask update
+        run: |
+          cd homebrew-tap
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if [[ -z $(git status -s) ]]; then
+            echo "No changes to the Cask file. Skipping commit."
+          else
+            echo "Changes detected. Committing and pushing..."
+            git add Casks/nipaplay-reload.rb
+            git commit -m "Update nipaplay-reload cask to v${{ steps.get_version.outputs.version }}"
+            git push
+            echo "Push successful."
+          fi
