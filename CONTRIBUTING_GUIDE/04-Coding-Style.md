@@ -8,17 +8,17 @@
 
 我们强烈依赖自动化工具来保证代码风格的一致性。
 
-### 1. 使用 `flutter format`
+### 1. 使用 `dart format`
 
 在你提交代码之前，请务必在项目根目录运行以下命令：
 
 ```bash
-flutter format .
+dart format .
 ```
 
 这个命令会自动格式化你所有的 Dart 代码文件，使其符合官方推荐的风格。这包括处理缩进、空格、逗号等所有细节。
 
-**与 AI 协作时的技巧**: 当 AI 生成了大量代码后，你可能会发现代码的格式有点乱。别担心，直接运行 `flutter format .`，所有问题都会迎刃而解。
+**与 AI 协作时的技巧**: 当 AI 生成了大量代码后，你可能会发现代码的格式有点乱。别担心，直接运行 `dart format .`，所有问题都会迎刃而解。
 
 ### 2. 关注 `flutter analyze`
 
@@ -114,8 +114,8 @@ Future<User> getUserById(String id) async {
 
 遵守代码风格指南有助于我们共同维护一个健康的代码库。记住，最重要的两点是：
 
-1.  在提交前运行 `flutter format .`。
-2.  尽量解决 `flutter analyze` 报告的问题。
+1. 在提交前运行 `dart format .`。
+2. 尽量解决 `flutter analyze` 报告的问题。
 
 感谢你为保持 NipaPlay-Reload 代码的优雅和清晰所做的努力！
 
