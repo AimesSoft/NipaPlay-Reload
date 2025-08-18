@@ -26,7 +26,7 @@ jobs:
           if [[ "$COMMIT_MSG" =~ ([0-9]{4}\.[0-9]{4}) ]]; then
             echo "✅ Release trigger found in commit message."
             echo "triggered=true" >> $GITHUB_OUTPUT
-            echo "release_title=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            echo "release_title=BASHREMATCH[1]">>{BASH_REMATCH[1]}" >> GITHUB_OUTPUT
           else
             echo "🛑 No release trigger found. Skipping release workflow."
             echo "triggered=false" >> $GITHUB_OUTPUT
@@ -576,44 +576,44 @@ jobs:
           ARCH="amd64" # Assuming amd64 from matrix
           BUILD_OUTPUT_DIR="build/linux/x64/release/bundle"
           LINUX_BUILD_DIR="build/linux"
-          DEB_PKG_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}"
-          APPIMAGE_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}.AppImage"
-          ARCHIVE_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}.tar.gz"
+          DEB_PKG_NAME="APPNAME−{APP_NAME}-{VERSION}-Linux-${ARCH}"
+          APPIMAGE_NAME="APPNAME−{APP_NAME}-{VERSION}-Linux-${ARCH}.AppImage"
+          ARCHIVE_NAME="APPNAME−{APP_NAME}-{VERSION}-Linux-${ARCH}.tar.gz"
           DESKTOP_FILE_NAME="io.github.MCDFsteve.NipaPlay-Reload.desktop" # Match your actual desktop file name
           ICON_NAME="io.github.MCDFsteve.NipaPlay-Reload.png" # Match icon name used in desktop file if specific
           ICON_SOURCE_PATH="assets/images/logo512.png" # Corrected path relative to root
           ASSETS_LINUX_DIR="assets/linux" # Corrected path relative to root
           RPM_SPEC_TEMPLATE="${ASSETS_LINUX_DIR}/nipaplay.spec.template"
           RPM_SPEC_FILE="nipaplay.spec" # Will be placed in SPECS dir
-          RPM_PKG_NAME="${APP_NAME}-${VERSION}-1.${ARCH}.rpm" # Adjust if Release tag in spec changes
+          RPM_PKG_NAME="APPNAME−{APP_NAME}-{VERSION}-1.${ARCH}.rpm" # Adjust if Release tag in spec changes
           
           echo "--- Starting Packaging ---"
-          echo "Version: ${VERSION}, Arch: ${ARCH}"
+          echo "Version: VERSION,Arch:{VERSION}, Arch: {ARCH}"
           echo "Build Output: ${BUILD_OUTPUT_DIR}"
           echo "Linux Build Dir: ${LINUX_BUILD_DIR}"
           
           # --- Create .deb package ---
           echo "--- Creating .deb package ---"
-          DEB_ROOT="${LINUX_BUILD_DIR}/${DEB_PKG_NAME}"
-          mkdir -p "${DEB_ROOT}/opt/${APP_NAME_LOWER}"
+          DEB_ROOT="LINUXBUILDDIR/{LINUX_BUILD_DIR}/{DEB_PKG_NAME}"
+          mkdir -p "DEBROOT/opt/{DEB_ROOT}/opt/{APP_NAME_LOWER}"
           mkdir -p "${DEB_ROOT}/usr/share/applications"
           mkdir -p "${DEB_ROOT}/usr/share/icons/hicolor/512x512/apps"
           mkdir -p "${DEB_ROOT}/DEBIAN"
           chmod 0755 "${DEB_ROOT}/DEBIAN"
           
           # Copy app files
-          echo "Copying application files to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
-          cp -r "${BUILD_OUTPUT_DIR}/"* "${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
+          echo "Copying application files to DEBROOT/opt/{DEB_ROOT}/opt/{APP_NAME_LOWER}/"
+          cp -r "BUILDOUTPUTDIR/"∗"{BUILD_OUTPUT_DIR}/"* "{DEB_ROOT}/opt/${APP_NAME_LOWER}/"
           
           # Copy system libmpv libraries to ensure availability
-          echo "Copying system libmpv libraries to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
-          mkdir -p "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib"
+          echo "Copying system libmpv libraries to DEBROOT/opt/{DEB_ROOT}/opt/{APP_NAME_LOWER}/lib/"
+          mkdir -p "DEBROOT/opt/{DEB_ROOT}/opt/{APP_NAME_LOWER}/lib"
           # Copy system libmpv and create compatibility symlinks
           find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
-            cp "$mpv_lib" "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" 2>/dev/null || true
+            cp "mpvlib""mpv_lib" "{DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" 2>/dev/null || true
           done
           # Create compatibility symlinks for libmpv.so.1 if needed
-          cd "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib"
+          cd "DEBROOT/opt/{DEB_ROOT}/opt/{APP_NAME_LOWER}/lib"
           if [ ! -f "libmpv.so.1" ] && [ -f "libmpv.so.2" ]; then
             ln -sf libmpv.so.2 libmpv.so.1
           fi
@@ -623,24 +623,24 @@ jobs:
           echo "Creating DEBIAN/control"
           sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
               -e "s/ARCH_PLACEHOLDER/${ARCH}/g" \
-              "${ASSETS_LINUX_DIR}/DEBIAN/control.template" > "${DEB_ROOT}/DEBIAN/control"
+              "ASSETSLINUXDIR/DEBIAN/control.template">"{ASSETS_LINUX_DIR}/DEBIAN/control.template" > "{DEB_ROOT}/DEBIAN/control"
           
           # Copy postinst/postrm scripts if they exist
           if [ -f "${ASSETS_LINUX_DIR}/DEBIAN/postinst" ]; then
             echo "Copying postinst script"
-            cp "${ASSETS_LINUX_DIR}/DEBIAN/postinst" "${DEB_ROOT}/DEBIAN/"
+            cp "ASSETSLINUXDIR/DEBIAN/postinst""{ASSETS_LINUX_DIR}/DEBIAN/postinst" "{DEB_ROOT}/DEBIAN/"
             chmod 0755 "${DEB_ROOT}/DEBIAN/postinst"
           fi
           if [ -f "${ASSETS_LINUX_DIR}/DEBIAN/postrm" ]; then
             echo "Copying postrm script"
-            cp "${ASSETS_LINUX_DIR}/DEBIAN/postrm" "${DEB_ROOT}/DEBIAN/"
+            cp "ASSETSLINUXDIR/DEBIAN/postrm""{ASSETS_LINUX_DIR}/DEBIAN/postrm" "{DEB_ROOT}/DEBIAN/"
             chmod 0755 "${DEB_ROOT}/DEBIAN/postrm"
           fi
           
           # Copy desktop file and icon
           echo "Copying desktop file and icon"
-          cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${DEB_ROOT}/usr/share/applications/"
-          cp "${ICON_SOURCE_PATH}" "${DEB_ROOT}/usr/share/icons/hicolor/512x512/apps/${ICON_NAME}"
+          cp "ASSETSLINUXDIR/{ASSETS_LINUX_DIR}/{DESKTOP_FILE_NAME}" "${DEB_ROOT}/usr/share/applications/"
+          cp "ICONSOURCEPATH""{ICON_SOURCE_PATH}" "{DEB_ROOT}/usr/share/icons/hicolor/512x512/apps/${ICON_NAME}"
           
           # Build the .deb package
           echo "Building .deb package..."
@@ -900,7 +900,7 @@ jobs:
           fi
           DESIRED_RPM_NAME_FOR_CHECK="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
           if [ ! -f "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}" ]; then
-             echo "Error: RPM file not found! Expected: ${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}"
+             echo "Error: RPM file not found! Expected: LINUXBUILDDIR/{LINUX_BUILD_DIR}/{DESIRED_RPM_NAME_FOR_CHECK}"
              MISSING_FILES=true
           fi
 
@@ -913,7 +913,7 @@ jobs:
 
           # --- Cleanup ---
           echo "--- Cleaning up intermediate directories ---"
-          rm -rf "${DEB_ROOT}" "${APPDIR}" "${ARCHIVE_CONTENT_DIR}"
+          rm -rf "DEBROOT""{DEB_ROOT}" "{APPDIR}" "${ARCHIVE_CONTENT_DIR}"
           
           echo "--- Linux Packaging Complete ---"
       
@@ -972,7 +972,7 @@ jobs:
           fi
 
           # Get commit history since the last tag
-          COMMIT_HISTORY=$(git log $COMMIT_RANGE --pretty=format:'- %s (%h)%n%b')
+          COMMIT_HISTORY=(gitlog(git log COMMIT_RANGE --pretty=format:'- %s (%h)%n%b')
           if [ -z "$COMMIT_HISTORY" ]; then
             echo "No new commits since last tag. Using latest commit message as changelog."
             COMMIT_HISTORY=$(git log -1 --pretty=format:'- %s (%h)')
@@ -1050,14 +1050,14 @@ jobs:
           
           MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
           MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
-          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+          PATCH=(echo(echo CURRENT_VERSION | cut -d. -f3)
           
           NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          NEW_VERSION="MAJOR.MAJOR.MINOR.$NEW_PATCH"
           echo "New version: $NEW_VERSION"
           
           # Update pubspec.yaml
-          sed -i "s/^version: .*$/version: $NEW_VERSION/" pubspec.yaml
+          sed -i "s/^version: .*/version:/version: NEW_VERSION/" pubspec.yaml
           
           # Commit and push changes
           git add pubspec.yaml
@@ -1066,7 +1066,7 @@ jobs:
 
   UpdateHomebrewTap:
     name: Update Homebrew Tap
-    needs: [Publish]
+    needs: [Publish, Build]
     if: success()
     runs-on: ubuntu-latest
 
@@ -1086,16 +1086,16 @@ jobs:
         id: shasum
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
-          DMG_URL="https://github.com/MCDFsteve/NipaPlay-Reload/releases/download/v${VERSION}/NipaPlay_${VERSION}_macOS_Universal.dmg"
+          DMG_URL="https://github.com/MCDFsteve/NipaPlay-Reload/releases/download/v{VERSION}/NipaPlay_{VERSION}/NipaPlay_{VERSION}_macOS_Universal.dmg"
           
           echo "Downloading DMG from ${DMG_URL}..."
           curl -sL -o NipaPlay.dmg "${DMG_URL}"
           
           echo "Calculating SHA256..."
-          SHA256=$(shasum -a 256 NipaPlay.dmg | awk '{print $1}')
+          SHA256=(shasum -a 256 NipaPlay.dmg | awk '{print(shasum -a 256 NipaPlay.dmg | awk '{print 1}')
           
           echo "SHA256 is ${SHA256}"
-          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "sha256=SHA256">>{SHA256}" >> GITHUB_OUTPUT
 
       - name: Update Cask file
         run: |
@@ -1103,10 +1103,14 @@ jobs:
           VERSION="${{ steps.get_version.outputs.version }}"
           SHA256="${{ steps.shasum.outputs.sha256 }}"
           
-          echo "Updating ${CASK_FILE} to version ${VERSION}"
+          echo "Updating CASKFILEtoversion{CASK_FILE} to version {VERSION}"
           
-          sed -i 's/^  version ".*"$/  version "'"$VERSION"'"/' "${CASK_FILE}"
-          sed -i 's/^  sha256 ".*"$/  sha256 "'"$SHA256"'"/' "${CASK_FILE}"
+          sed -i 's/^  version ".*"/version"′"/  version "'"VERSION"'"/' "${CASK_FILE}"
+          sed -i 's/^  sha256 ".*"/sha256"′"/  sha256 "'"SHA256"'"/' "${CASK_FILE}"
+          
+          sed -i 's|"~/Library/Preferences/io\.github\.mcdfsteve\.nipaplay-reload\.plist"|"~/Library/Preferences/com.aimessoft.nipaplay.plist"|g' "${CASK_FILE}"
+          sed -i 's|"~/Library/Saved Application State/io\.github\.mcdfsteve\.nipaplay-reload\.savedState"|"~/Library/Saved Application State/com.aimessoft.nipaplay.savedState"|g' "${CASK_FILE}"
+          sed -i 's|"~/Library/Application Support/NipaPlay-Reload"|"~/Library/Application Support/NipaPlay"|g' "${CASK_FILE}"
           
           echo "--- Cask file content after update ---"
           cat "${CASK_FILE}"
