@@ -36,6 +36,25 @@
 ## 下载
 - **Windows（x86 64）/Linux（amd64）/macOS（Intel&Apple Silicon）/Android（arm32&arm64&x86 64）/IOS（arm64）**
   - [GitHub Releases](https://github.com/mcdfsteve/nipaplay-reload/releases)
+
+- **macOS (Homebrew)**
+  > 我们推荐 macOS 用户使用 [Homebrew](https://brew.sh/) 进行安装和管理。
+
+  1.  **添加我们的软件源 (Tap):**  
+      *(此命令每个用户只需运行一次)*
+      ```bash
+      brew tap Shinokawa/nipaplay-reload
+      ```
+
+  2.  **安装 NipaPlay:**
+      ```bash
+      brew install --cask nipaplay-reload
+      ```
+  3.  **更新 NipaPlay:**
+      ```bash
+      brew upgrade nipaplay-reload
+      ```
+      
 - **Arch Linux**
   ```
   paru -S nipaplay-reload-bin
