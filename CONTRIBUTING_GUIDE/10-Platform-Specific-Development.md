@@ -204,3 +204,7 @@ Widget buildPlatformSpecificWidget() {
 5.  **在其他平台验证**: 之后，将目标设备切换到“Chrome (web)”或一个安卓模拟器，再次运行应用。在这些平台上，设置页面中**不应该**出现那个按钮。
 
 通过这种方式，你就可以有效地开发和测试平台专属的功能了。
+
+---
+
+**⬅️ 上一篇: [9. (进阶) 如何添加新的弹幕内核](09-Adding-a-New-Danmaku-Kernel.md)** | **➡️ 下一篇: [11. 非代码贡献：同样重要！](11-Non-Coding-Contributions.md)**

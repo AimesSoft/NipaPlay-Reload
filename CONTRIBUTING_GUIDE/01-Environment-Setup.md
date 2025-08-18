@@ -74,3 +74,7 @@ Flutter 是我们用来开发 NipaPlay-Reload 的框架，它允许我们用一�
 现在，你的电脑上已经拥有了开发 NipaPlay-Reload 所需的一切！你已经安装了 Git 和 Flutter，配置好了编辑器，并且下载了项目的代码。
 
 在下一章节，我们将带你了解项目的代码结构，让你知道不同的功能分别是在哪些文件里实现的。
+
+---
+
+**⬅️ 上一篇: [欢迎来到 NipaPlay-Reload 贡献指南](00-Introduction.md)** | **➡️ 下一篇: [2. 探索项目结构](02-Project-Structure.md)**

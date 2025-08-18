@@ -118,3 +118,7 @@ Future<User> getUserById(String id) async {
 2.  尽量解决 `flutter analyze` 报告的问题。
 
 感谢你为保持 NipaPlay-Reload 代码的优雅和清晰所做的努力！
+
+---
+
+**⬅️ 上一篇: [3. 贡献代码的标准流程](03-How-To-Contribute.md)** | **➡️ 下一篇: [5. 实战教程：添加一个“贡献者名单”页面](05-Example-Add-A-New-Page.md)**

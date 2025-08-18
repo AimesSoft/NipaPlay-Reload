@@ -62,3 +62,7 @@ NipaPlay-Reload 的视觉风格是其魅力的一部分。如果你擅长绘画�
 *   **社区管理**: 帮助回答新用户在社区（如 Discord, Telegram 群）中提出的问题。
 
 你的任何形式的贡献，都是对 NipaPlay-Reload 项目的宝贵支持。感谢你的热情！
+
+---
+
+**⬅️ 上一篇: [10. (进阶) 如何进行平台特定开发](10-Platform-Specific-Development.md)** | **[⬆️ 返回目录](00-Introduction.md)**
