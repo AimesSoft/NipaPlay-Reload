@@ -17,6 +17,12 @@ Git 是一个版本控制系统，你可以把它想象成一个可以记录你�
         *   Debian/Ubuntu: `sudo apt-get install git`
         *   Fedora: `sudo dnf install git`
         *   Arch Linux: `sudo pacman -S git`
+*   **安装后的初始化**
+    *   使用以下命令进行初始化，记得把[你的用户名]和[你的邮箱]替换成和你 GitHub 一致的信息
+        ```
+        git config --global user.name "[你的用户名]"
+        git config --global user.email [你的邮箱]
+        ```
 
 ### 1.1.1 (可选) 图形化工具：GitHub Desktop
 
@@ -46,7 +52,7 @@ Flutter 是我们用来开发 NipaPlay-Reload 的框架，它允许我们用一�
 *   **Cursor**:
     *   **下载地址**: [cursor.sh](https://cursor.sh/)
     *   **为什么推荐它**: Cursor 可以让你直接在编辑器里与 AI 对话，比如让它帮你解释一段代码、生成新的代码片段，或者帮你修复错误。这对于编程新手来说是极大的助力。
-    *   **备选方案**: 如果你不想使用 Cursor，**Visual Studio Code (VS Code)** 也是一个非常优秀的选择。你可以通过安装 Flutter 和 Dart 插件来获得良好的开发体验。
+    *   **备选方案**: 如果你不想使用 Cursor，**Visual Studio Code (VS Code)** 或由社区构建的完全自由版本 **VSCodium** 也是一个非常优秀的选择。你可以通过安装 Flutter 和 Dart 插件来获得良好的开发体验，并通过安装相关插件（如 Goodcode）获得 AI 支持。
 
 ## 获取项目代码
 
@@ -59,7 +65,7 @@ Flutter 是我们用来开发 NipaPlay-Reload 的框架，它允许我们用一�
 
 2.  **克隆你的 Fork**:
     *   打开你的终端。
-    *   导航到一个你希望存放项目的文件夹，例如 `cd ~/development`。
+    *   导航到一个你希望存放项目的文件夹，例如 `cd ~/dev`。
     *   执行以下命令，记得把 `[你的GitHub用户名]` 替换成你自己的用户名：
         ```
         git clone https://github.com/[你的GitHub用户名]/NipaPlay-Reload.git
