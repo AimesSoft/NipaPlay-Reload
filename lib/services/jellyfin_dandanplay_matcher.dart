@@ -1658,8 +1658,10 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                   ),
               ],
               // 底部操作按钮
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8.0,
+                runSpacing: 8.0,
                 children: [
                   if (!_showEpisodesView)
                     TextButton(

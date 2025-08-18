@@ -1187,6 +1187,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     // 当播放器处于活跃状态时，关闭 Dashboard 上的所有 Ticker（动画/过渡），避免后台动画占用栅格时间。
     final bool tickerEnabled = !_isVideoPlayerActive();
+  final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
 
     return TickerMode(
       enabled: tickerEnabled,
@@ -1201,14 +1202,14 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                   // 大海报推荐区域
-                  _buildHeroBanner(),
+                  _buildHeroBanner(isPhone: isPhone),
                   
-                  const SizedBox(height: 32),
+                  SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
                   
                   // 继续播放区域
-                  _buildContinueWatching(),
+                  _buildContinueWatching(isPhone: isPhone),
                   
-                  const SizedBox(height: 32),
+                  SizedBox(height: isPhone ? 12 : 32), // 手机端进一步减少间距
                   
                   // Jellyfin按媒体库显示最近添加
                   ..._recentJellyfinItemsByLibrary.entries.map((entry) => [
@@ -1218,7 +1219,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                       scrollController: _getJellyfinLibraryScrollController(entry.key),
                       onItemTap: (item) => _onJellyfinItemTap(item as JellyfinMediaItem),
                     ),
-                    const SizedBox(height: 32),
+                    SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
                   ]).expand((x) => x),
                   
                   // Emby按媒体库显示最近添加
@@ -1229,7 +1230,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                       scrollController: _getEmbyLibraryScrollController(entry.key),
                       onItemTap: (item) => _onEmbyItemTap(item as EmbyMediaItem),
                     ),
-                    const SizedBox(height: 32),
+                    SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
                   ]).expand((x) => x),
                   
                   // 本地媒体库显示最近添加
@@ -1240,7 +1241,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                       scrollController: _getLocalLibraryScrollController(),
                       onItemTap: (item) => _onLocalAnimeItemTap(item as LocalAnimeItem),
                     ),
-                    const SizedBox(height: 32),
+                    SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
                   ],
                   
                   // 空状态提示（当没有任何内容时）
@@ -1275,11 +1276,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                         ),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
                   ],
                   
                   // 底部间距
-                  const SizedBox(height: 50),
+                  SizedBox(height: isPhone ? 30 : 50),
                 ],
               ),
             );
@@ -1300,10 +1301,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       );
   }
 
-  Widget _buildHeroBanner() {
+  Widget _buildHeroBanner({required bool isPhone}) {
     if (_isLoadingRecommended) {
       return Container(
-        height: 400,
+        height: isPhone ? 220 : 400, // 保持一致的高度
         margin: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -1317,7 +1318,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
     if (_recommendedItems.isEmpty) {
       return Container(
-        height: 400,
+        height: isPhone ? 220 : 400, // 保持一致的高度
         margin: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -1349,68 +1350,78 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       }
     }
 
+    final int pageCount = math.min(5, items.length);
+
+    // 手机：改为全宽轮播；桌面：左大图 + 右两张小卡
     return Container(
-      height: 400,
+      height: isPhone ? 220 : 400, // 手机端更矩形，降低高度
       margin: const EdgeInsets.all(16),
       child: Stack(
         children: [
-          Row(
-            children: [
-              // 左侧主推荐横幅 - 占据大部分宽度，支持滑动（前5个）
-              Expanded(
-                flex: 2,
-                child: PageView.builder(
-                  controller: _heroBannerPageController,
-                  itemCount: 5, // 固定显示5个
-                  onPageChanged: (index) {
-                    // 只更新当前索引和ValueNotifier，避免重新构建整个UI
-                    _currentHeroBannerIndex = index;
-                    _heroBannerIndexNotifier.value = index;
-                    // 用户手动切换时停止自动切换3秒
-                    _stopAutoSwitch();
-                    Timer(const Duration(seconds: 3), () {
-                      _resumeAutoSwitch();
-                    });
-                  },
-                  itemBuilder: (context, index) {
-                    final item = items[index]; // 使用前5个
-                    return _buildMainHeroBannerItem(item);
-                  },
+          if (isPhone)
+            // 全宽轮播
+            PageView.builder(
+              controller: _heroBannerPageController,
+              itemCount: pageCount,
+              onPageChanged: (index) {
+                _currentHeroBannerIndex = index;
+                _heroBannerIndexNotifier.value = index;
+                _stopAutoSwitch();
+                Timer(const Duration(seconds: 3), () {
+                  _resumeAutoSwitch();
+                });
+              },
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return _buildMainHeroBannerItem(item, compact: true);
+              },
+            )
+          else
+            Row(
+              children: [
+                // 左侧主推荐横幅 - 占据大部分宽度，支持滑动（前5个）
+                Expanded(
+                  flex: 2,
+                  child: PageView.builder(
+                    controller: _heroBannerPageController,
+                    itemCount: pageCount, // 固定显示前5个
+                    onPageChanged: (index) {
+                      _currentHeroBannerIndex = index;
+                      _heroBannerIndexNotifier.value = index;
+                      _stopAutoSwitch();
+                      Timer(const Duration(seconds: 3), () {
+                        _resumeAutoSwitch();
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      final item = items[index]; // 使用前5个
+                      return _buildMainHeroBannerItem(item);
+                    },
+                  ),
                 ),
-              ),
-              
-              const SizedBox(width: 12),
-              
-              // 右侧小卡片区域 - 上下两个（第6和第7个）
-              Expanded(
-                flex: 1,
-                child: Column(
-                  children: [
-                    // 上方小卡片（第6个）
-                    Expanded(
-                      child: _buildSmallRecommendationCard(items[5], 5),
-                    ),
-                    
-                    const SizedBox(height: 8),
-                    
-                    // 下方小卡片（第7个）
-                    Expanded(
-                      child: _buildSmallRecommendationCard(items[6], 6),
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                // 右侧小卡片区域 - 上下两个（第6和第7个）
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    children: [
+                      Expanded(child: _buildSmallRecommendationCard(items[5], 5)),
+                      const SizedBox(height: 8),
+                      Expanded(child: _buildSmallRecommendationCard(items[6], 6)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           
           // 页面指示器
-          _buildPageIndicator(),
+          _buildPageIndicator(fullWidth: isPhone, count: pageCount),
         ],
       ),
     );
   }
 
-  Widget _buildMainHeroBannerItem(RecommendedItem item) {
+  Widget _buildMainHeroBannerItem(RecommendedItem item, {bool compact = false}) {
     return GestureDetector(
       onTap: () => _onRecommendedItemTap(item),
       child: Container(
@@ -1532,9 +1543,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 bottom: 32,
                 child: ClipRect(
                   child: Container(
-                    constraints: const BoxConstraints(
-                      maxWidth: 200,
-                      maxHeight: 80,
+                    constraints: BoxConstraints(
+                      maxWidth: compact ? 120 : 200, // 手机端更小
+                      maxHeight: compact ? 50 : 80,  // 手机端更小
                     ),
                     child: _cachedImages[item.logoImageUrl]!,
                   ),
@@ -1546,9 +1557,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 bottom: 32,
                 child: ClipRect(
                   child: Container(
-                    constraints: const BoxConstraints(
-                      maxWidth: 200,
-                      maxHeight: 80,
+                    constraints: BoxConstraints(
+                      maxWidth: compact ? 120 : 200, // 手机端更小
+                      maxHeight: compact ? 50 : 80,  // 手机端更小
                     ),
                     child: Image.network(
                       item.logoImageUrl!,
@@ -1556,14 +1567,14 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
                         return Container(
-                          width: 200,
-                          height: 80,
+                          width: compact ? 120 : 200,
+                          height: compact ? 50 : 80,
                           color: Colors.transparent,
                         );
                       },
                       errorBuilder: (context, error, stackTrace) => Container(
-                        width: 200,
-                        height: 80,
+                        width: compact ? 120 : 200,
+                        height: compact ? 50 : 80,
                         color: Colors.transparent,
                       ),
                     ),
@@ -1574,7 +1585,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             // 左侧中间位置的标题和简介
             Positioned(
               left: 16,
-              right: MediaQuery.of(context).size.width * 0.3, // 留出右侧空间
+              right: compact ? 16 : MediaQuery.of(context).size.width * 0.3, // 手机上不预留右侧空间
               top: 0,
               bottom: 0,
               child: Align(
@@ -1586,40 +1597,43 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     // 媒体名字（加粗显示）
                     Text(
                       item.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
-                        fontSize: 24,
+                        fontSize: compact ? 22 : 24, // 手机端调整为20px，比18px稍大
                         fontWeight: FontWeight.bold,
-                        shadows: [
+                        shadows: const [
                           Shadow(
                             color: Colors.black,
                             blurRadius: 8,
                           ),
                         ],
                       ),
-                      maxLines: 2,
+                      maxLines: compact ? 3 : 2, // 手机端可以显示更多行
                       overflow: TextOverflow.ellipsis,
                     ),
                     
-                    const SizedBox(height: 12),
-                    
-                    // 剧情简介（只显示2行）
-                    if (item.subtitle.isNotEmpty)
-                      Text(
-                        item.subtitle.replaceAll('<br>', ' ').replaceAll('<br/>', ' ').replaceAll('<br />', ' '),
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black,
-                              blurRadius: 4,
-                            ),
-                          ],
+                    // 桌面端显示间距和简介，手机端不显示
+                    if (!compact) ...[
+                      const SizedBox(height: 12),
+                      
+                      // 剧情简介（只在桌面端显示）
+                      if (item.subtitle.isNotEmpty)
+                        Text(
+                          item.subtitle.replaceAll('<br>', ' ').replaceAll('<br/>', ' ').replaceAll('<br />', ' '),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black,
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1886,7 +1900,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     );
   }
 
-  Widget _buildContinueWatching() {
+  Widget _buildContinueWatching({required bool isPhone}) {
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {
         final history = historyProvider.history;
@@ -1910,8 +1924,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     ),
                   ),
                 ),
-                if (validHistory.isNotEmpty)
-                  _buildScrollButtons(_continueWatchingScrollController, 292), // 卡片宽度280 + 12边距
+                if (!isPhone && validHistory.isNotEmpty)
+                  _buildScrollButtons(_continueWatchingScrollController, 292), // 桌面保留左右按钮
               ],
             ),
             const SizedBox(height: 16),
@@ -1932,7 +1946,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               )
             else
               SizedBox(
-                height: 280, // 增加高度以适应更大的卡片样式
+                height: isPhone ? 200 : 280, // 进一步减少手机端高度
                 child: ListView.builder(
                   controller: _continueWatchingScrollController,
                   scrollDirection: Axis.horizontal,
@@ -1942,7 +1956,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     final item = validHistory[index];
                     return Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: _buildContinueWatchingCard(item),
+                      child: _buildContinueWatchingCard(item, compact: isPhone),
                     );
                   },
                 ),
@@ -1953,18 +1967,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     );
   }
 
-  Widget _buildContinueWatchingCard(WatchHistoryItem item) {
+  Widget _buildContinueWatchingCard(WatchHistoryItem item, {bool compact = false}) {
     return GestureDetector(
       onTap: () => _onWatchHistoryItemTap(item),
       child: SizedBox(
         key: ValueKey('continue_${item.animeId ?? 0}_${item.filePath.hashCode}'), // 添加唯一key
-        width: 280, // 增加宽度使卡片更大
+        width: compact ? 220 : 280, // 手机更窄
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 图片容器
             Container(
-              height: 158, // 16:9比例，280*0.5625=157.5
+              height: compact ? 110 : 158, // 进一步减少手机端高度
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: [
@@ -2039,6 +2053,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     required ScrollController scrollController,
     required Function(dynamic) onItemTap,
   }) {
+    final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2057,13 +2072,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 ),
               ),
             ),
-            if (items.isNotEmpty)
-              _buildScrollButtons(scrollController, 162), // 卡片宽度150 + 12边距
+            if (!isPhone && items.isNotEmpty)
+              _buildScrollButtons(scrollController, 162), // 桌面保留左右按钮
           ],
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 280,
+          height: isPhone ? 240 : 280,
           child: ListView.builder(
             controller: scrollController,
             scrollDirection: Axis.horizontal,
@@ -2113,9 +2128,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       imageUrl = item.imageUrl ?? '';
     }
 
+    final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
     return SizedBox(
-      width: 150,
-      height: 280,
+      width: isPhone ? 120 : 150,
+      height: isPhone ? 240 : 280,
       child: AnimeCard(
         key: ValueKey(uniqueId), // 添加唯一key防止widget复用导致的缓存混乱
         name: name,
@@ -2442,19 +2458,19 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
   
   // 构建页面指示器（分离出来避免不必要的重建），支持点击和悬浮效果
-  Widget _buildPageIndicator() {
+  Widget _buildPageIndicator({bool fullWidth = false, int count = 5}) {
     return Positioned(
       bottom: 16,
       left: 0,
-      // 页面指示器只在左侧PageView区域显示：总宽度的2/3减去间距
-      right: (MediaQuery.of(context).size.width - 32) / 3 + 12,
+      // 手机全宽；桌面只在左侧PageView区域显示：总宽度的2/3减去间距
+      right: fullWidth ? 0 : (MediaQuery.of(context).size.width - 32) / 3 + 12,
       child: Center(
         child: ValueListenableBuilder<int>(
           valueListenable: _heroBannerIndexNotifier,
           builder: (context, currentIndex, child) {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(5, (index) {
+              children: List.generate(count, (index) {
                 final bool isHovered = _hoveredIndicatorIndex == index;
                 final bool isSelected = currentIndex == index;
                 double size;
