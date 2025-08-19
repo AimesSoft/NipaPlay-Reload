@@ -68,7 +68,7 @@ class BlurDialog {
         
         Widget dialogContent = ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: screenSize.height * 0.8, // 最大高度限制
+            //maxHeight: screenSize.height * 0.8, // 降低到75%，避免溢出
             maxWidth: dialogWidth, // 最大宽度限制
           ),
           child: Container(

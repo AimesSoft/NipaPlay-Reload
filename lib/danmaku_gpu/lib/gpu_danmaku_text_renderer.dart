@@ -1,4 +1,4 @@
-import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_text_renderer.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
@@ -135,7 +135,16 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     }
 
     final texture = _fontAtlas.atlasTexture;
-    if (texture == null) return;
+    if (texture == null) {
+      debugPrint('GPU弹幕渲染器: 字体图集纹理未准备好，跳过渲染');
+      return;
+    }
+    
+    // 验证纹理的有效性
+    if (texture.width <= 0 || texture.height <= 0) {
+      debugPrint('GPU弹幕渲染器: 字体图集纹理尺寸无效 (${texture.width}x${texture.height})，跳过渲染');
+      return;
+    }
     
     final bool needsOpacityLayer = opacity < 1.0;
 
@@ -173,14 +182,37 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     for (var char in item.text.runes) {
       final charStr = String.fromCharCode(char);
       final charInfo = _fontAtlas.getCharRect(charStr);
-      if (charInfo == null) continue;
+      if (charInfo == null) {
+        debugPrint('GPU弹幕渲染器: 字符 "$charStr" 不在图集中，跳过');
+        continue;
+      }
+      
+      // 验证字符矩形的有效性
+      if (charInfo.isEmpty || !charInfo.isFinite) {
+        debugPrint('GPU弹幕渲染器: 字符 "$charStr" 的矩形无效，跳过');
+        continue;
+      }
 
       final adjustedScale = scale * fontSizeMultiplier;
       final charWidthScaled = charInfo.width * adjustedScale;
+      final charHeightScaled = charInfo.height * adjustedScale;
+      
+      // 验证缩放后的尺寸是否有效
+      if (!charWidthScaled.isFinite || !charHeightScaled.isFinite || 
+          charWidthScaled <= 0 || charHeightScaled <= 0) {
+        debugPrint('GPU弹幕渲染器: 字符 "$charStr" 缩放后尺寸无效，跳过');
+        continue;
+      }
+      
       final charCenterX = currentX + charWidthScaled / 2;
       // 🔥 修改：调整字符中心Y坐标，考虑字符图集中的实际高度
-      final charHeightScaled = charInfo.height * adjustedScale;
       final charCenterY = y + charHeightScaled / 2;
+      
+      // 验证中心点坐标是否有效
+      if (!charCenterX.isFinite || !charCenterY.isFinite) {
+        debugPrint('GPU弹幕渲染器: 字符 "$charStr" 中心点坐标无效，跳过');
+        continue;
+      }
 
       // 1. 准备描边层参数 (8个方向)
       final offsets = [
@@ -225,13 +257,36 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
       for (var char in countText.runes) {
         final charStr = String.fromCharCode(char);
         final charInfo = _fontAtlas.getCharRect(charStr);
-        if (charInfo == null) continue;
+        if (charInfo == null) {
+          debugPrint('GPU弹幕渲染器: 计数字符 "$charStr" 不在图集中，跳过');
+          continue;
+        }
+        
+        // 验证字符矩形的有效性
+        if (charInfo.isEmpty || !charInfo.isFinite) {
+          debugPrint('GPU弹幕渲染器: 计数字符 "$charStr" 的矩形无效，跳过');
+          continue;
+        }
 
         final adjustedScale = 0.5 * (25.0 / config.fontSize); // 固定大小
         final charWidthScaled = charInfo.width * adjustedScale;
         final charHeightScaled = charInfo.height * adjustedScale;
+        
+        // 验证缩放后的尺寸是否有效
+        if (!charWidthScaled.isFinite || !charHeightScaled.isFinite || 
+            charWidthScaled <= 0 || charHeightScaled <= 0) {
+          debugPrint('GPU弹幕渲染器: 计数字符 "$charStr" 缩放后尺寸无效，跳过');
+          continue;
+        }
+        
         final charCenterX = currentX + charWidthScaled / 2;
         final charCenterY = y + charHeightScaled / 2;
+        
+        // 验证中心点坐标是否有效
+        if (!charCenterX.isFinite || !charCenterY.isFinite) {
+          debugPrint('GPU弹幕渲染器: 计数字符 "$charStr" 中心点坐标无效，跳过');
+          continue;
+        }
 
         final offsets = [
           Offset(-strokeOffset, -strokeOffset), Offset(strokeOffset, -strokeOffset),
@@ -273,30 +328,52 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     // 执行绘制
     final paint = Paint()..filterQuality = FilterQuality.low; // 设置采样质量为low，实现抗锯齿
 
+    // 验证参数完整性
+    if (strokeTransforms.length != strokeRects.length || 
+        strokeTransforms.length != strokeColors.length ||
+        fillTransforms.length != fillRects.length ||
+        fillTransforms.length != fillColors.length) {
+      debugPrint('GPU弹幕渲染器: 参数长度不匹配，跳过渲染');
+      if (needsOpacityLayer) {
+        canvas.restore();
+      }
+      return;
+    }
+
     // 第一遍：绘制描边
-    if (strokeTransforms.isNotEmpty) {
-      canvas.drawAtlas(
-        _fontAtlas.atlasTexture!,
-        strokeTransforms,
-        strokeRects,
-        strokeColors,
-        BlendMode.modulate,
-        null,
-        paint,
-      );
+    if (strokeTransforms.isNotEmpty && _fontAtlas.atlasTexture != null) {
+      try {
+        canvas.drawAtlas(
+          _fontAtlas.atlasTexture!,
+          strokeTransforms,
+          strokeRects,
+          strokeColors,
+          BlendMode.modulate,
+          null,
+          paint,
+        );
+      } catch (e) {
+        debugPrint('GPU弹幕渲染器: 描边渲染失败 - $e');
+        // 继续执行，不中断整个渲染流程
+      }
     }
 
     // 第二遍：绘制填充
-    if (fillTransforms.isNotEmpty) {
-      canvas.drawAtlas(
-        _fontAtlas.atlasTexture!,
-        fillTransforms,
-        fillRects,
-        fillColors,
-        BlendMode.modulate,
-        null,
-        paint,
-      );
+    if (fillTransforms.isNotEmpty && _fontAtlas.atlasTexture != null) {
+      try {
+        canvas.drawAtlas(
+          _fontAtlas.atlasTexture!,
+          fillTransforms,
+          fillRects,
+          fillColors,
+          BlendMode.modulate,
+          null,
+          paint,
+        );
+      } catch (e) {
+        debugPrint('GPU弹幕渲染器: 填充渲染失败 - $e');
+        // 继续执行，不中断整个渲染流程
+      }
     }
     
     // 🔥 修改：仅在创建了透明层时恢复画布状态

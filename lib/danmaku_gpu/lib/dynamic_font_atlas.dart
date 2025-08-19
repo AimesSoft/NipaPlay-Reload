@@ -259,13 +259,26 @@ class DynamicFontAtlas {
 
   // 检查指定的文本所需的所有字符是否都已在图集中准备就绪
   bool isReady(String text) {
+    // 如果图集还未生成，返回false
+    if (atlasTexture == null) return false;
+    
     return text.runes.every((rune) {
-      return characterRectMap.containsKey(String.fromCharCode(rune));
+      final charStr = String.fromCharCode(rune);
+      final rect = characterRectMap[charStr];
+      // 检查字符是否存在且矩形有效
+      return rect != null && !rect.isEmpty && rect.isFinite;
     });
   }
 
   // 获取字符信息
-  Rect? getCharRect(String char) => characterRectMap[char];
+  Rect? getCharRect(String char) {
+    final rect = characterRectMap[char];
+    // 确保返回的矩形是有效的
+    if (rect != null && !rect.isEmpty && rect.isFinite) {
+      return rect;
+    }
+    return null;
+  }
 
   void dispose() {
     atlasTexture?.dispose();
