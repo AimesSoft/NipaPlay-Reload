@@ -164,7 +164,7 @@ class _AboutPageState extends State<AboutPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             _buildInfoCard(
               context: context,
@@ -249,6 +249,28 @@ class _AboutPageState extends State<AboutPage> {
                         const SizedBox(width: 8),
                         Text(
                           'QQ群: 712139588',
+                          style: TextStyle(
+                            color: Colors.cyanAccent[100],
+                            decoration: TextDecoration.underline,
+                            decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => _launchURL('https://nipaplay.aimes-soft.com'),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Ionicons.globe_outline, color: Colors.white.withOpacity(0.8), size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'NipaPlay 官方网站',
                           style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,

@@ -270,6 +270,18 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                             ],
                           ),
                         ),
+                        FilledButton(
+                          onPressed: () => _launchURL('https://nipaplay.aimes-soft.com'),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(FluentIcons.globe),
+                              SizedBox(width: 8),
+                              Text('访问官网'),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
