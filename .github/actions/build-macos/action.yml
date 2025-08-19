@@ -1,0 +1,158 @@
+name: 'Build macOS DMG'
+description: '构建 macOS 应用并生成 DMG 文件'
+inputs:
+  app-version:
+    description: '应用版本号'
+    required: true
+outputs:
+  dmg-path:
+    description: '生成的 DMG 文件路径'
+    value: ${{ steps.package.outputs.dmg_path }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Build Web and copy assets
+      shell: bash
+      run: |
+        chmod +x build_and_copy_web.sh
+        ./build_and_copy_web.sh
+    
+    - name: Prepare macOS build environment
+      shell: bash
+      run: |
+        cd macos
+        export LANG=zh_CN.UTF-8
+        export LC_ALL=zh_CN.UTF-8
+        mkdir -p ~/.cocoapods
+        echo 'source "https://cdn.cocoapods.org/"' > ~/.cocoapods/config
+        echo "Cleaning existing Pods and cache for a fresh mdk nightly..."
+        rm -rf Pods Podfile.lock
+        pod cache clean fvp || true # Clean fvp pod's cache, which handles mdk
+        pod cache clean --all
+        echo "Running pod install --repo-update (this will run fvp/apple_deps.sh to get mdk nightly)..."
+        pod install --repo-update
+        cd ..
+
+    - name: Build macOS App
+      shell: bash
+      run: |
+        flutter build macos --release
+
+    - name: Copy mdk.framework.dSYM to App Bundle
+      shell: bash
+      run: |
+        echo "Attempting to copy mdk.framework.dSYM for symbolication..."
+        MDK_ARTIFACTS_DIR="macos/Pods/mdk"
+        DSYM_SOURCE_PATH="${MDK_ARTIFACTS_DIR}/mdk.framework.dSYM"
+        
+        APP_BUNDLE_NAME="NipaPlay.app"
+        APP_BUNDLE_ROOT_DIR="build/macos/Build/Products/Release"
+        TARGET_DSYM_DIR="${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME}/Contents/Frameworks"
+
+        if [ -d "$DSYM_SOURCE_PATH" ]; then
+          echo "Found mdk.framework.dSYM at $DSYM_SOURCE_PATH"
+          
+          if [ ! -d "${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME}" ]; then
+            echo "Error: App bundle ${APP_BUNDLE_ROOT_DIR}/${APP_BUNDLE_NAME} not found after flutter build."
+            echo "Listing contents of ${APP_BUNDLE_ROOT_DIR}/:"
+            ls -la "${APP_BUNDLE_ROOT_DIR}/"
+            exit 1
+          fi
+          
+          if [ ! -d "$TARGET_DSYM_DIR" ]; then
+             echo "Warning: Target Frameworks directory $TARGET_DSYM_DIR does not exist. Will attempt to create it."
+             mkdir -p "$TARGET_DSYM_DIR"
+          fi
+
+          echo "Copying $DSYM_SOURCE_PATH to $TARGET_DSYM_DIR/"
+          cp -R "$DSYM_SOURCE_PATH" "$TARGET_DSYM_DIR/"
+          if [ $? -eq 0 ]; then
+            echo "Successfully copied mdk.framework.dSYM from $DSYM_SOURCE_PATH."
+            echo "Contents of $TARGET_DSYM_DIR after copy:"
+            ls -la "$TARGET_DSYM_DIR"
+          else
+            echo "Error: Failed to copy mdk.framework.dSYM from $DSYM_SOURCE_PATH."
+            exit 1
+          fi
+        else
+          echo "Warning: mdk.framework.dSYM not found at the revised expected path $DSYM_SOURCE_PATH."
+          echo "Symbolicated crash logs for mdk might not be available."
+        fi
+
+    - name: Package macOS DMG
+      id: package
+      shell: bash
+      run: |
+        brew install coreutils create-dmg imagemagick
+        chmod +x dmg.sh
+        
+        # Set up environment for GUI operations in CI
+        export DISPLAY=:99
+        
+        # Try to create DMG with timeout and retry mechanism
+        gtimeout 300 ./dmg.sh || {
+          echo "DMG creation timed out or failed, trying fallback approach with layout..."
+          
+          # Fallback: Create DMG with layout but without complex AppleScript operations
+          version="${{ inputs.app-version }}"
+          dmg_name="NipaPlay_${version}_macOS_Universal.dmg"
+          
+          # Create a temporary directory for the DMG layout
+          temp_dir=$(mktemp -d)
+          mkdir -p "${temp_dir}/.background"
+          
+          # Copy the app to the temporary directory
+          cp -R "build/macos/Build/Products/Release/NipaPlay.app" "${temp_dir}/"
+          
+          # Create a symbolic link to Applications
+          ln -s /Applications "${temp_dir}/Applications"
+          
+          # Create the background image with arrow (fallback version)
+          magick -size 800x450 xc:white \
+            -font Arial-Bold -pointsize 120 -fill '#666666' \
+            -gravity center \
+            -draw "text -150,0 'NipaPlay'" \
+            -draw "text 150,0 '> '" \
+            "${temp_dir}/.background/background.png" || {
+              # If ImageMagick fails, create simple background
+              magick -size 800x450 xc:'#f0f0f0' "${temp_dir}/.background/background.png"
+            }
+          
+          # Create DMG with layout (CI-friendly version)
+          create-dmg \
+            --volname "NipaPlay-${version}" \
+            --window-pos 200 120 \
+            --window-size 800 450 \
+            --icon-size 100 \
+            --icon "NipaPlay.app" 200 185 \
+            --icon "Applications" 600 185 \
+            --background "${temp_dir}/.background/background.png" \
+            --no-internet-enable \
+            --skip-jenkins \
+            "${dmg_name}" \
+            "${temp_dir}" || {
+              # Final fallback: simple DMG without background
+              echo "Fallback with layout failed, creating simple DMG..."
+              rm -f "${dmg_name}"
+              create-dmg \
+                --volname "NipaPlay-${version}" \
+                --window-size 800 450 \
+                --icon-size 100 \
+                --app-drop-link 600 185 \
+            --no-internet-enable \
+            --skip-jenkins \
+            "${dmg_name}" \
+            "build/macos/Build/Products/Release/NipaPlay.app"
+            }
+          
+          # Clean up
+          rm -rf "${temp_dir}"
+        }
+        
+        echo "Listing final DMG:"
+        ls -la *.dmg
+        
+        # Set output
+        dmg_file=$(ls NipaPlay_*_macOS_Universal.dmg | head -1)
+        echo "dmg_path=$dmg_file" >> $GITHUB_OUTPUT
+

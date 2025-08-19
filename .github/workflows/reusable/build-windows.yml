@@ -1,0 +1,48 @@
+name: Build Windows
+
+on:
+  workflow_call:
+    inputs:
+      flutter-version:
+        description: 'Flutter 版本'
+        required: true
+        type: string
+    outputs:
+      version:
+        description: '应用版本号'
+        value: ${{ jobs.build.outputs.version }}
+      artifact-name:
+        description: '构建产物名称'
+        value: ${{ jobs.build.outputs.artifact-name }}
+
+jobs:
+  build:
+    name: Build Windows Package
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.setup.outputs.version }}
+      artifact-name: release-Windows-x64
+    env:
+      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
+      FVP_DEPS_LATEST: 1
+    steps:
+      - name: Setup Flutter Environment
+        id: setup
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ inputs.flutter-version }}
+      
+      - name: Build Windows Package
+        uses: ./.github/actions/build-windows
+        with:
+          app-version: ${{ steps.setup.outputs.version }}
+      
+      - name: Clean flutter pub cache
+        run: flutter pub cache clean
+      
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-Windows-x64
+          path: build/windows/*
+

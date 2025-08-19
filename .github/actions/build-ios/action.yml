@@ -1,0 +1,40 @@
+name: 'Build iOS IPA'
+description: '构建 iOS 应用并生成 IPA 文件'
+inputs:
+  app-version:
+    description: '应用版本号'
+    required: true
+outputs:
+  ipa-path:
+    description: '生成的 IPA 文件路径'
+    value: ${{ steps.build.outputs.ipa_path }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Build Web and copy assets
+      shell: bash
+      run: |
+        chmod +x build_and_copy_web.sh
+        ./build_and_copy_web.sh
+    
+    - name: Build Xcode iOS
+      shell: bash
+      run: |
+        xcodebuild -resolvePackageDependencies -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release
+    
+    - name: Build iOS
+      id: build
+      shell: bash
+      run: |
+        cd ios
+        pod update
+        cd ..
+        flutter build ios --release --no-codesign
+        sh thin-payload.sh build/ios/iphoneos/*.app
+        cd build
+        mkdir -p Payload
+        mv ios/iphoneos/*.app Payload
+        ipa_name="NipaPlay_${{ inputs.app-version }}_iOS_arm64.ipa"
+        zip -9 "$ipa_name" -r Payload
+        echo "ipa_path=build/$ipa_name" >> $GITHUB_OUTPUT
+

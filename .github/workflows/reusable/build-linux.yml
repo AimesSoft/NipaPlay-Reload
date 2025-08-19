@@ -1,0 +1,49 @@
+name: Build Linux
+
+on:
+  workflow_call:
+    inputs:
+      flutter-version:
+        description: 'Flutter 版本'
+        required: true
+        type: string
+    outputs:
+      version:
+        description: '应用版本号'
+        value: ${{ jobs.build.outputs.version }}
+      artifact-name:
+        description: '构建产物名称'
+        value: ${{ jobs.build.outputs.artifact-name }}
+
+jobs:
+  build:
+    name: Build Linux Packages
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.setup.outputs.version }}
+      artifact-name: release-Linux-amd64
+    env:
+      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
+      FVP_DEPS_LATEST: 1
+    steps:
+      - name: Setup Flutter Environment
+        id: setup
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ inputs.flutter-version }}
+      
+      - name: Build Linux Packages
+        uses: ./.github/actions/build-linux
+        with:
+          app-version: ${{ steps.setup.outputs.version }}
+          arch: amd64
+      
+      - name: Clean flutter pub cache
+        run: flutter pub cache clean
+      
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-Linux-amd64
+          path: build/linux/
+

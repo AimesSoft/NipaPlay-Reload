@@ -1,0 +1,61 @@
+name: Build macOS
+
+on:
+  workflow_call:
+    inputs:
+      flutter-version:
+        description: 'Flutter 版本'
+        required: true
+        type: string
+    outputs:
+      version:
+        description: '应用版本号'
+        value: ${{ jobs.build.outputs.version }}
+      artifact-name:
+        description: '构建产物名称'
+        value: ${{ jobs.build.outputs.artifact-name }}
+
+jobs:
+  build:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    outputs:
+      version: ${{ steps.setup.outputs.version }}
+      artifact-name: release-macOS
+    env:
+      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
+      FVP_DEPS_LATEST: 1
+    steps:
+      - name: Cache macOS Pods
+        uses: actions/cache@v3
+        with:
+          path: macos/Pods
+          key: macos-pods-${{ hashFiles('macos/Podfile.lock') }}
+          restore-keys: |
+            macos-pods-
+      
+      - name: Setup Flutter Environment
+        id: setup
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ inputs.flutter-version }}
+      
+      - name: Build macOS DMG
+        uses: ./.github/actions/build-macos
+        with:
+          app-version: ${{ steps.setup.outputs.version }}
+      
+      - name: Clean CocoaPods cache and lock for mdk
+        run: |
+          pod cache clean mdk
+          find . -name Podfile.lock -delete
+          rm -rf macos/Pods ios/Pods
+      
+      - name: Clean flutter pub cache
+        run: flutter pub cache clean
+      
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macOS
+          path: NipaPlay_*_macOS_Universal.dmg

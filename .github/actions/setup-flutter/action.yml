@@ -1,0 +1,59 @@
+name: 'Setup Flutter Environment'
+description: '设置 Flutter 开发环境，包括 Java、Flutter 和获取版本信息'
+inputs:
+  flutter-version:
+    description: 'Flutter 版本'
+    required: true
+    default: '3.35.1'
+  java-version:
+    description: 'Java 版本'
+    required: false
+    default: '21'
+outputs:
+  version:
+    description: '从 pubspec.yaml 获取的应用版本'
+    value: ${{ steps.get_version.outputs.version }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ github.token }}
+        fetch-depth: 0
+    
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ inputs.java-version }}
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: ${{ inputs.flutter-version }}
+        cache: true
+        cache-key: ${{ runner.os }}-flutter-${{ inputs.flutter-version }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v4
+    
+    - name: Get app version
+      id: get_version
+      shell: bash
+      run: |
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          # Use PowerShell for Windows to extract version
+          VERSION=$(pwsh -Command "(Get-Content pubspec.yaml | Select-String -Pattern '^version:' | ForEach-Object { \$_ -replace '^version: ', '' }).Trim()")
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        else
+          # Use grep/cut for Linux/macOS
+          echo "version=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Flutter Pub Get
+      shell: bash
+      run: |
+        # Only set core.longpaths on Windows (not supported on macOS/Linux)
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          git config --global core.longpaths true
+        fi
+        flutter pub get
+

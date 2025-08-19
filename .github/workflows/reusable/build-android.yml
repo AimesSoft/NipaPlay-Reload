@@ -1,0 +1,62 @@
+name: Build Android
+
+on:
+  workflow_call:
+    inputs:
+      flutter-version:
+        description: 'Flutter 版本'
+        required: true
+        type: string
+    secrets:
+      SIGNING_KEY:
+        description: 'Base64 编码的签名密钥'
+        required: true
+      KEY_STORE_PASSWORD:
+        description: 'Keystore 密码'
+        required: true
+      ALIAS:
+        description: '密钥别名'
+        required: true
+      KEY_PASSWORD:
+        description: '密钥密码'
+        required: true
+    outputs:
+      version:
+        description: '应用版本号'
+        value: ${{ jobs.build.outputs.version }}
+      artifact-name:
+        description: '构建产物名称'
+        value: ${{ jobs.build.outputs.artifact-name }}
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.setup.outputs.version }}
+      artifact-name: release-Android
+    env:
+      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
+      FVP_DEPS_LATEST: 1
+    steps:
+      - name: Setup Flutter Environment
+        id: setup
+        uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: ${{ inputs.flutter-version }}
+      
+      - name: Build Android APK
+        uses: ./.github/actions/build-android
+        with:
+          app-version: ${{ steps.setup.outputs.version }}
+          signing-key: ${{ secrets.SIGNING_KEY }}
+          keystore-password: ${{ secrets.KEY_STORE_PASSWORD }}
+          key-alias: ${{ secrets.ALIAS }}
+          key-password: ${{ secrets.KEY_PASSWORD }}
+      
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-Android
+          path: build/app/outputs/apk/release/NipaPlay-*.apk
+
