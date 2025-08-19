@@ -155,12 +155,24 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
     });
 
     try {
-      final animeId = anime['animeId'];
+      // 确保animeId是整数类型
+      final animeId = anime['animeId'] is int ? anime['animeId'] : int.tryParse(anime['animeId'].toString());
+      if (animeId == null) {
+        setState(() {
+          _isLoadingEpisodes = false;
+          _episodesMessage = '错误：动画ID格式不正确。';
+        });
+        return;
+      }
+      
+      debugPrint('正在加载动画剧集，animeId: $animeId, animeTitle: ${anime['animeTitle']}');
+      
       final appSecret = await DandanplayService.getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/bangumi/$animeId';
       
       final url = 'https://api.dandanplay.net/api/v2/bangumi/$animeId';
+      debugPrint('API请求URL: $url');
       
       final response = await http.get(
         Uri.parse(url),
@@ -183,20 +195,41 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['episodes'] != null && data['episodes'] is List) {
-          setState(() {
-            _currentEpisodes = List<Map<String, dynamic>>.from(data['episodes']);
-            _episodesMessage = '';
-          });
+        
+        // 添加调试信息
+        debugPrint('API响应成功，检查数据结构');
+        debugPrint('根级别success: ${data['success']}');
+        debugPrint('根级别errorCode: ${data['errorCode']}');
+        
+        // 检查API是否成功
+        if (data['success'] == true && data['bangumi'] != null) {
+          final bangumi = data['bangumi'];
+          debugPrint('bangumi字段存在，检查episodes...');
+          
+          if (bangumi['episodes'] != null && bangumi['episodes'] is List) {
+            final episodes = List<Map<String, dynamic>>.from(bangumi['episodes']);
+            setState(() {
+              _currentEpisodes = episodes;
+              _episodesMessage = episodes.isEmpty ? '该动画暂无剧集信息' : '';
+            });
+            debugPrint('成功加载 ${episodes.length} 个剧集');
+          } else {
+            setState(() {
+              _episodesMessage = '该动画暂无剧集信息';
+            });
+            debugPrint('bangumi.episodes字段为空或不是列表');
+          }
         } else {
           setState(() {
-            _episodesMessage = '没有找到该动画的剧集信息';
+            _episodesMessage = '获取动画信息失败: ${data['errorMessage'] ?? '未知错误'}';
           });
+          debugPrint('API返回错误: ${data['errorMessage']}');
         }
       } else {
         setState(() {
           _episodesMessage = '加载剧集失败: HTTP ${response.statusCode}';
         });
+        debugPrint('API请求失败，状态码: ${response.statusCode}，响应: ${response.body}');
       }
     } catch (e) {
       setState(() {
@@ -222,12 +255,23 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
     Map<String, dynamic> result = {};
     
     if (_selectedAnime != null) {
+      // 添加动画信息到结果中
       result['anime'] = _selectedAnime;
+      result['animeId'] = _selectedAnime!['animeId'];
+      result['animeTitle'] = _selectedAnime!['animeTitle'];
       
+      // 确定要使用的剧集
+      Map<String, dynamic>? episodeToUse;
       if (_selectedEpisode != null) {
-        result['episode'] = _selectedEpisode;
+        episodeToUse = _selectedEpisode;
       } else if (_currentEpisodes.isNotEmpty) {
-        result['episode'] = _currentEpisodes.first;
+        episodeToUse = _currentEpisodes.first;
+      }
+      
+      if (episodeToUse != null) {
+        result['episode'] = episodeToUse;
+        result['episodeId'] = episodeToUse['episodeId'];
+        result['episodeTitle'] = episodeToUse['episodeTitle'];
       } else {
         debugPrint('警告: 没有匹配到任何剧集信息，episodeId可能为空');
       }
