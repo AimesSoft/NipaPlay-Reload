@@ -188,7 +188,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               },
             ),
           ListTile(
-            title: const Text("远程访问",
+            title: const Text("远程访问（实验性）",
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,

@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -61,17 +63,31 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
   }
 
   Widget _buildWatchHistoryItem(WatchHistoryItem item) {
+    final appearanceProvider = context.watch<AppearanceSettingsProvider>();
     return GestureDetector(
       onLongPress: () => _showDeleteConfirmDialog(item),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.2),
-            width: 0.5,
-          ),
+      child: GlassmorphicContainer(
+        width: double.infinity,
+        height: 70,
+        borderRadius: 8,
+        blur: appearanceProvider.enableWidgetBlurEffect ? 10 : 0,
+        alignment: Alignment.center,
+        border: 0.5,
+        linearGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFFffffff).withOpacity(0.1),
+            const Color(0xFFFFFFFF).withOpacity(0.05),
+          ],
+        ),
+        borderGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFFffffff).withOpacity(0.5),
+            const Color(0xFFFFFFFF).withOpacity(0.5),
+          ],
         ),
         child: Material(
           color: Colors.transparent,
@@ -89,6 +105,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           item.animeName.isNotEmpty ? item.animeName : path.basename(item.filePath),
@@ -97,7 +114,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
@@ -117,6 +134,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                   // 观看进度和时间
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (item.watchProgress > 0)
                         Container(

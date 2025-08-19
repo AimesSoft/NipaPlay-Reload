@@ -201,13 +201,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           top: 0,
           bottom: 0,
           child: Center(
-            child: AnimatedOpacity(
-              opacity: videoState.showControls ? 1.0 : 0.0,
+            child: AnimatedSlide(
               duration: const Duration(milliseconds: 150),
-              child: IgnorePointer(
-                ignoring: !videoState.showControls,
-                child: SendDanmakuButton(
-                  onPressed: () => _showSendDanmakuDialog(videoState),
+              offset: Offset(videoState.showControls ? 0 : -0.1, 0),
+              child: AnimatedOpacity(
+                opacity: videoState.showControls ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(
+                  ignoring: !videoState.showControls,
+                  child: SendDanmakuButton(
+                    onPressed: () => _showSendDanmakuDialog(videoState),
+                  ),
                 ),
               ),
             ),

@@ -1,11 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
+import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:window_manager/window_manager.dart';
 
@@ -98,31 +100,43 @@ class _UIThemePageState extends State<UIThemePage> {
   }
 
   Widget _buildThemePreview(UIThemeProvider uiThemeProvider) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.white.withOpacity(0.1),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 1,
+    final appearanceProvider = context.watch<AppearanceSettingsProvider>();
+    final isBlurEnabled = appearanceProvider.enableWidgetBlurEffect;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: isBlurEnabled ? 25.0 : 0.0,
+          sigmaY: isBlurEnabled ? 25.0 : 0.0,
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '当前主题预览',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.white.withOpacity(0.25),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 1,
             ),
           ),
-          const SizedBox(height: 16),
-          _buildThemeDescription(uiThemeProvider.currentTheme),
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '当前主题预览',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildThemeDescription(uiThemeProvider.currentTheme),
+            ],
+          ),
+        ),
       ),
     );
   }
