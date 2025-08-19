@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:provider/provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/settings_card.dart';
 import 'package:nipaplay/services/update_service.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -292,41 +291,23 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Widget _buildInfoCard({required BuildContext context, String? title, required List<Widget> children}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
-          sigmaY: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: Colors.white.withOpacity(0.3),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (title != null) ...[
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Colors.white, 
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (title != null) ...[
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white, 
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              ...children,
-            ],
-          ),
-        ),
+            const SizedBox(height: 12),
+          ],
+          ...children,
+        ],
       ),
     );
   }

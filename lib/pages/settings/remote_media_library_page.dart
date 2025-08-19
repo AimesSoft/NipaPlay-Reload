@@ -9,6 +9,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_server_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/emby_server_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/settings_card.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
@@ -46,63 +47,47 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
   }
 
   Widget _buildJellyfinSection(JellyfinProvider jellyfinProvider) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
-          sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: Colors.white.withOpacity(0.3),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  SvgPicture.asset(
-                    'assets/jellyfin.svg',
-                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                    width: 24,
-                    height: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Jellyfin 媒体服务器',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (jellyfinProvider.isConnected)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green, width: 1),
-                      ),
-                      child: const Text(
-                        '已连接',
-                        style: TextStyle(
-                          color: Colors.green,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                ],
+              SvgPicture.asset(
+                'assets/jellyfin.svg',
+                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                width: 24,
+                height: 24,
               ),
+              const SizedBox(width: 12),
+              const Text(
+                'Jellyfin 媒体服务器',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              if (jellyfinProvider.isConnected)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green, width: 1),
+                  ),
+                  child: const Text(
+                    '已连接',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+            ],
+          ),
               
               const SizedBox(height: 16),
               
@@ -156,9 +141,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   ],
                 ),
               ],
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -265,46 +248,30 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
   }
 
   Widget _buildEmbySection(EmbyProvider embyProvider) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
-          sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: Colors.white.withOpacity(0.3),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  SvgPicture.asset(
-                    'assets/emby.svg',
-                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                    width: 24,
-                    height: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Emby 媒体服务器',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (embyProvider.isConnected)
-                    Container(
+              SvgPicture.asset(
+                'assets/emby.svg',
+                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                width: 24,
+                height: 24,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Emby 媒体服务器',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              if (embyProvider.isConnected)
+                Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: const Color(0xFF52B54B).withOpacity(0.2),
@@ -375,9 +342,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   ],
                 ),
               ],
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
