@@ -45,9 +45,10 @@ class HotkeyService extends ChangeNotifier {
   
   // 注册热键
   Future<void> registerHotkeys() async {
-    // 避免重复注册
+    // 先清理已注册的热键，再重新注册
     if (_registeredHotkeys.isNotEmpty) {
-      return;
+      debugPrint('[HotkeyService] 清理现有热键后重新注册');
+      await unregisterHotkeys();
     }
     await registerAllHotkeys();
   }
@@ -55,11 +56,14 @@ class HotkeyService extends ChangeNotifier {
   // 注销热键
   Future<void> unregisterHotkeys() async {
     if (_registeredHotkeys.isEmpty) {
+      debugPrint('[HotkeyService] 没有已注册的热键需要注销');
       return;
     }
+    debugPrint('[HotkeyService] 开始注销 ${_registeredHotkeys.length} 个热键');
     await hotKeyManager.unregisterAll();
     // 清空已注册列表，以便下次可以重新注册
     _registeredHotkeys.clear();
+    debugPrint('[HotkeyService] 热键注销完成');
   }
   
   // 加载保存的快捷键配置
@@ -116,6 +120,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 注册所有热键
   Future<void> registerAllHotkeys() async {
+    debugPrint('[HotkeyService] 开始注册所有热键');
     // 先清除所有已注册的热键
     await hotKeyManager.unregisterAll();
     _registeredHotkeys.clear();
@@ -152,6 +157,8 @@ class HotkeyService extends ChangeNotifier {
     
     // 注册ESC键退出全屏
     await _registerEscapeKey();
+    
+    debugPrint('[HotkeyService] 所有热键注册完成，已注册 ${_registeredHotkeys.length} 个热键');
   }
   
   // 注册单个热键

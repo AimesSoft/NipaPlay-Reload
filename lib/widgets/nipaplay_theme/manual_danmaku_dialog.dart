@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/utils/global_hotkey_manager.dart';
 import 'dart:ui';
 
 /// 手动弹幕匹配对话框
@@ -17,7 +19,8 @@ class ManualDanmakuMatchDialog extends StatefulWidget {
   State<ManualDanmakuMatchDialog> createState() => _ManualDanmakuMatchDialogState();
 }
 
-class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
+class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> 
+    with GlobalHotkeyManagerMixin {
   final TextEditingController _searchController = TextEditingController();
   
   bool _isSearching = false;
@@ -33,6 +36,10 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
   Map<String, dynamic>? _selectedAnime;
   Map<String, dynamic>? _selectedEpisode;
 
+  // 实现GlobalHotkeyManagerMixin要求的方法
+  @override
+  String get hotkeyDisableReason => 'manual_danmaku_dialog';
+
   @override
   void initState() {
     super.initState();
@@ -40,11 +47,17 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
     if (widget.initialVideoTitle != null) {
       _searchController.text = widget.initialVideoTitle!;
     }
+    // 禁用全局热键
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      disableHotkeys();
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    // 启用全局热键
+    disposeHotkeys();
     super.dispose();
   }
 
@@ -894,6 +907,21 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
     );
   }
 
+
+
+  /// 处理ESC键事件
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        debugPrint('[ManualDanmakuDialog] ESC键被按下，关闭对话框');
+        Navigator.of(context).pop();
+        return KeyEventResult.handled;
+      }
+    }
+    // 其他键事件不处理，让它们正常传递给输入框
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     debugPrint('=== 新版ManualDanmakuMatchDialog.build() 调用 ===');
@@ -904,11 +932,24 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
     final shortestSide = size.width < size.height ? size.width : size.height;
     final bool isRealPhone = isPhone && shortestSide < 600;
     
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-      child: Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+        child: GestureDetector(
+          // 点击空白区域关闭对话框
+          onTap: () {
+            debugPrint('[ManualDanmakuDialog] 点击空白区域，关闭对话框');
+            Navigator.of(context).pop();
+          },
+          behavior: HitTestBehavior.translucent,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            child: GestureDetector(
+              // 阻止对话框内容区域的点击事件冒泡
+              onTap: () {},
+              child: Container(
           width: MediaQuery.of(context).size.width * 0.85,
           height: MediaQuery.of(context).size.height * 0.75,
           padding: const EdgeInsets.all(24),
@@ -1029,6 +1070,9 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog> {
                 ),
               ],
             ],
+          ),
+        ),
+            ),
           ),
         ),
       ),

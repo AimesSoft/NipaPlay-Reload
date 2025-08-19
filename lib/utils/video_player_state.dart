@@ -1210,14 +1210,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 尝试自动检测和加载字幕
       await _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
 
-      // 切换视频后重新注册热键
-      try {
-        final hotkeyService = HotkeyService();
-        await hotkeyService.registerHotkeys();
-        debugPrint('[VideoPlayerState] 切换视频后重新注册热键成功');
-      } catch (e) {
-        debugPrint('[VideoPlayerState] 切换视频后重新注册热键失败: $e');
-      }
+      // 不在此处注册热键，由main.dart的_manageHotkeys统一管理
+      debugPrint('[VideoPlayerState] 跳过热键注册，由主页面统一管理');
 
       // 等待一小段时间确保播放器状态稳定
       await Future.delayed(const Duration(milliseconds: 300));
