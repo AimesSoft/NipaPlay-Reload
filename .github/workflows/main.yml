@@ -848,8 +848,8 @@ jobs:
           
           # Create the tarball
           echo "Creating tarball..."
-          tar -czvf "LINUXBUILDDIR/{LINUX_BUILD_DIR}/{ARCHIVE_NAME}" -C "${ARCHIVE_CONTENT_DIR}" .
-          echo ".tar.gz archive created at LINUXBUILDDIR/{LINUX_BUILD_DIR}/{ARCHIVE_NAME}"
+          tar -czvf "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" -C "${ARCHIVE_CONTENT_DIR}" .
+          echo ".tar.gz archive created at ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
           
           # --- Create RPM package ---
           echo "--- Creating RPM package ---"
@@ -858,49 +858,49 @@ jobs:
           
           # Prepare sources for RPM build
           mkdir -p "${RPM_BUILD_ROOT}/SOURCES/bundle"
-          cp -r "BUILDOUTPUTDIR/.""{BUILD_OUTPUT_DIR}/." "{RPM_BUILD_ROOT}/SOURCES/bundle/"
-          cp "ASSETSLINUXDIR/{ASSETS_LINUX_DIR}/{DESKTOP_FILE_NAME}" "${RPM_BUILD_ROOT}/SOURCES/"
-          cp "ICONSOURCEPATH""{ICON_SOURCE_PATH}" "{RPM_BUILD_ROOT}/SOURCES/logo512.png"
+          cp -r "${BUILD_OUTPUT_DIR}/." "${RPM_BUILD_ROOT}/SOURCES/bundle/"
+          cp "${ASSETS_LINUX_DIR}/${DESKTOP_FILE_NAME}" "${RPM_BUILD_ROOT}/SOURCES/"
+          cp "${ICON_SOURCE_PATH}" "${RPM_BUILD_ROOT}/SOURCES/logo512.png"
           
           # Prepare spec file
           echo "Preparing RPM spec file..."
           sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
-              "RPMSPECTEMPLATE">"{RPM_SPEC_TEMPLATE}" > "{RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}"
+              "${RPM_SPEC_TEMPLATE}" > "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}"
           
           # Build RPM
           echo "Building RPM..."
-          rpmbuild -ba "RPMBUILDROOT/SPECS/{RPM_BUILD_ROOT}/SPECS/{RPM_SPEC_FILE}" --define "_topdir RPMBUILDROOT"−−define"sourcedir{RPM_BUILD_ROOT}" --define "_sourcedir {RPM_BUILD_ROOT}/SOURCES" --nodeps
+          rpmbuild -ba "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}" --define "_topdir ${RPM_BUILD_ROOT}" --define "_sourcedir ${RPM_BUILD_ROOT}/SOURCES" --nodeps
           
           # Move the generated RPM to the final artifact directory
           echo "Moving RPM package..."
           RPM_ARCH_DIR="x86_64"
-          GENERATED_RPM_PATH=(find"(find "{RPM_BUILD_ROOT}/RPMS/RPMARCHDIR/"−name"nipaplay−{RPM_ARCH_DIR}/" -name "nipaplay-{VERSION}*.rpm" -print -quit)
-          DESIRED_RPM_NAME="NipaPlay-VERSION−Linux−{VERSION}-Linux-{ARCH}.rpm"
+          GENERATED_RPM_PATH=$(find "${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/" -name "nipaplay-${VERSION}*.rpm" -print -quit)
+          DESIRED_RPM_NAME="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
           if [ -n "${GENERATED_RPM_PATH}" ]; then
-            mv "GENERATEDRPMPATH""{GENERATED_RPM_PATH}" "{LINUX_BUILD_DIR}/${DESIRED_RPM_NAME}"
-            echo "RPM package moved and renamed to LINUXBUILDDIR/{LINUX_BUILD_DIR}/{DESIRED_RPM_NAME}"
+            mv "${GENERATED_RPM_PATH}" "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME}"
+            echo "RPM package moved and renamed to ${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME}"
           else
-            echo "Error: RPM file not found in RPMBUILDROOT/RPMS/{RPM_BUILD_ROOT}/RPMS/{RPM_ARCH_DIR}/"
+            echo "Error: RPM file not found in ${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/"
           fi
           
           # --- Final Check ---
           echo "Checking if all required Linux packages exist..."
           MISSING_FILES=false
-          if [ ! -f "LINUXBUILDDIR/{LINUX_BUILD_DIR}/{DEB_PKG_NAME}.deb" ]; then
-            echo "Error: .deb file not found! Expected: LINUXBUILDDIR/{LINUX_BUILD_DIR}/{DEB_PKG_NAME}.deb"
+          if [ ! -f "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" ]; then
+            echo "Error: .deb file not found! Expected: ${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb"
             MISSING_FILES=true
           fi
-          if [ ! -f "LINUXBUILDDIR/{LINUX_BUILD_DIR}/{APPIMAGE_NAME}" ]; then
-            echo "Error: AppImage file not found! Expected: LINUXBUILDDIR/{LINUX_BUILD_DIR}/{APPIMAGE_NAME}"
+          if [ ! -f "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" ]; then
+            echo "Error: AppImage file not found! Expected: ${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
             MISSING_FILES=true
           fi
-          if [ ! -f "LINUXBUILDDIR/{LINUX_BUILD_DIR}/{ARCHIVE_NAME}" ]; then
-            echo "Error: .tar.gz file not found! Expected: LINUXBUILDDIR/{LINUX_BUILD_DIR}/{ARCHIVE_NAME}"
+          if [ ! -f "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" ]; then
+            echo "Error: .tar.gz file not found! Expected: ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
             MISSING_FILES=true
           fi
-          DESIRED_RPM_NAME_FOR_CHECK="NipaPlay-VERSION−Linux−{VERSION}-Linux-{ARCH}.rpm"
-          if [ ! -f "LINUXBUILDDIR/{LINUX_BUILD_DIR}/{DESIRED_RPM_NAME_FOR_CHECK}" ]; then
-             echo "Error: RPM file not found! Expected: LINUXBUILDDIR/{LINUX_BUILD_DIR}/{DESIRED_RPM_NAME_FOR_CHECK}"
+          DESIRED_RPM_NAME_FOR_CHECK="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
+          if [ ! -f "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}" ]; then
+             echo "Error: RPM file not found! Expected: ${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}"
              MISSING_FILES=true
           fi
 
@@ -913,7 +913,7 @@ jobs:
 
           # --- Cleanup ---
           echo "--- Cleaning up intermediate directories ---"
-          rm -rf "DEBROOT""{DEB_ROOT}" "{APPDIR}" "${ARCHIVE_CONTENT_DIR}"
+          rm -rf "${DEB_ROOT}" "${APPDIR}" "${ARCHIVE_CONTENT_DIR}"
           
           echo "--- Linux Packaging Complete ---"
       
@@ -1086,16 +1086,16 @@ jobs:
         id: shasum
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
-          DMG_URL="https://github.com/MCDFsteve/NipaPlay-Reload/releases/download/v{VERSION}/NipaPlay_{VERSION}/NipaPlay_{VERSION}_macOS_Universal.dmg"
+          DMG_URL="https://github.com/MCDFsteve/NipaPlay-Reload/releases/download/v${VERSION}/NipaPlay_${VERSION}_macOS_Universal.dmg"
           
           echo "Downloading DMG from ${DMG_URL}..."
           curl -sL -o NipaPlay.dmg "${DMG_URL}"
           
           echo "Calculating SHA256..."
-          SHA256=(shasum -a 256 NipaPlay.dmg | awk '{print(shasum -a 256 NipaPlay.dmg | awk '{print 1}')
+          SHA256=$(shasum -a 256 NipaPlay.dmg | awk '{print $1}')
           
           echo "SHA256 is ${SHA256}"
-          echo "sha256=SHA256">>{SHA256}" >> GITHUB_OUTPUT
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
 
       - name: Update Cask file
         run: |
@@ -1103,10 +1103,10 @@ jobs:
           VERSION="${{ steps.get_version.outputs.version }}"
           SHA256="${{ steps.shasum.outputs.sha256 }}"
           
-          echo "Updating CASKFILEtoversion{CASK_FILE} to version {VERSION}"
+          echo "Updating ${CASK_FILE} to version ${VERSION}"
           
-          sed -i 's/^  version ".*"/version"′"/  version "'"VERSION"'"/' "${CASK_FILE}"
-          sed -i 's/^  sha256 ".*"/sha256"′"/  sha256 "'"SHA256"'"/' "${CASK_FILE}"
+          sed -i 's/^  version ".*"/  version "'"${VERSION}"'"/' "${CASK_FILE}"
+          sed -i 's/^  sha256 ".*"/  sha256 "'"${SHA256}"'"/' "${CASK_FILE}"
           
           # Also update the zap trash paths to use correct Bundle ID
           sed -i 's|"~/Library/Preferences/io\.github\.mcdfsteve\.nipaplay-reload\.plist"|"~/Library/Preferences/com.aimessoft.nipaplay.plist"|g' "${CASK_FILE}"
