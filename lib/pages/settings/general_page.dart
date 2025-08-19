@@ -5,6 +5,7 @@ import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -69,71 +70,51 @@ class _GeneralPageState extends State<GeneralPage> {
 
             return ListView(
               children: [
-                ListTile(
-                  title: const Text(
-                    "默认展示页面",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Text(
-                    "选择应用启动后默认显示的页面",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  trailing: BlurDropdown<int>(
-                    dropdownKey: _defaultPageDropdownKey,
-                    items: [
-                      DropdownMenuItemData(title: "主页", value: 0, isSelected: _defaultPageIndex == 0),
-                      DropdownMenuItemData(title: "视频播放", value: 1, isSelected: _defaultPageIndex == 1),
-                      DropdownMenuItemData(title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
-                      DropdownMenuItemData(title: "新番更新", value: 3, isSelected: _defaultPageIndex == 3),
-                      DropdownMenuItemData(title: "设置", value: 4, isSelected: _defaultPageIndex == 4),
-                    ],
-                    onItemSelected: (index) {
-                      setState(() {
-                        _defaultPageIndex = index;
-                      });
-                      _saveDefaultPagePreference(index);
-                    },
-                  ),
+                SettingsItem.dropdown(
+                  title: "默认展示页面",
+                  subtitle: "选择应用启动后默认显示的页面",
+                  icon: Ionicons.home_outline,
+                  items: [
+                    DropdownMenuItemData(title: "主页", value: 0, isSelected: _defaultPageIndex == 0),
+                    DropdownMenuItemData(title: "视频播放", value: 1, isSelected: _defaultPageIndex == 1),
+                    DropdownMenuItemData(title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
+                    DropdownMenuItemData(title: "新番更新", value: 3, isSelected: _defaultPageIndex == 3),
+                    DropdownMenuItemData(title: "设置", value: 4, isSelected: _defaultPageIndex == 4),
+                  ],
+                  onChanged: (index) {
+                    setState(() {
+                      _defaultPageIndex = index;
+                    });
+                    _saveDefaultPagePreference(index);
+                  },
+                  dropdownKey: _defaultPageDropdownKey,
                 ),
                 const Divider(color: Colors.white12, height: 1),
-                ListTile(
-                  title: const Text(
-                    "番剧卡片点击行为",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Text(
-                    "选择点击番剧卡片后默认展示的内容",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  trailing: BlurDropdown<AnimeCardAction>(
-                    dropdownKey: GlobalKey(), // Use a new key
-                    items: [
-                      DropdownMenuItemData(
-                        title: "简介",
-                        value: AnimeCardAction.synopsis,
-                        isSelected: appearanceSettings.animeCardAction == AnimeCardAction.synopsis,
-                      ),
-                      DropdownMenuItemData(
-                        title: "剧集列表",
-                        value: AnimeCardAction.episodeList,
-                        isSelected: appearanceSettings.animeCardAction == AnimeCardAction.episodeList,
-                      ),
-                    ],
-                    onItemSelected: (action) {
-                      appearanceSettings.setAnimeCardAction(action);
-                    },
-                  ),
+                SettingsItem.dropdown(
+                  title: "番剧卡片点击行为",
+                  subtitle: "选择点击番剧卡片后默认展示的内容",
+                  icon: Ionicons.card_outline,
+                  items: [
+                    DropdownMenuItemData(
+                      title: "简介",
+                      value: AnimeCardAction.synopsis,
+                      isSelected: appearanceSettings.animeCardAction == AnimeCardAction.synopsis,
+                    ),
+                    DropdownMenuItemData(
+                      title: "剧集列表",
+                      value: AnimeCardAction.episodeList,
+                      isSelected: appearanceSettings.animeCardAction == AnimeCardAction.episodeList,
+                    ),
+                  ],
+                  onChanged: (action) {
+                    appearanceSettings.setAnimeCardAction(action);
+                  },
                 ),
                 const Divider(color: Colors.white12, height: 1),
-                SwitchListTile(
-                  title: const Text(
-                    "过滤成人内容 (全局)",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Text(
-                    "在新番列表等处隐藏成人内容",
-                    style: TextStyle(color: Colors.white70),
-                  ),
+                SettingsItem.toggle(
+                  title: "过滤成人内容 (全局)",
+                  subtitle: "在新番列表等处隐藏成人内容",
+                  icon: Ionicons.shield_outline,
                   value: _filterAdultContent,
                   onChanged: (bool value) {
                     setState(() {
@@ -141,21 +122,14 @@ class _GeneralPageState extends State<GeneralPage> {
                     });
                     _saveFilterPreference(value);
                   },
-                  activeColor: Colors.white,
-                  inactiveThumbColor: Colors.white,
-                  inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
                 ),
                 const Divider(color: Colors.white12, height: 1),
-                ListTile(
-                  title: const Text(
-                    "清除图片缓存",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Text(
-                    "清除所有缓存的图片文件",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  trailing: const Icon(Ionicons.trash_outline, color: Colors.white),
+                SettingsItem.button(
+                  title: "清除图片缓存",
+                  subtitle: "清除所有缓存的图片文件",
+                  icon: Ionicons.trash_outline,
+                  trailingIcon: Ionicons.trash_outline,
+                  isDestructive: true,
                   onTap: () async {
                     final bool? confirm = await BlurDialog.show<bool>(
                       context: context,

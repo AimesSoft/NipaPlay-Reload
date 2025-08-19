@@ -163,11 +163,11 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
   String _getPlayerKernelDescription(PlayerKernelType type) {
     switch (type) {
       case PlayerKernelType.mdk:
-        return 'MDK 多媒体开发套件，基于FFmpeg，支持硬件加速，性能优秀';
+        return 'MDK 多媒体开发套件，基于FFmpeg，CPU解码视频，性能优秀';
       case PlayerKernelType.videoPlayer:
         return 'Video Player 官方播放器，适用于简单视频播放，兼容性良好';
       case PlayerKernelType.mediaKit:
-        return 'MediaKit (Libmpv) 播放器，基于MPV，功能强大，支持复杂媒体格式';
+        return 'MediaKit (Libmpv) 播放器，基于MPV，功能强大，支持硬件解码，支持复杂媒体格式';
     }
   }
 

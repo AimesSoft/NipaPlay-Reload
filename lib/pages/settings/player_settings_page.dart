@@ -1,5 +1,6 @@
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
@@ -11,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
@@ -261,11 +263,11 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   String _getPlayerKernelDescription(PlayerKernelType type) {
     switch (type) {
       case PlayerKernelType.mdk:
-        return 'MDK 多媒体开发套件\n基于FFmpeg，支持硬件加速，性能优秀';
+        return 'MDK 多媒体开发套件\n基于FFmpeg，CPU解码视频，性能优秀';
       case PlayerKernelType.videoPlayer:
         return 'Video Player 官方播放器\n适用于简单视频播放，兼容性良好';
       case PlayerKernelType.mediaKit:
-        return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持复杂媒体格式';
+        return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持硬件解码，支持复杂媒体格式';
     }
   }
 
@@ -291,68 +293,60 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
     return ListView(
       children: [
-        ListTile(
-          title: const Text("播放器内核", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          subtitle: const Text(
-            "选择播放器使用的核心引擎",
-            style: TextStyle(color: Colors.white70),
-          ),
-          trailing: BlurDropdown<PlayerKernelType>(
-            dropdownKey: _playerKernelDropdownKey,
-            items: [
-              DropdownMenuItemData(
-                title: "MDK",
-                value: PlayerKernelType.mdk,
-                isSelected: _selectedKernelType == PlayerKernelType.mdk,
-                description: _getPlayerKernelDescription(PlayerKernelType.mdk),
-              ),
-              DropdownMenuItemData(
-                title: "Video Player",
-                value: PlayerKernelType.videoPlayer,
-                isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
-                description: _getPlayerKernelDescription(PlayerKernelType.videoPlayer),
-              ),
-              DropdownMenuItemData(
-                title: "Libmpv",
-                value: PlayerKernelType.mediaKit,
-                isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
-                description: _getPlayerKernelDescription(PlayerKernelType.mediaKit),
-              ),
-            ],
-            onItemSelected: (kernelType) {
-              _savePlayerKernelSettings(kernelType);
-            },
-          ),
+        SettingsItem.dropdown(
+          title: "播放器内核",
+          subtitle: "选择播放器使用的核心引擎",
+          icon: Ionicons.play_circle_outline,
+          items: [
+            DropdownMenuItemData(
+              title: "MDK",
+              value: PlayerKernelType.mdk,
+              isSelected: _selectedKernelType == PlayerKernelType.mdk,
+              description: _getPlayerKernelDescription(PlayerKernelType.mdk),
+            ),
+            DropdownMenuItemData(
+              title: "Video Player",
+              value: PlayerKernelType.videoPlayer,
+              isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
+              description: _getPlayerKernelDescription(PlayerKernelType.videoPlayer),
+            ),
+            DropdownMenuItemData(
+              title: "Libmpv",
+              value: PlayerKernelType.mediaKit,
+              isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
+              description: _getPlayerKernelDescription(PlayerKernelType.mediaKit),
+            ),
+          ],
+          onChanged: (kernelType) {
+            _savePlayerKernelSettings(kernelType);
+          },
+          dropdownKey: _playerKernelDropdownKey,
         ),
         
         const Divider(color: Colors.white12, height: 1),
         
-        ListTile(
-          title: const Text("弹幕渲染引擎", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          subtitle: const Text(
-            "选择弹幕的渲染方式",
-            style: TextStyle(color: Colors.white70),
-          ),
-          trailing: BlurDropdown<DanmakuRenderEngine>(
-            dropdownKey: _danmakuRenderEngineDropdownKey,
-            items: [
-              DropdownMenuItemData(
-                title: "CPU 渲染",
-                value: DanmakuRenderEngine.cpu,
-                isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
-                description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
-              ),
-              DropdownMenuItemData(
-                title: "GPU 渲染 (实验性)",
-                value: DanmakuRenderEngine.gpu,
-                isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
-                description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
-              ),
-            ],
-            onItemSelected: (engine) {
-              _saveDanmakuRenderEngineSettings(engine);
-            },
-          ),
+        SettingsItem.dropdown(
+          title: "弹幕渲染引擎",
+          subtitle: "选择弹幕的渲染方式",
+          icon: Ionicons.hardware_chip_outline,
+          items: [
+            DropdownMenuItemData(
+              title: "CPU 渲染",
+              value: DanmakuRenderEngine.cpu,
+              isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
+              description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
+            ),
+            DropdownMenuItemData(
+              title: "GPU 渲染 (实验性)",
+              value: DanmakuRenderEngine.gpu,
+              isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
+              description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
+            ),
+          ],
+          onChanged: (engine) {
+            _saveDanmakuRenderEngineSettings(engine);
+          },
+          dropdownKey: _danmakuRenderEngineDropdownKey,
         ),
         
         const Divider(color: Colors.white12, height: 1),
@@ -360,15 +354,10 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         // 弹幕转换简体中文开关
         Consumer<SettingsProvider>(
           builder: (context, settingsProvider, child) {
-            return SwitchListTile(
-              title: const Text(
-                "弹幕转换简体中文",
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                "开启后，繁体中文弹幕将转换为简体中文显示",
-                style: TextStyle(color: Colors.white70),
-              ),
+            return SettingsItem.toggle(
+              title: "弹幕转换简体中文",
+              subtitle: "开启后，繁体中文弹幕将转换为简体中文显示",
+              icon: Ionicons.language_outline,
               value: settingsProvider.danmakuConvertToSimplified,
               onChanged: (bool value) {
                 settingsProvider.setDanmakuConvertToSimplified(value);
@@ -376,9 +365,6 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                   BlurSnackBar.show(context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
                 }
               },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
             );
           },
         ),

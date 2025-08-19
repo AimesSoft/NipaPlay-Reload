@@ -4,7 +4,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 import 'package:nipaplay/utils/message_helper.dart';
 import 'dart:ui';
 
@@ -53,6 +53,20 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'send_danmaku': '打开弹幕发送对话框',
   };
   
+  // 动作图标映射
+  final Map<String, IconData> _actionIcons = {
+    'play_pause': Ionicons.play_outline,
+    'fullscreen': Ionicons.expand_outline,
+    'rewind': Ionicons.play_back_outline,
+    'forward': Ionicons.play_forward_outline,
+    'toggle_danmaku': Ionicons.chatbubbles_outline,
+    'volume_up': Ionicons.volume_high_outline,
+    'volume_down': Ionicons.volume_low_outline,
+    'previous_episode': Ionicons.play_skip_back_outline,
+    'next_episode': Ionicons.play_skip_forward_outline,
+    'send_danmaku': Ionicons.send_outline,
+  };
+  
   // 修饰键文本映射
   final Map<HotKeyModifier, String> _modifierTexts = {
     HotKeyModifier.shift: 'Shift',
@@ -71,6 +85,11 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
   Future<void> _loadShortcuts() async {
     _shortcuts = Map.from(_hotkeyService.allShortcuts);
     setState(() {});
+  }
+  
+  // 获取动作对应的图标
+  IconData _getActionIcon(String action) {
+    return _actionIcons[action] ?? Ionicons.key_outline;
   }
   
   // 开始录制快捷键
@@ -369,16 +388,11 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
             : ListView(
                 children: [
                   // 恢复默认按钮作为单独的一栏
-                  ListTile(
-                    title: const Text(
-                      "恢复默认快捷键",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: const Text(
-                      "将所有快捷键恢复为默认设置",
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                    trailing: const Icon(Ionicons.refresh_outline, color: Colors.white),
+                  SettingsItem.button(
+                    title: "恢复默认快捷键",
+                    subtitle: "将所有快捷键恢复为默认设置",
+                    icon: Ionicons.refresh_outline,
+                    trailingIcon: Ionicons.refresh_outline,
                     onTap: _resetToDefaults,
                   ),
                   const Divider(color: Colors.white12, height: 1),
@@ -392,18 +406,13 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                     
                     return Column(
                       children: [
-                        ListTile(
-                          title: Text(
-                            label,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            description,
-                            style: const TextStyle(color: Colors.white70),
-                          ),
-                          trailing: isRecording
-                              ? _buildRecordingButton()
-                              : _buildShortcutButton(shortcut, () => _startRecording(action)),
+                        SettingsItem.hotkey(
+                          title: label,
+                          subtitle: description,
+                          icon: _getActionIcon(action),
+                          hotkeyText: shortcut,
+                          isRecording: isRecording,
+                          onTap: () => _startRecording(action),
                         ),
                         const Divider(color: Colors.white12, height: 1),
                       ],

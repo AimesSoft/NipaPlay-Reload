@@ -1,8 +1,9 @@
 // ThemeModePage.dart
 import 'package:flutter/material.dart';
-import 'package:nipaplay/utils/globals.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -169,135 +170,127 @@ class _ThemeModePageState extends State<ThemeModePage> {
         padding: const EdgeInsets.all(0),
         child: ListView(
           children: [
-            ListTile(
-              title: const Text("主题模式", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: const Text("选择应用界面的颜色主题", style: TextStyle(color: Colors.white70)),
-              trailing: BlurDropdown<ThemeMode>(
-                dropdownKey: _dropdownKey,
-                items: [
-                  DropdownMenuItemData(
-                    title: "日间模式",
-                    value: ThemeMode.light,
-                    isSelected:
-                        widget.themeNotifier.themeMode == ThemeMode.light,
-                  ),
-                  DropdownMenuItemData(
-                    title: "夜间模式",
-                    value: ThemeMode.dark,
-                    isSelected:
-                        widget.themeNotifier.themeMode == ThemeMode.dark,
-                  ),
-                  DropdownMenuItemData(
-                    title: "跟随系统",
-                    value: ThemeMode.system,
-                    isSelected:
-                        widget.themeNotifier.themeMode == ThemeMode.system,
-                  ),
-                ],
-                onItemSelected: (mode) {
-                  setState(() {
-                    widget.themeNotifier.themeMode = mode;
-                    _saveThemeMode(mode);
-                  });
-                },
-              ),
+            SettingsItem.dropdown(
+              title: "主题模式",
+              subtitle: "选择应用界面的颜色主题",
+              icon: Ionicons.moon_outline,
+              items: [
+                DropdownMenuItemData(
+                  title: "日间模式",
+                  value: ThemeMode.light,
+                  isSelected: widget.themeNotifier.themeMode == ThemeMode.light,
+                ),
+                DropdownMenuItemData(
+                  title: "夜间模式",
+                  value: ThemeMode.dark,
+                  isSelected: widget.themeNotifier.themeMode == ThemeMode.dark,
+                ),
+                DropdownMenuItemData(
+                  title: "跟随系统",
+                  value: ThemeMode.system,
+                  isSelected: widget.themeNotifier.themeMode == ThemeMode.system,
+                ),
+              ],
+              onChanged: (mode) {
+                setState(() {
+                  widget.themeNotifier.themeMode = mode;
+                  _saveThemeMode(mode);
+                });
+              },
+              dropdownKey: _dropdownKey,
             ),
             const Divider(color: Colors.white12, height: 1),
-            ListTile(
-              title: const Text("背景毛玻璃效果", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: const Text("调整界面元素的模糊强度", style: TextStyle(color: Colors.white70)),
-              trailing: BlurDropdown<int>(
-                dropdownKey: _blurDropdownKey,
-                items: [
-                  DropdownMenuItemData(
-                    title: "无",
-                    value: 0,
-                    isSelected: settingsProvider.blurPower == 0,
-                  ),
-                  DropdownMenuItemData(
-                    title: "轻微",
-                    value: 5,
-                    isSelected: settingsProvider.blurPower == 5,
-                  ),
-                  DropdownMenuItemData(
-                    title: "中等",
-                    value: 15,
-                    isSelected: settingsProvider.blurPower == 15,
-                  ),
-                  DropdownMenuItemData(
-                    title: "高",
-                    value: 25,
-                    isSelected: settingsProvider.blurPower == 25,
-                  ),
-                  DropdownMenuItemData(
-                    title: "超级",
-                    value: 50,
-                    isSelected: settingsProvider.blurPower == 50,
-                  ),
-                  DropdownMenuItemData(
-                    title: "梦幻",
-                    value: 100,
-                    isSelected: settingsProvider.blurPower == 100,
-                  ),
-                ],
-                onItemSelected: (blur) {
-                  context
-                      .read<SettingsProvider>()
-                      .setBlurPower(blur.toDouble());
-                },
-              ),
+            SettingsItem.dropdown(
+              title: "背景毛玻璃效果",
+              subtitle: "调整界面元素的模糊强度",
+              icon: Ionicons.water_outline,
+              items: [
+                DropdownMenuItemData(
+                  title: "无",
+                  value: 0,
+                  isSelected: settingsProvider.blurPower == 0,
+                ),
+                DropdownMenuItemData(
+                  title: "轻微",
+                  value: 5,
+                  isSelected: settingsProvider.blurPower == 5,
+                ),
+                DropdownMenuItemData(
+                  title: "中等",
+                  value: 15,
+                  isSelected: settingsProvider.blurPower == 15,
+                ),
+                DropdownMenuItemData(
+                  title: "高",
+                  value: 25,
+                  isSelected: settingsProvider.blurPower == 25,
+                ),
+                DropdownMenuItemData(
+                  title: "超级",
+                  value: 50,
+                  isSelected: settingsProvider.blurPower == 50,
+                ),
+                DropdownMenuItemData(
+                  title: "梦幻",
+                  value: 100,
+                  isSelected: settingsProvider.blurPower == 100,
+                ),
+              ],
+              onChanged: (blur) {
+                context
+                    .read<SettingsProvider>()
+                    .setBlurPower(blur.toDouble());
+              },
+              dropdownKey: _blurDropdownKey,
             ),
             const Divider(color: Colors.white12, height: 1),
-            SwitchListTile(
-              title: const Text("控件毛玻璃效果", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: const Text("关闭后可提升性能，但会失去部分UI透明感", style: TextStyle(color: Colors.white70)),
+            SettingsItem.toggle(
+              title: "控件毛玻璃效果",
+              subtitle: "关闭后可提升性能，但会失去部分UI透明感",
+              icon: Ionicons.radio_button_on_outline,
               value: appearanceSettings.enableWidgetBlurEffect,
               onChanged: (value) {
                 appearanceSettings.setEnableWidgetBlurEffect(value);
               },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
             ),
             const Divider(color: Colors.white12, height: 1),
-            ListTile(
-              title: const Text("背景图像", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: const Text("设置应用主界面的背景图片", style: TextStyle(color: Colors.white70)),
-              trailing: BlurDropdown<String>(
-                dropdownKey: _backgroundImageDropdownKey,
-                items: [
-                  DropdownMenuItemData(
-                    title: "看板娘",
-                    value: "看板娘",
-                    isSelected: widget.themeNotifier.backgroundImageMode == "看板娘",
-                  ),
-                  DropdownMenuItemData(
-                    title: "关闭",
-                    value: "关闭",
-                    isSelected: widget.themeNotifier.backgroundImageMode == "关闭",
-                  ),
-                  DropdownMenuItemData(
-                    title: "自定义",
-                    value: "自定义",
-                    isSelected: widget.themeNotifier.backgroundImageMode == "自定义",
-                  ),
-                ],
-                onItemSelected: (mode) async {
-                  setState(() {
-                    widget.themeNotifier.backgroundImageMode = mode;
-                    _saveBackgroundImageMode(mode);
-                  });
-                  if (mode == "自定义") {
-                    await _pickCustomBackground(context);
-                  }
-                },
-              ),
+            SettingsItem.dropdown(
+              title: "背景图像",
+              subtitle: "设置应用主界面的背景图片",
+              icon: Ionicons.image_outline,
+              items: [
+                DropdownMenuItemData(
+                  title: "看板娘",
+                  value: "看板娘",
+                  isSelected: widget.themeNotifier.backgroundImageMode == "看板娘",
+                ),
+                DropdownMenuItemData(
+                  title: "关闭",
+                  value: "关闭",
+                  isSelected: widget.themeNotifier.backgroundImageMode == "关闭",
+                ),
+                DropdownMenuItemData(
+                  title: "自定义",
+                  value: "自定义",
+                  isSelected: widget.themeNotifier.backgroundImageMode == "自定义",
+                ),
+              ],
+              onChanged: (mode) async {
+                setState(() {
+                  widget.themeNotifier.backgroundImageMode = mode;
+                  _saveBackgroundImageMode(mode);
+                });
+                if (mode == "自定义") {
+                  await _pickCustomBackground(context);
+                }
+              },
+              dropdownKey: _backgroundImageDropdownKey,
             ),
             const Divider(color: Colors.white12, height: 1),
-            // 改为使用与"过滤成人内容"一模一样的开关样式
-            SwitchListTile(
-              title: const Text("页面滑动动画", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: const Text("关闭可提升在低性能设备上的流畅度", style: TextStyle(color: Colors.white70)),
+            SettingsItem.toggle(
+              title: "页面滑动动画",
+              subtitle: "关闭可提升在低性能设备上的流畅度",
+              icon: Ionicons.swap_horizontal_outline,
               value: appearanceSettings.enablePageAnimation,
               onChanged: (value) {
                 appearanceSettings.setEnablePageAnimation(value);
@@ -306,9 +299,6 @@ class _ThemeModePageState extends State<ThemeModePage> {
                   value ? '已启用页面滑动动画' : '已关闭页面滑动动画'
                 );
               },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
             ),
             const Divider(color: Colors.white12, height: 1),
           ],

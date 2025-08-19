@@ -10,6 +10,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 
 /// 开发者选项设置页面
 class DeveloperOptionsPage extends StatelessWidget {
@@ -22,36 +23,23 @@ class DeveloperOptionsPage extends StatelessWidget {
         return ListView(
           children: [
             // 显示系统资源监控开关（所有平台可用）
-            SwitchListTile(
-              title: const Text(
-                '显示系统资源监控',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                '在界面右上角显示CPU、内存和帧率信息',
-                style: TextStyle(color: Colors.white70),
-              ),
+            SettingsItem.toggle(
+              title: '显示系统资源监控',
+              subtitle: '在界面右上角显示CPU、内存和帧率信息',
+              icon: Ionicons.analytics_outline,
               value: devOptions.showSystemResources,
               onChanged: (bool value) {
                 devOptions.setShowSystemResources(value);
               },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
             ),
             
             const Divider(color: Colors.white12, height: 1),
             
             // 调试日志收集开关
-            SwitchListTile(
-              title: const Text(
-                '调试日志收集',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                '收集应用的所有打印输出，用于调试和问题诊断',
-                style: TextStyle(color: Colors.white70),
-              ),
+            SettingsItem.toggle(
+              title: '调试日志收集',
+              subtitle: '收集应用的所有打印输出，用于调试和问题诊断',
+              icon: Ionicons.document_text_outline,
               value: devOptions.enableDebugLogCollection,
               onChanged: (bool value) async {
                 await devOptions.setEnableDebugLogCollection(value);
@@ -64,24 +52,16 @@ class DeveloperOptionsPage extends StatelessWidget {
                   logService.stopCollecting();
                 }
               },
-              activeColor: Colors.white,
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
             ),
             
             const Divider(color: Colors.white12, height: 1),
             
             // 终端输出查看器
-            ListTile(
-              title: const Text(
-                '终端输出',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                '查看应用的所有打印输出，支持搜索、过滤和复制',
-                style: TextStyle(color: Colors.white70),
-              ),
-              trailing: const Icon(Ionicons.chevron_forward_outline, color: Colors.white),
+            SettingsItem.button(
+              title: '终端输出',
+              subtitle: '查看应用的所有打印输出，支持搜索、过滤和复制',
+              icon: Ionicons.terminal_outline,
+              trailingIcon: Ionicons.chevron_forward_outline,
               onTap: () {
                 _openDebugLogViewer(context);
               },
