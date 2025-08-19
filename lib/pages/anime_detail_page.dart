@@ -23,6 +23,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -124,7 +125,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   void initState() {
     super.initState();
     _openPageContext = context;
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+        length: 2,
+        vsync: this,
+        initialIndex: Provider.of<AppearanceSettingsProvider>(context, listen: false)
+            .animeCardAction == AnimeCardAction.synopsis ? 0 : 1
+    );
     
     // 添加TabController监听
     _tabController!.addListener(_handleTabChange);

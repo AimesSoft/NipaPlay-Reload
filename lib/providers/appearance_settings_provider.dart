@@ -2,23 +2,33 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' if (dart.library.html) 'dart:io';
 
+// 定义番剧卡片点击行为的枚举
+enum AnimeCardAction {
+  synopsis, // 简介
+  episodeList, // 剧集列表
+}
+
 class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _enablePageAnimationKey = 'enable_page_animation';
   static const String _widgetBlurEffectKey = 'enable_widget_blur_effect';
+  static const String _animeCardActionKey = 'anime_card_action';
 
   // 默认值根据平台决定
   late bool _enablePageAnimation;
   late bool _enableWidgetBlurEffect;
+  late AnimeCardAction _animeCardAction;
 
-  // 获取是否启用页面滑动动画
+  // 获取设置值
   bool get enablePageAnimation => _enablePageAnimation;
   bool get enableWidgetBlurEffect => _enableWidgetBlurEffect;
+  AnimeCardAction get animeCardAction => _animeCardAction;
 
   // 构造函数
   AppearanceSettingsProvider() {
-    // 初始化默认值：移动端启用，桌面端禁用
+    // 初始化默认值
     _enablePageAnimation = _getDefaultAnimationValue();
     _enableWidgetBlurEffect = true; // 默认开启控件毛玻璃效果
+    _animeCardAction = AnimeCardAction.synopsis; // 默认行为是显示简介
     _loadSettings();
   }
 
@@ -46,6 +56,15 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       // 从存储加载时使用平台相关的默认值
       _enablePageAnimation = prefs.getBool(_enablePageAnimationKey) ?? _getDefaultAnimationValue();
       _enableWidgetBlurEffect = prefs.getBool(_widgetBlurEffectKey) ?? true;
+      
+      // 加载番剧卡片点击行为设置
+      final actionIndex = prefs.getInt(_animeCardActionKey);
+      if (actionIndex != null && actionIndex < AnimeCardAction.values.length) {
+        _animeCardAction = AnimeCardAction.values[actionIndex];
+      } else {
+        _animeCardAction = AnimeCardAction.synopsis; // 默认值
+      }
+      
       notifyListeners();
     } catch (e) {
       debugPrint('加载外观设置时出错: $e');
@@ -79,6 +98,21 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setBool(_widgetBlurEffectKey, value);
     } catch (e) {
       debugPrint('保存控件毛玻璃效果设置时出错: $e');
+    }
+  }
+
+  // 设置番剧卡片点击行为
+  Future<void> setAnimeCardAction(AnimeCardAction value) async {
+    if (_animeCardAction == value) return;
+
+    _animeCardAction = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_animeCardActionKey, value.index);
+    } catch (e) {
+      debugPrint('保存番剧卡片点击行为设置时出错: $e');
     }
   }
 } 

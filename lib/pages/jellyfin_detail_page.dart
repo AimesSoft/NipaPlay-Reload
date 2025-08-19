@@ -121,7 +121,12 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
             // 对于电影，我们不需要 TabController
           } else {
             // 对于剧集，初始化 TabController
-            _tabController = TabController(length: 2, vsync: this);
+            _tabController = TabController(
+                length: 2,
+                vsync: this,
+                initialIndex: Provider.of<AppearanceSettingsProvider>(context, listen: false)
+                    .animeCardAction == AnimeCardAction.synopsis ? 0 : 1
+            );
             _tabController!.addListener(() {
               if (mounted && !_tabController!.indexIsChanging) {
                 setState(() {

@@ -96,6 +96,35 @@ class _GeneralPageState extends State<GeneralPage> {
                   ),
                 ),
                 const Divider(color: Colors.white12, height: 1),
+                ListTile(
+                  title: const Text(
+                    "番剧卡片点击行为",
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Text(
+                    "选择点击番剧卡片后默认展示的内容",
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  trailing: BlurDropdown<AnimeCardAction>(
+                    dropdownKey: GlobalKey(), // Use a new key
+                    items: [
+                      DropdownMenuItemData(
+                        title: "简介",
+                        value: AnimeCardAction.synopsis,
+                        isSelected: appearanceSettings.animeCardAction == AnimeCardAction.synopsis,
+                      ),
+                      DropdownMenuItemData(
+                        title: "剧集列表",
+                        value: AnimeCardAction.episodeList,
+                        isSelected: appearanceSettings.animeCardAction == AnimeCardAction.episodeList,
+                      ),
+                    ],
+                    onItemSelected: (action) {
+                      appearanceSettings.setAnimeCardAction(action);
+                    },
+                  ),
+                ),
+                const Divider(color: Colors.white12, height: 1),
                 SwitchListTile(
                   title: const Text(
                     "过滤成人内容 (全局)",
