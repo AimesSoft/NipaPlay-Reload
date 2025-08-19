@@ -16,6 +16,8 @@
     brew install --cask nipaplay-reload
     ```
 
+    安装完成后，查看 [更新与发布通道](release-channels.md) 了解如何使用 Homebrew 轻松更新 NipaPlay（无需再次处理系统安全提示）。
+
 - 或从 [Release 页面](https://github.com/Shinokawa/NipaPlay-Reload/releases) 下载 dmg，将应用拖至"应用程序"；未签名提示：在设置-隐私与安全性中选择仍要打开。
 
 ## Linux
