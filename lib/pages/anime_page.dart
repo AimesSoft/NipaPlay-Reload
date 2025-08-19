@@ -420,7 +420,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                       right: 0
                     ),
                     indicator: BoxDecoration(
-                      color: Colors.greenAccent,
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(30),
                     ),
                     tabAlignment: TabAlignment.start,

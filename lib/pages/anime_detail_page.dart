@@ -933,7 +933,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           indicatorSize: TabBarIndicatorSize.tab,
           indicatorPadding: const EdgeInsets.only(top: 46, left: 15, right: 15),
           indicator: BoxDecoration(
-            color: Colors.greenAccent, // 设置指示器的颜色
+            color: Colors.white, // 设置指示器的颜色
 
             borderRadius: BorderRadius.circular(30), // 设置圆角矩形的圆角半径
           ),
