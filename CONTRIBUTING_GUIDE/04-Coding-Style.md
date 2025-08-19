@@ -99,6 +99,58 @@ Future<User> getUserById(String id) async {
 
 *   **保持函数短小**: 一个函数应该只做一件事情。如果一个函数过于庞大，考虑将它拆分成几个更小的、逻辑清晰的辅助函数。
 *   **优先使用 `const`**: 如果一个变量或组件在编译时其值就是确定的，请务必使用 `const` 关键字。这有助于提升应用的性能。Flutter 的分析工具通常会提示你这样做。
+*   **模块化与代码复用**: 
+    - 尽可能将可复用的功能拆解为单独的 Dart 文件。这有助于提高代码的可读性、可维护性和复用性。
+    - 对于通用的功能、工具类、常用的 UI 组件，应该创建独立的模块。例如：
+        * 将常用的网络请求逻辑放在 `services` 目录下的单独文件中
+        * 将通用的 UI 组件放在 `widgets` 目录下的独立文件中
+        * 将复杂的业务逻辑抽象为独立的控制器或服务类
+    - 遵循"单一职责原则"：每个模块、类和函数都应该只负责一个明确的功能。
+    - 优先考虑组合而非继承，使用组合可以更灵活地复用代码。
+    - 对于重复出现的代码片段，应该立即考虑如何将其抽象和模块化。
+
+**示例**:
+```dart
+// 反面示例：功能混杂，难以复用
+class UserProfilePage extends StatelessWidget {
+  void _doSomethingComplex() {
+    // 网络请求、UI逻辑、数据处理混在一起
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 大量代码...
+  }
+}
+
+// 正面示例：模块化，职责清晰
+// 网络请求服务
+class UserService {
+  Future<User> fetchUserProfile(String userId) async { /* ... */ }
+}
+
+// UI组件
+class UserProfileWidget extends StatelessWidget {
+  final User user;
+  const UserProfileWidget({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    // 专注于UI展示
+  }
+}
+
+// 页面控制器
+class UserProfileController {
+  final UserService _userService;
+  
+  UserProfileController(this._userService);
+
+  Future<void> loadUserProfile(String userId) async {
+    // 处理业务逻辑
+  }
+}
+```
 
 ## 让 AI 帮你遵守规范
 
