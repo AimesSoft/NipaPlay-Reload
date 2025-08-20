@@ -774,7 +774,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
+                          _dandanplayWatchStatus[episode.id] == true ? '[弹弹play云同步]已看' : '',
                           style: TextStyle(
                             color: Colors.green.withOpacity(0.9),
                             fontSize: 10,

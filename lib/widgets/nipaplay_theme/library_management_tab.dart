@@ -19,6 +19,7 @@ import 'package:nipaplay/utils/android_storage_helper.dart'; // 导入Android存
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 // Import MethodChannel
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
+import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动弹幕匹配器
 
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -380,19 +381,34 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   Future<void> _loadFolderChildren(String folderPath) async {
+    // 检查是否已经在加载中，避免重复加载
+    if (_loadingFolders.contains(folderPath)) {
+      return;
+    }
+    
     if (mounted) {
       setState(() {
         _loadingFolders.add(folderPath);
       });
     }
 
-    final children = await _getDirectoryContents(folderPath);
+    try {
+      final children = await _getDirectoryContents(folderPath);
 
-    if (mounted) {
-      setState(() {
-        _expandedFolderContents[folderPath] = children;
-        _loadingFolders.remove(folderPath);
-      });
+      if (mounted) {
+        setState(() {
+          _expandedFolderContents[folderPath] = children;
+          _loadingFolders.remove(folderPath);
+        });
+      }
+    } catch (e) {
+      // 如果加载失败，确保移除加载状态
+      if (mounted) {
+        setState(() {
+          _loadingFolders.remove(folderPath);
+        });
+      }
+      debugPrint('加载文件夹内容失败: $folderPath, 错误: $e');
     }
   }
 
@@ -416,7 +432,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             title: Text(p.basename(dirPath), style: const TextStyle(color: Colors.white)),
             onExpansionChanged: (isExpanded) {
               if (isExpanded && _expandedFolderContents[dirPath] == null && !_loadingFolders.contains(dirPath)) {
-                _loadFolderChildren(dirPath);
+                // 使用 Future.microtask 确保在当前构建帧完成后执行
+                Future.microtask(() => _loadFolderChildren(dirPath));
               }
             },
             children: _loadingFolders.contains(dirPath)
@@ -427,23 +444,92 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       } else if (entity is io.File) {
         return Padding(
           padding: indent,
-          child: ListTile(
-            leading: const Icon(Icons.videocam_outlined, color: Colors.tealAccent),
-            title: Text(p.basename(entity.path), style: const TextStyle(color: Colors.white)),
-            onTap: () {
-              // Create a minimal WatchHistoryItem to initiate playback
-              final WatchHistoryItem tempItem = WatchHistoryItem(
-                filePath: entity.path,
-                animeName: p.basenameWithoutExtension(entity.path), // Use filename as a basic anime name
-                episodeTitle: '', // Can be empty, VideoPlayerState might fill it later
-                duration: 0, // Will be updated by VideoPlayerState
-                lastPosition: 0, // Will be updated by VideoPlayerState
-                watchProgress: 0.0, // Will be updated by VideoPlayerState
-                lastWatchTime: DateTime.now(), // Current time, or can be a default
-                // thumbnailPath, episodeId, animeId can be null/default initially
+          child: FutureBuilder<WatchHistoryItem?>(
+            future: WatchHistoryManager.getHistoryItem(entity.path),
+            builder: (context, snapshot) {
+              // 获取扫描到的动画信息
+              final historyItem = snapshot.data;
+              final String fileName = p.basename(entity.path);
+              
+              // 调试信息
+              if (historyItem != null) {
+                debugPrint('🎬 文件: $fileName');
+                debugPrint('   动画名: ${historyItem.animeName}');
+                debugPrint('   集数: ${historyItem.episodeTitle}');
+                debugPrint('   来自扫描: ${historyItem.isFromScan}');
+                debugPrint('   动画ID: ${historyItem.animeId}');
+                debugPrint('   集数ID: ${historyItem.episodeId}');
+              }
+              
+              // 构建副标题（动画名称和集数）
+              String? subtitleText;
+              // 放宽条件：只要有历史记录且有动画信息就显示
+              if (historyItem != null && 
+                  (historyItem.animeId != null || historyItem.episodeId != null ||
+                   (historyItem.animeName.isNotEmpty && historyItem.animeName != p.basenameWithoutExtension(entity.path)))) {
+                final List<String> subtitleParts = [];
+                
+                // 添加动画名称（如果存在且不是文件名）
+                if (historyItem.animeName.isNotEmpty && 
+                    historyItem.animeName != p.basenameWithoutExtension(entity.path)) {
+                  subtitleParts.add(historyItem.animeName);
+                }
+                
+                // 添加集数标题（如果存在）
+                if (historyItem.episodeTitle != null && 
+                    historyItem.episodeTitle!.isNotEmpty) {
+                  subtitleParts.add(historyItem.episodeTitle!);
+                }
+                
+                if (subtitleParts.isNotEmpty) {
+                  subtitleText = subtitleParts.join(' - ');
+                }
+              }
+              
+              return ListTile(
+                leading: const Icon(Icons.videocam_outlined, color: Colors.white),
+                title: Text(fileName, style: const TextStyle(color: Colors.white)),
+                subtitle: subtitleText != null 
+                    ? Text(
+                        subtitleText,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 手动匹配弹幕按钮
+                    IconButton(
+                      icon: const Icon(Icons.subtitles, color: Colors.white70, size: 20),
+                      onPressed: () => _showManualDanmakuMatchDialog(entity.path, fileName, historyItem),
+                    ),
+                    // 移除扫描结果按钮
+                    if (historyItem != null && (historyItem.animeId != null || historyItem.episodeId != null))
+                      IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.white70, size: 20),
+                        onPressed: () => _showRemoveScanResultDialog(entity.path, fileName, historyItem),
+                      ),
+                  ],
+                ),
+                onTap: () {
+                  // Use existing history item if available, otherwise create a minimal one
+                  final WatchHistoryItem itemToPlay = historyItem ?? WatchHistoryItem(
+                    filePath: entity.path,
+                    animeName: p.basenameWithoutExtension(entity.path),
+                    episodeTitle: '',
+                    duration: 0,
+                    lastPosition: 0,
+                    watchProgress: 0.0,
+                    lastWatchTime: DateTime.now(),
+                  );
+                  widget.onPlayEpisode(itemToPlay);
+                },
               );
-              widget.onPlayEpisode(tempItem);
-              //debugPrint("Tapped on file: ${entity.path}, attempting to play.");
             },
           ),
         );
@@ -558,7 +644,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (!mounted) return;
     
     try {
-      final scanService = Provider.of<ScanService>(context, listen: false);
+      // 使用保存的引用避免在组件销毁时访问Provider
+      final scanService = _scanService;
+      if (scanService == null) return;
       
       print('检查扫描结果: isScanning=${scanService.isScanning}, justFinishedScanning=${scanService.justFinishedScanning}, totalFilesFound=${scanService.totalFilesFound}, scannedFolders.isEmpty=${scanService.scannedFolders.isEmpty}');
       
@@ -1309,7 +1397,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                         ),
                         onExpansionChanged: (isExpanded) {
                           if (isExpanded && _expandedFolderContents[folderPath] == null && !_loadingFolders.contains(folderPath)) {
-                            _loadFolderChildren(folderPath);
+                            Future.microtask(() => _loadFolderChildren(folderPath));
                           }
                         },
                         children: _loadingFolders.contains(folderPath)
@@ -1396,7 +1484,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                           ),
                           onExpansionChanged: (isExpanded) {
                             if (isExpanded && _expandedFolderContents[folderPath] == null && !_loadingFolders.contains(folderPath)) {
-                              _loadFolderChildren(folderPath);
+                              Future.microtask(() => _loadFolderChildren(folderPath));
                             }
                           },
                           children: _loadingFolders.contains(folderPath)
@@ -1409,6 +1497,188 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         ),
       ],
     );
+  }
+
+  // 显示手动匹配弹幕对话框
+  Future<void> _showManualDanmakuMatchDialog(String filePath, String fileName, WatchHistoryItem? historyItem) async {
+    try {
+      // 使用文件名作为初始搜索关键词
+      String initialSearchKeyword = fileName;
+      
+      // 如果有历史记录，优先使用动画名称
+      if (historyItem != null && historyItem.animeName.isNotEmpty) {
+        initialSearchKeyword = historyItem.animeName;
+      } else {
+        // 从文件名中提取可能的动画名称（去掉扩展名和可能的集数信息）
+        String baseName = p.basenameWithoutExtension(fileName);
+        // 简单的清理逻辑：移除可能的集数标识
+        baseName = baseName.replaceAll(RegExp(r'第?\d+[话集期]?'), '').trim();
+        baseName = baseName.replaceAll(RegExp(r'[Ee]\d+'), '').trim();
+        baseName = baseName.replaceAll(RegExp(r'[Ss]\d+[Ee]\d+'), '').trim();
+        if (baseName.isNotEmpty) {
+          initialSearchKeyword = baseName;
+        }
+      }
+      
+      debugPrint('准备显示手动匹配弹幕对话框：$fileName');
+      debugPrint('初始搜索关键词：$initialSearchKeyword');
+      
+      // 调用手动匹配弹幕对话框
+      final result = await ManualDanmakuMatcher.instance.showManualMatchDialog(
+        context,
+        initialVideoTitle: initialSearchKeyword,
+      );
+      
+      if (result != null && mounted) {
+        final episodeId = result['episodeId']?.toString() ?? '';
+        final animeId = result['animeId']?.toString() ?? '';
+        final animeTitle = result['animeTitle']?.toString() ?? '';
+        final episodeTitle = result['episodeTitle']?.toString() ?? '';
+        
+        if (episodeId.isNotEmpty && animeId.isNotEmpty) {
+          try {
+            // 获取现有历史记录
+            final existingHistory = await WatchHistoryManager.getHistoryItem(filePath);
+            
+            // 创建更新后的历史记录
+            final updatedHistory = WatchHistoryItem(
+              filePath: filePath,
+              animeName: animeTitle.isNotEmpty ? animeTitle : (existingHistory?.animeName ?? p.basenameWithoutExtension(fileName)),
+              episodeTitle: episodeTitle.isNotEmpty ? episodeTitle : existingHistory?.episodeTitle,
+              episodeId: int.tryParse(episodeId),
+              animeId: int.tryParse(animeId),
+              watchProgress: existingHistory?.watchProgress ?? 0.0,
+              lastPosition: existingHistory?.lastPosition ?? 0,
+              duration: existingHistory?.duration ?? 0,
+              lastWatchTime: DateTime.now(),
+              thumbnailPath: existingHistory?.thumbnailPath,
+              isFromScan: existingHistory?.isFromScan ?? false,
+              videoHash: existingHistory?.videoHash,
+            );
+            
+            // 保存更新后的历史记录
+            await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+            
+            debugPrint('✅ 成功更新弹幕匹配信息：');
+            debugPrint('   文件：$fileName');
+            debugPrint('   动画：$animeTitle');
+            debugPrint('   集数：$episodeTitle');
+            debugPrint('   动画ID：$animeId');
+            debugPrint('   集数ID：$episodeId');
+            
+            // 显示成功提示
+            if (mounted) {
+              BlurSnackBar.show(context, '弹幕匹配成功：$animeTitle - $episodeTitle');
+              
+              // 刷新UI以显示新的动画信息
+              setState(() {
+                // 清空已展开的文件夹内容，强制重新加载
+                _expandedFolderContents.clear();
+              });
+            }
+          } catch (e) {
+            debugPrint('❌ 更新弹幕匹配信息失败：$e');
+            if (mounted) {
+              BlurSnackBar.show(context, '更新弹幕信息失败：$e');
+            }
+          }
+        } else {
+          debugPrint('⚠️ 弹幕匹配结果缺少必要信息');
+          if (mounted) {
+            BlurSnackBar.show(context, '弹幕匹配结果无效');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ 显示手动匹配弹幕对话框失败：$e');
+      if (mounted) {
+        BlurSnackBar.show(context, '打开弹幕匹配对话框失败：$e');
+      }
+    }
+  }
+
+  // 显示移除扫描结果确认对话框
+  Future<void> _showRemoveScanResultDialog(String filePath, String fileName, WatchHistoryItem? historyItem) async {
+    if (historyItem == null) return;
+    
+    // 构建当前的动画信息描述
+    String currentInfo = '';
+    if (historyItem.animeName.isNotEmpty) {
+      currentInfo += '动画：${historyItem.animeName}';
+    }
+    if (historyItem.episodeTitle != null && historyItem.episodeTitle!.isNotEmpty) {
+      if (currentInfo.isNotEmpty) currentInfo += '\n';
+      currentInfo += '集数：${historyItem.episodeTitle}';
+    }
+    if (historyItem.animeId != null) {
+      if (currentInfo.isNotEmpty) currentInfo += '\n';
+      currentInfo += '动画ID：${historyItem.animeId}';
+    }
+    if (historyItem.episodeId != null) {
+      if (currentInfo.isNotEmpty) currentInfo += '\n';
+      currentInfo += '集数ID：${historyItem.episodeId}';
+    }
+    
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '移除扫描结果',
+      content: '确定要移除文件 "$fileName" 的扫描结果吗？\n\n当前扫描信息：\n$currentInfo\n\n移除后将清除动画名称、集数信息和弹幕ID，但保留观看进度。',
+      actions: <Widget>[
+        TextButton(
+          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          onPressed: () {
+            Navigator.of(context).pop(false);
+          },
+        ),
+        TextButton(
+          child: const Text('移除', style: TextStyle(color: Colors.redAccent)),
+          onPressed: () {
+            Navigator.of(context).pop(true);
+          },
+        ),
+      ],
+    );
+
+    if (confirm == true && mounted) {
+      try {
+        // 创建清除了扫描信息的历史记录
+        final clearedHistory = WatchHistoryItem(
+          filePath: filePath,
+          animeName: p.basenameWithoutExtension(fileName), // 恢复为文件名
+          episodeTitle: null, // 清除集数标题
+          episodeId: null, // 清除集数ID
+          animeId: null, // 清除动画ID
+          watchProgress: historyItem.watchProgress, // 保留观看进度
+          lastPosition: historyItem.lastPosition, // 保留观看位置
+          duration: historyItem.duration, // 保留时长
+          lastWatchTime: DateTime.now(), // 更新最后操作时间
+          thumbnailPath: historyItem.thumbnailPath, // 保留缩略图
+          isFromScan: false, // 标记为非扫描结果
+          videoHash: historyItem.videoHash, // 保留视频哈希
+        );
+        
+        // 保存更新后的历史记录
+        await WatchHistoryManager.addOrUpdateHistory(clearedHistory);
+        
+        debugPrint('✅ 成功移除扫描结果：$fileName');
+        
+        // 显示成功提示
+        if (mounted) {
+          BlurSnackBar.show(context, '已移除 "$fileName" 的扫描结果');
+          
+          // 刷新UI
+          setState(() {
+            // 清空已展开的文件夹内容，强制重新加载
+            _expandedFolderContents.clear();
+          });
+        }
+      } catch (e) {
+        debugPrint('❌ 移除扫描结果失败：$e');
+        if (mounted) {
+          BlurSnackBar.show(context, '移除扫描结果失败：$e');
+        }
+      }
+    }
   }
 
   // 辅助方法：检查是否为Android 13+

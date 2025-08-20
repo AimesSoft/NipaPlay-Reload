@@ -623,7 +623,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                           borderRadius: BorderRadius.circular(2),
                         ),
                         child: Text(
-                          _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
+                          _dandanplayWatchStatus[episode.id] == true ? '[弹弹play云同步]已看' : '',
                           style: TextStyle(
                             color: material.Colors.green.withOpacity(0.9),
                             fontSize: 10,

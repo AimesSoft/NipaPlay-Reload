@@ -11,18 +11,56 @@ class _TooltipManager {
   _TooltipManager._internal();
 
   _HoverTooltipBubbleState? _currentTooltip;
+  bool _isManaging = false; // 防止管理器操作冲突
 
   void registerTooltip(_HoverTooltipBubbleState tooltip) {
-    // 如果有旧的气泡，先强制关闭
-    if (_currentTooltip != null && _currentTooltip != tooltip) {
-      _currentTooltip!._forceHide();
+    if (_isManaging) return;
+    _isManaging = true;
+    
+    try {
+      // 如果有旧的气泡，先强制关闭
+      if (_currentTooltip != null && _currentTooltip != tooltip) {
+        try {
+          _currentTooltip!._forceHide();
+        } catch (e) {
+          // 忽略旧气泡的清理异常
+        }
+      }
+      _currentTooltip = tooltip;
+    } finally {
+      _isManaging = false;
     }
-    _currentTooltip = tooltip;
   }
 
   void unregisterTooltip(_HoverTooltipBubbleState tooltip) {
-    if (_currentTooltip == tooltip) {
-      _currentTooltip = null;
+    if (_isManaging) return;
+    _isManaging = true;
+    
+    try {
+      if (_currentTooltip == tooltip) {
+        _currentTooltip = null;
+      }
+    } finally {
+      _isManaging = false;
+    }
+  }
+  
+  // 强制清理所有气泡（用于紧急情况）
+  void forceCleanup() {
+    if (_isManaging) return;
+    _isManaging = true;
+    
+    try {
+      if (_currentTooltip != null) {
+        try {
+          _currentTooltip!._forceCleanup();
+        } catch (e) {
+          // 忽略清理异常
+        }
+        _currentTooltip = null;
+      }
+    } finally {
+      _isManaging = false;
     }
   }
 }
@@ -59,21 +97,34 @@ class HoverTooltipBubble extends StatefulWidget {
 
 class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   bool _isHovered = false;
+  bool _isOverlayVisible = false; // 新增：跟踪overlay的实际显示状态
   final GlobalKey _childKey = GlobalKey();
   OverlayEntry? _overlayEntry;
-  Offset? _mousePosition;
   final _TooltipManager _manager = _TooltipManager();
   
   // 添加定时器管理
   Timer? _showTimer;
   Timer? _hideTimer;
   
+  // 添加安全锁，防止并发操作
+  bool _isOperating = false;
+  
   @override
   void dispose() {
     _manager.unregisterTooltip(this);
     _cancelAllTimers(); // 取消所有定时器
-    _hideOverlay();
+    _forceCleanup(); // 强制清理所有资源
     super.dispose();
+  }
+  
+  @override
+  void deactivate() {
+    // 当 widget 被移除时，立即清理资源
+    _cancelAllTimers();
+    if (_isOverlayVisible) {
+      _hideOverlay();
+    }
+    super.deactivate();
   }
 
   // 取消所有定时器
@@ -84,34 +135,67 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
     _hideTimer = null;
   }
 
+  // 强制清理所有资源
+  void _forceCleanup() {
+    if (_isOperating) return; // 防止重复操作
+    _isOperating = true;
+    
+    try {
+      _cancelAllTimers();
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+      _isOverlayVisible = false;
+      _isHovered = false;
+    } catch (e) {
+      // 忽略清理时的异常
+    } finally {
+      _isOperating = false;
+    }
+  }
+
   // 强制隐藏（供管理器调用）
   void _forceHide() {
-    if (_overlayEntry != null) {
-      _cancelAllTimers(); // 取消所有定时器
-      setState(() => _isHovered = false);
+    if (_isOperating) return; // 防止重复操作
+    _isOperating = true;
+    
+    try {
+      _cancelAllTimers();
+      if (mounted) {
+        setState(() => _isHovered = false);
+      }
       _hideOverlay();
+    } catch (e) {
+      // 如果setState失败，直接清理资源
+      _forceCleanup();
+    } finally {
+      _isOperating = false;
     }
   }
 
   void _showOverlay(BuildContext context) {
-    if (widget.text.isEmpty) return;
+    if (widget.text.isEmpty || _isOperating || _isOverlayVisible) return;
     
-    // 先注册到管理器（这会自动关闭其他气泡）
-    _manager.registerTooltip(this);
+    _isOperating = true;
     
-    final RenderBox? renderBox = _childKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-    
-    final position = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
-    final screenSize = MediaQuery.of(context).size;
+    try {
+      // 先注册到管理器（这会自动关闭其他气泡）
+      _manager.registerTooltip(this);
+      
+      final RenderBox? renderBox = _childKey.currentContext?.findRenderObject() as RenderBox?;
+      if (renderBox == null) {
+        _isOperating = false;
+        return;
+      }
+      
+      final position = renderBox.localToGlobal(Offset.zero);
+      final size = renderBox.size;
+      final screenSize = MediaQuery.of(context).size;
     
     // 计算气泡尺寸
     final bubbleSize = _calculateBubbleSize();
     
     // 智能定位
     double left, top;
-    bool showOnRight = true; // 默认在右侧显示
     
     if (widget.autoAlign) {
       // 检查右侧是否有足够空间
@@ -120,19 +204,15 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       
       if (rightSpace >= bubbleSize.width) {
         // 右侧有足够空间，在右侧显示
-        showOnRight = true;
         left = position.dx + size.width + widget.horizontalOffset;
       } else if (leftSpace >= bubbleSize.width) {
         // 左侧有足够空间，在左侧显示
-        showOnRight = false;
         left = position.dx - bubbleSize.width - widget.horizontalOffset;
       } else {
         // 两侧都没有足够空间，选择空间更大的一侧
         if (rightSpace > leftSpace) {
-          showOnRight = true;
           left = position.dx + size.width + widget.horizontalOffset;
         } else {
-          showOnRight = false;
           left = position.dx - bubbleSize.width - widget.horizontalOffset;
         }
       }
@@ -153,25 +233,48 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
     left = left.clamp(10.0, screenSize.width - bubbleSize.width - 10);
     top = top.clamp(10.0, screenSize.height - bubbleSize.height - 10);
     
-    _overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        left: left,
-        top: top,
-        child: Material(
-          color: Colors.transparent,
-          child: _buildBubble(bubbleSize),
+      _overlayEntry = OverlayEntry(
+        builder: (context) => Positioned(
+          left: left,
+          top: top,
+          child: Material(
+            color: Colors.transparent,
+            child: _buildBubble(bubbleSize),
+          ),
         ),
-      ),
-    );
+      );
 
-    Overlay.of(context).insert(_overlayEntry!);
+      Overlay.of(context).insert(_overlayEntry!);
+      _isOverlayVisible = true;
+      
+    } catch (e) {
+      // 如果显示失败，清理资源
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+      _isOverlayVisible = false;
+    } finally {
+      _isOperating = false;
+    }
   }
 
   void _hideOverlay() {
-    _cancelAllTimers(); // 确保取消所有定时器
-    _manager.unregisterTooltip(this);
-    _overlayEntry?.remove();
-    _overlayEntry = null;
+    if (_isOperating || !_isOverlayVisible) return;
+    
+    _isOperating = true;
+    
+    try {
+      _cancelAllTimers(); // 确保取消所有定时器
+      _manager.unregisterTooltip(this);
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+      _isOverlayVisible = false;
+    } catch (e) {
+      // 忽略隐藏时的异常，但确保状态正确
+      _overlayEntry = null;
+      _isOverlayVisible = false;
+    } finally {
+      _isOperating = false;
+    }
   }
 
   Size _calculateBubbleSize() {
@@ -200,20 +303,18 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onHover: (event) {
-        _mousePosition = event.position;
-      },
       onEnter: (event) {
-        _mousePosition = event.position;
         
         // 取消之前的所有定时器
         _cancelAllTimers();
         
-        setState(() => _isHovered = true);
+        if (mounted) {
+          setState(() => _isHovered = true);
+        }
         
         // 使用可管理的定时器
         _showTimer = Timer(widget.showDelay, () {
-          if (_isHovered && mounted) {
+          if (_isHovered && mounted && !_isOverlayVisible) {
             _showOverlay(context);
           }
           _showTimer = null; // 清空引用
@@ -223,11 +324,13 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
         // 取消之前的所有定时器
         _cancelAllTimers();
         
-        setState(() => _isHovered = false);
+        if (mounted) {
+          setState(() => _isHovered = false);
+        }
         
         // 使用可管理的定时器
         _hideTimer = Timer(widget.hideDelay, () {
-          if (!_isHovered && mounted) {
+          if (!_isHovered && mounted && _isOverlayVisible) {
             _hideOverlay();
           }
           _hideTimer = null; // 清空引用
