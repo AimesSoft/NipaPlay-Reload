@@ -10,23 +10,7 @@
   <img src="https://count.getloli.com/get/@nipaplay?theme=moebooru" alt="访问统计" />
 </div>
 
-<div align="center" style="margin: 10px 0;">
-  <img src="https://img.shields.io/badge/QQ群-961207150-12B7F5?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ群">
-  <img src="https://img.shields.io/badge/番剧-追番中-ff69b4?style=for-the-badge&logo=anilist" alt="追番状态">
-  <img src="https://img.shields.io/badge/弹幕-密集-ff6b6b?style=for-the-badge&logo=wechat" alt="弹幕密度">
-  <img src="https://img.shields.io/badge/播放器-高性能-ffa500?style=for-the-badge&logo=flutter" alt="播放器性能">
-  <img src="https://img.shields.io/badge/主题-可切换-ffd700?style=for-the-badge&logo=materialdesign" alt="主题切换">
-  <img src="https://img.shields.io/badge/字幕-多轨道-4169e1?style=for-the-badge&logo=substack" alt="字幕支持">
-  <img src="https://img.shields.io/badge/音频-多轨道-2e8b57?style=for-the-badge&logo=spotify" alt="音频支持">
-</div>
-
-<div align="center" style="margin: 10px 0;">
-  <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS">
-  <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux">
-  <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
-  <img src="https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=ios&logoColor=white" alt="iOS">
-</div>
+![GitHub release](https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=flat-square&color=blue) ![GitHub downloads](https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=flat-square&color=green) ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square) ![License](https://img.shields.io/github/license/mcdfsteve/nipaplay-reload?style=flat-square)
 
 <div align="center" style="margin: 10px 0;">
   <img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart">
