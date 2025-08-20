@@ -9,6 +9,7 @@ class DanmakuGroupWidget extends StatelessWidget {
   final double fontSize;
   final bool isVisible;
   final double opacity;
+  final double timeOffset;
 
   const DanmakuGroupWidget({
     super.key,
@@ -19,6 +20,7 @@ class DanmakuGroupWidget extends StatelessWidget {
     required this.fontSize,
     required this.isVisible,
     required this.opacity,
+    this.timeOffset = 0.0,
   });
 
   @override
@@ -60,7 +62,7 @@ class DanmakuGroupWidget extends StatelessWidget {
       // 计算X/Y位置和透明度
       double x = 0;
       double localOpacity = opacity;
-      final timeDiff = currentTime - time;
+      final timeDiff = currentTime - (time - timeOffset);
       final adjustedFontSize = fontSize * danmakuItem.fontSizeMultiplier;
       final textPainter = TextPainter(
         text: TextSpan(

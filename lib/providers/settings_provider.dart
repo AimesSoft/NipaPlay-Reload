@@ -12,11 +12,16 @@ class SettingsProvider with ChangeNotifier {
   // 弹幕转换简体中文设置
   bool _danmakuConvertToSimplified = true; // 默认开启
   static const String _danmakuConvertKey = 'danmaku_convert_to_simplified';
+  
+  // 弹幕时间偏移设置
+  double _danmakuTimeOffset = 0.0; // 默认无偏移，单位为秒
+  static const String _danmakuTimeOffsetKey = 'danmaku_time_offset';
 
   // --- Getters ---
   double get blurPower => _blurPower;
   bool get isBlurEnabled => _blurPower > 0;
   bool get danmakuConvertToSimplified => _danmakuConvertToSimplified;
+  double get danmakuTimeOffset => _danmakuTimeOffset;
 
   SettingsProvider() {
     _loadSettings();
@@ -28,6 +33,8 @@ class SettingsProvider with ChangeNotifier {
     _blurPower = _prefs.getDouble(_blurPowerKey) ?? _defaultBlur;
     // Load danmaku convert setting, defaulting to true if not set
     _danmakuConvertToSimplified = _prefs.getBool(_danmakuConvertKey) ?? true;
+    // Load danmaku time offset setting, defaulting to 0.0 if not set
+    _danmakuTimeOffset = _prefs.getDouble(_danmakuTimeOffsetKey) ?? 0.0;
     notifyListeners();
   }
 
@@ -54,6 +61,13 @@ class SettingsProvider with ChangeNotifier {
   Future<void> setDanmakuConvertToSimplified(bool enable) async {
     _danmakuConvertToSimplified = enable;
     await _prefs.setBool(_danmakuConvertKey, _danmakuConvertToSimplified);
+    notifyListeners();
+  }
+
+  /// Sets the danmaku time offset in seconds.
+  Future<void> setDanmakuTimeOffset(double offset) async {
+    _danmakuTimeOffset = offset;
+    await _prefs.setDouble(_danmakuTimeOffsetKey, _danmakuTimeOffset);
     notifyListeners();
   }
 }

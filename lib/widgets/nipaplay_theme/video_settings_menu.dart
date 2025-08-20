@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
-import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'subtitle_tracks_menu.dart';
@@ -16,19 +14,7 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'playlist_menu.dart';
 import 'playback_rate_menu.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-
-import 'package:provider/provider.dart';
-import 'subtitle_tracks_menu.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
-import 'control_bar_settings_menu.dart';
-import 'danmaku_settings_menu.dart';
-import 'audio_tracks_menu.dart';
-import 'danmaku_list_menu.dart';
-import 'danmaku_tracks_menu.dart';
-import 'subtitle_list_menu.dart';
-import 'package:nipaplay/player_abstraction/player_factory.dart';
-import 'playlist_menu.dart';
-import 'playback_rate_menu.dart';
+import 'danmaku_offset_menu.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -53,6 +39,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   bool _showSubtitleList = false;
   bool _showPlaylist = false;
   bool _showPlaybackRate = false;
+  bool _showDanmakuOffset = false;
 
   OverlayEntry? _subtitleTracksOverlay;
   OverlayEntry? _controlBarSettingsOverlay;
@@ -63,6 +50,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   OverlayEntry? _subtitleListOverlay;
   OverlayEntry? _playlistOverlay;
   OverlayEntry? _playbackRateOverlay;
+  OverlayEntry? _danmakuOffsetOverlay;
 
   late final List<SettingsItem> _settingsItems;
   late final VideoPlayerState videoState;
@@ -131,6 +119,13 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     ));
     
     _settingsItems.add(SettingsItem(
+      icon: Icons.schedule,
+      title: '弹幕偏移',
+      onTap: _toggleDanmakuOffsetMenu,
+      isActive: () => _showDanmakuOffset,
+    ));
+    
+    _settingsItems.add(SettingsItem(
       icon: Icons.height,
       title: '控制栏设置',
       onTap: _toggleControlBarSettingsMenu,
@@ -172,6 +167,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
       
       _subtitleTracksOverlay = OverlayEntry(
@@ -204,6 +200,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
       
       _audioTracksOverlay = OverlayEntry(
@@ -236,6 +233,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
 
       _controlBarSettingsOverlay = OverlayEntry(
@@ -269,6 +267,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
 
       _danmakuSettingsOverlay = OverlayEntry(
@@ -302,6 +301,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
 
       _danmakuListOverlay = OverlayEntry(
@@ -335,6 +335,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuList = false;
         _showSubtitleList = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
 
       _danmakuTracksOverlay = OverlayEntry(
@@ -367,6 +368,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuList = false;
         _showDanmakuTracks = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
 
       _subtitleListOverlay = OverlayEntry(
@@ -399,6 +401,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuList = false;
         _showDanmakuTracks = false;
         _showSubtitleList = false;
+        _showDanmakuOffset = false;
       });
 
       _playlistOverlay = OverlayEntry(
@@ -434,6 +437,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _playlistOverlay = null;
     _playbackRateOverlay?.remove();
     _playbackRateOverlay = null;
+    _danmakuOffsetOverlay?.remove();
+    _danmakuOffsetOverlay = null;
     
     // 只有在组件仍然挂载时才调用setState
     if (mounted) {
@@ -446,6 +451,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
     } else {
       // 如果组件已经被销毁，直接更新值而不调用setState
@@ -457,6 +463,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _showDanmakuTracks = false;
       _showSubtitleList = false;
       _showPlaylist = false;
+      _showDanmakuOffset = false;
     }
   }
 
@@ -471,6 +478,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _danmakuTracksOverlay?.remove();
     _subtitleListOverlay?.remove();
     _playlistOverlay?.remove();
+    _danmakuOffsetOverlay?.remove();
     
     for (var entry in _overlayEntries) {
       entry.remove();
@@ -661,6 +669,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showDanmakuTracks = false;
         _showSubtitleList = false;
         _showPlaylist = false;
+        _showDanmakuOffset = false;
       });
       
       _playbackRateOverlay = OverlayEntry(
@@ -674,6 +683,41 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       );
 
       Overlay.of(context).insert(_playbackRateOverlay!);
+    }
+  }
+
+  // 添加弹幕偏移菜单切换方法
+  void _toggleDanmakuOffsetMenu() {
+    if (_showDanmakuOffset) {
+      _danmakuOffsetOverlay?.remove();
+      _danmakuOffsetOverlay = null;
+      setState(() => _showDanmakuOffset = false);
+    } else {
+      _closeAllOverlays();
+      setState(() {
+        _showDanmakuOffset = true;
+        _showSubtitleTracks = false;
+        _showControlBarSettings = false;
+        _showDanmakuSettings = false;
+        _showAudioTracks = false;
+        _showDanmakuList = false;
+        _showDanmakuTracks = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
+        _showPlaybackRate = false;
+      });
+      
+      _danmakuOffsetOverlay = OverlayEntry(
+        builder: (context) => DanmakuOffsetMenu(
+          onClose: () {
+            _danmakuOffsetOverlay?.remove();
+            _danmakuOffsetOverlay = null;
+            setState(() => _showDanmakuOffset = false);
+          },
+        ),
+      );
+
+      Overlay.of(context).insert(_danmakuOffsetOverlay!);
     }
   }
 }

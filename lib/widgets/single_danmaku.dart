@@ -12,6 +12,7 @@ class SingleDanmaku extends StatefulWidget {
   final double yPosition;
   final double opacity;
   final DanmakuTextRenderer textRenderer;
+  final double timeOffset;
 
   const SingleDanmaku({
     super.key,
@@ -24,6 +25,7 @@ class SingleDanmaku extends StatefulWidget {
     required this.yPosition,
     this.opacity = 1.0,
     required this.textRenderer,
+    this.timeOffset = 0.0,
   });
 
   @override
@@ -79,8 +81,8 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
       return;
     }
 
-    // 计算弹幕相对于当前时间的位置
-    final timeDiff = widget.currentTime - widget.danmakuTime;
+    // 计算弹幕相对于当前时间的位置，应用时间偏移
+    final timeDiff = widget.currentTime - (widget.danmakuTime - widget.timeOffset);
     //print('[SINGLE_DANMAKU] 📍 "${widget.content.text}" 位置计算: 当前=${widget.currentTime.toStringAsFixed(3)}s, 弹幕=${widget.danmakuTime.toStringAsFixed(3)}s, 差=${timeDiff.toStringAsFixed(3)}s');
     final screenWidth = MediaQuery.of(context).size.width;
     
@@ -119,8 +121,8 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
           final totalDuration = duration + earlyStartTime; // 总时长11秒
           
           if (_isPaused) {
-            // 视频暂停时，根据暂停时间计算位置
-            final pauseTimeDiff = _pauseTime - widget.danmakuTime;
+            // 视频暂停时，根据暂停时间计算位置，应用时间偏移
+            final pauseTimeDiff = _pauseTime - (widget.danmakuTime - widget.timeOffset);
             final adjustedPauseTime = pauseTimeDiff + earlyStartTime; // 调整到[0, 11]范围
             _xPosition = startX - (adjustedPauseTime / totalDuration) * totalDistance;
           } else {
@@ -144,7 +146,7 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
         // 顶部弹幕：固定位置，居中显示
         _xPosition = (screenWidth - danmakuWidth) / 2;
         
-        // 只在显示时间内显示
+        // 应用时间偏移，只在显示时间内显示
         if (timeDiff < 0 || timeDiff > 5) {
           _opacity = 0;
         } else {
@@ -156,7 +158,7 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
         // 底部弹幕：固定位置，居中显示
         _xPosition = (screenWidth - danmakuWidth) / 2;
         
-        // 只在显示时间内显示
+        // 应用时间偏移，只在显示时间内显示
         if (timeDiff < 0 || timeDiff > 5) {
           _opacity = 0;
         } else {

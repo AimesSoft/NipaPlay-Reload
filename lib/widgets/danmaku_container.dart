@@ -19,6 +19,7 @@ class DanmakuContainer extends StatefulWidget {
   final String status; // 添加播放状态参数
   final double playbackRate; // 添加播放速度参数
   final double displayArea; // 弹幕轨道显示区域
+  final double timeOffset; // 弹幕时间偏移
   final Function(List<PositionedDanmakuItem>)? onLayoutCalculated;
 
   const DanmakuContainer({
@@ -32,6 +33,7 @@ class DanmakuContainer extends StatefulWidget {
     required this.status, // 添加播放状态参数
     required this.playbackRate, // 添加播放速度参数
     required this.displayArea, // 弹幕轨道显示区域
+    this.timeOffset = 0.0, // 弹幕时间偏移，默认无偏移
     this.onLayoutCalculated,
   });
 
@@ -94,6 +96,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   
   // 添加一个变量追踪屏蔽状态的哈希值
   String _lastBlockStateHash = '';
+  
+  // 缓存相关
+  Map<String, List<Map<String, dynamic>>> _groupedDanmakuCache = {};
+  double _lastGroupedTime = -1;
+  double? _lastTimeOffset;
 
   // 文本渲染器
   DanmakuTextRenderer? _textRenderer;
@@ -346,12 +353,12 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     final existingTime = existingDanmaku['time'] as double;
     final newTime = newDanmaku['time'] as double;
     
-    // 计算两个弹幕的显示时间范围
-    final existingStartTime = existingTime;
-    final existingEndTime = existingTime + 5; // 顶部和底部弹幕显示5秒
+    // 应用时间偏移计算显示时间范围
+    final existingStartTime = existingTime - widget.timeOffset;
+    final existingEndTime = existingStartTime + 5; // 顶部和底部弹幕显示5秒
     
-    final newStartTime = newTime;
-    final newEndTime = newTime + 5;
+    final newStartTime = newTime - widget.timeOffset;
+    final newEndTime = newStartTime + 5;
     
     // 增加安全时间间隔，避免弹幕过于接近
     const safetyTime = 0.5; // 0.5秒的安全时间
@@ -362,10 +369,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
 
   // 检查顶部/底部弹幕轨道密度
   bool _isStaticTrackFull(List<Map<String, dynamic>> trackDanmaku, double currentTime) {
-    // 只统计当前在屏幕内的弹幕
+    // 只统计当前在屏幕内的弹幕，考虑时间偏移
     final visibleDanmaku = trackDanmaku.where((danmaku) {
       final time = danmaku['time'] as double;
-      return currentTime - time >= 0 && currentTime - time <= 5;
+      final adjustedTime = time - widget.timeOffset;
+      return currentTime - adjustedTime >= 0 && currentTime - adjustedTime <= 5;
     }).toList();
     
     // 如果当前轨道有弹幕，就认为轨道已满
@@ -792,7 +800,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
                 if (danmakuType == DanmakuItemType.scroll) {
                   const duration = 10.0; // 保持10秒的移动时间
                   const earlyStartTime = 1.0; // 提前1秒开始
-                  final elapsed = widget.currentTime - time;
+                  final elapsed = widget.currentTime - (time - widget.timeOffset);
                   
                   if (elapsed >= -earlyStartTime && elapsed <= duration) {
                     // 🔥 修复：弹幕从更远的屏幕外开始，确保时间轴时间点时刚好在屏幕边缘
@@ -832,6 +840,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
                       yPosition: yPosition,
                       opacity: widget.opacity,
                       textRenderer: _textRenderer!,
+                      timeOffset: widget.timeOffset,
                     ),
                   );
                 }
@@ -856,13 +865,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     );
   }
   
-  // 缓存弹幕分组结果
-  Map<String, List<Map<String, dynamic>>> _groupedDanmakuCache = {
-    'scroll': <Map<String, dynamic>>[],
-    'top': <Map<String, dynamic>>[],
-    'bottom': <Map<String, dynamic>>[],
-  };
-  double _lastGroupedTime = 0;
+
   
   // 获取缓存的弹幕分组
   Map<String, List<Map<String, dynamic>>> _getCachedGroupedDanmaku(
@@ -873,14 +876,19 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     {bool force = false}
   ) {
     // 如果时间变化小于0.1秒且没有强制刷新，使用缓存
-    if (!force && (currentTime - _lastGroupedTime).abs() < 0.1 && _groupedDanmakuCache.isNotEmpty) {
+    // 但如果时间偏移变化了，需要强制刷新
+    final offsetChanged = (widget.timeOffset - (_lastTimeOffset ?? 0.0)).abs() > 0.001;
+    if (!force && !offsetChanged && (currentTime - _lastGroupedTime).abs() < 0.1 && _groupedDanmakuCache.isNotEmpty) {
       return _groupedDanmakuCache;
     }
 
-    // 使用已排序列表与二分查找获取可见窗口 [currentTime-10, currentTime]
-    final double windowStart = currentTime - 10.0;
+    // 使用已排序列表与二分查找获取可见窗口，考虑时间偏移
+    // 扩大窗口范围以支持时间偏移，确保偏移后的弹幕仍在可见范围内
+    final double maxOffset = widget.timeOffset.abs();
+    final double windowStart = currentTime - 15.0 - maxOffset; // 扩大窗口起始范围
+    final double windowEnd = currentTime + 15.0 + maxOffset;   // 扩大窗口结束范围
     final int left = _lowerBoundByTime(windowStart);
-    final int right = _upperBoundByTime(currentTime) - 1; // 右开区间转闭区间
+    final int right = _upperBoundByTime(windowEnd) - 1; // 右开区间转闭区间
     _visibleLeftIndex = left;
     _visibleRightIndex = right;
 
@@ -918,6 +926,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     // 更新缓存
     _groupedDanmakuCache = groupedDanmaku;
     _lastGroupedTime = currentTime;
+    _lastTimeOffset = widget.timeOffset;
     
     return groupedDanmaku;
   }

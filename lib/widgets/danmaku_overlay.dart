@@ -5,6 +5,7 @@ import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class DanmakuOverlay extends StatefulWidget {
@@ -38,8 +39,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
       // 弹幕不可见时，彻底不构建，避免文本排版消耗
       return const SizedBox.shrink();
     }
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
+    return Consumer2<VideoPlayerState, SettingsProvider>(
+      builder: (context, videoState, settingsProvider, child) {
         final kernelType = DanmakuKernelFactory.getKernelType();
 
         // 直接从videoState获取已处理好的弹幕列表
@@ -61,6 +62,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
                   status: videoState.status.toString(),
                   playbackRate: videoState.playbackRate,
                   displayArea: videoState.danmakuDisplayArea,
+                  timeOffset: settingsProvider.danmakuTimeOffset,
                   onLayoutCalculated: (danmaku) {
                     // Update state with the calculated positions
                     // a little hacky to avoid setState() called during build
@@ -102,6 +104,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           status: videoState.status.toString(),
           playbackRate: videoState.playbackRate,
           displayArea: videoState.danmakuDisplayArea,
+          timeOffset: settingsProvider.danmakuTimeOffset,
         );
       },
     );
