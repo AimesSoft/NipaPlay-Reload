@@ -773,13 +773,26 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           ),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
-                          _dandanplayWatchStatus[episode.id] == true ? '[弹弹play云同步]已看' : '',
-                          style: TextStyle(
-                            color: Colors.green.withOpacity(0.9),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_dandanplayWatchStatus[episode.id] == true)
+                              Icon(
+                                Ionicons.cloud,
+                                color: Colors.green.withOpacity(0.9),
+                                size: 12,
+                              ),
+                            if (_dandanplayWatchStatus[episode.id] == true)
+                              const SizedBox(width: 4),
+                            Text(
+                              _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
+                              style: TextStyle(
+                                color: Colors.green.withOpacity(0.9),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                   ],
