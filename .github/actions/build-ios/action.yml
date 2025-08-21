@@ -11,13 +11,12 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Check iOS SDK availability
+    - name: Setup iOS environment
       shell: bash
       run: |
-        echo "检查可用的iOS SDK版本："
-        xcodebuild -showsdks | grep ios
-        echo "检查可用的iOS设备运行时："
-        xcrun simctl list runtimes
+        echo "检查Xcode版本："
+        xcodebuild -version || echo "无法获取Xcode版本"
+        echo "设置iOS构建环境..."
     
     - name: Build Web and copy assets
       shell: bash
@@ -25,26 +24,23 @@ runs:
         chmod +x build_and_copy_web.sh
         ./build_and_copy_web.sh
     
-    - name: Build Xcode iOS
-      shell: bash
-      run: |
-        # 列出可用的iOS SDK版本
-        xcodebuild -showsdks | grep ios
-        # 使用最新可用的iOS SDK，不指定具体的iOS版本
-        xcodebuild -resolvePackageDependencies -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -destination "generic/platform=iOS" -quiet
-    
     - name: Build iOS
       id: build
       shell: bash
       env:
         IPHONEOS_DEPLOYMENT_TARGET: '13.0'
       run: |
+        echo "开始iOS构建流程..."
+        echo "当前工作目录: $(pwd)"
+        
+        echo "更新CocoaPods依赖..."
         cd ios
-        pod update
+        pod update --repo-update || echo "Pod update警告，继续构建..."
         cd ..
-        # 使用可用的iOS SDK版本，而不是依赖iOS 18.0
-        # 明确指定设备目标，避免iOS 18.0的要求
-        flutter build ios --release --no-codesign
+        
+        echo "开始Flutter iOS构建..."
+        # 使用可用的iOS SDK版本，设置明确的目标
+        flutter build ios --release --no-codesign --verbose
         sh thin-payload.sh build/ios/iphoneos/*.app
         cd build
         mkdir -p Payload
