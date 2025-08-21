@@ -363,10 +363,10 @@ class DandanplayService {
       print('昵称: $screenName');
       
       // 调试：打印当前的应用ID
-      print('[弹弹play服务] 当前应用ID: $appId');
+      //print('[弹弹play服务] 当前应用ID: $appId');
       
-      logService.addLog('[弹弹play服务] 开始注册流程', level: 'INFO', tag: 'Register');
-      logService.addLog('[弹弹play服务] 用户名: $username, 邮箱: $email, 昵称: $screenName', level: 'INFO', tag: 'Register');
+      //logService.addLog('[弹弹play服务] 开始注册流程', level: 'INFO', tag: 'Register');
+      //logService.addLog('[弹弹play服务] 用户名: $username, 邮箱: $email, 昵称: $screenName', level: 'INFO', tag: 'Register');
       
       // 验证参数（保持不变）
       if (username.length < 5 || username.length > 20) {
@@ -399,24 +399,24 @@ class DandanplayService {
         return {'success': false, 'message': '昵称不能为空且长度不能超过50个字符'};
       }
 
-      logService.addLog('[弹弹play服务] 参数验证通过，开始获取AppSecret', level: 'INFO', tag: 'Register');
+      //logService.addLog('[弹弹play服务] 参数验证通过，开始获取AppSecret', level: 'INFO', tag: 'Register');
       
       final appSecret = await getAppSecret();
       
       // 调试：打印获取的AppSecret
-      print('[弹弹play服务] 获取的AppSecret: ${appSecret.substring(0, 8)}...');
-      logService.addLog('[弹弹play服务] AppSecret获取成功', level: 'INFO', tag: 'Register');
+      //print('[弹弹play服务] 获取的AppSecret: ${appSecret.substring(0, 8)}...');
+      //logService.addLog('[弹弹play服务] AppSecret获取成功', level: 'INFO', tag: 'Register');
       
       final now = DateTime.now();
       final utcNow = now.toUtc();
       final timestamp = (utcNow.millisecondsSinceEpoch / 1000).round();
       
       // 计算hash：appId + password + unixTimestamp + userName + email + screenName + AppSecret
-      final hashString = '$appId$password$timestamp$username$email$screenName$appSecret';
+      final hashString = '$appId$email$password$screenName$timestamp$username$appSecret';
       final hash = md5.convert(utf8.encode(hashString)).toString();
       
-      logService.addLog('[弹弹play服务] Hash计算完成: ${hash.substring(0, 8)}...', level: 'INFO', tag: 'Register');
-      logService.addLog('[弹弹play服务] 时间戳: $timestamp', level: 'INFO', tag: 'Register');
+      //logService.addLog('[弹弹play服务] Hash计算完成: ${hash.substring(0, 8)}...', level: 'INFO', tag: 'Register');
+      //ogService.addLog('[弹弹play服务] 时间戳: $timestamp', level: 'INFO', tag: 'Register');
 
       final requestBody = {
         'appId': appId,
@@ -427,19 +427,8 @@ class DandanplayService {
         'unixTimestamp': timestamp,
         'hash': hash,
       };
-      
-      // 打印发送的JSON
-      print('[弹弹play服务] 发送的注册请求JSON:');
-      print(json.encode(requestBody));
-      logService.addLog('[弹弹play服务] 发送的注册请求JSON: ${json.encode(requestBody)}', level: 'DEBUG', tag: 'Register');
-      
-      logService.addLog('[弹弹play服务] 准备发送注册请求', level: 'INFO', tag: 'Register');
-
       // 调试：打印签名生成细节
       final signature = generateSignature(appId, timestamp, '/api/v2/register', appSecret);
-      print('[弹弹play服务] 生成的签名: ${signature.substring(0, 8)}...');
-      print('[弹弹play服务] 签名生成参数: appId=$appId, timestamp=$timestamp, apiPath=/api/v2/register, appSecret=${appSecret.substring(0, 8)}...');
-
       final response = await http.post(
         Uri.parse('https://api.dandanplay.net/api/v2/register'),
         headers: {
@@ -451,28 +440,19 @@ class DandanplayService {
         },
         body: json.encode(requestBody),
       );
-
-      logService.addLog('[弹弹play服务] 注册响应状态码: ${response.statusCode}', level: 'INFO', tag: 'Register');
-      logService.addLog('[弹弹play服务] 响应头: ${response.headers}', level: 'DEBUG', tag: 'Register');
-
-      // 打印接收到的响应JSON
-      print('[弹弹play服务] 接收到的注册响应JSON:');
-      print(response.body);
-      logService.addLog('[弹弹play服务] 接收到的注册响应JSON: ${response.body}', level: 'DEBUG', tag: 'Register');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        logService.addLog('[弹弹play服务] 注册响应体: ${json.encode(data)}', level: 'INFO', tag: 'Register');
+        //logService.addLog('[弹弹play服务] 注册响应体: ${json.encode(data)}', level: 'INFO', tag: 'Register');
         
         if (data['success'] == true) {
-          logService.addLog('[弹弹play服务] 注册成功', level: 'INFO', tag: 'Register');
+          //logService.addLog('[弹弹play服务] 注册成功', level: 'INFO', tag: 'Register');
           // 注册成功，如果响应中包含token，则自动登录
           if (data['token'] != null) {
             await saveLoginInfo(data['token'], username, screenName);
-            logService.addLog('[弹弹play服务] 注册成功并自动登录', level: 'INFO', tag: 'Register');
+            //logService.addLog('[弹弹play服务] 注册成功并自动登录', level: 'INFO', tag: 'Register');
             return {'success': true, 'message': '注册成功并已自动登录'};
           } else {
-            logService.addLog('[弹弹play服务] 注册成功，但未返回token', level: 'INFO', tag: 'Register');
+            //logService.addLog('[弹弹play服务] 注册成功，但未返回token', level: 'INFO', tag: 'Register');
             return {'success': true, 'message': '注册成功，请使用新账号登录'};
           }
         } else {
