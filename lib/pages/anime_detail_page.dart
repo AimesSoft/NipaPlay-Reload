@@ -147,7 +147,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     _bangumiService.cleanExpiredDetailCache().then((_) {
       debugPrint("[番剧详情] 已清理过期的番剧详情缓存");
     });
-    _fetchAnimeDetails();
+    _fetchAnimeDetails().then((_) {
+      // 如果初始化时默认打开剧集列表，立即获取云同步状态
+      if (_detailedAnime != null && 
+          _tabController!.index == 1 && 
+          DandanplayService.isLoggedIn) {
+        _fetchDandanplayWatchStatus(_detailedAnime!);
+      }
+    });
   }
 
   @override
@@ -172,7 +179,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     if (_tabController!.indexIsChanging) {
       // 当切换到剧集列表标签（索引1）时，刷新观看状态
       if (_tabController!.index == 1 && _detailedAnime != null && DandanplayService.isLoggedIn) {
-        _fetchDandanplayWatchStatus(_detailedAnime!);
+        // 只有在没有加载过状态时才获取
+        if (_dandanplayWatchStatus.isEmpty) {
+          _fetchDandanplayWatchStatus(_detailedAnime!);
+        }
       }
       setState(() {
         // 更新UI以显示新的页面
