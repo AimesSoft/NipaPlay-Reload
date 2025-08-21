@@ -176,7 +176,7 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
     contents.sort((a, b) {
       if (a is io.Directory && b is io.File) return -1;
       if (a is io.File && b is io.Directory) return 1;
-      
+
       int result = 0;
       switch (_sortOption) {
         case 0: result = p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase()); break;
@@ -188,6 +188,24 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
       }
       return result;
     });
+  }
+
+  // 对文件夹路径列表进行排序
+  List<String> _sortFolderPaths(List<String> folderPaths) {
+    final sortedPaths = List<String>.from(folderPaths);
+    sortedPaths.sort((a, b) {
+      int result = 0;
+      switch (_sortOption) {
+        case 0: result = p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()); break;
+        case 1: result = p.basename(b).toLowerCase().compareTo(p.basename(a).toLowerCase()); break;
+        case 2: result = io.File(a).statSync().modified.compareTo(io.File(b).statSync().modified); break;
+        case 3: result = io.File(b).statSync().modified.compareTo(io.File(a).statSync().modified); break;
+        case 4: result = 0.compareTo(0); break; // 文件夹大小排序对路径无效
+        case 5: result = 0.compareTo(0); break; // 文件夹大小排序对路径无效
+      }
+      return result;
+    });
+    return sortedPaths;
   }
 
   Future<void> _loadFolderChildren(String folderPath) async {
@@ -280,6 +298,9 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
       return const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center));
     }
 
+    // 对根文件夹进行排序
+    final sortedFolders = _sortFolderPaths(scanService.scannedFolders);
+
     // 检测是否为桌面或平板设备
     if (isDesktopOrTablet) {
       // 桌面和平板设备使用真正的瀑布流布局
@@ -294,6 +315,7 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
 
             return _buildWaterfallLayout(
               scanService,
+              sortedFolders,
               constraints.maxWidth,
               300.0,
               16.0,
@@ -305,9 +327,9 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
       // 移动设备使用单列ListView
       return ListView.builder(
         controller: _listScrollController,
-        itemCount: scanService.scannedFolders.length,
+        itemCount: sortedFolders.length,
         itemBuilder: (context, index) {
-          final folderPath = scanService.scannedFolders[index];
+          final folderPath = sortedFolders[index];
           return _buildFolderExpander(folderPath, scanService);
         },
       );
@@ -315,7 +337,7 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
   }
 
   // 真正的瀑布流布局组件
-  Widget _buildWaterfallLayout(ScanService scanService, double maxWidth, double minItemWidth, double spacing) {
+  Widget _buildWaterfallLayout(ScanService scanService, List<String> sortedFolders, double maxWidth, double minItemWidth, double spacing) {
     // 预留边距防止溢出
     final availableWidth = maxWidth - 16.0; // 留出16px的安全边距
 
@@ -332,10 +354,10 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
       columnFolders.add([]);
     }
 
-    // 按列分配文件夹
-    for (var i = 0; i < scanService.scannedFolders.length; i++) {
+    // 按列分配已排序的文件夹
+    for (var i = 0; i < sortedFolders.length; i++) {
       final columnIndex = i % crossAxisCount;
-      columnFolders[columnIndex].add(scanService.scannedFolders[i]);
+      columnFolders[columnIndex].add(sortedFolders[i]);
     }
 
     // 创建列组件

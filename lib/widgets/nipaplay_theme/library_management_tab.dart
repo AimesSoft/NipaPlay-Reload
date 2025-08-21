@@ -381,6 +381,40 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     });
   }
 
+  // 对文件夹路径列表进行排序
+  List<String> _sortFolderPaths(List<String> folderPaths) {
+    final sortedPaths = List<String>.from(folderPaths);
+    sortedPaths.sort((a, b) {
+      int result = 0;
+      switch (_sortOption) {
+        case 0: result = p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()); break;
+        case 1: result = p.basename(b).toLowerCase().compareTo(p.basename(a).toLowerCase()); break;
+        case 2:
+          try {
+            final aModified = io.File(a).statSync().modified;
+            final bModified = io.File(b).statSync().modified;
+            result = aModified.compareTo(bModified);
+          } catch (e) {
+            result = p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase());
+          }
+          break;
+        case 3:
+          try {
+            final aModified = io.File(a).statSync().modified;
+            final bModified = io.File(b).statSync().modified;
+            result = bModified.compareTo(aModified);
+          } catch (e) {
+            result = p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase());
+          }
+          break;
+        case 4: result = 0.compareTo(0); break; // 文件夹大小排序对路径无效
+        case 5: result = 0.compareTo(0); break; // 文件夹大小排序对路径无效
+      }
+      return result;
+    });
+    return sortedPaths;
+  }
+
   Future<void> _loadFolderChildren(String folderPath) async {
     // 检查是否已经在加载中，避免重复加载
     if (_loadingFolders.contains(folderPath)) {
@@ -1513,6 +1547,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 响应式文件夹列表构建方法
   Widget _buildResponsiveFolderList(ScanService scanService) {
+    // 对根文件夹进行排序
+    final sortedFolders = _sortFolderPaths(scanService.scannedFolders);
+
     // 检测是否为桌面或平板设备
     if (isDesktopOrTablet) {
       // 桌面和平板设备使用真正的瀑布流布局
@@ -1527,6 +1564,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             builder: (context, constraints) {
               return _buildWaterfallLayout(
                 scanService,
+                sortedFolders,
                 constraints.maxWidth,
                 300.0,
                 16.0,
@@ -1540,9 +1578,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       if (io.Platform.isAndroid || io.Platform.isIOS) {
         return ListView.builder(
           controller: _listScrollController,
-          itemCount: scanService.scannedFolders.length,
+          itemCount: sortedFolders.length,
           itemBuilder: (context, index) {
-            final folderPath = scanService.scannedFolders[index];
+            final folderPath = sortedFolders[index];
             return _buildFolderTile(folderPath, scanService);
           },
         );
@@ -1553,9 +1591,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           thickness: 4,
           child: ListView.builder(
             controller: _listScrollController,
-            itemCount: scanService.scannedFolders.length,
+            itemCount: sortedFolders.length,
             itemBuilder: (context, index) {
-              final folderPath = scanService.scannedFolders[index];
+              final folderPath = sortedFolders[index];
               return _buildFolderTile(folderPath, scanService);
             },
           ),
@@ -1565,7 +1603,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   // 真正的瀑布流布局组件
-  Widget _buildWaterfallLayout(ScanService scanService, double maxWidth, double minItemWidth, double spacing) {
+  Widget _buildWaterfallLayout(ScanService scanService, List<String> sortedFolders, double maxWidth, double minItemWidth, double spacing) {
     // 预留边距防止溢出
     final availableWidth = maxWidth - 16.0; // 留出16px的安全边距
 
@@ -1582,10 +1620,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       columnFolders.add([]);
     }
 
-    // 按列分配文件夹
-    for (var i = 0; i < scanService.scannedFolders.length; i++) {
+    // 按列分配已排序的文件夹
+    for (var i = 0; i < sortedFolders.length; i++) {
       final columnIndex = i % crossAxisCount;
-      columnFolders[columnIndex].add(scanService.scannedFolders[i]);
+      columnFolders[columnIndex].add(sortedFolders[i]);
     }
 
     // 创建列组件
