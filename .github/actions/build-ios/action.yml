@@ -29,6 +29,8 @@ runs:
       shell: bash
       env:
         IPHONEOS_DEPLOYMENT_TARGET: '13.0'
+        FLUTTER_XCODE_IPHONEOS_DEPLOYMENT_TARGET: '13.0'
+        XCODE_SDK: 'iphoneos'
       run: |
         echo "开始iOS构建流程..."
         echo "当前工作目录: $(pwd)"
@@ -36,11 +38,34 @@ runs:
         echo "更新CocoaPods依赖..."
         cd ios
         pod update --repo-update || echo "Pod update警告，继续构建..."
+        
+        # 修改Xcode项目设置，强制使用可用的iOS SDK
+        echo "修改Xcode项目配置..."
+        # 获取可用的iOS SDK版本号
+        AVAILABLE_SDK_VERSION=$(xcodebuild -showsdks | grep iphoneos | tail -1 | sed 's/.*iphoneos//' | tr -d ' ')
+        if [ ! -z "$AVAILABLE_SDK_VERSION" ]; then
+          echo "强制设置iOS SDK版本为: $AVAILABLE_SDK_VERSION"
+          # 使用sed修改project.pbxproj中的IPHONEOS_DEPLOYMENT_TARGET
+          sed -i.bak "s/IPHONEOS_DEPLOYMENT_TARGET = [^;]*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g" Runner.xcodeproj/project.pbxproj
+        fi
+        
         cd ..
         
         echo "开始Flutter iOS构建..."
-        # 使用可用的iOS SDK版本，设置明确的目标
-        flutter build ios --release --no-codesign --verbose
+        # 获取系统上实际可用的最高iOS SDK版本
+        AVAILABLE_SDK=$(xcodebuild -showsdks | grep iphoneos | tail -1 | awk '{print $NF}')
+        echo "系统可用的iOS SDK: $AVAILABLE_SDK"
+        
+        # 如果检测到SDK，显式设置使用该SDK
+        if [ ! -z "$AVAILABLE_SDK" ]; then
+          echo "使用SDK: $AVAILABLE_SDK"
+          export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+          # 强制Flutter使用检测到的SDK版本
+          flutter build ios --release --no-codesign --verbose --dart-define=FLUTTER_XCODE_SDK=$AVAILABLE_SDK
+        else
+          echo "未检测到iOS SDK，使用默认构建..."
+          flutter build ios --release --no-codesign --verbose
+        fi
         sh thin-payload.sh build/ios/iphoneos/*.app
         cd build
         mkdir -p Payload
