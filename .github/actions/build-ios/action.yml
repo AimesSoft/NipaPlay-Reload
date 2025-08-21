@@ -14,9 +14,30 @@ runs:
     - name: Setup iOS environment
       shell: bash
       run: |
-        echo "检查Xcode版本："
-        xcodebuild -version || echo "无法获取Xcode版本"
-        echo "设置iOS构建环境..."
+        echo "=== 系统环境检查 ==="
+        echo "运行的机器类型: $(sw_vers -productName) $(sw_vers -productVersion)"
+        echo "CPU架构: $(uname -m)"
+        echo "可用磁盘空间:"
+        df -h
+        
+        echo "=== Xcode环境检查 ==="
+        if command -v xcodebuild &> /dev/null; then
+          echo "✅ Xcode已安装"
+          xcodebuild -version
+        else
+          echo "❌ 错误：未发现Xcode"
+          exit 1
+        fi
+        
+        echo "=== iOS SDK检查 ==="
+        echo "可用的iOS SDK:"
+        xcodebuild -showsdks | grep ios || echo "❌ 未发现iOS SDK"
+        
+        echo "=== 可用destinations检查 ==="
+        echo "可用的iOS构建目标:"
+        xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -showdestinations 2>/dev/null | grep "platform:iOS" || echo "❌ 无可用iOS目标"
+        
+        echo "设置iOS构建环境完成"
     
     - name: Build Web and copy assets
       shell: bash
@@ -61,7 +82,13 @@ runs:
           echo "使用SDK: $AVAILABLE_SDK"
           export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
           # 强制Flutter使用检测到的SDK版本
-          flutter build ios --release --no-codesign --verbose --dart-define=FLUTTER_XCODE_SDK=$AVAILABLE_SDK
+          echo "开始第一次构建尝试..."
+          if ! flutter build ios --release --no-codesign --verbose --dart-define=FLUTTER_XCODE_SDK=$AVAILABLE_SDK; then
+            echo "⚠️ 第一次构建失败，等待30秒后重试..."
+            sleep 30
+            echo "开始第二次构建尝试..."
+            flutter build ios --release --no-codesign --verbose
+          fi
         else
           echo "未检测到iOS SDK，使用默认构建..."
           flutter build ios --release --no-codesign --verbose

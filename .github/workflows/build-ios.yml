@@ -18,7 +18,8 @@ on:
 jobs:
   build:
     name: Build iOS IPA
-    runs-on: macos-latest
+    runs-on: macos-14
+    timeout-minutes: 60
     outputs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-iOS
