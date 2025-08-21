@@ -12,27 +12,14 @@ import 'storage_service.dart';
 
 // 用于在 isolate 中处理图片的函数
 Future<Uint8List> _processImageInIsolate(Uint8List imageData) async {
-  // 使用image包解码和压缩图片
+  // 使用image包解码图片
   final image = img.decodeImage(imageData);
   if (image == null) {
     throw Exception('Failed to decode image');
   }
 
-  // 计算目标尺寸
-  const targetWidth = 512;
-  final scale = targetWidth / image.width;
-  final targetHeight = (image.height * scale).round();
-
-  // 压缩图片
-  final resizedImage = img.copyResize(
-    image,
-    width: targetWidth,
-    height: targetHeight,
-    interpolation: img.Interpolation.linear,
-  );
-
-  // 将压缩后的图片转换为字节，使用最低的JPEG质量
-  return Uint8List.fromList(img.encodeJpg(resizedImage, quality: 100));
+  // 直接返回原始图片数据
+  return imageData;
 }
 
 class ImageCacheManager {
@@ -41,7 +28,6 @@ class ImageCacheManager {
   final Map<String, Completer<ui.Image>> _loading = {};
   final Map<String, int> _refCount = {};
   final Map<String, DateTime> _lastAccessed = {}; // 跟踪图片最后访问时间
-  static const int targetWidth = 512;
   static const Duration _maxCacheAge = Duration(minutes: 10); // 最大缓存时间
   Directory? _cacheDir;
   bool _isInitialized = false;
@@ -131,16 +117,16 @@ class ImageCacheManager {
         }
 
         // 在单独的 isolate 中处理图片
-        final compressedBytes = await compute(_processImageInIsolate, response.bodyBytes);
+        final processedBytes = await compute(_processImageInIsolate, response.bodyBytes);
 
         // 保存到本地缓存
         if (!kIsWeb) {
           final cacheFile = await _getCacheFile(url);
-          await cacheFile.writeAsBytes(compressedBytes);
+          await cacheFile.writeAsBytes(processedBytes);
         }
 
-        // 解码压缩后的图片数据
-        final codec = await ui.instantiateImageCodec(compressedBytes);
+        // 解码图片数据
+        final codec = await ui.instantiateImageCodec(processedBytes);
         final frame = await codec.getNextFrame();
         final uiImage = frame.image;
 

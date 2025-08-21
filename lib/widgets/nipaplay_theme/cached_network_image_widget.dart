@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'loading_placeholder.dart';
+import 'package:http/http.dart' as http;
 
 class CachedNetworkImageWidget extends StatefulWidget {
   final String imageUrl;
@@ -11,6 +12,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final Widget Function(BuildContext, Object)? errorBuilder;
   final bool shouldRelease;
   final Duration fadeDuration;
+  final bool shouldCompress;  // 新增参数，控制是否压缩图片
 
   const CachedNetworkImageWidget({
     super.key,
@@ -21,6 +23,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
     this.errorBuilder,
     this.shouldRelease = true,
     this.fadeDuration = const Duration(milliseconds: 300),
+    this.shouldCompress = true,  // 默认为true，保持原有行为
   });
 
   @override
@@ -64,8 +67,51 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   void _loadImage() {
     if (_currentUrl == widget.imageUrl || _isDisposed) return;
     _currentUrl = widget.imageUrl;
-    _imageFuture = ImageCacheManager.instance.loadImage(widget.imageUrl);
+    
+    // 立即加载基础图片
+    _loadBasicImage();
+    
+    // 异步加载高清图片
+    if (widget.shouldCompress) {
+      _imageFuture = ImageCacheManager.instance.loadImage(widget.imageUrl);
+    } else {
+      _imageFuture = _loadOriginalImage(widget.imageUrl);
+    }
   }
+
+  // 新增方法：立即加载基础图片
+  void _loadBasicImage() async {
+    try {
+      final response = await http.get(Uri.parse(widget.imageUrl));
+      if (response.statusCode == 200) {
+        final codec = await ui.instantiateImageCodec(response.bodyBytes);
+        final frame = await codec.getNextFrame();
+        
+        // 如果组件还在使用，更新基础图片
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _basicImage = frame.image;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('加载基础图片失败: $e');
+    }
+  }
+
+  // 新增方法：直接加载原始图片，不进行压缩
+  Future<ui.Image> _loadOriginalImage(String imageUrl) async {
+    final response = await http.get(Uri.parse(imageUrl));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load image');
+    }
+    final codec = await ui.instantiateImageCodec(response.bodyBytes);
+    final frame = await codec.getNextFrame();
+    return frame.image;
+  }
+
+  // 添加基础图片字段
+  ui.Image? _basicImage;
 
   // 安全获取图片，添加多重保护
   ui.Image? _getSafeImage(ui.Image? image) {
@@ -98,6 +144,18 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       return SizedBox(
         width: widget.width,
         height: widget.height,
+      );
+    }
+
+    // 优先显示基础图片
+    if (_basicImage != null) {
+      return SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: SafeRawImage(
+          image: _basicImage,
+          fit: widget.fit,
+        ),
       );
     }
 

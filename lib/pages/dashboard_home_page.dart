@@ -21,6 +21,7 @@ import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/cached_network_image_widget.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
 import 'package:nipaplay/pages/jellyfin_detail_page.dart';
 import 'package:nipaplay/pages/emby_detail_page.dart';
@@ -70,8 +71,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   bool _cachedPlayerActiveState = false;
   DateTime _lastPlayerStateCheck = DateTime.now();
 
-  // 图片缓存 - 存储下载好的图片对象
-  final Map<String, Image> _cachedImages = {}; // imageUrl -> ui.Image
+  // 移除老的图片缓存系统，现在使用 CachedNetworkImageWidget
 
   // 最近添加数据 - 按媒体库分类
   Map<String, List<JellyfinMediaItem>> _recentJellyfinItemsByLibrary = {};
@@ -745,6 +745,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         allCandidates.shuffle(math.Random());
         selectedCandidates = allCandidates.take(7).toList();
         debugPrint('从${allCandidates.length}个候选项目中随机选择了${selectedCandidates.length}个');
+      }
+
+      // 第二点五步：预加载本地媒体项目的图片缓存，确保立即显示
+      final localAnimeIds = selectedCandidates
+          .where((item) => item is WatchHistoryItem && item.animeId != null)
+          .map((item) => (item as WatchHistoryItem).animeId!)
+          .toSet();
+      if (localAnimeIds.isNotEmpty) {
+        await _loadPersistedLocalImageUrls(localAnimeIds);
+        debugPrint('预加载了 ${localAnimeIds.length} 个本地推荐项目的图片缓存');
       }
 
       // 第三步：快速构建基础推荐项目，先用缓存的封面图片
@@ -1449,24 +1459,15 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 背景图 - 优先使用缓存的图片
-            if (_cachedImages.containsKey(item.backgroundImageUrl))
-              _cachedImages[item.backgroundImageUrl]!
-            else if (item.backgroundImageUrl != null)
-              Image.network(
-                item.backgroundImageUrl!,
+            // 背景图 - 使用高效缓存组件
+            if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
+              CachedNetworkImageWidget(
                 key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
+                imageUrl: item.backgroundImageUrl!,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    color: Colors.white10,
-                    child: const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) => Container(
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (context, error) => Container(
                   color: Colors.white10,
                   child: const Center(
                     child: Icon(Icons.broken_image, color: Colors.white30),
@@ -1551,8 +1552,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 ),
               ),
             
-            // 左下角Logo - 优先使用缓存的图片
-            if (_cachedImages.containsKey(item.logoImageUrl))
+            // 左下角Logo - 使用高效缓存组件
+            if (item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty)
               Positioned(
                 left: 32,
                 bottom: 32,
@@ -1562,7 +1563,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                       maxWidth: compact ? 120 : 200, // 手机端更小
                       maxHeight: compact ? 50 : 80,  // 手机端更小
                     ),
-                    child: _cachedImages[item.logoImageUrl]!,
+                    child: CachedNetworkImageWidget(
+                      key: ValueKey('hero_logo_${item.id}_${item.logoImageUrl}'),
+                      imageUrl: item.logoImageUrl!,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               )
@@ -1679,28 +1684,15 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 背景图 - 优先使用缓存的图片
-            if (_cachedImages.containsKey(item.backgroundImageUrl))
-              _cachedImages[item.backgroundImageUrl]!
-            else if (item.backgroundImageUrl != null)
-              Image.network(
-                item.backgroundImageUrl!,
+            // 背景图 - 使用高效缓存组件
+            if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
+              CachedNetworkImageWidget(
                 key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
+                imageUrl: item.backgroundImageUrl!,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    color: Colors.white10,
-                    child: const Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) => Container(
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (context, error) => Container(
                   color: Colors.white10,
                   child: const Center(
                     child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
@@ -1786,8 +1778,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               ),
             
             // 左下角小Logo（如果有的话）
-            // Logo图片 - 优先使用缓存
-            if (_cachedImages.containsKey(item.logoImageUrl))
+            // Logo图片 - 使用高效缓存组件
+            if (item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty)
               Positioned(
                 left: 8,
                 bottom: 8,
@@ -1796,7 +1788,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     maxWidth: 120,
                     maxHeight: 45,
                   ),
-                  child: _cachedImages[item.logoImageUrl]!,
+                  child: CachedNetworkImageWidget(
+                    key: ValueKey('small_logo_${item.id}_${item.logoImageUrl}_$index'),
+                    imageUrl: item.logoImageUrl!,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               )
             else if (item.logoImageUrl != null)
@@ -2883,13 +2879,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           }
         });
         
-        // 预加载新的高清图片
-        if (upgradedItem.backgroundImageUrl != null && upgradedItem.backgroundImageUrl!.isNotEmpty) {
-          _downloadAndCacheImage(upgradedItem.backgroundImageUrl!, 'background_${upgradedItem.id}');
-        }
-        if (upgradedItem.logoImageUrl != null && upgradedItem.logoImageUrl!.isNotEmpty) {
-          _downloadAndCacheImage(upgradedItem.logoImageUrl!, 'logo_${upgradedItem.id}');
-        }
+        // CachedNetworkImageWidget 会自动处理图片预加载和缓存
         
         debugPrint('项目 ${upgradedItem.title} 已升级为高清版本');
       }
@@ -2920,41 +2910,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   
 
 
-  // 下载并缓存单个图片
-  Future<void> _downloadAndCacheImage(String imageUrl, String cacheKey) async {
-    try {
-      // 已缓存则跳过重复下载
-      if (_cachedImages.containsKey(imageUrl)) {
-        debugPrint('图片已缓存，跳过下载: $imageUrl');
-        return;
-      }
-      debugPrint('下载图片: $imageUrl');
-      
-      final response = await http.get(Uri.parse(imageUrl)).timeout(
-        const Duration(seconds: 10),
-      );
-      
-      if (response.statusCode == 200) {
-        // 解码图片数据
-        final codec = await instantiateImageCodec(response.bodyBytes);
-        final frame = await codec.getNextFrame();
-        final image = frame.image;
-        
-        // 缓存图片对象
-        _cachedImages[imageUrl] = Image.memory(
-          response.bodyBytes,
-          key: ValueKey(cacheKey),
-          fit: BoxFit.cover,
-        );
-        
-        debugPrint('图片下载并缓存成功: $imageUrl (${image.width}x${image.height})');
-      } else {
-        debugPrint('图片下载失败: $imageUrl, 状态码: ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('下载图片时发生错误: $imageUrl, 错误: $e');
-    }
-  }
+  // 已移除老的图片下载缓存函数，现在使用 CachedNetworkImageWidget 的内置缓存系统
 
   // 辅助方法：尝试获取Jellyfin图片 - 带验证与回退，按优先级返回第一个有效URL
   Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
