@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -16,8 +15,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_sort_dialog.dart';
-import 'package:nipaplay/widgets/emby_sort_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/media_library_sort_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_library_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/emby_library_card.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -552,14 +550,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   // 显示排序对话框
   Future<void> _showSortDialog() async {
-    switch (widget.serverType) {
-      case NetworkMediaServerType.jellyfin:
-        await JellyfinSortDialog.show(context, currentSortBy: 'name', currentSortOrder: 'asc');
-        break;
-      case NetworkMediaServerType.emby:
-        await EmbySortDialog.show(context, currentSortBy: 'name', currentSortOrder: 'asc');
-        break;
-    }
+    final MediaLibraryType libraryType = widget.serverType == NetworkMediaServerType.jellyfin 
+        ? MediaLibraryType.jellyfin 
+        : MediaLibraryType.emby;
+    
+    await MediaLibrarySortDialog.show(
+      context, 
+      currentSortBy: 'name', 
+      currentSortOrder: 'asc',
+      libraryType: libraryType,
+    );
   }
 
 

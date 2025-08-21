@@ -1,98 +1,155 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 
-class EmbySortOption {
+/// 媒体库类型枚举
+enum MediaLibraryType {
+  emby,
+  jellyfin,
+}
+
+/// 排序选项模型
+class MediaSortOption {
   final String value;
   final String label;
   final String description;
 
-  const EmbySortOption({
+  const MediaSortOption({
     required this.value,
     required this.label,
     required this.description,
   });
 }
 
-class EmbySortDialog extends StatefulWidget {
+/// 通用媒体库排序弹窗
+class MediaLibrarySortDialog extends StatefulWidget {
   final String currentSortBy;
   final String currentSortOrder;
+  final MediaLibraryType libraryType;
 
-  const EmbySortDialog({
+  const MediaLibrarySortDialog({
     super.key,
     required this.currentSortBy,
     required this.currentSortOrder,
+    required this.libraryType,
   });
 
+  /// 显示排序弹窗
   static Future<Map<String, String>?> show(
     BuildContext context, {
     required String currentSortBy,
     required String currentSortOrder,
+    required MediaLibraryType libraryType,
   }) {
     return showDialog<Map<String, String>>(
       context: context,
-      builder: (context) => EmbySortDialog(
+      builder: (context) => MediaLibrarySortDialog(
         currentSortBy: currentSortBy,
         currentSortOrder: currentSortOrder,
+        libraryType: libraryType,
       ),
     );
   }
 
   @override
-  State<EmbySortDialog> createState() => _EmbySortDialogState();
+  State<MediaLibrarySortDialog> createState() => _MediaLibrarySortDialogState();
 }
 
-class _EmbySortDialogState extends State<EmbySortDialog> {
+class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
   late String _selectedSortBy;
   late String _selectedSortOrder;
 
-  // 可用的排序选项 - 基于Emby API文档
-  static const List<EmbySortOption> _sortOptions = [
-    EmbySortOption(
-      value: 'DateCreated',
+  /// Jellyfin 排序选项
+  static const List<MediaSortOption> _jellyfinSortOptions = [
+    MediaSortOption(
+      value: 'DateCreated,SortName',
       label: '创建时间',
       description: '按文件创建时间排序',
     ),
-    EmbySortOption(
+    MediaSortOption(
       value: 'SortName',
       label: '名称',
       description: '按名称字母顺序排序',
     ),
-    EmbySortOption(
+    MediaSortOption(
       value: 'PremiereDate',
       label: '首播日期',
       description: '按首播日期排序',
     ),
-    EmbySortOption(
+    MediaSortOption(
       value: 'DatePlayed',
       label: '播放时间',
       description: '按最后播放时间排序',
     ),
-    EmbySortOption(
+    MediaSortOption(
       value: 'ProductionYear',
       label: '制作年份',
       description: '按制作年份排序',
     ),
-    EmbySortOption(
+    MediaSortOption(
       value: 'CommunityRating',
       label: '社区评分',
       description: '按社区评分排序',
     ),
-    EmbySortOption(
-      value: 'CriticRating',
-      label: '影评人评分',
-      description: '按影评人评分排序',
-    ),
-    EmbySortOption(
+    MediaSortOption(
       value: 'Runtime',
       label: '时长',
       description: '按视频时长排序',
     ),
-    EmbySortOption(
+    MediaSortOption(
       value: 'PlayCount',
       label: '播放次数',
       description: '按播放次数排序',
     ),
-    EmbySortOption(
+  ];
+
+  /// Emby 排序选项
+  static const List<MediaSortOption> _embySortOptions = [
+    MediaSortOption(
+      value: 'DateCreated',
+      label: '创建时间',
+      description: '按文件创建时间排序',
+    ),
+    MediaSortOption(
+      value: 'SortName',
+      label: '名称',
+      description: '按名称字母顺序排序',
+    ),
+    MediaSortOption(
+      value: 'PremiereDate',
+      label: '首播日期',
+      description: '按首播日期排序',
+    ),
+    MediaSortOption(
+      value: 'DatePlayed',
+      label: '播放时间',
+      description: '按最后播放时间排序',
+    ),
+    MediaSortOption(
+      value: 'ProductionYear',
+      label: '制作年份',
+      description: '按制作年份排序',
+    ),
+    MediaSortOption(
+      value: 'CommunityRating',
+      label: '社区评分',
+      description: '按社区评分排序',
+    ),
+    MediaSortOption(
+      value: 'CriticRating',
+      label: '影评人评分',
+      description: '按影评人评分排序',
+    ),
+    MediaSortOption(
+      value: 'Runtime',
+      label: '时长',
+      description: '按视频时长排序',
+    ),
+    MediaSortOption(
+      value: 'PlayCount',
+      label: '播放次数',
+      description: '按播放次数排序',
+    ),
+    MediaSortOption(
       value: 'Random',
       label: '随机',
       description: '随机排序',
@@ -103,6 +160,26 @@ class _EmbySortDialogState extends State<EmbySortDialog> {
     {'value': 'Ascending', 'label': '升序'},
     {'value': 'Descending', 'label': '降序'},
   ];
+
+  /// 根据媒体库类型获取排序选项
+  List<MediaSortOption> get _sortOptions {
+    switch (widget.libraryType) {
+      case MediaLibraryType.emby:
+        return _embySortOptions;
+      case MediaLibraryType.jellyfin:
+        return _jellyfinSortOptions;
+    }
+  }
+
+  /// 获取弹窗标题
+  String get _dialogTitle {
+    switch (widget.libraryType) {
+      case MediaLibraryType.emby:
+        return 'Emby 排序设置';
+      case MediaLibraryType.jellyfin:
+        return 'Jellyfin 排序设置';
+    }
+  }
 
   @override
   void initState() {
@@ -158,9 +235,9 @@ class _EmbySortDialogState extends State<EmbySortDialog> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // 标题
-                  const Text(
-                    'Emby 排序设置',
-                    style: TextStyle(
+                  Text(
+                    _dialogTitle,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -181,7 +258,7 @@ class _EmbySortDialogState extends State<EmbySortDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
                   Container(
                     constraints: const BoxConstraints(maxHeight: 200),
                     child: ListView.builder(
