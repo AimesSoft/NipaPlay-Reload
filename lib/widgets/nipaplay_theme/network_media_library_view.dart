@@ -149,16 +149,33 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _loadData();
+        final provider = _provider;
+        provider.addListener(_onProviderChanged);
+        _loadData(); // Initial load based on current provider state
       }
     });
   }
 
   @override
   void dispose() {
+    try {
+      if (mounted) {
+        final provider = _provider;
+        provider.removeListener(_onProviderChanged);
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print("Error removing Provider listener in NetworkMediaLibraryView: $e");
+    }
     _refreshTimer?.cancel();
     _gridScrollController.dispose();
     super.dispose();
+  }
+
+  void _onProviderChanged() {
+    if (mounted) {
+      _loadData();
+    }
   }
 
   // 获取对应的provider和service
@@ -256,21 +273,32 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
     return Stack(
       children: [
-        GridView.builder(
-          controller: _gridScrollController,
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 400,
-            childAspectRatio: 16 / 9,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
+        RepaintBoundary(
+          child: Scrollbar(
+            controller: _gridScrollController,
+            thickness: 4,
+            radius: const Radius.circular(2),
+            child: GridView.builder(
+              controller: _gridScrollController,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 400,
+                childAspectRatio: 16 / 9,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              padding: const EdgeInsets.all(20),
+              cacheExtent: 800,
+              clipBehavior: Clip.hardEdge,
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
+              itemCount: selectedLibraries.length,
+              itemBuilder: (context, index) {
+                final library = selectedLibraries[index];
+                return _buildLibraryCard(library);
+              },
+            ),
           ),
-          padding: const EdgeInsets.all(20),
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          itemCount: selectedLibraries.length,
-          itemBuilder: (context, index) {
-            final library = selectedLibraries[index];
-            return _buildLibraryCard(library);
-          },
         ),
         // 右下角按钮组
         _buildFloatingActionButtons(),
@@ -290,12 +318,23 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('加载失败: $_error', style: const TextStyle(color: Colors.white70)),
+              Text('加载媒体库内容失败: $_error', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 16),
-              BlurButton(
-                icon: Icons.refresh,
-                text: '重试',
-                onTap: () => _loadLibraryContent(_selectedLibraryId!),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  BlurButton(
+                    icon: Icons.refresh,
+                    text: '重试',
+                    onTap: () => _loadLibraryContent(_selectedLibraryId!),
+                  ),
+                  const SizedBox(width: 16),
+                  BlurButton(
+                    icon: Icons.arrow_back,
+                    text: '返回',
+                    onTap: _backToLibraries,
+                  ),
+                ],
               ),
             ],
           ),
@@ -306,11 +345,35 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     if (_mediaItems.isEmpty) {
       return Stack(
         children: [
-          const Center(
-            child: Text(
-              '该媒体库暂无内容',
-              style: TextStyle(color: Colors.grey, fontSize: 16),
-            ),
+          Column(
+            children: [
+              // 顶部导航栏
+              _buildTopNavigationBar(provider),
+              // 空内容提示
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          '该媒体库为空。',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                        const SizedBox(height: 16),
+                        BlurButton(
+                          icon: Icons.arrow_back,
+                          text: '返回媒体库列表',
+                          onTap: _backToLibraries,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           _buildFloatingActionButtons(),
         ],
@@ -319,25 +382,110 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
     return Stack(
       children: [
-        GridView.builder(
-          controller: _gridScrollController,
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 150,
-            childAspectRatio: 7/12,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-          ),
-          padding: const EdgeInsets.all(16),
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          itemCount: _mediaItems.length,
-          itemBuilder: (context, index) {
-            final item = _mediaItems[index];
-            return _buildMediaCard(item);
-          },
+        Column(
+          children: [
+            // 顶部导航栏
+            _buildTopNavigationBar(provider),
+            // 媒体内容网格
+            Expanded(
+              child: RepaintBoundary(
+                child: Scrollbar(
+                  controller: _gridScrollController,
+                  thickness: 4,
+                  radius: const Radius.circular(2),
+                  child: GridView.builder(
+                    controller: _gridScrollController,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 150,
+                      childAspectRatio: 7/12,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    cacheExtent: 800,
+                    clipBehavior: Clip.hardEdge,
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: true,
+                    itemCount: _mediaItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _mediaItems[index];
+                      return _buildMediaCard(item);
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         _buildFloatingActionButtons(),
       ],
     );
+  }
+
+  Widget _buildTopNavigationBar(dynamic provider) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(24), // 圆形
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(24), // 圆形
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(24), // 圆形
+                    onTap: _backToLibraries,
+                    child: const Center(
+                      child: Icon(
+                        Icons.chevron_left,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              _getSelectedLibraryName(provider),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 获取选中媒体库的名称
+  String _getSelectedLibraryName(dynamic provider) {
+    if (_selectedLibraryId == null) return '媒体库';
+    
+    final selectedLibraries = _getSelectedLibraries(provider);
+    final library = selectedLibraries.where((lib) => lib.id == _selectedLibraryId);
+    
+    if (library.isEmpty) return '媒体库';
+    
+    return library.first.name;
   }
 
   Widget _buildFloatingActionButtons() {
@@ -395,20 +543,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       case NetworkMediaServerType.jellyfin:
         final jellyfinItem = (item as JellyfinMediaItemAdapter).originalItem;
         uniqueId = 'jellyfin_${jellyfinItem.id}';
-        try {
-          imageUrl = JellyfinService.instance.getImageUrl(jellyfinItem.id);
-        } catch (e) {
-          imageUrl = '';
-        }
+        imageUrl = jellyfinItem.imagePrimaryTag != null
+            ? JellyfinService.instance.getImageUrl(jellyfinItem.id, width: 300)
+            : '';
         break;
       case NetworkMediaServerType.emby:
         final embyItem = (item as EmbyMediaItemAdapter).originalItem;
         uniqueId = 'emby_${embyItem.id}';
-        try {
-          imageUrl = EmbyService.instance.getImageUrl(embyItem.id);
-        } catch (e) {
-          imageUrl = '';
-        }
+        imageUrl = embyItem.imagePrimaryTag != null
+            ? EmbyService.instance.getImageUrl(embyItem.id, width: 300)
+            : '';
         break;
     }
 
@@ -444,11 +588,79 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     if (!mounted) return;
     
     final provider = _provider;
-    if (provider.isConnected && provider.selectedLibraryIds.isNotEmpty) {
-      // 如果已连接且有选中的媒体库，不需要特别处理
+    
+    if (!provider.isConnected || provider.selectedLibraryIds.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _mediaItems.clear();
+          _error = null;
+          _selectedLibraryId = null;
+          _isShowingLibraryContent = false;
+        });
+      }
+      return;
+    }
+
+    // 如果当前正在显示单个媒体库内容，不要重新加载全局内容
+    if (_isShowingLibraryContent && _selectedLibraryId != null) {
+      return;
+    }
+
+    if (mounted) {
       setState(() {
         _error = null;
       });
+    }
+
+    try {
+      final service = _service;
+      List<dynamic> items;
+      
+      switch (widget.serverType) {
+        case NetworkMediaServerType.jellyfin:
+          items = await (service as JellyfinService).getLatestMediaItems(
+            limit: 99999,
+            sortBy: provider.currentSortBy,
+            sortOrder: provider.currentSortOrder,
+          );
+          break;
+        case NetworkMediaServerType.emby:
+          items = await (service as EmbyService).getLatestMediaItems(
+            limitPerLibrary: 99999,
+            totalLimit: 99999,
+            sortBy: provider.currentSortBy,
+            sortOrder: provider.currentSortOrder,
+          );
+          break;
+      }
+      
+      if (mounted && !_isShowingLibraryContent) {
+        setState(() {
+          _mediaItems = _convertToNetworkMediaItems(items);
+        });
+      }
+      _setupRefreshTimer();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  // 返回媒体库列表
+  void _backToLibraries() {
+    if (mounted) {
+      setState(() {
+        _selectedLibraryId = null;
+        _isShowingLibraryContent = false;
+        _mediaItems.clear(); // 清空当前媒体项
+        _error = null;
+      });
+      
+      // 重新加载数据以同步最新的媒体库状态
+      _loadData();
     }
   }
 
@@ -471,14 +683,28 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     
     try {
       final service = _service;
+      final provider = _provider;
       List<dynamic> items;
+      
+      // 获取该媒体库的排序设置
+      final sortSettings = provider.getLibrarySortSettings(libraryId);
       
       switch (widget.serverType) {
         case NetworkMediaServerType.jellyfin:
-          items = await (service as JellyfinService).getLatestMediaItemsByLibrary(libraryId, limit: 50);
+          items = await (service as JellyfinService).getLatestMediaItemsByLibrary(
+            libraryId,
+            limit: 99999,
+            sortBy: sortSettings['sortBy']!,
+            sortOrder: sortSettings['sortOrder']!,
+          );
           break;
         case NetworkMediaServerType.emby:
-          items = await (service as EmbyService).getLatestMediaItemsByLibrary(libraryId, limit: 50);
+          items = await (service as EmbyService).getLatestMediaItemsByLibrary(
+            libraryId,
+            limit: 99999,
+            sortBy: sortSettings['sortBy']!,
+            sortOrder: sortSettings['sortOrder']!,
+          );
           break;
       }
       
@@ -489,6 +715,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _error = null;
         });
       }
+      _setupRefreshTimer();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -497,6 +724,18 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         });
       }
     }
+  }
+
+  // 设置刷新定时器
+  void _setupRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(minutes: 60), (timer) {
+      if (_isShowingLibraryContent && _selectedLibraryId != null) {
+        _loadLibraryContent(_selectedLibraryId!);
+      } else {
+        _loadData();
+      }
+    });
   }
 
   // 转换为通用媒体项
@@ -554,12 +793,45 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         ? MediaLibraryType.jellyfin 
         : MediaLibraryType.emby;
     
-    await MediaLibrarySortDialog.show(
+    final provider = _provider;
+    
+    // 获取当前媒体库的排序设置，如果没有则使用全局设置
+    Map<String, String> currentSortSettings;
+    if (_isShowingLibraryContent && _selectedLibraryId != null) {
+      currentSortSettings = provider.getLibrarySortSettings(_selectedLibraryId!);
+    } else {
+      currentSortSettings = {
+        'sortBy': provider.currentSortBy,
+        'sortOrder': provider.currentSortOrder,
+      };
+    }
+    
+    final result = await MediaLibrarySortDialog.show(
       context, 
-      currentSortBy: 'name', 
-      currentSortOrder: 'asc',
+      currentSortBy: currentSortSettings['sortBy']!,
+      currentSortOrder: currentSortSettings['sortOrder']!,
       libraryType: libraryType,
     );
+    
+    if (result != null && mounted) {
+      if (_isShowingLibraryContent && _selectedLibraryId != null) {
+        // 保存当前媒体库的排序设置
+        provider.setLibrarySortSettings(
+          _selectedLibraryId!,
+          result['sortBy']!,
+          result['sortOrder']!,
+        );
+        
+        // 重新加载当前媒体库内容
+        _loadLibraryContent(_selectedLibraryId!);
+      } else {
+        // 更新全局排序设置
+        provider.updateSortSettingsOnly(
+          result['sortBy']!,
+          result['sortOrder']!,
+        );
+      }
+    }
   }
 
 

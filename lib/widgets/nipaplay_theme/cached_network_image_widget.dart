@@ -13,6 +13,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final bool shouldRelease;
   final Duration fadeDuration;
   final bool shouldCompress;  // 新增参数，控制是否压缩图片
+  final bool delayLoad;  // 新增参数，控制是否延迟加载（避免与HEAD验证竞争）
 
   const CachedNetworkImageWidget({
     super.key,
@@ -24,6 +25,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
     this.shouldRelease = true,
     this.fadeDuration = const Duration(milliseconds: 300),
     this.shouldCompress = true,  // 默认为true，保持原有行为
+    this.delayLoad = false,  // 默认false，不延迟加载
   });
 
   @override
@@ -36,6 +38,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   bool _isImageLoaded = false;
   bool _isDisposed = false;
   ui.Image? _cachedImage; // 缓存图片引用，避免重复访问
+  ui.Image? _basicImage; // 基础图片
 
   @override
   void initState() {
@@ -81,8 +84,14 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
 
   // 新增方法：立即加载基础图片
   void _loadBasicImage() async {
+    // 🔥 根据delayLoad参数决定是否延迟（避免与HEAD验证竞争）
+    if (widget.delayLoad) {
+      await Future.delayed(const Duration(milliseconds: 1500));
+    }
+    
     try {
       final response = await http.get(Uri.parse(widget.imageUrl));
+      
       if (response.statusCode == 200) {
         final codec = await ui.instantiateImageCodec(response.bodyBytes);
         final frame = await codec.getNextFrame();
@@ -109,9 +118,6 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     final frame = await codec.getNextFrame();
     return frame.image;
   }
-
-  // 添加基础图片字段
-  ui.Image? _basicImage;
 
   // 安全获取图片，添加多重保护
   ui.Image? _getSafeImage(ui.Image? image) {

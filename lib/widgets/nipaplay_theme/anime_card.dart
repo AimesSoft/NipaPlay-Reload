@@ -16,6 +16,7 @@ class AnimeCard extends StatefulWidget {
   final String? source; // 新增：来源信息（本地/Emby/Jellyfin）
   final double? rating; // 新增：评分信息
   final Map<String, dynamic>? ratingDetails; // 新增：详细评分信息
+  final bool delayLoad; // 新增：延迟加载参数
 
   const AnimeCard({
     super.key,
@@ -26,6 +27,7 @@ class AnimeCard extends StatefulWidget {
     this.source, // 新增：来源信息
     this.rating, // 新增：评分信息
     this.ratingDetails, // 新增：详细评分信息
+    this.delayLoad = false, // 默认不延迟
   });
 
   // 根据filePath获取来源信息
@@ -122,6 +124,7 @@ class _AnimeCardState extends State<AnimeCard> {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        delayLoad: widget.delayLoad, // 使用延迟加载参数
         errorBuilder: (context, error) {
           return _buildPlaceholder(context);
         },

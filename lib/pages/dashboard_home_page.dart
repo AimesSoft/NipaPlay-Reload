@@ -270,6 +270,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
   }
 
+  // 判断是否应该延迟图片加载（避免与HEAD验证竞争）
+  bool _shouldDelayImageLoad() {
+    // 检查推荐内容中是否包含本地媒体
+    final hasLocalContent = _recommendedItems.any((item) => 
+      item.source == RecommendedItemSource.local
+    );
+    
+    // 如果有本地媒体，就立即加载以保持最佳性能；没有本地媒体才延迟避免与HEAD验证竞争
+    return !hasLocalContent;
+  }
+
   void _onVideoPlayerStateChanged() {
     if (!mounted) return;
     
@@ -1467,6 +1478,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
+                delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                 errorBuilder: (context, error) => Container(
                   color: Colors.white10,
                   child: const Center(
@@ -1566,6 +1578,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     child: CachedNetworkImageWidget(
                       key: ValueKey('hero_logo_${item.id}_${item.logoImageUrl}'),
                       imageUrl: item.logoImageUrl!,
+                      delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                       fit: BoxFit.contain,
                     ),
                   ),
@@ -1690,6 +1703,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
                 imageUrl: item.backgroundImageUrl!,
                 fit: BoxFit.cover,
+                delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                 width: double.infinity,
                 height: double.infinity,
                 errorBuilder: (context, error) => Container(
@@ -1792,6 +1806,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     key: ValueKey('small_logo_${item.id}_${item.logoImageUrl}_$index'),
                     imageUrl: item.logoImageUrl!,
                     fit: BoxFit.contain,
+                    delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                   ),
                 ),
               )
@@ -2153,6 +2168,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         imageUrl: imageUrl,
         onTap: () => onItemTap(item),
         isOnAir: false,
+        delayLoad: _shouldDelayImageLoad(), // 使用与推荐卡片相同的延迟逻辑
       ),
     );
   }
