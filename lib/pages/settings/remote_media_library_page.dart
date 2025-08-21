@@ -5,8 +5,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_server_dialog.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/emby_server_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_card.dart';
@@ -543,7 +542,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
   }
 
   Future<void> _showJellyfinServerDialog() async {
-    final result = await JellyfinServerDialog.show(context);
+    final result = await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
     
     if (result == true) {
       if (mounted) {
@@ -649,7 +648,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
   }
 
   Future<void> _showEmbyServerDialog() async {
-    final result = await EmbyServerDialog.show(context);
+    final result = await NetworkMediaServerDialog.show(context, MediaServerType.emby);
     
     if (result == true) {
       if (mounted) {

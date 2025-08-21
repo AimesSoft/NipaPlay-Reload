@@ -25,8 +25,7 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_media_library_view.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/emby_media_library_view.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_library_view.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 
@@ -423,7 +422,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         if (_isJellyfinConnected) {
           pageChildren.add(
             RepaintBoundary(
-              child: JellyfinMediaLibraryView(
+              child: NetworkMediaLibraryView(
+                serverType: NetworkMediaServerType.jellyfin,
                 onPlayEpisode: widget.onPlayEpisode,
               ),
             ),
@@ -433,7 +433,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         if (_isEmbyConnected) {
           pageChildren.add(
             RepaintBoundary(
-              child: EmbyMediaLibraryView(
+              child: NetworkMediaLibraryView(
+                serverType: NetworkMediaServerType.emby,
                 onPlayEpisode: widget.onPlayEpisode,
               ),
             ),

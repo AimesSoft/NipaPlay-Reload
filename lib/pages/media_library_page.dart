@@ -10,15 +10,16 @@ import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_media_library_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
+import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_server_dialog.dart'; 
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart'; 
 import 'dart:io'; 
 import 'dart:async';
 import 'dart:ui'; 
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/emby_server_dialog.dart';
+
 import 'package:nipaplay/widgets/nipaplay_theme/media_server_selection_sheet.dart';
 
 // Define a callback type for when an episode is selected for playing
@@ -195,7 +196,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   }
   
   Future<void> _showJellyfinServerDialog() async {
-    await JellyfinServerDialog.show(context);
+    await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
   }
 
   Future<void> _showServerSelectionDialog() async {
@@ -211,7 +212,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   }
 
   Future<void> _showEmbyServerDialog() async {
-    await EmbyServerDialog.show(context);
+    await NetworkMediaServerDialog.show(context, MediaServerType.emby);
   }
 
   Future<void> _fetchAndPersistFullDetailsInBackground() async {
@@ -396,10 +397,10 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
               ),
               const SizedBox(height: 16),
               if (!_isJellyfinConnected)
-                _buildGlassButton(
-                  onPressed: _showServerSelectionDialog,
+                BlurButton(
                   icon: Icons.cloud,
-                  label: '添加媒体服务器',
+                  text: '添加媒体服务器',
+                  onTap: _showServerSelectionDialog,
                 ),
             ],
           ),
@@ -555,68 +556,5 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     }
   }
 
-  Widget _buildGlassButton({
-    required VoidCallback onPressed,
-    required IconData icon,
-    required String label,
-  }) {
-    return StatefulBuilder(
-      builder: (context, setState) {
-        bool isHovered = false;
-        
-        return MouseRegion(
-          onEnter: (_) => setState(() => isHovered = true),
-          onExit: (_) => setState(() => isHovered = false),
-          cursor: SystemMouseCursors.click,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(isHovered ? 0.2 : 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(isHovered ? 0.4 : 0.2),
-                    width: 0.5,
-                  ),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: onPressed,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            icon,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            label,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
+
 }

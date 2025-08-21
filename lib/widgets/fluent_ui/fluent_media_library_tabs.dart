@@ -6,8 +6,7 @@ import 'package:nipaplay/widgets/fluent_ui/fluent_library_management_tab.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/pages/media_library_page.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/library_management_tab.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/jellyfin_media_library_view.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/emby_media_library_view.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_library_view.dart';
 
 class FluentMediaLibraryTabs extends StatefulWidget {
   final int initialIndex;
@@ -80,7 +79,8 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
       tabs.add(
         Tab(
           text: const Text('Jellyfin'),
-          body: JellyfinMediaLibraryView(
+          body: NetworkMediaLibraryView(
+            serverType: NetworkMediaServerType.jellyfin,
             onPlayEpisode: widget.onPlayEpisode,
           ),
         ),
@@ -91,7 +91,8 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
       tabs.add(
         Tab(
           text: const Text('Emby'),
-          body: EmbyMediaLibraryView(
+          body: NetworkMediaLibraryView(
+            serverType: NetworkMediaServerType.emby,
             onPlayEpisode: widget.onPlayEpisode,
           ),
         ),

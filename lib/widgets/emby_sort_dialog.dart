@@ -181,7 +181,7 @@ class _EmbySortDialogState extends State<EmbySortDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 20),
                   Container(
                     constraints: const BoxConstraints(maxHeight: 200),
                     child: ListView.builder(

@@ -2139,10 +2139,14 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       imageUrl = item.imageUrl ?? '';
     }
 
-    final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
+    // 使用与其他页面相同的尺寸计算方式
+    // 基于 maxCrossAxisExtent: 150, childAspectRatio: 7/12
+    const double cardWidth = 160;
+    const double cardHeight = 200;
+    
     return SizedBox(
-      width: isPhone ? 120 : 150,
-      height: isPhone ? 240 : 280,
+      width: cardWidth,
+      height: cardHeight,
       child: AnimeCard(
         key: ValueKey(uniqueId), // 添加唯一key防止widget复用导致的缓存混乱
         name: name,
