@@ -14,7 +14,6 @@ import 'package:provider/provider.dart'; // 重新添加
 // import 'package:nipaplay/utils/video_player_state.dart'; // Removed from here
 import 'dart:io'; // Added for File operations
 // import 'package:nipaplay/utils/tab_change_notifier.dart'; // Removed from here
-import '../providers/appearance_settings_provider.dart'; // 添加外观设置Provider
 import 'package:nipaplay/widgets/nipaplay_theme/switchable_view.dart'; // 添加SwitchableView组件
 import 'package:nipaplay/widgets/nipaplay_theme/tag_search_widget.dart'; // 添加标签搜索组件
 import 'package:nipaplay/widgets/nipaplay_theme/rating_dialog.dart'; // 添加评分对话框
@@ -24,6 +23,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:meta/meta.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -94,13 +94,21 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   AppearanceSettingsProvider? _appearanceSettings;
   
   // 弹弹play观看状态相关
-  Map<int, bool> _dandanplayWatchStatus = {}; // 存储弹弹play的观看状态
-  bool _isLoadingDandanplayStatus = false; // 是否正在加载弹弹play状态
+  /// 存储弹弹play的观看状态
+  Map<int, bool> _dandanplayWatchStatus = {}; 
+  
+  /// 是否正在加载弹弹play状态
+  bool _isLoadingDandanplayStatus = false; 
   
   // 弹弹play收藏状态相关
-  bool _isFavorited = false; // 是否已收藏
-  bool _isLoadingFavoriteStatus = false; // 是否正在加载收藏状态
-  bool _isTogglingFavorite = false; // 是否正在切换收藏状态
+  /// 是否已收藏
+  bool _isFavorited = false; 
+  
+  /// 是否正在加载收藏状态
+  bool _isLoadingFavoriteStatus = false; 
+  
+  /// 是否正在切换收藏状态
+  bool _isTogglingFavorite = false; 
 
   // 弹弹play用户评分相关
   int _userRating = 0; // 用户评分（0-10，0代表未评分）
@@ -219,6 +227,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   Future<void> _fetchDandanplayWatchStatus(BangumiAnime anime) async {
     // 如果未登录弹弹play或没有剧集信息，跳过
     if (!DandanplayService.isLoggedIn || anime.episodeList == null || anime.episodeList!.isEmpty) {
+      // 重置加载状态
+      setState(() {
+        _isLoadingDandanplayStatus = false;
+        _isLoadingFavoriteStatus = false;
+        _isLoadingUserRating = false;
+      });
       return;
     }
     
@@ -273,11 +287,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   String _formatDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '';
     try {
+      // 移除 T00:00:00 部分
+      dateStr = dateStr.replaceAll(RegExp(r'T\d{2}:\d{2}:\d{2}'), '');
+      
       final parts = dateStr.split('-');
-      if (parts.length == 3) return '${parts[0]}年${parts[1]}月${parts[2]}日';
+      if (parts.length >= 3) return '${parts[0]}年${parts[1]}月${parts[2]}日';
       return dateStr;
     } catch (e) {
-      return dateStr;
+      return dateStr ?? '';
     }
   }
 
