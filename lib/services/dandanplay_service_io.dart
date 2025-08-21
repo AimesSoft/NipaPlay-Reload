@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'danmaku_cache_manager.dart';
+import 'debug_log_service.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -196,23 +197,24 @@ class DandanplayService {
 
   // 获取appSecret
   static Future<String> getAppSecret() async {
-    //debugPrint('[DandanplayService] getAppSecret: Called.');
-    if (_appSecret != null) {
-      //debugPrint('[DandanplayService] getAppSecret: Returning cached _appSecret.');
-      return _appSecret!;
-    }
+    // debugPrint('[DandanplayService] getAppSecret: Called.');
+     if (_appSecret != null) {
+       //debugPrint('[DandanplayService] getAppSecret: Returning cached _appSecret.');
+       return _appSecret!;
+     }
 
-    // 尝试从 SharedPreferences 获取 appSecret
-    final prefs = await SharedPreferences.getInstance();
-    final savedAppSecret = prefs.getString('dandanplay_app_secret');
-    if (savedAppSecret != null) {
-      _appSecret = savedAppSecret;
-      //debugPrint('[DandanplayService] getAppSecret: Returning appSecret from SharedPreferences.');
-      return _appSecret!;
-    }
+    // // 尝试从 SharedPreferences 获取 appSecret
+     final prefs = await SharedPreferences.getInstance();
+     final savedAppSecret = prefs.getString('dandanplay_app_secret');
+     if (savedAppSecret != null) {
+       _appSecret = savedAppSecret;
+       //debugPrint('[DandanplayService] getAppSecret: Returning appSecret from SharedPreferences.');
+       return _appSecret!;
+     }
     //debugPrint('[DandanplayService] getAppSecret: No cached appSecret. Fetching from servers...');
 
     // 从服务器列表获取 appSecret
+    //final prefs = await SharedPreferences.getInstance();
     Exception? lastException;
     for (final server in _servers) {
       //debugPrint('[DandanplayService] getAppSecret: Trying server: $server');
@@ -225,6 +227,9 @@ class DandanplayService {
             'Accept': 'application/json',
           },
         ).timeout(const Duration(seconds: 5));
+
+        // 强制打印服务器返回的原始内容以供调试
+        print('[NipaPlay AppSecret Response from $server] StatusCode: ${response.statusCode}, Body: ${response.body}');
 
         ////debugPrint('服务器响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
         
@@ -241,17 +246,19 @@ class DandanplayService {
         }
         throw Exception('从 $server 获取appSecret失败：HTTP ${response.statusCode}');
       } on TimeoutException {
-        //debugPrint('[DandanplayService] getAppSecret: Timeout with server $server');
+        // 打印超时错误
+        print('[NipaPlay AppSecret Error from $server] TimeoutException: 请求超时');
         lastException = TimeoutException('从 $server 获取appSecret超时');
       } catch (e) {
-        //debugPrint('[DandanplayService] getAppSecret: Failed with server $server: $e');
+        // 打印其他所有网络错误
+        print('[NipaPlay AppSecret Error from $server] Exception: ${e.toString()}');
         lastException = e as Exception;
       }
     }
     
     //debugPrint('[DandanplayService] getAppSecret: Finished attempting all servers.');
     ////debugPrint('所有服务器均不可用，最后的错误: ${lastException?.toString()}');
-    throw lastException ?? Exception('获取appSecret失败：所有服务器均不可用');
+    throw lastException ?? Exception('获取应用密钥失败，请检查网络连接');
   }
 
   static String _b(String a) {
@@ -336,6 +343,152 @@ class DandanplayService {
       }
     } catch (e) {
       return {'success': false, 'message': '登录失败: ${e.toString()}'};
+    }
+  }
+
+  /// 注册弹弹play账号
+  static Future<Map<String, dynamic>> register({
+    required String username,
+    required String password,
+    required String email,
+    required String screenName,
+  }) async {
+    final logService = DebugLogService();
+    logService.startCollecting();
+    
+    try {
+      print('[弹弹play服务] 注册参数详情:');
+      print('用户名: $username');
+      print('邮箱: $email');
+      print('昵称: $screenName');
+      
+      // 调试：打印当前的应用ID
+      print('[弹弹play服务] 当前应用ID: $appId');
+      
+      logService.addLog('[弹弹play服务] 开始注册流程', level: 'INFO', tag: 'Register');
+      logService.addLog('[弹弹play服务] 用户名: $username, 邮箱: $email, 昵称: $screenName', level: 'INFO', tag: 'Register');
+      
+      // 验证参数（保持不变）
+      if (username.length < 5 || username.length > 20) {
+        logService.addError('[弹弹play服务] 用户名长度不符合要求: ${username.length}', tag: 'Register');
+        return {'success': false, 'message': '用户名长度必须在5-20位之间'};
+      }
+      
+      if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9]*$').hasMatch(username)) {
+        logService.addError('[弹弹play服务] 用户名格式不符合要求: $username', tag: 'Register');
+        return {'success': false, 'message': '用户名只能包含英文或数字，且首位不能为数字'};
+      }
+      
+      if (password.length < 5 || password.length > 20) {
+        logService.addError('[弹弹play服务] 密码长度不符合要求: ${password.length}', tag: 'Register');
+        return {'success': false, 'message': '密码长度必须在5-20位之间'};
+      }
+      
+      if (email.isEmpty || email.length > 50) {
+        logService.addError('[弹弹play服务] 邮箱长度不符合要求: ${email.length}', tag: 'Register');
+        return {'success': false, 'message': '请输入有效的邮箱地址'};
+      }
+      
+      if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+        logService.addError('[弹弹play服务] 邮箱格式不正确: $email', tag: 'Register');
+        return {'success': false, 'message': '请输入有效的邮箱格式'};
+      }
+      
+      if (screenName.isEmpty || screenName.length > 50) {
+        logService.addError('[弹弹play服务] 昵称长度不符合要求: ${screenName.length}', tag: 'Register');
+        return {'success': false, 'message': '昵称不能为空且长度不能超过50个字符'};
+      }
+
+      logService.addLog('[弹弹play服务] 参数验证通过，开始获取AppSecret', level: 'INFO', tag: 'Register');
+      
+      final appSecret = await getAppSecret();
+      
+      // 调试：打印获取的AppSecret
+      print('[弹弹play服务] 获取的AppSecret: ${appSecret.substring(0, 8)}...');
+      logService.addLog('[弹弹play服务] AppSecret获取成功', level: 'INFO', tag: 'Register');
+      
+      final now = DateTime.now();
+      final utcNow = now.toUtc();
+      final timestamp = (utcNow.millisecondsSinceEpoch / 1000).round();
+      
+      // 计算hash：appId + password + unixTimestamp + userName + email + screenName + AppSecret
+      final hashString = '$appId$password$timestamp$username$email$screenName$appSecret';
+      final hash = md5.convert(utf8.encode(hashString)).toString();
+      
+      logService.addLog('[弹弹play服务] Hash计算完成: ${hash.substring(0, 8)}...', level: 'INFO', tag: 'Register');
+      logService.addLog('[弹弹play服务] 时间戳: $timestamp', level: 'INFO', tag: 'Register');
+
+      final requestBody = {
+        'appId': appId,
+        'userName': username,
+        'password': password,
+        'email': email,
+        'screenName': screenName,
+        'unixTimestamp': timestamp,
+        'hash': hash,
+      };
+      
+      // 打印发送的JSON
+      print('[弹弹play服务] 发送的注册请求JSON:');
+      print(json.encode(requestBody));
+      logService.addLog('[弹弹play服务] 发送的注册请求JSON: ${json.encode(requestBody)}', level: 'DEBUG', tag: 'Register');
+      
+      logService.addLog('[弹弹play服务] 准备发送注册请求', level: 'INFO', tag: 'Register');
+
+      // 调试：打印签名生成细节
+      final signature = generateSignature(appId, timestamp, '/api/v2/register', appSecret);
+      print('[弹弹play服务] 生成的签名: ${signature.substring(0, 8)}...');
+      print('[弹弹play服务] 签名生成参数: appId=$appId, timestamp=$timestamp, apiPath=/api/v2/register, appSecret=${appSecret.substring(0, 8)}...');
+
+      final response = await http.post(
+        Uri.parse('https://api.dandanplay.net/api/v2/register'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-AppId': appId,
+          'X-Signature': signature,
+          'X-Timestamp': '$timestamp',
+        },
+        body: json.encode(requestBody),
+      );
+
+      logService.addLog('[弹弹play服务] 注册响应状态码: ${response.statusCode}', level: 'INFO', tag: 'Register');
+      logService.addLog('[弹弹play服务] 响应头: ${response.headers}', level: 'DEBUG', tag: 'Register');
+
+      // 打印接收到的响应JSON
+      print('[弹弹play服务] 接收到的注册响应JSON:');
+      print(response.body);
+      logService.addLog('[弹弹play服务] 接收到的注册响应JSON: ${response.body}', level: 'DEBUG', tag: 'Register');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        logService.addLog('[弹弹play服务] 注册响应体: ${json.encode(data)}', level: 'INFO', tag: 'Register');
+        
+        if (data['success'] == true) {
+          logService.addLog('[弹弹play服务] 注册成功', level: 'INFO', tag: 'Register');
+          // 注册成功，如果响应中包含token，则自动登录
+          if (data['token'] != null) {
+            await saveLoginInfo(data['token'], username, screenName);
+            logService.addLog('[弹弹play服务] 注册成功并自动登录', level: 'INFO', tag: 'Register');
+            return {'success': true, 'message': '注册成功并已自动登录'};
+          } else {
+            logService.addLog('[弹弹play服务] 注册成功，但未返回token', level: 'INFO', tag: 'Register');
+            return {'success': true, 'message': '注册成功，请使用新账号登录'};
+          }
+        } else {
+          final errorMsg = data['errorMessage'] ?? '注册失败，请检查填写信息';
+          logService.addError('[弹弹play服务] 注册失败: $errorMsg', tag: 'Register');
+          return {'success': false, 'message': errorMsg};
+        }
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? response.body;
+        logService.addError('[弹弹play服务] 注册请求失败: HTTP ${response.statusCode}, $errorMessage', tag: 'Register');
+        return {'success': false, 'message': '网络请求失败 (${response.statusCode}): $errorMessage'};
+      }
+    } catch (e, stackTrace) {
+      logService.addError('[弹弹play服务] 注册时发生异常: $e', tag: 'Register');
+      logService.addError('[弹弹play服务] 异常堆栈: $stackTrace', tag: 'Register');
+      return {'success': false, 'message': '注册失败: ${e.toString()}'};
     }
   }
 

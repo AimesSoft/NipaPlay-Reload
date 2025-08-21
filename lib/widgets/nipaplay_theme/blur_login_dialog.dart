@@ -113,7 +113,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
             BlurSnackBar.show(context, result.message!);
           }
         } else {
-          BlurSnackBar.show(context, result.message ?? '登录失败');
+          BlurSnackBar.show(context, result.message ?? '${widget.loginButtonText}失败');
         }
       }
     } catch (e) {
@@ -121,7 +121,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
         setState(() {
           _isLoading = false;
         });
-        BlurSnackBar.show(context, '登录失败: $e');
+        BlurSnackBar.show(context, '${widget.loginButtonText}失败: $e');
       }
     }
   }

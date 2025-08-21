@@ -8,7 +8,8 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/custom_scaffold.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/responsive_container.dart'; // 导入响应式容器
 import 'package:nipaplay/pages/settings/about_page.dart'; // 导入 AboutPage
-import 'package:nipaplay/utils/globals.dart' as globals; // 导入包含 isDesktop 的全局变量文件
+import 'package:nipaplay/utils/globals.dart'
+    as globals; // 导入包含 isDesktop 的全局变量文件
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:nipaplay/pages/settings/account_page.dart';
 import 'package:nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
@@ -26,7 +27,8 @@ class SettingsPage extends StatefulWidget {
   _SettingsPageState createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
+class _SettingsPageState extends State<SettingsPage>
+    with SingleTickerProviderStateMixin {
   // currentPage 状态现在用于桌面端的右侧面板
   // 也可以考虑给它一个初始值，这样桌面端一进来右侧不是空的
   Widget? currentPage; // 初始可以为 null
@@ -37,7 +39,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     super.initState();
     // 初始化TabController
     _tabController = TabController(length: 1, vsync: this);
-    
+
     // 可以在这里为桌面端和平板设备设置一个默认显示的页面
     if (globals.isDesktop || globals.isTablet) {
       currentPage = const AboutPage(); // 例如默认显示 AboutPage
@@ -99,10 +101,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
             onTap: () {
-              _handleItemTap(
-                  const AccountPage(),
-                  "账号设置"
-                  );
+              _handleItemTap(const AccountPage(), "账号设置");
             },
           ),
           ListTile(
@@ -121,19 +120,17 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                   );
             },
           ),
-          ListTile(
-            title: const Text("主题（实验性）",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(
-                  const UIThemePage(),
-                  "主题设置"
-                  );
-            },
-          ),
+          if (!globals.isPhone)
+            ListTile(
+              title: const Text("主题（实验性）",
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+              trailing: const Icon(Ionicons.chevron_forward_outline,
+                  color: Colors.white),
+              onTap: () {
+                _handleItemTap(const UIThemePage(), "主题设置");
+              },
+            ),
           ListTile(
             title: const Text("通用",
                 style: TextStyle(
@@ -141,10 +138,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
             onTap: () {
-              _handleItemTap(
-                  const GeneralPage(),
-                  "通用设置"
-                  );
+              _handleItemTap(const GeneralPage(), "通用设置");
             },
           ),
           ListTile(
@@ -154,10 +148,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
             onTap: () {
-              _handleItemTap(
-                  const WatchHistoryPage(),
-                  "观看记录"
-                  );
+              _handleItemTap(const WatchHistoryPage(), "观看记录");
             },
           ),
           ListTile(
@@ -167,10 +158,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
             onTap: () {
-              _handleItemTap(
-                  const PlayerSettingsPage(),
-                  "播放器设置"
-                  );
+              _handleItemTap(const PlayerSettingsPage(), "播放器设置");
             },
           ),
           if (!globals.isPhone)
@@ -181,25 +169,20 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               trailing: const Icon(Ionicons.chevron_forward_outline,
                   color: Colors.white),
               onTap: () {
-                _handleItemTap(
-                    const ShortcutsSettingsPage(),
-                    "快捷键设置"
-                    );
+                _handleItemTap(const ShortcutsSettingsPage(), "快捷键设置");
               },
             ),
-          ListTile(
-            title: const Text("远程访问（实验性）",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(
-                  const RemoteAccessPage(),
-                  "远程访问"
-                  );
-            },
-          ),
+          if (!globals.isPhone)
+            ListTile(
+              title: const Text("远程访问（实验性）",
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+              trailing: const Icon(Ionicons.chevron_forward_outline,
+                  color: Colors.white),
+              onTap: () {
+                _handleItemTap(const RemoteAccessPage(), "远程访问");
+              },
+            ),
           ListTile(
             title: const Text("远程媒体库",
                 style: TextStyle(
@@ -207,10 +190,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
             onTap: () {
-              _handleItemTap(
-                  const RemoteMediaLibraryPage(),
-                  "远程媒体库"
-                  );
+              _handleItemTap(const RemoteMediaLibraryPage(), "远程媒体库");
             },
           ),
           // 开发者选项
@@ -221,10 +201,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
             onTap: () {
-              _handleItemTap(
-                  const DeveloperOptionsPage(),
-                  "开发者选项"
-                  );
+              _handleItemTap(const DeveloperOptionsPage(), "开发者选项");
             },
           ),
           ListTile(

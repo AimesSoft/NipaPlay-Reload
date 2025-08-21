@@ -6,6 +6,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
 import 'account_controller.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/services/debug_log_service.dart';
 
 /// Material Design版本的账号页面
 class MaterialAccountPage extends StatefulWidget {
@@ -48,6 +49,70 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         passwordController.text = values['password']!;
         await performLogin();
         return LoginResult(success: isLoggedIn);
+      },
+    );
+  }
+
+  @override
+  void showRegisterDialog() {
+    BlurLoginDialog.show(
+      context,
+      title: '注册弹弹play账号',
+      fields: [
+        LoginField(
+          key: 'username',
+          label: '用户名',
+          hint: '5-20位英文或数字，首位不能为数字',
+          initialValue: registerUsernameController.text,
+        ),
+        LoginField(
+          key: 'password',
+          label: '密码',
+          hint: '5-20位密码',
+          isPassword: true,
+          initialValue: registerPasswordController.text,
+        ),
+        LoginField(
+          key: 'email',
+          label: '邮箱',
+          hint: '用于找回密码',
+          initialValue: registerEmailController.text,
+        ),
+        LoginField(
+          key: 'screenName',
+          label: '昵称',
+          hint: '显示名称，不超过50个字符',
+          initialValue: registerScreenNameController.text,
+        ),
+      ],
+      loginButtonText: '注册',
+      onLogin: (values) async {
+        final logService = DebugLogService();
+        try {
+          // 先记录日志
+          logService.addLog('[Material账号页面] 注册对话框onLogin回调被调用', level: 'INFO', tag: 'AccountPage');
+          logService.addLog('[Material账号页面] 收到的values: ${values.toString()}', level: 'INFO', tag: 'AccountPage');
+          
+          // 设置控制器的值
+          registerUsernameController.text = values['username'] ?? '';
+          registerPasswordController.text = values['password'] ?? '';
+          registerEmailController.text = values['email'] ?? '';
+          registerScreenNameController.text = values['screenName'] ?? '';
+          
+          logService.addLog('[Material账号页面] 准备调用performRegister', level: 'INFO', tag: 'AccountPage');
+          
+          // 调用注册方法
+          await performRegister();
+          
+          logService.addLog('[Material账号页面] performRegister执行完成，isLoggedIn=$isLoggedIn', level: 'INFO', tag: 'AccountPage');
+          
+          return LoginResult(success: isLoggedIn, message: isLoggedIn ? '注册成功' : '注册失败');
+        } catch (e) {
+          // 捕获并记录详细错误
+          print('[REGISTRATION ERROR]: $e');
+          logService.addLog('[Material账号页面] performRegister时发生异常: $e', level: 'ERROR', tag: 'AccountPage');
+          return LoginResult(success: false, message: '注册失败: $e');
+        }
       },
     );
   }
@@ -229,6 +294,19 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           ),
           trailing: const Icon(Icons.login, color: Colors.white),
           onTap: showLoginDialog,
+        ),
+        const Divider(color: Colors.white12, height: 1),
+        ListTile(
+          title: const Text(
+            "注册弹弹play账号",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          subtitle: const Text(
+            "创建新的弹弹play账号，享受完整功能",
+            style: TextStyle(color: Colors.white70),
+          ),
+          trailing: const Icon(Icons.person_add, color: Colors.white),
+          onTap: showRegisterDialog,
         ),
         const Divider(color: Colors.white12, height: 1),
       ],

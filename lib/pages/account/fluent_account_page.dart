@@ -76,6 +76,73 @@ class _FluentAccountPageState extends State<FluentAccountPage>
   }
 
   @override
+  void showRegisterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('注册弹弹play账号'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InfoLabel(
+              label: '用户名',
+              child: TextBox(
+                controller: registerUsernameController,
+                placeholder: '5-20位英文或数字，首位不能为数字',
+              ),
+            ),
+            const SizedBox(height: 16),
+            InfoLabel(
+              label: '密码',
+              child: PasswordBox(
+                controller: registerPasswordController,
+                placeholder: '5-20位密码',
+              ),
+            ),
+            const SizedBox(height: 16),
+            InfoLabel(
+              label: '邮箱',
+              child: TextBox(
+                controller: registerEmailController,
+                placeholder: '用于找回密码',
+              ),
+            ),
+            const SizedBox(height: 16),
+            InfoLabel(
+              label: '昵称',
+              child: TextBox(
+                controller: registerScreenNameController,
+                placeholder: '显示名称，不超过50个字符',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Button(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: isLoading ? null : () async {
+              await performRegister();
+              if (isLoggedIn && mounted) {
+                Navigator.of(context).pop();
+              }
+            },
+            child: isLoading 
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: ProgressRing(strokeWidth: 2),
+                  )
+                : const Text('注册'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ScaffoldPage(
       header: const PageHeader(
@@ -182,16 +249,33 @@ class _FluentAccountPageState extends State<FluentAccountPage>
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
-              FilledButton(
-                onPressed: showLoginDialog,
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(FluentIcons.signin),
-                    SizedBox(width: 8),
-                    Text('登录账号'),
-                  ],
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilledButton(
+                    onPressed: showLoginDialog,
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(FluentIcons.signin),
+                        SizedBox(width: 8),
+                        Text('登录账号'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Button(
+                    onPressed: showRegisterDialog,
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(FluentIcons.add_friend),
+                        SizedBox(width: 8),
+                        Text('注册账号'),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
