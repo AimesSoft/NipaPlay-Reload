@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
@@ -111,6 +112,7 @@ class _GeneralPageState extends State<GeneralPage> {
                   },
                 ),
                 const Divider(color: Colors.white12, height: 1),
+                if (!globals.isPhone)
                 SettingsItem.toggle(
                   title: "过滤成人内容 (全局)",
                   subtitle: "在新番列表等处隐藏成人内容",
