@@ -273,29 +273,31 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
     return Stack(
       children: [
-        Scrollbar(
-          controller: _gridScrollController,
-          thickness: 4,
-          radius: const Radius.circular(2),
-          child: GridView.builder(
+        RepaintBoundary(
+          child: Scrollbar(
             controller: _gridScrollController,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 400,
-              childAspectRatio: 16 / 9,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+            thickness: 4,
+            radius: const Radius.circular(2),
+            child: GridView.builder(
+              controller: _gridScrollController,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 400,
+                childAspectRatio: 16 / 9,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              padding: const EdgeInsets.all(20),
+              cacheExtent: 800,
+              clipBehavior: Clip.hardEdge,
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
+              itemCount: selectedLibraries.length,
+              itemBuilder: (context, index) {
+                final library = selectedLibraries[index];
+                return _buildLibraryCard(library);
+              },
             ),
-            padding: const EdgeInsets.all(20),
-            cacheExtent: 800,
-            clipBehavior: Clip.hardEdge,
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            addAutomaticKeepAlives: false,
-            addRepaintBoundaries: true,
-            itemCount: selectedLibraries.length,
-            itemBuilder: (context, index) {
-              final library = selectedLibraries[index];
-              return _buildLibraryCard(library);
-            },
           ),
         ),
         // 右下角按钮组
@@ -386,29 +388,31 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
             _buildTopNavigationBar(provider),
             // 媒体内容网格
             Expanded(
-              child: Scrollbar(
-                controller: _gridScrollController,
-                thickness: 4,
-                radius: const Radius.circular(2),
-                child: GridView.builder(
+              child: RepaintBoundary(
+                child: Scrollbar(
                   controller: _gridScrollController,
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 150,
-                    childAspectRatio: 7/12,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
+                  thickness: 4,
+                  radius: const Radius.circular(2),
+                  child: GridView.builder(
+                    controller: _gridScrollController,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 150,
+                      childAspectRatio: 7/12,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    cacheExtent: 800,
+                    clipBehavior: Clip.hardEdge,
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: true,
+                    itemCount: _mediaItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _mediaItems[index];
+                      return _buildMediaCard(item);
+                    },
                   ),
-                  padding: const EdgeInsets.all(16),
-                  cacheExtent: 800,
-                  clipBehavior: Clip.hardEdge,
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                  addAutomaticKeepAlives: false,
-                  addRepaintBoundaries: true,
-                  itemCount: _mediaItems.length,
-                  itemBuilder: (context, index) {
-                    final item = _mediaItems[index];
-                    return _buildMediaCard(item);
-                  },
                 ),
               ),
             ),
