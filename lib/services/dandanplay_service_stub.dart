@@ -173,6 +173,45 @@ class DandanplayService {
     }
   }
   
+  static Future<Map<String, dynamic>> register({
+    required String username,
+    required String password,
+    required String email,
+    required String screenName,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/dandanplay/register'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'username': username,
+          'password': password,
+          'email': email,
+          'screenName': screenName,
+        }),
+      );
+      
+      final data = json.decode(response.body);
+      
+      if (data['success'] == true) {
+        // 注册成功后可能需要自动登录
+        if (data['token'] != null) {
+          await saveLoginInfo('', username, screenName);
+          return {'success': true, 'message': '注册成功并已自动登录'};
+        } else {
+          return {'success': true, 'message': '注册成功，请使用新账号登录'};
+        }
+      }
+      
+      return data;
+    } catch (e) {
+      debugPrint('[弹弹play服务-Web] 注册失败: $e');
+      return {'success': false, 'message': '注册失败: ${e.toString()}'};
+    }
+  }
+  
   static Future<Map<String, dynamic>> getVideoInfo(String videoPath) async {
     try {
       final response = await http.get(
