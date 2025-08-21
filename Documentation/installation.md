@@ -75,6 +75,17 @@ iOS 用户可以选择以下几种安装方式：
    - 配置 Bundle Identifier 和开发者签名
    - 连接设备并构建安装
 
+### 方式三：TestFlight 公开测试版（推荐）
+
+1. 在 iOS 设备上打开 App Store，搜索并下载 TestFlight 应用
+2. 点击以下链接加入测试：[NipaPlay TestFlight 公开测试](https://testflight.apple.com/join/4JMh3t44)
+3. 在 TestFlight 中点击"接受"，然后点击"安装"
+4. 等待应用下载完成即可使用
+
+**注意**：
+- TestFlight 测试版本有效期为 90 天
+- 每次开发者上传新版本时，您都会收到更新通知
+- 测试期间可以直接在 TestFlight 中提供反馈
 
 ### 签名说明
 
