@@ -13,6 +13,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class FluentLibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -278,12 +280,108 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
       return const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center));
     }
 
-    return ListView.builder(
-      controller: _listScrollController,
-      itemCount: scanService.scannedFolders.length,
-      itemBuilder: (context, index) {
-        final folderPath = scanService.scannedFolders[index];
-        return Expander(
+    // 检测是否为桌面或平板设备
+    if (isDesktopOrTablet) {
+      // 桌面和平板设备使用真正的瀑布流布局
+      return SingleChildScrollView(
+        controller: _listScrollController,
+        padding: const EdgeInsets.all(8),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // 计算每行可以容纳的项目数（最小宽度300px）
+            const minItemWidth = 300.0;
+            final crossAxisCount = (constraints.maxWidth / minItemWidth).floor().clamp(1, 3);
+
+            return _buildWaterfallLayout(
+              scanService,
+              constraints.maxWidth,
+              300.0,
+              16.0,
+            );
+          },
+        ),
+      );
+    } else {
+      // 移动设备使用单列ListView
+      return ListView.builder(
+        controller: _listScrollController,
+        itemCount: scanService.scannedFolders.length,
+        itemBuilder: (context, index) {
+          final folderPath = scanService.scannedFolders[index];
+          return _buildFolderExpander(folderPath, scanService);
+        },
+      );
+    }
+  }
+
+  // 真正的瀑布流布局组件
+  Widget _buildWaterfallLayout(ScanService scanService, double maxWidth, double minItemWidth, double spacing) {
+    // 预留边距防止溢出
+    final availableWidth = maxWidth - 16.0; // 留出16px的安全边距
+
+    // 计算列数
+    final crossAxisCount = (availableWidth / minItemWidth).floor().clamp(1, 3);
+
+    // 重新计算间距和项目宽度
+    final totalSpacing = spacing * (crossAxisCount - 1);
+    final itemWidth = (availableWidth - totalSpacing) / crossAxisCount;
+
+    // 创建列的文件夹列表
+    final columnFolders = <List<String>>[];
+    for (var i = 0; i < crossAxisCount; i++) {
+      columnFolders.add([]);
+    }
+
+    // 按列分配文件夹
+    for (var i = 0; i < scanService.scannedFolders.length; i++) {
+      final columnIndex = i % crossAxisCount;
+      columnFolders[columnIndex].add(scanService.scannedFolders[i]);
+    }
+
+    // 创建列组件
+    final columnWidgets = <Widget>[];
+    for (var i = 0; i < crossAxisCount; i++) {
+      if (columnFolders[i].isNotEmpty) {
+        columnWidgets.add(
+          SizedBox(
+            width: itemWidth,
+            child: Column(
+              children: columnFolders[i].map((folderPath) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: _buildFolderExpander(folderPath, scanService),
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      }
+    }
+
+    // 使用Row排列列，添加间距
+    final rowChildren = <Widget>[];
+    for (var i = 0; i < columnWidgets.length; i++) {
+      if (i > 0) {
+        rowChildren.add(SizedBox(width: spacing)); // 添加列间距
+      }
+      rowChildren.add(columnWidgets[i]);
+    }
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: rowChildren,
+        ),
+      ),
+    );
+  }
+
+  // 统一的文件夹Expander构建方法
+  Widget _buildFolderExpander(String folderPath, ScanService scanService) {
+
+    return Expander(
           key: PageStorageKey<String>(folderPath),
           header: Row(
             children: [
@@ -320,8 +418,6 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
             }
           },
         );
-      },
-    );
   }
 
   List<Widget> _buildFileSystemNodes(List<io.FileSystemEntity> entities, int depth) {

@@ -42,7 +42,6 @@ bool get isTablet {
   final size = window.physicalSize / window.devicePixelRatio;
   return size.width > size.height;
 }
-
 bool get isTouch {
   //移动平台
   if (kIsWeb) {
@@ -66,6 +65,11 @@ bool get winLinDesktop {
 bool get isDesktop {
   //windows和linux和macOS桌面平台
   return !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+}
+
+bool get isDesktopOrTablet {
+  //桌面平台或平板设备（横屏移动设备）
+  return isDesktop || isTablet;
 }
 //////设备类型判断/////
 ///

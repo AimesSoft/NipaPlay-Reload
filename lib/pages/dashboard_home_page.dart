@@ -31,6 +31,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/main.dart'; // 用于MainPageState
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardHomePage extends StatefulWidget {
@@ -1286,17 +1288,30 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             );
         },
       ),
-      floatingActionButton: _isLoadingRecommended 
-          ? FloatingActionGlassButton(
-              iconData: Icons.refresh_rounded,
-              onPressed: () {}, // 加载中时禁用
-              description: '正在刷新...',
-            )
-          : FloatingActionGlassButton(
-              iconData: Icons.refresh_rounded,
-              onPressed: _loadData,
-              description: ' 刷新主页',
-            ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 挂载本地媒体库按钮
+          FloatingActionGlassButton(
+            iconData: Icons.folder_open_rounded,
+            onPressed: _navigateToMediaLibraryManagement,
+            description: '挂载本地媒体库',
+          ),
+          const SizedBox(height: 16),
+          // 刷新按钮
+          _isLoadingRecommended 
+              ? FloatingActionGlassButton(
+                  iconData: Icons.refresh_rounded,
+                  onPressed: () {}, // 加载中时禁用
+                  description: '正在刷新...',
+                )
+              : FloatingActionGlassButton(
+                  iconData: Icons.refresh_rounded,
+                  onPressed: _loadData,
+                  description: ' 刷新主页',
+                ),
+        ],
+      ),
         ),
       );
   }
@@ -2455,6 +2470,50 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     );
 
     await PlaybackService().play(playableItem);
+  }
+
+  // 导航到媒体库-库管理页面
+  void _navigateToMediaLibraryManagement() {
+    debugPrint('[DashboardHomePage] 准备导航到媒体库-库管理页面');
+    
+    // 先发送子标签切换请求，避免Widget销毁后无法访问
+    try {
+      final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+      tabChangeNotifier.changeToMediaLibrarySubTab(1); // 直接切换到库管理标签
+      debugPrint('[DashboardHomePage] 已发送子标签切换请求');
+    } catch (e) {
+      debugPrint('[DashboardHomePage] 发送子标签切换请求失败: $e');
+    }
+    
+    // 然后切换到媒体库页面
+    MainPageState? mainPageState = MainPageState.of(context);
+    if (mainPageState != null && mainPageState.globalTabController != null) {
+      // 切换到媒体库页面（索引2）
+      if (mainPageState.globalTabController!.index != 2) {
+        mainPageState.globalTabController!.animateTo(2);
+        debugPrint('[DashboardHomePage] 直接调用了globalTabController.animateTo(2)');
+      } else {
+        debugPrint('[DashboardHomePage] globalTabController已经在媒体库页面');
+        // 如果已经在媒体库页面，立即触发子标签切换
+        try {
+          final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+          tabChangeNotifier.changeToMediaLibrarySubTab(1);
+          debugPrint('[DashboardHomePage] 已在媒体库页面，立即触发子标签切换');
+        } catch (e) {
+          debugPrint('[DashboardHomePage] 立即触发子标签切换失败: $e');
+        }
+      }
+    } else {
+      debugPrint('[DashboardHomePage] 无法找到MainPageState或globalTabController');
+      // 如果直接访问失败，使用TabChangeNotifier作为备选方案
+      try {
+        final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+        tabChangeNotifier.changeToMediaLibrarySubTab(1); // 直接切换到媒体库-库管理标签
+        debugPrint('[DashboardHomePage] 备选方案: 使用TabChangeNotifier请求切换到媒体库-库管理标签');
+      } catch (e) {
+        debugPrint('[DashboardHomePage] TabChangeNotifier也失败: $e');
+      }
+    }
   }
   
   // 构建页面指示器（分离出来避免不必要的重建），支持点击和悬浮效果

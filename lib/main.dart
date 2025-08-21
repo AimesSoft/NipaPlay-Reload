@@ -828,7 +828,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       
       // 清除标记，避免多次触发
       debugPrint('[MainPageState] 正在清除targetTabIndex');
-      _tabChangeNotifier?.clear();
+      _tabChangeNotifier?.clearMainTabIndex();
     } else {
       debugPrint('[MainPageState] targetTabIndex为空，不进行任何操作');
     }

@@ -10,6 +10,7 @@ import 'package:nipaplay/widgets/fluent_ui/fluent_media_library_tabs.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/loading_overlay.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/loading_placeholder.dart';
 import '../providers/watch_history_provider.dart';
@@ -277,6 +278,14 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     );
     _tabController.addListener(_handleTabChange);
     
+    // 监听子标签切换通知
+    _setupSubTabListener();
+    
+    // 立即检查是否有待处理的子标签切换请求
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingSubTabChange();
+    });
+    
     print('_MediaLibraryTabs创建TabController：动态长度${_tabController.length}');
   }
 
@@ -287,10 +296,80 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     _isEmbyConnected = embyProvider.isConnected;
   }
 
+  TabChangeNotifier? _tabChangeNotifierRef;
+
+  void _setupSubTabListener() {
+    try {
+      _tabChangeNotifierRef = Provider.of<TabChangeNotifier>(context, listen: false);
+      _tabChangeNotifierRef?.addListener(_onSubTabChangeRequested);
+      debugPrint('[_MediaLibraryTabs] 已设置子标签切换监听器');
+    } catch (e) {
+      debugPrint('[_MediaLibraryTabs] 设置子标签切换监听器失败: $e');
+    }
+  }
+
+  void _onSubTabChangeRequested() {
+    try {
+      final subTabIndex = _tabChangeNotifierRef?.targetMediaLibrarySubTabIndex;
+      
+      if (subTabIndex != null && subTabIndex != _currentIndex) {
+        debugPrint('[_MediaLibraryTabs] 接收到子标签切换请求: $subTabIndex');
+        
+        // 确保索引在有效范围内
+        if (subTabIndex >= 0 && subTabIndex < _tabCount) {
+          _tabController.animateTo(subTabIndex);
+          debugPrint('[_MediaLibraryTabs] 已切换到子标签: $subTabIndex');
+          
+          // 清除切换请求
+          _tabChangeNotifierRef?.clearSubTabIndex();
+        } else {
+          debugPrint('[_MediaLibraryTabs] 子标签索引超出范围: $subTabIndex (最大: ${_tabCount - 1})');
+        }
+      }
+    } catch (e) {
+      debugPrint('[_MediaLibraryTabs] 处理子标签切换请求失败: $e');
+    }
+  }
+
+  void _checkPendingSubTabChange() {
+    try {
+      final subTabIndex = _tabChangeNotifierRef?.targetMediaLibrarySubTabIndex;
+      
+      if (subTabIndex != null && subTabIndex != _currentIndex) {
+        debugPrint('[_MediaLibraryTabs] 发现待处理的子标签切换请求: $subTabIndex');
+        
+        // 确保索引在有效范围内
+        if (subTabIndex >= 0 && subTabIndex < _tabCount) {
+          _tabController.animateTo(subTabIndex);
+          debugPrint('[_MediaLibraryTabs] 执行待处理的子标签切换: $subTabIndex');
+          
+          // 清除切换请求
+          _tabChangeNotifierRef?.clearSubTabIndex();
+        } else {
+          debugPrint('[_MediaLibraryTabs] 待处理子标签索引超出范围: $subTabIndex (最大: ${_tabCount - 1})');
+        }
+      } else {
+        debugPrint('[_MediaLibraryTabs] 无待处理的子标签切换请求');
+      }
+    } catch (e) {
+      debugPrint('[_MediaLibraryTabs] 检查待处理子标签切换请求失败: $e');
+    }
+  }
+
   @override
   void dispose() {
     //debugPrint('[CPU-泄漏排查] _MediaLibraryTabsState dispose 被调用');
     _tabController.removeListener(_handleTabChange);
+    
+    // 移除子标签切换监听器，使用缓存的引用避免访问已销毁的context
+    try {
+      _tabChangeNotifierRef?.removeListener(_onSubTabChangeRequested);
+      _tabChangeNotifierRef = null;
+      debugPrint('[_MediaLibraryTabs] 已移除子标签切换监听器');
+    } catch (e) {
+      debugPrint('[_MediaLibraryTabs] 移除子标签切换监听器失败: $e');
+    }
+    
     _tabController.dispose();
     super.dispose();
   }
