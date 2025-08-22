@@ -895,7 +895,7 @@ class _JellyfinDetailPageState extends State<JellyfinDetailPage> with SingleTick
                 child: Text(
                   _mediaDetail!.seriesStudio!,
                   style: const TextStyle(
-                    color: Colors.white70, // 调整颜色
+                    color: Colors.white70,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
