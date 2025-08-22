@@ -69,7 +69,7 @@ dependencies:
   sqflite: ^2.3.2
   sqflite_common_ffi: ^2.3.3  # 用于桌面平台
   video_player: 2.9.5
-  media_kit: 
+  media_kit:
     git:
       url: https://github.com/Shinokawa/media-kit.git
       ref: main
