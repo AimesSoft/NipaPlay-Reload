@@ -56,9 +56,7 @@ android {
         }
         
         // 支持ARM和x86架构（包括模拟器）
-        ndk {
-            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
-        }
+        // 注释掉 ndk abiFilters，避免与 splits 配置冲突
     }
 
     buildTypes {
