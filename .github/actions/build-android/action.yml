@@ -37,9 +37,10 @@ runs:
       id: build
       shell: bash
       run: |
-        # 构建ARM32位和ARM64位架构APK
-        echo "=== 构建Android APK (ARM32 + ARM64) ==="
-        flutter build apk --release --target-platform android-arm,android-arm64
+        # 构建分架构APK
+        echo "=== 构建Android APK (32位 + 64位) ==="
+        # 构建32位和64位ARM架构的分离APK
+        flutter build apk --release --split-per-abi
         
         # 检查生成的APK文件
         echo "检查构建输出目录："
@@ -51,17 +52,54 @@ runs:
         # 确保输出目录存在
         mkdir -p "build/app/outputs/apk/release"
         
-        # 定义要处理的架构和对应的APK文件
-        declare -A arch_apks=(
-          ["armeabi-v7a"]="build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk"
-          ["arm64-v8a"]="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
-        )
+        # 检查实际生成的APK文件并动态处理
+        echo "=== 检测生成的APK文件 ==="
+        declare -A arch_apks=()
+        
+        # 检查通用APK（如果配置了单一架构或未分架构）
+        if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+          echo "发现通用APK: app-release.apk"
+          arch_apks["universal"]="build/app/outputs/flutter-apk/app-release.apk"
+        fi
+        
+        # 检查分架构APK
+        if [ -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ]; then
+          echo "发现ARMv7 APK: app-armeabi-v7a-release.apk"
+          arch_apks["armeabi-v7a"]="build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk"
+        fi
+        
+        if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+          echo "发现ARM64 APK: app-arm64-v8a-release.apk"
+          arch_apks["arm64-v8a"]="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+        fi
+        
+        if [ -f "build/app/outputs/flutter-apk/app-x86-release.apk" ]; then
+          echo "发现x86 APK: app-x86-release.apk"
+          arch_apks["x86"]="build/app/outputs/flutter-apk/app-x86-release.apk"
+        fi
+        
+        if [ -f "build/app/outputs/flutter-apk/app-x86_64-release.apk" ]; then
+          echo "发现x86_64 APK: app-x86_64-release.apk"
+          arch_apks["x86_64"]="build/app/outputs/flutter-apk/app-x86_64-release.apk"
+        fi
+        
+        # 检查是否找到了APK文件
+        if [ ${#arch_apks[@]} -eq 0 ]; then
+          echo "错误：未找到任何APK文件"
+          exit 1
+        fi
         
         # 处理每个架构的APK
         signed_apks=()
         for arch in "${!arch_apks[@]}"; do
           input_apk="${arch_apks[$arch]}"
-          output_apk="build/app/outputs/apk/release/NipaPlay-${{ inputs.app-version }}-Android-${arch}.apk"
+          
+          # 根据架构类型设置输出文件名
+          if [ "$arch" = "universal" ]; then
+            output_apk="build/app/outputs/apk/release/NipaPlay-${{ inputs.app-version }}-Android-universal.apk"
+          else
+            output_apk="build/app/outputs/apk/release/NipaPlay-${{ inputs.app-version }}-Android-${arch}.apk"
+          fi
           
           echo "=== 处理 ${arch} 架构 ==="
           echo "输入APK: $input_apk"
@@ -69,8 +107,8 @@ runs:
           
           # 检查APK文件是否存在
           if [ ! -f "$input_apk" ]; then
-            echo "警告：${arch} APK文件不存在: $input_apk"
-            continue
+            echo "错误：${arch} APK文件不存在: $input_apk"
+            exit 1
           fi
           
           # 检查APK文件是否有效
