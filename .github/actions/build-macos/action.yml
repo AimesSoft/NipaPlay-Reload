@@ -105,12 +105,25 @@ runs:
           echo "可用的签名身份："
           security find-identity -v -p codesigning
           
-          # 获取Developer ID Application证书
-          CERT_NAME=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          # 获取证书信息
+          echo "查找可用的代码签名证书..."
+          CERT_LIST=$(security find-identity -v -p codesigning)
+          echo "证书列表："
+          echo "$CERT_LIST"
+          
+          # 首先尝试 Developer ID Application 证书（用于分发）
+          CERT_NAME=$(echo "$CERT_LIST" | grep "Developer ID Application" | head -1 | sed 's/.*) \([0-9A-F]*\) "\(.*\)"/\2/')
           
           if [ -z "$CERT_NAME" ]; then
-            echo "⚠️ 未找到Developer ID Application证书，尝试查找其他证书..."
-            CERT_NAME=$(security find-identity -v -p codesigning | grep "Apple Development\|Mac Developer\|Developer ID" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+            echo "⚠️ 未找到Developer ID Application证书，查找Apple Development证书..."
+            # 备选：查找 Apple Development 证书
+            CERT_NAME=$(echo "$CERT_LIST" | grep "Apple Development" | head -1 | sed 's/.*) \([0-9A-F]*\) "\(.*\)"/\2/')
+          fi
+          
+          if [ -z "$CERT_NAME" ]; then
+            echo "⚠️ 未找到Apple Development证书，查找其他可用证书..."
+            # 最后备选：查找任何可用证书
+            CERT_NAME=$(echo "$CERT_LIST" | grep -E "(Developer|Apple)" | head -1 | sed 's/.*) \([0-9A-F]*\) "\(.*\)"/\2/')
           fi
           
           if [ -n "$CERT_NAME" ]; then
