@@ -561,6 +561,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       name: item.title,
       imageUrl: imageUrl,
       source: _serverName,
+      useLegacyImageLoadMode: true, // 恢复旧版图片加载方式，减少并发请求
       onTap: () => _openMediaDetail(item),
     );
   }

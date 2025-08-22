@@ -17,6 +17,7 @@ class AnimeCard extends StatefulWidget {
   final double? rating; // 新增：评分信息
   final Map<String, dynamic>? ratingDetails; // 新增：详细评分信息
   final bool delayLoad; // 新增：延迟加载参数
+  final bool useLegacyImageLoadMode; // 新增：是否启用旧版图片加载模式
 
   const AnimeCard({
     super.key,
@@ -28,6 +29,7 @@ class AnimeCard extends StatefulWidget {
     this.rating, // 新增：评分信息
     this.ratingDetails, // 新增：详细评分信息
     this.delayLoad = false, // 默认不延迟
+    this.useLegacyImageLoadMode = false, // 默认关闭
   });
 
   // 根据filePath获取来源信息
@@ -125,6 +127,9 @@ class _AnimeCardState extends State<AnimeCard> {
         width: double.infinity,
         height: double.infinity,
         delayLoad: widget.delayLoad, // 使用延迟加载参数
+        loadMode: widget.useLegacyImageLoadMode
+          ? CachedImageLoadMode.legacy
+          : CachedImageLoadMode.hybrid,
         errorBuilder: (context, error) {
           return _buildPlaceholder(context);
         },

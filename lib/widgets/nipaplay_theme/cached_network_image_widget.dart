@@ -4,6 +4,14 @@ import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'loading_placeholder.dart';
 import 'package:http/http.dart' as http;
 
+// 图片加载模式
+enum CachedImageLoadMode {
+  // 当前混合模式：先快速加载基础图，再通过缓存/压缩通道加载高清图
+  hybrid,
+  // 旧版模式（699387b 提交之前）：仅走缓存管理器的单通道加载
+  legacy,
+}
+
 class CachedNetworkImageWidget extends StatefulWidget {
   final String imageUrl;
   final BoxFit fit;
@@ -14,6 +22,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final Duration fadeDuration;
   final bool shouldCompress;  // 新增参数，控制是否压缩图片
   final bool delayLoad;  // 新增参数，控制是否延迟加载（避免与HEAD验证竞争）
+  final CachedImageLoadMode loadMode; // 新增：加载模式（hybrid/legacy）
 
   const CachedNetworkImageWidget({
     super.key,
@@ -26,6 +35,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
     this.fadeDuration = const Duration(milliseconds: 300),
     this.shouldCompress = true,  // 默认为true，保持原有行为
     this.delayLoad = false,  // 默认false，不延迟加载
+    this.loadMode = CachedImageLoadMode.hybrid, // 默认使用混合模式
   });
 
   @override
@@ -71,7 +81,13 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     if (_currentUrl == widget.imageUrl || _isDisposed) return;
     _currentUrl = widget.imageUrl;
     
-    // 立即加载基础图片
+    // 旧版：仅使用缓存管理器单通道加载
+    if (widget.loadMode == CachedImageLoadMode.legacy) {
+      _imageFuture = ImageCacheManager.instance.loadImage(widget.imageUrl);
+      return;
+    }
+
+    // 混合模式：立即拉取基础图 + 异步加载高清图
     _loadBasicImage();
     
     // 异步加载高清图片
