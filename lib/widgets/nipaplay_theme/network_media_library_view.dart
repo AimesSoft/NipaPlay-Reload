@@ -562,6 +562,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       imageUrl: imageUrl,
       source: _serverName,
       useLegacyImageLoadMode: true, // 恢复旧版图片加载方式，减少并发请求
+      // 在网格中使用轻微毛玻璃，实际是否启用由全局设置控制
+      enableBackgroundBlur: true,
+      backgroundBlurSigma: 6.0,
+      enableShadow: false, // 网格中禁用阴影以降低绘制成本
       onTap: () => _openMediaDetail(item),
     );
   }

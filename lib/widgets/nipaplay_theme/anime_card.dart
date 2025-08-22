@@ -18,6 +18,9 @@ class AnimeCard extends StatefulWidget {
   final Map<String, dynamic>? ratingDetails; // 新增：详细评分信息
   final bool delayLoad; // 新增：延迟加载参数
   final bool useLegacyImageLoadMode; // 新增：是否启用旧版图片加载模式
+  final bool enableBackgroundBlur; // 新增：是否启用卡片背景模糊
+  final bool enableShadow; // 新增：是否启用阴影
+  final double backgroundBlurSigma; // 新增：背景模糊强度（sigma）
 
   const AnimeCard({
     super.key,
@@ -30,6 +33,9 @@ class AnimeCard extends StatefulWidget {
     this.ratingDetails, // 新增：详细评分信息
     this.delayLoad = false, // 默认不延迟
     this.useLegacyImageLoadMode = false, // 默认关闭
+    this.enableBackgroundBlur = true,
+    this.enableShadow = true,
+    this.backgroundBlurSigma = 20.0,
   });
 
   // 根据filePath获取来源信息
@@ -126,6 +132,8 @@ class _AnimeCardState extends State<AnimeCard> {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        // 网格场景禁用淡入动画，减少saveLayer
+        fadeDuration: Duration.zero,
         delayLoad: widget.delayLoad, // 使用延迟加载参数
         loadMode: widget.useLegacyImageLoadMode
           ? CachedImageLoadMode.legacy
@@ -152,7 +160,10 @@ class _AnimeCardState extends State<AnimeCard> {
 
   @override
   Widget build(BuildContext context) {
-    final Widget card = RepaintBoundary(
+  final settings = context.watch<AppearanceSettingsProvider>();
+  final bool enableBlur = settings.enableWidgetBlurEffect;
+
+  final Widget card = RepaintBoundary(
       child: GestureDetector(
         onTap: widget.onTap,
         child: Container(
@@ -163,28 +174,30 @@ class _AnimeCardState extends State<AnimeCard> {
               color: Colors.white.withOpacity(0.2),
               width: 0.5,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            boxShadow: widget.enableShadow
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.25),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
           ),
-          clipBehavior: Clip.antiAlias,
+          // 使用硬裁剪避免昂贵的抗锯齿裁剪
+          clipBehavior: Clip.hardEdge,
           child: Stack(
             children: [
               // 底层：模糊的封面图背景
               Positioned.fill(
                 child: Transform.rotate(
                   angle: 3.14159, // 180度（π弧度）
-                  child: ImageFiltered(
-                    imageFilter: ImageFilter.blur(
-                      sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
-                      sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
-                    ),
-                    child: _buildImage(context, true),
-                  ),
+                  child: (enableBlur && widget.enableBackgroundBlur)
+                      ? ImageFiltered(
+                          imageFilter: ImageFilter.blur(sigmaX: widget.backgroundBlurSigma, sigmaY: widget.backgroundBlurSigma),
+                          child: _buildImage(context, true),
+                        )
+                      : _buildImage(context, true),
                 ),
               ),
               
