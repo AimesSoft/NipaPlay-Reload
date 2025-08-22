@@ -4239,7 +4239,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       
       // 首先查找简体中文
       preferredSubtitle = externalSubtitles.firstWhere(
-        (track) => {
+        (track) {
           final title = track['title']?.toLowerCase() ?? '';
           final language = track['language']?.toLowerCase() ?? '';
           return language.contains('chi') || 
@@ -4249,7 +4249,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                  title.contains('tc') ||      // 支持tcjp格式
                  title.startsWith('scjp') ||  // 精确匹配scjp开头
                  title.startsWith('tcjp');    // 精确匹配tcjp开头
-        }(),
+        },
         orElse: () => externalSubtitles.first,
       );
       
@@ -4316,7 +4316,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       Map<String, dynamic>? preferredSubtitle;
       // 首先查找简体中文
       preferredSubtitle = externalSubtitles.firstWhere(
-        (track) => {
+        (track) {
           final title = track['title']?.toLowerCase() ?? '';
           final language = track['language']?.toLowerCase() ?? '';
           return language.contains('chi') || 
@@ -4326,7 +4326,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                  title.contains('tc') ||      // 支持tcjp格式
                  title.startsWith('scjp') ||  // 精确匹配scjp开头
                  title.startsWith('tcjp');    // 精确匹配tcjp开头
-        }(),
+        },
         orElse: () => externalSubtitles.first,
       );
       // 如果没有中文，选择默认字幕或第一个
