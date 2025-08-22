@@ -130,7 +130,7 @@ runs:
           echo "证书列表："
           echo "$CERT_LIST"
           
-          # 首先尝试 Developer ID Application 证书（用于分发）
+          # 首先尝试 Developer ID Application 证书（用于分发和公证）
           CERT_NAME=$(echo "$CERT_LIST" | grep "Developer ID Application" | head -1 | sed 's/.*) \([0-9A-F]*\) "\(.*\)"/\2/')
           
           if [ -z "$CERT_NAME" ]; then
@@ -148,23 +148,6 @@ runs:
           if [ -n "$CERT_NAME" ]; then
             echo "使用证书: $CERT_NAME"
             
-            # 对App Bundle进行深度签名
-            echo "正在对框架进行签名..."
-            for framework in "$APP_PATH/Contents/Frameworks/"*.framework; do
-              if [ -d "$framework" ]; then
-                echo "签名框架: $framework"
-                codesign --force --verbose --sign "$CERT_NAME" \
-                  --options runtime \
-                  --entitlements macos/Runner/Release.entitlements \
-                  "$framework"
-              fi
-            done
-              
-            echo "正在对主应用进行签名..."
-            echo "应用路径: $APP_PATH"
-            echo "证书名称: $CERT_NAME"
-            echo "权限文件: macos/Runner/Release.entitlements"
-            
             # 检查权限文件是否存在
             if [ ! -f "macos/Runner/Release.entitlements" ]; then
               echo "❌ 权限文件不存在"
@@ -177,14 +160,55 @@ runs:
               exit 1
             fi
             
-            codesign --force --verbose --sign "$CERT_NAME" \
+            # 对所有框架进行深度签名（确保使用 runtime 选项）
+            echo "正在对框架进行签名..."
+            find "$APP_PATH/Contents/Frameworks" -name "*.framework" -exec basename {} \; | sort | while read framework; do
+              framework_path="$APP_PATH/Contents/Frameworks/$framework"
+              if [ -d "$framework_path" ]; then
+                echo "签名框架: $framework_path"
+                codesign --force --deep --sign "$CERT_NAME" \
+                  --options runtime \
+                  --timestamp \
+                  "$framework_path"
+                
+                # 验证框架签名
+                if codesign --verify --deep --strict "$framework_path" 2>/dev/null; then
+                  echo "✅ 框架签名验证成功: $framework"
+                else
+                  echo "⚠️ 框架签名验证失败: $framework"
+                fi
+              fi
+            done
+            
+            # 对动态库进行签名
+            echo "正在对动态库进行签名..."
+            find "$APP_PATH" -name "*.dylib" -exec codesign --force --sign "$CERT_NAME" --options runtime --timestamp {} \;
+              
+            echo "正在对主应用进行签名..."
+            echo "应用路径: $APP_PATH"
+            echo "证书名称: $CERT_NAME (隐藏敏感信息)"
+            echo "权限文件: macos/Runner/Release.entitlements"
+            
+            # 对主应用进行签名（使用与本地相同的参数）
+            codesign --force --deep --sign "$CERT_NAME" \
               --options runtime \
+              --timestamp \
               --entitlements macos/Runner/Release.entitlements \
               "$APP_PATH"
               
-            # 验证签名
-            codesign --verify --verbose "$APP_PATH"
-            echo "✅ 应用签名完成"
+            # 详细验证签名
+            echo "验证应用签名..."
+            codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ 应用签名完成"
+              # 显示签名信息
+              echo "签名信息："
+              codesign -dv --verbose=4 "$APP_PATH"
+            else
+              echo "❌ 应用签名验证失败"
+              exit 1
+            fi
           else
             echo "❌ 未找到有效的签名证书"
             exit 1
@@ -202,70 +226,97 @@ runs:
           APP_PATH="build/macos/Build/Products/Release/NipaPlay.app"
           
           # 验证应用已正确签名
-          if ! codesign --verify --verbose "$APP_PATH" 2>/dev/null; then
+          if ! codesign --verify --deep --strict --verbose=2 "$APP_PATH" 2>/dev/null; then
             echo "❌ 应用签名验证失败，无法进行公证"
             exit 1
           fi
           
-          # 创建 zip 文件用于公证
+          # 检查应用是否使用了 Hardened Runtime
+          echo "检查 Hardened Runtime 设置..."
+          codesign -d --entitlements - "$APP_PATH"
+          
+          # 创建 zip 文件用于公证（与本地一致的方式）
           echo "📦 创建应用压缩包..."
           ditto -c -k --keepParent "$APP_PATH" "NipaPlay.zip"
           
           # 上传公证
           echo "☁️ 上传到 Apple 进行公证..."
-          if ! xcrun notarytool submit "NipaPlay.zip" \
+          SUBMISSION_ID=$(xcrun notarytool submit "NipaPlay.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
-            --wait; then
-            echo "❌ 公证失败"
-            rm "NipaPlay.zip"
+            --output-format json \
+            --wait | jq -r '.id')
+          
+          if [ -z "$SUBMISSION_ID" ] || [ "$SUBMISSION_ID" = "null" ]; then
+            echo "❌ 获取提交ID失败"
+            rm -f "NipaPlay.zip"
             exit 1
           fi
           
-          echo "✅ 公证完成"
+          echo "提交ID: $SUBMISSION_ID"
           
-          # 附加公证票据到应用
-          echo "🎫 附加公证票据..."
+          # 获取公证状态
+          echo "检查公证状态..."
+          STATUS=$(xcrun notarytool info "$SUBMISSION_ID" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --output-format json | jq -r '.status')
           
-          # 等待一下，让 Apple 服务器准备好票据
+          echo "公证状态: $STATUS"
+          
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "❌ 公证失败，状态: $STATUS"
+            echo "获取公证日志..."
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID"
+            rm -f "NipaPlay.zip"
+            exit 1
+          fi
+          
+          echo "✅ 公证成功"
+          
+          # 清理临时文件
+          rm -f "NipaPlay.zip"
+          
+          # 等待公证票据在 Apple 服务器上准备就绪
           echo "等待公证票据准备就绪..."
-          sleep 30
+          sleep 60
           
-          # 尝试附加票据，最多重试3次
+          # 尝试附加票据，最多重试5次，每次间隔更长
+          echo "🎫 附加公证票据..."
           STAPLE_SUCCESS=false
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4 5; do
             echo "尝试附加票据 (第 $attempt 次)..."
-            if xcrun stapler staple "$APP_PATH"; then
+            if xcrun stapler staple "$APP_PATH" 2>&1; then
               echo "✅ 公证票据附加成功"
               STAPLE_SUCCESS=true
               break
             else
               echo "⚠️ 第 $attempt 次附加失败"
-              if [ $attempt -lt 3 ]; then
-                echo "等待 60 秒后重试..."
-                sleep 60
+              if [ $attempt -lt 5 ]; then
+                wait_time=$((attempt * 30))
+                echo "等待 $wait_time 秒后重试..."
+                sleep $wait_time
               fi
             fi
           done
           
           if [ "$STAPLE_SUCCESS" = "false" ]; then
-            echo "❌ 公证票据附加失败"
-            rm -f "NipaPlay.zip"
-            exit 1
-          fi
-          
-          # 验证公证
-          if xcrun stapler validate "$APP_PATH"; then
-            echo "✅ 公证验证成功 - 应用现在可以直接运行"
+            echo "⚠️ 公证票据附加失败，但应用已经公证"
+            echo "应用仍然可以正常分发，用户首次运行时会在线验证"
+            # 不要因为票据附加失败而退出，因为应用已经公证成功
           else
-            echo "❌ 公证验证失败"
-            rm -f "NipaPlay.zip"
-            exit 1
+            # 验证公证
+            if xcrun stapler validate "$APP_PATH"; then
+              echo "✅ 公证验证成功 - 应用现在可以离线运行"
+            else
+              echo "⚠️ 公证验证失败，但应用已公证，仍可在线验证"
+            fi
           fi
-          
-          # 清理临时文件
-          rm -f "NipaPlay.zip"
           
         elif [ "$ENABLE_CODE_SIGNING" = "true" ]; then
           echo "⚠️ 应用已签名但未公证，用户可能需要手动允许运行"
@@ -318,7 +369,7 @@ runs:
       id: package
       shell: bash
       run: |
-        brew install coreutils create-dmg imagemagick
+        brew install coreutils create-dmg imagemagick jq
         chmod +x dmg.sh
         
         # Set up environment for GUI operations in CI
