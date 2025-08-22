@@ -213,46 +213,55 @@ runs:
           
           # 上传公证
           echo "☁️ 上传到 Apple 进行公证..."
-          SUBMISSION_ID=$(xcrun notarytool submit "NipaPlay.zip" \
+          if ! xcrun notarytool submit "NipaPlay.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
-            --output-format json \
-            --wait | jq -r '.id' 2>/dev/null || echo "")
-          
-          if [ -z "$SUBMISSION_ID" ]; then
-            echo "❌ 公证提交失败，尝试备用方法..."
-            # 备用方法：不解析 JSON
-            xcrun notarytool submit "NipaPlay.zip" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_APP_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait
-            
-            if [ $? -eq 0 ]; then
-              echo "✅ 公证完成（备用方法）"
-            else
-              echo "❌ 公证失败，但继续构建..."
-              rm "NipaPlay.zip"
-              exit 0
-            fi
-          else
-            echo "✅ 公证完成，提交ID: $SUBMISSION_ID"
+            --wait; then
+            echo "❌ 公证失败"
+            rm "NipaPlay.zip"
+            exit 1
           fi
+          
+          echo "✅ 公证完成"
           
           # 附加公证票据到应用
           echo "🎫 附加公证票据..."
-          if xcrun stapler staple "$APP_PATH"; then
-            echo "✅ 公证票据附加成功"
-            
-            # 验证公证
-            if xcrun stapler validate "$APP_PATH"; then
-              echo "✅ 公证验证成功 - 应用现在可以直接运行"
+          
+          # 等待一下，让 Apple 服务器准备好票据
+          echo "等待公证票据准备就绪..."
+          sleep 30
+          
+          # 尝试附加票据，最多重试3次
+          STAPLE_SUCCESS=false
+          for attempt in 1 2 3; do
+            echo "尝试附加票据 (第 $attempt 次)..."
+            if xcrun stapler staple "$APP_PATH"; then
+              echo "✅ 公证票据附加成功"
+              STAPLE_SUCCESS=true
+              break
             else
-              echo "⚠️ 公证验证失败，但继续构建"
+              echo "⚠️ 第 $attempt 次附加失败"
+              if [ $attempt -lt 3 ]; then
+                echo "等待 60 秒后重试..."
+                sleep 60
+              fi
             fi
+          done
+          
+          if [ "$STAPLE_SUCCESS" = "false" ]; then
+            echo "❌ 公证票据附加失败"
+            rm -f "NipaPlay.zip"
+            exit 1
+          fi
+          
+          # 验证公证
+          if xcrun stapler validate "$APP_PATH"; then
+            echo "✅ 公证验证成功 - 应用现在可以直接运行"
           else
-            echo "❌ 公证票据附加失败，但继续构建"
+            echo "❌ 公证验证失败"
+            rm -f "NipaPlay.zip"
+            exit 1
           fi
           
           # 清理临时文件
