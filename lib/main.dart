@@ -837,30 +837,30 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   void _manageHotkeys() {
     final videoState = _videoPlayerState;
     if (videoState == null || !mounted) {
-      debugPrint('[HotkeyManager] 跳过热键管理: videoState=${videoState != null}, mounted=$mounted');
+      //debugPrint('[HotkeyManager] 跳过热键管理: videoState=${videoState != null}, mounted=$mounted');
       return;
     }
 
     final tabIndex = globalTabController?.index ?? -1;
     final shouldBeRegistered = tabIndex == 1 && videoState.hasVideo;
     
-    //debugPrint('[HotkeyManager] 热键管理检查: tabIndex=$tabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
+    ////debugPrint('[HotkeyManager] 热键管理检查: tabIndex=$tabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
 
     if (shouldBeRegistered && !_hotkeysAreRegistered) {
-      debugPrint('[HotkeyManager] 注册热键...');
+      //debugPrint('[HotkeyManager] 注册热键...');
       HotkeyService().registerHotkeys().then((_) {
         _hotkeysAreRegistered = true;
-        debugPrint('[HotkeyManager] 热键注册完成');
+        //debugPrint('[HotkeyManager] 热键注册完成');
       }).catchError((e) {
-        debugPrint('[HotkeyManager] 热键注册失败: $e');
+        //debugPrint('[HotkeyManager] 热键注册失败: $e');
       });
     } else if (!shouldBeRegistered && _hotkeysAreRegistered) {
-      debugPrint('[HotkeyManager] 注销热键...');
+      //debugPrint('[HotkeyManager] 注销热键...');
       HotkeyService().unregisterHotkeys().then((_) {
         _hotkeysAreRegistered = false;
-        debugPrint('[HotkeyManager] 热键注销完成');
+        //debugPrint('[HotkeyManager] 热键注销完成');
       }).catchError((e) {
-        debugPrint('[HotkeyManager] 热键注销失败: $e');
+        //debugPrint('[HotkeyManager] 热键注销失败: $e');
       });
     }
   }
