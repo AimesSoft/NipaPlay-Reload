@@ -47,7 +47,6 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   String? _currentUrl;
   bool _isImageLoaded = false;
   bool _isDisposed = false;
-  ui.Image? _cachedImage; // 缓存图片引用，避免重复访问
   ui.Image? _basicImage; // 基础图片
 
   @override
@@ -61,7 +60,6 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageUrl != widget.imageUrl) {
       // 不再在这里释放图片，改为由缓存管理器统一管理
-      _cachedImage = null; // 清除本地缓存的图片引用
       setState(() {
         _isImageLoaded = false;
       });
@@ -72,7 +70,6 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   @override
   void dispose() {
     _isDisposed = true;
-    _cachedImage = null; // 清除本地引用，但不dispose图片对象
     // 完全移除图片释放逻辑，改为依赖缓存管理器的定期清理
     super.dispose();
   }
@@ -148,13 +145,9 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       if (width <= 0 || height <= 0) {
         return null;
       }
-      
-      // 缓存图片引用
-      _cachedImage = image;
       return image;
     } catch (e) {
       // 图片已被释放或无效
-      _cachedImage = null;
       return null;
     }
   }
@@ -217,6 +210,18 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                 });
               }
             });
+          }
+
+          // 如果禁用渐隐动画或时长为0，直接渲染，避免额外的saveLayer与图层抖动
+          if (widget.fadeDuration.inMilliseconds == 0) {
+            return SizedBox(
+              width: widget.width,
+              height: widget.height,
+              child: SafeRawImage(
+                image: safeImage,
+                fit: widget.fit,
+              ),
+            );
           }
 
           return AnimatedOpacity(
