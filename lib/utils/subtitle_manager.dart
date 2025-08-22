@@ -621,8 +621,8 @@ class SubtitleManager extends ChangeNotifier {
 
     // 常见的语言标识符
     final Map<String, String> languagePatterns = {
-      r'simplified|简体|chs|imp|zh-hans|zh-cn|zh-sg|sc': '简体中文',
-      r'traditional|繁体|cht|rad|zh-hant|zh-tw|zh-hk|tc': '繁体中文',
+      r'simplified|简体|chs|imp|zh-hans|zh-cn|zh-sg|sc$|scjp': '简体中文',
+      r'traditional|繁体|cht|rad|zh-hant|zh-tw|zh-hk|tc$|tcjp': '繁体中文',
       r'chi|zho|chinese|中文': '中文', // General Chinese as a fallback
       r'eng|en|英文|english': '英文',
       r'jpn|ja|日文|japanese': '日语',

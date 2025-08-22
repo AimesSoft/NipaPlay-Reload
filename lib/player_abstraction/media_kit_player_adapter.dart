@@ -752,7 +752,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
     final patterns = [
       'chi', 'chs', 'zh', '中文', '简体', '繁体', 'simplified', 'traditional', 
-      'zho', 'zh-hans', 'zh-cn', 'zh-sg', 'sc', 'zh-hant', 'zh-tw', 'zh-hk', 'tc'
+      'zho', 'zh-hans', 'zh-cn', 'zh-sg', 'sc', 'zh-hant', 'zh-tw', 'zh-hk', 'tc',
+      'scjp', 'tcjp' // 支持字幕组常用的简体中文日语(scjp)和繁体中文日语(tcjp)格式
     ];
 
     for (var p in patterns) {
@@ -810,10 +811,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
               final langLower = (subInfo.metadata['language'] ?? subInfo.language ?? '').toLowerCase();
 
               bool isSimplified = titleLower.contains('simplified') || titleLower.contains('简体') ||
-                                  langLower.contains('zh-hans') || langLower.contains('zh-cn') || langLower.contains('sc');
+                                  langLower.contains('zh-hans') || langLower.contains('zh-cn') || 
+                                  langLower.contains('sc') || titleLower.contains('scjp') || langLower.contains('scjp');
               
               bool isTraditional = titleLower.contains('traditional') || titleLower.contains('繁体') ||
-                                   langLower.contains('zh-hant') || langLower.contains('zh-tw') || langLower.contains('tc');
+                                   langLower.contains('zh-hant') || langLower.contains('zh-tw') || 
+                                   langLower.contains('tc') || titleLower.contains('tcjp') || langLower.contains('tcjp');
 
               if (isSimplified && firstSimplifiedChineseIndex == -1) {
                   firstSimplifiedChineseIndex = i;
@@ -1433,8 +1436,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
 // Helper map similar to SubtitleManager's languagePatterns
 const Map<String, String> _subtitleNormalizationPatterns = {
-  r'simplified|简体|chs|zh-hans|zh-cn|zh-sg|sc': '简体中文',
-  r'traditional|繁体|cht|zh-hant|zh-tw|zh-hk|tc': '繁体中文',
+  r'simplified|简体|chs|zh-hans|zh-cn|zh-sg|sc$|scjp': '简体中文',
+  r'traditional|繁体|cht|zh-hant|zh-tw|zh-hk|tc$|tcjp': '繁体中文',
   r'chi|zho|chinese|中文': '中文', // General Chinese as a fallback
   r'eng|en|英文|english': '英文',
   r'jpn|ja|日文|japanese': '日语',
@@ -1484,9 +1487,16 @@ String _getNormalizedLanguageHelper(String input) { // Renamed to avoid conflict
     }
   }
 
-  // If still no recognized language, use originalLangCode if available, otherwise "未知"
+  // If still no recognized language, use originalLangCode or originalTitle if available, otherwise "未知"
   if (determinedLanguage.isEmpty || (determinedLanguage == originalLangCode && !_subtitleNormalizationPatterns.containsValue(determinedLanguage))) {
-    determinedLanguage = originalLangCode.isNotEmpty ? originalLangCode : '未知';
+    // 优先使用原始语言代码，如果没有则使用原始标题，最后才是"未知"
+    if (originalLangCode.isNotEmpty) {
+      determinedLanguage = originalLangCode;
+    } else if (originalTitle.isNotEmpty) {
+      determinedLanguage = originalTitle;
+    } else {
+      determinedLanguage = '未知';
+    }
   }
   
   String finalTitle;
