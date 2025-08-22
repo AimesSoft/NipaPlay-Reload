@@ -117,11 +117,34 @@ runs:
             echo "使用证书: $CERT_NAME"
             
             # 对App Bundle进行深度签名
-            codesign --force --verbose --sign "$CERT_NAME" \
-              --options runtime \
-              --entitlements macos/Runner/Release.entitlements \
-              "$APP_PATH/Contents/Frameworks/"*.framework || true
+            echo "正在对框架进行签名..."
+            for framework in "$APP_PATH/Contents/Frameworks/"*.framework; do
+              if [ -d "$framework" ]; then
+                echo "签名框架: $framework"
+                codesign --force --verbose --sign "$CERT_NAME" \
+                  --options runtime \
+                  --entitlements macos/Runner/Release.entitlements \
+                  "$framework"
+              fi
+            done
               
+            echo "正在对主应用进行签名..."
+            echo "应用路径: $APP_PATH"
+            echo "证书名称: $CERT_NAME"
+            echo "权限文件: macos/Runner/Release.entitlements"
+            
+            # 检查权限文件是否存在
+            if [ ! -f "macos/Runner/Release.entitlements" ]; then
+              echo "❌ 权限文件不存在"
+              exit 1
+            fi
+            
+            # 检查应用路径是否存在
+            if [ ! -d "$APP_PATH" ]; then
+              echo "❌ 应用路径不存在: $APP_PATH"
+              exit 1
+            fi
+            
             codesign --force --verbose --sign "$CERT_NAME" \
               --options runtime \
               --entitlements macos/Runner/Release.entitlements \
