@@ -56,21 +56,32 @@ class VolumeIndicator extends StatelessWidget { // Changed class name
                         }
                       ),
                       const SizedBox(height: 10),
-                      SizedBox(
-                        height: globals.isPhone ? 100.0 : 250.0, 
-                        child: RotatedBox(
-                          quarterTurns: 3,
-                          child: SizedBox(
-                            height: 6, 
-                            child: LinearProgressIndicator(
-                              value: videoState.currentSystemVolume, // <<< CHANGED to currentSystemVolume
-                              backgroundColor: Colors.white.withOpacity(0.25),
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white.withOpacity(0.9)),
-                              borderRadius: BorderRadius.circular(3),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          // 获取屏幕高度
+                          final screenHeight = MediaQuery.of(context).size.height;
+                          // 根据设备类型计算滑条高度
+                          final sliderHeight = globals.isDesktopOrTablet 
+                              ? screenHeight / 3.0  // 平板/桌面：屏幕高度的1/3
+                              : screenHeight * 0.8;  // 手机：屏幕高度的80%
+                          
+                          return SizedBox(
+                            height: sliderHeight,
+                            child: RotatedBox(
+                              quarterTurns: 3,
+                              child: SizedBox(
+                                height: 6, 
+                                child: LinearProgressIndicator(
+                                  value: videoState.currentSystemVolume,
+                                  backgroundColor: Colors.white.withOpacity(0.25),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white.withOpacity(0.9)),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 10),
                       Padding(
