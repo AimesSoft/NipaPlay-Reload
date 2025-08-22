@@ -45,6 +45,27 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 0
       
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'pubspec.lock') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      
+      - name: Cache Android SDK
+        uses: actions/cache@v3
+        with:
+          path: |
+            ${{ env.ANDROID_SDK_ROOT }}
+            ${{ env.ANDROID_HOME }}
+          key: android-sdk-${{ runner.os }}-${{ hashFiles('android/app/build.gradle') }}
+          restore-keys: |
+            android-sdk-${{ runner.os }}-
+      
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
