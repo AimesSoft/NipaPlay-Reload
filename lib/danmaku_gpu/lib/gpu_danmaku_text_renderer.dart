@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_text_renderer.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'gpu_danmaku_item.dart';
 import 'dynamic_font_atlas.dart';
 import 'gpu_danmaku_config.dart';
@@ -97,10 +98,10 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     return luminance < 0.2 ? Colors.white : Colors.black;
   }
 
-  /// 获取描边偏移量，与 NipaPlay 保持一致
+  /// 获取描边偏移量，移动端使用更细的描边
   double _getStrokeOffset() {
-    // 统一使用1.0像素偏移，与 NipaPlay 保持一致
-    return 1.0;
+    // 移动端使用0.5像素偏移，桌面端使用1.0像素偏移
+    return globals.isPhone ? 0.5 : 1.0;
   }
 
   /// 渲染单个弹幕项目的文本

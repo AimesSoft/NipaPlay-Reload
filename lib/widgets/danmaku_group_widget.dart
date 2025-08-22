@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class DanmakuGroupWidget extends StatelessWidget {
   final List<Map<String, dynamic>> danmakus;
@@ -106,18 +107,19 @@ class DanmakuGroupWidget extends StatelessWidget {
           break;
       }
       if (localOpacity > 0) {
-        // 计算描边色
+        // 计算描边色，移动端使用更细的描边
         final luminance = (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
         final strokeColor = luminance < 0.114 ? Colors.white : Colors.black;
+        final strokeWidth = globals.isPhone ? 0.5 : 1.0;
         final shadowList = [
-          Shadow(offset: const Offset(-1, -1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: const Offset(1, -1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: const Offset(1, 1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: const Offset(-1, 1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: const Offset(0, -1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: const Offset(0, 1), blurRadius: 0, color: strokeColor),
-          Shadow(offset: const Offset(-1, 0), blurRadius: 0, color: strokeColor),
-          Shadow(offset: const Offset(1, 0), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(-strokeWidth, -strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(strokeWidth, -strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(strokeWidth, strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(-strokeWidth, strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(0, -strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(0, strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(-strokeWidth, 0), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(strokeWidth, 0), blurRadius: 0, color: strokeColor),
         ];
         final hasCountText = danmakuItem.countText != null;
         children.add(Positioned(

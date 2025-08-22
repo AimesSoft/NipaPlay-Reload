@@ -26,11 +26,13 @@ class GPUDanmakuConfig {
   GPUDanmakuConfig({
     double? fontSize,
     this.durationMultiplier = 1.0,
-    this.trackHeightMultiplier = 1.5,
-    this.danmakuBottomMargin = 10.0,
+    double? trackHeightMultiplier,
+    double? danmakuBottomMargin,
     this.screenUsageRatio = 1.0,
     this.scrollScreensPerSecond = 0.1,
-  }) : fontSize = fontSize ?? (globals.isPhone ? 20.0 : 30.0);
+  }) : fontSize = fontSize ?? (globals.isPhone ? 20.0 : 30.0),
+       trackHeightMultiplier = trackHeightMultiplier ?? (globals.isPhone ? 1.2 : 1.5),
+       danmakuBottomMargin = danmakuBottomMargin ?? (globals.isPhone ? 6.0 : 10.0);
 
   /// 从VideoPlayerState创建配置
   factory GPUDanmakuConfig.fromVideoPlayerState(VideoPlayerState videoState) {

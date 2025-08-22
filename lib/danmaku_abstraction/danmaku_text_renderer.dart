@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// 弹幕文本渲染器的抽象基类
 abstract class DanmakuTextRenderer {
@@ -43,16 +44,17 @@ class CpuDanmakuTextRenderer extends DanmakuTextRenderer {
     // 检查是否有计数文本
     final hasCountText = content.countText != null;
 
-    // 创建阴影列表
+    // 创建阴影列表，移动端使用更细的描边
+    final strokeWidth = globals.isPhone ? 0.5 : 1.0;
     final shadowList = [
-      Shadow(offset: const Offset(-1, -1), blurRadius: 0, color: strokeColor),
-      Shadow(offset: const Offset(1, -1), blurRadius: 0, color: strokeColor),
-      Shadow(offset: const Offset(1, 1), blurRadius: 0, color: strokeColor),
-      Shadow(offset: const Offset(-1, 1), blurRadius: 0, color: strokeColor),
-      Shadow(offset: const Offset(0, -1), blurRadius: 0, color: strokeColor),
-      Shadow(offset: const Offset(0, 1), blurRadius: 0, color: strokeColor),
-      Shadow(offset: const Offset(-1, 0), blurRadius: 0, color: strokeColor),
-      Shadow(offset: const Offset(1, 0), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(-strokeWidth, -strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(strokeWidth, -strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(strokeWidth, strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(-strokeWidth, strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(0, -strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(0, strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(-strokeWidth, 0), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(strokeWidth, 0), blurRadius: 0, color: strokeColor),
     ];
 
     final textWidget = hasCountText
