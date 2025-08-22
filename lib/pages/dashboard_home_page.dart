@@ -23,8 +23,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/cached_network_image_widget.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
-import 'package:nipaplay/pages/jellyfin_detail_page.dart';
-import 'package:nipaplay/pages/emby_detail_page.dart';
+import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -2296,7 +2295,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 已移除旧的创建本地动画项目的重量级方法，改为快速路径+后台补齐。
 
   void _navigateToJellyfinDetail(String jellyfinId) {
-    JellyfinDetailPage.show(context, jellyfinId).then((result) {
+    MediaServerDetailPage.showJellyfin(context, jellyfinId).then((result) {
       if (result != null) {
         // 检查是否需要获取实际播放URL
         String? actualPlayUrl;
@@ -2353,7 +2352,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   void _navigateToEmbyDetail(String embyId) {
-    EmbyDetailPage.show(context, embyId).then((result) {
+    MediaServerDetailPage.showEmby(context, embyId).then((result) {
       if (result != null) {
         // 检查是否需要获取实际播放URL
         String? actualPlayUrl;

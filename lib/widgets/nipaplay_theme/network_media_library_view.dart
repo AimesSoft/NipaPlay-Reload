@@ -5,8 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/pages/jellyfin_detail_page.dart';
-import 'package:nipaplay/pages/emby_detail_page.dart';
+import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -762,7 +761,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     switch (widget.serverType) {
       case NetworkMediaServerType.jellyfin:
         final jellyfinItem = (item as JellyfinMediaItemAdapter).originalItem;
-        JellyfinDetailPage.show(context, jellyfinItem.id).then((WatchHistoryItem? result) {
+        MediaServerDetailPage.showJellyfin(context, jellyfinItem.id).then((WatchHistoryItem? result) {
           if (result != null && result.filePath.isNotEmpty) {
             widget.onPlayEpisode?.call(result);
           }
@@ -770,7 +769,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         break;
       case NetworkMediaServerType.emby:
         final embyItem = (item as EmbyMediaItemAdapter).originalItem;
-        EmbyDetailPage.show(context, embyItem.id).then((WatchHistoryItem? result) {
+        MediaServerDetailPage.showEmby(context, embyItem.id).then((WatchHistoryItem? result) {
           if (result != null && result.filePath.isNotEmpty) {
             widget.onPlayEpisode?.call(result);
           }

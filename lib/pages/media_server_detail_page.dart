@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/cached_network_image_widget.dart';
@@ -9,20 +11,35 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/switchable_view.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
 import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
 
-class EmbyDetailPage extends StatefulWidget {
-  final String embyId;
+class MediaServerDetailPage extends StatefulWidget {
+  final String mediaId;
+  final MediaServerType serverType;
 
-  const EmbyDetailPage({super.key, required this.embyId});
+  const MediaServerDetailPage({
+    super.key, 
+    required this.mediaId, 
+    required this.serverType,
+  });
 
   @override
-  State<EmbyDetailPage> createState() => _EmbyDetailPageState();
+  State<MediaServerDetailPage> createState() => _MediaServerDetailPageState();
   
-  static Future<WatchHistoryItem?> show(BuildContext context, String embyId) {
+  static Future<WatchHistoryItem?> showJellyfin(BuildContext context, String jellyfinId) {
+    return show(context, jellyfinId, MediaServerType.jellyfin);
+  }
+
+  static Future<WatchHistoryItem?> showEmby(BuildContext context, String embyId) {
+    return show(context, embyId, MediaServerType.emby);
+  }
+
+  static Future<WatchHistoryItem?> show(BuildContext context, String mediaId, MediaServerType serverType) {
     // 获取外观设置Provider
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
     final enableAnimation = appearanceSettings.enablePageAnimation;
@@ -34,7 +51,7 @@ class EmbyDetailPage extends StatefulWidget {
       barrierLabel: '关闭详情页',
       transitionDuration: const Duration(milliseconds: 250),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return EmbyDetailPage(embyId: embyId);
+        return MediaServerDetailPage(mediaId: mediaId, serverType: serverType);
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         // 如果禁用动画，直接返回child
@@ -62,20 +79,60 @@ class EmbyDetailPage extends StatefulWidget {
   }
 }
 
-class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProviderStateMixin {
-  // 静态Map，用于存储Emby视频的哈希值（ID -> 哈希值）
-  static final Map<String, String> _embyVideoHashes = {};
-  static final Map<String, Map<String, dynamic>> _embyVideoInfos = {};
+class _MediaServerDetailPageState extends State<MediaServerDetailPage> with SingleTickerProviderStateMixin {
+  // 静态Map，用于存储视频的哈希值（ID -> 哈希值）
+  static final Map<String, String> _videoHashes = {};
+  static final Map<String, Map<String, dynamic>> _videoInfos = {};
   
-  EmbyMediaItemDetail? _mediaDetail;
-  List<EmbySeasonInfo> _seasons = [];
-  final Map<String, List<EmbyEpisodeInfo>> _episodesBySeasonId = {};
+  // 通用媒体详情（可以是Jellyfin或Emby）
+  dynamic _mediaDetail;
+  List<dynamic> _seasons = [];
+  final Map<String, List<dynamic>> _episodesBySeasonId = {};
   String? _selectedSeasonId;
   bool _isLoading = true;
   String? _error;
   bool _isMovie = false; // 新增状态，判断是否为电影
 
   TabController? _tabController;
+
+  // 辅助方法：获取演员头像URL
+  String? _getActorImageUrl(dynamic actor) {
+    if (widget.serverType == MediaServerType.jellyfin) {
+      if (actor.primaryImageTag != null) {
+        final service = JellyfinService.instance;
+        return service.getImageUrl(actor.id, type: 'Primary', width: 100, quality: 90);
+      }
+    } else {
+      if (actor.imagePrimaryTag != null && actor.id != null) {
+        final service = EmbyService.instance;
+        return service.getImageUrl(actor.id!, type: 'Primary', width: 100, height: 100, tag: actor.imagePrimaryTag);
+      }
+    }
+    return null;
+  }
+
+  // 辅助方法：获取剧集缩略图URL
+  String _getEpisodeImageUrl(dynamic episode, dynamic service) {
+    if (widget.serverType == MediaServerType.jellyfin) {
+      return service.getImageUrl(episode.id, type: 'Primary', width: 300, quality: 90);
+    } else {
+      // Emby需要传递tag参数
+      return service.getImageUrl(episode.id, type: 'Primary', width: 300, tag: episode.imagePrimaryTag);
+    }
+  }
+
+  // 辅助方法：获取海报URL
+  String _getPosterUrl() {
+    if (_mediaDetail?.imagePrimaryTag == null) return '';
+    
+    if (widget.serverType == MediaServerType.jellyfin) {
+      final service = JellyfinService.instance;
+      return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300, quality: 95);
+    } else {
+      final service = EmbyService.instance;
+      return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300, tag: _mediaDetail!.imagePrimaryTag);
+    }
+  }
 
   @override
   void initState() {
@@ -106,10 +163,16 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
     });
     
     try {
-      final embyService = EmbyService.instance;
+      dynamic service;
+      dynamic detail;
       
-      // 加载媒体详情
-      final detail = await embyService.getMediaItemDetails(widget.embyId);
+      if (widget.serverType == MediaServerType.jellyfin) {
+        service = JellyfinService.instance;
+        detail = await service.getMediaItemDetails(widget.mediaId);
+      } else {
+        service = EmbyService.instance;
+        detail = await service.getMediaItemDetails(widget.mediaId);
+      }
       
       if (mounted) {
         setState(() {
@@ -140,19 +203,24 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
 
       // 如果是剧集，才加载季节信息
       if (!_isMovie) {
-      final seasons = await embyService.getSeasons(widget.embyId);
-      
-      if (mounted) {
-        setState(() {
-          _seasons = seasons;
-          _isLoading = false;
-          
-          // 如果有季，选择第一个季
-          if (seasons.isNotEmpty) {
-            _selectedSeasonId = seasons.first.id;
-            _loadEpisodesForSeason(seasons.first.id);
-          }
-        });
+        dynamic seasons;
+        if (widget.serverType == MediaServerType.jellyfin) {
+          seasons = await (service as JellyfinService).getSeriesSeasons(widget.mediaId);
+        } else {
+          seasons = await (service as EmbyService).getSeasons(widget.mediaId);
+        }
+        
+        if (mounted) {
+          setState(() {
+            _seasons = seasons;
+            _isLoading = false;
+            
+            // 如果有季，选择第一个季
+            if (seasons.isNotEmpty) {
+              _selectedSeasonId = seasons.first.id;
+              _loadEpisodesForSeason(seasons.first.id);
+            }
+          });
         }
       }
     } catch (e) {
@@ -181,8 +249,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
     });
     
     try {
-      final embyService = EmbyService.instance;
-      // Ensure _mediaDetail is not null and has a valid id before calling getSeasonEpisodes
+      // 确保_mediaDetail不为null且有有效id
       if (_mediaDetail?.id == null) {
         if (mounted) {
           setState(() {
@@ -192,7 +259,15 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
         }
         return;
       }
-      final episodes = await embyService.getSeasonEpisodes(_mediaDetail!.id, seasonId);
+      
+      dynamic episodes;
+      if (widget.serverType == MediaServerType.jellyfin) {
+        final service = JellyfinService.instance;
+        episodes = await service.getSeasonEpisodes(_mediaDetail!.id, seasonId);
+      } else {
+        final service = EmbyService.instance;
+        episodes = await service.getSeasonEpisodes(_mediaDetail!.id, seasonId);
+      }
       
       if (mounted) {
         setState(() {
@@ -210,10 +285,15 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
     }
   }
   
-  Future<WatchHistoryItem?> _createWatchHistoryItem(EmbyEpisodeInfo episode) async {
-    // 使用EmbyDandanplayMatcher来创建可播放的历史记录项
+  Future<WatchHistoryItem?> _createWatchHistoryItem(dynamic episode) async {
+    // 根据服务器类型使用相应的匹配器创建可播放的历史记录项
     try {
-      final matcher = EmbyDandanplayMatcher.instance;
+      dynamic matcher;
+      if (widget.serverType == MediaServerType.jellyfin) {
+        matcher = JellyfinDandanplayMatcher.instance;
+      } else {
+        matcher = EmbyDandanplayMatcher.instance;
+      }
       
       // 先进行预计算和预匹配，不阻塞主流程
       matcher.precomputeVideoInfoAndMatch(context, episode).then((preMatchResult) {
@@ -225,38 +305,43 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
           debugPrint('预计算哈希值成功: $videoHash');
           
           // 需要在播放器创建或历史项创建时使用这个哈希值
-          // 由于EmbyEpisodeInfo没有videoHash属性，我们暂时存储在全局变量中
-          _embyVideoHashes[episode.id] = videoHash;
+          _videoHashes[episode.id] = videoHash;
           debugPrint('视频哈希值已缓存: ${episode.id} -> $videoHash');
           
-          if (fileName != null && fileSize != null) {
-            _embyVideoInfos[episode.id] = {
-              'fileName': fileName,
-              'fileSize': fileSize,
-              'videoHash': videoHash,
-            };
-            debugPrint('视频信息已缓存: ${episode.id} -> $fileName ($fileSize bytes)');
-          }
+          // 同时保存文件名和文件大小信息
+          Map<String, dynamic> videoInfo = {
+            'hash': videoHash,
+            'fileName': fileName ?? '',
+            'fileSize': fileSize ?? 0
+          };
+          _videoInfos[episode.id] = videoInfo;
+          debugPrint('视频信息已缓存: ${episode.id} -> $videoInfo');
         }
+        
+        if (preMatchResult['success'] == true) {
+          debugPrint('预匹配成功: animeId=${preMatchResult['animeId']}, episodeId=${preMatchResult['episodeId']}');
+        } else {
+          debugPrint('预匹配未成功: ${preMatchResult['message']}');
+        }
+      }).catchError((e) {
+        debugPrint('预计算过程中出错: $e');
       });
       
-      // 立即创建可播放项并返回，不等待预计算完成
+      // 继续常规匹配流程
       final playableItem = await matcher.createPlayableHistoryItem(context, episode);
       
       // 如果我们有这个视频的信息，添加到历史项中
       if (playableItem != null) {
         // 添加哈希值
-        if (_embyVideoHashes.containsKey(episode.id)) {
-          final videoHash = _embyVideoHashes[episode.id];
+        if (_videoHashes.containsKey(episode.id)) {
+          final videoHash = _videoHashes[episode.id];
           playableItem.videoHash = videoHash;
           debugPrint('成功将哈希值 $videoHash 添加到历史记录项');
         }
         
         // 存储完整的视频信息，可用于后续弹幕匹配
-        if (_embyVideoInfos.containsKey(episode.id)) {
-          final videoInfo = _embyVideoInfos[episode.id]!;
-          // 将视频信息存储到tag字段（如果必要）
-          // 或者在播放时单独传递
+        if (_videoInfos.containsKey(episode.id)) {
+          final videoInfo = _videoInfos[episode.id]!;
           debugPrint('已准备视频信息: ${videoInfo['fileName']}, 文件大小: ${videoInfo['fileSize']} 字节');
         }
       }
@@ -273,30 +358,56 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
   Future<void> _playMovie() async {
     if (_mediaDetail == null || !_isMovie) return;
 
-    // 将 EmbyMediaItemDetail 转换为 EmbyMovieInfo
-    // 这是必要的，因为匹配器需要一个 EmbyMovieInfo 对象
-    final movieInfo = EmbyMovieInfo(
-      id: _mediaDetail!.id,
-      name: _mediaDetail!.name,
-      overview: _mediaDetail!.overview,
-      originalTitle: _mediaDetail!.originalTitle,
-      imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
-      imageBackdropTag: _mediaDetail!.imageBackdropTag,
-      productionYear: _mediaDetail!.productionYear,
-      dateAdded: _mediaDetail!.dateAdded,
-      premiereDate: _mediaDetail!.premiereDate,
-      communityRating: _mediaDetail!.communityRating,
-      genres: _mediaDetail!.genres,
-      officialRating: _mediaDetail!.officialRating,
-      cast: _mediaDetail!.cast,
-      directors: _mediaDetail!.directors,
-      runTimeTicks: _mediaDetail!.runTimeTicks,
-      studio: _mediaDetail!.seriesStudio,
-    );
-
     try {
-      final matcher = EmbyDandanplayMatcher.instance;
-      final playableItem = await matcher.createPlayableHistoryItemFromMovie(context, movieInfo);
+      dynamic matcher;
+      dynamic playableItem;
+      
+      if (widget.serverType == MediaServerType.jellyfin) {
+        // 将MediaItemDetail转换为JellyfinMovieInfo
+        final movieInfo = JellyfinMovieInfo(
+          id: _mediaDetail!.id,
+          name: _mediaDetail!.name,
+          overview: _mediaDetail!.overview,
+          originalTitle: _mediaDetail!.originalTitle,
+          imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
+          imageBackdropTag: _mediaDetail!.imageBackdropTag,
+          productionYear: _mediaDetail!.productionYear,
+          dateAdded: _mediaDetail!.dateAdded,
+          premiereDate: _mediaDetail!.premiereDate,
+          communityRating: _mediaDetail!.communityRating,
+          genres: _mediaDetail!.genres,
+          officialRating: _mediaDetail!.officialRating,
+          cast: _mediaDetail!.cast,
+          directors: _mediaDetail!.directors,
+          runTimeTicks: _mediaDetail!.runTimeTicks,
+          studio: _mediaDetail!.seriesStudio,
+        );
+        matcher = JellyfinDandanplayMatcher.instance;
+        playableItem = await matcher.createPlayableHistoryItemFromMovie(context, movieInfo);
+      } else {
+        // 将MediaItemDetail转换为EmbyMovieInfo
+        final movieInfo = EmbyMovieInfo(
+          id: _mediaDetail!.id,
+          name: _mediaDetail!.name,
+          overview: _mediaDetail!.overview,
+          originalTitle: _mediaDetail!.originalTitle,
+          imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
+          imageBackdropTag: _mediaDetail!.imageBackdropTag,
+          productionYear: _mediaDetail!.productionYear,
+          dateAdded: _mediaDetail!.dateAdded,
+          premiereDate: _mediaDetail!.premiereDate,
+          communityRating: _mediaDetail!.communityRating,
+          genres: _mediaDetail!.genres,
+          officialRating: _mediaDetail!.officialRating,
+          cast: _mediaDetail!.cast,
+          directors: _mediaDetail!.directors,
+          runTimeTicks: _mediaDetail!.runTimeTicks,
+          studio: _mediaDetail!.seriesStudio,
+        );
+        matcher = EmbyDandanplayMatcher.instance;
+        playableItem = await matcher.createPlayableHistoryItemFromMovie(context, movieInfo);
+      }
+      
       if (playableItem == null) return; // 用户取消，彻底中断
       if (mounted) {
         Navigator.of(context).pop(playableItem);
@@ -304,7 +415,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
         // 如果匹配失败，可以给用户一个提示
         BlurSnackBar.show(context, '未能找到匹配的弹幕信息，但仍可播放。');
         // 即使没有弹幕，也创建一个基本的播放项
-        final basicItem = movieInfo.toWatchHistoryItem();
+        final basicItem = _mediaDetail!.toWatchHistoryItem();
         Navigator.of(context).pop(basicItem);
       }
     } catch (e) {
@@ -318,13 +429,13 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
   String _formatRuntime(int? runTimeTicks) {
     if (runTimeTicks == null) return '';
     
-    // Emby中的RunTimeTicks单位是100纳秒
+    // Jellyfin和Emby中的RunTimeTicks单位是100纳秒
     final durationInSeconds = runTimeTicks / 10000000;
     final hours = (durationInSeconds / 3600).floor();
     final minutes = ((durationInSeconds % 3600) / 60).floor();
     
     if (hours > 0) {
-      return '$hours小时$minutes分钟';
+      return '$hours小时${minutes > 0 ? ' $minutes分钟' : ''}';
     } else {
       return '$minutes分钟';
     }
@@ -334,11 +445,11 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     Widget pageContent;
 
-    if (_isLoading && _mediaDetail == null) { // Match Jellyfin's initial loading condition
+    if (_isLoading && _mediaDetail == null) {
       pageContent = const Center(
         child: CircularProgressIndicator(color: Colors.white),
       );
-    } else if (_error != null && _mediaDetail == null) { // Match Jellyfin's error condition
+    } else if (_error != null && _mediaDetail == null) {
       pageContent = Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -355,11 +466,12 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.2)),
-                onPressed: _loadMediaDetail,
-                child: const Text('重试', style: TextStyle(color: Colors.white)),
+              BlurButton(
+                icon: Icons.refresh,
+                text: '重试',
+                onTap: _loadMediaDetail,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                fontSize: 16,
               ),
               const SizedBox(height: 10),
               TextButton(
@@ -371,8 +483,10 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
         ),
       );
     } else if (_mediaDetail == null) {
+      // 理论上在成功加载后 _mediaDetail 不会为 null，除非发生意外
       pageContent = const Center(child: Text('未找到媒体详情', style: TextStyle(color: Colors.white70)));
     } else {
+      // 成功加载，构建详情UI
       final screenSize = MediaQuery.of(context).size;
       final isPortrait = screenSize.height > screenSize.width;
       final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
@@ -402,75 +516,84 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
             ),
           ),
           if (!_isMovie && _tabController != null) // 如果不是电影，才显示TabBar
-          TabBar(
-            controller: _tabController,
+            TabBar(
+              controller: _tabController,
               dividerColor: const Color.fromARGB(59, 255, 255, 255),
               dividerHeight: 3.0,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
               indicatorSize: TabBarIndicatorSize.tab,
-              indicatorPadding: const EdgeInsets.only(top: 46, left: 15, right: 15),
+              indicatorPadding: const EdgeInsets.only(top: 46, left: 15, right: 15), // 根据实际TabBar高度调整
               indicator: BoxDecoration(
-              color: Colors.amberAccent, // Emby theme color or custom
-              borderRadius: BorderRadius.circular(30),
-            ),
+                color: widget.serverType == MediaServerType.jellyfin 
+                    ? Colors.blueAccent // Jellyfin主题色
+                    : Colors.amberAccent, // Emby主题色
+                borderRadius: BorderRadius.circular(30),
+              ),
               indicatorWeight: 3,
               tabs: const [
                 Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.document_text_outline, size: 18), SizedBox(width: 8), Text('简介')])),
                 Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.film_outline, size: 18), SizedBox(width: 8), Text('剧集')])),
               ],
-          ),
+            ),
           Expanded(
             child: _isMovie || _tabController == null
               ? RepaintBoundary(child: _buildInfoView(isPortrait)) // 如果是电影，直接显示信息页
               : SwitchableView(
+                  controller: _tabController,
                   currentIndex: _tabController!.index,
-              enableAnimation: enableAnimation,
+                  enableAnimation: enableAnimation,
                   physics: enableAnimation
-                  ? const PageScrollPhysics()
-                  : const NeverScrollableScrollPhysics(),
+                      ? const PageScrollPhysics()
+                      : const NeverScrollableScrollPhysics(),
                   onPageChanged: (index) {
                     if (_tabController!.index != index) {
                       _tabController!.animateTo(index);
-                }
-              },
+                    }
+                  },
                   children: [
-                RepaintBoundary(child: _buildInfoView(isPortrait)),
-                RepaintBoundary(child: _buildEpisodesView(isPortrait)),
-              ],
-            ),
+                    RepaintBoundary(child: _buildInfoView(isPortrait)), // 使用RepaintBoundary优化
+                    RepaintBoundary(child: _buildEpisodesView(isPortrait)), // 使用RepaintBoundary优化
+                  ],
+                ),
           ),
         ],
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Padding( // Add Padding like Jellyfin
+      backgroundColor: Colors.transparent, // Dialog背景由showGeneralDialog的barrierColor控制
+      body: Padding(
+        // 调整Padding以匹配AnimeDetailPage
         padding: EdgeInsets.fromLTRB(
             20, MediaQuery.of(context).padding.top + 20, 20, 20),
         child: GlassmorphicContainer(
           width: double.infinity,
           height: double.infinity,
-          borderRadius: 15, // Match Jellyfin
-          blur: 25, // Match Jellyfin
+          borderRadius: 15,
+          blur: 25, // 与AnimeDetailPage一致
           alignment: Alignment.center,
-          border: 0.5, // Match Jellyfin
+          border: 0.5, // 与AnimeDetailPage一致
           linearGradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [ // Match Jellyfin's darker theme or use Emby specific
-              const Color.fromARGB(255, 50, 70, 50).withOpacity(0.2), // Emby-like green/dark
-              const Color.fromARGB(255, 30, 50, 30).withOpacity(0.2), // Darker Emby-like
-            ],
+            colors: widget.serverType == MediaServerType.jellyfin
+                ? [ // Jellyfin风格
+                    const Color.fromARGB(255, 60, 60, 80).withOpacity(0.2),
+                    const Color.fromARGB(255, 40, 40, 60).withOpacity(0.2),
+                  ]
+                : [ // Emby风格
+                    const Color.fromARGB(255, 50, 70, 50).withOpacity(0.2),
+                    const Color.fromARGB(255, 30, 50, 30).withOpacity(0.2),
+                  ],
             stops: const [0.1, 1],
           ),
           borderGradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.15), // Match Jellyfin
-              Colors.white.withOpacity(0.15), // Match Jellyfin
+            colors: [ // 与AnimeDetailPage一致
+              Colors.white.withOpacity(0.15),
+              Colors.white.withOpacity(0.15),
             ],
           ),
           child: pageContent,
@@ -482,14 +605,22 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
   Widget _buildInfoView(bool isPortrait) {
     if (_mediaDetail == null) return const SizedBox.shrink();
 
-    final embyService = EmbyService.instance;
-    final backdropUrl = _mediaDetail!.imageBackdropTag != null
-        ? embyService.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95)
-        : '';
+    String backdropUrl = '';
+    if (_mediaDetail!.imageBackdropTag != null) {
+      if (widget.serverType == MediaServerType.jellyfin) {
+        final service = JellyfinService.instance;
+        backdropUrl = service.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95);
+      } else {
+        final service = EmbyService.instance;
+        // Emby需要传递tag参数
+        backdropUrl = service.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95, tag: _mediaDetail!.imageBackdropTag);
+      }
+    }
 
+    // 注意：这里的返回按钮逻辑需要调整或移除，因为顶部已经有了全局关闭按钮
     return Stack(
       children: [
-        // 背景图片 - 直接使用网络图片，跳过压缩缓存
+        // 背景图 - 直接使用网络图片，跳过压缩缓存
         if (backdropUrl.isNotEmpty)
           Positioned.fill(
             child: Image.network(
@@ -509,33 +640,26 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               },
             ),
           ),
-        
-        // 渐变覆盖
+
+        // 背景暗化层
         Positioned.fill(
           child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withOpacity(0.4),
-                  Colors.black.withOpacity(0.8),
-                ],
-              ),
-            ),
+            color: Colors.black.withOpacity(0.75), // 可以稍微调整透明度
           ),
         ),
-        
-        // 内容
+
+        // 内容区域
+        // 移除原有的 Positioned 返回按钮
         SingleChildScrollView(
+          // padding: const EdgeInsets.only(top: 16, bottom: 24, left:16, right: 16), // 调整内边距，因为顶部标题和TabBar已在外部处理
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 头部信息区域（海报 + 基本信息）
               isPortrait
-                  ? _buildPortraitHeader()
-                  : _buildLandscapeHeader(),
+                  ? _buildPortraitHeader() // 竖屏布局
+                  : _buildLandscapeHeader(), // 横屏布局
               
               const SizedBox(height: 24),
               
@@ -580,7 +704,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                     ),
                     const SizedBox(height: 8),
                     SizedBox(
-                      height: 100,
+                      height: 100, // 根据内容调整或使其可滚动
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         itemCount: _mediaDetail!.cast.length,
@@ -594,10 +718,11 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                                 CircleAvatar(
                                   radius: 30,
                                   backgroundColor: Colors.grey.shade800,
-                                  backgroundImage: actor.imagePrimaryTag != null && actor.id != null
-                                      ? NetworkImage(embyService.getImageUrl(actor.id!, type: 'Primary', tag: actor.imagePrimaryTag, width: 100, height: 100))
+                                  backgroundImage: _getActorImageUrl(actor) != null
+                                      ? NetworkImage(_getActorImageUrl(actor)!)
                                       : null,
-                                  child: actor.imagePrimaryTag == null
+                                  child: (widget.serverType == MediaServerType.jellyfin && actor.primaryImageTag == null) ||
+                                         (widget.serverType == MediaServerType.emby && actor.imagePrimaryTag == null)
                                       ? const Icon(Icons.person, color: Colors.white54)
                                       : null,
                                 ),
@@ -626,19 +751,18 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
       ],
     );
   }
-
+  
+  // _buildPortraitHeader, _buildLandscapeHeader, _buildDetailInfo 方法中的文本颜色和样式也需要调整为白色或浅色系，以适应深色毛玻璃背景
+  // 例如：
   Widget _buildPortraitHeader() {
     if (_mediaDetail == null) return const SizedBox.shrink();
     
-    final embyService = EmbyService.instance;
-    final posterUrl = _mediaDetail!.imagePrimaryTag != null
-        ? embyService.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300)
-        : '';
+    final posterUrl = _getPosterUrl();
     
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center, // 竖屏时内容居中
       children: [
-        Center(
+        Center( // 确保海报居中
           child: Container(
             width: 200,
             height: 300,
@@ -663,7 +787,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                           color: Colors.grey[800],
                           child: const Center(
                             child: Icon(
-                              Ionicons.image_outline,
+                              Ionicons.image_outline, // 使用 Ionicons
                               size: 40,
                               color: Colors.white30,
                             ),
@@ -675,7 +799,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                       color: Colors.grey[800],
                       child: const Center(
                         child: Icon(
-                          Ionicons.film_outline,
+                          Ionicons.film_outline, // 使用 Ionicons
                           size: 40,
                           color: Colors.white30,
                         ),
@@ -685,27 +809,27 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
           ),
         ),
         
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         
-        Center(
+        Center( // 确保标题居中
           child: Text(
             _mediaDetail!.name,
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: Colors.white, // 调整颜色
             ),
             textAlign: TextAlign.center,
           ),
         ),
         
         if (_mediaDetail!.productionYear != null)
-          Center(
+          Center( // 确保年份居中
             child: Text(
               '(${_mediaDetail!.productionYear})',
               style: TextStyle(
                 fontSize: 18,
-                color: Colors.grey[300],
+                color: Colors.grey[300], // 调整颜色
               ),
               textAlign: TextAlign.center,
             ),
@@ -713,23 +837,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
         
         const SizedBox(height: 16),
         
-        _buildDetailInfo(),
-        
-        // 如果是电影，在详情信息下方添加播放按钮
-        if (_isMovie) ...[
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              BlurButton(
-                icon: Icons.play_arrow,
-                text: '播放',
-                onTap: _playMovie,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                fontSize: 18,
-              ),
-            ],
-          ),
-        ],
+        _buildDetailInfo(), // 这个方法内部的文本颜色也需要调整
       ],
     );
   }
@@ -737,17 +845,14 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
   Widget _buildLandscapeHeader() {
     if (_mediaDetail == null) return const SizedBox.shrink();
     
-    final embyService = EmbyService.instance;
-    final posterUrl = _mediaDetail!.imagePrimaryTag != null
-        ? embyService.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300)
-        : '';
+    final posterUrl = _getPosterUrl();
     
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 180,
-          height: 270,
+          width: 180, // 可以根据屏幕宽度动态调整
+          height: 270, // width * 1.5
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             boxShadow: [
@@ -769,7 +874,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                         color: Colors.grey[800],
                         child: const Center(
                           child: Icon(
-                            Ionicons.image_outline,
+                            Ionicons.image_outline, // 使用 Ionicons
                             size: 40,
                             color: Colors.white30,
                           ),
@@ -781,7 +886,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                     color: Colors.grey[800],
                     child: const Center(
                       child: Icon(
-                        Ionicons.film_outline,
+                        Ionicons.film_outline, // 使用 Ionicons
                         size: 40,
                         color: Colors.white30,
                       ),
@@ -799,9 +904,9 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               Text(
                 _mediaDetail!.name,
                 style: const TextStyle(
-                  fontSize: 24,
+                  fontSize: 24, // 可以适当调大
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: Colors.white, // 调整颜色
                 ),
               ),
               
@@ -810,29 +915,13 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                   '(${_mediaDetail!.productionYear})',
                   style: TextStyle(
                     fontSize: 18,
-                    color: Colors.grey[300],
+                    color: Colors.grey[300], // 调整颜色
                   ),
                 ),
               
               const SizedBox(height: 16),
               
-              _buildDetailInfo(),
-              
-              // 如果是电影，在详情信息下方添加播放按钮
-              if (_isMovie) ...[
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    BlurButton(
-                      icon: Icons.play_arrow,
-                      text: '播放',
-                      onTap: _playMovie,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      fontSize: 18,
-                    ),
-                  ],
-                ),
-              ],
+              _buildDetailInfo(), // 这个方法内部的文本颜色也需要调整
             ],
           ),
         ),
@@ -850,7 +939,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
           Row(
             children: [
               const Icon(
-                Ionicons.star,
+                Ionicons.star, // 使用 Ionicons
                 color: Colors.amber,
                 size: 20,
               ),
@@ -860,7 +949,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: Colors.white, // 调整颜色
                 ),
               ),
               const SizedBox(width: 16),
@@ -876,7 +965,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                     _mediaDetail!.officialRating!,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Colors.white70,
+                      color: Colors.white70, // 调整颜色
                     ),
                   ),
                 ),
@@ -889,7 +978,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
           Row(
             children: [
               const Icon(
-                Ionicons.time_outline,
+                Ionicons.time_outline, // 使用 Ionicons
                 color: Colors.white54,
                 size: 16,
               ),
@@ -897,7 +986,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               Text(
                 _formatRuntime(_mediaDetail!.runTimeTicks),
                 style: const TextStyle(
-                  color: Colors.white70,
+                  color: Colors.white70, // 调整颜色
                 ),
               ),
             ],
@@ -909,7 +998,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
           Row(
             children: [
               const Icon(
-                Ionicons.business_outline,
+                Ionicons.business_outline, // 使用 Ionicons
                 color: Colors.white54,
                 size: 16,
               ),
@@ -933,30 +1022,49 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _mediaDetail!.genres.map((genre) {
+            children: _mediaDetail!.genres.map<Widget>((genre) {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withOpacity(0.15), // 调整颜色
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   genre,
                   style: const TextStyle(
                     fontSize: 13,
-                    color: Colors.white70,
+                    color: Colors.white70, // 调整颜色
                   ),
                 ),
               );
             }).toList(),
           ),
+        
+        // 如果是电影，在详情信息下方添加播放按钮
+        if (_isMovie) ...[
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              BlurButton(
+                icon: Icons.play_arrow,
+                text: '播放',
+                onTap: _playMovie,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                fontSize: 18,
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
 
   Widget _buildEpisodesView(bool isPortrait) {
-    return Column(
+    // 移除原有的 Positioned 返回按钮，因为顶部已经有了全局关闭按钮
+    return Column( // 不再需要 Stack，因为返回按钮已全局处理
       children: [
+        // const SizedBox(height: 16), // 顶部间距可以根据整体布局调整，TabBar外部已有间距
+        
         // 季节选择器
         if (_seasons.isNotEmpty)
           Padding(
@@ -990,7 +1098,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
             ),
           ),
         
-        if (_seasons.isNotEmpty)
+        if (_seasons.isNotEmpty) // 仅当有季节选择器时显示分割线
           const Divider(height: 1, thickness: 1, color: Colors.white12, indent: 16, endIndent: 16),
         
         // 剧集列表
@@ -1002,12 +1110,12 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
   }
   
   Widget _buildEpisodesListForSelectedSeason() {
-    if (_selectedSeasonId == null && _seasons.isNotEmpty) {
+    if (_selectedSeasonId == null && _seasons.isNotEmpty) { // 如果有季但没有选择，提示选择
       return const Center(
         child: Text('请选择一个季', style: TextStyle(color: Colors.white70)),
       );
     }
-    if (_selectedSeasonId == null && _seasons.isEmpty && !_isLoading) {
+    if (_selectedSeasonId == null && _seasons.isEmpty && !_isLoading) { // 如果没有季且不在加载中
         return const Center(
         child: Text('该剧集没有季节信息', style: TextStyle(color: Colors.white70)),
       );
@@ -1019,7 +1127,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
       );
     }
     
-    if (_error != null && _selectedSeasonId != null) {
+    if (_error != null && _selectedSeasonId != null) { // 仅在尝试加载特定季出错时显示
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -1030,10 +1138,12 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               const SizedBox(height: 16),
               Text('加载剧集失败: $_error', style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white.withOpacity(0.2)),
-                onPressed: () => _loadEpisodesForSeason(_selectedSeasonId!),
-                child: const Text('重试', style: TextStyle(color: Colors.white)),
+              BlurButton(
+                icon: Icons.refresh,
+                text: '重试',
+                onTap: () => _loadEpisodesForSeason(_selectedSeasonId!),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                fontSize: 16,
               ),
             ],
           ),
@@ -1043,19 +1153,25 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
     
     final episodes = _episodesBySeasonId[_selectedSeasonId] ?? [];
     
-    if (episodes.isEmpty && !_isLoading && _selectedSeasonId != null) {
+    if (episodes.isEmpty && !_isLoading && _selectedSeasonId != null) { // 确保不是在加载中，并且确实选择了季
       return const Center(
         child: Text('该季没有剧集', style: TextStyle(color: Colors.white70)),
       );
     }
-     if (episodes.isEmpty && _isLoading) {
+     if (episodes.isEmpty && _isLoading) { // 如果仍在加载，显示加载指示器
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
-    if (episodes.isEmpty && _selectedSeasonId == null && _seasons.isEmpty) {
+    if (episodes.isEmpty && _selectedSeasonId == null && _seasons.isEmpty) { // 处理没有季的情况
         return const Center(child: Text('没有可显示的剧集', style: TextStyle(color: Colors.white70)));
     }
 
-    final embyService = EmbyService.instance;
+
+    dynamic service;
+    if (widget.serverType == MediaServerType.jellyfin) {
+      service = JellyfinService.instance;
+    } else {
+      service = EmbyService.instance;
+    }
     
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
@@ -1063,19 +1179,19 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
       itemBuilder: (context, index) {
         final episode = episodes[index];
         final episodeImageUrl = episode.imagePrimaryTag != null
-            ? embyService.getImageUrl(episode.id, type: 'Primary', width: 300)
+            ? _getEpisodeImageUrl(episode, service)
             : '';
         
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           leading: SizedBox(
-            width: 100,
-            height: 60,
+            width: 100, // 调整图片宽度
+            height: 60, // 调整图片高度，保持宽高比
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: episodeImageUrl.isNotEmpty
                   ? CachedNetworkImageWidget(
-                      key: ValueKey(episode.id),
+                      key: ValueKey(episode.id), // 为 CachedNetworkImageWidget 添加 Key
                       imageUrl: episodeImageUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error) {
@@ -1083,7 +1199,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                           color: Colors.grey[800],
                           child: const Center(
                             child: Icon(
-                              Ionicons.image_outline,
+                              Ionicons.image_outline, // 使用 Ionicons
                               size: 24,
                               color: Colors.white30,
                             ),
@@ -1095,7 +1211,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                       color: Colors.grey[800],
                       child: const Center(
                         child: Icon(
-                          Ionicons.film_outline,
+                          Ionicons.film_outline, // 使用 Ionicons
                           size: 24,
                           color: Colors.white30,
                         ),
@@ -1107,7 +1223,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
             episode.indexNumber != null
                 ? '${episode.indexNumber}. ${episode.name}'
                 : episode.name,
-            style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
+            style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white), // 调整颜色
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1117,7 +1233,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               if (episode.runTimeTicks != null)
                 Text(
                   _formatRuntime(episode.runTimeTicks),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
                 ),
               
               if (episode.overview != null && episode.overview!.isNotEmpty)
@@ -1127,18 +1243,23 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                     episode.overview!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
                   ),
                 ),
             ],
           ),
-          trailing: const Icon(Ionicons.play_circle_outline, color: Colors.white70, size: 22),
+          trailing: const Icon(Ionicons.play_circle_outline, color: Colors.white70, size: 22), // 添加播放按钮指示
           onTap: () async {
             try {
               BlurSnackBar.show(context, '准备播放: ${episode.name}');
               
-              // 获取Emby流媒体URL但暂不播放
-              final streamUrl = EmbyDandanplayMatcher.instance.getPlayUrl(episode);
+              // 获取流媒体URL但暂不播放
+              String streamUrl;
+              if (widget.serverType == MediaServerType.jellyfin) {
+                streamUrl = JellyfinDandanplayMatcher.instance.getPlayUrl(episode);
+              } else {
+                streamUrl = EmbyDandanplayMatcher.instance.getPlayUrl(episode);
+              }
               debugPrint('获取到流媒体URL: $streamUrl');
               
               // 显示加载指示器
@@ -1146,7 +1267,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                 BlurSnackBar.show(context, '正在匹配弹幕信息...');
               }
               
-              // 使用EmbyDandanplayMatcher创建增强的WatchHistoryItem
+              // 使用JellyfinDandanplayMatcher创建增强的WatchHistoryItem
               // 这一步会显示匹配对话框，阻塞直到用户完成选择或跳过
               final historyItem = await _createWatchHistoryItem(episode);
               if (historyItem == null) return; // 用户关闭弹窗，什么都不做
@@ -1156,7 +1277,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               
               // 调试：检查 historyItem 的弹幕 ID
               if (historyItem.animeId == null || historyItem.episodeId == null) {
-                debugPrint('警告: 从 EmbyDandanplayMatcher 获得的 historyItem 缺少弹幕 ID');
+                debugPrint('警告: 从 JellyfinDandanplayMatcher 获得的 historyItem 缺少弹幕 ID');
                 debugPrint('  animeId: ${historyItem.animeId}');
                 debugPrint('  episodeId: ${historyItem.episodeId}');
               } else {
@@ -1169,6 +1290,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
               
               // 在页面关闭前，获取TabChangeNotifier
+              // 注意：通过listen: false方式获取，避免建立依赖关系
               TabChangeNotifier? tabChangeNotifier;
               try {
                 tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
@@ -1192,9 +1314,9 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
                 BlurSnackBar.show(context, '开始播放: ${historyItem.episodeTitle}');
               }
               
-              // 创建一个专门用于流媒体播放的历史记录项，使用稳定的emby://协议
+              // 创建一个专门用于流媒体播放的历史记录项，使用稳定的jellyfin://或emby://协议
               final playableHistoryItem = WatchHistoryItem(
-                filePath: historyItem.filePath, // 保持稳定的emby://协议URL
+                filePath: historyItem.filePath, // 保持稳定的jellyfin://或emby://协议URL
                 animeName: historyItem.animeName,
                 episodeTitle: historyItem.episodeTitle,
                 episodeId: historyItem.episodeId,
@@ -1215,11 +1337,11 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               Future.delayed(const Duration(milliseconds: 100), () async {
                 try {
                   debugPrint('异步初始化播放器 - 开始');
-                  // 使用稳定的emby://协议URL作为标识符，临时HTTP URL作为实际播放源
+                  // 使用稳定的jellyfin://协议URL作为标识符，临时HTTP URL作为实际播放源
                   await videoPlayerState.initializePlayer(
-                   playableHistoryItem.filePath, // 使用 emby://<itemId> 作为视频路径
-                    historyItem: playableHistoryItem, // 使用包含弹幕信息的历史项
-                    actualPlayUrl: streamUrl, // 提供实际的HTTP流媒体URL
+                    historyItem.filePath, // 使用稳定的jellyfin://协议
+                    historyItem: playableHistoryItem,
+                    actualPlayUrl: streamUrl, // 临时HTTP流媒体URL仅用于播放
                   );
                   debugPrint('异步初始化播放器 - 完成');
                   
@@ -1234,7 +1356,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> with SingleTickerProvid
               });
                         } catch (e) {
               BlurSnackBar.show(context, '播放出错: $e');
-              debugPrint('播放Emby媒体出错: $e');
+              debugPrint('播放Jellyfin媒体出错: $e');
             }
           },
         );
