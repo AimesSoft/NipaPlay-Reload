@@ -17,6 +17,12 @@ on:
       APPLE_TEAM_ID:
         description: 'Apple Team ID'
         required: true
+      APPLE_ID:
+        description: 'Apple ID (email address)'
+        required: true
+      APPLE_APP_PASSWORD:
+        description: 'Apple App-specific Password'
+        required: true
     outputs:
       version:
         description: '应用版本号'
@@ -63,6 +69,8 @@ jobs:
           macos-certificate-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           macos-certificate-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
+          apple-id: ${{ secrets.APPLE_ID }}
+          apple-app-password: ${{ secrets.APPLE_APP_PASSWORD }}
       
       - name: Clean CocoaPods cache and lock for mdk
         run: |

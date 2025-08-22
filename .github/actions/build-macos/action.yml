@@ -16,6 +16,14 @@ inputs:
     description: 'Apple Team ID'
     required: false
     default: ''
+  apple-id:
+    description: 'Apple ID (email address) for notarization'
+    required: false
+    default: ''
+  apple-app-password:
+    description: 'Apple App-specific Password for notarization'
+    required: false
+    default: ''
 outputs:
   dmg-path:
     description: '生成的 DMG 文件路径'
@@ -76,6 +84,17 @@ runs:
           echo "✅ 证书导入成功"
           echo "ENABLE_CODE_SIGNING=true" >> $GITHUB_ENV
           echo "APPLE_TEAM_ID=${{ inputs.apple-team-id }}" >> $GITHUB_ENV
+          
+          # 设置公证相关环境变量
+          if [ -n "${{ inputs.apple-id }}" ] && [ -n "${{ inputs.apple-app-password }}" ]; then
+            echo "ENABLE_NOTARIZATION=true" >> $GITHUB_ENV
+            echo "APPLE_ID=${{ inputs.apple-id }}" >> $GITHUB_ENV
+            echo "APPLE_APP_PASSWORD=${{ inputs.apple-app-password }}" >> $GITHUB_ENV
+            echo "✅ 公证信息已配置"
+          else
+            echo "ENABLE_NOTARIZATION=false" >> $GITHUB_ENV
+            echo "⚠️ 未提供公证信息，应用将仅签名不公证"
+          fi
         else
           echo "⚠️ 未提供签名证书，将构建未签名版本"
           echo "ENABLE_CODE_SIGNING=false" >> $GITHUB_ENV
@@ -172,6 +191,77 @@ runs:
           fi
         else
           echo "⏭️ 跳过应用签名（未提供证书）"
+        fi
+
+    - name: Notarize macOS App
+      shell: bash
+      run: |
+        if [ "$ENABLE_NOTARIZATION" = "true" ] && [ "$ENABLE_CODE_SIGNING" = "true" ]; then
+          echo "🔐 开始公证 macOS 应用..."
+          
+          APP_PATH="build/macos/Build/Products/Release/NipaPlay.app"
+          
+          # 验证应用已正确签名
+          if ! codesign --verify --verbose "$APP_PATH" 2>/dev/null; then
+            echo "❌ 应用签名验证失败，无法进行公证"
+            exit 1
+          fi
+          
+          # 创建 zip 文件用于公证
+          echo "📦 创建应用压缩包..."
+          ditto -c -k --keepParent "$APP_PATH" "NipaPlay.zip"
+          
+          # 上传公证
+          echo "☁️ 上传到 Apple 进行公证..."
+          SUBMISSION_ID=$(xcrun notarytool submit "NipaPlay.zip" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --output-format json \
+            --wait | jq -r '.id' 2>/dev/null || echo "")
+          
+          if [ -z "$SUBMISSION_ID" ]; then
+            echo "❌ 公证提交失败，尝试备用方法..."
+            # 备用方法：不解析 JSON
+            xcrun notarytool submit "NipaPlay.zip" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ 公证完成（备用方法）"
+            else
+              echo "❌ 公证失败，但继续构建..."
+              rm "NipaPlay.zip"
+              exit 0
+            fi
+          else
+            echo "✅ 公证完成，提交ID: $SUBMISSION_ID"
+          fi
+          
+          # 附加公证票据到应用
+          echo "🎫 附加公证票据..."
+          if xcrun stapler staple "$APP_PATH"; then
+            echo "✅ 公证票据附加成功"
+            
+            # 验证公证
+            if xcrun stapler validate "$APP_PATH"; then
+              echo "✅ 公证验证成功 - 应用现在可以直接运行"
+            else
+              echo "⚠️ 公证验证失败，但继续构建"
+            fi
+          else
+            echo "❌ 公证票据附加失败，但继续构建"
+          fi
+          
+          # 清理临时文件
+          rm -f "NipaPlay.zip"
+          
+        elif [ "$ENABLE_CODE_SIGNING" = "true" ]; then
+          echo "⚠️ 应用已签名但未公证，用户可能需要手动允许运行"
+        else
+          echo "⏭️ 跳过公证（未签名或未配置）"
         fi
 
     - name: Copy mdk.framework.dSYM to App Bundle
