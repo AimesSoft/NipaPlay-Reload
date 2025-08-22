@@ -64,6 +64,10 @@ jobs:
     uses: ./.github/workflows/build-macos.yml
     with:
       flutter-version: 3.35.1
+    secrets:
+      MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
   Build-Windows:
     name: Build Windows

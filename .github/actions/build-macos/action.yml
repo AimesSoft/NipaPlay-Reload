@@ -4,6 +4,18 @@ inputs:
   app-version:
     description: '应用版本号'
     required: true
+  macos-certificate-base64:
+    description: 'macOS Distribution Certificate (Base64)'
+    required: false
+    default: ''
+  macos-certificate-password:
+    description: 'macOS Certificate Password'
+    required: false
+    default: ''
+  apple-team-id:
+    description: 'Apple Team ID'
+    required: false
+    default: ''
 outputs:
   dmg-path:
     description: '生成的 DMG 文件路径'
@@ -33,10 +45,98 @@ runs:
         pod install --repo-update
         cd ..
 
+    - name: Setup Code Signing
+      shell: bash
+      run: |
+        # 检查是否提供了签名证书
+        if [ -n "${{ inputs.macos-certificate-base64 }}" ] && [ -n "${{ inputs.apple-team-id }}" ]; then
+          echo "🔐 设置macOS代码签名..."
+          
+          # 导入证书到keychain
+          echo "${{ inputs.macos-certificate-base64 }}" | base64 --decode > certificate.p12
+          
+          # 创建临时keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD="temp_keychain_password"
+          
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # 导入证书
+          security import certificate.p12 -P "${{ inputs.macos-certificate-password }}" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          
+          # 设置证书权限
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # 清理证书文件
+          rm certificate.p12
+          
+          echo "✅ 证书导入成功"
+          echo "ENABLE_CODE_SIGNING=true" >> $GITHUB_ENV
+          echo "APPLE_TEAM_ID=${{ inputs.apple-team-id }}" >> $GITHUB_ENV
+        else
+          echo "⚠️ 未提供签名证书，将构建未签名版本"
+          echo "ENABLE_CODE_SIGNING=false" >> $GITHUB_ENV
+        fi
+
     - name: Build macOS App
       shell: bash
       run: |
-        flutter build macos --release
+        if [ "$ENABLE_CODE_SIGNING" = "true" ]; then
+          echo "🔨 构建已签名的macOS应用..."
+          flutter build macos --release \
+            --dart-define=APPLE_TEAM_ID=$APPLE_TEAM_ID
+        else
+          echo "🔨 构建未签名的macOS应用..."
+          flutter build macos --release
+        fi
+
+    - name: Sign macOS App
+      shell: bash
+      run: |
+        if [ "$ENABLE_CODE_SIGNING" = "true" ]; then
+          echo "🔐 对macOS应用进行代码签名..."
+          
+          APP_PATH="build/macos/Build/Products/Release/NipaPlay.app"
+          
+          # 查找可用的签名身份
+          echo "可用的签名身份："
+          security find-identity -v -p codesigning
+          
+          # 获取Developer ID Application证书
+          CERT_NAME=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          
+          if [ -z "$CERT_NAME" ]; then
+            echo "⚠️ 未找到Developer ID Application证书，尝试查找其他证书..."
+            CERT_NAME=$(security find-identity -v -p codesigning | grep "Apple Development\|Mac Developer\|Developer ID" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          fi
+          
+          if [ -n "$CERT_NAME" ]; then
+            echo "使用证书: $CERT_NAME"
+            
+            # 对App Bundle进行深度签名
+            codesign --force --verbose --sign "$CERT_NAME" \
+              --options runtime \
+              --entitlements macos/Runner/Release.entitlements \
+              "$APP_PATH/Contents/Frameworks/"*.framework || true
+              
+            codesign --force --verbose --sign "$CERT_NAME" \
+              --options runtime \
+              --entitlements macos/Runner/Release.entitlements \
+              "$APP_PATH"
+              
+            # 验证签名
+            codesign --verify --verbose "$APP_PATH"
+            echo "✅ 应用签名完成"
+          else
+            echo "❌ 未找到有效的签名证书"
+            exit 1
+          fi
+        else
+          echo "⏭️ 跳过应用签名（未提供证书）"
+        fi
 
     - name: Copy mdk.framework.dSYM to App Bundle
       shell: bash

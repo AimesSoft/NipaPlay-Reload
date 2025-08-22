@@ -7,6 +7,16 @@ on:
         description: 'Flutter 版本'
         required: true
         type: string
+    secrets:
+      MACOS_CERTIFICATE_BASE64:
+        description: 'macOS Distribution Certificate (Base64)'
+        required: true
+      MACOS_CERTIFICATE_PASSWORD:
+        description: 'macOS Certificate Password'
+        required: true
+      APPLE_TEAM_ID:
+        description: 'Apple Team ID'
+        required: true
     outputs:
       version:
         description: '应用版本号'
@@ -50,6 +60,9 @@ jobs:
         uses: ./.github/actions/build-macos
         with:
           app-version: ${{ steps.setup.outputs.version }}
+          macos-certificate-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          macos-certificate-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
       
       - name: Clean CocoaPods cache and lock for mdk
         run: |
