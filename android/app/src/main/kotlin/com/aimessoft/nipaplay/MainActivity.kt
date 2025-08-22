@@ -308,7 +308,7 @@ class MainActivity: FlutterActivity() {
                     val mediaType = split[0]
                     val mediaId = split[1]
                     
-                    val contentUri = when (mediaType.toLowerCase()) {
+                    val contentUri = when (mediaType.lowercase()) {
                         "video" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
                         else -> return null
                     }
