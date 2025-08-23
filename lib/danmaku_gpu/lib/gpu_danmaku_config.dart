@@ -31,7 +31,7 @@ class GPUDanmakuConfig {
     this.screenUsageRatio = 1.0,
     this.scrollScreensPerSecond = 0.1,
   }) : fontSize = fontSize ?? (globals.isPhone ? 20.0 : 30.0),
-       trackHeightMultiplier = trackHeightMultiplier ?? (globals.isPhone ? 1.2 : 1.5),
+       trackHeightMultiplier = trackHeightMultiplier ?? (globals.isPhone ? 0.8 : 1.5),
        danmakuBottomMargin = danmakuBottomMargin ?? (globals.isPhone ? 6.0 : 10.0);
 
   /// 从VideoPlayerState创建配置

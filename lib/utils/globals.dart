@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
+final strokeWidth = isPhone ? 0.7 : 1.0;
 //////全局变量/////
 double mobileThreshold = 550;
 // ignore: non_constant_identifier_names
@@ -73,12 +73,6 @@ bool get isDesktopOrTablet {
 }
 //////设备类型判断/////
 ///
-//////文本//////
-String settingTitle = "设置";
-String playVideoTitle = "视频播放";
-String libraryTitle = "媒体库";
-//////文本//////
-
 /// 对话框尺寸管理
 class DialogSizes {
   static double _screenHeight = 0.0;

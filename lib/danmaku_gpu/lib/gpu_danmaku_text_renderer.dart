@@ -158,7 +158,7 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
       // 🔥 增加额外高度以适应emoji和带descender的字符
       final height = config.fontSize * fontSizeMultiplier * 1.4; // 增加40%的高度缓冲
       canvas.saveLayer(
-        Rect.fromLTWH(x, y + 10, width, height), // 向上偏移10%高度
+        Rect.fromLTWH(x, y + 5, width, height), // 向上偏移10%高度
         Paint()..color = Colors.white.withOpacity(opacity),
       );
     }

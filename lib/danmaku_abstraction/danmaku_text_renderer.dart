@@ -45,16 +45,16 @@ class CpuDanmakuTextRenderer extends DanmakuTextRenderer {
     final hasCountText = content.countText != null;
 
     // 创建阴影列表，移动端使用更细的描边
-    final strokeWidth = globals.isPhone ? 0.5 : 1.0;
+     
     final shadowList = [
-      Shadow(offset: Offset(-strokeWidth, -strokeWidth), blurRadius: 0, color: strokeColor),
-      Shadow(offset: Offset(strokeWidth, -strokeWidth), blurRadius: 0, color: strokeColor),
-      Shadow(offset: Offset(strokeWidth, strokeWidth), blurRadius: 0, color: strokeColor),
-      Shadow(offset: Offset(-strokeWidth, strokeWidth), blurRadius: 0, color: strokeColor),
-      Shadow(offset: Offset(0, -strokeWidth), blurRadius: 0, color: strokeColor),
-      Shadow(offset: Offset(0, strokeWidth), blurRadius: 0, color: strokeColor),
-      Shadow(offset: Offset(-strokeWidth, 0), blurRadius: 0, color: strokeColor),
-      Shadow(offset: Offset(strokeWidth, 0), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(-globals.strokeWidth, -globals.strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(globals.strokeWidth, -globals.strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(globals.strokeWidth, globals.strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(-globals.strokeWidth, globals.strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(0, -globals.strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(0, globals.strokeWidth), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(-globals.strokeWidth, 0), blurRadius: 0, color: strokeColor),
+      Shadow(offset: Offset(globals.strokeWidth, 0), blurRadius: 0, color: strokeColor),
     ];
 
     final textWidget = hasCountText

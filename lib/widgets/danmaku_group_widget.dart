@@ -110,16 +110,16 @@ class DanmakuGroupWidget extends StatelessWidget {
         // 计算描边色，移动端使用更细的描边
         final luminance = (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
         final strokeColor = luminance < 0.114 ? Colors.white : Colors.black;
-        final strokeWidth = globals.isPhone ? 0.5 : 1.0;
+         
         final shadowList = [
-          Shadow(offset: Offset(-strokeWidth, -strokeWidth), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(strokeWidth, -strokeWidth), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(strokeWidth, strokeWidth), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(-strokeWidth, strokeWidth), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(0, -strokeWidth), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(0, strokeWidth), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(-strokeWidth, 0), blurRadius: 0, color: strokeColor),
-          Shadow(offset: Offset(strokeWidth, 0), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(-globals.strokeWidth, -globals.strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(globals.strokeWidth, -globals.strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(globals.strokeWidth, globals.strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(-globals.strokeWidth, globals.strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(0, -globals.strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(0, globals.strokeWidth), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(-globals.strokeWidth, 0), blurRadius: 0, color: strokeColor),
+          Shadow(offset: Offset(globals.strokeWidth, 0), blurRadius: 0, color: strokeColor),
         ];
         final hasCountText = danmakuItem.countText != null;
         children.add(Positioned(

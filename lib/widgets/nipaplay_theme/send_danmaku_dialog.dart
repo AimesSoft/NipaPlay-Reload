@@ -129,7 +129,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
     final bool isRealPhone = globals.isPhone && shortestSide < 600;
 
     final strokeColor = _getStrokeColor(selectedColor);
-    final strokeWidth = globals.isPhone ? 0.5 : 1.0;
+     
     final danmakuPreview = Text(
       textController.text,
       style: TextStyle(
@@ -137,22 +137,22 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
         color: selectedColor,
         shadows: [
           Shadow(
-            offset: Offset(strokeWidth, strokeWidth),
+            offset: Offset(globals.strokeWidth, globals.strokeWidth),
             blurRadius: 2.0,
             color: strokeColor,
           ),
           Shadow(
-            offset: Offset(-strokeWidth, -strokeWidth),
+            offset: Offset(-globals.strokeWidth, -globals.strokeWidth),
             blurRadius: 2.0,
             color: strokeColor,
           ),
           Shadow(
-            offset: Offset(strokeWidth, -strokeWidth),
+            offset: Offset(globals.strokeWidth, -globals.strokeWidth),
             blurRadius: 2.0,
             color: strokeColor,
           ),
           Shadow(
-            offset: Offset(-strokeWidth, strokeWidth),
+            offset: Offset(-globals.strokeWidth, globals.strokeWidth),
             blurRadius: 2.0,
             color: strokeColor,
           ),
