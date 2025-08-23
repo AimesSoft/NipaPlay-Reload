@@ -241,7 +241,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                 ],
                               ),
                               child: Container(
-                                height: globals.isPhone && !globals.isTablet? 45.0 : 60.0,
+                                height: globals.isPhone && !globals.isTablet? 40.0 : 60.0,
                                 decoration: BoxDecoration(
                                   color: backgroundColor,
                                   borderRadius: const BorderRadius.horizontal(
