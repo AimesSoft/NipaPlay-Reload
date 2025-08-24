@@ -73,6 +73,7 @@ class MultiAddressServerService {
     required String serverType,
     required String url,
     required String username,
+    String? serverId,
     String? addressName,
   }) async {
     // 规范化URL
@@ -93,6 +94,7 @@ class MultiAddressServerService {
       serverType: serverType,
       addresses: [address],
       username: username,
+      serverId: serverId,
     );
     
     _profiles.add(profile);
@@ -107,6 +109,17 @@ class MultiAddressServerService {
       (p) => p.id == id,
       orElse: () => throw Exception('未找到服务器配置'),
     );
+  }
+  
+  /// 通过远程服务器ID获取配置
+  ServerProfile? getProfileByServerId(String serverId, String serverType) {
+    try {
+      return _profiles.firstWhere(
+        (p) => p.serverId == serverId && p.serverType == serverType,
+      );
+    } catch (e) {
+      return null;
+    }
   }
   
   /// 通过服务器类型和用户名查找配置
@@ -355,32 +368,97 @@ class MultiAddressServerService {
   }) async {
     final normalizedUrl = _normalizeUrl(url);
     
+    DebugLogService().addLog('MultiAddressServer: 开始识别服务器 - URL: $normalizedUrl, Type: $serverType');
+    
     try {
       final serverId = await getServerId(normalizedUrl)
           .timeout(_connectionTimeout);
       
+      DebugLogService().addLog('MultiAddressServer: 获取到服务器ID - $serverId');
+      
       if (serverId == null) {
+        DebugLogService().addLog('MultiAddressServer: 无法获取服务器ID，无法进行冲突验证');
+        
+        // 检查URL是否已被占用
+        for (final profile in _profiles) {
+          if (profile.serverType == serverType) {
+            for (final addr in profile.addresses) {
+              if (addr.normalizedUrl == normalizedUrl) {
+                DebugLogService().addLog('MultiAddressServer: 发现URL冲突（无法获取新服务器ID）- 现有配置: ${profile.id}');
+                return ServerIdentifyResult(
+                  success: false,
+                  error: '该URL已被占用，且无法获取新服务器的ID进行验证。请检查服务器连接或使用不同的URL',
+                  isConflict: true,
+                  existingProfile: profile,
+                );
+              }
+            }
+          }
+        }
+        
+        // 即使没有URL冲突，也要拒绝添加，因为无法验证服务器身份
         return ServerIdentifyResult(
           success: false,
-          error: '无法获取服务器ID',
+          error: '无法获取${serverType}服务器ID，无法验证服务器身份。请检查服务器连接和URL格式',
         );
       }
       
-      // 查找是否有相同ID的服务器配置
+      // 查找是否有相同serverId的服务器配置
       ServerProfile? existingProfile;
+      DebugLogService().addLog('MultiAddressServer: 搜索现有配置，总数: ${_profiles.length}');
+      
       for (final profile in _profiles) {
-        if (profile.serverType == serverType) {
-          // 这里可以通过serverId匹配，但需要在profile中存储serverId
-          // 暂时通过serverName匹配
-          for (final addr in profile.addresses) {
-            if (addr.normalizedUrl == normalizedUrl) {
-              existingProfile = profile;
-              break;
+        DebugLogService().addLog('MultiAddressServer: 检查配置 - Type: ${profile.serverType}, ServerId: ${profile.serverId}, Username: ${profile.username}');
+        if (profile.serverType == serverType && profile.serverId == serverId) {
+          // 通过serverId匹配找到相同的服务器
+          DebugLogService().addLog('MultiAddressServer: 通过serverId找到现有配置: ${profile.id}');
+          existingProfile = profile;
+          break;
+        }
+      }
+      
+      // 如果没有通过serverId找到，检查是否存在URL冲突
+      if (existingProfile == null) {
+        DebugLogService().addLog('MultiAddressServer: 没有通过serverId找到配置，检查URL冲突');
+        for (final profile in _profiles) {
+          if (profile.serverType == serverType) {
+            for (final addr in profile.addresses) {
+              DebugLogService().addLog('MultiAddressServer: 检查地址 - URL: ${addr.normalizedUrl}, 目标URL: $normalizedUrl');
+              if (addr.normalizedUrl == normalizedUrl) {
+                DebugLogService().addLog('MultiAddressServer: 找到相同URL的配置 - ProfileServerId: ${profile.serverId}, 当前ServerId: $serverId');
+                // 找到相同URL的配置
+                          if (profile.serverId != null && profile.serverId != serverId) {
+            // URL相同但serverId不同，这是冲突情况
+            DebugLogService().addLog('MultiAddressServer: 检测到冲突！URL相同但serverId不同');
+            return ServerIdentifyResult(
+              success: false,
+              error: '该URL已被另一个${serverType}服务器占用 (服务器ID: ${profile.serverId})',
+              isConflict: true,
+              existingProfile: profile,
+            );
+          } else if (profile.serverId == null) {
+            // 现有配置没有serverId，但URL已被占用 - 这也是冲突情况
+            DebugLogService().addLog('MultiAddressServer: URL已被占用，且现有配置缺少serverId验证信息');
+            return ServerIdentifyResult(
+              success: false,
+              error: '该URL已被占用，现有配置缺少服务器ID验证信息，请手动处理冲突',
+              isConflict: true,
+              existingProfile: profile,
+            );
+          } else if (profile.serverId == serverId) {
+            // URL和serverId都相同，这是同一台服务器
+            DebugLogService().addLog('MultiAddressServer: 找到相同URL和serverId的现有配置');
+            existingProfile = profile;
+          }
+                break;
+              }
             }
+            if (existingProfile != null) break;
           }
         }
       }
       
+      DebugLogService().addLog('MultiAddressServer: 识别成功 - ServerId: $serverId, 现有配置: ${existingProfile?.id}');
       return ServerIdentifyResult(
         success: true,
         serverId: serverId,
@@ -388,11 +466,13 @@ class MultiAddressServerService {
         url: normalizedUrl,
       );
     } on TimeoutException {
+      DebugLogService().addLog('MultiAddressServer: 识别失败 - 连接超时');
       return ServerIdentifyResult(
         success: false,
         error: '连接超时',
       );
     } catch (e) {
+      DebugLogService().addLog('MultiAddressServer: 识别失败 - 异常: $e');
       return ServerIdentifyResult(
         success: false,
         error: e.toString(),
@@ -437,6 +517,7 @@ class ServerIdentifyResult {
   final String? url;
   final ServerProfile? existingProfile;
   final String? error;
+  final bool isConflict; // 是否存在URL冲突（相同URL但不同serverId）
   
   ServerIdentifyResult({
     required this.success,
@@ -444,5 +525,6 @@ class ServerIdentifyResult {
     this.url,
     this.existingProfile,
     this.error,
+    this.isConflict = false,
   });
 }

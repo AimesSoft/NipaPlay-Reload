@@ -210,16 +210,28 @@ class EmbyService {
             url: normalizedUrl,
             name: _generateAddressName(normalizedUrl),
           );
+        } else {
+          print('EmbyService: 地址已存在，使用现有配置');
         }
-      } else {
-        // 创建新配置
+      } else if (identifyResult.isConflict) {
+        // 检测到冲突：URL相同但serverId不同
+        print('EmbyService: 检测到冲突，抛出异常: ${identifyResult.error}');
+        throw Exception(identifyResult.error ?? '服务器冲突');
+      } else if (identifyResult.success) {
+        // 服务器识别成功但没有现有配置，创建新配置
+        print('EmbyService: 创建新的服务器配置');
         profile = await _multiAddressService.addProfile(
           serverName: await _getServerName(normalizedUrl) ?? 'Emby服务器',
           serverType: 'emby',
           url: normalizedUrl,
           username: username,
+          serverId: identifyResult.serverId,
           addressName: _generateAddressName(normalizedUrl),
         );
+      } else {
+        // 服务器识别失败
+        print('EmbyService: 服务器识别失败: ${identifyResult.error}');
+        throw Exception(identifyResult.error ?? '无法识别Emby服务器');
       }
       
       if (profile == null) {
@@ -262,8 +274,14 @@ class EmbyService {
         throw Exception(connectionResult.error ?? '连接失败');
       }
     } catch (e) {
-      print('Emby 连接失败: $e');
+      print('EmbyService: 连接过程中发生异常: $e');
       _isConnected = false;
+      
+      // 如果是服务器冲突错误，直接传递原始错误信息
+      if (e.toString().contains('已被另一个') || e.toString().contains('已被占用')) {
+        throw Exception(e.toString());
+      }
+      
       throw Exception('连接Emby服务器失败: $e');
     }
   }
@@ -1239,19 +1257,45 @@ class EmbyService {
   Future<bool> addServerAddress(String url, String name) async {
     if (_currentProfile == null) return false;
     
+    final normalizedUrl = _normalizeUrl(url);
+    
     try {
+      // 先验证这是否为同一台服务器
+      final identifyResult = await _multiAddressService.identifyServer(
+        url: normalizedUrl,
+        serverType: 'emby',
+        getServerId: _getEmbyServerId,
+      );
+      
+      if (!identifyResult.success) {
+        DebugLogService().addLog('添加地址失败: ${identifyResult.error}');
+        throw Exception(identifyResult.error ?? '无法验证服务器身份');
+      }
+      
+      if (identifyResult.isConflict) {
+        DebugLogService().addLog('添加地址失败: ${identifyResult.error}');
+        throw Exception(identifyResult.error ?? '服务器冲突');
+      }
+      
+      // 验证serverId是否匹配
+      if (identifyResult.serverId != _currentProfile!.serverId) {
+        throw Exception('该地址属于不同的Emby服务器（服务器ID: ${identifyResult.serverId}），无法添加到当前配置');
+      }
+      
       final updatedProfile = await _multiAddressService.addAddressToProfile(
         profileId: _currentProfile!.id,
-        url: url,
+        url: normalizedUrl,
         name: name,
       );
       
       if (updatedProfile != null) {
         _currentProfile = updatedProfile;
+        DebugLogService().addLog('成功添加新地址: $normalizedUrl');
         return true;
       }
     } catch (e) {
       DebugLogService().addLog('添加服务器地址失败: $e');
+      rethrow; // 重新抛出异常以便UI处理
     }
     return false;
   }

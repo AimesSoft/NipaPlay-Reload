@@ -256,10 +256,18 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
         if (mounted) {
           BlurSnackBar.show(context, '地址添加成功');
         }
+      } else {
+        if (mounted) {
+          BlurSnackBar.show(context, '添加地址失败：未知原因');
+        }
       }
     } catch (e) {
       if (mounted) {
-        BlurSnackBar.show(context, '添加地址失败: $e');
+        String errorMsg = e.toString();
+        if (errorMsg.startsWith('Exception: ')) {
+          errorMsg = errorMsg.substring(11);
+        }
+        BlurSnackBar.show(context, '添加地址失败：$errorMsg');
       }
     }
   }
@@ -452,7 +460,6 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                       const SizedBox(height: 20),
                       _buildServerInfo(),
                       const SizedBox(height: 20),
-                      // 添加多地址管理组件
                       if (_serverAddresses.isNotEmpty) ...[
                         MultiAddressManagerWidget(
                           addresses: _serverAddresses,
@@ -609,7 +616,7 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
         ),
         const SizedBox(height: 12),
         Container(
-          height: 300, // 给一个固定高度
+          height: 300,
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.03),
             borderRadius: BorderRadius.circular(12),
