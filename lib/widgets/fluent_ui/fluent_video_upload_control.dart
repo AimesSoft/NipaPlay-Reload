@@ -93,7 +93,7 @@ class _FluentVideoUploadControlState extends State<FluentVideoUploadControl>
         scale: _scaleAnimation,
         child: Card(
           padding: EdgeInsets.zero,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.zero,
           backgroundColor: _isHovering 
               ? theme.accentColor.withOpacity(0.05)
               : theme.cardColor,
@@ -103,7 +103,7 @@ class _FluentVideoUploadControlState extends State<FluentVideoUploadControl>
               width: double.infinity,
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.zero,
                 border: Border.all(
                   color: _isHovering || _isDragging
                       ? theme.accentColor.withOpacity(0.6)

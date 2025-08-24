@@ -225,7 +225,8 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
       ),
       content: Padding(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           children: [
             // 播放器内核设置
             Card(
@@ -416,6 +417,7 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
               // 可以添加解码器相关设置
             ],
           ],
+          ),
         ),
       ),
     );
