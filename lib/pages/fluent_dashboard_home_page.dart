@@ -23,7 +23,7 @@ import 'package:nipaplay/utils/message_helper.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_anime_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/cached_network_image_widget.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
-import 'package:nipaplay/pages/anime_detail_page.dart';
+import 'package:nipaplay/pages/fluent_anime_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -1431,7 +1431,7 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
       if (item.id.contains(RegExp(r'^\d+$'))) {
         final animeId = int.tryParse(item.id);
         if (animeId != null) {
-          AnimeDetailPage.show(context, animeId).then((result) {
+          FluentAnimeDetailPage.show(context, animeId).then((result) {
             if (result != null) {
               Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1453,7 +1453,7 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
   }
 
   void _onLocalAnimeItemTap(LocalAnimeItem item) {
-    AnimeDetailPage.show(context, item.animeId).then((result) {
+    FluentAnimeDetailPage.show(context, item.animeId).then((result) {
       if (result != null) {
         Provider.of<WatchHistoryProvider>(context, listen: false).refresh();
         WidgetsBinding.instance.addPostFrameCallback((_) {
