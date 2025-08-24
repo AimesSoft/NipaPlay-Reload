@@ -1,5 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 
 /// FluentUI风格的上传视频开始播放控件
 class FluentVideoUploadControl extends StatefulWidget {
@@ -57,21 +58,16 @@ class _FluentVideoUploadControlState extends State<FluentVideoUploadControl>
 
   Future<void> _pickVideo() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: widget.allowedExtensions,
-        allowMultiple: widget.allowMultiple,
-      );
+      // 使用 FilePickerService 来记住上次打开的路径
+      final filePickerService = FilePickerService();
+      final filePath = await filePickerService.pickVideoFile();
 
-      if (result != null) {
+      if (filePath != null) {
         if (widget.allowMultiple && widget.onVideosSelected != null) {
-          final filePaths = result.paths.where((path) => path != null).cast<String>().toList();
-          widget.onVideosSelected!(filePaths);
+          // 单文件转为列表
+          widget.onVideosSelected!([filePath]);
         } else if (!widget.allowMultiple && widget.onVideoSelected != null) {
-          final filePath = result.files.single.path;
-          if (filePath != null) {
-            widget.onVideoSelected!(filePath);
-          }
+          widget.onVideoSelected!(filePath);
         }
       }
     } catch (e) {
@@ -207,17 +203,12 @@ class FluentVideoUploadButton extends StatelessWidget {
 
   Future<void> _pickVideo() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'm4v'],
-        allowMultiple: false,
-      );
+      // 使用 FilePickerService 来记住上次打开的路径
+      final filePickerService = FilePickerService();
+      final filePath = await filePickerService.pickVideoFile();
 
-      if (result != null && onVideoSelected != null) {
-        final filePath = result.files.single.path;
-        if (filePath != null) {
-          onVideoSelected!(filePath);
-        }
+      if (filePath != null && onVideoSelected != null) {
+        onVideoSelected!(filePath);
       }
     } catch (e) {
       debugPrint('文件选择错误: $e');
