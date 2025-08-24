@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart' if (dart.library.html) 'packag
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'debug_log_service.dart';
+import 'emby_episode_mapping_service.dart';
+import 'package:nipaplay/utils/url_name_generator.dart';
 
 class EmbyService {
   static final EmbyService instance = EmbyService._internal();
@@ -178,7 +180,7 @@ class EmbyService {
     }
   }
   
-  Future<bool> connect(String serverUrl, String username, String password) async {
+  Future<bool> connect(String serverUrl, String username, String password, {String? addressName}) async {
     // 初始化多地址服务
     await _multiAddressService.initialize();
     
@@ -208,7 +210,7 @@ class EmbyService {
           profile = await _multiAddressService.addAddressToProfile(
             profileId: profile.id,
             url: normalizedUrl,
-            name: _generateAddressName(normalizedUrl),
+            name: UrlNameGenerator.generateAddressName(normalizedUrl, customName: addressName),
           );
         } else {
           print('EmbyService: 地址已存在，使用现有配置');
@@ -226,7 +228,7 @@ class EmbyService {
           url: normalizedUrl,
           username: username,
           serverId: identifyResult.serverId,
-          addressName: _generateAddressName(normalizedUrl),
+          addressName: UrlNameGenerator.generateAddressName(normalizedUrl, customName: addressName),
         );
       } else {
         // 服务器识别失败
@@ -358,16 +360,7 @@ class EmbyService {
     return null;
   }
   
-  /// 根据URL生成地址名称
-  String _generateAddressName(String url) {
-    if (url.contains('192.168') || url.contains('10.') || url.contains('172.')) {
-      return '局域网';
-    } else if (url.contains('localhost') || url.contains('127.0.0.1')) {
-      return '本地';
-    } else {
-      return '公网';
-    }
-  }
+
   
   /// 规范化URL
   String _normalizeUrl(String url) {
@@ -399,6 +392,9 @@ class EmbyService {
   }
   
   Future<void> disconnect() async {
+    // 保存当前配置文件ID，用于删除
+    final currentProfileId = _currentProfile?.id;
+    
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('emby_current_profile_id');
     await prefs.remove('emby_server_url');
@@ -417,6 +413,29 @@ class EmbyService {
     _isConnected = false;
     _availableLibraries = [];
     _selectedLibraryIds = [];
+    
+    // 删除多地址配置文件
+    if (currentProfileId != null) {
+      try {
+        await _multiAddressService.deleteProfile(currentProfileId);
+        DebugLogService().addLog('EmbyService: 已删除服务器配置文件 $currentProfileId');
+      } catch (e) {
+        DebugLogService().addLog('EmbyService: 删除服务器配置文件失败: $e');
+      }
+    }
+    
+    // 清除映射服务中的数据
+    try {
+      final embyEpisodeMappingService = EmbyEpisodeMappingService();
+      await embyEpisodeMappingService.clearAllMappings();
+      DebugLogService().addLog('EmbyService: 已清除所有Emby映射数据');
+    } catch (e) {
+      DebugLogService().addLog('EmbyService: 清除映射数据失败: $e');
+    }
+    
+    // TODO: 清除播放同步服务中的数据（待实现）
+    // 当前 EmbyPlaybackSyncService 没有清除所有数据的方法
+    // 可能需要在后续版本中添加相关方法
   }
   
   Future<http.Response> _makeAuthenticatedRequest(String path, {String method = 'GET', Map<String, dynamic>? body, Duration? timeout}) async {
@@ -1285,7 +1304,7 @@ class EmbyService {
       final updatedProfile = await _multiAddressService.addAddressToProfile(
         profileId: _currentProfile!.id,
         url: normalizedUrl,
-        name: name,
+        name: UrlNameGenerator.generateAddressName(normalizedUrl, customName: name),
       );
       
       if (updatedProfile != null) {

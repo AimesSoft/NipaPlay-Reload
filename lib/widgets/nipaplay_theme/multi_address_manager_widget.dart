@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/utils/url_name_generator.dart';
 
 /// 多地址管理组件
 class MultiAddressManagerWidget extends StatefulWidget {
@@ -79,8 +80,8 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
               controller: _nameController,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                labelText: '地址名称',
-                hintText: '例如：家庭网络、公网访问',
+                labelText: '地址名称（可留空自动生成）',
+                hintText: '例如：家庭网络、公网访问，或留空自动生成',
                 labelStyle: const TextStyle(color: Colors.white70),
                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
                 enabledBorder: OutlineInputBorder(
@@ -102,13 +103,16 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
         ),
         TextButton(
           onPressed: () {
-            if (_urlController.text.isNotEmpty && _nameController.text.isNotEmpty) {
+            if (_urlController.text.trim().isNotEmpty) {
+              final url = _urlController.text.trim();
+              final name = UrlNameGenerator.generateAddressName(url, customName: _nameController.text.trim());
+              
               Navigator.of(context).pop({
-                'url': _urlController.text,
-                'name': _nameController.text,
+                'url': url,
+                'name': name,
               });
             } else {
-              BlurSnackBar.show(context, '请填写所有字段');
+              BlurSnackBar.show(context, '请填写服务器地址');
             }
           },
           child: const Text('添加', style: TextStyle(color: Colors.blue)),

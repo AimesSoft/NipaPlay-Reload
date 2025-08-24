@@ -15,6 +15,7 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/url_name_generator.dart';
 
 enum MediaServerType { jellyfin, emby }
 
@@ -34,7 +35,7 @@ abstract class MediaServerProvider {
   List<MediaLibrary> get availableLibraries;
   Set<String> get selectedLibraryIds;
   
-  Future<bool> connectToServer(String server, String username, String password);
+  Future<bool> connectToServer(String server, String username, String password, {String? addressName});
   Future<void> disconnectFromServer();
   Future<void> updateSelectedLibraries(Set<String> libraryIds);
 }
@@ -71,8 +72,8 @@ class JellyfinProviderAdapter implements MediaServerProvider {
   Set<String> get selectedLibraryIds => _provider.selectedLibraryIds.toSet();
   
   @override
-  Future<bool> connectToServer(String server, String username, String password) =>
-    _provider.connectToServer(server, username, password);
+  Future<bool> connectToServer(String server, String username, String password, {String? addressName}) =>
+    _provider.connectToServer(server, username, password, addressName: addressName);
   @override
   Future<void> disconnectFromServer() => _provider.disconnectFromServer();
   @override
@@ -112,8 +113,8 @@ class EmbyProviderAdapter implements MediaServerProvider {
   Set<String> get selectedLibraryIds => _provider.selectedLibraryIds.toSet();
   
   @override
-  Future<bool> connectToServer(String server, String username, String password) =>
-    _provider.connectToServer(server, username, password);
+  Future<bool> connectToServer(String server, String username, String password, {String? addressName}) =>
+    _provider.connectToServer(server, username, password, addressName: addressName);
   @override
   Future<void> disconnectFromServer() => _provider.disconnectFromServer();
   @override
@@ -169,13 +170,25 @@ class NetworkMediaServerDialog extends StatefulWidget {
             isPassword: true,
             required: false,
           ),
+          const LoginField(
+            key: 'address_name',
+            label: '地址名称（可留空自动生成）',
+            hint: '例如：家庭网络、公网访问',
+            required: false,
+          ),
         ],
         loginButtonText: '连接',
         onLogin: (values) async {
+          // 生成地址名称（如果未提供则自动生成）
+          final serverUrl = values['server']!;
+          final addressName = UrlNameGenerator.generateAddressName(serverUrl, customName: values['address_name']);
+          
+          // 将地址名称传递给provider层
           final success = await provider.connectToServer(
-            values['server']!,
+            serverUrl,
             values['username']!,
             values['password']!,
+            addressName: addressName,
           );
           
           return LoginResult(

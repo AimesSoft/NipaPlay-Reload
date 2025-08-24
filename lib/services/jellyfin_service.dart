@@ -11,6 +11,8 @@ import 'package:path_provider/path_provider.dart' if (dart.library.html) 'packag
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'debug_log_service.dart';
+import 'jellyfin_episode_mapping_service.dart';
+import 'package:nipaplay/utils/url_name_generator.dart';
 
 class JellyfinService {
   static final JellyfinService instance = JellyfinService._internal();
@@ -176,7 +178,7 @@ class JellyfinService {
     }
   }
   
-  Future<bool> connect(String serverUrl, String username, String password) async {
+  Future<bool> connect(String serverUrl, String username, String password, {String? addressName}) async {
     // 初始化多地址服务
     await _multiAddressService.initialize();
     
@@ -206,7 +208,7 @@ class JellyfinService {
           profile = await _multiAddressService.addAddressToProfile(
             profileId: profile.id,
             url: normalizedUrl,
-            name: _generateAddressName(normalizedUrl),
+            name: UrlNameGenerator.generateAddressName(normalizedUrl, customName: addressName),
           );
         } else {
           print('JellyfinService: 地址已存在，使用现有配置');
@@ -224,7 +226,7 @@ class JellyfinService {
           url: normalizedUrl,
           username: username,
           serverId: identifyResult.serverId,
-          addressName: _generateAddressName(normalizedUrl),
+          addressName: UrlNameGenerator.generateAddressName(normalizedUrl, customName: addressName),
         );
       } else {
         // 服务器识别失败
@@ -357,16 +359,7 @@ class JellyfinService {
     return null;
   }
   
-  /// 根据URL生成地址名称
-  String _generateAddressName(String url) {
-    if (url.contains('192.168') || url.contains('10.') || url.contains('172.')) {
-      return '局域网';
-    } else if (url.contains('localhost') || url.contains('127.0.0.1')) {
-      return '本地';
-    } else {
-      return '公网';
-    }
-  }
+
   
   /// 规范化URL
   String _normalizeUrl(String url) {
@@ -397,6 +390,9 @@ class JellyfinService {
   }
   
   Future<void> disconnect() async {
+    // 保存当前配置文件ID，用于删除
+    final currentProfileId = _currentProfile?.id;
+    
     _isConnected = false;
     _currentProfile = null;
     _currentAddressId = null;
@@ -416,6 +412,29 @@ class JellyfinService {
     await prefs.remove('jellyfin_access_token');
     await prefs.remove('jellyfin_user_id');
     await prefs.remove('jellyfin_selected_libraries');
+    
+    // 删除多地址配置文件
+    if (currentProfileId != null) {
+      try {
+        await _multiAddressService.deleteProfile(currentProfileId);
+        DebugLogService().addLog('JellyfinService: 已删除服务器配置文件 $currentProfileId');
+      } catch (e) {
+        DebugLogService().addLog('JellyfinService: 删除服务器配置文件失败: $e');
+      }
+    }
+    
+    // 清除映射服务中的数据
+    try {
+      final jellyfinEpisodeMappingService = JellyfinEpisodeMappingService();
+      await jellyfinEpisodeMappingService.clearAllMappings();
+      DebugLogService().addLog('JellyfinService: 已清除所有Jellyfin映射数据');
+    } catch (e) {
+      DebugLogService().addLog('JellyfinService: 清除映射数据失败: $e');
+    }
+    
+    // TODO: 清除播放同步服务中的数据（待实现）
+    // 当前 JellyfinPlaybackSyncService 没有清除所有数据的方法
+    // 可能需要在后续版本中添加相关方法
   }
   
   Future<void> loadAvailableLibraries() async {
@@ -1301,7 +1320,7 @@ class JellyfinService {
       final updatedProfile = await _multiAddressService.addAddressToProfile(
         profileId: _currentProfile!.id,
         url: normalizedUrl,
-        name: name,
+        name: UrlNameGenerator.generateAddressName(normalizedUrl, customName: name),
       );
       
       if (updatedProfile != null) {
