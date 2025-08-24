@@ -16,7 +16,16 @@ class FluentPlayerHeader extends StatelessWidget {
         children: [
           IconButton(
             icon: const Icon(FluentIcons.back, size: 20),
-            onPressed: () => videoState.handleBackButton(),
+            onPressed: () async {
+              try {
+                // 先调用handleBackButton处理截图
+                await videoState.handleBackButton();
+                // 然后重置播放器状态
+                await videoState.resetPlayer();
+              } catch (e) {
+                // 静默处理错误，保持与nipaplay主题一致的行为
+              }
+            },
           ),
           const SizedBox(width: 12),
           Expanded(
