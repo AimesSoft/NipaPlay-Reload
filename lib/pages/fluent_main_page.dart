@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' as material;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:nipaplay/pages/fluent_settings_page.dart';
+import 'package:nipaplay/pages/fluent_dashboard_home_page.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/pages/anime_page.dart';
 import 'package:nipaplay/pages/new_series_page.dart';
@@ -24,6 +25,7 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
 
   // 页面列表
   final List<material.Widget> _pages = [
+    const FluentDashboardHomePage(),
     const PlayVideoPage(),
     const AnimePage(), 
     const NewSeriesPage(),
@@ -31,6 +33,7 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
   ];
 
   final List<String> _pageNames = [
+    '仪表盘',
     '视频播放',
     '动画',
     '新番',
@@ -161,24 +164,29 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
             },
             items: [
               PaneItem(
+                icon: const Icon(FluentIcons.home),
+                title: const Text('仪表盘'),
+                body: _pages[0],
+              ),
+              PaneItem(
                 icon: const Icon(FluentIcons.play),
                 title: const Text('视频播放'),
-                body: _pages[0],
+                body: _pages[1],
               ),
               PaneItem(
                 icon: const Icon(FluentIcons.video),
                 title: const Text('动画'),
-                body: _pages[1],
+                body: _pages[2],
               ),
               PaneItem(
                 icon: const Icon(FluentIcons.new_folder),
                 title: const Text('新番'),
-                body: _pages[2],
+                body: _pages[3],
               ),
               PaneItem(
                 icon: const Icon(FluentIcons.settings),
                 title: const Text('设置'),
-                body: _pages[3],
+                body: _pages[4],
               ),
             ],
           ),
