@@ -293,6 +293,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
     _isJellyfinConnected = jellyfinProvider.isConnected;
     _isEmbyConnected = embyProvider.isConnected;
+    print('_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected');
   }
 
   TabChangeNotifier? _tabChangeNotifierRef;
@@ -397,6 +398,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         // 检查连接状态是否改变
         if (_isJellyfinConnected != currentJellyfinConnectionState || 
             _isEmbyConnected != currentEmbyConnectionState) {
+          print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               _updateTabController(currentJellyfinConnectionState, currentEmbyConnectionState);

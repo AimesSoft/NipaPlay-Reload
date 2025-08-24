@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/server_profile_model.dart';
+import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/multi_address_manager_widget.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
@@ -197,6 +201,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
   Set<String> _currentSelectedLibraryIds = {};
   List<MediaLibrary> _currentAvailableLibraries = [];
   late MediaServerProvider _provider;
+  List<ServerAddress> _serverAddresses = [];
+  String? _currentAddressId;
 
   @override
   void didChangeDependencies() {
@@ -206,9 +212,141 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
     if (_provider.isConnected) {
       _currentAvailableLibraries = List.from(_provider.availableLibraries);
       _currentSelectedLibraryIds = Set.from(_provider.selectedLibraryIds);
+      
+      // 加载多地址信息
+      _loadMultiAddressInfo();
     } else {
       _currentAvailableLibraries = [];
       _currentSelectedLibraryIds = {};
+      _serverAddresses = [];
+      _currentAddressId = null;
+    }
+  }
+  
+  void _loadMultiAddressInfo() {
+    // 根据服务器类型获取地址列表
+    switch (widget.serverType) {
+      case MediaServerType.jellyfin:
+        final service = JellyfinService.instance;
+        _serverAddresses = service.getServerAddresses();
+        // 从当前服务器URL判断当前地址ID（这里简化处理）
+        break;
+      case MediaServerType.emby:
+        final service = EmbyService.instance;
+        _serverAddresses = service.getServerAddresses();
+        break;
+    }
+  }
+  
+  Future<void> _handleAddAddress(String url, String name) async {
+    try {
+      bool success = false;
+      switch (widget.serverType) {
+        case MediaServerType.jellyfin:
+          success = await JellyfinService.instance.addServerAddress(url, name);
+          break;
+        case MediaServerType.emby:
+          success = await EmbyService.instance.addServerAddress(url, name);
+          break;
+      }
+      
+      if (success) {
+        _loadMultiAddressInfo();
+        setState(() {});
+        if (mounted) {
+          BlurSnackBar.show(context, '地址添加成功');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '添加地址失败: $e');
+      }
+    }
+  }
+  
+  Future<void> _handleRemoveAddress(String addressId) async {
+    try {
+      bool success = false;
+      switch (widget.serverType) {
+        case MediaServerType.jellyfin:
+          success = await JellyfinService.instance.removeServerAddress(addressId);
+          break;
+        case MediaServerType.emby:
+          success = await EmbyService.instance.removeServerAddress(addressId);
+          break;
+      }
+      
+      if (success) {
+        _loadMultiAddressInfo();
+        setState(() {});
+        if (mounted) {
+          BlurSnackBar.show(context, '地址删除成功');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '删除地址失败: $e');
+      }
+    }
+  }
+  
+  Future<void> _handleSwitchAddress(String addressId) async {
+    try {
+      bool success = false;
+      switch (widget.serverType) {
+        case MediaServerType.jellyfin:
+          success = await JellyfinService.instance.switchToAddress(addressId);
+          break;
+        case MediaServerType.emby:
+          success = await EmbyService.instance.switchToAddress(addressId);
+          break;
+      }
+      
+      if (success) {
+        _loadMultiAddressInfo();
+        setState(() {});
+        if (mounted) {
+          BlurSnackBar.show(context, '已切换到新地址');
+        }
+      } else {
+        if (mounted) {
+          BlurSnackBar.show(context, '切换地址失败，请检查连接');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '切换地址失败: $e');
+      }
+    }
+  }
+
+  Future<void> _handleUpdatePriority(String addressId, int priority) async {
+    try {
+      bool success = false;
+      switch (widget.serverType) {
+        case MediaServerType.jellyfin:
+          success = await JellyfinService.instance.updateServerPriority(addressId, priority);
+          break;
+        case MediaServerType.emby:
+          success = await EmbyService.instance.updateServerPriority(addressId, priority);
+          break;
+      }
+      
+      if (success) {
+        _loadMultiAddressInfo();
+        setState(() {});
+        if (mounted) {
+          BlurSnackBar.show(context, '优先级已更新');
+        }
+      } else {
+        if (mounted) {
+          BlurSnackBar.show(context, '更新优先级失败');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '更新优先级失败: $e');
+      }
     }
   }
 
@@ -273,7 +411,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: dialogWidth,
-          maxHeight: screenSize.height * 0.8,
+          minHeight: 500,
+          maxHeight: screenSize.height * 0.9,
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -304,18 +443,32 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
               filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 20),
-                    _buildServerInfo(),
-                    const SizedBox(height: 20),
-                    _buildLibrariesSection(),
-                    const SizedBox(height: 24),
-                    _buildActionButtons(),
-                  ],
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 20),
+                      _buildServerInfo(),
+                      const SizedBox(height: 20),
+                      // 添加多地址管理组件
+                      if (_serverAddresses.isNotEmpty) ...[
+                        MultiAddressManagerWidget(
+                          addresses: _serverAddresses,
+                          currentAddressId: _currentAddressId,
+                          onAddAddress: _handleAddAddress,
+                          onRemoveAddress: _handleRemoveAddress,
+                          onSwitchAddress: _handleSwitchAddress,
+                          onUpdatePriority: _handleUpdatePriority,
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                      _buildLibrariesSection(),
+                      const SizedBox(height: 24),
+                      _buildActionButtons(),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -430,46 +583,43 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
   }
 
   Widget _buildLibrariesSection() {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.library_books, color: Colors.purple, size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                '媒体库选择',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: Container(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
+                color: Colors.purple.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: _currentAvailableLibraries.isEmpty
-                  ? _buildEmptyLibrariesState()
-                  : _buildLibrariesList(),
+              child: const Icon(Icons.library_books, color: Colors.purple, size: 20),
             ),
+            const SizedBox(width: 12),
+            const Text(
+              '媒体库选择',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          height: 300, // 给一个固定高度
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
           ),
-        ],
-      ),
+          child: _currentAvailableLibraries.isEmpty
+              ? _buildEmptyLibrariesState()
+              : _buildLibrariesList(),
+        ),
+      ],
     );
   }
 

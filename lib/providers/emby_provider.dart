@@ -119,14 +119,17 @@ class EmbyProvider extends ChangeNotifier {
   /// 连接状态变化回调
   void _onConnectionStateChanged(bool isConnected) {
     print('EmbyProvider: 连接状态变化 - isConnected: $isConnected');
+    
+    // 连接状态变化需要立即通知UI，不能延迟
+    // 这样可以确保媒体库标签页能及时显示/隐藏
+    notifyListeners();
+    
     if (isConnected) {
       print('EmbyProvider: Emby已连接，开始加载媒体项目...');
       // 异步加载媒体项目，不阻塞UI
       loadMediaItems();
       loadMovieItems();
     }
-    // 连接状态变化可能伴随后续的媒体加载通知，这里合并通知，避免短时间多次刷新
-    _notifyCoalesced();
   }
   
   // 加载Emby媒体项
