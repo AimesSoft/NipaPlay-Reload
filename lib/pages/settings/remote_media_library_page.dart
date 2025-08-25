@@ -24,9 +24,40 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
   Widget build(BuildContext context) {
     return Consumer2<JellyfinProvider, EmbyProvider>(
       builder: (context, jellyfinProvider, embyProvider, child) {
+        // 检查 Provider 是否已初始化
+        if (!jellyfinProvider.isInitialized && !embyProvider.isInitialized) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: Colors.blue),
+                SizedBox(height: 16),
+                Text(
+                  '正在初始化远程媒体库服务...',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          );
+        }
+        
+        // 检查是否有严重错误
+        final hasJellyfinError = jellyfinProvider.hasError && 
+                                 jellyfinProvider.errorMessage != null &&
+                                 !jellyfinProvider.isConnected;
+        final hasEmbyError = embyProvider.hasError && 
+                            embyProvider.errorMessage != null &&
+                            !embyProvider.isConnected;
+        
         return ListView(
           padding: const EdgeInsets.all(24.0),
           children: [
+            // 显示错误信息（如果有的话）
+            if (hasJellyfinError || hasEmbyError) ...[
+              _buildErrorCard(jellyfinProvider, embyProvider),
+              const SizedBox(height: 20),
+            ],
+            
             // Jellyfin服务器配置部分
             _buildJellyfinSection(jellyfinProvider),
             
@@ -42,6 +73,97 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildErrorCard(JellyfinProvider jellyfinProvider, EmbyProvider embyProvider) {
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.error_outline,
+                color: Colors.red[400],
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                '服务初始化错误',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (jellyfinProvider.hasError && jellyfinProvider.errorMessage != null)
+            _buildErrorItem('Jellyfin', jellyfinProvider.errorMessage!),
+          if (embyProvider.hasError && embyProvider.errorMessage != null) ...[
+            if (jellyfinProvider.hasError) const SizedBox(height: 8),
+            _buildErrorItem('Emby', embyProvider.errorMessage!),
+          ],
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.yellow.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.yellow.withOpacity(0.3)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info, color: Colors.yellow, size: 16),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '这些错误不会影响其他功能的正常使用。您可以尝试重新配置服务器连接。',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorItem(String serviceName, String errorMessage) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.red.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            serviceName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            errorMessage,
+            style: TextStyle(
+              color: Colors.red[300],
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -220,10 +342,29 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               spacing: 8,
               runSpacing: 4,
               children: selectedLibraries.map((libraryId) {
-                final library = availableLibraries.firstWhere(
-                  (lib) => lib.id == libraryId,
-                  orElse: () => availableLibraries.first,
-                );
+                // 安全地查找媒体库，避免数组越界异常
+                final library = availableLibraries.where((lib) => lib.id == libraryId).isNotEmpty
+                    ? availableLibraries.firstWhere((lib) => lib.id == libraryId)
+                    : null;
+                
+                if (library == null) {
+                  // 如果找不到对应的库，显示ID
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '未知媒体库 ($libraryId)',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                      ),
+                    ),
+                  );
+                }
+                
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -421,10 +562,29 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               spacing: 8,
               runSpacing: 4,
               children: selectedLibraries.map((libraryId) {
-                final library = availableLibraries.firstWhere(
-                  (lib) => lib.id == libraryId,
-                  orElse: () => availableLibraries.first,
-                );
+                // 安全地查找媒体库，避免数组越界异常
+                final library = availableLibraries.where((lib) => lib.id == libraryId).isNotEmpty
+                    ? availableLibraries.firstWhere((lib) => lib.id == libraryId)
+                    : null;
+                
+                if (library == null) {
+                  // 如果找不到对应的库，显示ID
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '未知媒体库 ($libraryId)',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                      ),
+                    ),
+                  );
+                }
+                
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(

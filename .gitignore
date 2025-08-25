@@ -33,3 +33,9 @@ doc/api/
 /MCDFsteve/
 /assets/web
 docs/error.txt
+
+# 忽略 Mac 的隐藏文件
+.DS_Store
+
+# 忽略 VSCode 的设置文件
+.vscode/settings.json

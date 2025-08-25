@@ -5,9 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
+import 'package:nipaplay/models/server_profile_model.dart';
+import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'debug_log_service.dart';
+
+import 'package:nipaplay/utils/url_name_generator.dart';
 
 class JellyfinService {
   static final JellyfinService instance = JellyfinService._internal();
@@ -22,6 +27,11 @@ class JellyfinService {
   bool _isConnected = false;
   List<JellyfinLibrary> _availableLibraries = [];
   List<String> _selectedLibraryIds = [];
+  
+  // 多地址支持
+  ServerProfile? _currentProfile;
+  String? _currentAddressId;
+  final MultiAddressServerService _multiAddressService = MultiAddressServerService.instance;
 
   // Client information cache
   String? _cachedClientInfo;
@@ -71,12 +81,42 @@ class JellyfinService {
       _isConnected = false;
       return;
     }
+    
+    // 初始化多地址服务
+    await _multiAddressService.initialize();
+    
     final prefs = await SharedPreferences.getInstance();
     
-    _serverUrl = prefs.getString('jellyfin_server_url');
-    _username = prefs.getString('jellyfin_username');
-    _accessToken = prefs.getString('jellyfin_access_token');
-    _userId = prefs.getString('jellyfin_user_id');
+    // 尝试加载当前配置
+    final profileId = prefs.getString('jellyfin_current_profile_id');
+    if (profileId != null) {
+      try {
+        _currentProfile = _multiAddressService.getProfileById(profileId);
+        if (_currentProfile != null) {
+          _username = _currentProfile!.username;
+          _accessToken = _currentProfile!.accessToken;
+          _userId = _currentProfile!.userId;
+          
+          // 使用当前地址
+          final currentAddress = _currentProfile!.currentAddress;
+          if (currentAddress != null) {
+            _serverUrl = currentAddress.normalizedUrl;
+            _currentAddressId = currentAddress.id;
+          }
+        }
+      } catch (e) {
+        DebugLogService().addLog('Jellyfin: 加载配置失败: $e');
+      }
+    }
+    
+    // 兼容旧版本存储
+    if (_currentProfile == null) {
+      _serverUrl = prefs.getString('jellyfin_server_url');
+      _username = prefs.getString('jellyfin_username');
+      _accessToken = prefs.getString('jellyfin_access_token');
+      _userId = prefs.getString('jellyfin_user_id');
+    }
+    
     _selectedLibraryIds = prefs.getStringList('jellyfin_selected_libraries') ?? [];
     
     if (_serverUrl != null && _accessToken != null && _userId != null) {
@@ -138,77 +178,226 @@ class JellyfinService {
     }
   }
   
-  Future<bool> connect(String serverUrl, String username, String password) async {
-    // 确保URL格式正确
-    if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
-      serverUrl = 'http://$serverUrl';
-    }
+  Future<bool> connect(String serverUrl, String username, String password, {String? addressName}) async {
+    // 初始化多地址服务
+    await _multiAddressService.initialize();
     
-    // 移除末尾的斜杠
-    if (serverUrl.endsWith('/')) {
-      serverUrl = serverUrl.substring(0, serverUrl.length - 1);
-    }
-    
-    _serverUrl = serverUrl;
-    _username = username;
-    _password = password;
+    // 规范化URL
+    final normalizedUrl = _normalizeUrl(serverUrl);
     
     try {
-      // 获取客户端配置
-      final configResponse = await http.get(
-        Uri.parse('$_serverUrl/System/Info/Public'),
+      // 先识别服务器
+      final identifyResult = await _multiAddressService.identifyServer(
+        url: normalizedUrl,
+        serverType: 'jellyfin',
+        getServerId: _getJellyfinServerId,
       );
       
-      if (configResponse.statusCode != 200) {
-        throw Exception('服务器返回错误: ${configResponse.statusCode} ${configResponse.reasonPhrase ?? ''}\n${configResponse.body}');
+      ServerProfile? profile;
+      
+      if (identifyResult.success && identifyResult.existingProfile != null) {
+        // 服务器已存在，添加新地址或使用现有地址
+        profile = identifyResult.existingProfile!;
+        
+        // 检查是否需要添加新地址
+        final hasAddress = profile.addresses.any(
+          (addr) => addr.normalizedUrl == normalizedUrl,
+        );
+        
+        if (!hasAddress) {
+          profile = await _multiAddressService.addAddressToProfile(
+            profileId: profile.id,
+            url: normalizedUrl,
+            name: UrlNameGenerator.generateAddressName(normalizedUrl, customName: addressName),
+          );
+        } else {
+          print('JellyfinService: 地址已存在，使用现有配置');
+        }
+      } else if (identifyResult.isConflict) {
+        // 检测到冲突：URL相同但serverId不同
+        print('JellyfinService: 检测到冲突，抛出异常: ${identifyResult.error}');
+        throw Exception(identifyResult.error ?? '服务器冲突');
+      } else if (identifyResult.success) {
+        // 服务器识别成功但没有现有配置，创建新配置
+        print('JellyfinService: 创建新的服务器配置');
+        profile = await _multiAddressService.addProfile(
+          serverName: await _getServerName(normalizedUrl) ?? 'Jellyfin服务器',
+          serverType: 'jellyfin',
+          url: normalizedUrl,
+          username: username,
+          serverId: identifyResult.serverId,
+          addressName: UrlNameGenerator.generateAddressName(normalizedUrl, customName: addressName),
+        );
+      } else {
+        // 服务器识别失败
+        print('JellyfinService: 服务器识别失败: ${identifyResult.error}');
+        throw Exception(identifyResult.error ?? '无法识别Jellyfin服务器');
       }
       
-      // 认证用户
-      final clientInfo = await _getClientInfo();
-      final authResponse = await http.post(
-        Uri.parse('$_serverUrl/Users/AuthenticateByName'),
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Emby-Authorization': clientInfo,
-        },
-        body: json.encode({
-          'Username': username,
-          'Pw': password,
-        }),
+      if (profile == null) {
+        throw Exception('无法创建服务器配置');
+      }
+      
+      // 使用多地址尝试连接
+      final connectionResult = await _multiAddressService.tryConnect(
+        profile: profile,
+        testConnection: (url) => _testJellyfinConnection(url, username, password),
       );
       
-      if (authResponse.statusCode != 200) {
-        throw Exception('服务器返回错误: ${authResponse.statusCode} ${authResponse.reasonPhrase ?? ''}\n${authResponse.body}');
+      if (connectionResult.success && connectionResult.profile != null) {
+        _currentProfile = connectionResult.profile;
+        _serverUrl = connectionResult.successfulUrl;
+        _currentAddressId = connectionResult.successfulAddressId;
+        _username = username;
+        _password = password;
+        
+        // 执行完整的认证流程
+        await _performAuthentication(_serverUrl!, username, password);
+        
+        // 只有在认证成功后才设置连接状态为true
+        _isConnected = true;
+        
+        // 更新配置中的认证信息
+        _currentProfile = _currentProfile!.copyWith(
+          accessToken: _accessToken,
+          userId: _userId,
+        );
+        await _multiAddressService.updateProfile(_currentProfile!);
+        
+        // 保存连接信息
+        await _saveConnectionInfo();
+        
+        // 获取可用的媒体库列表
+        if (!kIsWeb) {
+          await loadAvailableLibraries();
+        }
+        
+        return true;
+      } else {
+        throw Exception(connectionResult.error ?? '连接失败');
       }
-      
-      final authData = json.decode(authResponse.body);
-      _accessToken = authData['AccessToken'];
-      _userId = authData['User']['Id'];
-      
-      // 保存设置到SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('jellyfin_server_url', _serverUrl!);
-      await prefs.setString('jellyfin_username', _username!);
-      await prefs.setString('jellyfin_access_token', _accessToken!);
-      await prefs.setString('jellyfin_user_id', _userId!);
-      
-      _isConnected = true;
-      
-      // 获取可用的媒体库列表
-      if (!kIsWeb) {
-        await loadAvailableLibraries();
-      }
-      
-      return true;
     } catch (e) {
+      print('JellyfinService: 连接过程中发生异常: $e');
       _isConnected = false;
-      // 直接抛出异常，Provider会捕获并展示message
+      
+      // 如果是服务器冲突错误，直接传递原始错误信息
+      if (e.toString().contains('已被另一个') || e.toString().contains('已被占用')) {
+        throw Exception(e.toString());
+      }
+      
       throw Exception('连接Jellyfin服务器失败: $e');
     }
   }
   
+  /// 测试Jellyfin连接
+  Future<bool> _testJellyfinConnection(String url, String username, String password) async {
+    try {
+      // 获取服务器信息
+      final configResponse = await http.get(
+        Uri.parse('$url/System/Info/Public'),
+      ).timeout(const Duration(seconds: 5));
+      
+      return configResponse.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// 执行完整的认证流程
+  Future<void> _performAuthentication(String serverUrl, String username, String password) async {
+    final clientInfo = await _getClientInfo();
+    final authResponse = await http.post(
+      Uri.parse('$serverUrl/Users/AuthenticateByName'),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Emby-Authorization': clientInfo,
+      },
+      body: json.encode({
+        'Username': username,
+        'Pw': password,
+      }),
+    );
+    
+    if (authResponse.statusCode != 200) {
+      throw Exception('认证失败: ${authResponse.statusCode}');
+    }
+    
+    final authData = json.decode(authResponse.body);
+    _accessToken = authData['AccessToken'];
+    _userId = authData['User']['Id'];
+  }
+  
+  /// 获取Jellyfin服务器ID
+  Future<String?> _getJellyfinServerId(String url) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$url/System/Info/Public'),
+      ).timeout(const Duration(seconds: 5));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['Id'] ?? data['ServerId'];
+      }
+    } catch (e) {
+      DebugLogService().addLog('获取Jellyfin服务器ID失败: $e');
+    }
+    return null;
+  }
+  
+  /// 获取服务器名称
+  Future<String?> _getServerName(String url) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$url/System/Info/Public'),
+      ).timeout(const Duration(seconds: 5));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['ServerName'];
+      }
+    } catch (e) {
+      DebugLogService().addLog('获取Jellyfin服务器名称失败: $e');
+    }
+    return null;
+  }
+  
+
+  
+  /// 规范化URL
+  String _normalizeUrl(String url) {
+    String normalized = url.trim();
+    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+      normalized = 'http://$normalized';
+    }
+    if (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
+  
+  /// 保存连接信息
+  Future<void> _saveConnectionInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 保存当前配置ID
+    if (_currentProfile != null) {
+      await prefs.setString('jellyfin_current_profile_id', _currentProfile!.id);
+    }
+    
+    // 兼容旧版本，同时保存单地址信息
+    await prefs.setString('jellyfin_server_url', _serverUrl!);
+    await prefs.setString('jellyfin_username', _username!);
+    await prefs.setString('jellyfin_access_token', _accessToken!);
+    await prefs.setString('jellyfin_user_id', _userId!);
+  }
+  
   Future<void> disconnect() async {
+    // 保存当前配置文件ID，用于删除
+    final currentProfileId = _currentProfile?.id;
+    
     _isConnected = false;
+    _currentProfile = null;
+    _currentAddressId = null;
     _serverUrl = null;
     _username = null;
     _password = null;
@@ -219,11 +408,28 @@ class JellyfinService {
     
     // 清除保存的设置
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('jellyfin_current_profile_id');
     await prefs.remove('jellyfin_server_url');
     await prefs.remove('jellyfin_username');
     await prefs.remove('jellyfin_access_token');
     await prefs.remove('jellyfin_user_id');
     await prefs.remove('jellyfin_selected_libraries');
+    
+    // 删除多地址配置文件
+    if (currentProfileId != null) {
+      try {
+        await _multiAddressService.deleteProfile(currentProfileId);
+        DebugLogService().addLog('JellyfinService: 已删除服务器配置文件 $currentProfileId');
+      } catch (e) {
+        DebugLogService().addLog('JellyfinService: 删除服务器配置文件失败: $e');
+      }
+    }
+    
+
+    
+    // TODO: 清除播放同步服务中的数据（待实现）
+    // 当前 JellyfinPlaybackSyncService 没有清除所有数据的方法
+    // 可能需要在后续版本中添加相关方法
   }
   
   Future<void> loadAvailableLibraries() async {
@@ -933,7 +1139,17 @@ class JellyfinService {
   
   // 辅助方法：发送经过身份验证的HTTP请求
   Future<http.Response> _makeAuthenticatedRequest(String endpoint, {String method = 'GET', Map<String, dynamic>? body, Duration? timeout}) async {
-    if (_serverUrl == null || _accessToken == null) {
+    if (_accessToken == null) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+    
+    // 如果有多地址配置，尝试使用多地址重试机制
+    if (_currentProfile != null) {
+      return await _makeAuthenticatedRequestWithRetry(endpoint, method: method, body: body, timeout: timeout);
+    }
+    
+    // 单地址模式（兼容旧版本）
+    if (_serverUrl == null) {
       throw Exception('未连接到Jellyfin服务器');
     }
     
@@ -980,5 +1196,242 @@ class JellyfinService {
       throw Exception('服务器返回错误: ${response.statusCode} ${response.reasonPhrase ?? ''}\n${response.body}');
     }
     return response;
+  }
+  
+  /// 带重试的认证请求（多地址支持）
+  Future<http.Response> _makeAuthenticatedRequestWithRetry(String endpoint, {String method = 'GET', Map<String, dynamic>? body, Duration? timeout}) async {
+    if (_currentProfile == null || _accessToken == null) {
+      throw Exception('未连接到 Jellyfin 服务器');
+    }
+    
+    final addresses = _currentProfile!.enabledAddresses;
+    if (addresses.isEmpty) {
+      throw Exception('没有可用的服务器地址');
+    }
+    
+    final clientInfo = await _getClientInfo();
+    final authHeader = clientInfo + ', Token="$_accessToken"';
+    final Map<String, String> headers = {
+      'X-Emby-Authorization': authHeader,
+    };
+    
+    if (body != null) {
+      headers['Content-Type'] = 'application/json';
+    }
+    
+    final requestTimeout = timeout ?? const Duration(seconds: 10);
+    
+    Exception? lastError;
+    
+    // 尝试每个地址
+    for (final address in addresses) {
+      if (!address.shouldRetry()) continue;
+      
+      final Uri uri = Uri.parse('${address.normalizedUrl}$endpoint');
+      
+      try {
+        http.Response response;
+        switch (method.toUpperCase()) {
+          case 'GET':
+            response = await http.get(uri, headers: headers).timeout(requestTimeout);
+            break;
+          case 'POST':
+            response = await http.post(uri, headers: headers, body: body != null ? json.encode(body) : null).timeout(requestTimeout);
+            break;
+          case 'PUT':
+            response = await http.put(uri, headers: headers, body: body != null ? json.encode(body) : null).timeout(requestTimeout);
+            break;
+          case 'DELETE':
+            response = await http.delete(uri, headers: headers).timeout(requestTimeout);
+            break;
+          default:
+            throw Exception('不支持的 HTTP 方法: $method');
+        }
+        
+        if (response.statusCode < 400) {
+          // 成功，更新当前使用的地址
+          if (_currentAddressId != address.id) {
+            _serverUrl = address.normalizedUrl;
+            _currentAddressId = address.id;
+            _currentProfile = _currentProfile!.markAddressSuccess(address.id);
+            await _multiAddressService.updateProfile(_currentProfile!);
+          }
+          return response;
+        } else {
+          // 提供更详细的错误信息
+          String errorMessage;
+          if (response.statusCode == 401) {
+            errorMessage = '认证失败: 访问令牌无效或已过期 (HTTP 401)';
+          } else if (response.statusCode == 403) {
+            errorMessage = '访问被拒绝: 用户权限不足 (HTTP 403)';
+          } else if (response.statusCode == 404) {
+            errorMessage = '请求的资源未找到 (HTTP 404)';
+          } else if (response.statusCode >= 500) {
+            errorMessage = 'Jellyfin服务器内部错误 (HTTP ${response.statusCode})';
+          } else {
+            errorMessage = '服务器返回错误: HTTP ${response.statusCode} ${response.reasonPhrase ?? ''}';
+          }
+          lastError = Exception(errorMessage);
+          DebugLogService().addLog('JellyfinService: 请求失败 ${address.normalizedUrl}: $errorMessage');
+        }
+      } on TimeoutException catch (e) {
+        lastError = Exception('请求超时: ${e.message}');
+        _currentProfile = _currentProfile!.markAddressFailed(address.id);
+      } catch (e) {
+        lastError = Exception('请求失败: $e');
+        _currentProfile = _currentProfile!.markAddressFailed(address.id);
+      }
+    }
+    
+    // 更新失败信息
+    await _multiAddressService.updateProfile(_currentProfile!);
+    
+    throw lastError ?? Exception('所有地址连接失败');
+  }
+  
+  /// 获取当前服务器的所有地址
+  List<ServerAddress> getServerAddresses() {
+    if (_currentProfile != null) {
+      return _currentProfile!.addresses;
+    }
+    return [];
+  }
+  
+  /// 添加新地址到当前服务器
+  Future<bool> addServerAddress(String url, String name) async {
+    if (_currentProfile == null) return false;
+    
+    final normalizedUrl = _normalizeUrl(url);
+    
+    try {
+      // 先验证这是否为同一台服务器
+      final identifyResult = await _multiAddressService.identifyServer(
+        url: normalizedUrl,
+        serverType: 'jellyfin',
+        getServerId: _getJellyfinServerId,
+      );
+      
+      if (!identifyResult.success) {
+        DebugLogService().addLog('添加地址失败: ${identifyResult.error}');
+        throw Exception(identifyResult.error ?? '无法验证服务器身份');
+      }
+      
+      if (identifyResult.isConflict) {
+        DebugLogService().addLog('添加地址失败: ${identifyResult.error}');
+        throw Exception(identifyResult.error ?? '服务器冲突');
+      }
+      
+      // 验证serverId是否匹配
+      if (identifyResult.serverId != _currentProfile!.serverId) {
+        throw Exception('该地址属于不同的Jellyfin服务器（服务器ID: ${identifyResult.serverId}），无法添加到当前配置');
+      }
+      
+      final updatedProfile = await _multiAddressService.addAddressToProfile(
+        profileId: _currentProfile!.id,
+        url: normalizedUrl,
+        name: UrlNameGenerator.generateAddressName(normalizedUrl, customName: name),
+      );
+      
+      if (updatedProfile != null) {
+        _currentProfile = updatedProfile;
+        DebugLogService().addLog('成功添加新地址: $normalizedUrl');
+        return true;
+      }
+    } catch (e) {
+      DebugLogService().addLog('添加服务器地址失败: $e');
+      rethrow; // 重新抛出异常以便UI处理
+    }
+    return false;
+  }
+  
+  /// 删除服务器地址
+  Future<bool> removeServerAddress(String addressId) async {
+    if (_currentProfile == null) return false;
+    
+    try {
+      final updatedProfile = await _multiAddressService.deleteAddressFromProfile(
+        profileId: _currentProfile!.id,
+        addressId: addressId,
+      );
+      
+      if (updatedProfile != null) {
+        _currentProfile = updatedProfile;
+        return true;
+      }
+    } catch (e) {
+      DebugLogService().addLog('删除服务器地址失败: $e');
+    }
+    return false;
+  }
+  
+  /// 切换服务器地址
+  Future<bool> switchToAddress(String addressId) async {
+    if (_currentProfile == null) return false;
+    
+    final address = _currentProfile!.addresses.firstWhere(
+      (addr) => addr.id == addressId,
+      orElse: () => throw Exception('地址不存在'),
+    );
+    
+    // 测试连接
+    final success = await _testJellyfinConnection(
+      address.normalizedUrl,
+      _username ?? '',
+      _password ?? '',
+    );
+    
+    if (success) {
+      // 验证当前用户token在新地址上的有效性
+      try {
+        final originalUrl = _serverUrl;
+        _serverUrl = address.normalizedUrl;
+        
+        // 进行轻量级认证验证
+        final authResponse = await _makeAuthenticatedRequest('/System/Info')
+            .timeout(const Duration(seconds: 5));
+        
+        if (authResponse.statusCode == 200) {
+          _currentAddressId = address.id;
+          _currentProfile = _currentProfile!.markAddressSuccess(address.id);
+          await _multiAddressService.updateProfile(_currentProfile!);
+          DebugLogService().addLog('JellyfinService: 成功切换到地址: ${address.normalizedUrl}');
+          return true;
+        } else {
+          // 认证失败，恢复原地址
+          _serverUrl = originalUrl;
+          DebugLogService().addLog('JellyfinService: 地址切换失败，token在新地址上无效: HTTP ${authResponse.statusCode}');
+          return false;
+        }
+      } catch (e) {
+        // 认证失败，恢复原地址
+        _serverUrl = _currentProfile!.currentAddress?.normalizedUrl;
+        DebugLogService().addLog('JellyfinService: 地址切换失败，认证验证异常: $e');
+        return false;
+      }
+    }
+    
+    return false;
+  }
+
+  /// 更新服务器地址优先级
+  Future<bool> updateServerPriority(String addressId, int priority) async {
+    if (_currentProfile == null) return false;
+    
+    try {
+      final updatedProfile = await _multiAddressService.updateAddressPriority(
+        profileId: _currentProfile!.id,
+        addressId: addressId,
+        priority: priority,
+      );
+      
+      if (updatedProfile != null) {
+        _currentProfile = updatedProfile;
+        return true;
+      }
+    } catch (e) {
+      DebugLogService().addLog('JellyfinService: 更新地址优先级失败: $e');
+    }
+    
+    return false;
   }
 }

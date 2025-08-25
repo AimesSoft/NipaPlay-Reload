@@ -895,4 +895,28 @@ class EmbyEpisodeMappingService {
 
     debugPrint('[Emby映射服务] 导入完成: ${animeMappings.length}个动画映射, ${episodeMappings.length}个剧集映射');
   }
+
+  /// 清除所有映射数据
+  Future<void> clearAllMappings() async {
+    await initialize();
+
+    debugPrint('[Emby映射服务] 清除所有映射数据');
+
+    try {
+      // 先删除所有剧集映射
+      await _database!.delete('emby_episode_mapping');
+      
+      // 再删除所有动画映射
+      await _database!.delete('emby_dandanplay_mapping');
+      
+      // 清理缓存
+      _animeMappingCache.clear();
+      _episodePredictionCache.clear();
+      
+      debugPrint('[Emby映射服务] 所有映射数据清除完成');
+    } catch (e) {
+      debugPrint('[Emby映射服务] 清除映射数据失败: $e');
+      rethrow;
+    }
+  }
 } 
