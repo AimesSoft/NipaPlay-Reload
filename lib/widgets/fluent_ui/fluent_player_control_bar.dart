@@ -1,7 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 
 class FluentPlayerControlBar extends StatefulWidget {
   const FluentPlayerControlBar({super.key});
@@ -21,7 +20,6 @@ class _FluentPlayerControlBarState extends State<FluentPlayerControlBar> {
   @override
   Widget build(BuildContext context) {
     final videoState = Provider.of<VideoPlayerState>(context);
-    final theme = FluentTheme.of(context);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -94,13 +92,18 @@ class _FluentPlayerControlBarState extends State<FluentPlayerControlBar> {
   }
 
   Widget _buildSettingsButton(VideoPlayerState videoState) {
-    // TODO: Implement settings flyout
     return Tooltip(
       message: '设置',
       child: IconButton(
-        icon: const Icon(FluentIcons.settings, size: 20),
+        icon: Icon(
+          FluentIcons.settings,
+          size: 20,
+          color: videoState.showRightMenu 
+            ? FluentTheme.of(context).accentColor 
+            : null,
+        ),
         onPressed: () {
-          // Show settings flyout
+          videoState.toggleRightMenu();
         },
       ),
     );

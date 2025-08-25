@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze:*)",
+      "Bash(grep -n \"void setShowControls\" lib/utils/video_player_state.dart)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

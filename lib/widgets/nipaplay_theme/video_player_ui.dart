@@ -7,6 +7,7 @@ import 'video_upload_ui.dart';
 import 'vertical_indicator.dart';
 import 'loading_overlay.dart';
 import '../fluent_ui/fluent_loading_overlay.dart';
+import '../fluent_ui/fluent_right_edge_menu.dart';
 import '../danmaku_overlay.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
@@ -466,7 +467,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                 VerticalIndicator(videoState: videoState),
                               
                               // 右边缘悬浮菜单（仅桌面版）
-                              const RightEdgeHoverMenu(),
+                              uiThemeProvider.isFluentUITheme
+                                  ? const FluentRightEdgeMenu()
+                                  : const RightEdgeHoverMenu(),
                             ],
                           ),
                         ),

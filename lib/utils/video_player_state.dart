@@ -73,6 +73,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
   bool _showControls = true;
+  bool _showRightMenu = false; // 控制右侧菜单显示状态
   bool _isFullscreen = false;
   double _progress = 0.0;
   Duration _duration = Duration.zero;
@@ -267,6 +268,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   PlayerStatus get status => _status;
   List<String> get statusMessages => _statusMessages;
   bool get showControls => _showControls;
+  bool get showRightMenu => _showRightMenu;
   bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
   Duration get duration => _duration;
@@ -1964,6 +1966,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _autoHideTimer?.cancel();
     }
     notifyListeners();
+  }
+
+  void setShowRightMenu(bool value) {
+    _showRightMenu = value;
+    notifyListeners();
+  }
+
+  void toggleRightMenu() {
+    setShowRightMenu(!_showRightMenu);
   }
 
   // 右边缘悬浮菜单管理方法
