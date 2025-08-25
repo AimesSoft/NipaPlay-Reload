@@ -50,6 +50,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   WatchHistoryProvider? _watchHistoryProviderRef;
   ScanService? _scanServiceRef;
   VideoPlayerState? _videoPlayerStateRef;
+  // 后端 ready 回调引用，便于移除
+  VoidCallback? _jellyfinReadyListener;
+  VoidCallback? _embyReadyListener;
+  // 按服务粒度的监听开关
+  bool _jellyfinLiveListening = false;
+  bool _embyLiveListening = false;
+  // Provider 通知后的轻量防抖（覆盖库选择等状态变化）
+  Timer? _jfDebounceTimer;
+  Timer? _emDebounceTimer;
+  
   
   @override
   bool get wantKeepAlive => true;
@@ -111,6 +121,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 静态变量，用于缓存推荐内容
   static List<RecommendedItem> _cachedRecommendedItems = [];
   static DateTime? _lastRecommendedLoadTime;
+  // 最近一次数据加载时间，用于合并短时间内的重复触发
+  DateTime? _lastLoadTime;
 
   @override
   void initState() {
@@ -194,20 +206,41 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
   
   void _setupProviderListeners() {
-    // 监听Jellyfin连接状态变化
+    // 仅订阅后端 ready；ready 之前不监听 Provider 的即时变化
     try {
-  _jellyfinProviderRef = Provider.of<JellyfinProvider>(context, listen: false);
-  _jellyfinProviderRef!.addListener(_onJellyfinStateChanged);
+      _jellyfinProviderRef = Provider.of<JellyfinProvider>(context, listen: false);
+      final jfService = JellyfinService.instance;
+      _jellyfinReadyListener = () {
+        if (!mounted) return;
+        debugPrint('DashboardHomePage: 收到 Jellyfin 后端 ready 信号');
+        _activateJellyfinLiveListening();
+        _triggerLoadIfIdle('Jellyfin 后端 ready');
+      };
+      jfService.addReadyListener(_jellyfinReadyListener!);
+      // 若进入页面时已 ready，则立即激活监听并首刷
+      if (jfService.isReady) {
+        _activateJellyfinLiveListening();
+        // 不在进入页面时立即刷新，首刷由 initState 的 _loadData 负责，避免重复刷新
+      }
     } catch (e) {
-      debugPrint('DashboardHomePage: 添加JellyfinProvider监听器失败: $e');
+      debugPrint('DashboardHomePage: 安装 Jellyfin ready 监听失败: $e');
     }
-    
-    // 监听Emby连接状态变化
     try {
-  _embyProviderRef = Provider.of<EmbyProvider>(context, listen: false);
-  _embyProviderRef!.addListener(_onEmbyStateChanged);
+      _embyProviderRef = Provider.of<EmbyProvider>(context, listen: false);
+      final emService = EmbyService.instance;
+      _embyReadyListener = () {
+        if (!mounted) return;
+        debugPrint('DashboardHomePage: 收到 Emby 后端 ready 信号');
+        _activateEmbyLiveListening();
+        _triggerLoadIfIdle('Emby 后端 ready');
+      };
+      emService.addReadyListener(_embyReadyListener!);
+      if (emService.isReady) {
+        _activateEmbyLiveListening();
+        // 不在进入页面时立即刷新，首刷由 initState 的 _loadData 负责，避免重复刷新
+      }
     } catch (e) {
-      debugPrint('DashboardHomePage: 添加EmbyProvider监听器失败: $e');
+      debugPrint('DashboardHomePage: 安装 Emby ready 监听失败: $e');
     }
     
     // 监听WatchHistoryProvider的加载状态变化
@@ -233,6 +266,66 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     } catch (e) {
       debugPrint('DashboardHomePage: 添加VideoPlayerState监听器失败: $e');
     }
+  }
+
+  void _activateJellyfinLiveListening() {
+    if (_jellyfinLiveListening || _jellyfinProviderRef == null) return;
+    try {
+      _jellyfinProviderRef!.addListener(_onJellyfinStateChanged);
+      _jellyfinLiveListening = true;
+      debugPrint('DashboardHomePage: 已激活 Jellyfin Provider 即时监听');
+    } catch (e) {
+      debugPrint('DashboardHomePage: 激活 Jellyfin 监听失败: $e');
+    }
+  }
+
+  void _deactivateJellyfinLiveListening() {
+    if (!_jellyfinLiveListening) return;
+    try {
+      _jellyfinProviderRef?.removeListener(_onJellyfinStateChanged);
+    } catch (_) {}
+    _jellyfinLiveListening = false;
+    debugPrint('DashboardHomePage: 已暂停 Jellyfin Provider 即时监听');
+  }
+
+  void _activateEmbyLiveListening() {
+    if (_embyLiveListening || _embyProviderRef == null) return;
+    try {
+      _embyProviderRef!.addListener(_onEmbyStateChanged);
+      _embyLiveListening = true;
+      debugPrint('DashboardHomePage: 已激活 Emby Provider 即时监听');
+    } catch (e) {
+      debugPrint('DashboardHomePage: 激活 Emby 监听失败: $e');
+    }
+  }
+
+  void _deactivateEmbyLiveListening() {
+    if (!_embyLiveListening) return;
+    try {
+      _embyProviderRef?.removeListener(_onEmbyStateChanged);
+    } catch (_) {}
+    _embyLiveListening = false;
+    debugPrint('DashboardHomePage: 已暂停 Emby Provider 即时监听');
+  }
+
+  // ready 或进入页面即已 ready 时，若空闲则立即刷新一次
+  void _triggerLoadIfIdle(String reason) {
+    if (!mounted) return;
+    debugPrint('DashboardHomePage: 检测到$reason，准备执行首次刷新');
+    if (_isVideoPlayerActive()) return;
+    // 合并短时间内的重复触发：注意，后端 ready 不参与合并，必须执行；仅合并后续触发
+    final now = DateTime.now();
+    final bool isBackendReady = reason.contains('后端 ready');
+    if (!isBackendReady && _lastLoadTime != null && now.difference(_lastLoadTime!).inMilliseconds < 500) {
+      debugPrint('DashboardHomePage: 距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过这次($reason)');
+      return;
+    }
+    if (_isLoadingRecommended) {
+      _pendingRefreshAfterLoad = true;
+      _pendingRefreshReason = reason;
+      return;
+    }
+    _loadData();
   }
   
   // 检查播放器是否处于活跃状态（播放中、暂停或准备好播放）
@@ -314,6 +407,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
   
   void _onJellyfinStateChanged() {
+  if (!_jellyfinLiveListening) return; // ready 前不处理
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过Jellyfin状态变化处理');
@@ -327,16 +421,31 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
     
     final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-    debugPrint('DashboardHomePage: Jellyfin连接状态变化 - isConnected: ${jellyfinProvider.isConnected}, mounted: $mounted');
-    
-    if (jellyfinProvider.isConnected && mounted) {
+    final connected = jellyfinProvider.isConnected;
+    debugPrint('DashboardHomePage: Jellyfin provider 状态变化 - isConnected: $connected, mounted: $mounted');
+
+    // 断开连接时，立即清空“最近添加”并刷新一次UI，避免残留
+    if (!connected && mounted) {
+      if (_recentJellyfinItemsByLibrary.isNotEmpty) {
+        _recentJellyfinItemsByLibrary.clear();
+        setState(() {});
+      }
+      // 继续走防抖以触发后续常规刷新（如空态）
+    }
+
+    // 已连接时的即时刷新（保持原有有效逻辑）：
+    if (connected && mounted) {
+      // 合并短时间内的重复触发（避免与刚刚的 ready/首刷重叠）
+      final now = DateTime.now();
+      if (_lastLoadTime != null && now.difference(_lastLoadTime!).inMilliseconds < 500) {
+        debugPrint('DashboardHomePage: Jellyfin连接完成，但距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过立即刷新');
+        return;
+      }
       if (_isLoadingRecommended) {
-        // 如果正在加载，记录待处理的刷新请求
         _pendingRefreshAfterLoad = true;
         _pendingRefreshReason = 'Jellyfin连接完成';
         debugPrint('DashboardHomePage: 正在加载中，记录Jellyfin刷新请求待稍后处理');
       } else {
-        // 🔥 修复Flutter状态错误：使用addPostFrameCallback确保不在build期间调用
         debugPrint('DashboardHomePage: Jellyfin连接完成，立即刷新数据');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -344,10 +453,20 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           }
         });
       }
+      return; // 避免与防抖重复触发
     }
+
+  // 统一处理 provider 状态变化（连接/断开/库选择等）：轻量防抖刷新
+    _jfDebounceTimer?.cancel();
+    _jfDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted || _isVideoPlayerActive() || _isLoadingRecommended) return;
+      debugPrint('DashboardHomePage: Jellyfin provider 状态变化（防抖触发）刷新');
+      _loadData();
+    });
   }
   
   void _onEmbyStateChanged() {
+  if (!_embyLiveListening) return; // ready 前不处理
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过Emby状态变化处理');
@@ -361,16 +480,31 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
     
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-    debugPrint('DashboardHomePage: Emby连接状态变化 - isConnected: ${embyProvider.isConnected}, mounted: $mounted');
-    
-    if (embyProvider.isConnected && mounted) {
+    final connected = embyProvider.isConnected;
+    debugPrint('DashboardHomePage: Emby provider 状态变化 - isConnected: $connected, mounted: $mounted');
+
+    // 断开连接时，立即清空“最近添加”并刷新一次UI，避免残留
+    if (!connected && mounted) {
+      if (_recentEmbyItemsByLibrary.isNotEmpty) {
+        _recentEmbyItemsByLibrary.clear();
+        setState(() {});
+      }
+      // 继续走防抖以触发后续常规刷新（如空态）
+    }
+
+    // 已连接时的即时刷新（保持原有有效逻辑）：
+    if (connected && mounted) {
+      // 合并短时间内的重复触发（避免与刚刚的 ready/首刷重叠）
+      final now = DateTime.now();
+      if (_lastLoadTime != null && now.difference(_lastLoadTime!).inMilliseconds < 500) {
+        debugPrint('DashboardHomePage: Emby连接完成，但距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过立即刷新');
+        return;
+      }
       if (_isLoadingRecommended) {
-        // 如果正在加载，记录待处理的刷新请求
         _pendingRefreshAfterLoad = true;
         _pendingRefreshReason = 'Emby连接完成';
         debugPrint('DashboardHomePage: 正在加载中，记录Emby刷新请求待稍后处理');
       } else {
-        // 🔥 修复Flutter状态错误：使用addPostFrameCallback确保不在build期间调用
         debugPrint('DashboardHomePage: Emby连接完成，立即刷新数据');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -378,7 +512,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           }
         });
       }
+      return; // 避免与防抖重复触发
     }
+
+  // 统一处理 provider 状态变化（连接/断开/库选择等）：轻量防抖刷新
+    _emDebounceTimer?.cancel();
+    _emDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted || _isVideoPlayerActive() || _isLoadingRecommended) return;
+      debugPrint('DashboardHomePage: Emby provider 状态变化（防抖触发）刷新');
+      _loadData();
+    });
   }
   
   void _onWatchHistoryStateChanged() {
@@ -476,14 +619,24 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     // 移除监听器 - 使用初始化时保存的实例引用，避免在dispose中再次查找context
     try {
-      _jellyfinProviderRef?.removeListener(_onJellyfinStateChanged);
+      _jfDebounceTimer?.cancel();
+      _deactivateJellyfinLiveListening();
+      if (_jellyfinReadyListener != null) {
+        JellyfinService.instance.removeReadyListener(_jellyfinReadyListener!);
+        _jellyfinReadyListener = null;
+      }
       debugPrint('DashboardHomePage: JellyfinProvider监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除JellyfinProvider监听器失败: $e');
     }
     
     try {
-      _embyProviderRef?.removeListener(_onEmbyStateChanged);
+      _emDebounceTimer?.cancel();
+      _deactivateEmbyLiveListening();
+      if (_embyReadyListener != null) {
+        EmbyService.instance.removeReadyListener(_embyReadyListener!);
+        _embyReadyListener = null;
+      }
       debugPrint('DashboardHomePage: EmbyProvider监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除EmbyProvider监听器失败: $e');
@@ -544,6 +697,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Future<void> _loadData() async {
     final stopwatch = Stopwatch()..start();
     debugPrint('DashboardHomePage: _loadData 被调用 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
+    _lastLoadTime = DateTime.now();
     
     // 检查Widget状态
     if (!mounted) {
@@ -945,8 +1099,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     debugPrint('DashboardHomePage: 开始加载最近内容');
     try {
       // 从Jellyfin按媒体库获取最近添加（按库并行）
-      final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-      if (jellyfinProvider.isConnected) {
+  final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+  if (jellyfinProvider.isConnected) {
         final jellyfinService = JellyfinService.instance;
         _recentJellyfinItemsByLibrary.clear();
         final jfFutures = <Future<void>>[];
@@ -968,11 +1122,14 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         if (jfFutures.isNotEmpty) {
           await Future.wait(jfFutures, eagerError: false);
         }
+      } else {
+        // 未连接时确保清空
+        _recentJellyfinItemsByLibrary.clear();
       }
 
       // 从Emby按媒体库获取最近添加（按库并行）
-      final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-      if (embyProvider.isConnected) {
+  final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
+  if (embyProvider.isConnected) {
         final embyService = EmbyService.instance;
         _recentEmbyItemsByLibrary.clear();
         final emFutures = <Future<void>>[];
@@ -994,6 +1151,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         if (emFutures.isNotEmpty) {
           await Future.wait(emFutures, eagerError: false);
         }
+      } else {
+        // 未连接时确保清空
+        _recentEmbyItemsByLibrary.clear();
       }
 
       // 从本地媒体库获取最近添加（优化：不做逐文件stat，按历史记录时间排序，图片懒加载+持久化）

@@ -27,6 +27,29 @@ class EmbyService {
   List<EmbyLibrary> _availableLibraries = [];
   List<String> _selectedLibraryIds = [];
   
+  // 后端就绪标志与回调
+  bool _isReady = false;
+  bool get isReady => _isReady;
+  final List<VoidCallback> _readyCallbacks = [];
+  
+  void addReadyListener(VoidCallback callback) {
+    _readyCallbacks.add(callback);
+  }
+  
+  void removeReadyListener(VoidCallback callback) {
+    _readyCallbacks.remove(callback);
+  }
+  
+  void _notifyReady() {
+    for (final cb in _readyCallbacks) {
+      try {
+        cb();
+      } catch (e) {
+        DebugLogService().addLog('Emby: ready 回调执行失败: $e');
+      }
+    }
+  }
+  
   // 多地址支持
   ServerProfile? _currentProfile;
   String? _currentAddressId;
@@ -78,6 +101,7 @@ class EmbyService {
   Future<void> loadSavedSettings() async {
     if (kIsWeb) {
       _isConnected = false;
+  _isReady = false;
       return;
     }
     
@@ -126,6 +150,7 @@ class EmbyService {
     } else {
       print('Emby: 缺少必要的连接信息，跳过自动连接');
       _isConnected = false;
+  _isReady = false;
     }
   }
   
@@ -147,12 +172,16 @@ class EmbyService {
         print('Emby: 媒体库加载完成，可用库数量: ${_availableLibraries.length}');
         // 通知连接状态变化
         _notifyConnectionStateChanged();
+        // 设置后端就绪并发出信号
+        _isReady = true;
+        _notifyReady();
       } else {
         print('Emby: 连接验证失败 - HTTP ${response.statusCode}');
       }
     } catch (e) {
       print('Emby: 连接验证过程中发生异常: $e');
       _isConnected = false;
+      _isReady = false;
     }
   }
   
@@ -272,6 +301,9 @@ class EmbyService {
         
         // 加载可用媒体库
         await loadAvailableLibraries();
+  // 连接流程结束，标记 ready
+  _isReady = true;
+  _notifyReady();
         
         return true;
       } else {
@@ -415,6 +447,7 @@ class EmbyService {
     _isConnected = false;
     _availableLibraries = [];
     _selectedLibraryIds = [];
+  _isReady = false;
     
     // 删除多地址配置文件
     if (currentProfileId != null) {
