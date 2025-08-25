@@ -38,12 +38,20 @@ class FluentAnimeDetailPage extends StatefulWidget {
     );
   }
 
+  static void popIfOpen() {
+    if (_FluentAnimeDetailPageState._openPageContext != null && _FluentAnimeDetailPageState._openPageContext!.mounted) {
+      Navigator.of(_FluentAnimeDetailPageState._openPageContext!).pop();
+      _FluentAnimeDetailPageState._openPageContext = null;
+    }
+  }
+
   @override
   State<FluentAnimeDetailPage> createState() => _FluentAnimeDetailPageState();
 }
 
 class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
     with SingleTickerProviderStateMixin {
+  static BuildContext? _openPageContext;
   final BangumiService _bangumiService = BangumiService.instance;
   BangumiAnime? _detailedAnime;
   bool _isLoading = true;
@@ -80,6 +88,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
   @override
   void initState() {
     super.initState();
+    _openPageContext = context;
     _tabController = material.TabController(length: 2, vsync: this);
     _tabController!.addListener(_handleTabChange);
     
@@ -97,6 +106,9 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
 
   @override
   void dispose() {
+    if (_openPageContext == context) {
+      _openPageContext = null;
+    }
     _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
     super.dispose();
