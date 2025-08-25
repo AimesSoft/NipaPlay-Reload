@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart' if (dart.library.html) 'packag
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'debug_log_service.dart';
-import 'jellyfin_episode_mapping_service.dart';
+
 import 'package:nipaplay/utils/url_name_generator.dart';
 
 class JellyfinService {
@@ -423,14 +423,7 @@ class JellyfinService {
       }
     }
     
-    // 清除映射服务中的数据
-    try {
-      final jellyfinEpisodeMappingService = JellyfinEpisodeMappingService();
-      await jellyfinEpisodeMappingService.clearAllMappings();
-      DebugLogService().addLog('JellyfinService: 已清除所有Jellyfin映射数据');
-    } catch (e) {
-      DebugLogService().addLog('JellyfinService: 清除映射数据失败: $e');
-    }
+
     
     // TODO: 清除播放同步服务中的数据（待实现）
     // 当前 JellyfinPlaybackSyncService 没有清除所有数据的方法
@@ -1263,7 +1256,21 @@ class JellyfinService {
           }
           return response;
         } else {
-          lastError = Exception('服务器返回错误: ${response.statusCode}');
+          // 提供更详细的错误信息
+          String errorMessage;
+          if (response.statusCode == 401) {
+            errorMessage = '认证失败: 访问令牌无效或已过期 (HTTP 401)';
+          } else if (response.statusCode == 403) {
+            errorMessage = '访问被拒绝: 用户权限不足 (HTTP 403)';
+          } else if (response.statusCode == 404) {
+            errorMessage = '请求的资源未找到 (HTTP 404)';
+          } else if (response.statusCode >= 500) {
+            errorMessage = 'Jellyfin服务器内部错误 (HTTP ${response.statusCode})';
+          } else {
+            errorMessage = '服务器返回错误: HTTP ${response.statusCode} ${response.reasonPhrase ?? ''}';
+          }
+          lastError = Exception(errorMessage);
+          DebugLogService().addLog('JellyfinService: 请求失败 ${address.normalizedUrl}: $errorMessage');
         }
       } on TimeoutException catch (e) {
         lastError = Exception('请求超时: ${e.message}');
@@ -1372,11 +1379,33 @@ class JellyfinService {
     );
     
     if (success) {
-      _serverUrl = address.normalizedUrl;
-      _currentAddressId = address.id;
-      _currentProfile = _currentProfile!.markAddressSuccess(address.id);
-      await _multiAddressService.updateProfile(_currentProfile!);
-      return true;
+      // 验证当前用户token在新地址上的有效性
+      try {
+        final originalUrl = _serverUrl;
+        _serverUrl = address.normalizedUrl;
+        
+        // 进行轻量级认证验证
+        final authResponse = await _makeAuthenticatedRequest('/System/Info')
+            .timeout(const Duration(seconds: 5));
+        
+        if (authResponse.statusCode == 200) {
+          _currentAddressId = address.id;
+          _currentProfile = _currentProfile!.markAddressSuccess(address.id);
+          await _multiAddressService.updateProfile(_currentProfile!);
+          DebugLogService().addLog('JellyfinService: 成功切换到地址: ${address.normalizedUrl}');
+          return true;
+        } else {
+          // 认证失败，恢复原地址
+          _serverUrl = originalUrl;
+          DebugLogService().addLog('JellyfinService: 地址切换失败，token在新地址上无效: HTTP ${authResponse.statusCode}');
+          return false;
+        }
+      } catch (e) {
+        // 认证失败，恢复原地址
+        _serverUrl = _currentProfile!.currentAddress?.normalizedUrl;
+        DebugLogService().addLog('JellyfinService: 地址切换失败，认证验证异常: $e');
+        return false;
+      }
     }
     
     return false;
