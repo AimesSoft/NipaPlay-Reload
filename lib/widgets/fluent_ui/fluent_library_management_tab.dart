@@ -413,7 +413,12 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(p.basename(folderPath), style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      p.basename(folderPath), 
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                     Text(folderPath, style: FluentTheme.of(context).typography.caption, overflow: TextOverflow.ellipsis),
                   ],
                 ),
@@ -455,7 +460,13 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
             children: [
               const Icon(FluentIcons.folder),
               const SizedBox(width: 8.0),
-              Text(p.basename(entity.path)),
+              Expanded(
+                child: Text(
+                  p.basename(entity.path),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
             ],
           ),
           content: _loadingFolders.contains(entity.path)
@@ -470,7 +481,11 @@ class _FluentLibraryManagementTabState extends State<FluentLibraryManagementTab>
       } else if (entity is io.File) {
         return ListTile(
           leading: const Icon(FluentIcons.video),
-          title: Text(p.basename(entity.path)),
+          title: Text(
+            p.basename(entity.path),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
           onPressed: () {
             final tempItem = WatchHistoryItem(
               filePath: entity.path,

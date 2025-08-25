@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart' as material;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:nipaplay/pages/fluent_settings_page.dart';
+import 'package:nipaplay/pages/fluent_dashboard_home_page.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/pages/anime_page.dart';
 import 'package:nipaplay/pages/new_series_page.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/splash_screen.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
+import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 
 class FluentMainPage extends StatefulWidget {
   final String? launchFilePath;
@@ -24,6 +27,7 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
 
   // 页面列表
   final List<material.Widget> _pages = [
+    const FluentDashboardHomePage(),
     const PlayVideoPage(),
     const AnimePage(), 
     const NewSeriesPage(),
@@ -31,6 +35,7 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
   ];
 
   final List<String> _pageNames = [
+    '仪表盘',
     '视频播放',
     '动画',
     '新番',
@@ -55,14 +60,45 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
       windowManager.addListener(this);
       _checkWindowMaximizedState();
     }
+    
+    // 延迟监听 TabChangeNotifier，确保 Provider 已准备好
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+        tabChangeNotifier.addListener(_onTabChange);
+      }
+    });
   }
 
   @override
   void dispose() {
+    // 移除 TabChangeNotifier 监听器
+    if (mounted) {
+      try {
+        final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+        tabChangeNotifier.removeListener(_onTabChange);
+      } catch (e) {
+        // Provider 可能已经被释放，忽略错误
+      }
+    }
+    
     if (globals.winLinDesktop) {
       windowManager.removeListener(this);
     }
     super.dispose();
+  }
+
+  // 处理 TabChangeNotifier 的变化
+  void _onTabChange() {
+    if (mounted) {
+      final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+      final newIndex = tabChangeNotifier.targetTabIndex;
+      if (newIndex != null && newIndex != _selectedIndex && newIndex >= 0 && newIndex < _pages.length) {
+        setState(() {
+          _selectedIndex = newIndex;
+        });
+      }
+    }
   }
 
   // 检查窗口是否已最大化
@@ -158,27 +194,35 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
               setState(() {
                 _selectedIndex = index;
               });
+              // 同步更新 TabChangeNotifier
+              final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+              tabChangeNotifier.changeTab(index);
             },
             items: [
               PaneItem(
+                icon: const Icon(FluentIcons.home),
+                title: const Text('仪表盘'),
+                body: _pages[0],
+              ),
+              PaneItem(
                 icon: const Icon(FluentIcons.play),
                 title: const Text('视频播放'),
-                body: _pages[0],
+                body: _pages[1],
               ),
               PaneItem(
                 icon: const Icon(FluentIcons.video),
                 title: const Text('动画'),
-                body: _pages[1],
+                body: _pages[2],
               ),
               PaneItem(
                 icon: const Icon(FluentIcons.new_folder),
                 title: const Text('新番'),
-                body: _pages[2],
+                body: _pages[3],
               ),
               PaneItem(
                 icon: const Icon(FluentIcons.settings),
                 title: const Text('设置'),
-                body: _pages[3],
+                body: _pages[4],
               ),
             ],
           ),

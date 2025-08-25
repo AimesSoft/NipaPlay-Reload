@@ -20,6 +20,24 @@ class FluentAnimeDetailPage extends StatefulWidget {
 
   const FluentAnimeDetailPage({super.key, required this.animeId});
 
+  static Future<WatchHistoryItem?> show(BuildContext context, int animeId) {
+    return showDialog<WatchHistoryItem>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => ContentDialog(
+        constraints: const BoxConstraints(
+          maxWidth: 1000,
+          maxHeight: 800,
+        ),
+        content: SizedBox(
+          width: 1000,
+          height: 800,
+          child: FluentAnimeDetailPage(animeId: animeId),
+        ),
+      ),
+    );
+  }
+
   @override
   State<FluentAnimeDetailPage> createState() => _FluentAnimeDetailPageState();
 }

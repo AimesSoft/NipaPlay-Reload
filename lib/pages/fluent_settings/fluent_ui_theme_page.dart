@@ -100,7 +100,7 @@ class _FluentUIThemePageState extends State<FluentUIThemePage> {
                 // 说明信息
                 InfoBar(
                   title: const Text('说明'),
-                  content: const Text('Fluent UI 主题仅在桌面端生效，移动端将继续使用 NipaPlay 主题以保持最佳体验。'),
+                  content: const Text('Fluent UI 主题仅针对桌面端适配，移动端可能无法获得最佳体验。'),
                   severity: InfoBarSeverity.info,
                 ),
               ],

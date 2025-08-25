@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'video_upload_ui.dart';
 import 'vertical_indicator.dart';
 import 'loading_overlay.dart';
+import '../fluent_ui/fluent_loading_overlay.dart';
 import '../danmaku_overlay.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
@@ -282,6 +284,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final uiThemeProvider = Provider.of<UIThemeProvider>(context);
         final textureId = videoState.player.textureId.value;
 
         if (!videoState.hasVideo) {
@@ -289,10 +292,16 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
             children: [
               const VideoUploadUI(),
               if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
-                LoadingOverlay(
-                  messages: videoState.statusMessages,
-                  backgroundOpacity: 0.5,
-                ),
+                uiThemeProvider.isFluentUITheme
+                    ? FluentLoadingOverlay(
+                        messages: videoState.statusMessages,
+                        highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                      )
+                    : LoadingOverlay(
+                        messages: videoState.statusMessages,
+                        backgroundOpacity: 0.5,
+                        highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                      ),
             ],
           );
         }
@@ -367,11 +376,16 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                             
                             if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
                               Positioned.fill(
-                                child: LoadingOverlay(
-                                  messages: videoState.statusMessages,
-                                  backgroundOpacity: 0.5,
-                                  highPriorityAnimation: !videoState.isInFinalLoadingPhase,
-                                ),
+                                child: uiThemeProvider.isFluentUITheme
+                                    ? FluentLoadingOverlay(
+                                        messages: videoState.statusMessages,
+                                        highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                                      )
+                                    : LoadingOverlay(
+                                        messages: videoState.statusMessages,
+                                        backgroundOpacity: 0.5,
+                                        highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                                      ),
                               ),
                             
                             if (videoState.hasVideo)
@@ -436,11 +450,16 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                               
                               if (videoState.status == PlayerStatus.recognizing || videoState.status == PlayerStatus.loading)
                                 Positioned.fill(
-                                  child: LoadingOverlay(
-                                    messages: videoState.statusMessages,
-                                    backgroundOpacity: 0.5,
-                                    highPriorityAnimation: !videoState.isInFinalLoadingPhase,
-                                  ),
+                                  child: uiThemeProvider.isFluentUITheme
+                                      ? FluentLoadingOverlay(
+                                          messages: videoState.statusMessages,
+                                          highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                                        )
+                                      : LoadingOverlay(
+                                          messages: videoState.statusMessages,
+                                          backgroundOpacity: 0.5,
+                                          highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                                        ),
                                 ),
                               
                               if (videoState.hasVideo)

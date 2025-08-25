@@ -695,8 +695,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
           }
           
           // 根据UI主题选择使用哪套应用框架
-          if (uiThemeProvider.isFluentUITheme && (globals.isDesktop || globals.isTablet)) {
-            // 桌面端使用 Fluent UI
+          if (uiThemeProvider.isFluentUITheme) {
+            // 使用 Fluent UI
             return fluent.FluentApp(
               title: 'NipaPlay',
               debugShowCheckedModeBanner: false,
