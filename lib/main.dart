@@ -30,8 +30,6 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/providers/jellyfin_provider.dart';
-import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/pages/fluent_main_page.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
@@ -450,22 +448,15 @@ void main(List<String> args) async {
             ),
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
-          ChangeNotifierProvider(create: (_) => WatchHistoryProvider()),
+          // 统一使用 ServiceProvider 中的全局实例，避免重复初始化与事件风暴
+          ChangeNotifierProvider.value(value: ServiceProvider.watchHistoryProvider),
           ChangeNotifierProvider(create: (_) => ScanService()),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
           ChangeNotifierProvider(create: (_) => UIThemeProvider()),
           ChangeNotifierProvider.value(value: debugLogService),
-          ChangeNotifierProvider(create: (context) { // 修改 JellyfinProvider 的创建方式
-            final jellyfinProvider = JellyfinProvider();
-            jellyfinProvider.initialize(); // 在创建后立即调用 initialize
-            return jellyfinProvider;
-          }),
-          ChangeNotifierProvider(create: (context) { // 添加 EmbyProvider
-            final embyProvider = EmbyProvider();
-            embyProvider.initialize(); // 在创建后立即调用 initialize
-            return embyProvider;
-          }),
+          ChangeNotifierProvider.value(value: ServiceProvider.jellyfinProvider),
+          ChangeNotifierProvider.value(value: ServiceProvider.embyProvider),
         ],
         child: NipaPlayApp(launchFilePath: launchFilePath),
       ),

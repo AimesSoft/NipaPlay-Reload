@@ -28,6 +28,29 @@ class JellyfinService {
   List<JellyfinLibrary> _availableLibraries = [];
   List<String> _selectedLibraryIds = [];
   
+  // 后端就绪标志与回调（当完成令牌验证与媒体库加载后触发）
+  bool _isReady = false;
+  bool get isReady => _isReady;
+  final List<VoidCallback> _readyCallbacks = [];
+  
+  void addReadyListener(VoidCallback callback) {
+    _readyCallbacks.add(callback);
+  }
+  
+  void removeReadyListener(VoidCallback callback) {
+    _readyCallbacks.remove(callback);
+  }
+  
+  void _notifyReady() {
+    for (final cb in _readyCallbacks) {
+      try {
+        cb();
+      } catch (e) {
+        DebugLogService().addLog('Jellyfin: ready 回调执行失败: $e');
+      }
+    }
+  }
+  
   // 多地址支持
   ServerProfile? _currentProfile;
   String? _currentAddressId;
@@ -79,6 +102,7 @@ class JellyfinService {
   Future<void> loadSavedSettings() async {
     if (kIsWeb) {
       _isConnected = false;
+  _isReady = false;
       return;
     }
     
@@ -124,6 +148,7 @@ class JellyfinService {
       _validateConnectionAsync();
     } else {
       _isConnected = false;
+  _isReady = false;
     }
   }
   
@@ -145,12 +170,16 @@ class JellyfinService {
         print('Jellyfin: 媒体库加载完成，可用库数量: ${_availableLibraries.length}');
         // 通知连接状态变化
         _notifyConnectionStateChanged();
+        // 设置后端就绪并发出就绪信号
+        _isReady = true;
+        _notifyReady();
       } else {
         print('Jellyfin: 连接验证失败 - HTTP ${response.statusCode}');
       }
     } catch (e) {
       print('Jellyfin: 连接验证过程中发生异常: $e');
       _isConnected = false;
+      _isReady = false;
     }
   }
   
@@ -271,6 +300,9 @@ class JellyfinService {
         if (!kIsWeb) {
           await loadAvailableLibraries();
         }
+  // 连接流程结束，标记 ready
+  _isReady = true;
+  _notifyReady();
         
         return true;
       } else {
@@ -405,6 +437,7 @@ class JellyfinService {
     _userId = null;
     _availableLibraries = [];
     _selectedLibraryIds = [];
+  _isReady = false;
     
     // 清除保存的设置
     final prefs = await SharedPreferences.getInstance();
