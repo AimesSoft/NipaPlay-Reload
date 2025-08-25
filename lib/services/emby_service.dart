@@ -252,10 +252,12 @@ class EmbyService {
         _currentAddressId = connectionResult.successfulAddressId;
         _username = username;
         _password = password;
-        _isConnected = true;
         
         // 执行完整的认证流程
         await _performAuthentication(_serverUrl!, username, password);
+        
+        // 只有在认证成功后才设置连接状态为true
+        _isConnected = true;
         
         // 更新配置中的认证信息
         _currentProfile = _currentProfile!.copyWith(
