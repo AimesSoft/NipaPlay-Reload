@@ -10,6 +10,8 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/hotkey_service.dart';
 
 class FluentMainPage extends StatefulWidget {
   final String? launchFilePath;
@@ -24,6 +26,10 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
   bool isMaximized = false;
   bool _showSplash = true;
   int _selectedIndex = 0;
+  
+  // 热键管理相关变量
+  VideoPlayerState? _videoPlayerState;
+  bool _hotkeysAreRegistered = false;
 
   // 页面列表
   final List<material.Widget> _pages = [
@@ -66,12 +72,19 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
       if (mounted) {
         final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
         tabChangeNotifier.addListener(_onTabChange);
+        
+        // 初始化 HotkeyService
+        HotkeyService().initialize(context);
+        //debugPrint('[FluentHotkeyManager] HotkeyService已初始化');
       }
     });
   }
 
   @override
   void dispose() {
+    // 移除 VideoPlayerState 监听器
+    _videoPlayerState?.removeListener(_manageHotkeys);
+    
     // 移除 TabChangeNotifier 监听器
     if (mounted) {
       try {
@@ -98,6 +111,43 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
           _selectedIndex = newIndex;
         });
       }
+      // FluentUI主题：当标签切换时管理热键
+      _manageHotkeys();
+    }
+  }
+  
+  // 热键管理方法
+  void _manageHotkeys() {
+    final videoState = _videoPlayerState;
+    if (videoState == null || !mounted) {
+      //debugPrint('[FluentHotkeyManager] 跳过热键管理: videoState=${videoState != null}, mounted=$mounted');
+      return;
+    }
+
+    // FluentUI主题：检查是否在视频播放页面（索引1）且有视频
+    final shouldBeRegistered = _selectedIndex == 1 && videoState.hasVideo;
+    
+    //debugPrint('[FluentHotkeyManager] FluentUI主题: selectedIndex=$_selectedIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
+    //debugPrint('[FluentHotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
+
+    if (shouldBeRegistered && !_hotkeysAreRegistered) {
+      //debugPrint('[FluentHotkeyManager] 开始注册热键...');
+      HotkeyService().registerHotkeys().then((_) {
+        _hotkeysAreRegistered = true;
+        //debugPrint('[FluentHotkeyManager] 热键注册完成');
+      }).catchError((e) {
+        //debugPrint('[FluentHotkeyManager] 热键注册失败: $e');
+      });
+    } else if (!shouldBeRegistered && _hotkeysAreRegistered) {
+      //debugPrint('[FluentHotkeyManager] 开始注销热键...');
+      HotkeyService().unregisterHotkeys().then((_) {
+        _hotkeysAreRegistered = false;
+        //debugPrint('[FluentHotkeyManager] 热键注销完成');
+      }).catchError((e) {
+        //debugPrint('[FluentHotkeyManager] 热键注销失败: $e');
+      });
+    } else {
+      //debugPrint('[FluentHotkeyManager] 无需更改热键状态');
     }
   }
 
@@ -162,7 +212,20 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
     return material.Stack(
       children: [
         // 主要内容区域
-        NavigationView(
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            // 设置VideoPlayerState监听器
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_videoPlayerState != videoState) {
+                _videoPlayerState?.removeListener(_manageHotkeys);
+                _videoPlayerState = videoState;
+                _videoPlayerState?.addListener(_manageHotkeys);
+                //debugPrint('[FluentHotkeyManager] VideoPlayerState监听器已设置');
+                _manageHotkeys(); // 初始状态检查
+              }
+            });
+            
+            return NavigationView(
           appBar: NavigationAppBar(
             title: Text(_pageNames[_selectedIndex]),
             automaticallyImplyLeading: false,
@@ -226,6 +289,8 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
               ),
             ],
           ),
+            );
+          },
         ),
         
         // 启动画面
