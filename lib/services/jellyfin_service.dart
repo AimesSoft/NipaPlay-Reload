@@ -170,9 +170,11 @@ class JellyfinService {
         print('Jellyfin: 媒体库加载完成，可用库数量: ${_availableLibraries.length}');
         // 通知连接状态变化
         _notifyConnectionStateChanged();
-        // 设置后端就绪并发出就绪信号
-        _isReady = true;
-        _notifyReady();
+        // 设置后端就绪并发出就绪信号（使用 microtask，确保在前面的通知处理完成后触发）
+        scheduleMicrotask(() {
+          _isReady = true;
+          _notifyReady();
+        });
       } else {
         print('Jellyfin: 连接验证失败 - HTTP ${response.statusCode}');
       }
@@ -300,9 +302,12 @@ class JellyfinService {
         if (!kIsWeb) {
           await loadAvailableLibraries();
         }
-  // 连接流程结束，标记 ready
-  _isReady = true;
-  _notifyReady();
+        // 连接流程结束，先通知连接状态变化，再通过 microtask 触发 ready，保证 ready 最后到达
+        _notifyConnectionStateChanged();
+        scheduleMicrotask(() {
+          _isReady = true;
+          _notifyReady();
+        });
         
         return true;
       } else {

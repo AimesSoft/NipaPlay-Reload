@@ -20,6 +20,13 @@ class JellyfinProvider extends ChangeNotifier {
   Timer? _notifyTimer;
   bool _disposed = false;
   
+  // Provider 级 ready：首次媒体/电影列表加载完成后触发
+  bool _isReady = false;
+  bool get isReady => _isReady;
+  final List<VoidCallback> _readyCallbacks = [];
+  bool _initializingAfterConnect = false;
+  int _initialPendingParts = 0; // 2 = media + movie
+  
   // 排序相关状态
   String _currentSortBy = 'DateCreated,SortName';
   String _currentSortOrder = 'Descending';
@@ -113,6 +120,32 @@ class JellyfinProvider extends ChangeNotifier {
     super.dispose();
   }
 
+  // Provider ready 监听 API
+  void addReadyListener(VoidCallback callback) {
+    _readyCallbacks.add(callback);
+  }
+  void removeReadyListener(VoidCallback callback) {
+    _readyCallbacks.remove(callback);
+  }
+  void _notifyReady() {
+    for (final cb in List<VoidCallback>.from(_readyCallbacks)) {
+      try { cb(); } catch (_) {}
+    }
+  }
+  void _resetReady() {
+    _isReady = false;
+    _initializingAfterConnect = false;
+    _initialPendingParts = 0;
+  }
+  void _maybeMarkReady() {
+    if (_initializingAfterConnect && _initialPendingParts <= 0 && !_isReady) {
+      _isReady = true;
+      _initializingAfterConnect = false;
+      _initialPendingParts = 0;
+      _notifyReady();
+    }
+  }
+
   // 初始化Jellyfin Provider
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -152,9 +185,15 @@ class JellyfinProvider extends ChangeNotifier {
     
     if (isConnected) {
       print('JellyfinProvider: Jellyfin已连接，开始加载媒体项目...');
+      // 跟踪首次加载（媒体+电影），完成后触发 provider-ready
+      _resetReady();
+      _initializingAfterConnect = true;
+      _initialPendingParts = 2;
       // 异步加载媒体项目，不阻塞UI
       loadMediaItems();
       loadMovieItems();
+    } else {
+      _resetReady();
     }
   }
   
@@ -178,6 +217,10 @@ class JellyfinProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       _notifyCoalesced();
+      if (_initializingAfterConnect) {
+        _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
+        _maybeMarkReady();
+      }
     }
   }
   
@@ -193,6 +236,10 @@ class JellyfinProvider extends ChangeNotifier {
       _movieItems = [];
     } finally {
       _notifyCoalesced();
+      if (_initializingAfterConnect) {
+        _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
+        _maybeMarkReady();
+      }
     }
   }
   
@@ -204,14 +251,9 @@ class JellyfinProvider extends ChangeNotifier {
     _notifyCoalesced();
     
     try {
-      final success = await _jellyfinService.connect(serverUrl, username, password, addressName: addressName);
-      
-      if (success) {
-        await loadMediaItems();
-        await loadMovieItems();
-      }
-      
-      return success;
+  final success = await _jellyfinService.connect(serverUrl, username, password, addressName: addressName);
+  // 首次加载由连接状态回调统一触发，避免重复加载
+  return success;
     } catch (e) {
       _hasError = true;
       _errorMessage = e.toString();
@@ -229,6 +271,7 @@ class JellyfinProvider extends ChangeNotifier {
     _movieItems = [];
     _mediaDetailsCache = {};
     _movieDetailsCache = {};
+  _resetReady();
     _notifyCoalesced();
   }
   

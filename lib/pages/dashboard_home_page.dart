@@ -50,9 +50,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   WatchHistoryProvider? _watchHistoryProviderRef;
   ScanService? _scanServiceRef;
   VideoPlayerState? _videoPlayerStateRef;
-  // 后端 ready 回调引用，便于移除
-  VoidCallback? _jellyfinReadyListener;
-  VoidCallback? _embyReadyListener;
+  // Provider ready 回调引用，便于移除
+  VoidCallback? _jellyfinProviderReadyListener;
+  VoidCallback? _embyProviderReadyListener;
   // 按服务粒度的监听开关
   bool _jellyfinLiveListening = false;
   bool _embyLiveListening = false;
@@ -206,41 +206,45 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
   
   void _setupProviderListeners() {
-    // 仅订阅后端 ready；ready 之前不监听 Provider 的即时变化
+    // 订阅 Provider 级 ready；ready 之前不监听 Provider 的即时变化
     try {
       _jellyfinProviderRef = Provider.of<JellyfinProvider>(context, listen: false);
-      final jfService = JellyfinService.instance;
-      _jellyfinReadyListener = () {
+      _jellyfinProviderReadyListener = () {
         if (!mounted) return;
-        debugPrint('DashboardHomePage: 收到 Jellyfin 后端 ready 信号');
+        debugPrint('DashboardHomePage: 收到 Jellyfin Provider ready 信号');
+        // ready 后立即清理待处理请求，避免重复刷新
+        _pendingRefreshAfterLoad = false;
+        _pendingRefreshReason = '';
         _activateJellyfinLiveListening();
-        _triggerLoadIfIdle('Jellyfin 后端 ready');
+        _triggerLoadIfIdle('Jellyfin Provider ready');
       };
-      jfService.addReadyListener(_jellyfinReadyListener!);
-      // 若进入页面时已 ready，则立即激活监听并首刷
-      if (jfService.isReady) {
+      _jellyfinProviderRef!.addReadyListener(_jellyfinProviderReadyListener!);
+      // 若进入页面时已 provider-ready，则立即激活监听并首刷
+      if (_jellyfinProviderRef!.isReady) {
         _activateJellyfinLiveListening();
         // 不在进入页面时立即刷新，首刷由 initState 的 _loadData 负责，避免重复刷新
       }
     } catch (e) {
-      debugPrint('DashboardHomePage: 安装 Jellyfin ready 监听失败: $e');
+      debugPrint('DashboardHomePage: 安装 Jellyfin Provider ready 监听失败: $e');
     }
     try {
       _embyProviderRef = Provider.of<EmbyProvider>(context, listen: false);
-      final emService = EmbyService.instance;
-      _embyReadyListener = () {
+      _embyProviderReadyListener = () {
         if (!mounted) return;
-        debugPrint('DashboardHomePage: 收到 Emby 后端 ready 信号');
+        debugPrint('DashboardHomePage: 收到 Emby Provider ready 信号');
+        // ready 后立即清理待处理请求，避免重复刷新
+        _pendingRefreshAfterLoad = false;
+        _pendingRefreshReason = '';
         _activateEmbyLiveListening();
-        _triggerLoadIfIdle('Emby 后端 ready');
+        _triggerLoadIfIdle('Emby Provider ready');
       };
-      emService.addReadyListener(_embyReadyListener!);
-      if (emService.isReady) {
+      _embyProviderRef!.addReadyListener(_embyProviderReadyListener!);
+      if (_embyProviderRef!.isReady) {
         _activateEmbyLiveListening();
         // 不在进入页面时立即刷新，首刷由 initState 的 _loadData 负责，避免重复刷新
       }
     } catch (e) {
-      debugPrint('DashboardHomePage: 安装 Emby ready 监听失败: $e');
+      debugPrint('DashboardHomePage: 安装 Emby Provider ready 监听失败: $e');
     }
     
     // 监听WatchHistoryProvider的加载状态变化
@@ -621,9 +625,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     try {
       _jfDebounceTimer?.cancel();
       _deactivateJellyfinLiveListening();
-      if (_jellyfinReadyListener != null) {
-        JellyfinService.instance.removeReadyListener(_jellyfinReadyListener!);
-        _jellyfinReadyListener = null;
+      if (_jellyfinProviderReadyListener != null) {
+        try { _jellyfinProviderRef?.removeReadyListener(_jellyfinProviderReadyListener!); } catch (_) {}
+        _jellyfinProviderReadyListener = null;
       }
       debugPrint('DashboardHomePage: JellyfinProvider监听器已移除');
     } catch (e) {
@@ -633,9 +637,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     try {
       _emDebounceTimer?.cancel();
       _deactivateEmbyLiveListening();
-      if (_embyReadyListener != null) {
-        EmbyService.instance.removeReadyListener(_embyReadyListener!);
-        _embyReadyListener = null;
+      if (_embyProviderReadyListener != null) {
+        try { _embyProviderRef?.removeReadyListener(_embyProviderReadyListener!); } catch (_) {}
+        _embyProviderReadyListener = null;
       }
       debugPrint('DashboardHomePage: EmbyProvider监听器已移除');
     } catch (e) {
