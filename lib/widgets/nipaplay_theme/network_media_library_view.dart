@@ -139,6 +139,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   String? _selectedLibraryId;
   bool _isShowingLibraryContent = false;
   bool _isLoadingLibraryContent = false;
+  
+  // 搜索状态
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearching = false;
+  bool _isSearchLoading = false;
+  List<NetworkMediaItem> _searchResults = [];
+  Timer? _searchDebounceTimer;
 
   @override
   bool get wantKeepAlive => true;
@@ -167,7 +174,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       print("Error removing Provider listener in NetworkMediaLibraryView: $e");
     }
     _refreshTimer?.cancel();
+    _searchDebounceTimer?.cancel();
     _gridScrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -385,6 +394,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           children: [
             // 顶部导航栏
             _buildTopNavigationBar(provider),
+            // 搜索栏（在媒体库内容视图中显示）
+            if (_isShowingLibraryContent) _buildSearchBar(),
             // 媒体内容网格
             Expanded(
               child: RepaintBoundary(
@@ -406,9 +417,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                     physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                     addAutomaticKeepAlives: false,
                     addRepaintBoundaries: true,
-                    itemCount: _mediaItems.length,
+                    itemCount: _isSearching ? _searchResults.length : _mediaItems.length,
                     itemBuilder: (context, index) {
-                      final item = _mediaItems[index];
+                      final item = _isSearching ? _searchResults[index] : _mediaItems[index];
                       return _buildMediaCard(item);
                     },
                   ),
@@ -494,14 +505,26 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 排序按钮（仅在显示库内容时显示）
-          if (_isShowingLibraryContent) ...[
+          // 排序按钮（仅在显示库内容且未在搜索时显示）
+          if (_isShowingLibraryContent && !_isSearching) ...[
             FloatingActionGlassButton(
               iconData: Ionicons.swap_vertical_outline,
               onPressed: _showSortDialog,
               description: '排序选项\n按名称、日期或评分排序\n提升浏览体验',
             ),
             const SizedBox(height: 16), // 按钮之间的间距
+          ],
+          // 搜索按钮（仅在显示库内容时显示）
+          if (_isShowingLibraryContent) ...[
+            FloatingActionGlassButton(
+              iconData: _isSearching ? Ionicons.close_outline : Ionicons.search_outline,
+              onPressed: _isSearching ? _clearSearch : () {
+                // 聚焦到搜索框
+                FocusScope.of(context).requestFocus(FocusNode());
+              },
+              description: _isSearching ? '清空搜索\n返回浏览模式' : '搜索内容\n快速查找媒体',
+            ),
+            const SizedBox(height: 16),
           ],
           // 设置按钮
           FloatingActionGlassButton(
@@ -653,8 +676,155 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
+  // 构建搜索栏
+  Widget _buildSearchBar() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              decoration: InputDecoration(
+                hintText: '搜索 ${_getSelectedLibraryName(_provider)} 中的内容...',
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 16),
+                prefixIcon: _isSearchLoading
+                    ? Container(
+                        width: 20,
+                        height: 20,
+                        padding: const EdgeInsets.all(12),
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Icon(Icons.search, color: Colors.white.withValues(alpha: 0.7)),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.clear, color: Colors.white.withValues(alpha: 0.7)),
+                        onPressed: _clearSearch,
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onChanged: _onSearchChanged,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 搜索输入变化处理
+  void _onSearchChanged(String query) {
+    // 取消之前的搜索定时器
+    _searchDebounceTimer?.cancel();
+    
+    if (query.isEmpty) {
+      setState(() {
+        _isSearching = false;
+        _searchResults.clear();
+        _isSearchLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearchLoading = true;
+    });
+
+    // 设置新的搜索定时器（防抖动）
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _performSearch(query);
+    });
+  }
+
+  // 执行搜索
+  Future<void> _performSearch(String query) async {
+    if (!mounted || query.trim().isEmpty) return;
+
+    try {
+      final service = _service;
+      List<dynamic> searchResults = [];
+
+      switch (widget.serverType) {
+        case NetworkMediaServerType.jellyfin:
+          if (_selectedLibraryId != null) {
+            searchResults = await (service as JellyfinService).searchInLibrary(
+              _selectedLibraryId!,
+              query,
+              limit: 50,
+            );
+          } else {
+            searchResults = await (service as JellyfinService).searchMediaItems(
+              query,
+              limit: 50,
+            );
+          }
+          break;
+        case NetworkMediaServerType.emby:
+          if (_selectedLibraryId != null) {
+            searchResults = await (service as EmbyService).searchInLibrary(
+              _selectedLibraryId!,
+              query,
+              limit: 50,
+            );
+          } else {
+            searchResults = await (service as EmbyService).searchMediaItems(
+              query,
+              limit: 50,
+            );
+          }
+          break;
+      }
+
+      if (mounted) {
+        setState(() {
+          _isSearching = true;
+          _searchResults = _convertToNetworkMediaItems(searchResults);
+          _isSearchLoading = false;
+        });
+
+        debugPrint('[$_serverName] 搜索 "$query" 找到 ${_searchResults.length} 个结果');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSearchLoading = false;
+          _error = '搜索失败: $e';
+        });
+      }
+      debugPrint('[$_serverName] 搜索失败: $e');
+    }
+  }
+
+  // 清空搜索
+  void _clearSearch() {
+    _searchController.clear();
+    _searchDebounceTimer?.cancel();
+    setState(() {
+      _isSearching = false;
+      _searchResults.clear();
+      _isSearchLoading = false;
+    });
+  }
+
   // 返回媒体库列表
   void _backToLibraries() {
+    _clearSearch();
+    
     if (mounted) {
       setState(() {
         _selectedLibraryId = null;
@@ -670,6 +840,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   // 选择媒体库
   void _selectLibrary(NetworkMediaLibrary library) {
+    _clearSearch();
+    
     setState(() {
       _selectedLibraryId = library.id;
       _isShowingLibraryContent = true;
