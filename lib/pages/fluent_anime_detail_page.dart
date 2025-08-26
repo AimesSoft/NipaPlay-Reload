@@ -363,11 +363,9 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
             Expanded(
               child: SizedBox(
                 height: 195,
-                child: Scrollbar(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: Text(summaryText, style: valueStyle),
-                  ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(summaryText, style: valueStyle),
                 ),
               ),
             ),
