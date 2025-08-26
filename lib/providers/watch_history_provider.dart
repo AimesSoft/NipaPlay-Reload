@@ -106,14 +106,14 @@ class WatchHistoryProvider extends ChangeNotifier {
       
       // 跳过Jellyfin和Emby协议URL的文件存在性验证
       if (originalPath.startsWith('jellyfin://') || originalPath.startsWith('emby://')) {
-        debugPrint('跳过流媒体协议URL的文件验证: $originalPath');
+        //debugPrint('跳过流媒体协议URL的文件验证: $originalPath');
         validItems.add(item);
         continue;
       }
       
       // 跳过HTTP/HTTPS流媒体URL的文件存在性验证
       if (originalPath.startsWith('http://') || originalPath.startsWith('https://')) {
-        debugPrint('跳过流媒体URL的文件验证: $originalPath');
+        //debugPrint('跳过流媒体URL的文件验证: $originalPath');
         validItems.add(item);
         continue;
       }

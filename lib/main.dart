@@ -833,7 +833,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   void _manageHotkeys() {
     final videoState = _videoPlayerState;
     if (videoState == null || !mounted) {
-      debugPrint('[HotkeyManager] 跳过热键管理: videoState=${videoState != null}, mounted=$mounted');
+      //debugPrint('[HotkeyManager] 跳过热键管理: videoState=${videoState != null}, mounted=$mounted');
       return;
     }
 
@@ -847,35 +847,35 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     if (globalTabController != null) {
       // nipaplay主题：检查tabIndex == 1
       shouldBeRegistered = tabIndex == 1 && videoState.hasVideo;
-      debugPrint('[HotkeyManager] nipaplay主题: tabIndex=$tabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
+      //debugPrint('[HotkeyManager] nipaplay主题: tabIndex=$tabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
     } else {
       // FluentUI主题：检查TabChangeNotifier的targetTabIndex == 1
       final tabChangeNotifier = _tabChangeNotifier;
       final fluentTabIndex = tabChangeNotifier?.targetTabIndex ?? -1;
       shouldBeRegistered = fluentTabIndex == 1 && videoState.hasVideo;
-      debugPrint('[HotkeyManager] FluentUI主题: fluentTabIndex=$fluentTabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
+      //debugPrint('[HotkeyManager] FluentUI主题: fluentTabIndex=$fluentTabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
     }
     
-    debugPrint('[HotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
+    //debugPrint('[HotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
 
     if (shouldBeRegistered && !_hotkeysAreRegistered) {
-      debugPrint('[HotkeyManager] 开始注册热键...');
+      //debugPrint('[HotkeyManager] 开始注册热键...');
       HotkeyService().registerHotkeys().then((_) {
         _hotkeysAreRegistered = true;
-        debugPrint('[HotkeyManager] 热键注册完成');
+        //debugPrint('[HotkeyManager] 热键注册完成');
       }).catchError((e) {
-        debugPrint('[HotkeyManager] 热键注册失败: $e');
+        //debugPrint('[HotkeyManager] 热键注册失败: $e');
       });
     } else if (!shouldBeRegistered && _hotkeysAreRegistered) {
-      debugPrint('[HotkeyManager] 开始注销热键...');
+      //debugPrint('[HotkeyManager] 开始注销热键...');
       HotkeyService().unregisterHotkeys().then((_) {
         _hotkeysAreRegistered = false;
-        debugPrint('[HotkeyManager] 热键注销完成');
+        //debugPrint('[HotkeyManager] 热键注销完成');
       }).catchError((e) {
-        debugPrint('[HotkeyManager] 热键注销失败: $e');
+        //debugPrint('[HotkeyManager] 热键注销失败: $e');
       });
     } else {
-      debugPrint('[HotkeyManager] 无需更改热键状态');
+      //debugPrint('[HotkeyManager] 无需更改热键状态');
     }
   }
 
