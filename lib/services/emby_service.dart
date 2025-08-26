@@ -366,7 +366,8 @@ class EmbyService {
   }
   
   /// 获取Emby服务器ID
-  Future<String?> _getEmbyServerId(String url) async {
+  /// 如果无法获取，将抛出异常
+  Future<String> _getEmbyServerId(String url) async {
     try {
       final response = await http.get(
         Uri.parse('$url/emby/System/Info/Public'),
@@ -376,10 +377,13 @@ class EmbyService {
         final data = json.decode(response.body);
         return data['Id'] ?? data['ServerId'];
       }
+      // 在HTTP状态码不为200时抛出详细错误
+      throw Exception('获取Emby服务器ID失败: HTTP ${response.statusCode} ${response.reasonPhrase ?? ''}\n${response.body}');
     } catch (e) {
       DebugLogService().addLog('获取Emby服务器ID失败: $e');
+      // 重新抛出异常，以便 identifyServer 捕获并返回详细错误
+      rethrow;
     }
-    return null;
   }
   
   /// 获取服务器名称

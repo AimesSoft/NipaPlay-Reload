@@ -364,8 +364,8 @@ class JellyfinService {
     _userId = authData['User']['Id'];
   }
   
-  /// 获取Jellyfin服务器ID
-  Future<String?> _getJellyfinServerId(String url) async {
+  /// 获取Jellyfin服务器ID，如果无法获取将抛出异常
+  Future<String> _getJellyfinServerId(String url) async {
     try {
       final response = await http.get(
         Uri.parse('$url/System/Info/Public'),
@@ -375,10 +375,13 @@ class JellyfinService {
         final data = json.decode(response.body);
         return data['Id'] ?? data['ServerId'];
       }
+      // 在HTTP状态码不为200时抛出详细错误
+      throw Exception('获取Jellyfin服务器ID失败: HTTP ${response.statusCode} ${response.reasonPhrase ?? ''}\n${response.body}');
     } catch (e) {
       DebugLogService().addLog('获取Jellyfin服务器ID失败: $e');
+      // 重新抛出异常，以便 identifyServer 捕获并返回详细错误
+      rethrow;
     }
-    return null;
   }
   
   /// 获取服务器名称

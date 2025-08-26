@@ -215,8 +215,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         // ready 后立即清理待处理请求，避免重复刷新
         _pendingRefreshAfterLoad = false;
         _pendingRefreshReason = '';
-        _activateJellyfinLiveListening();
+        // 先触发首次加载，避免激活监听后立即触发状态变化导致重复刷新
         _triggerLoadIfIdle('Jellyfin Provider ready');
+        // 等待首次加载完成后再激活监听，避免加载期间的状态变化被捕获
+        _scheduleJellyfinListeningActivation();
       };
       _jellyfinProviderRef!.addReadyListener(_jellyfinProviderReadyListener!);
       // 若进入页面时已 provider-ready，则立即激活监听并首刷
@@ -235,8 +237,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         // ready 后立即清理待处理请求，避免重复刷新
         _pendingRefreshAfterLoad = false;
         _pendingRefreshReason = '';
-        _activateEmbyLiveListening();
+        // 先触发首次加载，避免激活监听后立即触发状态变化导致重复刷新
         _triggerLoadIfIdle('Emby Provider ready');
+        // 等待首次加载完成后再激活监听，避免加载期间的状态变化被捕获
+        _scheduleEmbyListeningActivation();
       };
       _embyProviderRef!.addReadyListener(_embyProviderReadyListener!);
       if (_embyProviderRef!.isReady) {
@@ -283,6 +287,21 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
   }
 
+  void _scheduleJellyfinListeningActivation() {
+    // 等待当前数据加载完成后再激活监听，避免加载期间的状态变化被误捕获
+    void checkAndActivate() {
+      if (!mounted) return;
+      if (_isLoadingRecommended) {
+        // 如果还在加载，继续等待
+        Future.delayed(const Duration(milliseconds: 100), checkAndActivate);
+      } else {
+        // 加载完成，可以安全激活监听
+        _activateJellyfinLiveListening();
+      }
+    }
+    checkAndActivate();
+  }
+
   void _deactivateJellyfinLiveListening() {
     if (!_jellyfinLiveListening) return;
     try {
@@ -301,6 +320,21 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     } catch (e) {
       debugPrint('DashboardHomePage: 激活 Emby 监听失败: $e');
     }
+  }
+
+  void _scheduleEmbyListeningActivation() {
+    // 等待当前数据加载完成后再激活监听，避免加载期间的状态变化被误捕获
+    void checkAndActivate() {
+      if (!mounted) return;
+      if (_isLoadingRecommended) {
+        // 如果还在加载，继续等待
+        Future.delayed(const Duration(milliseconds: 100), checkAndActivate);
+      } else {
+        // 加载完成，可以安全激活监听
+        _activateEmbyLiveListening();
+      }
+    }
+    checkAndActivate();
   }
 
   void _deactivateEmbyLiveListening() {
