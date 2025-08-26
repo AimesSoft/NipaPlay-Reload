@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
@@ -8,6 +9,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
@@ -281,32 +283,62 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
     return Stack(
       children: [
-        RepaintBoundary(
-          child: Scrollbar(
-            controller: _gridScrollController,
-            thickness: 4,
-            radius: const Radius.circular(2),
-            child: GridView.builder(
-              controller: _gridScrollController,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 400,
-                childAspectRatio: 16 / 9,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+        Column(
+          children: [
+            // 主页面搜索栏
+            _buildMainSearchBar(),
+            // 媒体库网格或搜索结果
+            Expanded(
+              child: RepaintBoundary(
+                child: Scrollbar(
+                  controller: _gridScrollController,
+                  thickness: 4,
+                  radius: const Radius.circular(2),
+                  child: _isSearching
+                      ? GridView.builder(
+                          controller: _gridScrollController,
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 150,
+                            childAspectRatio: 7/12,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          cacheExtent: 800,
+                          clipBehavior: Clip.hardEdge,
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          addAutomaticKeepAlives: false,
+                          addRepaintBoundaries: true,
+                          itemCount: _searchResults.length,
+                          itemBuilder: (context, index) {
+                            final item = _searchResults[index];
+                            return _buildMediaCard(item);
+                          },
+                        )
+                      : GridView.builder(
+                          controller: _gridScrollController,
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 400,
+                            childAspectRatio: 16 / 9,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          padding: const EdgeInsets.all(20),
+                          cacheExtent: 800,
+                          clipBehavior: Clip.hardEdge,
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          addAutomaticKeepAlives: false,
+                          addRepaintBoundaries: true,
+                          itemCount: selectedLibraries.length,
+                          itemBuilder: (context, index) {
+                            final library = selectedLibraries[index];
+                            return _buildLibraryCard(library);
+                          },
+                        ),
+                ),
               ),
-              padding: const EdgeInsets.all(20),
-              cacheExtent: 800,
-              clipBehavior: Clip.hardEdge,
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: true,
-              itemCount: selectedLibraries.length,
-              itemBuilder: (context, index) {
-                final library = selectedLibraries[index];
-                return _buildLibraryCard(library);
-              },
             ),
-          ),
+          ],
         ),
         // 右下角按钮组
         _buildFloatingActionButtons(),
@@ -514,18 +546,6 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
             ),
             const SizedBox(height: 16), // 按钮之间的间距
           ],
-          // 搜索按钮（仅在显示库内容时显示）
-          if (_isShowingLibraryContent) ...[
-            FloatingActionGlassButton(
-              iconData: _isSearching ? Ionicons.close_outline : Ionicons.search_outline,
-              onPressed: _isSearching ? _clearSearch : () {
-                // 聚焦到搜索框
-                FocusScope.of(context).requestFocus(FocusNode());
-              },
-              description: _isSearching ? '清空搜索\n返回浏览模式' : '搜索内容\n快速查找媒体',
-            ),
-            const SizedBox(height: 16),
-          ],
           // 设置按钮
           FloatingActionGlassButton(
             iconData: Ionicons.settings_outline,
@@ -676,8 +696,34 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
-  // 构建搜索栏
+  // 构建搜索栏（单个媒体库视图）
   Widget _buildSearchBar() {
+    return Consumer<UIThemeProvider>(
+      builder: (context, uiThemeProvider, child) {
+        if (uiThemeProvider.isFluentUITheme) {
+          return _buildFluentSearchBar('搜索 ${_getSelectedLibraryName(_provider)} 中的内容...', _onSearchChanged);
+        } else {
+          return _buildMaterialSearchBar('搜索 ${_getSelectedLibraryName(_provider)} 中的内容...', _onSearchChanged);
+        }
+      },
+    );
+  }
+
+  // 构建主页面搜索栏（媒体库列表视图）
+  Widget _buildMainSearchBar() {
+    return Consumer<UIThemeProvider>(
+      builder: (context, uiThemeProvider, child) {
+        if (uiThemeProvider.isFluentUITheme) {
+          return _buildFluentSearchBar('搜索所有媒体库中的内容...', _onMainSearchChanged);
+        } else {
+          return _buildMaterialSearchBar('搜索所有媒体库中的内容...', _onMainSearchChanged);
+        }
+      },
+    );
+  }
+
+  // 构建 Material Design 搜索栏
+  Widget _buildMaterialSearchBar(String hintText, Function(String) onChanged) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ClipRRect(
@@ -697,7 +743,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               controller: _searchController,
               style: const TextStyle(color: Colors.white, fontSize: 16),
               decoration: InputDecoration(
-                hintText: '搜索 ${_getSelectedLibraryName(_provider)} 中的内容...',
+                hintText: hintText,
                 hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 16),
                 prefixIcon: _isSearchLoading
                     ? Container(
@@ -719,7 +765,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              onChanged: _onSearchChanged,
+              onChanged: onChanged,
             ),
           ),
         ),
@@ -727,7 +773,41 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     );
   }
 
-  // 搜索输入变化处理
+  // 构建 Fluent UI 搜索栏
+  Widget _buildFluentSearchBar(String hintText, Function(String) onChanged) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: fluent.TextBox(
+        controller: _searchController,
+        placeholder: hintText,
+        style: const TextStyle(fontSize: 16),
+        prefix: _isSearchLoading
+            ? Container(
+                width: 20,
+                height: 20,
+                padding: const EdgeInsets.all(8),
+                child: const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: fluent.ProgressRing(strokeWidth: 2),
+                ),
+              )
+            : const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: Icon(fluent.FluentIcons.search, size: 16),
+              ),
+        suffix: _searchController.text.isNotEmpty
+            ? fluent.IconButton(
+                icon: const Icon(fluent.FluentIcons.chrome_close, size: 16),
+                onPressed: _clearSearch,
+              )
+            : null,
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  // 搜索输入变化处理（单个媒体库）
   void _onSearchChanged(String query) {
     // 取消之前的搜索定时器
     _searchDebounceTimer?.cancel();
@@ -751,7 +831,31 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     });
   }
 
-  // 执行搜索
+  // 主页面搜索输入变化处理（跨媒体库）
+  void _onMainSearchChanged(String query) {
+    // 取消之前的搜索定时器
+    _searchDebounceTimer?.cancel();
+    
+    if (query.isEmpty) {
+      setState(() {
+        _isSearching = false;
+        _searchResults.clear();
+        _isSearchLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearchLoading = true;
+    });
+
+    // 设置新的搜索定时器（防抖动）
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _performCrossLibrarySearch(query);
+    });
+  }
+
+  // 执行搜索（单个媒体库）
   Future<void> _performSearch(String query) async {
     if (!mounted || query.trim().isEmpty) return;
 
@@ -807,6 +911,66 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         });
       }
       debugPrint('[$_serverName] 搜索失败: $e');
+    }
+  }
+
+  // 执行跨媒体库搜索
+  Future<void> _performCrossLibrarySearch(String query) async {
+    if (!mounted || query.trim().isEmpty) return;
+
+    try {
+      final service = _service;
+      final provider = _provider;
+      final selectedLibraries = _getSelectedLibraries(provider);
+      List<dynamic> allSearchResults = [];
+
+      // 遍历所有选中的媒体库
+      for (final library in selectedLibraries) {
+        try {
+          List<dynamic> libraryResults = [];
+          
+          switch (widget.serverType) {
+            case NetworkMediaServerType.jellyfin:
+              libraryResults = await (service as JellyfinService).searchInLibrary(
+                library.id,
+                query,
+                limit: 50,
+              );
+              break;
+            case NetworkMediaServerType.emby:
+              libraryResults = await (service as EmbyService).searchInLibrary(
+                library.id,
+                query,
+                limit: 50,
+              );
+              break;
+          }
+          
+          allSearchResults.addAll(libraryResults);
+          debugPrint('[$_serverName] 在媒体库 "${library.name}" 中搜索 "$query" 找到 ${libraryResults.length} 个结果');
+        } catch (e) {
+          debugPrint('[$_serverName] 在媒体库 "${library.name}" 中搜索失败: $e');
+          // 继续搜索其他媒体库
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _isSearching = true;
+          _searchResults = _convertToNetworkMediaItems(allSearchResults);
+          _isSearchLoading = false;
+        });
+
+        debugPrint('[$_serverName] 跨媒体库搜索 "$query" 共找到 ${_searchResults.length} 个结果');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSearchLoading = false;
+          _error = '跨媒体库搜索失败: $e';
+        });
+      }
+      debugPrint('[$_serverName] 跨媒体库搜索失败: $e');
     }
   }
 
