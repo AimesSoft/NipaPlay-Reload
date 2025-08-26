@@ -1241,6 +1241,107 @@ class EmbyService {
     return null;
   }
 
+  /// 搜索媒体库中的内容
+  /// [searchTerm] 搜索关键词
+  /// [includeItemTypes] 包含的项目类型 (Series, Movie, Episode等)
+  /// [limit] 结果数量限制
+  /// [parentId] 父级媒体库ID (可选，用于限制在特定媒体库中搜索)
+  Future<List<EmbyMediaItem>> searchMediaItems(
+    String searchTerm, {
+    List<String>? includeItemTypes,
+    int limit = 50,
+    String? parentId,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected || searchTerm.trim().isEmpty || _userId == null) {
+      return [];
+    }
+
+    try {
+      // 构建查询参数
+      final queryParams = <String, String>{
+        'SearchTerm': searchTerm.trim(),
+        'IncludeItemTypes': (includeItemTypes ?? ['Series', 'Movie']).join(','),
+        'Recursive': 'true',
+        'Limit': limit.toString(),
+        'Fields': 'Overview,Genres,People,Studios,ProviderIds,DateCreated,PremiereDate,CommunityRating,ProductionYear',
+      };
+
+      // 如果指定了父级媒体库，则只在该媒体库中搜索
+      if (parentId != null) {
+        queryParams['ParentId'] = parentId;
+      } else {
+        // 如果没有指定，则在所有选中的媒体库中搜索
+        if (_selectedLibraryIds.isNotEmpty) {
+          queryParams['ParentId'] = _selectedLibraryIds.join(',');
+        }
+      }
+
+      final queryString = queryParams.entries
+          .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+          .join('&');
+
+      final response = await _makeAuthenticatedRequest('/emby/Users/$_userId/Items?$queryString');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'] ?? [];
+        
+        final results = items
+            .map((item) => EmbyMediaItem.fromJson(item))
+            .toList();
+
+        debugPrint('[EmbyService] 搜索 "$searchTerm" 找到 ${results.length} 个结果');
+        return results;
+      } else {
+        debugPrint('[EmbyService] 搜索失败: HTTP ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('[EmbyService] 搜索出错: $e');
+      return [];
+    }
+  }
+
+  /// 在特定媒体库中搜索
+  Future<List<EmbyMediaItem>> searchInLibrary(
+    String libraryId,
+    String searchTerm, {
+    int limit = 50,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected || searchTerm.trim().isEmpty || _userId == null) {
+      return [];
+    }
+
+    try {
+      // 首先获取媒体库信息以确定类型
+      final libraryResponse = await _makeAuthenticatedRequest(
+        '/emby/Users/$_userId/Items/$libraryId'
+      );
+      
+      if (libraryResponse.statusCode != 200) {
+        return [];
+      }
+      
+      final libraryData = json.decode(libraryResponse.body);
+      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      
+      // 根据媒体库类型选择不同的IncludeItemTypes
+      String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
+
+      return await searchMediaItems(
+        searchTerm,
+        includeItemTypes: [includeItemTypes],
+        limit: limit,
+        parentId: libraryId,
+      );
+    } catch (e) {
+      debugPrint('[EmbyService] 在媒体库 $libraryId 中搜索出错: $e');
+      return [];
+    }
+  }
+
   /// 获取Emby视频的字幕轨道信息，包括内嵌字幕和外挂字幕
   Future<List<Map<String, dynamic>>> getSubtitleTracks(String itemId) async {
     if (!_isConnected) {

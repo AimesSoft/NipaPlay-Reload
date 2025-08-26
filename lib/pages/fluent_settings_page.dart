@@ -21,86 +21,138 @@ class FluentSettingsPage extends StatefulWidget {
 class _FluentSettingsPageState extends State<FluentSettingsPage> {
   int _selectedIndex = 0;
 
-  final List<NavigationPaneItem> _settingsItems = [
-    PaneItem(
-      key: const ValueKey('account'),
-      icon: const Icon(FluentIcons.contact),
-      title: const Text('账号'),
-      body: const FluentAccountPage(),
-    ),
-    PaneItem(
-      key: const ValueKey('ui_theme'),
-      icon: const Icon(FluentIcons.color),
-      title: const Text('主题（实验性）'),
-      body: const FluentUIThemePage(),
-    ),
-    PaneItem(
-      key: const ValueKey('general'),
-      icon: const Icon(FluentIcons.settings),
-      title: const Text('通用'),
-      body: const FluentGeneralPage(),
-    ),
-    PaneItem(
-      key: const ValueKey('watch_history'),
-      icon: const Icon(FluentIcons.history),
-      title: const Text('观看记录'),
-      body: const FluentWatchHistoryPage(),
-    ),
-    PaneItem(
-      key: const ValueKey('player'),
-      icon: const Icon(FluentIcons.play),
-      title: const Text('播放器'),
-      body: const FluentPlayerSettingsPage(),
-    ),
-    if (globals.isDesktop) PaneItem(
-      key: const ValueKey('shortcuts'),
-      icon: const Icon(FluentIcons.key_phrase_extraction),
-      title: const Text('快捷键'),
-      body: const FluentShortcutsPage(),
-    ),
-    PaneItem(
-      key: const ValueKey('remote_access'),
-      icon: const Icon(FluentIcons.remote),
-      title: const Text('远程访问'),
-      body: const FluentRemoteAccessPage(),
-    ),
-    PaneItem(
-      key: const ValueKey('remote_media'),
-      icon: const Icon(FluentIcons.folder_open),
-      title: const Text('远程媒体库'),
-      body: const FluentRemoteMediaLibraryPage(),
-    ),
-    PaneItem(
-      key: const ValueKey('developer'),
-      icon: const Icon(FluentIcons.developer_tools),
-      title: const Text('开发者选项'),
-      body: const FluentDeveloperOptionsPage(),
-    ),
-    PaneItem(
-      key: const ValueKey('about'),
-      icon: const Icon(FluentIcons.info),
-      title: const Text('关于'),
-      body: const FluentAboutPage(),
-    ),
+  final List<Widget> _settingsPages = [
+    const FluentAccountPage(),
+    const FluentUIThemePage(),
+    const FluentGeneralPage(),
+    const FluentWatchHistoryPage(),
+    const FluentPlayerSettingsPage(),
+    if (globals.isDesktop) const FluentShortcutsPage(),
+    const FluentRemoteAccessPage(),
+    const FluentRemoteMediaLibraryPage(),
+    const FluentDeveloperOptionsPage(),
+    const FluentAboutPage(),
+  ];
+
+  final List<String> _settingsTitles = [
+    '账号',
+    '主题（实验性）',
+    '通用',
+    '观看记录',
+    '播放器',
+    if (globals.isDesktop) '快捷键',
+    '远程访问',
+    '远程媒体库',
+    '开发者选项',
+    '关于',
+  ];
+
+  final List<IconData> _settingsIcons = [
+    FluentIcons.contact,
+    FluentIcons.color,
+    FluentIcons.settings,
+    FluentIcons.history,
+    FluentIcons.play,
+    if (globals.isDesktop) FluentIcons.key_phrase_extraction,
+    FluentIcons.remote,
+    FluentIcons.folder_open,
+    FluentIcons.developer_tools,
+    FluentIcons.info,
   ];
 
   @override
   Widget build(BuildContext context) {
-    return NavigationView(
-      appBar: const NavigationAppBar(
-        title: Text('设置'),
-        automaticallyImplyLeading: false,
-      ),
-      pane: NavigationPane(
-        selected: _selectedIndex,
-        onChanged: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        displayMode: PaneDisplayMode.open,
-        items: _settingsItems,
-      ),
+    return Row(
+      children: [
+        // 左侧导航列表
+        SizedBox(
+          width: 250,
+          child: Container(
+            decoration: BoxDecoration(
+              color: FluentTheme.of(context).navigationPaneTheme.backgroundColor,
+              border: Border(
+                right: BorderSide(
+                  color: FluentTheme.of(context).inactiveColor.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: _settingsPages.length,
+              itemBuilder: (context, index) {
+                final isSelected = index == _selectedIndex;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected 
+                        ? FluentTheme.of(context).accentColor.withOpacity(0.1)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: ListTile(
+                    onPressed: () {
+                      setState(() {
+                        _selectedIndex = index;
+                      });
+                    },
+                    leading: Icon(
+                      _settingsIcons[index],
+                      color: isSelected 
+                          ? FluentTheme.of(context).accentColor
+                          : FluentTheme.of(context).inactiveColor,
+                    ),
+                    title: Text(
+                      _settingsTitles[index],
+                      style: TextStyle(
+                        color: isSelected 
+                            ? FluentTheme.of(context).accentColor
+                            : null,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        // 右侧内容区域
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: FluentTheme.of(context).scaffoldBackgroundColor,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 标题栏
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: FluentTheme.of(context).inactiveColor.withOpacity(0.1),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    _settingsTitles[_selectedIndex],
+                    style: FluentTheme.of(context).typography.title,
+                  ),
+                ),
+                // 内容区域
+                Expanded(
+                  child: _selectedIndex < _settingsPages.length
+                      ? _settingsPages[_selectedIndex]
+                      : Container(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
