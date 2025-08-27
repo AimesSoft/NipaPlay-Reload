@@ -289,56 +289,12 @@ jobs:
     needs: [Publish, Build-Linux]
     if: success()
     runs-on: ubuntu-latest
-    container: archlinux:base-devel
-
     steps:
-      - name: Install dependencies
-        run: |
-          pacman -Syu --noconfirm git openssh pacman-contrib
-
-      - name: Configure SSH for AUR
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "${AUR_SSH_PRIVATE_KEY}" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          # Configure git to use this key for AUR operations
-          git config --global core.sshCommand "ssh -i ~/.ssh/aur -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
-
-      - name: Clone AUR repository
-        run: git clone ssh://aur@aur.archlinux.org/nipaplay-reload-bin.git
-
-      - name: Get Version
-        id: get_version
-        run: echo "version=${{ needs.Build-Linux.outputs.version }}" >> $GITHUB_OUTPUT
-
-      - name: Update PKGBUILD and .SRCINFO
-        working-directory: ./nipaplay-reload-bin
-        run: |
-          VERSION="${{ steps.get_version.outputs.version }}"
-          
-          echo "Updating PKGBUILD to version ${VERSION}"
-          
-          sed -i "s/^pkgver=.*$/pkgver=${VERSION}/" PKGBUILD
-          sed -i "s/^pkgrel=.*$/pkgrel=1/" PKGBUILD
-          
-          updpkgsums
-          
-          makepkg --printsrcinfo > .SRCINFO
-
-      - name: Commit and push AUR update
-        working-directory: ./nipaplay-reload-bin
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          if [[ -z $(git status -s) ]]; then
-            echo "No changes to the AUR file. Skipping commit."
-          else
-            echo "Changes detected. Committing and pushing..."
-            git add PKGBUILD .SRCINFO
-            git commit -m "Update to v${{ steps.get_version.outputs.version }}"
-            git push
-            echo "Push successful."
-          fi
+      - name: Publish AUR package
+        uses: aksh1618/update-aur-package@v1.0.4
+        with:
+          version: ${{ needs.Build-Linux.outputs.version }}
+          package_name: nipaplay-reload-bin
+          commit_username: "github-actions[bot]"
+          commit_email: github-actions[bot]@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
