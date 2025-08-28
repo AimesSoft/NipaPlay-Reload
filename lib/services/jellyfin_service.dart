@@ -13,6 +13,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'debug_log_service.dart';
 
 import 'package:nipaplay/utils/url_name_generator.dart';
+import '../models/jellyfin_transcode_settings.dart';
 
 class JellyfinService {
   static final JellyfinService instance = JellyfinService._internal();
@@ -87,6 +88,105 @@ class JellyfinService {
       // Fallback to static values
       _cachedClientInfo = 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.4.9"';
       return _cachedClientInfo!;
+    }
+  }
+
+  /// 获取服务器端的媒体技术元数据（容器/编解码器/Profile/Level/HDR/声道/码率等）
+  /// 返回统一结构：
+  /// {
+  ///   'container': String?,
+  ///   'video': {
+  ///      'codec': String?, 'profile': String?, 'level': String?, 'bitDepth': int?,
+  ///      'width': int?, 'height': int?, 'frameRate': num?, 'bitRate': int?,
+  ///      'pixelFormat': String?, 'colorSpace': String?, 'colorTransfer': String?, 'colorPrimaries': String?,
+  ///      'dynamicRange': String?
+  ///   },
+  ///   'audio': {
+  ///      'codec': String?, 'channels': int?, 'channelLayout': String?,
+  ///      'sampleRate': int?, 'bitRate': int?, 'language': String?
+  ///   }
+  /// }
+  Future<Map<String, dynamic>> getServerMediaTechnicalInfo(String itemId) async {
+    if (!_isConnected) {
+      return {};
+    }
+
+    final Map<String, dynamic> result = {
+      'container': null,
+      'video': <String, dynamic>{},
+      'audio': <String, dynamic>{},
+    };
+
+    try {
+      // 1) 优先获取 PlaybackInfo，包含 MediaSources 与 MediaStreams（技术细节更全）
+      final playbackResp = await _makeAuthenticatedRequest(
+        '/Items/$itemId/PlaybackInfo?userId=$_userId',
+      );
+      Map<String, dynamic>? firstSource;
+      Map<String, dynamic>? videoStream;
+      Map<String, dynamic>? audioStream;
+
+      if (playbackResp.statusCode == 200) {
+        final pbData = json.decode(playbackResp.body);
+        final mediaSources = pbData['MediaSources'];
+        if (mediaSources is List && mediaSources.isNotEmpty) {
+          firstSource = Map<String, dynamic>.from(mediaSources.first);
+          result['container'] = firstSource['Container'];
+          final streams = firstSource['MediaStreams'];
+          if (streams is List) {
+            for (final s in streams) {
+              if (s is Map && s['Type'] == 'Video' && videoStream == null) {
+                videoStream = Map<String, dynamic>.from(s);
+              } else if (s is Map && s['Type'] == 'Audio' && audioStream == null) {
+                audioStream = Map<String, dynamic>.from(s);
+              }
+            }
+          }
+        }
+      }
+
+      // 2) 补充 Items 详情（可能带有 VideoRange 等目录级字段）
+      Map<String, dynamic>? itemDetail;
+      try {
+        final itemResp = await _makeAuthenticatedRequest('/Users/$_userId/Items/$itemId');
+        if (itemResp.statusCode == 200) {
+          itemDetail = Map<String, dynamic>.from(json.decode(itemResp.body));
+        }
+      } catch (_) {}
+
+      // 组装 video 信息
+      final video = <String, dynamic>{
+        'codec': videoStream?['Codec'] ?? firstSource?['VideoCodec'],
+        'profile': videoStream?['Profile'],
+        'level': videoStream?['Level']?.toString(),
+        'bitDepth': videoStream?['BitDepth'],
+        'width': videoStream?['Width'] ?? firstSource?['Width'],
+        'height': videoStream?['Height'] ?? firstSource?['Height'],
+        'frameRate': videoStream?['RealFrameRate'] ?? videoStream?['AverageFrameRate'],
+        'bitRate': videoStream?['BitRate'] ?? firstSource?['Bitrate'],
+        'pixelFormat': videoStream?['PixelFormat'],
+        'colorSpace': videoStream?['ColorSpace'],
+        'colorTransfer': videoStream?['ColorTransfer'],
+        'colorPrimaries': videoStream?['ColorPrimaries'],
+        'dynamicRange': videoStream?['VideoRange'] ?? itemDetail?['VideoRange'],
+      };
+
+      // 组装 audio 信息
+      final audio = <String, dynamic>{
+        'codec': audioStream?['Codec'] ?? firstSource?['AudioCodec'],
+        'channels': audioStream?['Channels'],
+        'channelLayout': audioStream?['ChannelLayout'],
+        'sampleRate': audioStream?['SampleRate'],
+        'bitRate': audioStream?['BitRate'] ?? firstSource?['AudioBitrate'],
+        'language': audioStream?['Language'],
+      };
+
+      result['video'] = video;
+      result['audio'] = audio;
+      return result;
+    } catch (e) {
+      DebugLogService().addLog('JellyfinService: 获取媒体技术元数据失败: $e');
+      return {};
     }
   }
 
@@ -1009,13 +1109,96 @@ class JellyfinService {
     return null;
   }
 
-  // 获取流媒体URL
+  // 获取流媒体URL（向后兼容的方法）
   String getStreamUrl(String itemId) {
+    return getStreamUrlWithOptions(itemId);
+  }
+  
+  /// 获取流媒体URL，支持转码选项
+  /// [itemId] 媒体项目ID
+  /// [quality] 指定的视频质量，为null时使用用户默认设置
+  /// [forceDirectPlay] 是否强制直播（不转码）
+  String getStreamUrlWithOptions(
+    String itemId, {
+    JellyfinVideoQuality? quality,
+    bool forceDirectPlay = false,
+  }) {
     if (!_isConnected || _accessToken == null) {
       throw Exception('未连接到Jellyfin服务器');
     }
     
+    // 如果强制直播，返回直播URL
+    if (forceDirectPlay) {
+      return _buildDirectPlayUrl(itemId);
+    }
+    
+    // 构建转码URL
+    return _buildTranscodeUrl(itemId, quality);
+  }
+  
+  /// 构建直播URL（不转码）
+  String _buildDirectPlayUrl(String itemId) {
     return '$_serverUrl/Videos/$itemId/stream?static=true&MediaSourceId=$itemId&api_key=$_accessToken';
+  }
+  
+  /// 构建转码URL
+  String _buildTranscodeUrl(String itemId, JellyfinVideoQuality? quality) {
+    // 如果质量为original或未指定，使用直播
+    if (quality == null || quality == JellyfinVideoQuality.original) {
+      return _buildDirectPlayUrl(itemId);
+    }
+    
+    final params = <String, String>{
+      'api_key': _accessToken!,
+    };
+    
+    // 添加转码参数
+    _addTranscodeParameters(params, quality);
+    
+    final uri = Uri.parse('$_serverUrl/Videos/$itemId/stream').replace(queryParameters: params);
+    debugPrint('Jellyfin转码URL: $uri');
+    return uri.toString();
+  }
+  
+  /// 添加转码参数到URL参数中
+  void _addTranscodeParameters(Map<String, String> params, JellyfinVideoQuality quality) {
+    // 基础转码参数
+    final bitrate = quality.bitrate;
+    final resolution = quality.maxResolution;
+    
+    if (bitrate != null) {
+      params['MaxStreamingBitrate'] = (bitrate * 1000).toString(); // 转换为bps
+      params['VideoBitRate'] = (bitrate * 1000).toString();
+    }
+    
+    if (resolution != null) {
+      params['MaxWidth'] = resolution.width.toString();
+      params['MaxHeight'] = resolution.height.toString();
+    }
+    
+    // 默认转码设置
+    params['VideoCodec'] = 'h264,hevc,av1';
+    params['AudioCodec'] = 'aac,mp3,opus';
+    params['Container'] = 'ts,webm,mp4,mkv';
+    params['TranscodingContainer'] = 'ts';
+    params['TranscodingProtocol'] = 'hls';
+    
+    // 边界情况：确保参数有效
+    try {
+      // 验证参数有效性
+      if (params['MaxStreamingBitrate']?.isEmpty == true) {
+        params.remove('MaxStreamingBitrate');
+      }
+      if (params['MaxWidth'] == '0' || params['MaxHeight'] == '0') {
+        params.remove('MaxWidth');
+        params.remove('MaxHeight');
+      }
+    } catch (e) {
+      debugPrint('添加转码参数时出错: $e');
+      // 发生错误时移除可能有问题的参数
+      params.removeWhere((key, value) => 
+        key.startsWith('Max') || key.contains('BitRate'));
+    }
   }
 
   /// 获取Jellyfin视频的字幕轨道信息

@@ -1073,4 +1073,30 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   void setPlaybackRate(double rate) {
     playbackRate = rate; // 这将调用setter
   }
+
+  // 提供详细播放技术信息（video_player能力有限，返回基础信息）
+  Map<String, dynamic> getDetailedMediaInfo() {
+    final Map<String, dynamic> result = {
+      'kernel': 'VideoPlayer',
+      'videoParams': <String, dynamic>{},
+      'audioParams': <String, dynamic>{},
+      'tracks': <String, dynamic>{},
+    };
+    try {
+      final v = _controller?.value;
+      if (v != null && v.isInitialized) {
+        result['videoParams'] = {
+          'width': v.size.width.toInt(),
+          'height': v.size.height.toInt(),
+          'durationMs': v.duration.inMilliseconds,
+          'isPlaying': v.isPlaying,
+        };
+      }
+    } catch (_) {}
+    return result;
+  }
+
+  Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
+    return getDetailedMediaInfo();
+  }
 } 

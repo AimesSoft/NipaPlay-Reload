@@ -150,6 +150,32 @@ class Player {
   
   // 添加setPlaybackRate方法实现
   void setPlaybackRate(double rate) => _delegate.setPlaybackRate(rate);
+
+  // 播放技术信息（可选）
+  // 返回一个同步的 Map，用于暴露底层内核的技术细节（fps/bitrate/mpv属性/轨道等）。
+  // 若底层未实现，则返回空映射。
+  Map<String, dynamic> getDetailedMediaInfo() {
+    try {
+      final dyn = _delegate as dynamic;
+      final info = dyn.getDetailedMediaInfo?.call();
+      if (info is Map<String, dynamic>) return info;
+    } catch (_) {}
+    return const <String, dynamic>{};
+  }
+
+  // 异步版本：允许底层等待获取属性（例如 mpv 的 getProperty 通常是异步的）
+  Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
+    try {
+      final dyn = _delegate as dynamic;
+      final f = dyn.getDetailedMediaInfoAsync?.call();
+      if (f is Future) {
+        final info = await f;
+        if (info is Map<String, dynamic>) return info;
+      }
+    } catch (_) {}
+    // 回退到同步版本
+    return getDetailedMediaInfo();
+  }
 }
 
 // Type aliases for full compatibility if VideoPlayerState uses these type names

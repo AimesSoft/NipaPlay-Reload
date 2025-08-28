@@ -89,6 +89,90 @@ class EmbyService {
     }
   }
 
+  /// 获取服务器端的媒体技术元数据（容器/编解码器/Profile/Level/HDR/声道/码率等）
+  /// 结构与 Jellyfin 保持一致，字段命名相同，便于 UI 统一展示。
+  Future<Map<String, dynamic>> getServerMediaTechnicalInfo(String itemId) async {
+    if (!_isConnected || _userId == null) {
+      return {};
+    }
+
+    final Map<String, dynamic> result = {
+      'container': null,
+      'video': <String, dynamic>{},
+      'audio': <String, dynamic>{},
+    };
+
+    try {
+      // 1) 优先 PlaybackInfo
+      final playbackResp = await _makeAuthenticatedRequest(
+        '/emby/Items/$itemId/PlaybackInfo?UserId=$_userId',
+      );
+      Map<String, dynamic>? firstSource;
+      Map<String, dynamic>? videoStream;
+      Map<String, dynamic>? audioStream;
+
+      if (playbackResp.statusCode == 200) {
+        final pbData = json.decode(playbackResp.body);
+        final mediaSources = pbData['MediaSources'];
+        if (mediaSources is List && mediaSources.isNotEmpty) {
+          firstSource = Map<String, dynamic>.from(mediaSources.first);
+          result['container'] = firstSource['Container'];
+          final streams = firstSource['MediaStreams'];
+          if (streams is List) {
+            for (final s in streams) {
+              if (s is Map && s['Type'] == 'Video' && videoStream == null) {
+                videoStream = Map<String, dynamic>.from(s);
+              } else if (s is Map && s['Type'] == 'Audio' && audioStream == null) {
+                audioStream = Map<String, dynamic>.from(s);
+              }
+            }
+          }
+        }
+      }
+
+      // 2) 补充 Items 详情
+      Map<String, dynamic>? itemDetail;
+      try {
+        final itemResp = await _makeAuthenticatedRequest('/emby/Users/$_userId/Items/$itemId');
+        if (itemResp.statusCode == 200) {
+          itemDetail = Map<String, dynamic>.from(json.decode(itemResp.body));
+        }
+      } catch (_) {}
+
+      final video = <String, dynamic>{
+        'codec': videoStream?['Codec'] ?? firstSource?['VideoCodec'],
+        'profile': videoStream?['Profile'],
+        'level': videoStream?['Level']?.toString(),
+        'bitDepth': videoStream?['BitDepth'],
+        'width': videoStream?['Width'] ?? firstSource?['Width'],
+        'height': videoStream?['Height'] ?? firstSource?['Height'],
+        'frameRate': videoStream?['RealFrameRate'] ?? videoStream?['AverageFrameRate'],
+        'bitRate': videoStream?['BitRate'] ?? firstSource?['Bitrate'],
+        'pixelFormat': videoStream?['PixelFormat'],
+        'colorSpace': videoStream?['ColorSpace'],
+        'colorTransfer': videoStream?['ColorTransfer'],
+        'colorPrimaries': videoStream?['ColorPrimaries'],
+        'dynamicRange': videoStream?['VideoRange'] ?? itemDetail?['VideoRange'],
+      };
+
+      final audio = <String, dynamic>{
+        'codec': audioStream?['Codec'] ?? firstSource?['AudioCodec'],
+        'channels': audioStream?['Channels'],
+        'channelLayout': audioStream?['ChannelLayout'],
+        'sampleRate': audioStream?['SampleRate'],
+        'bitRate': audioStream?['BitRate'] ?? firstSource?['AudioBitrate'],
+        'language': audioStream?['Language'],
+      };
+
+      result['video'] = video;
+      result['audio'] = audio;
+      return result;
+    } catch (e) {
+      DebugLogService().addLog('EmbyService: 获取媒体技术元数据失败: $e');
+      return {};
+    }
+  }
+
   // Getters
   bool get isConnected => _isConnected;
   String? get serverUrl => _serverUrl;
