@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart' if (dart.library.html) 'packag
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'debug_log_service.dart';
+import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 
 import 'package:nipaplay/utils/url_name_generator.dart';
 
@@ -1221,6 +1222,77 @@ class EmbyService {
     
     return '$_serverUrl/emby/Videos/$itemId/stream?api_key=$_accessToken&Static=true';
   }
+
+  /// 构建 Emby HLS URL（带可选的服务器端字幕选择与烧录开关）
+  /// 说明：与 Jellyfin 复用同一枚举 JellyfinVideoQuality，便于 UI 统一。
+  Future<String> buildHlsUrlWithOptions(
+    String itemId, {
+    JellyfinVideoQuality? quality,
+    int? subtitleStreamIndex,
+    bool alwaysBurnInSubtitleWhenTranscoding = false,
+  }) async {
+    if (!_isConnected || _accessToken == null) {
+      throw Exception('未连接到Emby服务器');
+    }
+
+    final effectiveQuality = quality ?? JellyfinVideoQuality.bandwidth5m;
+
+    // original => 直连
+    if (effectiveQuality == JellyfinVideoQuality.original) {
+      return getStreamUrl(itemId);
+    }
+
+    final params = <String, String>{
+      'api_key': _accessToken!,
+      // Emby 对 master.m3u8 接口的典型参数
+      'Container': 'ts', // HLS 分片容器
+      'MediaSourceId': itemId,
+    };
+
+    _addTranscodeParameters(params, effectiveQuality);
+
+    // 字幕参数
+    if (subtitleStreamIndex != null) {
+      params['SubtitleStreamIndex'] = subtitleStreamIndex.toString();
+      if (alwaysBurnInSubtitleWhenTranscoding) {
+        params['SubtitleMethod'] = 'Encode'; // 烧录
+        params['EnableAutoStreamCopy'] = 'false';
+      } else {
+        params['SubtitleMethod'] = 'Embed'; // 内嵌为独立轨
+      }
+    }
+
+    final uri = Uri.parse('$_serverUrl/emby/Videos/$itemId/master.m3u8')
+        .replace(queryParameters: params);
+    debugPrint('[Emby HLS] 构建URL: ${uri.toString()}');
+    return uri.toString();
+  }
+
+  /// 为 Emby 添加转码参数（注意参数名大小写与 Jellyfin 不同）
+  void _addTranscodeParameters(Map<String, String> params, JellyfinVideoQuality quality) {
+    final bitrate = quality.bitrate; // Mbps
+    final resolution = quality.maxResolution;
+
+    if (bitrate != null) {
+      final br = (bitrate * 1000).toString();
+      params['VideoBitRate'] = br;
+      params['MaxStreamingBitrate'] = br; // 一些服务器实现会读取该参数
+    }
+
+    if (resolution != null) {
+      params['MaxWidth'] = resolution.width.toString();
+      params['MaxHeight'] = resolution.height.toString();
+    }
+
+    // 合理的编解码优先级（可根据需要改为从设置读取）
+    params['VideoCodec'] = 'h264,hevc,av1';
+    params['AudioCodec'] = 'aac,mp3,opus';
+
+    // 音频约束（保守默认，不强制）
+    // 可在后续接入独立设置后开启：
+    // params['MaxAudioChannels'] = '2';
+    // params['AudioBitRate'] = '192000';
+  }
   
   String getImageUrl(String itemId, {String type = 'Primary', int? width, int? height, int? quality, String? tag}) {
     if (!_isConnected) {
@@ -1466,8 +1538,21 @@ class EmbyService {
             final isDefault = stream['IsDefault'] ?? false;
             final isForced = stream['IsForced'] ?? false;
             final isHearingImpaired = stream['IsHearingImpaired'] ?? false;
+            final realIndex = stream['Index'] ?? i;
+            final displayParts = <String>[];
+            if ((title as String).isNotEmpty) {
+              displayParts.add(title);
+            } else if ((language as String).isNotEmpty) {
+              displayParts.add(language);
+            } else {
+              displayParts.add('字幕');
+            }
+            if ((codec as String).isNotEmpty) displayParts.add(codec.toString().toUpperCase());
+            if (isExternal) displayParts.add('外挂');
+            if (isForced) displayParts.add('强制');
+            if (isDefault) displayParts.add('默认');
             Map<String, dynamic> trackInfo = {
-              'index': i,
+              'index': realIndex,
               'type': isExternal ? 'external' : 'embedded',
               'language': language,
               'title': title.isNotEmpty ? title : (language.isNotEmpty ? language : 'Unknown'),
@@ -1476,11 +1561,12 @@ class EmbyService {
               'isForced': isForced,
               'isHearingImpaired': isHearingImpaired,
               'deliveryMethod': deliveryMethod,
+              'display': displayParts.join(' · '),
             };
             // 如果是外挂字幕，添加下载URL
             if (isExternal) {
               final mediaSourceId = mediaSource['Id'];
-              final subtitleUrl = '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$i/Stream.$codec?api_key=$_accessToken';
+              final subtitleUrl = '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$realIndex/Stream.$codec?api_key=$_accessToken';
               trackInfo['downloadUrl'] = subtitleUrl;
             }
             subtitleTracks.add(trackInfo);

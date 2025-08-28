@@ -5307,3 +5307,69 @@ extension JellyfinQualitySwitch on VideoPlayerState {
     }
   }
 }
+
+// ==== Emby 清晰度切换：平滑重载当前流 ====
+extension EmbyQualitySwitch on VideoPlayerState {
+  Future<void> reloadCurrentEmbyStream({
+    required JellyfinVideoQuality quality,
+    int? serverSubtitleIndex,
+    bool burnInSubtitle = false,
+  }) async {
+    try {
+      if (_currentVideoPath == null || !_currentVideoPath!.startsWith('emby://')) {
+        return;
+      }
+
+      final currentPath = _currentVideoPath!;
+      final currentPosition = _position;
+      final currentDuration = _duration;
+      final currentProgress = _progress;
+      final currentVolume = player.volume;
+      final currentPlaybackRate = _playbackRate;
+      final wasPlaying = _status == PlayerStatus.playing;
+
+      final historyItem = WatchHistoryItem(
+        filePath: currentPath,
+        animeName: _animeTitle ?? '',
+        episodeTitle: _episodeTitle,
+        episodeId: _episodeId,
+        animeId: _animeId,
+        lastPosition: currentPosition.inMilliseconds,
+        duration: currentDuration.inMilliseconds,
+        watchProgress: currentProgress,
+        lastWatchTime: DateTime.now(),
+      );
+
+      final itemId = currentPath.replaceFirst('emby://', '');
+      final newUrl = await EmbyService.instance.buildHlsUrlWithOptions(
+        itemId,
+        quality: quality,
+        subtitleStreamIndex: serverSubtitleIndex,
+        alwaysBurnInSubtitleWhenTranscoding: burnInSubtitle,
+      );
+
+      await initializePlayer(
+        currentPath,
+        historyItem: historyItem,
+        actualPlayUrl: newUrl,
+      );
+
+      if (hasVideo) {
+        await Future.delayed(const Duration(milliseconds: 150));
+        player.volume = currentVolume;
+        if (currentPlaybackRate != 1.0) {
+          player.setPlaybackRate(currentPlaybackRate);
+        }
+        seekTo(currentPosition);
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (wasPlaying) {
+          play();
+        } else {
+          pause();
+        }
+      }
+    } catch (e) {
+      debugPrint('Emby 清晰度切换失败: $e');
+    }
+  }
+}

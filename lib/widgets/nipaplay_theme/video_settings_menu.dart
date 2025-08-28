@@ -146,8 +146,9 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       isActive: () => _showPlaybackRate,
     ));
     
-    // 添加 Jellyfin 转码质量设置（仅在播放 Jellyfin 内容时显示）
-    if (videoState.currentVideoPath?.startsWith('jellyfin://') == true) {
+    // 添加 Jellyfin/Emby 转码清晰度设置（播放 Jellyfin 或 Emby 内容时显示，同复用 JellyfinQualityMenu UI）
+    if (videoState.currentVideoPath?.startsWith('jellyfin://') == true ||
+      videoState.currentVideoPath?.startsWith('emby://') == true) {
       _settingsItems.add(SettingsItem(
         icon: Icons.hd,
         title: '清晰度',

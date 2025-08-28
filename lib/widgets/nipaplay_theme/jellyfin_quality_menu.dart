@@ -7,6 +7,7 @@ import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
 
 class JellyfinQualityMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -42,12 +43,23 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
         _currentQuality = transcodeProvider.currentVideoQuality;
       });
 
-      // 读取当前播放的 Jellyfin itemId 并获取服务器字幕列表
+      // 读取当前播放的 jellyfin:// 或 emby:// itemId 并获取服务器字幕列表
       final vp = Provider.of<VideoPlayerState>(context, listen: false);
       final path = vp.currentVideoPath;
       if (path != null && path.startsWith('jellyfin://')) {
         final itemId = path.replaceFirst('jellyfin://', '');
         final tracks = await JellyfinService.instance.getSubtitleTracks(itemId);
+        setState(() {
+          _serverSubtitles = tracks;
+          final def = tracks.firstWhere(
+            (t) => (t['isDefault'] == true),
+            orElse: () => {},
+          );
+          _selectedServerSubtitleIndex = def.isEmpty ? null : def['index'] as int?;
+        });
+      } else if (path != null && path.startsWith('emby://')) {
+        final itemId = path.replaceFirst('emby://', '');
+        final tracks = await EmbyService.instance.getSubtitleTracks(itemId);
         setState(() {
           _serverSubtitles = tracks;
           // 预选默认字幕（如果存在）
@@ -89,11 +101,20 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       
       // 然后重载播放器
       final vp = Provider.of<VideoPlayerState>(context, listen: false);
-      await vp.reloadCurrentJellyfinStream(
-        quality: _currentQuality!,
-        serverSubtitleIndex: _selectedServerSubtitleIndex,
-        burnInSubtitle: _burnIn,
-      );
+      final path = vp.currentVideoPath;
+      if (path != null && path.startsWith('jellyfin://')) {
+        await vp.reloadCurrentJellyfinStream(
+          quality: _currentQuality!,
+          serverSubtitleIndex: _selectedServerSubtitleIndex,
+          burnInSubtitle: _burnIn,
+        );
+      } else if (path != null && path.startsWith('emby://')) {
+        await vp.reloadCurrentEmbyStream(
+          quality: _currentQuality!,
+          serverSubtitleIndex: _selectedServerSubtitleIndex,
+          burnInSubtitle: _burnIn,
+        );
+      }
       
       setState(() {
         _isLoading = false;
