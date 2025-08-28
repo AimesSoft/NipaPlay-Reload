@@ -22,6 +22,7 @@ import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时�
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
@@ -82,6 +83,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
+  String? _currentActualPlayUrl; // 存储实际播放URL，用于判断转码状态
   String _danmakuOverlayKey = 'idle'; // 弹幕覆盖层的稳定key
   Timer? _uiUpdateTimer; // UI更新定时器（包含位置保存和数据持久化功能）
   // 观看记录节流：记录上一次更新所处的10秒分桶，避免同一时间窗内重复写DB与通知Provider
@@ -293,6 +295,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get danmakuStacking => _danmakuStacking;
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
+  String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
   String get danmakuOverlayKey => _danmakuOverlayKey; // 弹幕覆盖层的稳定key
   String? get animeTitle => _animeTitle; // 添加动画标题getter
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
@@ -828,6 +831,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _subtitleManager.setCurrentVideoPath(videoPath);
 
     _currentVideoPath = videoPath;
+    _currentActualPlayUrl = actualPlayUrl; // 存储实际播放URL
     print('historyItem: $historyItem');
     _animeTitle = historyItem?.animeName; // 从历史记录获取动画标题
     _episodeTitle = historyItem?.episodeTitle; // 从历史记录获取集数标题
@@ -1790,6 +1794,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void _clearPreviousVideoState() {
     _currentVideoPath = null;
+    _currentActualPlayUrl = null; // 清除实际播放URL
     _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
     _currentVideoHash = null;
     _currentThumbnailPath = null;
@@ -5227,6 +5232,78 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
     } catch (e) {
       debugPrint('Emby播放结束同步失败: $e');
+    }
+  }
+}
+
+// ==== Jellyfin 清晰度切换：平滑重载当前流 ====
+// 说明：当侧栏清晰度设置被更改时调用，保留当前位置、播放/暂停、音量、倍速等状态
+extension JellyfinQualitySwitch on VideoPlayerState {
+  Future<void> reloadCurrentJellyfinStream({
+    required JellyfinVideoQuality quality,
+    int? serverSubtitleIndex,
+    bool burnInSubtitle = false,
+  }) async {
+    try {
+      if (_currentVideoPath == null || !_currentVideoPath!.startsWith('jellyfin://')) {
+        return;
+      }
+
+      // 快照当前播放状态
+      final currentPath = _currentVideoPath!;
+      final currentPosition = _position;
+      final currentDuration = _duration;
+      final currentProgress = _progress;
+      final currentVolume = player.volume;
+      final currentPlaybackRate = _playbackRate;
+      final wasPlaying = _status == PlayerStatus.playing;
+
+      // 构造临时历史项用于恢复进度
+      final historyItem = WatchHistoryItem(
+        filePath: currentPath,
+        animeName: _animeTitle ?? '',
+        episodeTitle: _episodeTitle,
+        episodeId: _episodeId,
+        animeId: _animeId,
+        lastPosition: currentPosition.inMilliseconds,
+        duration: currentDuration.inMilliseconds,
+        watchProgress: currentProgress,
+        lastWatchTime: DateTime.now(),
+      );
+
+      // 计算新的播放 URL（应用清晰度 + 可选服务器字幕/烧录参数）
+      final itemId = currentPath.replaceFirst('jellyfin://', '');
+      final newUrl = await JellyfinService.instance.buildHlsUrlWithOptions(
+        itemId,
+        quality: quality,
+        subtitleStreamIndex: serverSubtitleIndex,
+        alwaysBurnInSubtitleWhenTranscoding: burnInSubtitle,
+      );
+
+      // 重载播放器
+      await initializePlayer(
+        currentPath,
+        historyItem: historyItem,
+        actualPlayUrl: newUrl,
+      );
+
+      // 恢复播放状态（等待状态稳定后再操作）
+      if (hasVideo) {
+        await Future.delayed(const Duration(milliseconds: 150));
+        player.volume = currentVolume;
+        if (currentPlaybackRate != 1.0) {
+          player.setPlaybackRate(currentPlaybackRate);
+        }
+        seekTo(currentPosition);
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (wasPlaying) {
+          play();
+        } else {
+          pause();
+        }
+      }
+    } catch (e) {
+      debugPrint('Jellyfin 清晰度切换失败: $e');
     }
   }
 }

@@ -14,6 +14,7 @@ import 'debug_log_service.dart';
 
 import 'package:nipaplay/utils/url_name_generator.dart';
 import '../models/jellyfin_transcode_settings.dart';
+import 'jellyfin_transcode_manager.dart';
 
 class JellyfinService {
   static final JellyfinService instance = JellyfinService._internal();
@@ -59,6 +60,11 @@ class JellyfinService {
 
   // Client information cache
   String? _cachedClientInfo;
+
+  // Transcode preferences cache (loaded once and updated by provider)
+  bool _transcodeEnabledCache = true;
+  JellyfinVideoQuality _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
+  JellyfinTranscodeSettings _settingsCache = const JellyfinTranscodeSettings();
 
   // Get dynamic client information
   Future<String> _getClientInfo() async {
@@ -249,6 +255,21 @@ class JellyfinService {
     } else {
       _isConnected = false;
   _isReady = false;
+    }
+
+    // 预加载转码设置到本地缓存，避免在 getStreamUrl 中做异步操作
+    try {
+      final transMgr = JellyfinTranscodeManager.instance;
+      await transMgr.initialize();
+      _transcodeEnabledCache = await transMgr.isTranscodingEnabled();
+      _defaultQualityCache = await transMgr.getDefaultVideoQuality();
+  _settingsCache = await transMgr.getSettings();
+      DebugLogService().addLog('Jellyfin: 已加载转码偏好 缓存 enabled=$_transcodeEnabledCache, quality=$_defaultQualityCache');
+    } catch (e) {
+      DebugLogService().addLog('Jellyfin: 加载转码偏好失败，使用默认值: $e');
+      _transcodeEnabledCache = true;
+      _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
+  _settingsCache = const JellyfinTranscodeSettings();
     }
   }
   
@@ -1111,7 +1132,11 @@ class JellyfinService {
 
   // 获取流媒体URL（向后兼容的方法）
   String getStreamUrl(String itemId) {
-    return getStreamUrlWithOptions(itemId);
+  // 使用缓存的转码设置决定默认质量
+  final effectiveQuality = _transcodeEnabledCache
+    ? _defaultQualityCache
+    : JellyfinVideoQuality.original;
+  return getStreamUrlWithOptions(itemId, quality: effectiveQuality);
   }
   
   /// 获取流媒体URL，支持转码选项
@@ -1122,18 +1147,25 @@ class JellyfinService {
     String itemId, {
     JellyfinVideoQuality? quality,
     bool forceDirectPlay = false,
+    int? subtitleStreamIndex,
+    bool? burnInSubtitle,
   }) {
     if (!_isConnected || _accessToken == null) {
       throw Exception('未连接到Jellyfin服务器');
     }
     
-    // 如果强制直播，返回直播URL
+  // 如果强制直播，返回直播URL
     if (forceDirectPlay) {
       return _buildDirectPlayUrl(itemId);
     }
-    
-    // 构建转码URL
-    return _buildTranscodeUrl(itemId, quality);
+
+  // 若未显式传入quality，则使用缓存设置
+  final effective = quality ?? (_transcodeEnabledCache
+    ? _defaultQualityCache
+    : JellyfinVideoQuality.original);
+
+  // 构建转码/直连URL
+  return _buildTranscodeUrl(itemId, effective, subtitleStreamIndex: subtitleStreamIndex, burnInSubtitle: burnInSubtitle);
   }
   
   /// 构建直播URL（不转码）
@@ -1141,47 +1173,145 @@ class JellyfinService {
     return '$_serverUrl/Videos/$itemId/stream?static=true&MediaSourceId=$itemId&api_key=$_accessToken';
   }
   
-  /// 构建转码URL
-  String _buildTranscodeUrl(String itemId, JellyfinVideoQuality? quality) {
-    // 如果质量为original或未指定，使用直播
+  /// 构建转码URL（HLS 使用 master.m3u8）
+  String _buildTranscodeUrl(String itemId, JellyfinVideoQuality? quality, {int? subtitleStreamIndex, bool? burnInSubtitle}) {
+    // 如果质量为 original 或未指定，使用直连
     if (quality == null || quality == JellyfinVideoQuality.original) {
       return _buildDirectPlayUrl(itemId);
     }
-    
+
     final params = <String, String>{
       'api_key': _accessToken!,
+      // HLS master.m3u8 需要 MediaSourceId（大多数情况下与 itemId 相同）
+      'MediaSourceId': itemId,
+      // 指定分片容器，Jellyfin 默认 HLS TS 更通用
+      'segmentContainer': 'ts',
     };
+
+    // 添加转码参数（码率/分辨率/编解码器等）
+    _addTranscodeParameters(params, quality, subtitleStreamIndex: subtitleStreamIndex, burnInSubtitle: burnInSubtitle);
+
+    // 使用 HLS master.m3u8 入口
+    final uri = Uri.parse('$_serverUrl/Videos/$itemId/master.m3u8').replace(queryParameters: params);
+    debugPrint('Jellyfin HLS 转码URL: $uri');
+    return uri.toString();
+  }
+
+  /// 构建 HLS URL（带可选的服务器端字幕选择与烧录开关）
+  /// 注意：不影响外挂字幕下载/加载逻辑，仅在服务端转码时让服务器选定字幕轨道或进行烧录。
+  Future<String> buildHlsUrlWithOptions(
+    String itemId, {
+    JellyfinVideoQuality? quality,
+    int? subtitleStreamIndex,
+    bool alwaysBurnInSubtitleWhenTranscoding = false,
+  }) async {
+    if (!_isConnected || _accessToken == null) {
+      throw Exception('未连接到Jellyfin服务器');
+    }
+
+    // original => 直连
+    if ((quality ?? _defaultQualityCache) == JellyfinVideoQuality.original) {
+      return _buildDirectPlayUrl(itemId);
+    }
+
+    final params = <String, String>{
+      'api_key': _accessToken!,
+      'mediaSourceId': itemId,  // 修正参数名
+      'segmentContainer': 'ts',
+    };
+
+    // 画质/编解码参数
+    _addTranscodeParameters(params, quality ?? _defaultQualityCache);
+
+    // 字幕参数：如果用户明确选择了服务器字幕，则强制添加字幕参数
+    if (subtitleStreamIndex != null) {
+      params['subtitleStreamIndex'] = subtitleStreamIndex.toString();
+      // 根据用户选择决定字幕处理方式
+      if (alwaysBurnInSubtitleWhenTranscoding) {
+        params['subtitleMethod'] = 'Encode'; // 烧录字幕到视频中
+        params['alwaysBurnInSubtitleWhenTranscoding'] = 'true';
+        // 强制转码以确保字幕烧录
+        params['allowVideoStreamCopy'] = 'false'; // 禁止视频流直传
+      } else {
+        params['subtitleMethod'] = 'Embed'; // 嵌入字幕作为独立轨道
+      }
+      // 不设置subtitleCodec，让服务器自动处理
+      // PGSSUB等图形字幕需要服务器自动选择合适的输出格式
+    } else {
+      // 用户未选择特定字幕，使用默认设置
+      final delivery = _settingsCache.subtitle.deliveryMethod;
+      if (_settingsCache.subtitle.enableTranscoding &&
+          delivery != JellyfinSubtitleDeliveryMethod.external &&
+          delivery != JellyfinSubtitleDeliveryMethod.drop) {
+        params['subtitleMethod'] = delivery.apiValue;
+        if (alwaysBurnInSubtitleWhenTranscoding) {
+          params['alwaysBurnInSubtitleWhenTranscoding'] = 'true';
+        }
+      }
+    }
+
+    final uri = Uri.parse('$_serverUrl/Videos/$itemId/master.m3u8')
+        .replace(queryParameters: params);
     
-    // 添加转码参数
-    _addTranscodeParameters(params, quality);
+    debugPrint('[Jellyfin HLS] 构建URL: ${uri.toString()}');
+    debugPrint('[Jellyfin HLS] 字幕参数 - streamIndex: $subtitleStreamIndex, burnIn: $alwaysBurnInSubtitleWhenTranscoding');
     
-    final uri = Uri.parse('$_serverUrl/Videos/$itemId/stream').replace(queryParameters: params);
-    debugPrint('Jellyfin转码URL: $uri');
     return uri.toString();
   }
   
   /// 添加转码参数到URL参数中
-  void _addTranscodeParameters(Map<String, String> params, JellyfinVideoQuality quality) {
+  void _addTranscodeParameters(Map<String, String> params, JellyfinVideoQuality quality, {int? subtitleStreamIndex, bool? burnInSubtitle}) {
     // 基础转码参数
     final bitrate = quality.bitrate;
     final resolution = quality.maxResolution;
     
     if (bitrate != null) {
-      params['MaxStreamingBitrate'] = (bitrate * 1000).toString(); // 转换为bps
-      params['VideoBitRate'] = (bitrate * 1000).toString();
+      params['maxStreamingBitrate'] = (bitrate * 1000).toString(); // 修正参数名
+      params['videoBitRate'] = (bitrate * 1000).toString(); // 修正参数名
     }
     
     if (resolution != null) {
-      params['MaxWidth'] = resolution.width.toString();
-      params['MaxHeight'] = resolution.height.toString();
+      params['maxWidth'] = resolution.width.toString(); // 修正参数名
+      params['maxHeight'] = resolution.height.toString(); // 修正参数名
     }
     
-    // 默认转码设置
-    params['VideoCodec'] = 'h264,hevc,av1';
-    params['AudioCodec'] = 'aac,mp3,opus';
-    params['Container'] = 'ts,webm,mp4,mkv';
-    params['TranscodingContainer'] = 'ts';
-    params['TranscodingProtocol'] = 'hls';
+    // 默认/偏好转码设置
+    final videoCodecs = _settingsCache.video.preferredCodecs.isNotEmpty
+        ? _settingsCache.video.preferredCodecs.join(',')
+        : 'h264,hevc,av1';
+    final audioCodecs = _settingsCache.audio.preferredCodecs.isNotEmpty
+        ? _settingsCache.audio.preferredCodecs.join(',')
+        : 'aac,mp3,opus';
+    params['videoCodec'] = videoCodecs; // 修正参数名
+    params['audioCodec'] = audioCodecs; // 修正参数名
+
+    // 音频相关限制（可选）
+    if (_settingsCache.audio.maxAudioChannels > 0) {
+      params['maxAudioChannels'] = _settingsCache.audio.maxAudioChannels.toString();
+    }
+    if (_settingsCache.audio.audioBitRate != null && _settingsCache.audio.audioBitRate! > 0) {
+      params['audioBitRate'] = (_settingsCache.audio.audioBitRate! * 1000).toString();
+    }
+    if (_settingsCache.audio.audioSampleRate != null && _settingsCache.audio.audioSampleRate! > 0) {
+      params['audioSampleRate'] = _settingsCache.audio.audioSampleRate!.toString();
+    }
+
+    // 字幕交付方式（仅当需要由服务器处理时）
+    if (_settingsCache.subtitle.enableTranscoding &&
+        _settingsCache.subtitle.deliveryMethod != JellyfinSubtitleDeliveryMethod.external &&
+        _settingsCache.subtitle.deliveryMethod != JellyfinSubtitleDeliveryMethod.drop) {
+      params['subtitleMethod'] = _settingsCache.subtitle.deliveryMethod.apiValue;
+      // 指定字幕流索引（如果提供）
+      if (subtitleStreamIndex != null && subtitleStreamIndex >= 0) {
+        params['subtitleStreamIndex'] = subtitleStreamIndex.toString();
+      }
+      // 烧录字幕标志（如果选择烧录或显式传入）
+      final shouldBurn = burnInSubtitle ?? (_settingsCache.subtitle.deliveryMethod == JellyfinSubtitleDeliveryMethod.encode);
+      if (shouldBurn) {
+        params['alwaysBurnInSubtitleWhenTranscoding'] = 'true';
+      }
+    }
+    // HLS 使用 master.m3u8，不需要设置 Container/TranscodingContainer/TranscodingProtocol
     
     // 边界情况：确保参数有效
     try {
@@ -1199,6 +1329,56 @@ class JellyfinService {
       params.removeWhere((key, value) => 
         key.startsWith('Max') || key.contains('BitRate'));
     }
+  }
+
+  /// 构建支持自动选择字幕的 HLS URL（异步）。
+  /// 当未提供 [subtitleStreamIndex] 且字幕交付方式为 Encode/Embed/Hls 时：
+  /// - 优先选择简体/繁体中文或标记为默认的字幕轨道
+  Future<String> buildHlsUrlWithAutoSubtitle(
+    String itemId, {
+    JellyfinVideoQuality? quality,
+    int? subtitleStreamIndex,
+    bool? burnInSubtitle,
+    String? preferredLanguage, // e.g. 'chi','zho','zh'
+  }) async {
+    final effective = quality ?? (_transcodeEnabledCache ? _defaultQualityCache : JellyfinVideoQuality.original);
+
+    // 若 direct play，直接返回直链
+    if (effective == JellyfinVideoQuality.original) {
+      return _buildDirectPlayUrl(itemId);
+    }
+
+    int? resolvedIndex = subtitleStreamIndex;
+    final needsServerSubtitle = _settingsCache.subtitle.enableTranscoding &&
+        _settingsCache.subtitle.deliveryMethod != JellyfinSubtitleDeliveryMethod.external &&
+        _settingsCache.subtitle.deliveryMethod != JellyfinSubtitleDeliveryMethod.drop;
+
+    if (resolvedIndex == null && needsServerSubtitle) {
+      try {
+        final tracks = await getSubtitleTracks(itemId);
+        if (tracks.isNotEmpty) {
+          // 先中文（简/繁/语言码）
+          final zh = tracks.firstWhere(
+            (t) {
+              final title = (t['title'] ?? '').toString().toLowerCase();
+              final language = (t['language'] ?? '').toString().toLowerCase();
+              return language.contains('chi') || language.contains('zho') || language == 'zh' ||
+                     title.contains('简体') || title.contains('繁体') || title.contains('中文') ||
+                     title.contains('chs') || title.contains('cht') || title.startsWith('scjp') || title.startsWith('tcjp');
+            },
+            orElse: () => tracks.firstWhere(
+              (t) => (t['isDefault'] ?? false) == true,
+              orElse: () => tracks.first,
+            ),
+          );
+          resolvedIndex = (zh['index'] as int?);
+        }
+      } catch (e) {
+        debugPrint('JellyfinService: 自动选择字幕轨道失败，忽略: $e');
+      }
+    }
+
+    return _buildTranscodeUrl(itemId, effective, subtitleStreamIndex: resolvedIndex, burnInSubtitle: burnInSubtitle);
   }
 
   /// 获取Jellyfin视频的字幕轨道信息
@@ -1246,10 +1426,14 @@ class JellyfinService {
             final isDefault = stream['IsDefault'] ?? false;
             final isForced = stream['IsForced'] ?? false;
             final isHearingImpaired = stream['IsHearingImpaired'] ?? false;
+            // 使用流的真实索引，而不是循环索引
+            final realIndex = stream['Index'] ?? i;
+            
+            debugPrint('JellyfinService: 找到字幕轨道 $realIndex: $language ($codec, ${isExternal ? 'external' : 'embedded'})');
             
             // 构建字幕轨道信息
             Map<String, dynamic> trackInfo = {
-              'index': i,
+              'index': realIndex,  // 使用真实索引
               'type': isExternal ? 'external' : 'embedded',
               'language': language,
               'title': title.isNotEmpty ? title : (language.isNotEmpty ? language : 'Unknown'),
@@ -1258,17 +1442,19 @@ class JellyfinService {
               'isForced': isForced,
               'isHearingImpaired': isHearingImpaired,
               'deliveryMethod': deliveryMethod,
+      // 供 UI 快速显示
+      'display': _buildSubtitleDisplay(language, title, codec, isExternal, isForced, isDefault),
             };
 
             // 如果是外挂字幕，添加下载URL
             if (isExternal) {
               final mediaSourceId = mediaSource['Id'];
-              final subtitleUrl = '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$i/Stream.$codec?api_key=$_accessToken';
+              final subtitleUrl = '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$realIndex/Stream.$codec?api_key=$_accessToken';
               trackInfo['downloadUrl'] = subtitleUrl;
             }
 
             subtitleTracks.add(trackInfo);
-            debugPrint('JellyfinService: 找到字幕轨道 $i: ${trackInfo['title']} (${trackInfo['type']})');
+            // 注意：这里使用realIndex而不是循环的i
           }
         }
 
@@ -1339,6 +1525,30 @@ class JellyfinService {
       debugPrint('JellyfinService: 下载字幕文件时出错: $e');
       return null;
     }
+  }
+
+  /// 构造字幕显示名称（供设置面板展示）
+  String _buildSubtitleDisplay(
+    String language,
+    String title,
+    String codec,
+    bool isExternal,
+    bool isForced,
+    bool isDefault,
+  ) {
+    final List<String> parts = [];
+    if (title.isNotEmpty) {
+      parts.add(title);
+    } else if (language.isNotEmpty) {
+      parts.add(language);
+    } else {
+      parts.add('字幕');
+    }
+    if (codec.isNotEmpty) parts.add(codec.toUpperCase());
+    if (isExternal) parts.add('外挂');
+    if (isForced) parts.add('强制');
+    if (isDefault) parts.add('默认');
+    return parts.join(' · ');
   }
 
   /// 搜索媒体库中的内容
@@ -1758,5 +1968,18 @@ class JellyfinService {
     }
     
     return false;
+  }
+
+  /// 由 Provider 调用：在运行时更新本地转码缓存（避免在 getStreamUrl 中做异步 IO）
+  void setTranscodePreferences({bool? enabled, JellyfinVideoQuality? defaultQuality}) {
+    if (enabled != null) _transcodeEnabledCache = enabled;
+    if (defaultQuality != null) _defaultQualityCache = defaultQuality;
+    DebugLogService().addLog('Jellyfin: 更新转码偏好 缓存 enabled=${enabled ?? _transcodeEnabledCache}, quality=${defaultQuality ?? _defaultQualityCache}');
+  }
+
+  /// 由 Provider 调用：更新完整转码设置缓存（用于音频/字幕等参数）
+  void setFullTranscodeSettings(JellyfinTranscodeSettings settings) {
+    _settingsCache = settings;
+    DebugLogService().addLog('Jellyfin: 更新完整转码设置缓存 (video/audio/subtitle/adaptive)');
   }
 }

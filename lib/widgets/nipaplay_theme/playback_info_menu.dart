@@ -480,14 +480,38 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       return [InfoItem('状态', '不适用 (本地播放)')];
     }
 
-    // 对于流媒体，默认情况下是直接播放，除非需要转码
-    // 这里可以根据实际的转码状态来显示更准确的信息
-    return [
-      InfoItem('状态', '直接播放', false),
-      InfoItem('协议', isJellyfin ? 'Jellyfin API' : 'Emby API'),
-      InfoItem('传输方式', 'HTTP流'),
-      InfoItem('备注', '如需转码请在设置中调整清晰度'),
-    ];
+    // 获取实际播放URL来判断是否在转码
+    // 对于流媒体，我们需要检查实际的播放URL格式
+    final actualUrl = videoState.currentActualPlayUrl;
+    bool isTranscoding = false;
+    String transcodeType = '未知';
+    
+    if (actualUrl != null) {
+      if (actualUrl.contains('master.m3u8')) {
+        isTranscoding = true;
+        transcodeType = 'HLS 转码';
+      } else if (actualUrl.contains('stream.') || actualUrl.contains('/stream/')) {
+        isTranscoding = true;
+        transcodeType = '流转码';
+      } else if (actualUrl.contains('/original/') || actualUrl.contains('original')) {
+        isTranscoding = false;
+        transcodeType = '直接播放';
+      }
+    }
+    
+    if (isTranscoding) {
+      return [
+        InfoItem('状态', transcodeType, true),
+        InfoItem('协议', isJellyfin ? 'Jellyfin HLS' : 'Emby HLS'),
+        InfoItem('说明', '服务器正在转码视频流'),
+      ];
+    } else {
+      return [
+        InfoItem('状态', '直接播放', false),
+        InfoItem('协议', isJellyfin ? 'Jellyfin API' : 'Emby API'),
+        InfoItem('传输方式', 'HTTP直连'),
+      ];
+    }
   }
 
   bool _isTranscoding(VideoPlayerState videoState) {

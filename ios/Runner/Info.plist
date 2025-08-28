@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>未来需要更新头像</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -152,8 +154,6 @@
 	</array>
 	<key>UISupportsDocumentBrowser</key>
 	<true/>
-	
-	<!-- 文档类型配置 -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -229,8 +229,6 @@
 			</array>
 		</dict>
 	</array>
-	
-	<!-- 导入的内容类型 -->
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>

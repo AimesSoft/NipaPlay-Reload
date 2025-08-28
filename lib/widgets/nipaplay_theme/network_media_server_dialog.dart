@@ -16,6 +16,8 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/url_name_generator.dart';
+import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 
 enum MediaServerType { jellyfin, emby }
 
@@ -216,11 +218,29 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
   late MediaServerProvider _provider;
   List<ServerAddress> _serverAddresses = [];
   String? _currentAddressId;
+  
+  // 转码设置相关状态
+  bool _transcodeSettingsExpanded = false;
+  JellyfinVideoQuality _selectedQuality = JellyfinVideoQuality.bandwidth5m;
+  bool _transcodeEnabled = true;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _provider = NetworkMediaServerDialog._getProvider(context, widget.serverType);
+
+    // 初始化转码Provider（仅对Jellyfin）
+    if (widget.serverType == MediaServerType.jellyfin) {
+      final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+      transcodeProvider.initialize().then((_) {
+        if (mounted) {
+          setState(() {
+            _selectedQuality = transcodeProvider.currentVideoQuality;
+            _transcodeEnabled = transcodeProvider.transcodeEnabled;
+          });
+        }
+      });
+    }
 
     if (_provider.isConnected) {
       _currentAvailableLibraries = List.from(_provider.availableLibraries);
@@ -485,7 +505,12 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                         const SizedBox(height: 20),
                       ],
                       _buildLibrariesSection(),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
+                      if (widget.serverType == MediaServerType.jellyfin) ...[
+                        _buildTranscodeSection(),
+                        const SizedBox(height: 20),
+                      ],
+                      const SizedBox(height: 4),
                       _buildActionButtons(),
                     ],
                   ),
@@ -780,6 +805,253 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
         return Colors.orange;
       default:
         return Colors.grey;
+    }
+  }
+
+  Widget _buildTranscodeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              _transcodeSettingsExpanded = !_transcodeSettingsExpanded;
+            });
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: _transcodeSettingsExpanded 
+                  ? const BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      topRight: Radius.circular(12),
+                    )
+                  : BorderRadius.circular(12),
+              border: _transcodeSettingsExpanded
+                  ? Border(
+                      top: BorderSide(color: Colors.white.withOpacity(0.1)),
+                      left: BorderSide(color: Colors.white.withOpacity(0.1)),
+                      right: BorderSide(color: Colors.white.withOpacity(0.1)),
+                    )
+                  : Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.high_quality, color: Colors.orange, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '转码设置',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '当前默认质量: ${_selectedQuality.displayName}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                AnimatedRotation(
+                  turns: _transcodeSettingsExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.expand_more,
+                    color: Colors.white.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child: _transcodeSettingsExpanded
+              ? Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.03),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(12),
+                      bottomRight: Radius.circular(12),
+                    ),
+                    border: Border(
+                      left: BorderSide(color: Colors.white.withOpacity(0.1)),
+                      right: BorderSide(color: Colors.white.withOpacity(0.1)),
+                      bottom: BorderSide(color: Colors.white.withOpacity(0.1)),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '启用转码',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Switch(
+                            value: _transcodeEnabled,
+                            onChanged: _handleTranscodeEnabledChanged,
+                            activeColor: Colors.orange,
+                            activeTrackColor: Colors.orange.withOpacity(0.3),
+                            inactiveThumbColor: Colors.white.withOpacity(0.5),
+                            inactiveTrackColor: Colors.white.withOpacity(0.1),
+                          ),
+                        ],
+                      ),
+                      if (_transcodeEnabled) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          '默认清晰度',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ...JellyfinVideoQuality.values.map((quality) {
+                          final isSelected = _selectedQuality == quality;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _handleQualityChanged(quality),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isSelected 
+                                        ? Colors.orange.withOpacity(0.2)
+                                        : Colors.white.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isSelected 
+                                          ? Colors.orange
+                                          : Colors.white.withOpacity(0.1),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                        color: isSelected ? Colors.orange : Colors.white70,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              quality.displayName,
+                                              style: TextStyle(
+                                                color: isSelected ? Colors.orange : Colors.white,
+                                                fontSize: 14,
+                                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    ],
+                  ),
+                )
+              : const SizedBox(width: double.infinity, height: 0),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleTranscodeEnabledChanged(bool enabled) async {
+    if (widget.serverType != MediaServerType.jellyfin) return;
+    
+    try {
+      final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+      final success = await transcodeProvider.setTranscodeEnabled(enabled);
+      
+      if (success) {
+        setState(() {
+          _transcodeEnabled = enabled;
+        });
+        if (mounted) {
+          BlurSnackBar.show(context, enabled ? '转码已启用' : '转码已禁用');
+        }
+      } else {
+        if (mounted) {
+          BlurSnackBar.show(context, '设置失败');
+        }
+      }
+    } catch (e) {
+      debugPrint('更新转码启用状态失败: $e');
+      if (mounted) {
+        BlurSnackBar.show(context, '设置失败');
+      }
+    }
+  }
+
+  Future<void> _handleQualityChanged(JellyfinVideoQuality quality) async {
+    if (_selectedQuality == quality || widget.serverType != MediaServerType.jellyfin) return;
+    
+    try {
+      final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+      final success = await transcodeProvider.setDefaultVideoQuality(quality);
+      
+      if (success) {
+        setState(() {
+          _selectedQuality = quality;
+        });
+        if (mounted) {
+          BlurSnackBar.show(context, '默认质量已设置为: ${quality.displayName}');
+        }
+      } else {
+        if (mounted) {
+          BlurSnackBar.show(context, '设置失败');
+        }
+      }
+    } catch (e) {
+      debugPrint('更新默认质量失败: $e');
+      if (mounted) {
+        BlurSnackBar.show(context, '设置失败');
+      }
     }
   }
 
