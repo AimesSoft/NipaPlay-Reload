@@ -183,22 +183,8 @@ class JellyfinDandanplayMatcher {
       // 2. 通过DandanPlay API匹配内容
       final Map<String, dynamic> dummyVideoInfo = await _matchWithDandanPlay(context, episode, showMatchDialog, videoInfo);
       if (dummyVideoInfo['__cancel__'] == true) {
-        debugPrint('用户取消了弹幕匹配，但继续播放视频（无弹幕）');
-        // 不再返回null，而是创建一个不含弹幕信息的基础历史项
-        return WatchHistoryItem(
-          filePath: 'jellyfin://${episode.id}',
-          animeName: episode.seriesName ?? 'Unknown',
-          episodeTitle: episode.name,
-          animeId: null, // 没有弹幕ID
-          episodeId: null, // 没有弹幕ID
-          watchProgress: 0.0,
-          lastPosition: 0,
-          duration: 0,
-          lastWatchTime: DateTime.now(),
-          thumbnailPath: null,
-          isFromScan: false,
-          videoHash: videoInfo['hash'] as String?, // 保留视频哈希
-        );
+        debugPrint('用户取消了弹幕匹配，直接返回null');
+        return null;
       }
       
       // 3. 如果匹配成功，更新历史条目的元数据
