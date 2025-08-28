@@ -9,7 +9,8 @@ class AppTheme {
   static String? get _platformDefaultFont {
     if (kIsWeb) return null; // Web平台使用浏览器默认字体
     if (Platform.isWindows) {
-      return "微软雅黑"; // Windows中文系统默认字体：直接使用中文名称
+      // Windows平台：优先使用思源黑体，备选微软雅黑
+      return "SourceHanSansCN";
     } else if (Platform.isMacOS) {
       return null; // 让Flutter自动选择macOS系统默认字体 (San Francisco)
     } else if (Platform.isLinux) {

@@ -14,6 +14,24 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Setup Chinese Font for Windows
+      shell: pwsh
+      run: |
+        Write-Host "Setting up Chinese font for Windows build..."
+        cd windows
+        if (Test-Path "setup_font.bat") {
+          Write-Host "Executing setup_font.bat..."
+          cmd /c "setup_font.bat"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Warning: Font setup failed with exit code $LASTEXITCODE"
+          } else {
+            Write-Host "Font setup completed successfully"
+          }
+        } else {
+          Write-Host "Warning: setup_font.bat not found, skipping font setup"
+        }
+        cd ..
+    
     - name: Build Web and copy assets
       shell: bash
       run: |
