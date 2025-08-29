@@ -166,7 +166,7 @@ class EmbyDandanplayMatcher {
     
     try {
       // 获取Emby流媒体URL（仅用于日志）
-      final streamUrl = getPlayUrl(episode);
+      final streamUrl = await getPlayUrl(episode);
       debugPrint('正在为Emby内容创建可播放项: ${episode.seriesName} - ${episode.name}');
       debugPrint('Emby流媒体URL: $streamUrl');
       
@@ -280,8 +280,8 @@ class EmbyDandanplayMatcher {
   /// 获取播放URL
   /// 
   /// 根据Emby剧集信息获取媒体流URL
-  String getPlayUrl(EmbyEpisodeInfo episode) {
-    final url = EmbyService.instance.getStreamUrl(episode.id);
+  Future<String> getPlayUrl(EmbyEpisodeInfo episode) async {
+    final url = await EmbyService.instance.getStreamUrl(episode.id);
     debugPrint('Emby流媒体URL: $url');
     return url;
   }
@@ -841,7 +841,7 @@ class EmbyDandanplayMatcher {
       debugPrint('开始计算Emby视频哈希值: $seriesName - $episodeName');
       
       // 获取流媒体URL
-      final String streamUrl = EmbyService.instance.getStreamUrl(episode.id);
+  final String streamUrl = await EmbyService.instance.getStreamUrl(episode.id);
       
       if (streamUrl.isEmpty) {
         debugPrint('无法获取流媒体URL');

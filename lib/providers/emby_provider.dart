@@ -325,9 +325,9 @@ class EmbyProvider extends ChangeNotifier {
     }
   }
   
-  // 获取流媒体URL
-  String getStreamUrl(String itemId) {
-    return _embyService.getStreamUrl(itemId);
+  // 获取流媒体URL（异步，保证含会话参数）
+  Future<String> getStreamUrl(String itemId) async {
+    return await _embyService.getStreamUrl(itemId);
   }
   
   // 获取图片URL

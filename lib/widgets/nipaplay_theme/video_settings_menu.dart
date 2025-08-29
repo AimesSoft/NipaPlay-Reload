@@ -15,6 +15,8 @@ import 'playlist_menu.dart';
 import 'playback_rate_menu.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'danmaku_offset_menu.dart';
+import 'jellyfin_quality_menu.dart';
+import 'playback_info_menu.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -40,6 +42,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   bool _showPlaylist = false;
   bool _showPlaybackRate = false;
   bool _showDanmakuOffset = false;
+  bool _showJellyfinQuality = false;
+  bool _showPlaybackInfo = false;
 
   OverlayEntry? _subtitleTracksOverlay;
   OverlayEntry? _controlBarSettingsOverlay;
@@ -51,6 +55,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   OverlayEntry? _playlistOverlay;
   OverlayEntry? _playbackRateOverlay;
   OverlayEntry? _danmakuOffsetOverlay;
+  OverlayEntry? _jellyfinQualityOverlay;
+  OverlayEntry? _playbackInfoOverlay;
 
   late final List<SettingsItem> _settingsItems;
   late final VideoPlayerState videoState;
@@ -140,6 +146,27 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       isActive: () => _showPlaybackRate,
     ));
     
+    // 添加 Jellyfin/Emby 转码清晰度设置（播放 Jellyfin 或 Emby 内容时显示，同复用 JellyfinQualityMenu UI）
+    if (videoState.currentVideoPath?.startsWith('jellyfin://') == true ||
+      videoState.currentVideoPath?.startsWith('emby://') == true) {
+      _settingsItems.add(SettingsItem(
+        icon: Icons.hd,
+        title: '清晰度',
+        onTap: _toggleJellyfinQualityMenu,
+        isActive: () => _showJellyfinQuality,
+      ));
+    }
+    
+    // 播放信息 - 当有视频播放时显示
+    if (videoState.currentVideoPath != null) {
+      _settingsItems.add(SettingsItem(
+        icon: Icons.info_outline,
+        title: '播放信息',
+        onTap: _togglePlaybackInfoMenu,
+        isActive: () => _showPlaybackInfo,
+      ));
+    }
+    
     // 剧集列表 - 当有视频文件时显示（整合了API、数据库、文件系统三种模式）
     if (videoState.currentVideoPath != null || videoState.animeId != null) {
       _settingsItems.add(SettingsItem(
@@ -155,27 +182,33 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     if (_showSubtitleTracks) {
       _subtitleTracksOverlay?.remove();
       _subtitleTracksOverlay = null;
-      setState(() => _showSubtitleTracks = false);
+      if (mounted) {
+        setState(() => _showSubtitleTracks = false);
+      }
     } else {
       _closeAllOverlays();
-      setState(() {
-        _showSubtitleTracks = true;
-        _showControlBarSettings = false;
-        _showDanmakuSettings = false;
-        _showAudioTracks = false;
-        _showDanmakuList = false;
-        _showDanmakuTracks = false;
-        _showSubtitleList = false;
-        _showPlaylist = false;
-        _showDanmakuOffset = false;
-      });
+      if (mounted) {
+        setState(() {
+          _showSubtitleTracks = true;
+          _showControlBarSettings = false;
+          _showDanmakuSettings = false;
+          _showAudioTracks = false;
+          _showDanmakuList = false;
+          _showDanmakuTracks = false;
+          _showSubtitleList = false;
+          _showPlaylist = false;
+          _showDanmakuOffset = false;
+        });
+      }
       
       _subtitleTracksOverlay = OverlayEntry(
         builder: (context) => SubtitleTracksMenu(
           onClose: () {
             _subtitleTracksOverlay?.remove();
             _subtitleTracksOverlay = null;
-            setState(() => _showSubtitleTracks = false);
+            if (mounted) {
+              setState(() => _showSubtitleTracks = false);
+            }
           },
         ),
       );
@@ -188,27 +221,33 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     if (_showAudioTracks) {
       _audioTracksOverlay?.remove();
       _audioTracksOverlay = null;
-      setState(() => _showAudioTracks = false);
+      if (mounted) {
+        setState(() => _showAudioTracks = false);
+      }
     } else {
       _closeAllOverlays();
-      setState(() {
-        _showAudioTracks = true;
-        _showSubtitleTracks = false;
-        _showControlBarSettings = false;
-        _showDanmakuSettings = false;
-        _showDanmakuList = false;
-        _showDanmakuTracks = false;
-        _showSubtitleList = false;
-        _showPlaylist = false;
-        _showDanmakuOffset = false;
-      });
+      if (mounted) {
+        setState(() {
+          _showAudioTracks = true;
+          _showSubtitleTracks = false;
+          _showControlBarSettings = false;
+          _showDanmakuSettings = false;
+          _showDanmakuList = false;
+          _showDanmakuTracks = false;
+          _showSubtitleList = false;
+          _showPlaylist = false;
+          _showDanmakuOffset = false;
+        });
+      }
       
       _audioTracksOverlay = OverlayEntry(
         builder: (context) => AudioTracksMenu(
           onClose: () {
             _audioTracksOverlay?.remove();
             _audioTracksOverlay = null;
-            setState(() => _showAudioTracks = false);
+            if (mounted) {
+              setState(() => _showAudioTracks = false);
+            }
           },
         ),
       );
@@ -221,27 +260,33 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     if (_showControlBarSettings) {
       _controlBarSettingsOverlay?.remove();
       _controlBarSettingsOverlay = null;
-      setState(() => _showControlBarSettings = false);
+      if (mounted) {
+        setState(() => _showControlBarSettings = false);
+      }
     } else {
       _closeAllOverlays();
-      setState(() {
-        _showControlBarSettings = true;
-        _showSubtitleTracks = false;
-        _showDanmakuSettings = false;
-        _showAudioTracks = false;
-        _showDanmakuList = false;
-        _showDanmakuTracks = false;
-        _showSubtitleList = false;
-        _showPlaylist = false;
-        _showDanmakuOffset = false;
-      });
+      if (mounted) {
+        setState(() {
+          _showControlBarSettings = true;
+          _showSubtitleTracks = false;
+          _showDanmakuSettings = false;
+          _showAudioTracks = false;
+          _showDanmakuList = false;
+          _showDanmakuTracks = false;
+          _showSubtitleList = false;
+          _showPlaylist = false;
+          _showDanmakuOffset = false;
+        });
+      }
 
       _controlBarSettingsOverlay = OverlayEntry(
         builder: (context) => ControlBarSettingsMenu(
           onClose: () {
             _controlBarSettingsOverlay?.remove();
             _controlBarSettingsOverlay = null;
-            setState(() => _showControlBarSettings = false);
+            if (mounted) {
+              setState(() => _showControlBarSettings = false);
+            }
           },
           videoState: videoState,
         ),
@@ -255,27 +300,33 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     if (_showDanmakuSettings) {
       _danmakuSettingsOverlay?.remove();
       _danmakuSettingsOverlay = null;
-      setState(() => _showDanmakuSettings = false);
+      if (mounted) {
+        setState(() => _showDanmakuSettings = false);
+      }
     } else {
       _closeAllOverlays();
-      setState(() {
-        _showDanmakuSettings = true;
-        _showSubtitleTracks = false;
-        _showControlBarSettings = false;
-        _showAudioTracks = false;
-        _showDanmakuList = false;
-        _showDanmakuTracks = false;
-        _showSubtitleList = false;
-        _showPlaylist = false;
-        _showDanmakuOffset = false;
-      });
+      if (mounted) {
+        setState(() {
+          _showDanmakuSettings = true;
+          _showSubtitleTracks = false;
+          _showControlBarSettings = false;
+          _showAudioTracks = false;
+          _showDanmakuList = false;
+          _showDanmakuTracks = false;
+          _showSubtitleList = false;
+          _showPlaylist = false;
+          _showDanmakuOffset = false;
+        });
+      }
 
       _danmakuSettingsOverlay = OverlayEntry(
         builder: (context) => DanmakuSettingsMenu(
           onClose: () {
             _danmakuSettingsOverlay?.remove();
             _danmakuSettingsOverlay = null;
-            setState(() => _showDanmakuSettings = false);
+            if (mounted) {
+              setState(() => _showDanmakuSettings = false);
+            }
           },
           videoState: videoState,
         ),
@@ -289,20 +340,24 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     if (_showDanmakuList) {
       _danmakuListOverlay?.remove();
       _danmakuListOverlay = null;
-      setState(() => _showDanmakuList = false);
+      if (mounted) {
+        setState(() => _showDanmakuList = false);
+      }
     } else {
       _closeAllOverlays();
-      setState(() {
-        _showDanmakuList = true;
-        _showSubtitleTracks = false;
-        _showControlBarSettings = false;
-        _showDanmakuSettings = false;
-        _showAudioTracks = false;
-        _showDanmakuTracks = false;
-        _showSubtitleList = false;
-        _showPlaylist = false;
-        _showDanmakuOffset = false;
-      });
+      if (mounted) {
+        setState(() {
+          _showDanmakuList = true;
+          _showSubtitleTracks = false;
+          _showControlBarSettings = false;
+          _showDanmakuSettings = false;
+          _showAudioTracks = false;
+          _showDanmakuTracks = false;
+          _showSubtitleList = false;
+          _showPlaylist = false;
+          _showDanmakuOffset = false;
+        });
+      }
 
       _danmakuListOverlay = OverlayEntry(
         builder: (context) => DanmakuListMenu(
@@ -310,7 +365,9 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
           onClose: () {
             _danmakuListOverlay?.remove();
             _danmakuListOverlay = null;
-            setState(() => _showDanmakuList = false);
+            if (mounted) {
+              setState(() => _showDanmakuList = false);
+            }
           },
         ),
       );
@@ -323,27 +380,33 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     if (_showDanmakuTracks) {
       _danmakuTracksOverlay?.remove();
       _danmakuTracksOverlay = null;
-      setState(() => _showDanmakuTracks = false);
+      if (mounted) {
+        setState(() => _showDanmakuTracks = false);
+      }
     } else {
       _closeAllOverlays();
-      setState(() {
-        _showDanmakuTracks = true;
-        _showSubtitleTracks = false;
-        _showControlBarSettings = false;
-        _showDanmakuSettings = false;
-        _showAudioTracks = false;
-        _showDanmakuList = false;
-        _showSubtitleList = false;
-        _showPlaylist = false;
-        _showDanmakuOffset = false;
-      });
+      if (mounted) {
+        setState(() {
+          _showDanmakuTracks = true;
+          _showSubtitleTracks = false;
+          _showControlBarSettings = false;
+          _showDanmakuSettings = false;
+          _showAudioTracks = false;
+          _showDanmakuList = false;
+          _showSubtitleList = false;
+          _showPlaylist = false;
+          _showDanmakuOffset = false;
+        });
+      }
 
       _danmakuTracksOverlay = OverlayEntry(
         builder: (context) => DanmakuTracksMenu(
           onClose: () {
             _danmakuTracksOverlay?.remove();
             _danmakuTracksOverlay = null;
-            setState(() => _showDanmakuTracks = false);
+            if (mounted) {
+              setState(() => _showDanmakuTracks = false);
+            }
           },
         ),
       );
@@ -356,27 +419,33 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     if (_showSubtitleList) {
       _subtitleListOverlay?.remove();
       _subtitleListOverlay = null;
-      setState(() => _showSubtitleList = false);
+      if (mounted) {
+        setState(() => _showSubtitleList = false);
+      }
     } else {
       _closeAllOverlays();
-      setState(() {
-        _showSubtitleList = true;
-        _showSubtitleTracks = false;
-        _showControlBarSettings = false;
-        _showDanmakuSettings = false;
-        _showAudioTracks = false;
-        _showDanmakuList = false;
-        _showDanmakuTracks = false;
-        _showPlaylist = false;
-        _showDanmakuOffset = false;
-      });
+      if (mounted) {
+        setState(() {
+          _showSubtitleList = true;
+          _showSubtitleTracks = false;
+          _showControlBarSettings = false;
+          _showDanmakuSettings = false;
+          _showAudioTracks = false;
+          _showDanmakuList = false;
+          _showDanmakuTracks = false;
+          _showPlaylist = false;
+          _showDanmakuOffset = false;
+        });
+      }
 
       _subtitleListOverlay = OverlayEntry(
         builder: (context) => SubtitleListMenu(
           onClose: () {
             _subtitleListOverlay?.remove();
             _subtitleListOverlay = null;
-            setState(() => _showSubtitleList = false);
+            if (mounted) {
+              setState(() => _showSubtitleList = false);
+            }
           },
         ),
       );
@@ -439,6 +508,10 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _playbackRateOverlay = null;
     _danmakuOffsetOverlay?.remove();
     _danmakuOffsetOverlay = null;
+    _jellyfinQualityOverlay?.remove();
+    _jellyfinQualityOverlay = null;
+    _playbackInfoOverlay?.remove();
+    _playbackInfoOverlay = null;
     
     // 只有在组件仍然挂载时才调用setState
     if (mounted) {
@@ -452,6 +525,9 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showSubtitleList = false;
         _showPlaylist = false;
         _showDanmakuOffset = false;
+        _showPlaybackRate = false;
+        _showJellyfinQuality = false;
+        _showPlaybackInfo = false;
       });
     } else {
       // 如果组件已经被销毁，直接更新值而不调用setState
@@ -464,6 +540,9 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _showSubtitleList = false;
       _showPlaylist = false;
       _showDanmakuOffset = false;
+      _showPlaybackRate = false;
+      _showJellyfinQuality = false;
+      _showPlaybackInfo = false;
     }
   }
 
@@ -718,6 +797,87 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       );
 
       Overlay.of(context).insert(_danmakuOffsetOverlay!);
+    }
+  }
+
+  // 添加 Jellyfin 转码质量菜单切换方法
+  void _toggleJellyfinQualityMenu() {
+    if (_showJellyfinQuality) {
+      _jellyfinQualityOverlay?.remove();
+      _jellyfinQualityOverlay = null;
+      if (mounted) {
+        setState(() => _showJellyfinQuality = false);
+      }
+    } else {
+      _closeAllOverlays();
+      if (mounted) {
+        setState(() {
+          _showJellyfinQuality = true;
+          _showSubtitleTracks = false;
+          _showControlBarSettings = false;
+          _showDanmakuSettings = false;
+          _showAudioTracks = false;
+          _showDanmakuList = false;
+          _showDanmakuTracks = false;
+          _showSubtitleList = false;
+          _showPlaylist = false;
+          _showDanmakuOffset = false;
+          _showPlaybackRate = false;
+        });
+      }
+      
+      _jellyfinQualityOverlay = OverlayEntry(
+        builder: (context) => JellyfinQualityMenu(
+          onClose: () {
+            _jellyfinQualityOverlay?.remove();
+            _jellyfinQualityOverlay = null;
+            if (mounted) {
+              setState(() => _showJellyfinQuality = false);
+            }
+          },
+        ),
+      );
+
+      Overlay.of(context).insert(_jellyfinQualityOverlay!);
+    }
+  }
+
+  // 添加播放信息菜单切换方法
+  void _togglePlaybackInfoMenu() {
+    if (_showPlaybackInfo) {
+      _playbackInfoOverlay?.remove();
+      _playbackInfoOverlay = null;
+      setState(() => _showPlaybackInfo = false);
+    } else {
+      _closeAllOverlays();
+      setState(() {
+        _showPlaybackInfo = true;
+        _showSubtitleTracks = false;
+        _showControlBarSettings = false;
+        _showDanmakuSettings = false;
+        _showAudioTracks = false;
+        _showDanmakuList = false;
+        _showDanmakuTracks = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
+        _showDanmakuOffset = false;
+        _showPlaybackRate = false;
+        _showJellyfinQuality = false;
+      });
+      
+      _playbackInfoOverlay = OverlayEntry(
+        builder: (context) => PlaybackInfoMenu(
+          onClose: () {
+            _playbackInfoOverlay?.remove();
+            _playbackInfoOverlay = null;
+            if (mounted) {
+              setState(() => _showPlaybackInfo = false);
+            }
+          },
+        ),
+      );
+
+      Overlay.of(context).insert(_playbackInfoOverlay!);
     }
   }
 }

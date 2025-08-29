@@ -283,7 +283,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           }
           
           // 获取实际的流媒体URL
-          final actualUrl = EmbyService.instance.getStreamUrl(episodeId);
+          final actualUrl = await EmbyService.instance.getStreamUrl(episodeId);
           debugPrint('[播放列表] 获取Emby流媒体URL: $actualUrl');
           
           // 尝试获取弹幕映射

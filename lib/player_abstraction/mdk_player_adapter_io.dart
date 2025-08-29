@@ -362,4 +362,62 @@ class MdkPlayerAdapter implements AbstractPlayer {
   void setPlaybackRate(double rate) {
     playbackRate = rate;
   }
+
+  // 提供详细播放技术信息（MDK）
+  Map<String, dynamic> getDetailedMediaInfo() {
+    final info = _mdkPlayer.mediaInfo;
+    final Map<String, dynamic> ret = {
+      'kernel': 'MDK',
+      'video': <dynamic>[],
+      'audio': <dynamic>[],
+      'duration': info.duration,
+    };
+
+    try {
+      ret['video'] = (info.video ?? []).map((v) {
+        final codec = v.codec;
+        String codecName = 'unknown';
+        try {
+          final dynamic name = (v as dynamic).codecName;
+          if (name is String && name.isNotEmpty) codecName = name;
+        } catch (_) {
+          codecName = codec.toString();
+        }
+        return {
+          'codecName': codecName,
+          'width': codec.width,
+          'height': codec.height,
+          'raw': v.toString(),
+        };
+      }).toList();
+    } catch (_) {}
+
+    try {
+      ret['audio'] = (info.audio ?? []).map((a) {
+        final dynamic c = (a as dynamic).codec;
+        String? name;
+        int? bitRate;
+        int? channels;
+        int? sampleRate;
+        try { name = c?.name as String?; } catch (_) {}
+        try { bitRate = c?.bit_rate as int?; } catch (_) {}
+        try { channels = c?.channels as int?; } catch (_) {}
+        try { sampleRate = c?.sample_rate as int?; } catch (_) {}
+        return {
+          'codecName': name,
+          'bitRate': bitRate,
+          'channels': channels,
+          'sampleRate': sampleRate,
+          'raw': a.toString(),
+        };
+      }).toList();
+    } catch (_) {}
+
+    return ret;
+  }
+
+  // MDK 的异步接口：直接返回同步结果（MDK 获取多为同步）
+  Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
+    return getDetailedMediaInfo();
+  }
 } 

@@ -1432,6 +1432,238 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }
     }
   }
+
+  // 提供详细播放技术信息
+  Map<String, dynamic> getDetailedMediaInfo() {
+    final Map<String, dynamic> result = {
+      'kernel': 'MediaKit',
+      'mpvProperties': <String, dynamic>{},
+      'videoParams': <String, dynamic>{},
+      'audioParams': <String, dynamic>{},
+      'tracks': <String, dynamic>{},
+    };
+
+    // 尝试获取mpv底层属性
+    try {
+      final dynamic platform = _player.platform;
+      if (platform != null) {
+        dynamic _gp(String name) {
+          try {
+            final v = platform.getProperty?.call(name);
+            if (v is Future) {
+              // 避免阻塞UI，同步接口不await，直接返回占位
+              return null;
+            }
+            return v;
+          } catch (_) {
+            return null;
+          }
+        }
+
+        final mpv = <String, dynamic>{
+          // fps
+          'container-fps': _gp('container-fps'),
+          'estimated-vf-fps': _gp('estimated-vf-fps'),
+          // bitrate
+          'video-bitrate': _gp('video-bitrate'),
+          'audio-bitrate': _gp('audio-bitrate'),
+          'demuxer-bitrate': _gp('demuxer-bitrate'),
+          'container-bitrate': _gp('container-bitrate'),
+          'bitrate': _gp('bitrate'),
+          // hwdec
+          'hwdec': _gp('hwdec'),
+          'hwdec-current': _gp('hwdec-current'),
+          'hwdec-active': _gp('hwdec-active'),
+          'current-vo': _gp('current-vo'),
+          // video params
+          'video-params/colormatrix': _gp('video-params/colormatrix'),
+          'video-params/colorprimaries': _gp('video-params/colorprimaries'),
+          'video-params/transfer': _gp('video-params/transfer'),
+          // codecs
+          'video-codec': _gp('video-codec'),
+          'audio-codec': _gp('audio-codec'),
+          'audio-codec-name': _gp('audio-codec-name'),
+          // audio params
+          'audio-samplerate': _gp('audio-samplerate'),
+          'audio-channels': _gp('audio-channels'),
+          'audio-params/channel-count': _gp('audio-params/channel-count'),
+          'audio-channel-layout': _gp('audio-channel-layout'),
+          'audio-params/channel-layout': _gp('audio-params/channel-layout'),
+          'audio-params/format': _gp('audio-params/format'),
+          // track ids
+          'vid': _gp('vid'),
+          'aid': _gp('aid'),
+          'sid': _gp('sid'),
+        }..removeWhere((k, v) => v == null);
+
+        result['mpvProperties'] = mpv;
+      }
+    } catch (_) {}
+
+    // 视频参数
+    try {
+      result['videoParams'] = <String, dynamic>{
+        'width': _player.state.width,
+        'height': _player.state.height,
+      };
+    } catch (_) {}
+
+    // 音频参数
+    try {
+      result['audioParams'] = <String, dynamic>{
+        'channels': _player.state.audioParams.channels,
+        'sampleRate': _player.state.audioParams.sampleRate,
+        'format': _player.state.audioParams.format,
+      };
+    } catch (_) {}
+
+    // 轨道信息
+    try {
+      final tracks = _player.state.tracks;
+      result['tracks'] = {
+        'video': tracks.video
+            .map((t) => {
+                  'id': t.id,
+                  'title': t.title,
+                  'language': t.language,
+                  'codec': t.codec,
+                })
+            .toList(),
+        'audio': tracks.audio
+            .map((t) => {
+                  'id': t.id,
+                  'title': t.title,
+                  'language': t.language,
+                  'codec': t.codec,
+                })
+            .toList(),
+        'subtitle': tracks.subtitle
+            .map((t) => {
+                  'id': t.id,
+                  'title': t.title,
+                  'language': t.language,
+                })
+            .toList(),
+      };
+    } catch (_) {}
+
+    // 估算比特率（若mpv未提供）
+    // 省略基于文件大小的码率估算以保持跨平台稳定
+    try {
+      if (!(result['mpvProperties'] as Map).containsKey('video-bitrate')) {
+        // 留空，UI可根据 mpvProperties 中的其他字段或自行估算
+      }
+    } catch (_) {}
+
+    return result;
+  }
+
+  // 异步版本：等待 mpv 属性获取，填充更多字段
+  Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
+    final Map<String, dynamic> result = {
+      'kernel': 'MediaKit',
+      'mpvProperties': <String, dynamic>{},
+      'videoParams': <String, dynamic>{},
+      'audioParams': <String, dynamic>{},
+      'tracks': <String, dynamic>{},
+    };
+
+    // 获取 mpv 属性（await）
+    try {
+      final dynamic platform = _player.platform;
+      if (platform != null) {
+        Future<dynamic> _gp(String name) async {
+          try {
+            final v = platform.getProperty?.call(name);
+            if (v is Future) return await v; // 等待实际值
+            return v;
+          } catch (_) {
+            return null;
+          }
+        }
+
+        final mpv = <String, dynamic>{
+          'container-fps': await _gp('container-fps'),
+          'estimated-vf-fps': await _gp('estimated-vf-fps'),
+          'video-bitrate': await _gp('video-bitrate'),
+          'audio-bitrate': await _gp('audio-bitrate'),
+          'demuxer-bitrate': await _gp('demuxer-bitrate'),
+          'container-bitrate': await _gp('container-bitrate'),
+          'bitrate': await _gp('bitrate'),
+          'hwdec': await _gp('hwdec'),
+          'hwdec-current': await _gp('hwdec-current'),
+          'hwdec-active': await _gp('hwdec-active'),
+          'current-vo': await _gp('current-vo'),
+          'video-params/colormatrix': await _gp('video-params/colormatrix'),
+          'video-params/colorprimaries': await _gp('video-params/colorprimaries'),
+          'video-params/transfer': await _gp('video-params/transfer'),
+          'video-codec': await _gp('video-codec'),
+          'audio-codec': await _gp('audio-codec'),
+          'audio-codec-name': await _gp('audio-codec-name'),
+          'audio-samplerate': await _gp('audio-samplerate'),
+          'audio-channels': await _gp('audio-channels'),
+          'audio-params/channel-count': await _gp('audio-params/channel-count'),
+          'audio-channel-layout': await _gp('audio-channel-layout'),
+          'audio-params/channel-layout': await _gp('audio-params/channel-layout'),
+          'audio-params/format': await _gp('audio-params/format'),
+          'vid': await _gp('vid'),
+          'aid': await _gp('aid'),
+          'sid': await _gp('sid'),
+        }..removeWhere((k, v) => v == null);
+
+        result['mpvProperties'] = mpv;
+      }
+    } catch (_) {}
+
+    // 视频参数
+    try {
+      result['videoParams'] = <String, dynamic>{
+        'width': _player.state.width,
+        'height': _player.state.height,
+      };
+    } catch (_) {}
+
+    // 音频参数
+    try {
+      result['audioParams'] = <String, dynamic>{
+        'channels': _player.state.audioParams.channels,
+        'sampleRate': _player.state.audioParams.sampleRate,
+        'format': _player.state.audioParams.format,
+      };
+    } catch (_) {}
+
+    // 轨道信息
+    try {
+      final tracks = _player.state.tracks;
+      result['tracks'] = {
+        'video': tracks.video
+            .map((t) => {
+                  'id': t.id,
+                  'title': t.title,
+                  'language': t.language,
+                  'codec': t.codec,
+                })
+            .toList(),
+        'audio': tracks.audio
+            .map((t) => {
+                  'id': t.id,
+                  'title': t.title,
+                  'language': t.language,
+                  'codec': t.codec,
+                })
+            .toList(),
+        'subtitle': tracks.subtitle
+            .map((t) => {
+                  'id': t.id,
+                  'title': t.title,
+                  'language': t.language,
+                })
+            .toList(),
+      };
+    } catch (_) {}
+
+    return result;
+  }
 }
 
 // Helper map similar to SubtitleManager's languagePatterns

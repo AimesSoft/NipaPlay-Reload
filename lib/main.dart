@@ -31,6 +31,8 @@ import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
+import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/pages/fluent_main_page.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'dart:async';
@@ -454,6 +456,8 @@ void main(List<String> args) async {
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
           ChangeNotifierProvider(create: (_) => UIThemeProvider()),
+          ChangeNotifierProvider(create: (_) => JellyfinTranscodeProvider()),
+          ChangeNotifierProvider(create: (_) => EmbyTranscodeProvider()),
           ChangeNotifierProvider.value(value: debugLogService),
           ChangeNotifierProvider.value(value: ServiceProvider.jellyfinProvider),
           ChangeNotifierProvider.value(value: ServiceProvider.embyProvider),

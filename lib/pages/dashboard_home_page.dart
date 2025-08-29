@@ -2493,7 +2493,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 已移除旧的创建本地动画项目的重量级方法，改为快速路径+后台补齐。
 
   void _navigateToJellyfinDetail(String jellyfinId) {
-    MediaServerDetailPage.showJellyfin(context, jellyfinId).then((result) {
+    MediaServerDetailPage.showJellyfin(context, jellyfinId).then((result) async {
       if (result != null) {
         // 检查是否需要获取实际播放URL
         String? actualPlayUrl;
@@ -2519,7 +2519,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             final embyId = result.filePath.replaceFirst('emby://', '');
             final embyService = EmbyService.instance;
             if (embyService.isConnected) {
-              actualPlayUrl = embyService.getStreamUrl(embyId);
+              actualPlayUrl = await embyService.getStreamUrl(embyId);
             } else {
               BlurSnackBar.show(context, '未连接到Emby服务器');
               return;
@@ -2550,7 +2550,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   void _navigateToEmbyDetail(String embyId) {
-    MediaServerDetailPage.showEmby(context, embyId).then((result) {
+    MediaServerDetailPage.showEmby(context, embyId).then((result) async {
       if (result != null) {
         // 检查是否需要获取实际播放URL
         String? actualPlayUrl;
@@ -2571,12 +2571,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
             return;
           }
-        } else if (isEmbyProtocol) {
+    } else if (isEmbyProtocol) {
           try {
             final embyId = result.filePath.replaceFirst('emby://', '');
             final embyService = EmbyService.instance;
             if (embyService.isConnected) {
-              actualPlayUrl = embyService.getStreamUrl(embyId);
+      actualPlayUrl = await embyService.getStreamUrl(embyId);
             } else {
               BlurSnackBar.show(context, '未连接到Emby服务器');
               return;
@@ -2634,12 +2634,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         }
       }
       
-      if (isEmbyProtocol) {
+  if (isEmbyProtocol) {
         try {
           final embyId = item.filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
-            actualPlayUrl = embyService.getStreamUrl(embyId);
+    actualPlayUrl = await embyService.getStreamUrl(embyId);
           } else {
             BlurSnackBar.show(context, '未连接到Emby服务器');
             return;

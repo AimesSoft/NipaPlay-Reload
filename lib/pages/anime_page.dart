@@ -129,7 +129,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           final embyId = item.filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
-            actualPlayUrl = embyService.getStreamUrl(embyId);
+            actualPlayUrl = await embyService.getStreamUrl(embyId);
           } else {
             BlurSnackBar.show(context, '未连接到Emby服务器');
             return;

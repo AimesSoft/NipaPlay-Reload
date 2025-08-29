@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart' if (dart.library.html) 'packag
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'debug_log_service.dart';
+import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay/services/emby_transcode_manager.dart';
 
 import 'package:nipaplay/utils/url_name_generator.dart';
 
@@ -55,6 +57,11 @@ class EmbyService {
   String? _currentAddressId;
   final MultiAddressServerService _multiAddressService = MultiAddressServerService.instance;
 
+  // 转码偏好缓存（内存）——让 Provider 能在运行时同步设置，避免 async IO
+  bool _transcodeEnabledCache = false;
+  JellyfinVideoQuality _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
+  JellyfinTranscodeSettings _settingsCache = const JellyfinTranscodeSettings();
+
   // Client information cache
   String? _cachedClientInfo;
 
@@ -86,6 +93,90 @@ class EmbyService {
       // Fallback to static values
       _cachedClientInfo = 'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.4.9"';
       return _cachedClientInfo!;
+    }
+  }
+
+  /// 获取服务器端的媒体技术元数据（容器/编解码器/Profile/Level/HDR/声道/码率等）
+  /// 结构与 Jellyfin 保持一致，字段命名相同，便于 UI 统一展示。
+  Future<Map<String, dynamic>> getServerMediaTechnicalInfo(String itemId) async {
+    if (!_isConnected || _userId == null) {
+      return {};
+    }
+
+    final Map<String, dynamic> result = {
+      'container': null,
+      'video': <String, dynamic>{},
+      'audio': <String, dynamic>{},
+    };
+
+    try {
+      // 1) 优先 PlaybackInfo
+      final playbackResp = await _makeAuthenticatedRequest(
+        '/emby/Items/$itemId/PlaybackInfo?UserId=$_userId',
+      );
+      Map<String, dynamic>? firstSource;
+      Map<String, dynamic>? videoStream;
+      Map<String, dynamic>? audioStream;
+
+      if (playbackResp.statusCode == 200) {
+        final pbData = json.decode(playbackResp.body);
+        final mediaSources = pbData['MediaSources'];
+        if (mediaSources is List && mediaSources.isNotEmpty) {
+          firstSource = Map<String, dynamic>.from(mediaSources.first);
+          result['container'] = firstSource['Container'];
+          final streams = firstSource['MediaStreams'];
+          if (streams is List) {
+            for (final s in streams) {
+              if (s is Map && s['Type'] == 'Video' && videoStream == null) {
+                videoStream = Map<String, dynamic>.from(s);
+              } else if (s is Map && s['Type'] == 'Audio' && audioStream == null) {
+                audioStream = Map<String, dynamic>.from(s);
+              }
+            }
+          }
+        }
+      }
+
+      // 2) 补充 Items 详情
+      Map<String, dynamic>? itemDetail;
+      try {
+        final itemResp = await _makeAuthenticatedRequest('/emby/Users/$_userId/Items/$itemId');
+        if (itemResp.statusCode == 200) {
+          itemDetail = Map<String, dynamic>.from(json.decode(itemResp.body));
+        }
+      } catch (_) {}
+
+      final video = <String, dynamic>{
+        'codec': videoStream?['Codec'] ?? firstSource?['VideoCodec'],
+        'profile': videoStream?['Profile'],
+        'level': videoStream?['Level']?.toString(),
+        'bitDepth': videoStream?['BitDepth'],
+        'width': videoStream?['Width'] ?? firstSource?['Width'],
+        'height': videoStream?['Height'] ?? firstSource?['Height'],
+        'frameRate': videoStream?['RealFrameRate'] ?? videoStream?['AverageFrameRate'],
+        'bitRate': videoStream?['BitRate'] ?? firstSource?['Bitrate'],
+        'pixelFormat': videoStream?['PixelFormat'],
+        'colorSpace': videoStream?['ColorSpace'],
+        'colorTransfer': videoStream?['ColorTransfer'],
+        'colorPrimaries': videoStream?['ColorPrimaries'],
+        'dynamicRange': videoStream?['VideoRange'] ?? itemDetail?['VideoRange'],
+      };
+
+      final audio = <String, dynamic>{
+        'codec': audioStream?['Codec'] ?? firstSource?['AudioCodec'],
+        'channels': audioStream?['Channels'],
+        'channelLayout': audioStream?['ChannelLayout'],
+        'sampleRate': audioStream?['SampleRate'],
+        'bitRate': audioStream?['BitRate'] ?? firstSource?['AudioBitrate'],
+        'language': audioStream?['Language'],
+      };
+
+      result['video'] = video;
+      result['audio'] = audio;
+      return result;
+    } catch (e) {
+      DebugLogService().addLog('EmbyService: 获取媒体技术元数据失败: $e');
+      return {};
     }
   }
 
@@ -151,6 +242,21 @@ class EmbyService {
       print('Emby: 缺少必要的连接信息，跳过自动连接');
       _isConnected = false;
   _isReady = false;
+    }
+
+    // 预加载转码设置到本地缓存，避免在 getStreamUrl 中做异步操作（与 Jellyfin 行为一致）
+    try {
+      final transMgr = EmbyTranscodeManager.instance;
+      await transMgr.initialize();
+      _transcodeEnabledCache = await transMgr.isTranscodingEnabled();
+      _defaultQualityCache = await transMgr.getDefaultVideoQuality();
+      _settingsCache = await transMgr.getSettings();
+      DebugLogService().addLog('Emby: 已加载转码偏好 缓存 enabled=' + _transcodeEnabledCache.toString() + ', quality=' + _defaultQualityCache.toString());
+    } catch (e) {
+      DebugLogService().addLog('Emby: 加载转码偏好失败，使用默认值: $e');
+      _transcodeEnabledCache = false;
+      _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
+      _settingsCache = const JellyfinTranscodeSettings();
     }
   }
   
@@ -1130,12 +1236,228 @@ class EmbyService {
     return null;
   }
   
-  String getStreamUrl(String itemId) {
+  // 获取流媒体URL（异步，确保含 MediaSourceId/PlaySessionId）
+  Future<String> getStreamUrl(String itemId) async {
     if (!_isConnected || _accessToken == null) {
       return '';
     }
-    
-    return '$_serverUrl/emby/Videos/$itemId/stream?api_key=$_accessToken&Static=true';
+    // 使用缓存的转码设置决定默认质量
+    final effectiveQuality = _transcodeEnabledCache
+        ? _defaultQualityCache
+        : JellyfinVideoQuality.original;
+
+    // 原画或未启用转码 -> 直连
+    if (effectiveQuality == JellyfinVideoQuality.original) {
+      return _buildDirectPlayUrl(itemId);
+    }
+
+    // 其余情况 -> 通过 PlaybackInfo 构建带会话的 HLS URL
+    return await buildHlsUrlWithOptions(
+      itemId,
+      quality: effectiveQuality,
+    );
+  }
+
+  /// 获取流媒体URL（同步），与 Jellyfin 保持一致的调用方式
+  /// 若 quality 为 original 或强制直连，则返回直连 Static 流；否则返回带转码参数的 HLS master.m3u8。
+  String getStreamUrlWithOptions(
+    String itemId, {
+    JellyfinVideoQuality? quality,
+    bool forceDirectPlay = false,
+    int? subtitleStreamIndex,
+    bool? burnInSubtitle,
+  }) {
+    if (!_isConnected || _accessToken == null) {
+      throw Exception('未连接到Emby服务器');
+    }
+
+    // 强制直连
+    if (forceDirectPlay) {
+      return _buildDirectPlayUrl(itemId);
+    }
+
+    // 计算实际清晰度
+    final effective = quality ?? (_transcodeEnabledCache
+        ? _defaultQualityCache
+        : JellyfinVideoQuality.original);
+
+    // 构建直连或转码 URL
+    return _buildTranscodeUrlSync(
+      itemId,
+      effective,
+      subtitleStreamIndex: subtitleStreamIndex,
+      burnInSubtitle: burnInSubtitle,
+    );
+  }
+
+  /// 构建直连URL（不转码）
+  String _buildDirectPlayUrl(String itemId) {
+    return '$_serverUrl/emby/Videos/$itemId/stream?Static=true&api_key=$_accessToken';
+  }
+
+  /// 构建转码URL（HLS 使用 master.m3u8，尽量同步生成，必要参数使用约定填充）
+  /// 说明：为保持同步调用，此处不请求 PlaybackInfo；在多数 Emby 环境下可以正常工作。
+  /// 若遇到个别服务器需要 MediaSourceId/PlaySessionId，可通过 UI 切换质量时的异步 buildHlsUrlWithOptions 获得更稳妥的 URL。
+  String _buildTranscodeUrlSync(
+    String itemId,
+    JellyfinVideoQuality? quality, {
+    int? subtitleStreamIndex,
+    bool? burnInSubtitle,
+  }) {
+    // original 或未指定 -> 直连
+    if (quality == null || quality == JellyfinVideoQuality.original) {
+      return _buildDirectPlayUrl(itemId);
+    }
+
+    final params = <String, String>{
+      'api_key': _accessToken!,
+      // HLS 分片容器
+      'Container': 'ts',
+      // 尝试传递 MediaSourceId 为 itemId（大多数情况下等同）以避免服务器端 mediaSource 为空
+      'MediaSourceId': itemId,
+    };
+
+    // 添加常规转码参数（码率/分辨率/编解码器/音频限制/字幕处理）
+    _addTranscodeParameters(
+      params,
+      quality,
+      subtitleStreamIndex: subtitleStreamIndex,
+      burnInSubtitle: burnInSubtitle,
+    );
+
+    final uri = Uri.parse('$_serverUrl/emby/Videos/$itemId/master.m3u8')
+        .replace(queryParameters: params);
+    debugPrint('[Emby HLS(sync)] 构建URL: ${uri.toString()}');
+    return uri.toString();
+  }
+
+  /// 构建 Emby HLS URL（带可选的服务器端字幕选择与烧录开关）
+  /// 说明：与 Jellyfin 复用同一枚举 JellyfinVideoQuality，便于 UI 统一。
+  Future<String> buildHlsUrlWithOptions(
+    String itemId, {
+    JellyfinVideoQuality? quality,
+    int? subtitleStreamIndex,
+    bool alwaysBurnInSubtitleWhenTranscoding = false,
+  }) async {
+    if (!_isConnected || _accessToken == null) {
+      throw Exception('未连接到Emby服务器');
+    }
+
+    final effectiveQuality = quality ?? JellyfinVideoQuality.bandwidth5m;
+
+    // original => 直连
+    if (effectiveQuality == JellyfinVideoQuality.original) {
+      return getStreamUrl(itemId);
+    }
+
+    // 先获取 PlaybackInfo，拿到 MediaSourceId & PlaySessionId
+    String? mediaSourceId;
+    String? playSessionId;
+    try {
+      final playbackInfoResp = await _makeAuthenticatedRequest(
+        '/emby/Items/$itemId/PlaybackInfo?UserId=$_userId',
+      );
+      if (playbackInfoResp.statusCode == 200) {
+        final pb = json.decode(playbackInfoResp.body) as Map<String, dynamic>;
+        final srcs = (pb['MediaSources'] as List?) ?? const [];
+        if (srcs.isNotEmpty) {
+          final first = srcs.first as Map<String, dynamic>;
+          mediaSourceId = first['Id']?.toString();
+        }
+        playSessionId = pb['PlaySessionId']?.toString();
+      }
+    } catch (e) {
+      DebugLogService().addLog('Emby HLS: 获取PlaybackInfo失败: $e');
+    }
+
+    final params = <String, String>{
+      'api_key': _accessToken!,
+      // Emby 对 master.m3u8 接口的典型参数
+      'Container': 'ts', // HLS 分片容器
+  if (mediaSourceId != null && mediaSourceId.isNotEmpty) 'MediaSourceId': mediaSourceId,
+  if (playSessionId != null && playSessionId.isNotEmpty) 'PlaySessionId': playSessionId,
+    };
+
+    _addTranscodeParameters(params, effectiveQuality);
+
+    // 字幕参数
+    if (subtitleStreamIndex != null) {
+      params['SubtitleStreamIndex'] = subtitleStreamIndex.toString();
+      if (alwaysBurnInSubtitleWhenTranscoding) {
+        params['SubtitleMethod'] = 'Encode'; // 烧录
+        params['EnableAutoStreamCopy'] = 'false';
+      } else {
+        params['SubtitleMethod'] = 'Embed'; // 内嵌为独立轨
+      }
+    }
+
+    final uri = Uri.parse('$_serverUrl/emby/Videos/$itemId/master.m3u8')
+        .replace(queryParameters: params);
+    debugPrint('[Emby HLS] 构建URL: ${uri.toString()}');
+    return uri.toString();
+  }
+
+  /// 为 Emby 添加转码参数（注意参数名大小写与 Jellyfin 不同）
+  void _addTranscodeParameters(Map<String, String> params, JellyfinVideoQuality quality, {int? subtitleStreamIndex, bool? burnInSubtitle}) {
+    final bitrate = quality.bitrate;
+    final resolution = quality.maxResolution;
+
+    if (bitrate != null) {
+      params['MaxStreamingBitrate'] = (bitrate * 1000).toString();
+      params['VideoBitRate'] = (bitrate * 1000).toString();
+    }
+
+    if (resolution != null) {
+      params['MaxWidth'] = resolution.width.toString();
+      params['MaxHeight'] = resolution.height.toString();
+    }
+
+    // 从本地设置缓存读取编解码偏好，若未配置使用合理默认
+    final videoCodecs = _settingsCache.video.preferredCodecs.isNotEmpty
+        ? _settingsCache.video.preferredCodecs.join(',')
+        : 'h264,hevc,av1';
+    final audioCodecs = _settingsCache.audio.preferredCodecs.isNotEmpty
+        ? _settingsCache.audio.preferredCodecs.join(',')
+        : 'aac,mp3,opus';
+    params['VideoCodec'] = videoCodecs;
+    params['AudioCodec'] = audioCodecs;
+
+    // 音频限制
+    if (_settingsCache.audio.maxAudioChannels > 0) {
+      params['MaxAudioChannels'] = _settingsCache.audio.maxAudioChannels.toString();
+    }
+    if (_settingsCache.audio.audioBitRate != null && _settingsCache.audio.audioBitRate! > 0) {
+      params['AudioBitRate'] = (_settingsCache.audio.audioBitRate! * 1000).toString();
+    }
+    if (_settingsCache.audio.audioSampleRate != null && _settingsCache.audio.audioSampleRate! > 0) {
+      params['AudioSampleRate'] = _settingsCache.audio.audioSampleRate!.toString();
+    }
+
+    // 字幕处理：如果设置允许服务端处理并非 external/drop，则添加相应参数
+    if (_settingsCache.subtitle.enableTranscoding &&
+        _settingsCache.subtitle.deliveryMethod != JellyfinSubtitleDeliveryMethod.external &&
+        _settingsCache.subtitle.deliveryMethod != JellyfinSubtitleDeliveryMethod.drop) {
+      params['SubtitleMethod'] = _settingsCache.subtitle.deliveryMethod.apiValue;
+      if (subtitleStreamIndex != null && subtitleStreamIndex >= 0) {
+        params['SubtitleStreamIndex'] = subtitleStreamIndex.toString();
+      }
+      final shouldBurn = burnInSubtitle ?? (_settingsCache.subtitle.deliveryMethod == JellyfinSubtitleDeliveryMethod.encode);
+      if (shouldBurn) {
+        params['AlwaysBurnInSubtitleWhenTranscoding'] = 'true';
+      }
+    }
+
+    // 保证参数整洁
+    try {
+      if (params['MaxStreamingBitrate']?.isEmpty == true) params.remove('MaxStreamingBitrate');
+      if (params['MaxWidth'] == '0' || params['MaxHeight'] == '0') {
+        params.remove('MaxWidth');
+        params.remove('MaxHeight');
+      }
+    } catch (e) {
+      debugPrint('添加 Emby 转码参数时出错: $e');
+      params.removeWhere((key, value) => key.startsWith('Max') || key.contains('BitRate'));
+    }
   }
   
   String getImageUrl(String itemId, {String type = 'Primary', int? width, int? height, int? quality, String? tag}) {
@@ -1382,8 +1704,21 @@ class EmbyService {
             final isDefault = stream['IsDefault'] ?? false;
             final isForced = stream['IsForced'] ?? false;
             final isHearingImpaired = stream['IsHearingImpaired'] ?? false;
+            final realIndex = stream['Index'] ?? i;
+            final displayParts = <String>[];
+            if ((title as String).isNotEmpty) {
+              displayParts.add(title);
+            } else if ((language as String).isNotEmpty) {
+              displayParts.add(language);
+            } else {
+              displayParts.add('字幕');
+            }
+            if ((codec as String).isNotEmpty) displayParts.add(codec.toString().toUpperCase());
+            if (isExternal) displayParts.add('外挂');
+            if (isForced) displayParts.add('强制');
+            if (isDefault) displayParts.add('默认');
             Map<String, dynamic> trackInfo = {
-              'index': i,
+              'index': realIndex,
               'type': isExternal ? 'external' : 'embedded',
               'language': language,
               'title': title.isNotEmpty ? title : (language.isNotEmpty ? language : 'Unknown'),
@@ -1392,11 +1727,12 @@ class EmbyService {
               'isForced': isForced,
               'isHearingImpaired': isHearingImpaired,
               'deliveryMethod': deliveryMethod,
+              'display': displayParts.join(' · '),
             };
             // 如果是外挂字幕，添加下载URL
             if (isExternal) {
               final mediaSourceId = mediaSource['Id'];
-              final subtitleUrl = '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$i/Stream.$codec?api_key=$_accessToken';
+              final subtitleUrl = '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$realIndex/Stream.$codec?api_key=$_accessToken';
               trackInfo['downloadUrl'] = subtitleUrl;
             }
             subtitleTracks.add(trackInfo);
@@ -1422,6 +1758,19 @@ class EmbyService {
       return _currentProfile!.addresses;
     }
     return [];
+  }
+
+  /// 由 Provider 调用：在运行时更新本地转码缓存（避免在 getStreamUrl 中做异步 IO）
+  void setTranscodePreferences({bool? enabled, JellyfinVideoQuality? defaultQuality}) {
+    if (enabled != null) _transcodeEnabledCache = enabled;
+    if (defaultQuality != null) _defaultQualityCache = defaultQuality;
+    DebugLogService().addLog('Emby: 更新转码偏好 缓存 enabled=${enabled ?? _transcodeEnabledCache}, quality=${defaultQuality ?? _defaultQualityCache}');
+  }
+
+  /// 由 Provider 调用：更新完整转码设置缓存（用于音频/字幕等参数）
+  void setFullTranscodeSettings(JellyfinTranscodeSettings settings) {
+    _settingsCache = settings;
+    DebugLogService().addLog('Emby: 更新完整转码设置缓存 (video/audio/subtitle/adaptive)');
   }
   
   /// 添加新地址到当前服务器
