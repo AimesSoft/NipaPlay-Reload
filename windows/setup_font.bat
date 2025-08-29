@@ -20,8 +20,8 @@ if %errorlevel% equ 0 (
     goto :end
 )
 
-REM 创建临时文件来修改 pubspec.yaml
-powershell -Command "$content = Get-Content '..\pubspec.yaml' -Raw; $fontSection = \"`r`n`r`n  fonts:`r`n    - family: SourceHanSansCN`r`n      fonts:`r`n        - asset: assets/fonts/SourceHanSansCN-Normal.ttf`r`n\"; $assetSection = '    - assets/fonts/SourceHanSansCN-Normal.ttf'; if ($content -match 'assets:\s*\r?\n(.*?)\r?\n\s*#') { $beforeAssets = $content.Substring(0, $matches.Index + $matches[0].IndexOf(\"`n\") + 1); $afterMatch = $content.Substring($matches.Index + $matches[0].Length); $afterAssets = \"`n\" + $afterMatch; $newContent = $beforeAssets + $assetSection + $afterAssets; } else { $newContent = $content; } if ($newContent -match '# see https://flutter\.dev/to/font-from-package\s*\r?\n') { $insertPoint = $matches.Index; $newContent = $newContent.Substring(0, $insertPoint) + $fontSection + \"`r`n\" + $newContent.Substring($insertPoint); } $newContent | Set-Content '..\pubspec.yaml' -Encoding UTF8"
+REM 简化字体配置，只添加字体资产而不修改字体部分
+powershell -Command "$content = Get-Content '..\pubspec.yaml' -Raw; if (-not ($content -match 'assets/fonts/SourceHanSansCN-Normal.ttf')) { $content = $content -replace '(assets:\s*)', ('$1' + \"`r`n    - assets/fonts/SourceHanSansCN-Normal.ttf\"); $content | Set-Content '..\pubspec.yaml' -Encoding UTF8; }"
 
 if %errorlevel% neq 0 (
     echo Failed to modify pubspec.yaml
