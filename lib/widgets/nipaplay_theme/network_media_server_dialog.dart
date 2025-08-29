@@ -18,6 +18,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/url_name_generator.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
+import 'package:nipaplay/providers/emby_transcode_provider.dart';
 
 enum MediaServerType { jellyfin, emby }
 
@@ -229,17 +230,52 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
     super.didChangeDependencies();
     _provider = NetworkMediaServerDialog._getProvider(context, widget.serverType);
 
-    // 初始化转码Provider（仅对Jellyfin）
+    // 初始化转码Provider（Jellyfin/Emby 各自独立）
     if (widget.serverType == MediaServerType.jellyfin) {
-      final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
-      transcodeProvider.initialize().then((_) {
-        if (mounted) {
-          setState(() {
-            _selectedQuality = transcodeProvider.currentVideoQuality;
-            _transcodeEnabled = transcodeProvider.transcodeEnabled;
-          });
-        }
-      });
+      try {
+        final jProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+        jProvider.initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _selectedQuality = jProvider.currentVideoQuality;
+              _transcodeEnabled = jProvider.transcodeEnabled;
+            });
+          }
+        });
+      } catch (_) {
+        // 回退到单例，避免在 Provider 未挂载（热重载等）时崩溃
+        final jProvider = JellyfinTranscodeProvider();
+        jProvider.initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _selectedQuality = jProvider.currentVideoQuality;
+              _transcodeEnabled = jProvider.transcodeEnabled;
+            });
+          }
+        });
+      }
+    } else if (widget.serverType == MediaServerType.emby) {
+      try {
+        final eProvider = Provider.of<EmbyTranscodeProvider>(context, listen: false);
+        eProvider.initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _selectedQuality = eProvider.currentVideoQuality;
+              _transcodeEnabled = eProvider.transcodeEnabled;
+            });
+          }
+        });
+      } catch (_) {
+        final eProvider = EmbyTranscodeProvider();
+        eProvider.initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _selectedQuality = eProvider.currentVideoQuality;
+              _transcodeEnabled = eProvider.transcodeEnabled;
+            });
+          }
+        });
+      }
     }
 
     if (_provider.isConnected) {
@@ -506,7 +542,7 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                       ],
                       _buildLibrariesSection(),
                       const SizedBox(height: 20),
-                      if (widget.serverType == MediaServerType.jellyfin) ...[
+                      if (widget.serverType == MediaServerType.jellyfin || widget.serverType == MediaServerType.emby) ...[
                         _buildTranscodeSection(),
                         const SizedBox(height: 20),
                       ],
@@ -1002,12 +1038,25 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
   }
 
   Future<void> _handleTranscodeEnabledChanged(bool enabled) async {
-    if (widget.serverType != MediaServerType.jellyfin) return;
-    
     try {
-      final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
-      final success = await transcodeProvider.setTranscodeEnabled(enabled);
-      
+      bool success = false;
+      if (widget.serverType == MediaServerType.jellyfin) {
+        try {
+          final j = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+          success = await j.setTranscodeEnabled(enabled);
+        } catch (_) {
+          // 回退到单例
+          success = await JellyfinTranscodeProvider().setTranscodeEnabled(enabled);
+        }
+      } else if (widget.serverType == MediaServerType.emby) {
+        try {
+          final e = Provider.of<EmbyTranscodeProvider>(context, listen: false);
+          success = await e.setTranscodeEnabled(enabled);
+        } catch (_) {
+          success = await EmbyTranscodeProvider().setTranscodeEnabled(enabled);
+        }
+      }
+
       if (success) {
         setState(() {
           _transcodeEnabled = enabled;
@@ -1029,12 +1078,26 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
   }
 
   Future<void> _handleQualityChanged(JellyfinVideoQuality quality) async {
-    if (_selectedQuality == quality || widget.serverType != MediaServerType.jellyfin) return;
-    
+    if (_selectedQuality == quality) return;
+
     try {
-      final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
-      final success = await transcodeProvider.setDefaultVideoQuality(quality);
-      
+      bool success = false;
+      if (widget.serverType == MediaServerType.jellyfin) {
+        try {
+          final j = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+          success = await j.setDefaultVideoQuality(quality);
+        } catch (_) {
+          success = await JellyfinTranscodeProvider().setDefaultVideoQuality(quality);
+        }
+      } else if (widget.serverType == MediaServerType.emby) {
+        try {
+          final e = Provider.of<EmbyTranscodeProvider>(context, listen: false);
+          success = await e.setDefaultVideoQuality(quality);
+        } catch (_) {
+          success = await EmbyTranscodeProvider().setDefaultVideoQuality(quality);
+        }
+      }
+
       if (success) {
         setState(() {
           _selectedQuality = quality;

@@ -691,7 +691,7 @@ class JellyfinService {
             .toList();
       }
     } catch (e) {
-      print('Error fetching media items for library $libraryId: $e');
+      debugPrint('Error fetching media items for library $libraryId: $e');
     }
     
     return [];

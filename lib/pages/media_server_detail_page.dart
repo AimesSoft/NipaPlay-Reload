@@ -1258,7 +1258,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
               if (widget.serverType == MediaServerType.jellyfin) {
                 streamUrl = JellyfinDandanplayMatcher.instance.getPlayUrl(episode);
               } else {
-                streamUrl = EmbyDandanplayMatcher.instance.getPlayUrl(episode);
+                streamUrl = await EmbyDandanplayMatcher.instance.getPlayUrl(episode);
               }
               debugPrint('获取到流媒体URL: $streamUrl');
               

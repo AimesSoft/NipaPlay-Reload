@@ -4603,7 +4603,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
               // 获取实际的HTTP流媒体URL
-              final actualPlayUrl = EmbyService.instance.getStreamUrl(episodeId);
+              final actualPlayUrl = await EmbyService.instance.getStreamUrl(episodeId);
               debugPrint('[上一话] 获取Emby流媒体URL: $actualPlayUrl');
               
               // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
@@ -4724,7 +4724,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
               // 获取实际的HTTP流媒体URL
-              final actualPlayUrl = EmbyService.instance.getStreamUrl(episodeId);
+              final actualPlayUrl = await EmbyService.instance.getStreamUrl(episodeId);
               debugPrint('[下一话] 获取Emby流媒体URL: $actualPlayUrl');
               
               // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源

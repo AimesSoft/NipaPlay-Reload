@@ -5,6 +5,7 @@ import 'settings_hint_text.dart';
 import 'blur_snackbar.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
+import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -36,12 +37,21 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
 
   Future<void> _loadCurrentQuality() async {
     try {
-      final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
-      await transcodeProvider.initialize();
-      
-      setState(() {
-        _currentQuality = transcodeProvider.currentVideoQuality;
-      });
+      // 根据当前播放协议使用对应 provider，保证两端持久化与默认值独立
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      if (videoState.currentVideoPath != null && videoState.currentVideoPath!.startsWith('emby://')) {
+        final embyProv = Provider.of<EmbyTranscodeProvider>(context, listen: false);
+        await embyProv.initialize();
+        setState(() {
+          _currentQuality = embyProv.currentVideoQuality;
+        });
+      } else {
+        final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+        await transcodeProvider.initialize();
+        setState(() {
+          _currentQuality = transcodeProvider.currentVideoQuality;
+        });
+      }
 
       // 读取当前播放的 jellyfin:// 或 emby:// itemId 并获取服务器字幕列表
       final vp = Provider.of<VideoPlayerState>(context, listen: false);
@@ -96,8 +106,16 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
     
     try {
       // 先保存默认清晰度设置
-      final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
-      await transcodeProvider.setDefaultVideoQuality(_currentQuality!);
+      // 根据当前播放协议选择对应的 provider（保证两者持久化独立且行为一致）
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      if (videoState.currentVideoPath != null && videoState.currentVideoPath!.startsWith('emby://')) {
+        final embyProv = Provider.of<EmbyTranscodeProvider>(context, listen: false);
+        await embyProv.initialize();
+        await embyProv.setDefaultVideoQuality(_currentQuality!);
+      } else {
+        final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+        await transcodeProvider.setDefaultVideoQuality(_currentQuality!);
+      }
       
       // 然后重载播放器
       final vp = Provider.of<VideoPlayerState>(context, listen: false);

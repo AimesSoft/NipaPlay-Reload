@@ -1502,7 +1502,7 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
   }
 
   void _navigateToEmbyDetail(String embyId) {
-    MediaServerDetailPage.showEmby(context, embyId).then((result) {
+    MediaServerDetailPage.showEmby(context, embyId).then((result) async {
       if (result != null) {
         String? actualPlayUrl;
         final isEmbyProtocol = result.filePath.startsWith('emby://');
@@ -1512,7 +1512,7 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
             final embyId = result.filePath.replaceFirst('emby://', '');
             final embyService = EmbyService.instance;
             if (embyService.isConnected) {
-              actualPlayUrl = embyService.getStreamUrl(embyId);
+              actualPlayUrl = await embyService.getStreamUrl(embyId);
             } else {
               MessageHelper.showMessage(context, '未连接到Emby服务器');
               return;
@@ -1571,7 +1571,7 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
           final embyId = item.filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
-            actualPlayUrl = embyService.getStreamUrl(embyId);
+            actualPlayUrl = await embyService.getStreamUrl(embyId);
           } else {
             MessageHelper.showMessage(context, '未连接到Emby服务器');
             return;
