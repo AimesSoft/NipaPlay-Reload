@@ -20,8 +20,8 @@ if %errorlevel% equ 0 (
     goto :end
 )
 
-REM 简化字体配置，只添加字体资产而不修改字体部分
-powershell -Command "$content = Get-Content '..\pubspec.yaml' -Raw; if (-not ($content -match 'assets/fonts/SourceHanSansCN-Normal.ttf')) { $content = $content -replace '(assets:\s*)', ('$1' + \"`r`n    - assets/fonts/SourceHanSansCN-Normal.ttf\"); $content | Set-Content '..\pubspec.yaml' -Encoding UTF8; }"
+REM 使用简单的PowerShell命令添加字体到assets列表
+powershell -Command "& {$content = Get-Content '..\pubspec.yaml' -Raw; $newAsset = '    - assets/fonts/SourceHanSansCN-Normal.ttf'; if ($content -match '(?m)^(\s*assets:\s*)$') { $content = $content -replace '(?m)^(\s*assets:\s*)$', ('$1' + \"`n\" + $newAsset); Set-Content '..\pubspec.yaml' -Value $content -Encoding UTF8 -NoNewline; echo 'Font asset added to pubspec.yaml' } else { echo 'Could not find assets section in pubspec.yaml' } }"
 
 if %errorlevel% neq 0 (
     echo Failed to modify pubspec.yaml
