@@ -62,7 +62,7 @@ class JellyfinService {
   String? _cachedClientInfo;
 
   // Transcode preferences cache (loaded once and updated by provider)
-  bool _transcodeEnabledCache = true;
+  bool _transcodeEnabledCache = false;
   JellyfinVideoQuality _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
   JellyfinTranscodeSettings _settingsCache = const JellyfinTranscodeSettings();
 
@@ -267,7 +267,7 @@ class JellyfinService {
       DebugLogService().addLog('Jellyfin: 已加载转码偏好 缓存 enabled=$_transcodeEnabledCache, quality=$_defaultQualityCache');
     } catch (e) {
       DebugLogService().addLog('Jellyfin: 加载转码偏好失败，使用默认值: $e');
-      _transcodeEnabledCache = true;
+      _transcodeEnabledCache = false;
       _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
   _settingsCache = const JellyfinTranscodeSettings();
     }

@@ -105,11 +105,11 @@ class JellyfinTranscodeManager {
         return enabledString.toLowerCase() == 'true';
       }
       
-      // 默认启用转码
-      return true;
+      // 默认关闭转码，保持原有直连体验
+      return false;
     } catch (e) {
       debugPrint('获取转码启用状态失败: $e');
-      return true;
+      return false;
     }
   }
   

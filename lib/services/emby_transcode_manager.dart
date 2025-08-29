@@ -79,10 +79,11 @@ class EmbyTranscodeManager {
       final prefs = await SharedPreferences.getInstance();
       final enabledString = prefs.getString(_keyEnableTranscoding);
       if (enabledString != null) return enabledString.toLowerCase() == 'true';
-      return true;
+      // 默认关闭转码，保持原有直连体验
+      return false;
     } catch (e) {
       debugPrint('获取 Emby 转码启用状态失败: $e');
-      return true;
+      return false;
     }
   }
 

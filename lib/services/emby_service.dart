@@ -58,7 +58,7 @@ class EmbyService {
   final MultiAddressServerService _multiAddressService = MultiAddressServerService.instance;
 
   // 转码偏好缓存（内存）——让 Provider 能在运行时同步设置，避免 async IO
-  bool _transcodeEnabledCache = true;
+  bool _transcodeEnabledCache = false;
   JellyfinVideoQuality _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
   JellyfinTranscodeSettings _settingsCache = const JellyfinTranscodeSettings();
 
@@ -254,7 +254,7 @@ class EmbyService {
       DebugLogService().addLog('Emby: 已加载转码偏好 缓存 enabled=' + _transcodeEnabledCache.toString() + ', quality=' + _defaultQualityCache.toString());
     } catch (e) {
       DebugLogService().addLog('Emby: 加载转码偏好失败，使用默认值: $e');
-      _transcodeEnabledCache = true;
+      _transcodeEnabledCache = false;
       _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
       _settingsCache = const JellyfinTranscodeSettings();
     }
