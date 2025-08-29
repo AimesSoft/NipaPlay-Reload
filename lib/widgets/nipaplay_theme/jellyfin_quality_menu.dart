@@ -112,9 +112,19 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
         final embyProv = Provider.of<EmbyTranscodeProvider>(context, listen: false);
         await embyProv.initialize();
         await embyProv.setDefaultVideoQuality(_currentQuality!);
+        
+        // 当选择非原画质量时，自动启用转码
+        if (_currentQuality! != JellyfinVideoQuality.original) {
+          await embyProv.setTranscodeEnabled(true);
+        }
       } else {
         final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
         await transcodeProvider.setDefaultVideoQuality(_currentQuality!);
+        
+        // 当选择非原画质量时，自动启用转码
+        if (_currentQuality! != JellyfinVideoQuality.original) {
+          await transcodeProvider.setTranscodeEnabled(true);
+        }
       }
       
       // 然后重载播放器

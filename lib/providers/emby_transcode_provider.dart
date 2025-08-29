@@ -45,8 +45,20 @@ class EmbyTranscodeProvider extends ChangeNotifier {
     try {
       await _transcodeManager.setTranscodingEnabled(enabled);
       _transcodeEnabled = enabled;
+      
+      // 如果关闭转码，自动将质量重置为原画
+      if (!enabled) {
+        await _transcodeManager.saveDefaultVideoQuality(JellyfinVideoQuality.original);
+        _settings = _settings.copyWith(
+          video: _settings.video.copyWith(quality: JellyfinVideoQuality.original)
+        );
+      }
+      
       try {
-        EmbyService.instance.setTranscodePreferences(enabled: enabled);
+        EmbyService.instance.setTranscodePreferences(
+          enabled: enabled,
+          defaultQuality: !enabled ? JellyfinVideoQuality.original : null,
+        );
       } catch (_) {}
       notifyListeners();
       return true;

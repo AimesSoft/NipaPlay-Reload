@@ -1060,6 +1060,10 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
       if (success) {
         setState(() {
           _transcodeEnabled = enabled;
+          // 如果关闭转码，自动将质量重置为原画
+          if (!enabled) {
+            _selectedQuality = JellyfinVideoQuality.original;
+          }
         });
         if (mounted) {
           BlurSnackBar.show(context, enabled ? '转码已启用' : '转码已禁用');
@@ -1086,15 +1090,31 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
         try {
           final j = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
           success = await j.setDefaultVideoQuality(quality);
+          // 当选择非原画质量时，自动启用转码
+          if (quality != JellyfinVideoQuality.original) {
+            await j.setTranscodeEnabled(true);
+          }
         } catch (_) {
           success = await JellyfinTranscodeProvider().setDefaultVideoQuality(quality);
+          // 当选择非原画质量时，自动启用转码
+          if (quality != JellyfinVideoQuality.original) {
+            await JellyfinTranscodeProvider().setTranscodeEnabled(true);
+          }
         }
       } else if (widget.serverType == MediaServerType.emby) {
         try {
           final e = Provider.of<EmbyTranscodeProvider>(context, listen: false);
           success = await e.setDefaultVideoQuality(quality);
+          // 当选择非原画质量时，自动启用转码
+          if (quality != JellyfinVideoQuality.original) {
+            await e.setTranscodeEnabled(true);
+          }
         } catch (_) {
           success = await EmbyTranscodeProvider().setDefaultVideoQuality(quality);
+          // 当选择非原画质量时，自动启用转码
+          if (quality != JellyfinVideoQuality.original) {
+            await EmbyTranscodeProvider().setTranscodeEnabled(true);
+          }
         }
       }
 

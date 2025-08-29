@@ -58,9 +58,21 @@ class JellyfinTranscodeProvider extends ChangeNotifier {
     try {
       await _transcodeManager.setTranscodingEnabled(enabled);
       _transcodeEnabled = enabled;
+      
+      // 如果关闭转码，自动将质量重置为原画
+      if (!enabled) {
+        await _transcodeManager.saveDefaultVideoQuality(JellyfinVideoQuality.original);
+        _settings = _settings.copyWith(
+          video: _settings.video.copyWith(quality: JellyfinVideoQuality.original)
+        );
+      }
+      
       // 同步到 JellyfinService 的转码偏好缓存
       try {
-        JellyfinService.instance.setTranscodePreferences(enabled: enabled);
+        JellyfinService.instance.setTranscodePreferences(
+          enabled: enabled,
+          defaultQuality: !enabled ? JellyfinVideoQuality.original : null,
+        );
       } catch (_) {}
       notifyListeners();
       return true;
