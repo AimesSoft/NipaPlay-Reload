@@ -1,21 +1,12 @@
 // ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
-import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/foundation.dart';
 
 class AppTheme {
   // 获取适合当前平台的默认字体
   static String? get _platformDefaultFont {
     if (kIsWeb) return null; // Web平台使用浏览器默认字体
-    if (Platform.isWindows) {
-      // Windows平台：优先使用思源黑体，备选微软雅黑
-      return "SourceHanSansCN";
-    } else if (Platform.isMacOS) {
-      return null; // 让Flutter自动选择macOS系统默认字体 (San Francisco)
-    } else if (Platform.isLinux) {
-      return null; // 让Flutter自动选择Linux系统默认字体
-    }
     return null; // 其他平台使用默认
   }
 
