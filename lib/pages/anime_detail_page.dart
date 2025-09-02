@@ -349,7 +349,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   }
 
   Widget _buildSummaryView(BangumiAnime anime) {
-    final String summaryText = anime.summary ?? '暂无简介';
+    final String summaryText = (anime.summary ?? '暂无简介')
+        .replaceAll('<br>', ' ')
+        .replaceAll('<br/>', ' ')
+        .replaceAll('<br />', ' ');
     final airWeekday = anime.airWeekday;
     final String weekdayString =
         airWeekday != null && _weekdays.containsKey(airWeekday)
