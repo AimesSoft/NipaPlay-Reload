@@ -72,8 +72,8 @@ class _FluentPlayerControlBarState extends State<FluentPlayerControlBar> {
 
   Widget _buildSkipButton(VideoPlayerState videoState, {required bool isForward}) {
     final icon = isForward ? FluentIcons.fast_forward : FluentIcons.rewind;
-    final tooltip = isForward ? '快进 10 秒' : '快退 10 秒';
-    final action = isForward ? () => videoState.seekTo(videoState.position + const Duration(seconds: 10)) : () => videoState.seekTo(videoState.position - const Duration(seconds: 10));
+    final tooltip = isForward ? '快进 ${videoState.seekStepSeconds} 秒' : '快退 ${videoState.seekStepSeconds} 秒';
+    final action = isForward ? () => videoState.seekTo(videoState.position + Duration(seconds: videoState.seekStepSeconds)) : () => videoState.seekTo(videoState.position - Duration(seconds: videoState.seekStepSeconds));
 
     return Tooltip(
       message: tooltip,

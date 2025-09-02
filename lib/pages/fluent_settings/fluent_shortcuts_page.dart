@@ -38,8 +38,8 @@ class _FluentShortcutsPageState extends State<FluentShortcutsPage> {
   final Map<String, String> _actionDescriptions = {
     'play_pause': '切换视频的播放和暂停状态',
     'fullscreen': '进入或退出全屏模式',
-    'rewind': '快退10秒',
-    'forward': '快进10秒',
+    'rewind': '快退指定时间',
+    'forward': '快进指定时间',
     'toggle_danmaku': '显示或隐藏弹幕',
     'volume_up': '增加音量',
     'volume_down': '减少音量',

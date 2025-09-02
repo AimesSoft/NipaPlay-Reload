@@ -194,7 +194,7 @@ style: TextStyle(
                     item.value,
                     locale:Locale("zh","CN"),
 style: TextStyle(
-                      color: item.isHighlighted ? Colors.blue : Colors.white.withOpacity(0.9),
+                      color: item.isHighlighted ? Colors.white : Colors.white.withOpacity(0.9),
                       fontSize: 12,
                       fontWeight: item.isHighlighted ? FontWeight.w500 : FontWeight.normal,
                     ),

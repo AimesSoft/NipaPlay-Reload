@@ -298,14 +298,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                             size: globals.isPhone ? 36 : 28,
                                           ),
                                           onTap: () {
-                                            final newPosition = videoState.position - const Duration(seconds: 10);
+                                            final newPosition = videoState.position - Duration(seconds: videoState.seekStepSeconds);
                                             videoState.seekTo(newPosition);
                                           },
                                           isPressed: _isRewindPressed,
                                           isHovered: _isRewindHovered,
                                           onHover: (value) => setState(() => _isRewindHovered = value),
                                           onPressed: (value) => setState(() => _isRewindPressed = value),
-                                          tooltip: _tooltipManager.formatActionWithShortcut('rewind', '快退 10 秒'),
+                                          tooltip: _tooltipManager.formatActionWithShortcut('rewind', '快退 ${videoState.seekStepSeconds} 秒'),
                                           useAnimatedSwitcher: true,
                                         ),
                                       
@@ -348,14 +348,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                             size: globals.isPhone ? 36 : 28,
                                           ),
                                           onTap: () {
-                                            final newPosition = videoState.position + const Duration(seconds: 10);
+                                            final newPosition = videoState.position + Duration(seconds: videoState.seekStepSeconds);
                                             videoState.seekTo(newPosition);
                                           },
                                           isPressed: _isForwardPressed,
                                           isHovered: _isForwardHovered,
                                           onHover: (value) => setState(() => _isForwardHovered = value),
                                           onPressed: (value) => setState(() => _isForwardPressed = value),
-                                          tooltip: _tooltipManager.formatActionWithShortcut('forward', '快进 10 秒'),
+                                          tooltip: _tooltipManager.formatActionWithShortcut('forward', '快进 ${videoState.seekStepSeconds} 秒'),
                                           useAnimatedSwitcher: true,
                                         ),
                                         

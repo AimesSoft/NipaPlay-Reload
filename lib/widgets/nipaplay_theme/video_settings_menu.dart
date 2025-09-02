@@ -17,6 +17,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'danmaku_offset_menu.dart';
 import 'jellyfin_quality_menu.dart';
 import 'playback_info_menu.dart';
+import 'seek_step_menu.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -44,6 +45,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   bool _showDanmakuOffset = false;
   bool _showJellyfinQuality = false;
   bool _showPlaybackInfo = false;
+  bool _showSeekStep = false;
 
   OverlayEntry? _subtitleTracksOverlay;
   OverlayEntry? _controlBarSettingsOverlay;
@@ -57,6 +59,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   OverlayEntry? _danmakuOffsetOverlay;
   OverlayEntry? _jellyfinQualityOverlay;
   OverlayEntry? _playbackInfoOverlay;
+  OverlayEntry? _seekStepOverlay;
 
   late final List<SettingsItem> _settingsItems;
   late final VideoPlayerState videoState;
@@ -166,6 +169,14 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         isActive: () => _showPlaybackInfo,
       ));
     }
+    
+    // 播放设置 - 始终显示
+    _settingsItems.add(SettingsItem(
+      icon: Icons.settings,
+      title: '播放设置',
+      onTap: _toggleSeekStepMenu,
+      isActive: () => _showSeekStep,
+    ));
     
     // 剧集列表 - 当有视频文件时显示（整合了API、数据库、文件系统三种模式）
     if (videoState.currentVideoPath != null || videoState.animeId != null) {
@@ -512,6 +523,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _jellyfinQualityOverlay = null;
     _playbackInfoOverlay?.remove();
     _playbackInfoOverlay = null;
+    _seekStepOverlay?.remove();
+    _seekStepOverlay = null;
     
     // 只有在组件仍然挂载时才调用setState
     if (mounted) {
@@ -528,6 +541,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         _showPlaybackRate = false;
         _showJellyfinQuality = false;
         _showPlaybackInfo = false;
+        _showSeekStep = false;
       });
     } else {
       // 如果组件已经被销毁，直接更新值而不调用setState
@@ -543,6 +557,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       _showPlaybackRate = false;
       _showJellyfinQuality = false;
       _showPlaybackInfo = false;
+      _showSeekStep = false;
     }
   }
 
@@ -864,6 +879,7 @@ style: TextStyle(
         _showDanmakuOffset = false;
         _showPlaybackRate = false;
         _showJellyfinQuality = false;
+        _showSeekStep = false;
       });
       
       _playbackInfoOverlay = OverlayEntry(
@@ -879,6 +895,47 @@ style: TextStyle(
       );
 
       Overlay.of(context).insert(_playbackInfoOverlay!);
+    }
+  }
+
+  // 添加快进快退时间菜单切换方法
+  void _toggleSeekStepMenu() {
+    if (_showSeekStep) {
+      _seekStepOverlay?.remove();
+      _seekStepOverlay = null;
+      setState(() => _showSeekStep = false);
+    } else {
+      _closeAllOverlays();
+      setState(() {
+        _showSeekStep = true;
+        _showSubtitleTracks = false;
+        _showControlBarSettings = false;
+        _showDanmakuSettings = false;
+        _showAudioTracks = false;
+        _showDanmakuList = false;
+        _showDanmakuTracks = false;
+        _showSubtitleList = false;
+        _showPlaylist = false;
+        _showDanmakuOffset = false;
+        _showPlaybackRate = false;
+        _showJellyfinQuality = false;
+        _showPlaybackInfo = false;
+        _showSeekStep = false;
+      });
+      
+      _seekStepOverlay = OverlayEntry(
+        builder: (context) => SeekStepMenu(
+          onClose: () {
+            _seekStepOverlay?.remove();
+            _seekStepOverlay = null;
+            if (mounted) {
+              setState(() => _showSeekStep = false);
+            }
+          },
+        ),
+      );
+
+      Overlay.of(context).insert(_seekStepOverlay!);
     }
   }
 }

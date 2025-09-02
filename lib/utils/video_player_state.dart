@@ -162,6 +162,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isSpeedBoostActive = false; // 是否正在倍速播放（长按状态）
   double _normalPlaybackRate = 1.0; // 正常播放速度
   
+  // 快进快退时间设置
+  static const String _seekStepSecondsKey = 'seek_step_seconds';
+  int _seekStepSeconds = 10; // 默认10秒
+  
   dynamic danmakuController; // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
   bool _isFullscreenTransitioning = false;
@@ -405,6 +409,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 播放速度相关的getter
   double get playbackRate => _playbackRate;
   bool get isSpeedBoostActive => _isSpeedBoostActive;
+  
+  // 快进快退时间的getter
+  int get seekStepSeconds => _seekStepSeconds;
 
   // 右边缘悬浮菜单的getter
   bool get isRightEdgeHovered => _isRightEdgeHovered;
@@ -443,6 +450,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 加载播放速度设置
     await _loadPlaybackRate();
+    
+    // 加载快进快退时间设置
+    await _loadSeekStepSeconds();
 
     // 订阅播放器内核切换事件
     _playerKernelChangeSubscription = PlayerFactory.onKernelChanged.listen((_) {
@@ -4081,6 +4091,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         setPlaybackRate(1.0);
       }
     }
+  }
+  
+  // 快进快退时间设置相关方法
+  
+  // 加载快进快退时间设置
+  Future<void> _loadSeekStepSeconds() async {
+    final prefs = await SharedPreferences.getInstance();
+    _seekStepSeconds = prefs.getInt(_seekStepSecondsKey) ?? 10; // 默认10秒
+    notifyListeners();
+  }
+  
+  // 保存快进快退时间设置
+  Future<void> setSeekStepSeconds(int seconds) async {
+    _seekStepSeconds = seconds;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_seekStepSecondsKey, seconds);
+    notifyListeners();
   }
   
   // 弹幕字体大小和显示区域相关方法

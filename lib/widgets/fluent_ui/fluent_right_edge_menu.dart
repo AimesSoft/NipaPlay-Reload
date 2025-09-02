@@ -275,6 +275,8 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
     switch (view) {
       case 'main':
         return '播放设置';
+      case 'seek_step':
+        return '快进快退时间';
       case 'video':
         return '视频设置';
       case 'audio':
@@ -308,6 +310,8 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
     switch (_currentView) {
       case 'main':
         return _buildMainMenu(videoState);
+      case 'seek_step':
+        return _buildSeekStepMenu(videoState);
       case 'video':
         return _buildVideoMenu(videoState);
       case 'audio':
@@ -341,6 +345,12 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
     return ListView(
       padding: const EdgeInsets.all(8),
       children: [
+        _buildMenuGroup('播放控制', [
+          _buildMenuItem('快进快退时间', FluentIcons.clock, () {
+            _navigateTo('seek_step');
+          }),
+        ]),
+        const SizedBox(height: 8),
         _buildMenuGroup('视频', [
           _buildMenuItem('播放速度', FluentIcons.clock, () {
             _navigateTo('playback_rate');
@@ -439,6 +449,78 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
 
   Widget _buildDanmakuOffsetMenu(VideoPlayerState videoState) {
     return FluentDanmakuOffsetMenu(videoState: videoState);
+  }
+
+  Widget _buildSeekStepMenu(VideoPlayerState videoState) {
+    final List<int> seekStepOptions = [5, 10, 15, 30, 60]; // 可选的秒数
+    
+    return ListView(
+      padding: const EdgeInsets.all(8),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: Text(
+            '选择快进快退时间',
+            style: FluentTheme.of(context).typography.body?.copyWith(
+              color: FluentTheme.of(context).resources.textFillColorSecondary,
+            ),
+          ),
+        ),
+        ...seekStepOptions.map((seconds) {
+          final isSelected = videoState.seekStepSeconds == seconds;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: HoverButton(
+              onPressed: () {
+                videoState.setSeekStepSeconds(seconds);
+              },
+              builder: (context, states) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? FluentTheme.of(context).accentColor.withValues(alpha: 0.2)
+                        : states.isHovered
+                            ? FluentTheme.of(context).resources.subtleFillColorSecondary
+                            : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                    border: isSelected
+                        ? Border.all(
+                            color: FluentTheme.of(context).accentColor,
+                            width: 1,
+                          )
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isSelected ? FluentIcons.radio_btn_on : FluentIcons.radio_btn_off,
+                        size: 16,
+                        color: isSelected
+                            ? FluentTheme.of(context).accentColor
+                            : FluentTheme.of(context).resources.textFillColorPrimary,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '$seconds秒',
+                          style: FluentTheme.of(context).typography.body?.copyWith(
+                            color: isSelected
+                                ? FluentTheme.of(context).accentColor
+                                : FluentTheme.of(context).resources.textFillColorPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        }),
+      ],
+    );
   }
 
   Widget _buildMenuGroup(String title, List<Widget> items) {

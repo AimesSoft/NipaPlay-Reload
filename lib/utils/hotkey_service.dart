@@ -482,7 +482,7 @@ class HotkeyService extends ChangeNotifier {
     final videoState = _getVideoPlayerState();
     if (videoState != null) {
       final currentPosition = videoState.position;
-      final newPosition = currentPosition - const Duration(seconds: 10);
+      final newPosition = currentPosition - Duration(seconds: videoState.seekStepSeconds);
       videoState.seekTo(newPosition);
     }
   }
@@ -491,7 +491,7 @@ class HotkeyService extends ChangeNotifier {
     final videoState = _getVideoPlayerState();
     if (videoState != null) {
       final currentPosition = videoState.position;
-      final newPosition = currentPosition + const Duration(seconds: 10);
+      final newPosition = currentPosition + Duration(seconds: videoState.seekStepSeconds);
       videoState.seekTo(newPosition);
     }
   }
