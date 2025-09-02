@@ -166,6 +166,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const String _seekStepSecondsKey = 'seek_step_seconds';
   int _seekStepSeconds = 10; // 默认10秒
   
+  // 跳过时间设置
+  static const String _skipSecondsKey = 'skip_seconds';
+  int _skipSeconds = 90; // 默认90秒
+  
   dynamic danmakuController; // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
   bool _isFullscreenTransitioning = false;
@@ -412,6 +416,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   
   // 快进快退时间的getter
   int get seekStepSeconds => _seekStepSeconds;
+  // 跳过时间的getter
+  int get skipSeconds => _skipSeconds;
 
   // 右边缘悬浮菜单的getter
   bool get isRightEdgeHovered => _isRightEdgeHovered;
@@ -453,6 +459,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 加载快进快退时间设置
     await _loadSeekStepSeconds();
+    
+    // 加载跳过时间设置
+    await _loadSkipSeconds();
 
     // 订阅播放器内核切换事件
     _playerKernelChangeSubscription = PlayerFactory.onKernelChanged.listen((_) {
@@ -4108,6 +4117,28 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_seekStepSecondsKey, seconds);
     notifyListeners();
+  }
+  
+  // 加载跳过时间设置
+  Future<void> _loadSkipSeconds() async {
+    final prefs = await SharedPreferences.getInstance();
+    _skipSeconds = prefs.getInt(_skipSecondsKey) ?? 90; // 默认90秒
+    notifyListeners();
+  }
+  
+  // 保存跳过时间设置
+  Future<void> setSkipSeconds(int seconds) async {
+    _skipSeconds = seconds;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_skipSecondsKey, seconds);
+    notifyListeners();
+  }
+  
+  // 跳过功能
+  void skip() {
+    final currentPosition = position;
+    final newPosition = currentPosition + Duration(seconds: _skipSeconds);
+    seekTo(newPosition);
   }
   
   // 弹幕字体大小和显示区域相关方法

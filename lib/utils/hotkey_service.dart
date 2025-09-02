@@ -84,14 +84,15 @@ class HotkeyService extends ChangeNotifier {
       'previous_episode': 'Shift+←',
       'next_episode': 'Shift+→',
       'send_danmaku': 'C', // 添加发送弹幕快捷键
+      'skip': 'S', // 添加跳过快捷键
     });
 
     if (savedShortcutsString != null) {
       try {
         final Map<String, dynamic> decodedSaved = json.decode(savedShortcutsString);
-        // 用保存的值覆盖默认配置
+        // 用保存的值覆盖默认配置，但只覆盖存在的键，新键保持默认值
         decodedSaved.forEach((key, value) {
-          if (value is String) {
+          if (value is String && currentShortcutsConfig.containsKey(key)) {
             currentShortcutsConfig[key] = value; 
           }
         });
@@ -154,6 +155,9 @@ class HotkeyService extends ChangeNotifier {
     
     // 注册发送弹幕热键
     await _registerHotkey('send_danmaku', '发送弹幕', _handleSendDanmaku);
+    
+    // 注册跳过热键
+    await _registerHotkey('skip', '跳过', _handleSkip);
     
     // 注册ESC键退出全屏
     await _registerEscapeKey();
@@ -544,6 +548,13 @@ class HotkeyService extends ChangeNotifier {
       if (videoState != null) {
         videoState.showSendDanmakuDialog();
       }
+    }
+  }
+  
+  void _handleSkip() {
+    final videoState = _getVideoPlayerState();
+    if (videoState != null) {
+      videoState.skip();
     }
   }
   

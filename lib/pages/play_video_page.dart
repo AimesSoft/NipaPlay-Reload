@@ -14,6 +14,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/anime_info_widget.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/skip_button.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_dialog.dart';
 import '../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
@@ -209,8 +210,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 duration: const Duration(milliseconds: 150),
                 child: IgnorePointer(
                   ignoring: !videoState.showControls,
-                  child: SendDanmakuButton(
-                    onPressed: () => _showSendDanmakuDialog(videoState),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SendDanmakuButton(
+                        onPressed: () => _showSendDanmakuDialog(videoState),
+                      ),
+                      const SizedBox(height: 12),
+                      SkipButton(
+                        onPressed: () => videoState.skip(),
+                      ),
+                    ],
                   ),
                 ),
               ),

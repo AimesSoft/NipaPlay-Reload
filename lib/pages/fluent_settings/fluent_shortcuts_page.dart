@@ -32,6 +32,7 @@ class _FluentShortcutsPageState extends State<FluentShortcutsPage> {
     'previous_episode': '上一集',
     'next_episode': '下一集',
     'send_danmaku': '发送弹幕',
+    'skip': '跳过',
   };
   
   // 动作描述
@@ -46,6 +47,7 @@ class _FluentShortcutsPageState extends State<FluentShortcutsPage> {
     'previous_episode': '播放上一集',
     'next_episode': '播放下一集',
     'send_danmaku': '打开弹幕发送对话框',
+    'skip': '快进指定时间（跳过）',
   };
   
   // 动作图标映射
@@ -60,6 +62,7 @@ class _FluentShortcutsPageState extends State<FluentShortcutsPage> {
     'previous_episode': FluentIcons.previous,
     'next_episode': FluentIcons.next,
     'send_danmaku': FluentIcons.send,
+    'skip': FluentIcons.fast_forward,
   };
 
   @override
@@ -113,6 +116,8 @@ class _FluentShortcutsPageState extends State<FluentShortcutsPage> {
       'volume_down': '↓',
       'previous_episode': 'Shift+←',
       'next_episode': 'Shift+→',
+      'send_danmaku': 'C',
+      'skip': 'S',
     };
     
     for (final entry in defaultShortcuts.entries) {
