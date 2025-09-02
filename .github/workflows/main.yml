@@ -283,32 +283,3 @@ jobs:
             git push
             echo "Push successful."
           fi
-
-  UpdateAUR:
-    name: Update AUR
-    needs: [Publish, Build-Linux]
-    if: success()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get Version
-        id: get_version
-        run: echo "version=${{ needs.Build-Linux.outputs.version }}" >> $GITHUB_OUTPUT
-
-      - name: Update PKGBUILD
-        run: |
-          git clone https://aur.archlinux.org/nipaplay-reload-bin.git
-          cd nipaplay-reload-bin
-          sed -i "s/^pkgver=.*/pkgver=${{ steps.get_version.outputs.version }}/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
-          cd ..
-
-      - name: Publish AUR package
-        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1  
-        with:
-          pkgname: nipaplay-reload-bin
-          pkgbuild: ./nipaplay-reload-bin/PKGBUILD
-          updpkgsums: true
-          commit_username: github-actions[bot]
-          commit_email: github-actions[bot]@users.noreply.github.com
-          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: Update AUR package to v${{ steps.get_version.outputs.version }}"
