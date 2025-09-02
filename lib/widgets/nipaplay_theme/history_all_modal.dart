@@ -326,7 +326,8 @@ class HistoryListItem extends StatelessWidget {
                     ),
                     child: Text(
                       "${(item.watchProgress * 100).toInt()}%",
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: item.watchProgress > 0.9
                             ? Colors.greenAccent
                             : Colors.orangeAccent,

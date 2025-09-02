@@ -52,7 +52,8 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
             ),
             child: Text(
               _formatOffset(offset),
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white,
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -82,7 +83,8 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
                   children: [
                     const Text(
                       '当前偏移',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -143,7 +145,8 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
                   children: [
                     const Text(
                       '快速设置',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -153,7 +156,8 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
                     // 后退选项
                     const Text(
                       '弹幕后退',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white70,
                         fontSize: 12,
                       ),
@@ -171,7 +175,8 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
                     // 无偏移
                     const Text(
                       '默认',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white70,
                         fontSize: 12,
                       ),
@@ -183,7 +188,8 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
                     // 前进选项
                     const Text(
                       '弹幕前进',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white70,
                         fontSize: 12,
                       ),

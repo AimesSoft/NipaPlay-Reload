@@ -90,7 +90,8 @@ class _SingleDanmakuState extends State<SingleDanmaku> {
     final textPainter = TextPainter(
       text: TextSpan(
         text: widget.content.text,
-        style: TextStyle(
+        locale:Locale("zh","CN"),
+style: TextStyle(
           fontSize: widget.fontSize * widget.content.fontSizeMultiplier,
           color: widget.content.color,
         ),

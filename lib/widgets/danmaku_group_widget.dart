@@ -68,7 +68,8 @@ class DanmakuGroupWidget extends StatelessWidget {
       final textPainter = TextPainter(
         text: TextSpan(
           text: danmakuItem.text,
-          style: TextStyle(fontSize: adjustedFontSize, color: danmakuItem.color),
+          locale:Locale("zh","CN"),
+style: TextStyle(fontSize: adjustedFontSize, color: danmakuItem.color),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
@@ -133,7 +134,8 @@ class DanmakuGroupWidget extends StatelessWidget {
                       children: [
                         TextSpan(
                           text: danmakuItem.text,
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             fontSize: adjustedFontSize,
                             color: danmakuItem.color,
                             fontWeight: FontWeight.normal,
@@ -142,7 +144,8 @@ class DanmakuGroupWidget extends StatelessWidget {
                         ),
                         TextSpan(
                           text: danmakuItem.countText,
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             fontSize: 16.0,
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -157,7 +160,8 @@ class DanmakuGroupWidget extends StatelessWidget {
                       // 描边
                       Text(
                         danmakuItem.text,
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                           fontSize: adjustedFontSize,
                           color: strokeColor,
                           fontWeight: FontWeight.normal,
@@ -167,7 +171,8 @@ class DanmakuGroupWidget extends StatelessWidget {
                       // 实际文本
                       Text(
                         danmakuItem.text,
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                           fontSize: adjustedFontSize,
                           color: danmakuItem.color,
                           fontWeight: FontWeight.normal,

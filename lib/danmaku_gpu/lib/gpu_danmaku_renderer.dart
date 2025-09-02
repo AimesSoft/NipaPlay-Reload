@@ -222,7 +222,8 @@ class _GPUDanmakuItem {
     final textPainter = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(
+        locale:Locale("zh","CN"),
+style: TextStyle(
           fontSize: fontSize,
           fontWeight: FontWeight.normal,
           fontFeatures: const [FontFeature.proportionalFigures()],

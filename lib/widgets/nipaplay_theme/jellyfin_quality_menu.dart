@@ -233,7 +233,8 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       onClose: widget.onClose,
       extraButton: TextButton(
         onPressed: _applySelection,
-        child: const Text('应用', style: TextStyle(color: Colors.white)),
+        child: const Text('应用', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white)),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -290,7 +291,8 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
                                     children: [
                                       Text(
                                         _getQualityDisplayName(quality),
-                                        style: TextStyle(
+                                        locale:Locale("zh","CN"),
+style: TextStyle(
                                           color: isSelected ? Colors.blue : Colors.white,
                                           fontSize: 14,
                                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -299,7 +301,8 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
                                       const SizedBox(height: 2),
                                       Text(
                                         _getQualityDescription(quality),
-                                        style: TextStyle(
+                                        locale:Locale("zh","CN"),
+style: TextStyle(
                                           color: isSelected ? Colors.blue.withOpacity(0.8) : Colors.white60,
                                           fontSize: 12,
                                         ),
@@ -334,7 +337,8 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('转码时烧录字幕', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      const Text('转码时烧录字幕', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 13)),
                       Switch(
                         value: _burnIn,
                         onChanged: (v) => setState(() => _burnIn = v),
@@ -379,7 +383,8 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     color: selected ? Colors.blue : Colors.white,
                     fontSize: 13,
                   ),

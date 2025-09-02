@@ -196,7 +196,8 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     if (animes.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16.0),
-        child: Center(child: Text("本日无新番", style: TextStyle(color: Colors.white70))),
+        child: Center(child: Text("本日无新番", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70))),
       );
     }
     return GridView.builder(

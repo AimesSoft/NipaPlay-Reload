@@ -72,7 +72,8 @@ class MediaServerSelectionSheet extends StatelessWidget {
               padding: EdgeInsets.only(bottom: 16),
               child: Text(
                 '选择媒体服务器',
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -177,7 +178,8 @@ class MediaServerSelectionSheet extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white.withOpacity(0.7),
                         fontSize: 14,
                       ),

@@ -134,7 +134,8 @@ class _RatingDialogState extends State<RatingDialog> {
                     // 番剧名称
                     Text(
                       widget.animeTitle,
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white.withOpacity(0.8),
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -150,7 +151,8 @@ class _RatingDialogState extends State<RatingDialog> {
                         children: [
                           Text(
                             _selectedRating > 0 ? '$_selectedRating 分' : '未评分',
-                            style: TextStyle(
+                            locale:Locale("zh","CN"),
+style: TextStyle(
                               color: Colors.white,
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -160,7 +162,8 @@ class _RatingDialogState extends State<RatingDialog> {
                             const SizedBox(height: 4),
                             Text(
                               _ratingEvaluationMap[_selectedRating] ?? '',
-                              style: TextStyle(
+                              locale:Locale("zh","CN"),
+style: TextStyle(
                                 color: Colors.white.withOpacity(0.7),
                                 fontSize: 14,
                               ),
@@ -240,7 +243,8 @@ class _RatingDialogState extends State<RatingDialog> {
                             child: Center(
                               child: Text(
                                 '$rating',
-                                style: TextStyle(
+                                locale:Locale("zh","CN"),
+style: TextStyle(
                                   color: isSelected 
                                       ? Colors.blue
                                       : Colors.white.withOpacity(0.8),
@@ -269,7 +273,8 @@ class _RatingDialogState extends State<RatingDialog> {
                                   : () => setState(() => _selectedRating = 0),
                               child: Text(
                                 '清除评分',
-                                style: TextStyle(
+                                locale:Locale("zh","CN"),
+style: TextStyle(
                                   color: Colors.white.withOpacity(0.7),
                                   fontSize: 13,
                                 ),
@@ -286,7 +291,8 @@ class _RatingDialogState extends State<RatingDialog> {
                                 : () => Navigator.of(context).pop(),
                             child: Text(
                               '取消',
-                              style: TextStyle(
+                              locale:Locale("zh","CN"),
+style: TextStyle(
                                 color: Colors.white.withOpacity(0.8),
                                 fontSize: 13,
                               ),
@@ -320,7 +326,8 @@ class _RatingDialogState extends State<RatingDialog> {
                                   )
                                 : Text(
                                     '确定',
-                                    style: TextStyle(
+                                    locale:Locale("zh","CN"),
+style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),

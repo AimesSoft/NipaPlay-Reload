@@ -393,7 +393,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
               const Text(
                 '媒体库为空。\n观看过的动画将显示在这里。',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+                locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),
               if (!_isJellyfinConnected)

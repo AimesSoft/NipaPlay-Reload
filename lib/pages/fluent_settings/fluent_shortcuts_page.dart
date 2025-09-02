@@ -525,7 +525,8 @@ class _FluentShortcutsPageState extends State<FluentShortcutsPage> {
             ],
             Text(
               text,
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: isRecording 
                     ? FluentTheme.of(context).accentColor
                     : null,

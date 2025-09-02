@@ -594,7 +594,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
               const SizedBox(height: 4),
               Text(
                 '管理媒体库连接和选择',
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 14,
                 ),
@@ -627,7 +628,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                 child: const Icon(Icons.dns, color: Colors.blue, size: 20),
               ),
               const SizedBox(width: 12),
-              const Text('服务器:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text('服务器:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -650,7 +652,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                 child: const Icon(Icons.person, color: Colors.green, size: 20),
               ),
               const SizedBox(width: 12),
-              const Text('用户:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text('用户:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
                 _provider.username ?? '匿名',
@@ -680,7 +683,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
             const SizedBox(width: 12),
             const Text(
               '媒体库选择',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -726,7 +730,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
             const SizedBox(height: 16),
             Text(
               '没有可用的媒体库',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white.withOpacity(0.7),
                 fontSize: 16,
               ),
@@ -734,7 +739,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
             const SizedBox(height: 8),
             Text(
               '请检查服务器连接状态',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white.withOpacity(0.5),
                 fontSize: 14,
               ),
@@ -788,7 +794,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
             ),
             subtitle: Text(
               library.type,
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white.withOpacity(0.7),
                 fontSize: 12,
               ),
@@ -890,7 +897,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                     children: [
                       const Text(
                         '转码设置',
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -899,7 +907,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                       const SizedBox(height: 4),
                       Text(
                         '当前默认质量: ${_selectedQuality.displayName}',
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                           color: Colors.white.withOpacity(0.7),
                           fontSize: 12,
                         ),
@@ -947,7 +956,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                           Expanded(
                             child: Text(
                               '启用转码',
-                              style: TextStyle(
+                              locale:Locale("zh","CN"),
+style: TextStyle(
                                 color: Colors.white.withOpacity(0.9),
                                 fontSize: 14,
                               ),
@@ -967,7 +977,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                         const SizedBox(height: 16),
                         Text(
                           '默认清晰度',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
@@ -1011,7 +1022,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                                           children: [
                                             Text(
                                               quality.displayName,
-                                              style: TextStyle(
+                                              locale:Locale("zh","CN"),
+style: TextStyle(
                                                 color: isSelected ? Colors.orange : Colors.white,
                                                 fontSize: 14,
                                                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,

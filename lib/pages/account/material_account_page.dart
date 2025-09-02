@@ -131,7 +131,8 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           children: [
             const Text(
               '弹弹play账号',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
@@ -225,7 +226,8 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                     const SizedBox(height: 4),
                     const Text(
                       '已登录',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white60,
                         fontSize: 12,
                       ),
@@ -263,7 +265,8 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                         SizedBox(width: 4),
                         Text(
                           '退出',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
                           ),
@@ -286,11 +289,13 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         ListTile(
           title: const Text(
             "登录弹弹play账号",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           subtitle: const Text(
             "登录后可以同步观看记录和个人设置",
-            style: TextStyle(color: Colors.white70),
+            locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70),
           ),
           trailing: const Icon(Icons.login, color: Colors.white),
           onTap: showLoginDialog,
@@ -299,11 +304,13 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         ListTile(
           title: const Text(
             "注册弹弹play账号",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           subtitle: const Text(
             "创建新的弹弹play账号，享受完整功能",
-            style: TextStyle(color: Colors.white70),
+            locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70),
           ),
           trailing: const Icon(Icons.person_add, color: Colors.white),
           onTap: showRegisterDialog,

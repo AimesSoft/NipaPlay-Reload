@@ -479,13 +479,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   child: _buildRatingStars(bangumiRatingValue.toDouble())),
               TextSpan(
                   text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                       color: Colors.yellow[600],
                       fontWeight: FontWeight.bold,
                       fontSize: 14)),
               TextSpan(
                   text: bangumiEvaluationText,
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                       color: Colors.white.withOpacity(0.7), fontSize: 12))
             ])),
             const SizedBox(height: 6),
@@ -511,7 +513,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       ),
                       TextSpan(
                         text: '(${_ratingEvaluationMap[_userRating] ?? ''})',
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                           color: Colors.blue.withOpacity(0.7),
                           fontSize: 12,
                         ),
@@ -602,7 +605,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                     fontWeight: FontWeight.normal)),
                             TextSpan(
                                 text: score.toStringAsFixed(1),
-                                style: TextStyle(
+                                locale:Locale("zh","CN"),
+style: TextStyle(
                                     color: Colors.white.withOpacity(0.95)))
                           ]));
                     }).toList())),
@@ -706,7 +710,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       return const Center(
           child: Padding(
         padding: EdgeInsets.all(20.0),
-        child: Text('暂无剧集信息', style: TextStyle(color: Colors.white70)),
+        child: Text('暂无剧集信息', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
       ));
     }
     return ListView.builder(
@@ -776,7 +781,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   children: [
                     Expanded(
                       child: Text(episode.title,
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                               color: Colors.white.withOpacity(0.9), fontSize: 13),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis),
@@ -811,7 +817,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                               const SizedBox(width: 4),
                             Text(
                               _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
-                              style: TextStyle(
+                              locale:Locale("zh","CN"),
+style: TextStyle(
                                 color: Colors.green.withOpacity(0.9),
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
@@ -824,7 +831,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 ),
                 trailing: progressText != null
                     ? Text(progressText,
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                             color: progress > 0.95
                                 ? Colors.greenAccent
                                     .withOpacity(0.9) // Green for "已看完"
@@ -892,11 +900,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text('加载详情失败:',
-                  style: TextStyle(color: Colors.white.withOpacity(0.8))),
+                  locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white.withOpacity(0.8))),
               const SizedBox(height: 8),
               Text(
                 _error ?? '未知错误',
-                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white.withOpacity(0.7)),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -904,13 +914,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white.withOpacity(0.2)),
                 onPressed: _fetchAnimeDetails,
-                child: const Text('重试', style: TextStyle(color: Colors.white)),
+                child: const Text('重试', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white)),
               ),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child:
-                    const Text('关闭', style: TextStyle(color: Colors.white70)),
+                    const Text('关闭', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
               ),
             ],
           ),
@@ -1245,7 +1257,8 @@ class _HoverableTagState extends State<_HoverableTag> {
                   ),
                   child: Text(
                     widget.tag,
-                    style: TextStyle(
+                    locale:Locale("zh","CN"),
+style: TextStyle(
                       fontSize: 12,
                       color: _isHovered 
                           ? Colors.white 

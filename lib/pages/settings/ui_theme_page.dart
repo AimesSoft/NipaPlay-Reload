@@ -35,7 +35,8 @@ class _UIThemePageState extends State<UIThemePage> {
                 // 标题
                 const Text(
                   '控件主题',
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -44,7 +45,8 @@ class _UIThemePageState extends State<UIThemePage> {
                 const SizedBox(height: 8),
                 const Text(
                   '选择应用的控件主题风格',
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
                   ),
@@ -71,7 +73,8 @@ class _UIThemePageState extends State<UIThemePage> {
       children: [
         const Text(
           '主题风格',
-          style: TextStyle(
+          locale:Locale("zh","CN"),
+style: TextStyle(
             color: Colors.white,
             fontSize: 16,
             fontWeight: FontWeight.w500,
@@ -108,7 +111,8 @@ class _UIThemePageState extends State<UIThemePage> {
         children: [
           const Text(
             '当前主题预览',
-            style: TextStyle(
+            locale:Locale("zh","CN"),
+style: TextStyle(
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w500,
@@ -129,7 +133,8 @@ class _UIThemePageState extends State<UIThemePage> {
           children: [
             Text(
               'NipaPlay 主题',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -138,7 +143,8 @@ class _UIThemePageState extends State<UIThemePage> {
             SizedBox(height: 8),
             Text(
               '• 磨砂玻璃效果\n• 渐变背景\n• 圆角设计\n• 适合多媒体应用',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
                 height: 1.5,
@@ -152,7 +158,8 @@ class _UIThemePageState extends State<UIThemePage> {
           children: [
             Text(
               'Fluent UI 主题',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -161,7 +168,8 @@ class _UIThemePageState extends State<UIThemePage> {
             SizedBox(height: 8),
             Text(
               '• Microsoft 设计语言\n• 亚克力材质\n• 现代化界面\n• 统一的交互体验',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
                 height: 1.5,
@@ -184,7 +192,8 @@ class _UIThemePageState extends State<UIThemePage> {
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text('取消', style: TextStyle(color: Colors.grey)),
+          child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.grey)),
         ),
         TextButton(
           onPressed: () async {
@@ -194,7 +203,8 @@ class _UIThemePageState extends State<UIThemePage> {
             // 退出应用
             _exitApplication();
           },
-          child: const Text('重启应用', style: TextStyle(color: Colors.white)),
+          child: const Text('重启应用', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white)),
         ),
       ],
     );

@@ -96,7 +96,8 @@ Card(
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: _getAccessUrls().map((url) => 
-              Text(url, style: TextStyle(fontFamily: 'monospace'))
+              Text(url, locale:Locale("zh","CN"),
+style: TextStyle(fontFamily: 'monospace'))
             ).toList(),
           ),
           trailing: IconButton(

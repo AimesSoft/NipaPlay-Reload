@@ -222,7 +222,8 @@ class DynamicFontAtlas {
       final textPainter = TextPainter(
         text: TextSpan(
           text: charStr,
-          style: TextStyle(fontSize: fontSize * 2.0, color: color), // 2x 渲染
+          locale:Locale("zh","CN"),
+style: TextStyle(fontSize: fontSize * 2.0, color: color), // 2x 渲染
         ),
         textDirection: TextDirection.ltr,
       );

@@ -100,12 +100,14 @@ class FluentMediaLibraryView extends StatelessWidget {
         children: [
           const Text(
             '媒体库为空',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            locale:Locale("zh","CN"),
+style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           const Text(
             '观看过的动画将显示在这里。',
-            style: TextStyle(color: Colors.grey),
+            locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 20),
           if (!isJellyfinConnected)

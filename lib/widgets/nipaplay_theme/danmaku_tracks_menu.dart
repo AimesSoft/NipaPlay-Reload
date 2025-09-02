@@ -250,7 +250,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                         children: [
                           const Text(
                             '弹幕轨道总览',
-                            style: TextStyle(
+                            locale:Locale("zh","CN"),
+style: TextStyle(
                               color: Colors.white,
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -259,7 +260,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                           const SizedBox(height: 2),
                           Text(
                             '共${tracks.length}个轨道，合计$totalDanmakuCount条弹幕',
-                            style: TextStyle(
+                            locale:Locale("zh","CN"),
+style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 12,
                             ),
@@ -267,7 +269,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                           if (totalDanmakuCount != filteredDanmakuCount)
                             Text(
                               '显示: $filteredDanmakuCount条 (已过滤${totalDanmakuCount - filteredDanmakuCount}条)',
-                              style: TextStyle(
+                              locale:Locale("zh","CN"),
+style: TextStyle(
                                 color: Colors.orange.withOpacity(0.8),
                                 fontSize: 12,
                               ),
@@ -340,7 +343,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                               children: [
                                 Text(
                                   trackName,
-                                  style: TextStyle(
+                                  locale:Locale("zh","CN"),
+style: TextStyle(
                                     color: isEnabled ? Colors.white : Colors.white.withOpacity(0.7),
                                     fontSize: 14,
                                     fontWeight: isEnabled ? FontWeight.w500 : FontWeight.normal,
@@ -348,7 +352,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                                 ),
                                 Text(
                                   '$count条弹幕',
-                                  style: TextStyle(
+                                  locale:Locale("zh","CN"),
+style: TextStyle(
                                     color: Colors.white.withOpacity(0.6),
                                     fontSize: 12,
                                   ),
@@ -393,7 +398,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                         const SizedBox(width: 12),
                         Text(
                           '正在加载弹幕文件...',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: Colors.white.withOpacity(0.7),
                             fontSize: 14,
                           ),

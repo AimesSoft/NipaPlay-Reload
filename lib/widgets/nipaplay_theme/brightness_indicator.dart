@@ -80,7 +80,8 @@ class BrightnessIndicator extends StatelessWidget {
                         padding: const EdgeInsets.all(5),
                         child: Text(
                           "${(videoState.currentScreenBrightness * 100).toInt()}%",
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 10,
                               fontWeight: FontWeight.w500,

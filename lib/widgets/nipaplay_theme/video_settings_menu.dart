@@ -648,7 +648,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                                     children: [
                                       Text(
                                         '设置',
-                                        style: TextStyle(
+                                        locale:Locale("zh","CN"),
+style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 16,
                                           fontWeight: FontWeight.w500,

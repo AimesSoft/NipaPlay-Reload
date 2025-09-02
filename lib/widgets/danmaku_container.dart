@@ -966,7 +966,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(
+        locale:Locale("zh","CN"),
+style: TextStyle(
           fontSize: fontSize,
           // 与渲染路径尽可能一致；如有指定字体可在此补充 family
         ),

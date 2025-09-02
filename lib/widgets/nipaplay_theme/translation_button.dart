@@ -182,7 +182,8 @@ class _TranslationButtonState extends State<TranslationButton> {
                               : (widget.translatedSummaries.containsKey(widget.animeId)
                                   ? (widget.isShowingTranslation ? '显示原文' : '显示翻译')
                                   : '翻译为中文')),
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: _errorMessage != null ? Colors.red[300] : Colors.white,
                         fontSize: 14,
                       ),

@@ -63,7 +63,8 @@ class CpuDanmakuTextRenderer extends DanmakuTextRenderer {
               children: [
                 TextSpan(
                   text: content.text,
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     fontSize: adjustedFontSize,
                     color: content.color,
                     fontWeight: FontWeight.normal,
@@ -72,7 +73,8 @@ class CpuDanmakuTextRenderer extends DanmakuTextRenderer {
                 ),
                 TextSpan(
                   text: content.countText,
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     fontSize: 25.0, // 固定大小字体
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -87,7 +89,8 @@ class CpuDanmakuTextRenderer extends DanmakuTextRenderer {
               // 描边
               Text(
                 content.text,
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   fontSize: adjustedFontSize,
                   color: strokeColor,
                   fontWeight: FontWeight.normal,
@@ -97,7 +100,8 @@ class CpuDanmakuTextRenderer extends DanmakuTextRenderer {
               // 实际文本
               Text(
                 content.text,
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   fontSize: adjustedFontSize,
                   color: content.color,
                   fontWeight: FontWeight.normal,

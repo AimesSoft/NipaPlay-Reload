@@ -69,7 +69,8 @@ class _SplashScreenState extends State<SplashScreen> {
             const SizedBox(height: 16),
             Text(
               'v$_version',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 fontSize: 16,
                 color: textColor,
                 fontWeight: FontWeight.w500,

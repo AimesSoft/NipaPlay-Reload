@@ -403,7 +403,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                       TextSpan(text: '我的打分: ', style: boldKeyStyle?.copyWith(color: FluentTheme.of(context).accentColor)),
                       TextSpan(
                         text: '$_userRating 分 ',
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                           color: FluentTheme.of(context).accentColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -526,7 +527,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                     style: boldKeyStyle?.copyWith(color: material.Colors.orangeAccent)),
                 TextSpan(
                     text: anime.isFavorited! ? '已追' : '未追',
-                    style: TextStyle(color: material.Colors.orangeAccent.withOpacity(0.85)))
+                    locale:Locale("zh","CN"),
+style: TextStyle(color: material.Colors.orangeAccent.withOpacity(0.85)))
               ]))),
           if (anime.isNSFW ?? false)
             Padding(
@@ -538,7 +540,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                       style: boldKeyStyle?.copyWith(color: material.Colors.redAccent)),
                   TextSpan(
                       text: '是',
-                      style: TextStyle(color: material.Colors.redAccent.withOpacity(0.85)))
+                      locale:Locale("zh","CN"),
+style: TextStyle(color: material.Colors.redAccent.withOpacity(0.85)))
                 ]))),
           ...metadataWidgets,
           ...titlesWidgets,
@@ -652,7 +655,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                         ),
                         child: Text(
                           _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: material.Colors.green.withOpacity(0.9),
                             fontSize: 10,
                             fontWeight: FontWeight.w500,
@@ -663,7 +667,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                 ),
                 trailing: progressText != null
                     ? Text(progressText,
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                             color: progress > 0.95
                                 ? material.Colors.greenAccent.withOpacity(0.9)
                                 : (progress > 0.01

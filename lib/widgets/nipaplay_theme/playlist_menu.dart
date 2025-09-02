@@ -631,7 +631,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 _currentAnimeTitle!,
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.9),
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -659,7 +660,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             SizedBox(height: 16),
             Text(
               '加载播放列表中...',
-              style: TextStyle(color: Colors.white70),
+              locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70),
             ),
           ],
         ),
@@ -707,7 +709,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             SizedBox(height: 16),
             Text(
               '目录中没有找到视频文件',
-              style: TextStyle(color: Colors.white70),
+              locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70),
             ),
           ],
         ),
@@ -744,7 +747,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                   ),
                   title: Text(
                     displayName,
-                    style: TextStyle(
+                    locale:Locale("zh","CN"),
+style: TextStyle(
                       color: isCurrentEpisode ? Colors.white : Colors.white.withValues(alpha: 0.87),
                       fontSize: 14,
                       fontWeight: isCurrentEpisode ? FontWeight.bold : FontWeight.normal,

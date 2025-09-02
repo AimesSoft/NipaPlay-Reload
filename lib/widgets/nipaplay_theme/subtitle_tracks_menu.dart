@@ -533,7 +533,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                     padding: EdgeInsets.only(left: 16, bottom: 8),
                     child: Text(
                       '外部字幕',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -597,7 +598,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                                   ),
                                   Text(
                                     '类型: ${fileType.toUpperCase()}',
-                                    style: TextStyle(
+                                    locale:Locale("zh","CN"),
+style: TextStyle(
                                       color: Colors.white.withOpacity(0.7),
                                       fontSize: 12,
                                     ),
@@ -629,7 +631,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                     padding: EdgeInsets.only(left: 16, bottom: 8),
                     child: Text(
                       '内嵌字幕',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -717,7 +720,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                                   ),
                                   Text(
                                     '语言: $language', // Display language from SubtitleManager (or fallback)
-                                    style: TextStyle(
+                                    locale:Locale("zh","CN"),
+style: TextStyle(
                                       color: Colors.white.withOpacity(0.7),
                                       fontSize: 12,
                                     ),
@@ -739,7 +743,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                   padding: EdgeInsets.all(16.0),
                   child: Text(
                     '当前视频没有可用的字幕轨道。\n您可以通过"加载本地字幕文件"按钮添加外部字幕。',
-                    style: TextStyle(
+                    locale:Locale("zh","CN"),
+style: TextStyle(
                       color: Colors.white70,
                       fontSize: 14,
                     ),

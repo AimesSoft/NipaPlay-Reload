@@ -168,7 +168,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                           const SizedBox(width: 4),
                           Text(
                             '${_cpuUsage.toStringAsFixed(1)}%',
-                            style: TextStyle(
+                            locale:Locale("zh","CN"),
+style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                               color: _getCpuColor(),
@@ -187,7 +188,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                           const SizedBox(width: 4),
                           Text(
                             '${_memoryUsageMB.toStringAsFixed(1)}MB',
-                            style: TextStyle(
+                            locale:Locale("zh","CN"),
+style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                               color: _getMemoryColor(),
@@ -206,7 +208,8 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                           const SizedBox(width: 4),
                           Text(
                             '${_fps.toStringAsFixed(1)} FPS',
-                            style: TextStyle(
+                            locale:Locale("zh","CN"),
+style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                               color: _getFpsColor(),

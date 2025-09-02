@@ -34,7 +34,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                 SizedBox(height: 16),
                 Text(
                   '正在初始化远程媒体库服务...',
-                  style: TextStyle(color: Colors.white70),
+                  locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70),
                 ),
               ],
             ),
@@ -91,7 +92,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               const SizedBox(width: 12),
               const Text(
                 '服务初始化错误',
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
@@ -121,7 +123,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                 Expanded(
                   child: Text(
                     '这些错误不会影响其他功能的正常使用。您可以尝试重新配置服务器连接。',
-                    style: TextStyle(
+                    locale:Locale("zh","CN"),
+style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
                     ),
@@ -157,7 +160,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           const SizedBox(height: 4),
           Text(
             errorMessage,
-            style: TextStyle(
+            locale:Locale("zh","CN"),
+style: TextStyle(
               color: Colors.red[300],
               fontSize: 12,
             ),
@@ -183,7 +187,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               const SizedBox(width: 12),
               const Text(
                 'Jellyfin 媒体服务器',
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
@@ -200,7 +205,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   ),
                   child: const Text(
                     '已连接',
-                    style: TextStyle(
+                    locale:Locale("zh","CN"),
+style: TextStyle(
                       color: Colors.green,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -215,7 +221,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               if (!jellyfinProvider.isConnected) ...[
                 const Text(
                   'Jellyfin是一个免费的媒体服务器软件，可以让您在任何设备上流式传输您的媒体收藏。',
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
                   ),
@@ -281,7 +288,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             children: [
               const Icon(Icons.dns, color: Colors.blue, size: 16),
               const SizedBox(width: 8),
-              const Text('服务器:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text('服务器:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -297,7 +305,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             children: [
               const Icon(Icons.person, color: Colors.blue, size: 16),
               const SizedBox(width: 8),
-              const Text('用户:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text('用户:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
                 jellyfinProvider.username ?? '匿名',
@@ -328,7 +337,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             children: [
               const Icon(Ionicons.library_outline, color: Colors.blue, size: 16),
               const SizedBox(width: 8),
-              const Text('媒体库:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text('媒体库:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
                 '已选择 ${selectedLibraries.length} / ${availableLibraries.length}',
@@ -403,7 +413,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               const SizedBox(width: 12),
               const Text(
                 'Emby 媒体服务器',
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
@@ -420,7 +431,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                       ),
                       child: const Text(
                         '已连接',
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                           color: Color(0xFF52B54B),
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -435,7 +447,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               if (!embyProvider.isConnected) ...[
                 const Text(
                   'Emby是一个强大的个人媒体服务器，可以让您在任何设备上组织、播放和流式传输您的媒体收藏。',
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
                   ),
@@ -501,7 +514,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             children: [
               const Icon(Icons.dns, color: Color(0xFF52B54B), size: 16),
               const SizedBox(width: 8),
-              const Text('服务器:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text('服务器:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -517,7 +531,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             children: [
               const Icon(Icons.person, color: Color(0xFF52B54B), size: 16),
               const SizedBox(width: 8),
-              const Text('用户:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text('用户:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
                 embyProvider.username ?? '匿名',
@@ -548,7 +563,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             children: [
               const Icon(Ionicons.library_outline, color: Color(0xFF52B54B), size: 16),
               const SizedBox(width: 8),
-              const Text('媒体库:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text('媒体库:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
                 '已选择 ${selectedLibraries.length} / ${availableLibraries.length}',
@@ -638,7 +654,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   SizedBox(width: 12),
                   Text(
                     '其他媒体服务',
-                    style: TextStyle(
+                    locale:Locale("zh","CN"),
+style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -651,7 +668,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               
               const Text(
                 '更多远程媒体服务支持正在开发中...',
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
                 ),
@@ -719,11 +737,13 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('断开连接', style: TextStyle(color: Colors.red)),
+          child: const Text('断开连接', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.red)),
         ),
       ],
     );
@@ -825,11 +845,13 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('断开连接', style: TextStyle(color: Colors.red)),
+          child: const Text('断开连接', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.red)),
         ),
       ],
     );

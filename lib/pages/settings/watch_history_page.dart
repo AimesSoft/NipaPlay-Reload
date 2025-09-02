@@ -232,7 +232,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           const SizedBox(height: 16),
           const Text(
             '暂无观看记录',
-            style: TextStyle(
+            locale:Locale("zh","CN"),
+style: TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w500,
@@ -241,7 +242,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           const SizedBox(height: 8),
           Text(
             '开始播放视频后，这里会显示观看记录',
-            style: TextStyle(
+            locale:Locale("zh","CN"),
+style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 14,
             ),
@@ -360,7 +362,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           },
         ),
         TextButton(
-          child: const Text('删除', style: TextStyle(color: Colors.red)),
+          child: const Text('删除', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.red)),
           onPressed: () async {
             // 调用 Provider 的方法删除观看记录
             final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);

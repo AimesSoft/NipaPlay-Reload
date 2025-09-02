@@ -475,7 +475,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 child: const Center(
                   child: Text(
                     '布局空间不足',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                    locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),
               );

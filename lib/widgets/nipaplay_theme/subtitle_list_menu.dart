@@ -460,7 +460,8 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                   child: Center(
                     child: Text(
                       '没有激活的字幕轨道\n请在字幕轨道设置中激活字幕',
-                      style: TextStyle(color: Colors.white70),
+                      locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -471,7 +472,8 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                     child: Center(
                       child: Text(
                         '当前字幕轨道没有可显示的字幕内容',
-                        style: TextStyle(color: Colors.white70),
+                        locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -533,7 +535,8 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                             children: [
                                               Text(
                                                 entry.formattedStartTime,
-                                                style: TextStyle(
+                                                locale:Locale("zh","CN"),
+style: TextStyle(
                                                   color: Colors.grey.shade400,
                                                   fontSize: 12,
                                                   fontWeight: isCurrentSubtitle ? FontWeight.bold : FontWeight.normal,
@@ -541,14 +544,16 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                               ),
                                               const Text(
                                                 ' → ',
-                                                style: TextStyle(
+                                                locale:Locale("zh","CN"),
+style: TextStyle(
                                                   color: Colors.grey,
                                                   fontSize: 12,
                                                 ),
                                               ),
                                               Text(
                                                 entry.formattedEndTime,
-                                                style: TextStyle(
+                                                locale:Locale("zh","CN"),
+style: TextStyle(
                                                   color: Colors.grey.shade400,
                                                   fontSize: 12,
                                                   fontWeight: isCurrentSubtitle ? FontWeight.bold : FontWeight.normal,
@@ -566,7 +571,8 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                             ),
                                             child: Text(
                                               entry.content,
-                                              style: TextStyle(
+                                              locale:Locale("zh","CN"),
+style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 14,
                                                 fontWeight: isCurrentSubtitle ? FontWeight.bold : FontWeight.normal,
@@ -637,7 +643,8 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                               children: [
                                                 Text(
                                                   entry.formattedStartTime,
-                                                  style: TextStyle(
+                                                  locale:Locale("zh","CN"),
+style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.normal,
@@ -645,14 +652,16 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                                 ),
                                                 Text(
                                                   ' → ',
-                                                  style: TextStyle(
+                                                  locale:Locale("zh","CN"),
+style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
                                                   ),
                                                 ),
                                                 Text(
                                                   entry.formattedEndTime,
-                                                  style: TextStyle(
+                                                  locale:Locale("zh","CN"),
+style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.normal,
@@ -670,7 +679,8 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                                               ),
                                               child: Text(
                                                 entry.content,
-                                                style: TextStyle(
+                                                locale:Locale("zh","CN"),
+style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 14,
                                                   fontWeight: isCurrentSubtitle ? FontWeight.bold : FontWeight.normal,

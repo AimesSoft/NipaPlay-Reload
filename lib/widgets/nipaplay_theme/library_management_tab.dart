@@ -149,13 +149,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           content: "无法访问您选择的文件夹，可能是权限问题。\n\n如果您使用的是Android 11或更高版本，请考虑在设置中开启「管理所有文件」权限。",
           actions: <Widget>[
             TextButton(
-              child: const Text("知道了", style: TextStyle(color: Colors.white70)),
+              child: const Text("知道了", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: const Text("打开设置", style: TextStyle(color: Colors.lightBlueAccent)),
+              child: const Text("打开设置", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
                 Navigator.of(context).pop();
                 openAppSettings();
@@ -204,7 +206,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             content: dialogContent,
             actions: <Widget>[
               TextButton(
-                child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
+                child: const Text("知道了", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
@@ -232,7 +235,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             content: "无法访问所选文件夹，可能是权限问题。\n\n建议选择您的个人文件夹或媒体文件夹，如Pictures、Download或Movies。\n\n错误: ${e.toString().substring(0, min(e.toString().length, 100))}",
             actions: <Widget>[
               TextButton(
-                child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
+                child: const Text("知道了", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
@@ -259,13 +263,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       content: '确定要从列表中移除文件夹 "$folderPathToRemove" 吗？\n相关的媒体记录也会被清理。',
       actions: <Widget>[
         TextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
         TextButton(
-          child: const Text('移除', style: TextStyle(color: Colors.redAccent)),
+          child: const Text('移除', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
             Navigator.of(context).pop(true);
           },
@@ -451,7 +457,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (entities.isEmpty && !_loadingFolders.contains(parentPath)) {
       return [Padding(
         padding: EdgeInsets.only(left: depth * 16.0 + 16.0, top: 8.0, bottom: 8.0),
-        child: const Text("文件夹为空", style: TextStyle(color: Colors.white54)),
+        child: const Text("文件夹为空", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white54)),
       )];
     }
     
@@ -527,7 +534,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 subtitle: subtitleText != null 
                     ? Text(
                         subtitleText,
-                        style: TextStyle(
+                        locale:Locale("zh","CN"),
+style: TextStyle(
                           color: Colors.white.withOpacity(0.7),
                           fontSize: 12,
                         ),
@@ -592,7 +600,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         children: [
           Text(
             '选择文件夹中文件和子文件夹的排序方式：',
-            style: TextStyle(
+            locale:Locale("zh","CN"),
+style: TextStyle(
               color: Colors.white.withOpacity(0.8),
               fontSize: 14,
             ),
@@ -633,7 +642,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                               Expanded(
                                 child: Text(
                                   option,
-                                  style: TextStyle(
+                                  locale:Locale("zh","CN"),
+style: TextStyle(
                                     color: isSelected ? Colors.lightBlueAccent : Colors.white70,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                     fontSize: 14,
@@ -653,7 +663,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           const SizedBox(height: 16),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消', style: TextStyle(color: Colors.white54)),
+            child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white54)),
           ),
         ],
       ),
@@ -741,7 +752,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       content: dialogContent,
       actions: <Widget>[
         TextButton(
-          child: const Text("知道了", style: TextStyle(color: Colors.lightBlueAccent)),
+          child: const Text("知道了", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
           onPressed: () {
             Navigator.of(context).pop();
           },
@@ -764,13 +776,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       content: '确定要重置存储路径吗？这将清除您之前设置的自定义路径，并使用系统默认位置。\n\n注意：这不会删除您已添加到媒体库的视频文件。',
       actions: <Widget>[
         TextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
         TextButton(
-          child: const Text('重置', style: TextStyle(color: Colors.redAccent)),
+          child: const Text('重置', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
             Navigator.of(context).pop(true);
           },
@@ -828,13 +842,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           content: content.toString(),
           actions: <Widget>[
             TextButton(
-              child: const Text('关闭', style: TextStyle(color: Colors.white70)),
+              child: const Text('关闭', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: const Text('申请权限', style: TextStyle(color: Colors.lightBlueAccent)),
+              child: const Text('申请权限', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () async {
                 Navigator.of(context).pop();
                 await AndroidStorageHelper.requestAllRequiredPermissions();
@@ -876,13 +892,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           content: "NipaPlay需要访问媒体文件权限才能扫描视频文件。\n\n请在系统设置中允许NipaPlay访问照片、视频和音频权限。",
           actions: <Widget>[
             TextButton(
-              child: const Text("稍后再说", style: TextStyle(color: Colors.white70)),
+              child: const Text("稍后再说", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: const Text("打开设置", style: TextStyle(color: Colors.lightBlueAccent)),
+              child: const Text("打开设置", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
                 Navigator.of(context).pop();
                 openAppSettings();
@@ -954,13 +972,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           content: "无法找到系统视频文件夹。建议使用\"管理所有文件\"权限或手动选择文件夹。",
           actions: <Widget>[
             TextButton(
-              child: const Text("取消", style: TextStyle(color: Colors.white70)),
+              child: const Text("取消", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: const Text("开启完整权限", style: TextStyle(color: Colors.lightBlueAccent)),
+              child: const Text("开启完整权限", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
                 Navigator.of(context).pop();
                 AndroidStorageHelper.requestManageExternalStoragePermission();
@@ -1035,7 +1055,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 此功能需要访问本地文件系统，但Web应用无法获取相关权限。
 请在Windows、macOS、Android或iOS客户端中使用此功能。''',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
+            locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
           ),
         ),
       );
@@ -1055,7 +1076,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Text("媒体文件夹", style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
+              const Text("媒体文件夹", locale:Locale("zh","CN"),
+style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
               Row(
                 children: [
                   // 重置存储路径按钮 - 只在Android平台显示，macOS平台不支持自定义存储路径
@@ -1083,11 +1105,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                         content: '这将清理所有文件夹的变化检测缓存，下次扫描时将重新检查所有文件夹。\n\n适用于：\n• 怀疑智能扫描遗漏了某些变化\n• 想要强制重新扫描所有文件夹\n\n确定要清理缓存吗？',
                         actions: <Widget>[
                           TextButton(
-                            child: const Text('取消', style: TextStyle(color: Colors.white70)),
+                            child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
                             onPressed: () => Navigator.of(context).pop(false),
                           ),
                           TextButton(
-                            child: const Text('清理', style: TextStyle(color: Colors.orangeAccent)),
+                            child: const Text('清理', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.orangeAccent)),
                             onPressed: () => Navigator.of(context).pop(true),
                           ),
                         ],
@@ -1112,11 +1136,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                               content: '将使用智能扫描技术重新检查所有已添加的媒体文件夹：\n\n• 自动检测文件夹内容变化\n• 只扫描有新增、删除或修改文件的文件夹\n• 跳过无变化的文件夹，大幅提升扫描速度\n• 可选择跳过已匹配且未观看的文件\n\n这可能需要一些时间，但比传统全量扫描快很多。',
                               actions: <Widget>[
                                 TextButton(
-                                  child: const Text('取消', style: TextStyle(color: Colors.white70)),
+                                  child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
                                   onPressed: () => Navigator.of(context).pop(false),
                                 ),
                                 TextButton(
-                                  child: const Text('智能刷新', style: TextStyle(color: Colors.lightBlueAccent)),
+                                  child: const Text('智能刷新', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
                                   onPressed: () => Navigator.of(context).pop(true),
                                 ),
                               ],
@@ -1246,12 +1272,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                         const SizedBox(width: 8),
                         const Text(
                           "检测到文件夹变化",
-                          style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16),
+                          locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16),
                         ),
                         const Spacer(),
                         TextButton(
                           onPressed: () => scanService.clearDetectedChanges(),
-                          child: const Text("忽略", style: TextStyle(color: Colors.white70)),
+                          child: const Text("忽略", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
                         ),
                       ],
                     ),
@@ -1288,7 +1316,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                 BlurSnackBar.show(context, '已开始扫描: ${change.displayName}');
                               }
                             },
-                            child: const Text("扫描", style: TextStyle(color: Colors.lightBlueAccent)),
+                            child: const Text("扫描", locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
                           ),
                         ],
                       ),
@@ -1330,7 +1359,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: Row(
               children: [
-                const Text('排序方式：', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                const Text('排序方式：', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70, fontSize: 14)),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: _showSortOptionsDialog,
@@ -1356,7 +1386,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           ),
         Expanded(
           child: scanService.scannedFolders.isEmpty && !scanService.isScanning
-              ? const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)))
+              ? const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center, locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)))
               : _buildResponsiveFolderList(scanService),
         ),
       ],
@@ -1489,13 +1520,15 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       content: '确定要移除文件 "$fileName" 的扫描结果吗？\n\n当前扫描信息：\n$currentInfo\n\n移除后将清除动画名称、集数信息和弹幕ID，但保留观看进度。',
       actions: <Widget>[
         TextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
         TextButton(
-          child: const Text('移除', style: TextStyle(color: Colors.redAccent)),
+          child: const Text('移除', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
             Navigator.of(context).pop(true);
           },
@@ -1696,7 +1729,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             padding: const EdgeInsets.only(top: 4.0),
             child: Text(
               folderPath,
-              style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
+              locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -1726,11 +1760,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                           content: '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n• 检测文件夹内容是否有变化\n• 如无变化将快速跳过\n• 如有变化将进行全面扫描\n\n开始扫描？',
                           actions: <Widget>[
                             TextButton(
-                              child: const Text('取消', style: TextStyle(color: Colors.white70)),
+                              child: const Text('取消', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
                               onPressed: () => Navigator.of(context).pop(false),
                             ),
                             TextButton(
-                              child: const Text('扫描', style: TextStyle(color: Colors.lightBlueAccent)),
+                              child: const Text('扫描', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent)),
                               onPressed: () => Navigator.of(context).pop(true),
                             ),
                           ],

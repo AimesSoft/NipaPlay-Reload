@@ -266,7 +266,8 @@ class SettingsItem extends StatelessWidget {
       leading: icon != null ? Icon(icon, color: Colors.white70) : null,
       title: Text(
         title,
-        style: TextStyle(
+        locale:Locale("zh","CN"),
+style: TextStyle(
           color: enabled ? Colors.white : Colors.white54,
           fontWeight: FontWeight.bold,
         ),
@@ -274,7 +275,8 @@ class SettingsItem extends StatelessWidget {
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: enabled ? Colors.white70 : Colors.white38,
               ),
             )
@@ -296,7 +298,8 @@ class SettingsItem extends StatelessWidget {
       secondary: icon != null ? Icon(icon, color: Colors.white70) : null,
       title: Text(
         title,
-        style: TextStyle(
+        locale:Locale("zh","CN"),
+style: TextStyle(
           color: enabled ? Colors.white : Colors.white54,
           fontWeight: FontWeight.bold,
         ),
@@ -304,7 +307,8 @@ class SettingsItem extends StatelessWidget {
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: enabled ? Colors.white70 : Colors.white38,
               ),
             )
@@ -323,7 +327,8 @@ class SettingsItem extends StatelessWidget {
       leading: icon != null ? Icon(icon, color: Colors.white70) : null,
       title: Text(
         title,
-        style: TextStyle(
+        locale:Locale("zh","CN"),
+style: TextStyle(
           color: enabled ? Colors.white : Colors.white54,
           fontWeight: FontWeight.bold,
         ),
@@ -331,7 +336,8 @@ class SettingsItem extends StatelessWidget {
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: enabled ? Colors.white70 : Colors.white38,
               ),
             )
@@ -355,7 +361,8 @@ class SettingsItem extends StatelessWidget {
           leading: icon != null ? Icon(icon, color: Colors.white70) : null,
           title: Text(
             title,
-            style: TextStyle(
+            locale:Locale("zh","CN"),
+style: TextStyle(
               color: enabled ? Colors.white : Colors.white54,
               fontWeight: FontWeight.bold,
             ),
@@ -363,7 +370,8 @@ class SettingsItem extends StatelessWidget {
           subtitle: subtitle != null
               ? Text(
                   subtitle!,
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     color: enabled ? Colors.white70 : Colors.white38,
                   ),
                 )
@@ -371,7 +379,8 @@ class SettingsItem extends StatelessWidget {
           trailing: Text(
             sliderLabelFormatter?.call(sliderValue ?? 0) ?? 
             (sliderValue ?? 0).toStringAsFixed(1),
-            style: TextStyle(
+            locale:Locale("zh","CN"),
+style: TextStyle(
               color: enabled ? Colors.white : Colors.white54,
               fontWeight: FontWeight.bold,
             ),
@@ -404,7 +413,8 @@ class SettingsItem extends StatelessWidget {
           leading: icon != null ? Icon(icon, color: Colors.white70) : null,
           title: Text(
             title,
-            style: TextStyle(
+            locale:Locale("zh","CN"),
+style: TextStyle(
               color: enabled ? Colors.white : Colors.white54,
               fontWeight: FontWeight.bold,
             ),
@@ -412,7 +422,8 @@ class SettingsItem extends StatelessWidget {
           subtitle: subtitle != null
               ? Text(
                   subtitle!,
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     color: enabled ? Colors.white70 : Colors.white38,
                   ),
                 )
@@ -440,7 +451,8 @@ class SettingsItem extends StatelessWidget {
                 ),
                 child: Text(
                   isRecording ? '按任意键...' : (hotkeyText ?? '未设置'),
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     color: isRecording 
                         ? Colors.red 
                         : (enabled ? Colors.white : Colors.white54),

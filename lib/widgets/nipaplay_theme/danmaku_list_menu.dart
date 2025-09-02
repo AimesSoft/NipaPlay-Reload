@@ -481,7 +481,8 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                             children: [
                                               Text(
                                                 _formatTime(timeInSeconds),
-                                                style: TextStyle(
+                                                locale:Locale("zh","CN"),
+style: TextStyle(
                                                   color: Colors.grey.shade400,
                                                   fontSize: 12,
                                                   fontWeight: isCurrentDanmaku ? FontWeight.bold : FontWeight.normal,
@@ -496,7 +497,8 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                                 ),
                                                 child: Text(
                                                   _getDanmakuTypeText(type),
-                                                  style: TextStyle(
+                                                  locale:Locale("zh","CN"),
+style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 10,
                                                   ),
@@ -513,7 +515,8 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                                   ),
                                                   child: const Text(
                                                     '已过滤',
-                                                    style: TextStyle(
+                                                    locale:Locale("zh","CN"),
+style: TextStyle(
                                                       color: Colors.red,
                                                       fontSize: 10,
                                                     ),
@@ -530,7 +533,8 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                             ),
                                             child: Text(
                                               content,
-                                              style: TextStyle(
+                                              locale:Locale("zh","CN"),
+style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 14,
                                                 fontWeight: isCurrentDanmaku ? FontWeight.bold : FontWeight.normal,
@@ -609,7 +613,8 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                               children: [
                                                 Text(
                                                   _formatTime(timeInSeconds),
-                                                  style: TextStyle(
+                                                  locale:Locale("zh","CN"),
+style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
                                                     fontWeight: isCurrentDanmaku ? FontWeight.bold : FontWeight.normal,
@@ -624,7 +629,8 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                                   ),
                                                   child: Text(
                                                     _getDanmakuTypeText(type),
-                                                    style: TextStyle(
+                                                    locale:Locale("zh","CN"),
+style: TextStyle(
                                                       color: Colors.grey.shade400,
                                                       fontSize: 10,
                                                     ),
@@ -641,7 +647,8 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                                     ),
                                                     child: const Text(
                                                       '已过滤',
-                                                      style: TextStyle(
+                                                      locale:Locale("zh","CN"),
+style: TextStyle(
                                                         color: Colors.red,
                                                         fontSize: 10,
                                                       ),
@@ -658,7 +665,8 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                               ),
                                               child: Text(
                                                 content,
-                                                style: TextStyle(
+                                                locale:Locale("zh","CN"),
+style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 14,
                                                   fontWeight: isCurrentDanmaku ? FontWeight.bold : FontWeight.normal,

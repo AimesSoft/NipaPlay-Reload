@@ -151,7 +151,8 @@ class _AboutPageState extends State<AboutPage> {
                         ),
                         child: const Text(
                           'NEW',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: Colors.white,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -172,7 +173,8 @@ class _AboutPageState extends State<AboutPage> {
                   context,
                   [
                     const TextSpan(text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
-                    TextSpan(text: 'にぱ〜☆', style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                    TextSpan(text: 'にぱ〜☆', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
                     const TextSpan(text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
                   ],
                 ),
@@ -188,7 +190,8 @@ class _AboutPageState extends State<AboutPage> {
                   context,
                   [
                     const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
-                    TextSpan(text: 'Kaedei', style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
+                    TextSpan(text: 'Kaedei', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
                     const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
                   ]
                 ),
@@ -196,7 +199,8 @@ class _AboutPageState extends State<AboutPage> {
                   context,
                   [
                     const TextSpan(text: '感谢开发者 '),
-                    TextSpan(text: 'Sakiko', style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
+                    TextSpan(text: 'Sakiko', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
                     const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
                   ]
                 ),
@@ -226,7 +230,8 @@ class _AboutPageState extends State<AboutPage> {
                         const SizedBox(width: 8),
                         Text(
                           'MCDFsteve/NipaPlay-Reload',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
                             decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
@@ -248,7 +253,8 @@ class _AboutPageState extends State<AboutPage> {
                         const SizedBox(width: 8),
                         Text(
                           'QQ群: 712139588',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
                             decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
@@ -270,7 +276,8 @@ class _AboutPageState extends State<AboutPage> {
                         const SizedBox(width: 8),
                         Text(
                           'NipaPlay 官方网站',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
                             decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),

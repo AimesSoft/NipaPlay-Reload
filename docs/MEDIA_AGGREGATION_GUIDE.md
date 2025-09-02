@@ -334,9 +334,11 @@ class _AggregatedLibraryPageState extends State<AggregatedLibraryPage> {
             padding: EdgeInsets.all(8),
             child: Column(
               children: [
-                Text(library.name, style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(library.name, locale:Locale("zh","CN"),
+style: TextStyle(fontWeight: FontWeight.bold)),
                 Text(library.adapter.adapterName, 
-                     style: TextStyle(color: Colors.grey, fontSize: 12)),
+                     locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.grey, fontSize: 12)),
                 // 连接状态指示器
                 _buildConnectionStatus(library.adapter),
               ],

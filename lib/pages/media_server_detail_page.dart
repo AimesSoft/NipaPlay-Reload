@@ -458,11 +458,13 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
             children: [
               const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
               const SizedBox(height: 16),
-              Text('加载详情失败:', style: TextStyle(color: Colors.white.withOpacity(0.8))),
+              Text('加载详情失败:', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white.withOpacity(0.8))),
               const SizedBox(height: 8),
               Text(
                 _error!,
-                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white.withOpacity(0.7)),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -476,7 +478,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('关闭', style: TextStyle(color: Colors.white70)),
+                child: const Text('关闭', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
               ),
             ],
           ),
@@ -484,7 +487,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       );
     } else if (_mediaDetail == null) {
       // 理论上在成功加载后 _mediaDetail 不会为 null，除非发生意外
-      pageContent = const Center(child: Text('未找到媒体详情', style: TextStyle(color: Colors.white70)));
+      pageContent = const Center(child: Text('未找到媒体详情', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)));
     } else {
       // 成功加载，构建详情UI
       final screenSize = MediaQuery.of(context).size;
@@ -670,7 +674,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
                   children: [
                     const Text(
                       '剧情简介',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -696,7 +701,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
                   children: [
                     const Text(
                       '演员',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -827,7 +833,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
           Center( // 确保年份居中
             child: Text(
               '(${_mediaDetail!.productionYear})',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 fontSize: 18,
                 color: Colors.grey[300], // 调整颜色
               ),
@@ -913,7 +920,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
               if (_mediaDetail!.productionYear != null)
                 Text(
                   '(${_mediaDetail!.productionYear})',
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                     fontSize: 18,
                     color: Colors.grey[300], // 调整颜色
                   ),
@@ -1112,12 +1120,14 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
   Widget _buildEpisodesListForSelectedSeason() {
     if (_selectedSeasonId == null && _seasons.isNotEmpty) { // 如果有季但没有选择，提示选择
       return const Center(
-        child: Text('请选择一个季', style: TextStyle(color: Colors.white70)),
+        child: Text('请选择一个季', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
       );
     }
     if (_selectedSeasonId == null && _seasons.isEmpty && !_isLoading) { // 如果没有季且不在加载中
         return const Center(
-        child: Text('该剧集没有季节信息', style: TextStyle(color: Colors.white70)),
+        child: Text('该剧集没有季节信息', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
       );
     }
     
@@ -1155,14 +1165,16 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
     
     if (episodes.isEmpty && !_isLoading && _selectedSeasonId != null) { // 确保不是在加载中，并且确实选择了季
       return const Center(
-        child: Text('该季没有剧集', style: TextStyle(color: Colors.white70)),
+        child: Text('该季没有剧集', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)),
       );
     }
      if (episodes.isEmpty && _isLoading) { // 如果仍在加载，显示加载指示器
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
     if (episodes.isEmpty && _selectedSeasonId == null && _seasons.isEmpty) { // 处理没有季的情况
-        return const Center(child: Text('没有可显示的剧集', style: TextStyle(color: Colors.white70)));
+        return const Center(child: Text('没有可显示的剧集', locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70)));
     }
 
 
@@ -1233,7 +1245,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
               if (episode.runTimeTicks != null)
                 Text(
                   _formatRuntime(episode.runTimeTicks),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
+                  locale:Locale("zh","CN"),
+style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
                 ),
               
               if (episode.overview != null && episode.overview!.isNotEmpty)
@@ -1243,7 +1256,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
                     episode.overview!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
+                    locale:Locale("zh","CN"),
+style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
                   ),
                 ),
             ],

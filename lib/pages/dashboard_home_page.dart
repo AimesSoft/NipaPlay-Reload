@@ -1560,7 +1560,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         child: const Center(
           child: Text(
             '暂无推荐内容',
-            style: TextStyle(color: Colors.white54, fontSize: 16),
+            locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white54, fontSize: 16),
           ),
         ),
       );
@@ -1827,7 +1828,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     // 媒体名字（加粗显示）
                     Text(
                       item.title,
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white,
                         fontSize: compact ? 22 : 24, // 手机端调整为20px，比18px稍大
                         fontWeight: FontWeight.bold,
@@ -2139,7 +2141,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       '继续播放',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -2163,7 +2166,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 child: const Center(
                   child: Text(
                     '暂无播放记录',
-                    style: TextStyle(color: Colors.white54, fontSize: 16),
+                    locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white54, fontSize: 16),
                   ),
                 ),
               )

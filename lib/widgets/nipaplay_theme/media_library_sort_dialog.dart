@@ -251,7 +251,8 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       '排序方式',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -307,7 +308,8 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
                                         children: [
                                           Text(
                                             option.label,
-                                            style: TextStyle(
+                                            locale:Locale("zh","CN"),
+style: TextStyle(
                                               color: isSelected ? Colors.lightBlueAccent : Colors.white,
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
@@ -316,7 +318,8 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
                                           const SizedBox(height: 2),
                                           Text(
                                             option.description,
-                                            style: TextStyle(
+                                            locale:Locale("zh","CN"),
+style: TextStyle(
                                               color: Colors.white.withValues(alpha: 0.7),
                                               fontSize: 12,
                                             ),
@@ -340,7 +343,8 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       '排序顺序',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -380,7 +384,8 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
                                 child: Center(
                                   child: Text(
                                     order['label']!,
-                                    style: TextStyle(
+                                    locale:Locale("zh","CN"),
+style: TextStyle(
                                       color: isSelected ? Colors.lightBlueAccent : Colors.white,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -404,7 +409,8 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
                         onPressed: () => Navigator.of(context).pop(),
                         child: const Text(
                           '取消',
-                          style: TextStyle(color: Colors.white70),
+                          locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white70),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -424,7 +430,8 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
                         ),
                         child: const Text(
                           '应用',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                          locale:Locale("zh","CN"),
+style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],

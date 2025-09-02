@@ -19,7 +19,8 @@ class DragDropOverlay extends StatelessWidget {
             SizedBox(height: 20.0),
             Text(
               '拖放至页面内播放视频',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 color: Colors.white,
                 fontSize: 24.0,
                 fontWeight: FontWeight.bold,

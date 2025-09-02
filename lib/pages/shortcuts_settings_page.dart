@@ -18,13 +18,13 @@ class ShortcutsSettingsPage extends StatefulWidget {
 class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
   // 热键服务实例
   final HotkeyService _hotkeyService = HotkeyService();
-  
+
   // 当前快捷键配置
   Map<String, String>? _shortcuts;
-  
+
   // 记录当前正在录制的动作
   String? _recordingAction;
-  
+
   // 动作标签映射
   final Map<String, String> _actionLabels = {
     'play_pause': '播放/暂停',
@@ -38,7 +38,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'next_episode': '下一集',
     'send_danmaku': '发送弹幕',
   };
-  
+
   // 动作描述
   final Map<String, String> _actionDescriptions = {
     'play_pause': '切换视频的播放和暂停状态',
@@ -52,7 +52,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'next_episode': '播放下一集',
     'send_danmaku': '打开弹幕发送对话框',
   };
-  
+
   // 动作图标映射
   final Map<String, IconData> _actionIcons = {
     'play_pause': Ionicons.play_outline,
@@ -66,7 +66,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'next_episode': Ionicons.play_skip_forward_outline,
     'send_danmaku': Ionicons.send_outline,
   };
-  
+
   // 修饰键文本映射
   final Map<HotKeyModifier, String> _modifierTexts = {
     HotKeyModifier.shift: 'Shift',
@@ -74,45 +74,45 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     HotKeyModifier.alt: 'Alt',
     HotKeyModifier.meta: 'Meta',
   };
-  
+
   @override
   void initState() {
     super.initState();
     _loadShortcuts();
   }
-  
+
   // 加载当前快捷键配置
   Future<void> _loadShortcuts() async {
     _shortcuts = Map.from(_hotkeyService.allShortcuts);
     setState(() {});
   }
-  
+
   // 获取动作对应的图标
   IconData _getActionIcon(String action) {
     return _actionIcons[action] ?? Ionicons.key_outline;
   }
-  
+
   // 开始录制快捷键
   void _startRecording(String action) {
     setState(() {
       _recordingAction = action;
     });
   }
-  
+
   // 停止录制快捷键
   void _stopRecording() {
     setState(() {
       _recordingAction = null;
     });
   }
-  
+
   // 更新快捷键
   Future<void> _updateShortcut(String action, String shortcut) async {
     debugPrint('[ShortcutsSettingsPage] 更新快捷键: $action -> $shortcut');
     await _hotkeyService.updateShortcut(action, shortcut);
     await _loadShortcuts();
   }
-  
+
   // 重置为默认快捷键
   Future<void> _resetToDefaults() async {
     final defaultShortcuts = {
@@ -126,14 +126,14 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       'previous_episode': 'Shift+←',
       'next_episode': 'Shift+→',
     };
-    
+
     for (final entry in defaultShortcuts.entries) {
       await _hotkeyService.updateShortcut(entry.key, entry.value);
     }
-    
+
     await _loadShortcuts();
   }
-  
+
   // 将PhysicalKeyboardKey转换为文本
   String _keyToText(PhysicalKeyboardKey key) {
     // 特殊键的映射
@@ -151,11 +151,11 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       PhysicalKeyboardKey.end: 'End',
       PhysicalKeyboardKey.tab: 'Tab',
     };
-    
+
     if (specialKeys.containsKey(key)) {
       return specialKeys[key]!;
     }
-    
+
     // 字母键 (A-Z)
     if (key == PhysicalKeyboardKey.keyA) return 'A';
     if (key == PhysicalKeyboardKey.keyB) return 'B';
@@ -183,7 +183,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     if (key == PhysicalKeyboardKey.keyX) return 'X';
     if (key == PhysicalKeyboardKey.keyY) return 'Y';
     if (key == PhysicalKeyboardKey.keyZ) return 'Z';
-    
+
     // 数字键 (0-9)
     if (key == PhysicalKeyboardKey.digit0) return '0';
     if (key == PhysicalKeyboardKey.digit1) return '1';
@@ -195,7 +195,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     if (key == PhysicalKeyboardKey.digit7) return '7';
     if (key == PhysicalKeyboardKey.digit8) return '8';
     if (key == PhysicalKeyboardKey.digit9) return '9';
-    
+
     // 功能键 (F1-F24)
     if (key == PhysicalKeyboardKey.f1) return 'F1';
     if (key == PhysicalKeyboardKey.f2) return 'F2';
@@ -209,7 +209,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     if (key == PhysicalKeyboardKey.f10) return 'F10';
     if (key == PhysicalKeyboardKey.f11) return 'F11';
     if (key == PhysicalKeyboardKey.f12) return 'F12';
-    
+
     // 其他常见键
     if (key == PhysicalKeyboardKey.backspace) return '退格';
     if (key == PhysicalKeyboardKey.delete) return 'Del';
@@ -229,7 +229,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     if (key == PhysicalKeyboardKey.backslash) return '\\';
     if (key == PhysicalKeyboardKey.bracketRight) return ']';
     if (key == PhysicalKeyboardKey.quote) return '\'';
-    
+
     // 小键盘数字键
     if (key == PhysicalKeyboardKey.numpad0) return 'Num 0';
     if (key == PhysicalKeyboardKey.numpad1) return 'Num 1';
@@ -241,7 +241,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     if (key == PhysicalKeyboardKey.numpad7) return 'Num 7';
     if (key == PhysicalKeyboardKey.numpad8) return 'Num 8';
     if (key == PhysicalKeyboardKey.numpad9) return 'Num 9';
-    
+
     // 小键盘其他键
     if (key == PhysicalKeyboardKey.numpadDivide) return 'Num /';
     if (key == PhysicalKeyboardKey.numpadMultiply) return 'Num *';
@@ -249,10 +249,10 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     if (key == PhysicalKeyboardKey.numpadAdd) return 'Num +';
     if (key == PhysicalKeyboardKey.numpadEnter) return 'Num Enter';
     if (key == PhysicalKeyboardKey.numpadDecimal) return 'Num .';
-    
+
     // 获取键的调试名称
     final String debugName = key.debugName ?? '';
-    
+
     // 如果以上都不匹配，尝试获取更友好的名称
     if (debugName.isNotEmpty) {
       // 尝试从debugName中提取字母或数字
@@ -261,33 +261,34 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       if (letterMatch != null && letterMatch.groupCount >= 1) {
         return letterMatch.group(1)!;
       }
-      
+
       // 尝试从debugName中提取数字
       final digitRegExp = RegExp(r'^Digit([0-9])$');
       final digitMatch = digitRegExp.firstMatch(debugName);
       if (digitMatch != null && digitMatch.groupCount >= 1) {
         return digitMatch.group(1)!;
       }
-      
+
       return debugName;
     }
-    
+
     // 最后的备选方案，使用toString()并提取最后一部分
     final fullName = key.toString();
     final parts = fullName.split('.');
     if (parts.length > 1) {
       return parts.last;
     }
-    
+
     return fullName;
   }
-  
+
   // 处理键盘事件
   void _handleKeyPress(RawKeyEvent event) {
     if (_recordingAction == null || event is! RawKeyDownEvent) return;
-    
-    debugPrint('[ShortcutsSettingsPage] 接收到键盘事件: ${event.physicalKey}, debugName: ${event.physicalKey.debugName}');
-    
+
+    debugPrint(
+        '[ShortcutsSettingsPage] 接收到键盘事件: ${event.physicalKey}, debugName: ${event.physicalKey.debugName}');
+
     // 忽略修饰键单独按下的事件
     if (event.physicalKey == PhysicalKeyboardKey.shiftLeft ||
         event.physicalKey == PhysicalKeyboardKey.shiftRight ||
@@ -299,11 +300,11 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
         event.physicalKey == PhysicalKeyboardKey.metaRight) {
       return;
     }
-    
+
     // 获取键的文本表示
     final keyText = _keyToText(event.physicalKey);
     debugPrint('[ShortcutsSettingsPage] 键位文本表示: $keyText');
-    
+
     // 如果是无法识别的键，显示提示并返回
     if (keyText.contains('PhysicalKeyboard') || keyText.contains('#')) {
       MessageHelper.showMessage(
@@ -315,14 +316,14 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       _stopRecording();
       return;
     }
-    
+
     // 构建修饰键列表
     List<String> modifiers = [];
     if (event.isShiftPressed) modifiers.add('Shift');
     if (event.isControlPressed) modifiers.add('Ctrl');
     if (event.isAltPressed) modifiers.add('Alt');
     if (event.isMetaPressed) modifiers.add('Meta');
-    
+
     // 构建快捷键文本
     String shortcut = '';
     if (modifiers.isNotEmpty) {
@@ -330,13 +331,13 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     } else {
       shortcut = keyText;
     }
-    
+
     debugPrint('[ShortcutsSettingsPage] 生成的快捷键: $shortcut');
-    
+
     // 检查是否与现有快捷键冲突
     bool hasConflict = false;
     String? conflictAction;
-    
+
     for (final entry in _shortcuts!.entries) {
       if (entry.key != _recordingAction && entry.value == shortcut) {
         hasConflict = true;
@@ -344,7 +345,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
         break;
       }
     }
-    
+
     if (hasConflict) {
       // 显示冲突提示
       BlurDialog.show(
@@ -357,7 +358,9 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
               Navigator.of(context).pop();
               _stopRecording();
             },
-            child: const Text('取消', style: TextStyle(color: Colors.white70)),
+            child: const Text('取消',
+                locale: Locale("zh", "CN"),
+                style: TextStyle(color: Colors.white70)),
           ),
           TextButton(
             onPressed: () {
@@ -365,7 +368,9 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
               _updateShortcut(_recordingAction!, shortcut);
               _stopRecording();
             },
-            child: const Text('替换', style: TextStyle(color: Colors.white)),
+            child: const Text('替换',
+                locale: Locale("zh", "CN"),
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       );
@@ -375,7 +380,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       _stopRecording();
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return RawKeyboardListener(
@@ -396,14 +401,14 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                     onTap: _resetToDefaults,
                   ),
                   const Divider(color: Colors.white12, height: 1),
-                  
+
                   // 快捷键列表
                   ..._actionLabels.keys.map((action) {
                     final label = _actionLabels[action]!;
                     final description = _actionDescriptions[action] ?? '';
                     final shortcut = _shortcuts![action] ?? '';
                     final isRecording = _recordingAction == action;
-                    
+
                     return Column(
                       children: [
                         SettingsItem.hotkey(
@@ -423,7 +428,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       ),
     );
   }
-  
+
   // 构建录制中的按钮
   Widget _buildRecordingButton() {
     return Container(
@@ -447,42 +452,42 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
           const SizedBox(width: 8),
           const Text(
             '按下键位...',
+            locale: Locale("zh", "CN"),
             style: TextStyle(color: Colors.white),
           ),
         ],
       ),
     );
   }
-  
+
   // 构建快捷键按钮，使用与BlurButton一致的样式
   Widget _buildShortcutButton(String shortcut, VoidCallback onPressed) {
     bool isHovered = false;
-    
-    return StatefulBuilder(
-      builder: (context, setState) {
-        return MouseRegion(
-          onEnter: (_) => setState(() => isHovered = true),
-          onExit: (_) => setState(() => isHovered = false),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isHovered 
-                    ? Colors.white.withOpacity(0.4) 
+
+    return StatefulBuilder(builder: (context, setState) {
+      return MouseRegion(
+        onEnter: (_) => setState(() => isHovered = true),
+        onExit: (_) => setState(() => isHovered = false),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isHovered
+                    ? Colors.white.withOpacity(0.4)
                     : Colors.white.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isHovered 
-                      ? Colors.white.withOpacity(0.7) 
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isHovered
+                      ? Colors.white.withOpacity(0.7)
                       : Colors.white.withOpacity(0.25),
-                    width: isHovered ? 1.0 : 0.5,
-                  ),
-                  boxShadow: isHovered
+                  width: isHovered ? 1.0 : 0.5,
+                ),
+                boxShadow: isHovered
                     ? [
                         BoxShadow(
                           color: Colors.white.withOpacity(0.25),
@@ -491,26 +496,25 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                         )
                       ]
                     : [],
-                ),
-                child: InkWell(
-                  onTap: onPressed,
-                  child: AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 300),
-                    style: TextStyle(
-                      color: isHovered
-                        ? Colors.white 
+              ),
+              child: InkWell(
+                onTap: onPressed,
+                child: AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 300),
+                  style: TextStyle(
+                    color: isHovered
+                        ? Colors.white
                         : Colors.white.withOpacity(0.8),
-                      fontSize: 14,
-                      fontWeight: isHovered ? FontWeight.w500 : FontWeight.normal,
-                    ),
-                    child: Text(shortcut.isEmpty ? '点击设置' : shortcut),
+                    fontSize: 14,
+                    fontWeight: isHovered ? FontWeight.w500 : FontWeight.normal,
                   ),
+                  child: Text(shortcut.isEmpty ? '点击设置' : shortcut),
                 ),
               ),
             ),
           ),
-        );
-      }
-    );
+        ),
+      );
+    });
   }
-} 
+}

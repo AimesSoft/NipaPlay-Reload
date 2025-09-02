@@ -26,7 +26,8 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
           children: [
             const Text(
               '我的活动记录',
-              style: TextStyle(
+              locale:Locale("zh","CN"),
+style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
@@ -118,7 +119,8 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                             ),
                             child: const Text(
                               '重试',
-                              style: TextStyle(color: Colors.white),
+                              locale:Locale("zh","CN"),
+style: TextStyle(color: Colors.white),
                             ),
                           ),
                         ],

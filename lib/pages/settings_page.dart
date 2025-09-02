@@ -96,7 +96,8 @@ class _SettingsPageState extends State<SettingsPage>
         children: [
           ListTile(
             title: const Text("账号",
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
@@ -106,7 +107,8 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           ListTile(
             title: const Text("外观",
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
@@ -123,7 +125,8 @@ class _SettingsPageState extends State<SettingsPage>
           if (!globals.isPhone)
             ListTile(
               title: const Text("主题（实验性）",
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold)),
               trailing: const Icon(Ionicons.chevron_forward_outline,
                   color: Colors.white),
@@ -133,7 +136,8 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ListTile(
             title: const Text("通用",
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
@@ -143,7 +147,8 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           ListTile(
             title: const Text("观看记录",
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
@@ -153,7 +158,8 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           ListTile(
             title: const Text("播放器",
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
@@ -164,7 +170,8 @@ class _SettingsPageState extends State<SettingsPage>
           if (!globals.isPhone)
             ListTile(
               title: const Text("快捷键",
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold)),
               trailing: const Icon(Ionicons.chevron_forward_outline,
                   color: Colors.white),
@@ -175,7 +182,8 @@ class _SettingsPageState extends State<SettingsPage>
           if (!globals.isPhone)
             ListTile(
               title: const Text("远程访问（实验性）",
-                  style: TextStyle(
+                  locale:Locale("zh","CN"),
+style: TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold)),
               trailing: const Icon(Ionicons.chevron_forward_outline,
                   color: Colors.white),
@@ -185,7 +193,8 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ListTile(
             title: const Text("远程媒体库",
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
@@ -196,7 +205,8 @@ class _SettingsPageState extends State<SettingsPage>
           // 开发者选项
           ListTile(
             title: const Text("开发者选项",
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),
@@ -206,7 +216,8 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           ListTile(
             title: const Text("关于",
-                style: TextStyle(
+                locale:Locale("zh","CN"),
+style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             trailing: const Icon(Ionicons.chevron_forward_outline,
                 color: Colors.white),

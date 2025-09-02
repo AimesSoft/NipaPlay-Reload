@@ -104,7 +104,8 @@ class _FluentSettingsPageState extends State<FluentSettingsPage> {
                     ),
                     title: Text(
                       _settingsTitles[index],
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         color: isSelected 
                             ? FluentTheme.of(context).accentColor
                             : null,

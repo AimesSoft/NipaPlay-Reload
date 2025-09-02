@@ -111,7 +111,8 @@ class EmbyLibraryCard extends StatelessWidget {
 												const SizedBox(height: 8),
 												Text(
 													'${library.totalItems} 项内容',
-													style: TextStyle(
+													locale:Locale("zh","CN"),
+style: TextStyle(
 														color: Colors.white.withOpacity(0.9),
 														fontSize: 16,
 														fontWeight: FontWeight.w500,

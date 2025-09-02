@@ -43,7 +43,8 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                       children: [
                         const Text(
                           '当前倍速',
-                          style: TextStyle(
+                          locale:Locale("zh","CN"),
+style: TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
                           ),
@@ -61,7 +62,8 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                     const SizedBox(height: 4),
                     Text(
                       videoState.isSpeedBoostActive ? '正在倍速播放' : '点击下方选项或长按屏幕倍速播放',
-                      style: TextStyle(
+                      locale:Locale("zh","CN"),
+style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[400],
                       ),
@@ -106,7 +108,8 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                           Expanded(
                             child: Text(
                               '${speed}x ${_getSpeedDescription(speed, isNormalSpeed)}',
-                              style: TextStyle(
+                              locale:Locale("zh","CN"),
+style: TextStyle(
                                 color: isSelected ? Colors.white : Colors.white70,
                                 fontSize: 14,
                                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
