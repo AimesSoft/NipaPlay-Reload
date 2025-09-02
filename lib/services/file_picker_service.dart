@@ -370,7 +370,7 @@ class FilePickerService {
         label: '字幕文件',
         extensions: const ['srt', 'ass', 'ssa', 'sub'],
         uniformTypeIdentifiers: io.Platform.isIOS 
-            ? ['public.text', 'public.plain-text'] 
+            ? ['public.text', 'public.plain-text', 'public.subtitle', 'public.data', 'public.item'] 
             : null,
       );
       
