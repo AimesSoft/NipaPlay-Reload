@@ -468,7 +468,10 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
             basicItems.add(RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息',
+              subtitle: item.overview?.isNotEmpty == true ? item.overview!
+                  .replaceAll('<br>', ' ')
+                  .replaceAll('<br/>', ' ')
+                  .replaceAll('<br />', ' ') : '暂无简介信息',
               backgroundImageUrl: backdropUrl,
               source: RecommendedItemSource.jellyfin,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
@@ -486,7 +489,10 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
             basicItems.add(RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息',
+              subtitle: item.overview?.isNotEmpty == true ? item.overview!
+                  .replaceAll('<br>', ' ')
+                  .replaceAll('<br/>', ' ')
+                  .replaceAll('<br />', ' ') : '暂无简介信息',
               backgroundImageUrl: backdropUrl,
               source: RecommendedItemSource.emby,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,

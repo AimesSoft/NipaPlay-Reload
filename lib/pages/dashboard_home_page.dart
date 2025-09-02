@@ -978,7 +978,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: (subtitle?.isNotEmpty == true) ? subtitle! : (item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息'),
+              subtitle: (subtitle?.isNotEmpty == true) ? subtitle! : (item.overview?.isNotEmpty == true ? item.overview!
+                  .replaceAll('<br>', ' ')
+                  .replaceAll('<br/>', ' ')
+                  .replaceAll('<br />', ' ') : '暂无简介信息'),
               backgroundImageUrl: backdropUrl,
               logoImageUrl: logoUrl,
               source: RecommendedItemSource.jellyfin,
@@ -1000,7 +1003,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: (subtitle?.isNotEmpty == true) ? subtitle! : (item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息'),
+              subtitle: (subtitle?.isNotEmpty == true) ? subtitle! : (item.overview?.isNotEmpty == true ? item.overview!
+                  .replaceAll('<br>', ' ')
+                  .replaceAll('<br/>', ' ')
+                  .replaceAll('<br />', ' ') : '暂无简介信息'),
               backgroundImageUrl: backdropUrl,
               logoImageUrl: logoUrl,
               source: RecommendedItemSource.emby,
@@ -3241,10 +3247,16 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
   Future<String> _getJellyfinItemSubtitle(JellyfinService service, JellyfinMediaItem item) async {
     try {
       final detail = await service.getMediaItemDetails(item.id);
-      return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
+      return detail.overview?.isNotEmpty == true ? detail.overview!
+          .replaceAll('<br>', ' ')
+          .replaceAll('<br/>', ' ')
+          .replaceAll('<br />', ' ') : '暂无简介信息';
     } catch (e) {
       debugPrint('获取Jellyfin详细信息失败: $e');
-      return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
+      return item.overview?.isNotEmpty == true ? item.overview!
+          .replaceAll('<br>', ' ')
+          .replaceAll('<br/>', ' ')
+          .replaceAll('<br />', ' ') : '暂无简介信息';
     }
   }
 
@@ -3252,10 +3264,16 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
   Future<String> _getEmbyItemSubtitle(EmbyService service, EmbyMediaItem item) async {
     try {
       final detail = await service.getMediaItemDetails(item.id);
-      return detail.overview?.isNotEmpty == true ? detail.overview! : '暂无简介信息';
+      return detail.overview?.isNotEmpty == true ? detail.overview!
+          .replaceAll('<br>', ' ')
+          .replaceAll('<br/>', ' ')
+          .replaceAll('<br />', ' ') : '暂无简介信息';
     } catch (e) {
       debugPrint('获取Emby详细信息失败: $e');
-      return item.overview?.isNotEmpty == true ? item.overview! : '暂无简介信息';
+      return item.overview?.isNotEmpty == true ? item.overview!
+          .replaceAll('<br>', ' ')
+          .replaceAll('<br/>', ' ')
+          .replaceAll('<br />', ' ') : '暂无简介信息';
     }
   }
 

@@ -683,7 +683,10 @@ style: TextStyle(
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _mediaDetail!.overview!,
+                      _mediaDetail!.overview!
+                          .replaceAll('<br>', ' ')
+                          .replaceAll('<br/>', ' ')
+                          .replaceAll('<br />', ' '),
                       style: const TextStyle(
                         color: Colors.white70,
                         height: 1.5,
@@ -1253,7 +1256,10 @@ style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
                 Padding(
                   padding: const EdgeInsets.only(top: 2.0),
                   child: Text(
-                    episode.overview!,
+                    episode.overview!
+                        .replaceAll('<br>', ' ')
+                        .replaceAll('<br/>', ' ')
+                        .replaceAll('<br />', ' '),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     locale:Locale("zh","CN"),
