@@ -374,7 +374,12 @@ class FilePickerService {
             : null,
       );
       
-      // 字幕文件通常很小，可以继续使用默认方法
+      // Android平台特殊处理字幕文件选择
+      if (io.Platform.isAndroid) {
+        return await _pickSubtitleFileAndroid();
+      }
+      
+      // 其他平台使用默认方法
       final XFile? file = await openFile(
         acceptedTypeGroups: [subtitleGroup],
         initialDirectory: initialDirectory,
@@ -528,5 +533,62 @@ class FilePickerService {
     }
     
     return null; // 找不到有效路径
+  }
+
+  // Android平台特定的字幕文件选择方法
+  Future<String?> _pickSubtitleFileAndroid() async {
+    try {
+      // 使用通用文件选择Intent，支持所有文本文件
+      final result = await const MethodChannel('android/intent')
+          .invokeMethod<Map<dynamic, dynamic>>('createChooser', {
+        'action': 'android.intent.action.GET_CONTENT',
+        'type': 'text/*', // 使用text/*类型，涵盖所有文本文件包括srt、ass等
+        'title': '选择字幕文件',
+        'extra_mime_types': [
+          'text/plain',
+          'text/srt',
+          'text/ass',
+          'text/ssa',
+          'text/sub',
+          'application/x-subrip',
+          'application/x-ass',
+          '*/*' // 允许所有文件类型作为备选
+        ],
+      });
+      
+      if (result == null || result['data'] == null) {
+        return null;
+      }
+      
+      final filePath = result['data'].toString();
+      
+      // 存储目录信息
+      _saveLastDirectory(filePath, _lastSubtitleDirKey, _lastDirKey);
+      
+      return _normalizePath(filePath);
+    } catch (e) {
+      print('Android选择字幕文件时出错: $e');
+      
+      // 如果Intent方法失败，尝试使用更宽泛的文件选择
+      try {
+        final fallbackResult = await const MethodChannel('android/intent')
+            .invokeMethod<Map<dynamic, dynamic>>('createChooser', {
+          'action': 'android.intent.action.GET_CONTENT',
+          'type': '*/*', // 允许选择任何文件
+          'title': '选择字幕文件',
+        });
+        
+        if (fallbackResult == null || fallbackResult['data'] == null) {
+          return null;
+        }
+        
+        final filePath = fallbackResult['data'].toString();
+        _saveLastDirectory(filePath, _lastSubtitleDirKey, _lastDirKey);
+        return _normalizePath(filePath);
+      } catch (fallbackError) {
+        print('Android字幕文件选择备用方法也失败: $fallbackError');
+        return null;
+      }
+    }
   }
 } 
