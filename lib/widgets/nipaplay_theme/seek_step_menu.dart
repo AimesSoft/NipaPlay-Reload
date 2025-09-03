@@ -17,6 +17,7 @@ class SeekStepMenu extends StatefulWidget {
 
 class _SeekStepMenuState extends State<SeekStepMenu> {
   final List<int> _seekStepOptions = [5, 10, 15, 30, 60];
+  final List<double> _speedBoostOptions = [1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0];
   final TextEditingController _skipSecondsController = TextEditingController();
 
   @override
@@ -111,6 +112,85 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           const SizedBox(width: 12),
                           Text(
                             '${seconds}秒',
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.white70,
+                              fontSize: 14,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              
+              const Divider(color: Colors.white24, height: 1),
+              
+              // 长按倍速播放设置
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          '长按右键倍速',
+                          locale: Locale("zh", "CN"),
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '${videoState.speedBoostRate}x',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '设置长按右方向键时的播放倍速',
+                      locale: Locale("zh", "CN"),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              const Divider(color: Colors.white24, height: 1),
+              
+              // 倍速选项列表
+              ..._speedBoostOptions.map((speed) {
+                final isSelected = videoState.speedBoostRate == speed;
+                
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      videoState.setSpeedBoostRate(speed);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                            color: isSelected ? Colors.white : Colors.white70,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '${speed}x',
                             style: TextStyle(
                               color: isSelected ? Colors.white : Colors.white70,
                               fontSize: 14,

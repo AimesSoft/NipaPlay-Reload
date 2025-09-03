@@ -4,6 +4,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'video_player_state.dart';
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 
@@ -12,6 +13,7 @@ class HotkeyService extends ChangeNotifier {
   static final HotkeyService _instance = HotkeyService._internal();
   static const String _shortcutsKey = 'keyboard_shortcuts';
   static const int _debounceTime = 300; // 防抖时间（毫秒）
+  static const int _longPressThreshold = 800; // 长按阈值（毫秒）
   
   // 单例模式
   factory HotkeyService() {
@@ -28,6 +30,11 @@ class HotkeyService extends ChangeNotifier {
   
   // 上下文，用于访问Provider
   BuildContext? _context;
+  
+  // 长按检测
+  Timer? _longPressTimer;
+  bool _isRightArrowPressed = false;
+  bool _isSpeedBoostActive = false;
   
   // 初始化热键服务
   Future<void> initialize(BuildContext context) async {
@@ -135,8 +142,8 @@ class HotkeyService extends ChangeNotifier {
     // 注册快退热键
     await _registerHotkey('rewind', '快退', _handleRewind);
     
-    // 注册快进热键
-    await _registerHotkey('forward', '快进', _handleForward);
+    // 注册长按检测的右方向键（替代原来的快进热键）
+    await _registerLongPressRightArrow();
     
     // 注册弹幕开关热键
     await _registerHotkey('toggle_danmaku', '弹幕开关', _handleToggleDanmaku);
@@ -558,6 +565,77 @@ class HotkeyService extends ChangeNotifier {
     }
   }
   
+  // 注册长按右方向键检测
+  Future<void> _registerLongPressRightArrow() async {
+    try {
+      final hotKey = HotKey(
+        key: PhysicalKeyboardKey.arrowRight,
+        scope: HotKeyScope.inapp,
+      );
+      
+      await hotKeyManager.register(
+        hotKey,
+        keyDownHandler: (HotKey hotKey) {
+          _handleRightArrowDown();
+        },
+        keyUpHandler: (HotKey hotKey) {
+          _handleRightArrowUp();
+        },
+      );
+      
+      _registeredHotkeys.add(hotKey);
+    } catch (e) {
+      ////debugPrint('[HotkeyService] 注册长按右方向键失败: $e');
+    }
+  }
+  
+  void _handleRightArrowDown() {
+    _isRightArrowPressed = true;
+    
+    // 取消之前的计时器
+    _longPressTimer?.cancel();
+    
+    // 启动长按检测计时器
+    _longPressTimer = Timer(Duration(milliseconds: _longPressThreshold), () {
+      if (_isRightArrowPressed && !_isSpeedBoostActive) {
+        _startSpeedBoost();
+      }
+    });
+  }
+  
+  void _handleRightArrowUp() {
+    _isRightArrowPressed = false;
+    
+    // 取消长按计时器
+    _longPressTimer?.cancel();
+    
+    if (_isSpeedBoostActive) {
+      // 如果正在倍速播放，停止倍速
+      _stopSpeedBoost();
+    } else {
+      // 如果没有触发倍速（短按），执行快进
+      _handleForward();
+    }
+  }
+  
+  void _startSpeedBoost() {
+    final videoState = _getVideoPlayerState();
+    if (videoState != null) {
+      _isSpeedBoostActive = true;
+      videoState.startSpeedBoost();
+      ////debugPrint('[HotkeyService] 开始倍速播放');
+    }
+  }
+  
+  void _stopSpeedBoost() {
+    final videoState = _getVideoPlayerState();
+    if (videoState != null) {
+      _isSpeedBoostActive = false;
+      videoState.stopSpeedBoost();
+      ////debugPrint('[HotkeyService] 停止倍速播放');
+    }
+  }
+  
   void _handleEscape() {
     final videoState = _getVideoPlayerState();
     if (videoState != null && videoState.isFullscreen) {
@@ -590,6 +668,7 @@ class HotkeyService extends ChangeNotifier {
   // 清理资源
   @override
   Future<void> dispose() async {
+    _longPressTimer?.cancel();
     await hotKeyManager.unregisterAll();
     _registeredHotkeys.clear();
   }

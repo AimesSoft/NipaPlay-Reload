@@ -161,6 +161,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _playbackRate = 1.0; // 默认1倍速
   bool _isSpeedBoostActive = false; // 是否正在倍速播放（长按状态）
   double _normalPlaybackRate = 1.0; // 正常播放速度
+  static const String _speedBoostRateKey = 'speed_boost_rate';
+  double _speedBoostRate = 2.0; // 长按倍速播放的倍率，默认2倍速
   
   // 快进快退时间设置
   static const String _seekStepSecondsKey = 'seek_step_seconds';
@@ -413,6 +415,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 播放速度相关的getter
   double get playbackRate => _playbackRate;
   bool get isSpeedBoostActive => _isSpeedBoostActive;
+  double get speedBoostRate => _speedBoostRate;
   
   // 快进快退时间的getter
   int get seekStepSeconds => _seekStepSeconds;
@@ -4032,6 +4035,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> _loadPlaybackRate() async {
     final prefs = await SharedPreferences.getInstance();
     _playbackRate = prefs.getDouble(_playbackRateKey) ?? 1.0; // 默认1倍速
+    _speedBoostRate = prefs.getDouble(_speedBoostRateKey) ?? 2.0; // 默认2倍速
     _normalPlaybackRate = 1.0; // 始终重置为1.0
     notifyListeners();
   }
@@ -4050,6 +4054,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     notifyListeners();
   }
   
+  // 设置长按倍速播放的倍率
+  Future<void> setSpeedBoostRate(double rate) async {
+    _speedBoostRate = rate;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_speedBoostRateKey, rate);
+    notifyListeners();
+  }
+  
   // 开始倍速播放（长按开始）
   void startSpeedBoost() {
     if (!hasVideo || _isSpeedBoostActive) return;
@@ -4058,9 +4070,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _normalPlaybackRate = _playbackRate;
     _isSpeedBoostActive = true;
     
-    // 固定使用2倍速
-    player.setPlaybackRate(2.0);
-    debugPrint('开始长按倍速播放: 2.0x (之前: ${_normalPlaybackRate}x)');
+    // 使用配置的倍速
+    player.setPlaybackRate(_speedBoostRate);
+    debugPrint('开始长按倍速播放: ${_speedBoostRate}x (之前: ${_normalPlaybackRate}x)');
     
     // 显示倍速指示器
     _showSpeedBoostIndicator();
