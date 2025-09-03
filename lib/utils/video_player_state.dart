@@ -3669,7 +3669,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 显示倍速指示器
   void _showSpeedBoostIndicator() {
-    if (!globals.isPhone || _context == null) return;
+    if (_context == null) return;
 
     if (_speedBoostOverlayEntry == null) {
       _speedBoostOverlayEntry = OverlayEntry(
@@ -3686,7 +3686,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 隐藏倍速指示器
   void _hideSpeedBoostIndicator() {
-    if (!globals.isPhone) return;
 
     // Wait for fade-out animation to complete before removing
     Future.delayed(const Duration(milliseconds: 200), () {
