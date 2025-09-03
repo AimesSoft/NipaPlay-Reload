@@ -151,7 +151,7 @@ class _AboutPageState extends State<AboutPage> {
                         ),
                         child: const Text(
                           'NEW',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -173,7 +173,7 @@ style: TextStyle(
                   context,
                   [
                     const TextSpan(text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
-                    TextSpan(text: 'にぱ〜☆', locale:Locale("zh","CN"),
+                    TextSpan(text: 'にぱ〜☆', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
                     const TextSpan(text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
                   ],
@@ -190,7 +190,7 @@ style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fon
                   context,
                   [
                     const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
-                    TextSpan(text: 'Kaedei', locale:Locale("zh","CN"),
+                    TextSpan(text: 'Kaedei', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
                     const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
                   ]
@@ -199,7 +199,7 @@ style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold
                   context,
                   [
                     const TextSpan(text: '感谢开发者 '),
-                    TextSpan(text: 'Sakiko', locale:Locale("zh","CN"),
+                    TextSpan(text: 'Sakiko', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
                     const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
                   ]
@@ -230,7 +230,7 @@ style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold
                         const SizedBox(width: 8),
                         Text(
                           'MCDFsteve/NipaPlay-Reload',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
@@ -252,8 +252,8 @@ style: TextStyle(
                         Icon(Ionicons.chatbubbles_outline, color: Colors.white.withOpacity(0.8), size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          'QQ群: 712139588',
-                          locale:Locale("zh","CN"),
+                          'QQ群: 961207150',
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
@@ -276,7 +276,7 @@ style: TextStyle(
                         const SizedBox(width: 8),
                         Text(
                           'NipaPlay 官方网站',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,

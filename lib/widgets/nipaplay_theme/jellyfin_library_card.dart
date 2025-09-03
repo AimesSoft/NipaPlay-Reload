@@ -110,7 +110,7 @@ class JellyfinLibraryCard extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           '${library.totalItems} 项内容',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 16,

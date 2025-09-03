@@ -460,7 +460,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                   child: Center(
                     child: Text(
                       '没有激活的字幕轨道\n请在字幕轨道设置中激活字幕',
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                       textAlign: TextAlign.center,
                     ),
@@ -472,7 +472,7 @@ style: TextStyle(color: Colors.white70),
                     child: Center(
                       child: Text(
                         '当前字幕轨道没有可显示的字幕内容',
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                         textAlign: TextAlign.center,
                       ),
@@ -535,7 +535,7 @@ style: TextStyle(color: Colors.white70),
                                             children: [
                                               Text(
                                                 entry.formattedStartTime,
-                                                locale:Locale("zh","CN"),
+                                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                   color: Colors.grey.shade400,
                                                   fontSize: 12,
@@ -544,7 +544,7 @@ style: TextStyle(
                                               ),
                                               const Text(
                                                 ' → ',
-                                                locale:Locale("zh","CN"),
+                                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                   color: Colors.grey,
                                                   fontSize: 12,
@@ -552,7 +552,7 @@ style: TextStyle(
                                               ),
                                               Text(
                                                 entry.formattedEndTime,
-                                                locale:Locale("zh","CN"),
+                                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                   color: Colors.grey.shade400,
                                                   fontSize: 12,
@@ -571,7 +571,7 @@ style: TextStyle(
                                             ),
                                             child: Text(
                                               entry.content,
-                                              locale:Locale("zh","CN"),
+                                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 14,
@@ -643,7 +643,7 @@ style: TextStyle(
                                               children: [
                                                 Text(
                                                   entry.formattedStartTime,
-                                                  locale:Locale("zh","CN"),
+                                                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
@@ -652,7 +652,7 @@ style: TextStyle(
                                                 ),
                                                 Text(
                                                   ' → ',
-                                                  locale:Locale("zh","CN"),
+                                                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
@@ -660,7 +660,7 @@ style: TextStyle(
                                                 ),
                                                 Text(
                                                   entry.formattedEndTime,
-                                                  locale:Locale("zh","CN"),
+                                                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
@@ -679,7 +679,7 @@ style: TextStyle(
                                               ),
                                               child: Text(
                                                 entry.content,
-                                                locale:Locale("zh","CN"),
+                                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 14,

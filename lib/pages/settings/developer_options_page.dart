@@ -75,12 +75,12 @@ class DeveloperOptionsPage extends StatelessWidget {
               ListTile(
                 title: const Text(
                   '检查Linux存储迁移状态',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 subtitle: const Text(
                   '查看Linux平台数据目录迁移状态',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                 ),
                 trailing: const Icon(Ionicons.information_circle_outline, color: Colors.white),
@@ -93,12 +93,12 @@ style: TextStyle(color: Colors.white70),
               ListTile(
                 title: const Text(
                   '手动触发存储迁移',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 subtitle: const Text(
                   '强制重新执行数据目录迁移（仅用于测试）',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                 ),
                 trailing: const Icon(Ionicons.refresh_outline, color: Colors.orange),
@@ -111,12 +111,12 @@ style: TextStyle(color: Colors.white70),
               ListTile(
                 title: const Text(
                   '🚨 紧急恢复个人文件',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                 ),
                 subtitle: const Text(
                   '将误迁移的个人文件恢复到Documents目录',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                 ),
                 trailing: const Icon(Ionicons.medical_outline, color: Colors.red),
@@ -129,12 +129,12 @@ style: TextStyle(color: Colors.white70),
               ListTile(
                 title: const Text(
                   '显示存储目录信息',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 subtitle: const Text(
                   '查看当前使用的数据和缓存目录路径',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                 ),
                 trailing: const Icon(Ionicons.folder_outline, color: Colors.white),
@@ -207,7 +207,7 @@ style: TextStyle(color: Colors.white70),
                       const SizedBox(width: 12),
                       const Text(
                         '终端输出',
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                           color: Colors.white,
                           fontSize: 20,
@@ -283,7 +283,7 @@ XDG缓存目录: $cacheDir
         """.trim(),
         actions: <Widget>[
           TextButton(
-            child: const Text("知道了", locale:Locale("zh","CN"),
+            child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
             onPressed: () => Navigator.of(context).pop(),
           ),
@@ -306,12 +306,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       content: "这将重新执行数据目录迁移过程。\n\n注意：这是一个测试功能，在正常情况下不应该使用。",
       actions: <Widget>[
         TextButton(
-          child: const Text("取消", locale:Locale("zh","CN"),
+          child: const Text("取消", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         TextButton(
-          child: const Text("确认", locale:Locale("zh","CN"),
+          child: const Text("确认", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -344,7 +344,7 @@ ${result.message}
             """.trim(),
             actions: <Widget>[
               TextButton(
-                child: const Text("知道了", locale:Locale("zh","CN"),
+                child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -362,7 +362,7 @@ ${result.errors.join('\n')}
             """.trim(),
             actions: <Widget>[
               TextButton(
-                child: const Text("知道了", locale:Locale("zh","CN"),
+                child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -412,7 +412,7 @@ XDG_CACHE_HOME: $xdgCacheHome
         """.trim(),
         actions: <Widget>[
           TextButton(
-            child: const Text("知道了", locale:Locale("zh","CN"),
+            child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
             onPressed: () => Navigator.of(context).pop(),
           ),
@@ -443,12 +443,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       """.trim(),
       actions: <Widget>[
         TextButton(
-          child: const Text("取消", locale:Locale("zh","CN"),
+          child: const Text("取消", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         TextButton(
-          child: const Text("确认恢复", locale:Locale("zh","CN"),
+          child: const Text("确认恢复", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -479,7 +479,7 @@ ${result.message}
             """.trim(),
             actions: <Widget>[
               TextButton(
-                child: const Text("知道了", locale:Locale("zh","CN"),
+                child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -497,7 +497,7 @@ ${result.errors.join('\n')}
             """.trim(),
             actions: <Widget>[
               TextButton(
-                child: const Text("知道了", locale:Locale("zh","CN"),
+                child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
                 onPressed: () => Navigator.of(context).pop(),
               ),

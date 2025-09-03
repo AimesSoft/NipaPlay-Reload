@@ -68,7 +68,7 @@ class DanmakuGroupWidget extends StatelessWidget {
       final textPainter = TextPainter(
         text: TextSpan(
           text: danmakuItem.text,
-          locale:Locale("zh","CN"),
+          locale:Locale("zh-Hans","zh"),
 style: TextStyle(fontSize: adjustedFontSize, color: danmakuItem.color),
         ),
         textDirection: TextDirection.ltr,
@@ -134,7 +134,7 @@ style: TextStyle(fontSize: adjustedFontSize, color: danmakuItem.color),
                       children: [
                         TextSpan(
                           text: danmakuItem.text,
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             fontSize: adjustedFontSize,
                             color: danmakuItem.color,
@@ -144,7 +144,7 @@ style: TextStyle(
                         ),
                         TextSpan(
                           text: danmakuItem.countText,
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             fontSize: 16.0,
                             color: Colors.white,
@@ -160,7 +160,7 @@ style: TextStyle(
                       // 描边
                       Text(
                         danmakuItem.text,
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                           fontSize: adjustedFontSize,
                           color: strokeColor,
@@ -171,7 +171,7 @@ style: TextStyle(
                       // 实际文本
                       Text(
                         danmakuItem.text,
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                           fontSize: adjustedFontSize,
                           color: danmakuItem.color,

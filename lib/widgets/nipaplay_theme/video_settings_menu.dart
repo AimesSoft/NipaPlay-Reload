@@ -663,7 +663,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                                     children: [
                                       Text(
                                         '设置',
-                                        locale:Locale("zh","CN"),
+                                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 16,

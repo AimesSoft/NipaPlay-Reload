@@ -482,14 +482,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   child: _buildRatingStars(bangumiRatingValue.toDouble())),
               TextSpan(
                   text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.yellow[600],
                       fontWeight: FontWeight.bold,
                       fontSize: 14)),
               TextSpan(
                   text: bangumiEvaluationText,
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.white.withOpacity(0.7), fontSize: 12))
             ])),
@@ -516,7 +516,7 @@ style: TextStyle(
                       ),
                       TextSpan(
                         text: '(${_ratingEvaluationMap[_userRating] ?? ''})',
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                           color: Colors.blue.withOpacity(0.7),
                           fontSize: 12,
@@ -608,7 +608,7 @@ style: TextStyle(
                                     fontWeight: FontWeight.normal)),
                             TextSpan(
                                 text: score.toStringAsFixed(1),
-                                locale:Locale("zh","CN"),
+                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                     color: Colors.white.withOpacity(0.95)))
                           ]));
@@ -713,7 +713,7 @@ style: TextStyle(
       return const Center(
           child: Padding(
         padding: EdgeInsets.all(20.0),
-        child: Text('暂无剧集信息', locale:Locale("zh","CN"),
+        child: Text('暂无剧集信息', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
       ));
     }
@@ -784,7 +784,7 @@ style: TextStyle(color: Colors.white70)),
                   children: [
                     Expanded(
                       child: Text(episode.title,
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                               color: Colors.white.withOpacity(0.9), fontSize: 13),
                           maxLines: 1,
@@ -820,7 +820,7 @@ style: TextStyle(
                               const SizedBox(width: 4),
                             Text(
                               _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
-                              locale:Locale("zh","CN"),
+                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                 color: Colors.green.withOpacity(0.9),
                                 fontSize: 10,
@@ -834,7 +834,7 @@ style: TextStyle(
                 ),
                 trailing: progressText != null
                     ? Text(progressText,
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: progress > 0.95
                                 ? Colors.greenAccent
@@ -903,12 +903,12 @@ style: TextStyle(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text('加载详情失败:',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white.withOpacity(0.8))),
               const SizedBox(height: 8),
               Text(
                 _error ?? '未知错误',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white.withOpacity(0.7)),
                 textAlign: TextAlign.center,
               ),
@@ -917,14 +917,14 @@ style: TextStyle(color: Colors.white.withOpacity(0.7)),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white.withOpacity(0.2)),
                 onPressed: _fetchAnimeDetails,
-                child: const Text('重试', locale:Locale("zh","CN"),
+                child: const Text('重试', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),
               ),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child:
-                    const Text('关闭', locale:Locale("zh","CN"),
+                    const Text('关闭', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               ),
             ],
@@ -1260,7 +1260,7 @@ class _HoverableTagState extends State<_HoverableTag> {
                   ),
                   child: Text(
                     widget.tag,
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       fontSize: 12,
                       color: _isHovered 

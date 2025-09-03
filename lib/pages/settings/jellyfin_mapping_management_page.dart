@@ -48,12 +48,12 @@ class _JellyfinMappingManagementPageState extends State<JellyfinMappingManagemen
       content: '确定要清除所有Jellyfin剧集映射吗？这将删除所有已建立的智能映射关系，无法恢复。',
       actions: [
         TextButton(
-          child: const Text('取消', locale:Locale("zh","CN"),
+          child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         TextButton(
-          child: const Text('确定清除', locale:Locale("zh","CN"),
+          child: const Text('确定清除', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -87,7 +87,7 @@ style: TextStyle(color: Colors.red)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('知道了', locale:Locale("zh","CN"),
+            child: const Text('知道了', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -127,7 +127,7 @@ style: TextStyle(color: Colors.white)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭', locale:Locale("zh","CN"),
+          child: const Text('关闭', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),
         ),
       ],
@@ -179,7 +179,7 @@ style: TextStyle(color: Colors.white)),
                   SizedBox(width: 8),
                   Text(
                     '映射统计',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -213,7 +213,7 @@ style: TextStyle(
                   const SizedBox(height: 8),
                   const Text(
                     '最近活动',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -293,7 +293,7 @@ style: TextStyle(
                     SizedBox(width: 8),
                     Text(
                       '映射管理',
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -308,12 +308,12 @@ style: TextStyle(
                 leading: const Icon(Ionicons.refresh_outline, color: Colors.white),
                 title: const Text(
                   '重新加载统计',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
                 ),
                 subtitle: const Text(
                   '刷新映射统计信息',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                 ),
                 onTap: () {
@@ -330,12 +330,12 @@ style: TextStyle(color: Colors.white70),
                 leading: const Icon(Ionicons.analytics_outline, color: Colors.white),
                 title: const Text(
                   '映射分析',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
                 ),
                 subtitle: const Text(
                   '查看映射准确性和使用情况',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                 ),
                 onTap: _showMappingAnalysis,
@@ -347,12 +347,12 @@ style: TextStyle(color: Colors.white70),
                 leading: const Icon(Ionicons.trash_outline, color: Colors.red),
                 title: const Text(
                   '清除所有映射',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
                 ),
                 subtitle: const Text(
                   '删除所有已建立的映射关系',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                 ),
                 onTap: _clearAllMappings,
@@ -389,7 +389,7 @@ style: TextStyle(color: Colors.white70),
                   SizedBox(width: 8),
                   Text(
                     '关于智能映射',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -402,7 +402,7 @@ style: TextStyle(
               
               const Text(
                 '智能映射系统自动记录Jellyfin剧集与DandanPlay弹幕的对应关系，实现以下功能：',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white, fontSize: 14),
               ),
               const SizedBox(height: 12),
@@ -416,7 +416,7 @@ style: TextStyle(color: Colors.white, fontSize: 14),
               
               const Text(
                 '映射会在手动匹配弹幕时自动创建，无需手动配置。',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],

@@ -141,7 +141,7 @@ class _GeneralPageState extends State<GeneralPage> {
                         TextButton(
                           child: const Text(
                             '取消',
-                            locale:Locale("zh","CN"),
+                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                           ),
                           onPressed: () => Navigator.of(context).pop(false),
@@ -149,7 +149,7 @@ style: TextStyle(color: Colors.white70),
                         TextButton(
                           child: const Text(
                             '确定',
-                            locale:Locale("zh","CN"),
+                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white),
                           ),
                           onPressed: () => Navigator.of(context).pop(true),

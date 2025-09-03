@@ -72,7 +72,7 @@ class GPUDanmakuItem {
     final textPainter = TextPainter(
       text: TextSpan(
         text: text,
-        locale:Locale("zh","CN"),
+        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
           fontSize: fontSize,
           fontWeight: FontWeight.normal,

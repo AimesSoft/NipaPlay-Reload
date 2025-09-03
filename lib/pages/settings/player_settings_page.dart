@@ -117,7 +117,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                Navigator.of(context).pop();
             }
           },
-          child: const Text('确定', locale:Locale("zh","CN"),
+          child: const Text('确定', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),
         ),
       ],
@@ -243,7 +243,7 @@ style: TextStyle(color: Colors.white)),
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text('取消', locale:Locale("zh","CN"),
+          child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.grey)),
         ),
         TextButton(
@@ -256,7 +256,7 @@ style: TextStyle(color: Colors.grey)),
               windowManager.close();
             }
           },
-          child: const Text('确定', locale:Locale("zh","CN"),
+          child: const Text('确定', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),
         ),
       ],
@@ -290,7 +290,7 @@ style: TextStyle(color: Colors.white)),
       return const Center(
         child: Text(
           '播放器设置在Web平台不可用',
-          locale:Locale("zh","CN"),
+          locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white),
         ),
       );

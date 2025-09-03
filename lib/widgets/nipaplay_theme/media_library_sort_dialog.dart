@@ -251,7 +251,7 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       '排序方式',
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -308,7 +308,7 @@ style: TextStyle(
                                         children: [
                                           Text(
                                             option.label,
-                                            locale:Locale("zh","CN"),
+                                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                               color: isSelected ? Colors.lightBlueAccent : Colors.white,
                                               fontSize: 14,
@@ -318,7 +318,7 @@ style: TextStyle(
                                           const SizedBox(height: 2),
                                           Text(
                                             option.description,
-                                            locale:Locale("zh","CN"),
+                                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                               color: Colors.white.withValues(alpha: 0.7),
                                               fontSize: 12,
@@ -343,7 +343,7 @@ style: TextStyle(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       '排序顺序',
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -384,7 +384,7 @@ style: TextStyle(
                                 child: Center(
                                   child: Text(
                                     order['label']!,
-                                    locale:Locale("zh","CN"),
+                                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                       color: isSelected ? Colors.lightBlueAccent : Colors.white,
                                       fontSize: 14,
@@ -409,7 +409,7 @@ style: TextStyle(
                         onPressed: () => Navigator.of(context).pop(),
                         child: const Text(
                           '取消',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                         ),
                       ),
@@ -430,7 +430,7 @@ style: TextStyle(color: Colors.white70),
                         ),
                         child: const Text(
                           '应用',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),

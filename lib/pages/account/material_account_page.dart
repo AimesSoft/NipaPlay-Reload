@@ -131,7 +131,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           children: [
             const Text(
               '弹弹play账号',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -226,7 +226,7 @@ style: TextStyle(
                     const SizedBox(height: 4),
                     const Text(
                       '已登录',
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         color: Colors.white60,
                         fontSize: 12,
@@ -265,7 +265,7 @@ style: TextStyle(
                         SizedBox(width: 4),
                         Text(
                           '退出',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
@@ -289,12 +289,12 @@ style: TextStyle(
         ListTile(
           title: const Text(
             "登录弹弹play账号",
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           subtitle: const Text(
             "登录后可以同步观看记录和个人设置",
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
           ),
           trailing: const Icon(Icons.login, color: Colors.white),
@@ -304,12 +304,12 @@ style: TextStyle(color: Colors.white70),
         ListTile(
           title: const Text(
             "注册弹弹play账号",
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           subtitle: const Text(
             "创建新的弹弹play账号，享受完整功能",
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
           ),
           trailing: const Icon(Icons.person_add, color: Colors.white),

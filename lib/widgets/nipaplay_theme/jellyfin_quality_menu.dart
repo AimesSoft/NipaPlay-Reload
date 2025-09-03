@@ -233,7 +233,7 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       onClose: widget.onClose,
       extraButton: TextButton(
         onPressed: _applySelection,
-        child: const Text('应用', locale:Locale("zh","CN"),
+        child: const Text('应用', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),
       ),
       content: Column(
@@ -291,7 +291,7 @@ style: TextStyle(color: Colors.white)),
                                     children: [
                                       Text(
                                         _getQualityDisplayName(quality),
-                                        locale:Locale("zh","CN"),
+                                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                           color: isSelected ? Colors.blue : Colors.white,
                                           fontSize: 14,
@@ -301,7 +301,7 @@ style: TextStyle(
                                       const SizedBox(height: 2),
                                       Text(
                                         _getQualityDescription(quality),
-                                        locale:Locale("zh","CN"),
+                                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                           color: isSelected ? Colors.blue.withOpacity(0.8) : Colors.white60,
                                           fontSize: 12,
@@ -337,7 +337,7 @@ style: TextStyle(
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('转码时烧录字幕', locale:Locale("zh","CN"),
+                      const Text('转码时烧录字幕', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 13)),
                       Switch(
                         value: _burnIn,
@@ -383,7 +383,7 @@ style: TextStyle(color: Colors.white70, fontSize: 13)),
               Expanded(
                 child: Text(
                   title,
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     color: selected ? Colors.blue : Colors.white,
                     fontSize: 13,

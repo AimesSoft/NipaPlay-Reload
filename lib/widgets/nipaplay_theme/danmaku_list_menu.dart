@@ -481,7 +481,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                                             children: [
                                               Text(
                                                 _formatTime(timeInSeconds),
-                                                locale:Locale("zh","CN"),
+                                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                   color: Colors.grey.shade400,
                                                   fontSize: 12,
@@ -497,7 +497,7 @@ style: TextStyle(
                                                 ),
                                                 child: Text(
                                                   _getDanmakuTypeText(type),
-                                                  locale:Locale("zh","CN"),
+                                                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 10,
@@ -515,7 +515,7 @@ style: TextStyle(
                                                   ),
                                                   child: const Text(
                                                     '已过滤',
-                                                    locale:Locale("zh","CN"),
+                                                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                       color: Colors.red,
                                                       fontSize: 10,
@@ -533,7 +533,7 @@ style: TextStyle(
                                             ),
                                             child: Text(
                                               content,
-                                              locale:Locale("zh","CN"),
+                                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 14,
@@ -613,7 +613,7 @@ style: TextStyle(
                                               children: [
                                                 Text(
                                                   _formatTime(timeInSeconds),
-                                                  locale:Locale("zh","CN"),
+                                                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 12,
@@ -629,7 +629,7 @@ style: TextStyle(
                                                   ),
                                                   child: Text(
                                                     _getDanmakuTypeText(type),
-                                                    locale:Locale("zh","CN"),
+                                                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                       color: Colors.grey.shade400,
                                                       fontSize: 10,
@@ -647,7 +647,7 @@ style: TextStyle(
                                                     ),
                                                     child: const Text(
                                                       '已过滤',
-                                                      locale:Locale("zh","CN"),
+                                                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                         color: Colors.red,
                                                         fontSize: 10,
@@ -665,7 +665,7 @@ style: TextStyle(
                                               ),
                                               child: Text(
                                                 content,
-                                                locale:Locale("zh","CN"),
+                                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 14,

@@ -10,7 +10,7 @@ class EmptyPage extends StatelessWidget {
     return const Center(
       child: Text(
         '这里什么都没有',
-        locale:Locale("zh","CN"),
+        locale:Locale("zh-Hans","zh"),
 style: TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold),
       ),
     );

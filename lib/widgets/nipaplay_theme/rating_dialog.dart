@@ -134,7 +134,7 @@ class _RatingDialogState extends State<RatingDialog> {
                     // 番剧名称
                     Text(
                       widget.animeTitle,
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         color: Colors.white.withOpacity(0.8),
                         fontSize: 14,
@@ -151,7 +151,7 @@ style: TextStyle(
                         children: [
                           Text(
                             _selectedRating > 0 ? '$_selectedRating 分' : '未评分',
-                            locale:Locale("zh","CN"),
+                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                               color: Colors.white,
                               fontSize: 24,
@@ -162,7 +162,7 @@ style: TextStyle(
                             const SizedBox(height: 4),
                             Text(
                               _ratingEvaluationMap[_selectedRating] ?? '',
-                              locale:Locale("zh","CN"),
+                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                 color: Colors.white.withOpacity(0.7),
                                 fontSize: 14,
@@ -243,7 +243,7 @@ style: TextStyle(
                             child: Center(
                               child: Text(
                                 '$rating',
-                                locale:Locale("zh","CN"),
+                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                   color: isSelected 
                                       ? Colors.blue
@@ -273,7 +273,7 @@ style: TextStyle(
                                   : () => setState(() => _selectedRating = 0),
                               child: Text(
                                 '清除评分',
-                                locale:Locale("zh","CN"),
+                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                   color: Colors.white.withOpacity(0.7),
                                   fontSize: 13,
@@ -291,7 +291,7 @@ style: TextStyle(
                                 : () => Navigator.of(context).pop(),
                             child: Text(
                               '取消',
-                              locale:Locale("zh","CN"),
+                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                 color: Colors.white.withOpacity(0.8),
                                 fontSize: 13,
@@ -326,7 +326,7 @@ style: TextStyle(
                                   )
                                 : Text(
                                     '确定',
-                                    locale:Locale("zh","CN"),
+                                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,

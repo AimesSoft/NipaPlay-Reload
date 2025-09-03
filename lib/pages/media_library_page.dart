@@ -393,7 +393,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
               const Text(
                 '媒体库为空。\n观看过的动画将显示在这里。',
                 textAlign: TextAlign.center,
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),

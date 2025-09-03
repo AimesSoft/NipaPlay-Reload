@@ -34,7 +34,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                 SizedBox(height: 16),
                 Text(
                   '正在初始化远程媒体库服务...',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70),
                 ),
               ],
@@ -92,7 +92,7 @@ style: TextStyle(color: Colors.white70),
               const SizedBox(width: 12),
               const Text(
                 '服务初始化错误',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -123,7 +123,7 @@ style: TextStyle(
                 Expanded(
                   child: Text(
                     '这些错误不会影响其他功能的正常使用。您可以尝试重新配置服务器连接。',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
@@ -160,7 +160,7 @@ style: TextStyle(
           const SizedBox(height: 4),
           Text(
             errorMessage,
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
               color: Colors.red[300],
               fontSize: 12,
@@ -187,7 +187,7 @@ style: TextStyle(
               const SizedBox(width: 12),
               const Text(
                 'Jellyfin 媒体服务器',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -205,7 +205,7 @@ style: TextStyle(
                   ),
                   child: const Text(
                     '已连接',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.green,
                       fontSize: 12,
@@ -221,7 +221,7 @@ style: TextStyle(
               if (!jellyfinProvider.isConnected) ...[
                 const Text(
                   'Jellyfin是一个免费的媒体服务器软件，可以让您在任何设备上流式传输您的媒体收藏。',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
@@ -288,7 +288,7 @@ style: TextStyle(
             children: [
               const Icon(Icons.dns, color: Colors.blue, size: 16),
               const SizedBox(width: 8),
-              const Text('服务器:', locale:Locale("zh","CN"),
+              const Text('服务器:', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Expanded(
@@ -305,7 +305,7 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
             children: [
               const Icon(Icons.person, color: Colors.blue, size: 16),
               const SizedBox(width: 8),
-              const Text('用户:', locale:Locale("zh","CN"),
+              const Text('用户:', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
@@ -337,7 +337,7 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
             children: [
               const Icon(Ionicons.library_outline, color: Colors.blue, size: 16),
               const SizedBox(width: 8),
-              const Text('媒体库:', locale:Locale("zh","CN"),
+              const Text('媒体库:', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
@@ -413,7 +413,7 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 12),
               const Text(
                 'Emby 媒体服务器',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -431,7 +431,7 @@ style: TextStyle(
                       ),
                       child: const Text(
                         '已连接',
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                           color: Color(0xFF52B54B),
                           fontSize: 12,
@@ -447,7 +447,7 @@ style: TextStyle(
               if (!embyProvider.isConnected) ...[
                 const Text(
                   'Emby是一个强大的个人媒体服务器，可以让您在任何设备上组织、播放和流式传输您的媒体收藏。',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
@@ -514,7 +514,7 @@ style: TextStyle(
             children: [
               const Icon(Icons.dns, color: Color(0xFF52B54B), size: 16),
               const SizedBox(width: 8),
-              const Text('服务器:', locale:Locale("zh","CN"),
+              const Text('服务器:', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Expanded(
@@ -531,7 +531,7 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
             children: [
               const Icon(Icons.person, color: Color(0xFF52B54B), size: 16),
               const SizedBox(width: 8),
-              const Text('用户:', locale:Locale("zh","CN"),
+              const Text('用户:', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
@@ -563,7 +563,7 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
             children: [
               const Icon(Ionicons.library_outline, color: Color(0xFF52B54B), size: 16),
               const SizedBox(width: 8),
-              const Text('媒体库:', locale:Locale("zh","CN"),
+              const Text('媒体库:', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
@@ -654,7 +654,7 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
                   SizedBox(width: 12),
                   Text(
                     '其他媒体服务',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -668,7 +668,7 @@ style: TextStyle(
               
               const Text(
                 '更多远程媒体服务支持正在开发中...',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
@@ -737,12 +737,12 @@ style: TextStyle(
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', locale:Locale("zh","CN"),
+          child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('断开连接', locale:Locale("zh","CN"),
+          child: const Text('断开连接', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
         ),
       ],
@@ -845,12 +845,12 @@ style: TextStyle(color: Colors.red)),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', locale:Locale("zh","CN"),
+          child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('断开连接', locale:Locale("zh","CN"),
+          child: const Text('断开连接', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
         ),
       ],

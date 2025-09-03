@@ -35,7 +35,7 @@ class _UIThemePageState extends State<UIThemePage> {
                 // 标题
                 const Text(
                   '控件主题',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,
@@ -45,7 +45,7 @@ style: TextStyle(
                 const SizedBox(height: 8),
                 const Text(
                   '选择应用的控件主题风格',
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
@@ -73,7 +73,7 @@ style: TextStyle(
       children: [
         const Text(
           '主题风格',
-          locale:Locale("zh","CN"),
+          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
             color: Colors.white,
             fontSize: 16,
@@ -111,7 +111,7 @@ style: TextStyle(
         children: [
           const Text(
             '当前主题预览',
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -133,7 +133,7 @@ style: TextStyle(
           children: [
             Text(
               'NipaPlay 主题',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -143,7 +143,7 @@ style: TextStyle(
             SizedBox(height: 8),
             Text(
               '• 磨砂玻璃效果\n• 渐变背景\n• 圆角设计\n• 适合多媒体应用',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
@@ -158,7 +158,7 @@ style: TextStyle(
           children: [
             Text(
               'Fluent UI 主题',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -168,7 +168,7 @@ style: TextStyle(
             SizedBox(height: 8),
             Text(
               '• Microsoft 设计语言\n• 亚克力材质\n• 现代化界面\n• 统一的交互体验',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
@@ -192,7 +192,7 @@ style: TextStyle(
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text('取消', locale:Locale("zh","CN"),
+          child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.grey)),
         ),
         TextButton(
@@ -203,7 +203,7 @@ style: TextStyle(color: Colors.grey)),
             // 退出应用
             _exitApplication();
           },
-          child: const Text('重启应用', locale:Locale("zh","CN"),
+          child: const Text('重启应用', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),
         ),
       ],

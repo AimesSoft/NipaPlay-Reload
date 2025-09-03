@@ -63,7 +63,7 @@ class CpuDanmakuTextRenderer extends DanmakuTextRenderer {
               children: [
                 TextSpan(
                   text: content.text,
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     fontSize: adjustedFontSize,
                     color: content.color,
@@ -73,7 +73,7 @@ style: TextStyle(
                 ),
                 TextSpan(
                   text: content.countText,
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     fontSize: 25.0, // 固定大小字体
                     color: Colors.white,
@@ -89,7 +89,7 @@ style: TextStyle(
               // 描边
               Text(
                 content.text,
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                   fontSize: adjustedFontSize,
                   color: strokeColor,
@@ -100,7 +100,7 @@ style: TextStyle(
               // 实际文本
               Text(
                 content.text,
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                   fontSize: adjustedFontSize,
                   color: content.color,

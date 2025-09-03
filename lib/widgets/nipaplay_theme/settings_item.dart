@@ -266,7 +266,7 @@ class SettingsItem extends StatelessWidget {
       leading: icon != null ? Icon(icon, color: Colors.white70) : null,
       title: Text(
         title,
-        locale:Locale("zh","CN"),
+        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
           color: enabled ? Colors.white : Colors.white54,
           fontWeight: FontWeight.bold,
@@ -275,7 +275,7 @@ style: TextStyle(
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: enabled ? Colors.white70 : Colors.white38,
               ),
@@ -298,7 +298,7 @@ style: TextStyle(
       secondary: icon != null ? Icon(icon, color: Colors.white70) : null,
       title: Text(
         title,
-        locale:Locale("zh","CN"),
+        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
           color: enabled ? Colors.white : Colors.white54,
           fontWeight: FontWeight.bold,
@@ -307,7 +307,7 @@ style: TextStyle(
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: enabled ? Colors.white70 : Colors.white38,
               ),
@@ -327,7 +327,7 @@ style: TextStyle(
       leading: icon != null ? Icon(icon, color: Colors.white70) : null,
       title: Text(
         title,
-        locale:Locale("zh","CN"),
+        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
           color: enabled ? Colors.white : Colors.white54,
           fontWeight: FontWeight.bold,
@@ -336,7 +336,7 @@ style: TextStyle(
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: enabled ? Colors.white70 : Colors.white38,
               ),
@@ -361,7 +361,7 @@ style: TextStyle(
           leading: icon != null ? Icon(icon, color: Colors.white70) : null,
           title: Text(
             title,
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
               color: enabled ? Colors.white : Colors.white54,
               fontWeight: FontWeight.bold,
@@ -370,7 +370,7 @@ style: TextStyle(
           subtitle: subtitle != null
               ? Text(
                   subtitle!,
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     color: enabled ? Colors.white70 : Colors.white38,
                   ),
@@ -379,7 +379,7 @@ style: TextStyle(
           trailing: Text(
             sliderLabelFormatter?.call(sliderValue ?? 0) ?? 
             (sliderValue ?? 0).toStringAsFixed(1),
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
               color: enabled ? Colors.white : Colors.white54,
               fontWeight: FontWeight.bold,
@@ -413,7 +413,7 @@ style: TextStyle(
           leading: icon != null ? Icon(icon, color: Colors.white70) : null,
           title: Text(
             title,
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
               color: enabled ? Colors.white : Colors.white54,
               fontWeight: FontWeight.bold,
@@ -422,7 +422,7 @@ style: TextStyle(
           subtitle: subtitle != null
               ? Text(
                   subtitle!,
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     color: enabled ? Colors.white70 : Colors.white38,
                   ),
@@ -451,7 +451,7 @@ style: TextStyle(
                 ),
                 child: Text(
                   isRecording ? '按任意键...' : (hotkeyText ?? '未设置'),
-                  locale:Locale("zh","CN"),
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                     color: isRecording 
                         ? Colors.red 

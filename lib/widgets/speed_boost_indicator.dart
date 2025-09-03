@@ -37,7 +37,7 @@ class SpeedBoostIndicator extends StatelessWidget {
                         SizedBox(width: 8),
                         Text(
                           "2x 倍速",
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Color.fromARGB(139, 255, 255, 255),
                             fontSize: 16,

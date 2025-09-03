@@ -182,7 +182,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
                   width: 80,
                   child: Text(
                     '${item.label}:',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 12,
@@ -192,7 +192,7 @@ style: TextStyle(
                 Expanded(
                   child: Text(
                     item.value,
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: item.isHighlighted ? Colors.white : Colors.white.withOpacity(0.9),
                       fontSize: 12,

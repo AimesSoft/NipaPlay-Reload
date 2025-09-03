@@ -1,5 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
@@ -7,7 +9,7 @@ class AppTheme {
   // 获取适合当前平台的默认字体
   static String? get _platformDefaultFont {
     if (kIsWeb) return null; // Web平台使用浏览器默认字体
-    return null; // 其他平台使用默认
+    return Platform.isWindows ? "微软雅黑" : null;
   }
 
   static ThemeData lightTheme = ThemeData(

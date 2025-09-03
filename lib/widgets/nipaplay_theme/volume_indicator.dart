@@ -88,7 +88,7 @@ class VolumeIndicator extends StatelessWidget { // Changed class name
                         padding: const EdgeInsets.all(5),
                         child: Text(
                           "${(videoState.currentSystemVolume * 100).toInt()}%", // <<< CHANGED to currentSystemVolume
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 10,

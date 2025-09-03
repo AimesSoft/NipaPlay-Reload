@@ -594,7 +594,7 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
               const SizedBox(height: 4),
               Text(
                 '管理媒体库连接和选择',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 14,
@@ -628,7 +628,7 @@ style: TextStyle(
                 child: const Icon(Icons.dns, color: Colors.blue, size: 20),
               ),
               const SizedBox(width: 12),
-              const Text('服务器:', locale:Locale("zh","CN"),
+              const Text('服务器:', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Expanded(
@@ -652,7 +652,7 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
                 child: const Icon(Icons.person, color: Colors.green, size: 20),
               ),
               const SizedBox(width: 12),
-              const Text('用户:', locale:Locale("zh","CN"),
+              const Text('用户:', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(width: 8),
               Text(
@@ -683,7 +683,7 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
             const SizedBox(width: 12),
             const Text(
               '媒体库选择',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,
@@ -730,7 +730,7 @@ style: TextStyle(
             const SizedBox(height: 16),
             Text(
               '没有可用的媒体库',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white.withOpacity(0.7),
                 fontSize: 16,
@@ -739,7 +739,7 @@ style: TextStyle(
             const SizedBox(height: 8),
             Text(
               '请检查服务器连接状态',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white.withOpacity(0.5),
                 fontSize: 14,
@@ -794,7 +794,7 @@ style: TextStyle(
             ),
             subtitle: Text(
               library.type,
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white.withOpacity(0.7),
                 fontSize: 12,
@@ -897,7 +897,7 @@ style: TextStyle(
                     children: [
                       const Text(
                         '转码设置',
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -907,7 +907,7 @@ style: TextStyle(
                       const SizedBox(height: 4),
                       Text(
                         '当前默认质量: ${_selectedQuality.displayName}',
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                           color: Colors.white.withOpacity(0.7),
                           fontSize: 12,
@@ -956,7 +956,7 @@ style: TextStyle(
                           Expanded(
                             child: Text(
                               '启用转码',
-                              locale:Locale("zh","CN"),
+                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                 color: Colors.white.withOpacity(0.9),
                                 fontSize: 14,
@@ -977,7 +977,7 @@ style: TextStyle(
                         const SizedBox(height: 16),
                         Text(
                           '默认清晰度',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 14,
@@ -1022,7 +1022,7 @@ style: TextStyle(
                                           children: [
                                             Text(
                                               quality.displayName,
-                                              locale:Locale("zh","CN"),
+                                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                                 color: isSelected ? Colors.orange : Colors.white,
                                                 fontSize: 14,

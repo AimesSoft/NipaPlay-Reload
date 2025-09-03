@@ -168,7 +168,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
                           const SizedBox(width: 4),
                           Text(
                             '${_cpuUsage.toStringAsFixed(1)}%',
-                            locale:Locale("zh","CN"),
+                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -188,7 +188,7 @@ style: TextStyle(
                           const SizedBox(width: 4),
                           Text(
                             '${_memoryUsageMB.toStringAsFixed(1)}MB',
-                            locale:Locale("zh","CN"),
+                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -208,7 +208,7 @@ style: TextStyle(
                           const SizedBox(width: 4),
                           Text(
                             '${_fps.toStringAsFixed(1)} FPS',
-                            locale:Locale("zh","CN"),
+                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,

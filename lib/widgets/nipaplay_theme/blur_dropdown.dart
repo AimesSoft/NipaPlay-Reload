@@ -372,7 +372,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
           color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent, // Subtle selection highlight
           child: Text(
             item.title,
-            locale:Locale("zh","CN"),
+            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
               fontSize: 15,
               color: Colors.white.withOpacity(isSelected ? 1.0 : 0.8), // Adjust opacity

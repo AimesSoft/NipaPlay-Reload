@@ -102,7 +102,7 @@ class CountdownSnackBar {
                               ),
                               child: const Text(
                                 '取消',
-                                locale:Locale("zh","CN"),
+                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,

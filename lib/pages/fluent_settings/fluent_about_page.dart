@@ -153,7 +153,7 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                               const TextSpan(text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
                               TextSpan(
                                 text: 'にぱ〜☆',
-                                locale:Locale("zh","CN"),
+                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                   color: material.Colors.pinkAccent[100],
                                   fontWeight: FontWeight.bold,
@@ -190,7 +190,7 @@ style: TextStyle(
                               const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
                               TextSpan(
                                 text: 'Kaedei',
-                                locale:Locale("zh","CN"),
+                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                   color: material.Colors.lightBlueAccent[100],
                                   fontWeight: FontWeight.bold,
@@ -208,7 +208,7 @@ style: TextStyle(
                               const TextSpan(text: '感谢开发者 '),
                               TextSpan(
                                 text: 'Sakiko',
-                                locale:Locale("zh","CN"),
+                                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                   color: material.Colors.lightBlueAccent[100],
                                   fontWeight: FontWeight.bold,

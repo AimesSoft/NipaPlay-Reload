@@ -96,7 +96,7 @@ Card(
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: _getAccessUrls().map((url) => 
-              Text(url, locale:Locale("zh","CN"),
+              Text(url, locale:Locale("zh-Hans","zh"),
 style: TextStyle(fontFamily: 'monospace'))
             ).toList(),
           ),

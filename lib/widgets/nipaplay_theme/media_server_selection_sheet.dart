@@ -72,7 +72,7 @@ class MediaServerSelectionSheet extends StatelessWidget {
               padding: EdgeInsets.only(bottom: 16),
               child: Text(
                 '选择媒体服务器',
-                locale:Locale("zh","CN"),
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -178,7 +178,7 @@ style: TextStyle(
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         color: Colors.white.withOpacity(0.7),
                         fontSize: 14,

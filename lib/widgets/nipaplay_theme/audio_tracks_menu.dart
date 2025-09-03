@@ -135,7 +135,7 @@ class AudioTracksMenu extends StatelessWidget {
                                   ),
                                   Text(
                                     '语言: $language',
-                                    locale:Locale("zh","CN"),
+                                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                       color: Colors.white.withOpacity(0.7),
                                       fontSize: 12,

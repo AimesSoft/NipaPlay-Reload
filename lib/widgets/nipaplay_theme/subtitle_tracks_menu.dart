@@ -533,7 +533,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                     padding: EdgeInsets.only(left: 16, bottom: 8),
                     child: Text(
                       '外部字幕',
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -598,7 +598,7 @@ style: TextStyle(
                                   ),
                                   Text(
                                     '类型: ${fileType.toUpperCase()}',
-                                    locale:Locale("zh","CN"),
+                                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                       color: Colors.white.withOpacity(0.7),
                                       fontSize: 12,
@@ -631,7 +631,7 @@ style: TextStyle(
                     padding: EdgeInsets.only(left: 16, bottom: 8),
                     child: Text(
                       '内嵌字幕',
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -720,7 +720,7 @@ style: TextStyle(
                                   ),
                                   Text(
                                     '语言: $language', // Display language from SubtitleManager (or fallback)
-                                    locale:Locale("zh","CN"),
+                                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                       color: Colors.white.withOpacity(0.7),
                                       fontSize: 12,
@@ -743,7 +743,7 @@ style: TextStyle(
                   padding: EdgeInsets.all(16.0),
                   child: Text(
                     '当前视频没有可用的字幕轨道。\n您可以通过"加载本地字幕文件"按钮添加外部字幕。',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                       color: Colors.white70,
                       fontSize: 14,

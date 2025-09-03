@@ -250,7 +250,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
                         children: [
                           const Text(
                             '弹幕轨道总览',
-                            locale:Locale("zh","CN"),
+                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                               color: Colors.white,
                               fontSize: 14,
@@ -260,7 +260,7 @@ style: TextStyle(
                           const SizedBox(height: 2),
                           Text(
                             '共${tracks.length}个轨道，合计$totalDanmakuCount条弹幕',
-                            locale:Locale("zh","CN"),
+                            locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 12,
@@ -269,7 +269,7 @@ style: TextStyle(
                           if (totalDanmakuCount != filteredDanmakuCount)
                             Text(
                               '显示: $filteredDanmakuCount条 (已过滤${totalDanmakuCount - filteredDanmakuCount}条)',
-                              locale:Locale("zh","CN"),
+                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                 color: Colors.orange.withOpacity(0.8),
                                 fontSize: 12,
@@ -343,7 +343,7 @@ style: TextStyle(
                               children: [
                                 Text(
                                   trackName,
-                                  locale:Locale("zh","CN"),
+                                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                     color: isEnabled ? Colors.white : Colors.white.withOpacity(0.7),
                                     fontSize: 14,
@@ -352,7 +352,7 @@ style: TextStyle(
                                 ),
                                 Text(
                                   '$count条弹幕',
-                                  locale:Locale("zh","CN"),
+                                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                     color: Colors.white.withOpacity(0.6),
                                     fontSize: 12,
@@ -398,7 +398,7 @@ style: TextStyle(
                         const SizedBox(width: 12),
                         Text(
                           '正在加载弹幕文件...',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: Colors.white.withOpacity(0.7),
                             fontSize: 14,

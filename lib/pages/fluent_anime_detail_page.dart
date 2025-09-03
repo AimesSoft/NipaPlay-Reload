@@ -406,7 +406,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                       TextSpan(text: '我的打分: ', style: boldKeyStyle?.copyWith(color: FluentTheme.of(context).accentColor)),
                       TextSpan(
                         text: '$_userRating 分 ',
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                           color: FluentTheme.of(context).accentColor,
                           fontWeight: FontWeight.bold,
@@ -530,7 +530,7 @@ style: TextStyle(
                     style: boldKeyStyle?.copyWith(color: material.Colors.orangeAccent)),
                 TextSpan(
                     text: anime.isFavorited! ? '已追' : '未追',
-                    locale:Locale("zh","CN"),
+                    locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: material.Colors.orangeAccent.withOpacity(0.85)))
               ]))),
           if (anime.isNSFW ?? false)
@@ -543,7 +543,7 @@ style: TextStyle(color: material.Colors.orangeAccent.withOpacity(0.85)))
                       style: boldKeyStyle?.copyWith(color: material.Colors.redAccent)),
                   TextSpan(
                       text: '是',
-                      locale:Locale("zh","CN"),
+                      locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: material.Colors.redAccent.withOpacity(0.85)))
                 ]))),
           ...metadataWidgets,
@@ -658,7 +658,7 @@ style: TextStyle(color: material.Colors.redAccent.withOpacity(0.85)))
                         ),
                         child: Text(
                           _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
-                          locale:Locale("zh","CN"),
+                          locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: material.Colors.green.withOpacity(0.9),
                             fontSize: 10,
@@ -670,7 +670,7 @@ style: TextStyle(
                 ),
                 trailing: progressText != null
                     ? Text(progressText,
-                        locale:Locale("zh","CN"),
+                        locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                             color: progress > 0.95
                                 ? material.Colors.greenAccent.withOpacity(0.9)

@@ -86,7 +86,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
             const SizedBox(height: 16),
             const Text(
               '上传视频开始播放',
-              locale:Locale("zh","CN"),
+              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -133,7 +133,7 @@ style: TextStyle(
                           child: const Center(
                             child: Text(
                               '选择视频',
-                              locale:Locale("zh","CN"),
+                              locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
