@@ -411,7 +411,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       if (type == 'bottom') {
         yPosition = screenHeight - (track + 1) * trackHeight - adjustedDanmakuHeight - _verticalSpacing;
       } else {
-        yPosition = track * trackHeight + _verticalSpacing;
+        // 顶部和滚动弹幕：减去字体高度让文字顶部贴近屏幕顶部
+        yPosition = track * trackHeight + _verticalSpacing - widget.fontSize;
       }
       
       // 更新轨道信息
@@ -501,7 +502,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       final nextAvailable = time + D * ((danmakuWidth + safetyMargin) / (screenWidth + danmakuWidth));
       _scrollLaneNextAvailableUntil[chosenTrack] = nextAvailable;
 
-      final yPosition = chosenTrack * trackHeight + _verticalSpacing;
+      final yPosition = chosenTrack * trackHeight + _verticalSpacing - widget.fontSize;
       _danmakuYPositions[danmakuKey] = yPosition;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         videoState.updateDanmakuTrackInfo(danmakuKey, {
