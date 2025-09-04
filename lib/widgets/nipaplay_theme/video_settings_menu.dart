@@ -136,7 +136,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     
     _settingsItems.add(SettingsItem(
       icon: Icons.height,
-      title: '控制栏设置',
+      title: '控件设置',
       onTap: _toggleControlBarSettingsMenu,
       isActive: () => _showControlBarSettings,
     ));

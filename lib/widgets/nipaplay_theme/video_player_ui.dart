@@ -15,6 +15,7 @@ import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
 import 'right_edge_hover_menu.dart';
+import 'minimal_progress_bar.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -397,6 +398,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                             
                             if (globals.isPhone && videoState.hasVideo)
                               const VolumeGestureArea(),
+                            
+                            // 底部1像素白色进度条
+                            const MinimalProgressBar(),
                           ],
                         )
                       : Focus(
@@ -470,6 +474,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                               uiThemeProvider.isFluentUITheme
                                   ? const FluentRightEdgeMenu()
                                   : const RightEdgeHoverMenu(),
+                              
+                              // 底部1像素白色进度条
+                              const MinimalProgressBar(),
                             ],
                           ),
                         ),

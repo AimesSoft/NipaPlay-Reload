@@ -123,6 +123,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final Map<String, bool> _danmakuTrackEnabled = {};
   static const String _controlBarHeightKey = 'control_bar_height';
   double _controlBarHeight = 20.0; // 默认高度
+  static const String _minimalProgressBarEnabledKey = 'minimal_progress_bar_enabled';
+  bool _minimalProgressBarEnabled = false; // 默认关闭
+  static const String _minimalProgressBarColorKey = 'minimal_progress_bar_color';
+  int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
   static const String _danmakuOpacityKey = 'danmaku_opacity';
   double _danmakuOpacity = 1.0; // 默认透明度
   static const String _danmakuVisibleKey = 'danmaku_visible';
@@ -297,6 +301,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
   double get controlBarHeight => _controlBarHeight;
+  bool get minimalProgressBarEnabled => _minimalProgressBarEnabled;
+  Color get minimalProgressBarColor => Color(_minimalProgressBarColor);
   double get danmakuOpacity => _danmakuOpacity;
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;
@@ -440,6 +446,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _focusNode.requestFocus();
     await _loadLastVideo();
     await _loadControlBarHeight(); // 加载保存的控制栏高度
+    await _loadMinimalProgressBarSettings(); // 加载最小化进度条设置
     await _loadDanmakuOpacity(); // 加载保存的弹幕不透明度
     await _loadDanmakuVisible(); // 加载弹幕可见性
     await _loadMergeDanmaku(); // 加载弹幕合并设置
@@ -2813,11 +2820,35 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     notifyListeners();
   }
 
+  // 加载最小化进度条设置
+  Future<void> _loadMinimalProgressBarSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _minimalProgressBarEnabled = prefs.getBool(_minimalProgressBarEnabledKey) ?? false;
+    _minimalProgressBarColor = prefs.getInt(_minimalProgressBarColorKey) ?? 0xFFFF7274;
+    notifyListeners();
+  }
+
   // 保存控制栏高度
   Future<void> setControlBarHeight(double height) async {
     _controlBarHeight = height;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_controlBarHeightKey, height);
+    notifyListeners();
+  }
+
+  // 保存最小化进度条启用状态
+  Future<void> setMinimalProgressBarEnabled(bool enabled) async {
+    _minimalProgressBarEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_minimalProgressBarEnabledKey, enabled);
+    notifyListeners();
+  }
+
+  // 保存最小化进度条颜色
+  Future<void> setMinimalProgressBarColor(int color) async {
+    _minimalProgressBarColor = color;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_minimalProgressBarColorKey, color);
     notifyListeners();
   }
 

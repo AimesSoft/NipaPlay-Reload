@@ -26,19 +26,19 @@ class SpeedBoostIndicator extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12.0),
                       border: Border.all(color: Colors.white.withOpacity(0.7), width: 0.5),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.fast_forward_rounded,
                           color: Color.fromARGB(139, 255, 255, 255),
                           size: 20,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
                           "${videoState.speedBoostRate}x 倍速",
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                          locale:const Locale("zh-Hans","zh"),
+style: const TextStyle(
                             color: Color.fromARGB(139, 255, 255, 255),
                             fontSize: 16,
                             fontWeight: FontWeight.w500,

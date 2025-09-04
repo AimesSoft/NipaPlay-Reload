@@ -36,7 +36,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
         offset: Offset(widget.videoState.showControls ? 0 : -0.1, 0),
         child: Container(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.5,
+            maxWidth: MediaQuery.of(context).size.width * 0.3,
           ),
           child: IntrinsicWidth(
             child: MouseRegion(
@@ -48,7 +48,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
               },
               child: GlassmorphicContainer(
                 width: double.infinity,
-                height: 48,
+                height: 40,
                 borderRadius: 24,
                 blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
                 alignment: Alignment.center,
@@ -69,8 +69,6 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                     const Color(0xFFFFFFFF).withOpacity(0.5),
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.start,
@@ -119,7 +117,6 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
             ),
           ),
         ),
-      ),
     );
   }
 } 
