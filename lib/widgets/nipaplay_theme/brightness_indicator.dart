@@ -48,40 +48,31 @@ class BrightnessIndicator extends StatelessWidget {
                       Icon(Ionicons.sunny_outline,
                           color: Colors.white.withOpacity(0.8), size: 20),
                       const SizedBox(height: 10),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          // 获取屏幕高度
-                          final screenHeight = MediaQuery.of(context).size.height;
-                          // 根据设备类型计算滑条高度
-                          final sliderHeight = globals.isDesktopOrTablet 
-                              ? screenHeight / 3.0  // 平板/桌面：屏幕高度的1/3
-                              : screenHeight * 0.8;  // 手机：屏幕高度的80%
-                          
-                          return SizedBox(
-                            height: sliderHeight,
-                            child: RotatedBox(
-                              quarterTurns: 3,
-                              child: SizedBox(
-                                height: 6, 
-                                child: LinearProgressIndicator(
-                                  value: videoState.currentScreenBrightness,
-                                  backgroundColor: Colors.white.withOpacity(0.25),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white.withOpacity(0.9)),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
+                      SizedBox(
+                        height: globals.isDesktopOrTablet 
+                            ? MediaQuery.of(context).size.height * 0.3  // 平板/桌面：屏幕高度的30%
+                            : MediaQuery.of(context).size.height * 0.7,  // 手机：屏幕高度的70%
+                        child: RotatedBox(
+                          quarterTurns: 3,
+                          child: SizedBox(
+                            height: 6, 
+                            child: LinearProgressIndicator(
+                              value: videoState.currentScreenBrightness,
+                              backgroundColor: Colors.white.withOpacity(0.25),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white.withOpacity(0.9)),
+                              borderRadius: BorderRadius.circular(3),
                             ),
-                          );
-                        },
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 10),
                       Padding(
                         padding: const EdgeInsets.all(5),
                         child: Text(
                           "${(videoState.currentScreenBrightness * 100).toInt()}%",
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                          locale: const Locale("zh-Hans","zh"),
+                          style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 10,
                               fontWeight: FontWeight.w500,

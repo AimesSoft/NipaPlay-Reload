@@ -584,16 +584,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             value: this,
             child: Consumer<VideoPlayerState>(
               builder: (context, videoState, _) {
-                return AnimatedPositioned(
-                  duration: const Duration(milliseconds: 150),
-                  right: videoState.isBrightnessIndicatorVisible ? 20.0 : 0.0, 
-                  top: globals.isPhone ? 100.0 : 250.0,
-                  bottom: globals.isPhone ? 100.0 : 250.0,
-                  // We need to import 'package:nipaplay/widgets/nipaplay_theme/brightness_indicator.dart'
-                  // Assuming it's available, otherwise this will fail.
-                  // For the edit tool, I should ensure imports are handled if I introduce new types.
-                  // However, BrightnessIndicator is an existing type.
-                  child: const BrightnessIndicator(), 
+                return Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      transform: Matrix4.translationValues(
+                        videoState.isBrightnessIndicatorVisible ? -35.0 : 70.0, // Slide from right
+                        0.0,
+                        0.0,
+                      ),
+                      child: const BrightnessIndicator(),
+                    ),
+                  ),
                 );
               },
             ),
@@ -649,12 +654,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             value: this,
             child: Consumer<VideoPlayerState>(
               builder: (context, videoState, _) {
-                return AnimatedPositioned(
-                  duration: const Duration(milliseconds: 150),
-                  left: videoState.isVolumeUIVisible ? 35.0 : 0.0, // Position on left, slide out left
-                  top: globals.isPhone ? 100.0 : 250.0,
-                  bottom: globals.isPhone ? 100.0 : null,
-                  child: const VolumeIndicator(), // Uses isVolumeUIVisible internally for opacity
+                return Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      transform: Matrix4.translationValues(
+                        videoState.isVolumeUIVisible ? 35.0 : -70.0, // Slide from left
+                        0.0,
+                        0.0,
+                      ),
+                      child: const VolumeIndicator(),
+                    ),
+                  ),
                 );
               },
             ),

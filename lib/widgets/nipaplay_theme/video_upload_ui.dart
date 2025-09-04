@@ -29,24 +29,26 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
 
   @override
   Widget build(BuildContext context) {
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
-    
+    final uiThemeProvider =
+        Provider.of<UIThemeProvider>(context, listen: false);
+
     if (uiThemeProvider.isFluentUITheme) {
       // 使用 FluentUI 版本
       return FluentVideoUploadControl(
         title: '选择视频文件',
         subtitle: '支持 MP4, AVI, MKV 等格式\n单击选择文件开始播放',
         onVideoSelected: (filePath) async {
-          final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+          final videoState =
+              Provider.of<VideoPlayerState>(context, listen: false);
           videoState.setPreInitLoadingState('正在准备视频文件...');
-          
+
           Future.microtask(() async {
             await videoState.initializePlayer(filePath);
           });
         },
       );
     }
-    
+
     // 使用 Material 版本（保持原有逻辑）
     final appearanceProvider = Provider.of<AppearanceSettingsProvider>(context);
     final bool enableBlur = appearanceProvider.enableWidgetBlurEffect;
@@ -86,8 +88,8 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
             const SizedBox(height: 16),
             const Text(
               '上传视频开始播放',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
               ),
@@ -99,7 +101,11 @@ style: TextStyle(
               cursor: SystemMouseCursors.click,
               child: AnimatedScale(
                 duration: const Duration(milliseconds: 150),
-                scale: _isPressed ? 0.95 : _isHovered ? 1.05 : 1.0,
+                scale: _isPressed
+                    ? 0.95
+                    : _isHovered
+                        ? 1.05
+                        : 1.0,
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 150),
                   opacity: _isHovered ? 0.8 : 1.0,
@@ -118,23 +124,27 @@ style: TextStyle(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              const Color(0xFFffffff).withOpacity(_isHovered ? 0.15 : 0.1),
-                              const Color(0xFFFFFFFF).withOpacity(_isHovered ? 0.1 : 0.05),
+                              const Color(0xFFffffff)
+                                  .withOpacity(_isHovered ? 0.15 : 0.1),
+                              const Color(0xFFFFFFFF)
+                                  .withOpacity(_isHovered ? 0.1 : 0.05),
                             ],
                           ),
                           borderGradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              const Color(0xFFffffff).withOpacity(_isHovered ? 0.7 : 0.5),
-                              const Color((0xFFFFFFFF)).withOpacity(_isHovered ? 0.7 : 0.5),
+                              const Color(0xFFffffff)
+                                  .withOpacity(_isHovered ? 0.7 : 0.5),
+                              const Color((0xFFFFFFFF))
+                                  .withOpacity(_isHovered ? 0.7 : 0.5),
                             ],
                           ),
                           child: const Center(
                             child: Text(
                               '选择视频',
-                              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                              locale: Locale("zh-Hans", "zh"),
+                              style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
                               ),
@@ -145,9 +155,12 @@ style: TextStyle(
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
-                              onTapDown: (_) => setState(() => _isPressed = true),
-                              onTapUp: (_) => setState(() => _isPressed = false),
-                              onTapCancel: () => setState(() => _isPressed = false),
+                              onTapDown: (_) =>
+                                  setState(() => _isPressed = true),
+                              onTapUp: (_) =>
+                                  setState(() => _isPressed = false),
+                              onTapCancel: () =>
+                                  setState(() => _isPressed = false),
                               onTap: _handleUploadVideo,
                               splashColor: Colors.white.withOpacity(0.2),
                               highlightColor: Colors.white.withOpacity(0.1),
@@ -172,7 +185,7 @@ style: TextStyle(
         // Web 平台逻辑
         final videoState = context.read<VideoPlayerState>();
         videoState.setPreInitLoadingState('正在准备视频文件...');
-        
+
         FilePickerResult? result = await FilePicker.platform.pickFiles(
           type: FileType.video,
         );
@@ -180,7 +193,7 @@ style: TextStyle(
         if (result != null && result.files.single.bytes != null) {
           final fileBytes = result.files.single.bytes!;
           final fileName = result.files.single.name;
-          
+
           final blob = web_html.Blob([fileBytes]);
           final url = web_html.Url.createObjectUrlFromBlob(blob);
 
@@ -205,13 +218,19 @@ style: TextStyle(
               onPressed: () {
                 Navigator.of(context).pop('album');
               },
-              child: const Text('相册'),
+              child: const Text(
+                '相册',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop('file'); // 先 pop
               },
-              child: const Text('文件管理器'),
+              child: const Text(
+                '文件管理器',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         );
@@ -219,24 +238,28 @@ style: TextStyle(
         if (!mounted) return; // 检查 mounted 状态
 
         if (source == 'album') {
-          if (io.Platform.isAndroid) { // 只在 Android 上使用 permission_handler
+          if (io.Platform.isAndroid) {
+            // 只在 Android 上使用 permission_handler
             PermissionStatus photoStatus;
             PermissionStatus videoStatus;
             // 请求照片和视频权限 (Android 13+ 需要)
             print("Requesting photos and videos permissions for Android...");
             photoStatus = await Permission.photos.request();
             videoStatus = await Permission.videos.request();
-            print("Android permissions status: Photos=$photoStatus, Videos=$videoStatus");
+            print(
+                "Android permissions status: Photos=$photoStatus, Videos=$videoStatus");
 
             if (!mounted) return;
             if (photoStatus.isGranted && videoStatus.isGranted) {
               // Android 权限通过，继续选择
-              await _pickMediaFromGallery(); 
+              await _pickMediaFromGallery();
             } else {
               // Android 权限被拒绝
               if (!mounted) return;
-              print("Android permissions not granted. Photo status: $photoStatus, Video status: $videoStatus");
-              if (photoStatus.isPermanentlyDenied || videoStatus.isPermanentlyDenied) {
+              print(
+                  "Android permissions not granted. Photo status: $photoStatus, Video status: $videoStatus");
+              if (photoStatus.isPermanentlyDenied ||
+                  videoStatus.isPermanentlyDenied) {
                 BlurDialog.show<void>(
                   context: context,
                   title: '权限被永久拒绝',
@@ -259,22 +282,27 @@ style: TextStyle(
                 BlurSnackBar.show(context, '需要相册和视频权限才能选择');
               }
             }
-          } else if (io.Platform.isIOS) { // 在 iOS 上直接尝试选择
-            print("iOS: Bypassing permission_handler, directly calling ImagePicker.");
-            await _pickMediaFromGallery(); 
-          } else { // 其他平台 (如果支持，也直接尝试)
-            print("Other platform: Bypassing permission_handler, directly calling ImagePicker/FilePicker.");
+          } else if (io.Platform.isIOS) {
+            // 在 iOS 上直接尝试选择
+            print(
+                "iOS: Bypassing permission_handler, directly calling ImagePicker.");
+            await _pickMediaFromGallery();
+          } else {
+            // 其他平台 (如果支持，也直接尝试)
+            print(
+                "Other platform: Bypassing permission_handler, directly calling ImagePicker/FilePicker.");
             await _pickMediaFromGallery(); // 或者根据平台选择不同的picker逻辑
           }
         } else if (source == 'file') {
           // 使用 Future.delayed ensure pop 完成后再执行
-          await Future.delayed(const Duration(milliseconds: 100), () async { 
+          await Future.delayed(const Duration(milliseconds: 100), () async {
             if (!mounted) return; // 在延迟后再次检查 mounted
             try {
               // 先显示加载界面，然后再选择文件
-              final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+              final videoState =
+                  Provider.of<VideoPlayerState>(context, listen: false);
               videoState.setPreInitLoadingState('正在准备视频文件...');
-              
+
               // 使用FilePickerService选择视频文件
               final filePickerService = FilePickerService();
               final filePath = await filePickerService.pickVideoFile();
@@ -283,12 +311,12 @@ style: TextStyle(
 
               if (filePath != null) {
                 // 此处不需要再次设置加载状态，因为已经在选择文件前设置了
-                
+
                 // 然后在下一帧初始化播放器
                 Future.microtask(() async {
-                  if (context.mounted) { 
+                  if (context.mounted) {
                     await Provider.of<VideoPlayerState>(context, listen: false)
-                              .initializePlayer(filePath);
+                        .initializePlayer(filePath);
                   }
                 });
               } else {
@@ -297,10 +325,12 @@ style: TextStyle(
               }
             } catch (e) {
               // ignore: use_build_context_synchronously
-              if (mounted) { // 确保 mounted
+              if (mounted) {
+                // 确保 mounted
                 BlurSnackBar.show(context, '选择文件出错: $e');
                 // 发生错误时清除加载状态
-                Provider.of<VideoPlayerState>(context, listen: false).resetPlayer();
+                Provider.of<VideoPlayerState>(context, listen: false)
+                    .resetPlayer();
               } else {
                 print('选择文件出错但 widget 已 unmounted: $e');
               }
@@ -312,13 +342,13 @@ style: TextStyle(
         // 先显示加载界面，然后再选择文件
         final videoState = context.read<VideoPlayerState>();
         videoState.setPreInitLoadingState('正在准备视频文件...');
-        
+
         final filePickerService = FilePickerService();
         final filePath = await filePickerService.pickVideoFile();
-        
+
         if (filePath != null) {
           // 此处不需要再次设置加载状态，因为已经在选择文件前设置了
-          
+
           // 然后在下一帧初始化播放器
           Future.microtask(() async {
             await videoState.initializePlayer(filePath);
@@ -339,7 +369,7 @@ style: TextStyle(
       // 先显示加载界面，然后再选择文件
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       videoState.setPreInitLoadingState('正在准备视频文件...');
-      
+
       final picker = ImagePicker();
       // 使用 pickMedia 因为你需要视频
       final XFile? picked = await picker.pickMedia();
@@ -352,16 +382,17 @@ style: TextStyle(
           videoState.resetPlayer(); // 如果选择了不支持的格式，清除加载状态
           return;
         }
-        
+
         // 已经在前面设置了加载状态，这里不需要再次设置
-        
+
         // 然后在下一帧初始化播放器
         Future.microtask(() async {
           await videoState.initializePlayer(picked.path);
         });
       } else {
         // 用户可能取消了选择，或者 image_picker 因为权限问题返回了 null
-        print("Media picking cancelled or failed (possibly due to permissions).");
+        print(
+            "Media picking cancelled or failed (possibly due to permissions).");
         videoState.resetPlayer(); // 清除加载状态
       }
     } catch (e) {
@@ -372,4 +403,4 @@ style: TextStyle(
       Provider.of<VideoPlayerState>(context, listen: false).resetPlayer();
     }
   }
-} 
+}
