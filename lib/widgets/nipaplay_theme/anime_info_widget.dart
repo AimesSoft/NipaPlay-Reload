@@ -36,7 +36,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
         offset: Offset(widget.videoState.showControls ? 0 : -0.1, 0),
         child: Container(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.3,
+            maxWidth: MediaQuery.of(context).size.width * 0.4,
           ),
           child: IntrinsicWidth(
             child: MouseRegion(
@@ -69,6 +69,8 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                     const Color(0xFFFFFFFF).withOpacity(0.5),
                   ],
                 ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.start,
@@ -117,6 +119,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
             ),
           ),
         ),
+      ),
     );
   }
 } 
