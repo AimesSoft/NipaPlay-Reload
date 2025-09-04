@@ -1083,7 +1083,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
 
   // 切换窗口大小
   void _toggleWindowSize() async {
-    if (globals.winLinDesktop) {
+    if (globals.isDesktop) {
       if (await windowManager.isMaximized()) {
         await windowManager.unmaximize();
       } else {
@@ -1155,13 +1155,13 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
         Positioned(
           top: 0,
           left: 0,
-          right: globals.winLinDesktop ? 120 : 0,
+          right: globals.isDesktop ? 120 : 0,
           child: SizedBox(
             height: 40,
             child: GestureDetector(
               onDoubleTap: _toggleWindowSize,
               onPanStart: (details) async {
-                if (globals.winLinDesktop) {
+                if (globals.isDesktop) {
                   await windowManager.startDragging();
                 }
               },
