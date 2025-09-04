@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/utils/storage_service.dart' show StorageService;
+import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 
 class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
@@ -94,62 +95,6 @@ class WatchHistoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 修复iOS容器路径变化问题
-  Future<String?> _fixiOSContainerPath(String originalPath) async {
-    if (!Platform.isIOS) return null;
-    
-    try {
-      // 获取当前应用的Documents目录
-      final currentAppDir = await StorageService.getAppStorageDirectory();
-      final currentContainerPath = currentAppDir.path;
-      
-      // 提取当前容器ID
-      final currentContainerMatch = RegExp(r'/var/mobile/Containers/Data/Application/([^/]+)')
-          .firstMatch(currentContainerPath);
-      
-      if (currentContainerMatch == null) return null;
-      
-      final currentContainerId = currentContainerMatch.group(1);
-      
-      // 检查原路径是否包含不同的容器ID
-      final originalContainerMatch = RegExp(r'/var/mobile/Containers/Data/Application/([^/]+)')
-          .firstMatch(originalPath);
-      
-      if (originalContainerMatch == null) return null;
-      
-      final originalContainerId = originalContainerMatch.group(1);
-      
-      // 如果容器ID相同，不需要修复
-      if (currentContainerId == originalContainerId) return null;
-      
-      // 替换容器ID生成新路径
-      final newPath = originalPath.replaceFirst(
-        '/var/mobile/Containers/Data/Application/$originalContainerId',
-        '/var/mobile/Containers/Data/Application/$currentContainerId'
-      );
-      
-      debugPrint('iOS容器路径修复: $originalContainerId -> $currentContainerId');
-      debugPrint('原路径: $originalPath');
-      debugPrint('新路径: $newPath');
-      
-      return newPath;
-    } catch (e) {
-      debugPrint('修复iOS容器路径失败: $e');
-      return null;
-    }
-  }
-
-  // 修复缩略图路径
-  String? _fixThumbnailPath(String? thumbnailPath, String oldContainerId, String newContainerId) {
-    if (thumbnailPath == null || !Platform.isIOS) return thumbnailPath;
-    
-    if (thumbnailPath.contains(oldContainerId)) {
-      return thumbnailPath.replaceFirst(oldContainerId, newContainerId);
-    }
-    
-    return thumbnailPath;
-  }
-
   // 验证文件路径并修复iOS路径问题
   Future<List<WatchHistoryItem>> _validateFilePaths(List<WatchHistoryItem> items) async {
     List<WatchHistoryItem> validItems = [];
@@ -166,42 +111,34 @@ class WatchHistoryProvider extends ChangeNotifier {
       
       // 跳过Jellyfin和Emby协议URL的文件存在性验证
       if (originalPath.startsWith('jellyfin://') || originalPath.startsWith('emby://')) {
-        //debugPrint('跳过流媒体协议URL的文件验证: $originalPath');
         validItems.add(item);
         continue;
       }
       
       // 跳过HTTP/HTTPS流媒体URL的文件存在性验证
       if (originalPath.startsWith('http://') || originalPath.startsWith('https://')) {
-        //debugPrint('跳过流媒体URL的文件验证: $originalPath');
         validItems.add(item);
         continue;
       }
       
-      // 1. 直接检查文件是否存在
-      fileExists = File(originalPath).existsSync();
-      
-      // 2. 如果不存在，使用FilePickerService检查并修复路径
-      if (!fileExists && Platform.isIOS) {
-        // 首先尝试iOS容器路径修复
-        final fixedPath = await _fixiOSContainerPath(originalPath);
-        if (fixedPath != null && File(fixedPath).existsSync()) {
-          // 提取容器ID用于修复缩略图路径
-          final oldContainerMatch = RegExp(r'/Application/([^/]+)/').firstMatch(originalPath);
-          final newContainerMatch = RegExp(r'/Application/([^/]+)/').firstMatch(fixedPath);
-          
+      // 1. 使用iOS路径修复工具验证并修复路径
+      final validPath = await iOSContainerPathFixer.validateAndFixFilePath(originalPath);
+      if (validPath != null) {
+        fileExists = true;
+        
+        // 如果路径被修复了，更新记录
+        if (validPath != originalPath) {
+          // 同时修复缩略图路径
           String? fixedThumbnailPath = item.thumbnailPath;
-          if (oldContainerMatch != null && newContainerMatch != null) {
-            fixedThumbnailPath = _fixThumbnailPath(
-              item.thumbnailPath, 
-              oldContainerMatch.group(1)!, 
-              newContainerMatch.group(1)!
-            );
+          if (Platform.isIOS && item.thumbnailPath != null) {
+            final fixedThumbnailPathResult = await iOSContainerPathFixer.validateAndFixFilePath(item.thumbnailPath!);
+            if (fixedThumbnailPathResult != null) {
+              fixedThumbnailPath = fixedThumbnailPathResult;
+            }
           }
           
-          // 创建修复后的历史记录项
           final updatedItem = WatchHistoryItem(
-            filePath: fixedPath,
+            filePath: validPath,
             animeName: item.animeName,
             episodeTitle: item.episodeTitle,
             episodeId: item.episodeId,
@@ -214,39 +151,40 @@ class WatchHistoryProvider extends ChangeNotifier {
             isFromScan: item.isFromScan,
           );
           
-          // 更新数据库
           await _database.insertOrUpdateWatchHistory(updatedItem);
           await _database.deleteHistory(originalPath);
           
           debugPrint('iOS路径修复成功: ${item.animeName}');
           validItems.add(updatedItem);
-          fileExists = true;
-        } else {
-          // 容器路径修复失败，尝试FilePickerService
-          fileExists = _filePickerService.checkFileExists(originalPath);
-          
-          if (!fileExists) {
-            final validPath = await _filePickerService.getValidFilePath(originalPath);
-            if (validPath != null) {
-              item.filePath = validPath;
-              final updatedItem = WatchHistoryItem(
-                filePath: validPath,
-                animeName: item.animeName,
-                episodeTitle: item.episodeTitle,
-                episodeId: item.episodeId,
-                animeId: item.animeId,
-                watchProgress: item.watchProgress,
-                lastPosition: item.lastPosition,
-                duration: item.duration,
-                lastWatchTime: item.lastWatchTime,
-                thumbnailPath: item.thumbnailPath,
-                isFromScan: item.isFromScan,
-              );
-              
-              await _database.insertOrUpdateWatchHistory(updatedItem);
-              await _database.deleteHistory(originalPath);
-              fileExists = true;
-            }
+          continue;
+        }
+      }
+      
+      // 2. iOS平台的FilePickerService回退处理
+      if (!fileExists && Platform.isIOS) {
+        fileExists = _filePickerService.checkFileExists(originalPath);
+        
+        if (!fileExists) {
+          final validPath = await _filePickerService.getValidFilePath(originalPath);
+          if (validPath != null) {
+            item.filePath = validPath;
+            final updatedItem = WatchHistoryItem(
+              filePath: validPath,
+              animeName: item.animeName,
+              episodeTitle: item.episodeTitle,
+              episodeId: item.episodeId,
+              animeId: item.animeId,
+              watchProgress: item.watchProgress,
+              lastPosition: item.lastPosition,
+              duration: item.duration,
+              lastWatchTime: item.lastWatchTime,
+              thumbnailPath: item.thumbnailPath,
+              isFromScan: item.isFromScan,
+            );
+            
+            await _database.insertOrUpdateWatchHistory(updatedItem);
+            await _database.deleteHistory(originalPath);
+            fileExists = true;
           }
         }
       }
@@ -258,7 +196,6 @@ class WatchHistoryProvider extends ChangeNotifier {
         // 将无效路径添加到缓存集合
         _knownInvalidPaths.add(originalPath);
         invalidPaths.add(originalPath);
-        // 只在第一次发现无效路径时打印日志
         debugPrint('跳过无效文件: ${item.filePath}');
       }
     }

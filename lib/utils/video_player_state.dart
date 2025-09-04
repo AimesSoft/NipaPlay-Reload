@@ -28,6 +28,7 @@ import 'package:image/image.dart' as img;
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 
 import 'package:path/path.dart' as p; // Added import for path package
+import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 // Added for getTemporaryDirectory
 import 'package:crypto/crypto.dart';
 import 'package:provider/provider.dart';
@@ -730,14 +731,54 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await prefs.setString(_videoPositionsKey, json.encode(positionMap));
   }
 
-  // 获取视频播放位置
+  // 获取视频播放位置（支持iOS容器路径修复和进度回退）
   Future<int> _getVideoPosition(String path) async {
     final prefs = await SharedPreferences.getInstance();
     final positions = prefs.getString(_videoPositionsKey) ?? '{}';
     final Map<String, dynamic> positionMap =
         Map<String, dynamic>.from(json.decode(positions));
-    final position = positionMap[path] ?? 0;
-    return position;
+    
+    // 1. 直接查找原路径
+    int position = positionMap[path] ?? 0;
+    if (position > 0) {
+      return position;
+    }
+    
+    // 2. iOS平台：尝试修复容器路径查找进度
+    if (Platform.isIOS) {
+      final fixedPath = await iOSContainerPathFixer.fixContainerPath(path);
+      if (fixedPath != null) {
+        position = positionMap[fixedPath] ?? 0;
+        if (position > 0) {
+          debugPrint('通过iOS路径修复找到播放进度: $position ms');
+          // 同时更新新路径的进度记录
+          positionMap[path] = position;
+          await prefs.setString(_videoPositionsKey, json.encode(positionMap));
+          return position;
+        }
+      }
+      
+      // 3. iOS进度回退：通过视频识别结果查询进度
+      if (_animeId != null && _episodeId != null) {
+        try {
+          final historyByEpisode = await WatchHistoryDatabase.instance
+              .getHistoryByEpisode(_animeId!, _episodeId!);
+          if (historyByEpisode != null && historyByEpisode.lastPosition > 0) {
+            debugPrint('通过视频识别回退查找到播放进度: ${historyByEpisode.lastPosition} ms');
+            debugPrint('匹配视频: ${historyByEpisode.animeName} - ${historyByEpisode.episodeTitle}');
+            
+            // 保存到新路径
+            positionMap[path] = historyByEpisode.lastPosition;
+            await prefs.setString(_videoPositionsKey, json.encode(positionMap));
+            return historyByEpisode.lastPosition;
+          }
+        } catch (e) {
+          debugPrint('通过视频识别查询进度失败: $e');
+        }
+      }
+    }
+    
+    return 0;
   }
 
 
