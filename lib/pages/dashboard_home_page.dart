@@ -2383,7 +2383,64 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
   Widget _getVideoThumbnail(WatchHistoryItem item) {
     final now = DateTime.now();
     
-    // 检查是否存在缓存，并且距离上次绘制未超过10秒
+    // iOS平台特殊处理：检查截图文件的修改时间
+    if (Platform.isIOS && item.thumbnailPath != null) {
+      final thumbnailFile = File(item.thumbnailPath!);
+      if (thumbnailFile.existsSync()) {
+        try {
+          final fileModified = thumbnailFile.lastModifiedSync();
+          final cacheKey = '${item.filePath}_${fileModified.millisecondsSinceEpoch}';
+          
+          // 使用包含文件修改时间的缓存key，确保文件更新后缓存失效
+          if (_thumbnailCache.containsKey(cacheKey)) {
+            final cachedData = _thumbnailCache[cacheKey]!;
+            final lastRenderTime = cachedData['time'] as DateTime;
+            
+            if (now.difference(lastRenderTime).inSeconds < 60) {
+              return cachedData['widget'] as Widget;
+            }
+          }
+          
+          // 清理旧的缓存条目（相同filePath但不同修改时间）
+          _thumbnailCache.removeWhere((key, value) => key.startsWith('${item.filePath}_'));
+          
+          final thumbnailWidget = FutureBuilder<Uint8List>(
+            future: thumbnailFile.readAsBytes(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Container(color: Colors.white10);
+              }
+              if (snapshot.hasError || !snapshot.hasData) {
+                return _buildDefaultThumbnail();
+              }
+              try {
+                return Image.memory(
+                  snapshot.data!,
+                  key: ValueKey('${item.filePath}_${fileModified.millisecondsSinceEpoch}'),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                );
+              } catch (e) {
+                return _buildDefaultThumbnail();
+              }
+            },
+          );
+          
+          // 使用新的缓存key存储
+          _thumbnailCache[cacheKey] = {
+            'widget': thumbnailWidget,
+            'time': now
+          };
+          
+          return thumbnailWidget;
+        } catch (e) {
+          debugPrint('获取截图文件修改时间失败: $e');
+        }
+      }
+    }
+    
+    // 非iOS平台或获取修改时间失败时的原有逻辑
     if (_thumbnailCache.containsKey(item.filePath)) {
       final cachedData = _thumbnailCache[item.filePath]!;
       final lastRenderTime = cachedData['time'] as DateTime;

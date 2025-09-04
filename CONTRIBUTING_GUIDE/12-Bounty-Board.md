@@ -44,16 +44,8 @@
 
 ### 💻 桌面端优化
 
-#### 4. Windows字符显示问题 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
-**问题描述**: Windows 端字符显示异体字/繁体字字形而非简体中文。
 
-**技术领域**: Windows平台字体渲染、系统API  
-**相关文件**: `windows/`, 字体相关组件  
-**期望结果**: 正确显示简体中文字符
-
----
-
-#### 5. Linux AppImage 体积优化 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 4. Linux AppImage 体积优化 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 **问题描述**: 目前 Linux 的 AppImage 格式文件体积过大，需要优化打包策略。
 
 **技术领域**: 构建系统、包管理、Linux 平台  
@@ -62,7 +54,7 @@
 
 ---
 
-#### 6. Flathub 上架支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 5. Flathub 上架支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 **问题描述**: 希望将应用上架到 Flathub，需要创建相应的 Flatpak 配置。
 
 **技术领域**: Flatpak、Linux 包管理、CI/CD  
@@ -73,7 +65,7 @@
 
 ### 🎨 用户体验优化
 
-#### 7. Windows 安装程序美化 ![难度: 低](https://img.shields.io/badge/难度-低-green)
+#### 6. Windows 安装程序美化 ![难度: 低](https://img.shields.io/badge/难度-低-green)
 **问题描述**: 
 - 安装程序图标显示为默认图标而非 NipaPlay 图标
 - 安装界面可以进一步美化
@@ -84,7 +76,7 @@
 
 ---
 
-#### 8. macOS DMG 布局美化 ![难度: 低](https://img.shields.io/badge/难度-低-green)
+#### 7. macOS DMG 布局美化 ![难度: 低](https://img.shields.io/badge/难度-低-green)
 **问题描述**: macOS 的 DMG 文件打开后的布局需要美化。
 
 **技术领域**: macOS 打包、DMG 设计  
@@ -93,7 +85,7 @@
 
 ---
 
-#### 9. 更多主题支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 8. 更多主题支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 **问题描述**: 目前主题数量有限，希望有更多风格的主题选择。
 
 **技术领域**: UI/UX 设计、Flutter 主题系统  
@@ -104,7 +96,7 @@
 
 ### 🎬 播放器内核扩展
 
-#### 10. HDR 支持 ![难度: 高](https://img.shields.io/badge/难度-高-red)
+#### 9. HDR 支持 ![难度: 高](https://img.shields.io/badge/难度-高-red)
 **问题描述**: 播放器需要支持 HDR 视频播放和色彩管理。
 
 **技术领域**: 视频解码、色彩科学、图形渲染  
@@ -113,7 +105,7 @@
 
 ---
 
-#### 11. 新播放器内核集成 ![难度: 高](https://img.shields.io/badge/难度-高-red)
+#### 10. 新播放器内核集成 ![难度: 高](https://img.shields.io/badge/难度-高-red)
 **问题描述**: 希望添加更多播放器内核选择：
 - VLC 内核
 - GPU-Next 内核
@@ -124,7 +116,7 @@
 
 ---
 
-#### 12. 新平台移植 ![难度: 极高](https://img.shields.io/badge/难度-极高-darkred)
+#### 11. 新平台移植 ![难度: 极高](https://img.shields.io/badge/难度-极高-darkred)
 **问题描述**: 希望将应用移植到更多平台：
 - Apple TV
 - 鸿蒙OS (HarmonyOS)
@@ -138,7 +130,7 @@
 
 ### 🎮 交互体验
 
-#### 13. 手柄支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 12. 手柄支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 **问题描述**: 添加游戏手柄支持，特别是为 Steam Deck 等设备优化交互体验。
 
 **技术领域**: 输入设备、游戏手柄API  
@@ -147,7 +139,7 @@
 
 ---
 
-#### 14. Steam Deck GPU 弹幕性能优化 ![难度: 高](https://img.shields.io/badge/难度-高-red)
+#### 13. Steam Deck GPU 弹幕性能优化 ![难度: 高](https://img.shields.io/badge/难度-高-red)
 **问题描述**: 在 Steam Deck 上使用 GPU 弹幕渲染时，视频帧数急剧下降。
 
 **技术领域**: GPU 渲染优化、性能调优  
@@ -158,7 +150,7 @@
 
 ### 🔧 底层优化
 
-#### 15. LibMPV 完整版支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 14. LibMPV 完整版支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 **问题描述**: Windows 版本的 libmpv 不是完整版，需要默认支持完整版以获得更好的编解码器支持。
 
 **技术领域**: 构建系统、Windows 平台  
@@ -167,7 +159,7 @@
 
 ---
 
-#### 16. LibMPV 参数扩展 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 15. LibMPV 参数扩展 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 **问题描述**: 需要让 libmpv 内核支持更多传入参数，提供更多的播放选项。
 
 **技术领域**: 播放器集成、参数传递  
