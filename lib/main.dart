@@ -59,6 +59,7 @@ import 'services/hotkey_service_initializer.dart';
 import 'utils/shortcut_tooltip_manager.dart';
 import 'utils/hotkey_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -626,6 +627,16 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint('_NipaPlayAppState: 应用初始化完成，设置监听器');
+      
+      // 调试：启动时打印数据库内容
+      Future.delayed(const Duration(milliseconds: 1000), () async {
+        try {
+          final db = WatchHistoryDatabase.instance;
+          await db.debugPrintAllData();
+        } catch (e) {
+          debugPrint('启动时调试打印数据库内容失败: $e');
+        }
+      });
       
       try {
         final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);

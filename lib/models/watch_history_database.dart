@@ -458,6 +458,41 @@ class WatchHistoryDatabase {
     }
   }
   
+  // 调试：打印数据库所有内容
+  Future<void> debugPrintAllData() async {
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query('watch_history', orderBy: 'last_watch_time DESC');
+      
+      debugPrint('=== watch_history.db 数据库内容 ===');
+      debugPrint('数据库路径: ${await _getDatabasePath()}');
+      debugPrint('总记录数: ${maps.length}');
+      
+      for (int i = 0; i < maps.length; i++) {
+        final map = maps[i];
+        debugPrint('记录 ${i + 1}:');
+        debugPrint('  - file_path: ${map['file_path']}');
+        debugPrint('  - anime_name: ${map['anime_name']}');
+        debugPrint('  - episode_title: ${map['episode_title']}');
+        debugPrint('  - watch_progress: ${map['watch_progress']}');
+        debugPrint('  - last_position: ${map['last_position']}');
+        debugPrint('  - duration: ${map['duration']}');
+        debugPrint('  - last_watch_time: ${map['last_watch_time']}');
+        debugPrint('  - thumbnail_path: ${map['thumbnail_path']}');
+        debugPrint('  ---');
+      }
+      debugPrint('=== 数据库内容结束 ===');
+    } catch (e) {
+      debugPrint('调试打印数据库内容失败: $e');
+    }
+  }
+
+  // 获取数据库文件路径（调试用）
+  Future<String> _getDatabasePath() async {
+    final storageDir = await StorageService.getAppStorageDirectory();
+    return path.join(storageDir.path, _dbName);
+  }
+
   // 将数据库行映射为WatchHistoryItem对象
   WatchHistoryItem _mapToWatchHistoryItem(Map<String, dynamic> map) {
     final item = WatchHistoryItem(

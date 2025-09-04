@@ -4,6 +4,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:convert';
@@ -116,11 +117,83 @@ class ScanService with ChangeNotifier {
   Future<void> _loadScannedFolders() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _scannedFolders = prefs.getStringList(_scannedFoldersPrefsKey) ?? [];
+      List<String> rawFolders = prefs.getStringList(_scannedFoldersPrefsKey) ?? [];
+      
+      // iOS平台：检查并修复容器路径变化
+      if (Platform.isIOS && rawFolders.isNotEmpty) {
+        List<String> fixedFolders = [];
+        bool hasChanges = false;
+        
+        for (String folder in rawFolders) {
+          String fixedFolder = await _fixiOSContainerPathForScan(folder) ?? folder;
+          fixedFolders.add(fixedFolder);
+          if (fixedFolder != folder) {
+            hasChanges = true;
+            debugPrint('ScanService: 修复扫描文件夹路径: $folder -> $fixedFolder');
+          }
+        }
+        
+        _scannedFolders = fixedFolders;
+        
+        // 如果有路径变化，保存修复后的路径
+        if (hasChanges) {
+          await prefs.setStringList(_scannedFoldersPrefsKey, fixedFolders);
+          debugPrint('ScanService: 已保存修复后的扫描文件夹路径');
+        }
+      } else {
+        _scannedFolders = rawFolders;
+      }
+      
       notifyListeners();
     } catch (e) {
       //debugPrint("ScanService: Error loading scanned folders: $e");
       _updateScanMessage("加载已扫描文件夹列表失败: $e");
+    }
+  }
+
+  // 修复iOS扫描路径的容器ID变化
+  Future<String?> _fixiOSContainerPathForScan(String originalPath) async {
+    if (!Platform.isIOS) return null;
+    
+    try {
+      // 获取当前应用的Documents目录
+      final currentAppDir = await StorageService.getAppStorageDirectory();
+      final currentContainerPath = currentAppDir.path;
+      
+      // 提取当前容器ID
+      final currentContainerMatch = RegExp(r'/var/mobile/Containers/Data/Application/([^/]+)')
+          .firstMatch(currentContainerPath);
+      
+      if (currentContainerMatch == null) return null;
+      
+      final currentContainerId = currentContainerMatch.group(1);
+      
+      // 检查原路径是否包含不同的容器ID
+      final originalContainerMatch = RegExp(r'/var/mobile/Containers/Data/Application/([^/]+)')
+          .firstMatch(originalPath);
+      
+      if (originalContainerMatch == null) return null;
+      
+      final originalContainerId = originalContainerMatch.group(1);
+      
+      // 如果容器ID相同，不需要修复
+      if (currentContainerId == originalContainerId) return null;
+      
+      // 替换容器ID生成新路径
+      final newPath = originalPath.replaceFirst(
+        '/var/mobile/Containers/Data/Application/$originalContainerId',
+        '/var/mobile/Containers/Data/Application/$currentContainerId'
+      );
+      
+      // 检查新路径是否存在
+      if (Directory(newPath).existsSync()) {
+        return newPath;
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('修复iOS扫描容器路径失败: $e');
+      return null;
     }
   }
 
