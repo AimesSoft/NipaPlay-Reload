@@ -141,9 +141,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
         }
       }
     } else {
+      if (!kIsWeb) {
       final videoFile = File(item.filePath);
       fileExists = videoFile.existsSync();
-      if (!kIsWeb) {
       if (!fileExists && Platform.isIOS) {
         String altPath = filePath.startsWith('/private') 
             ? filePath.replaceFirst('/private', '') 

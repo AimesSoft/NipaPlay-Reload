@@ -6,6 +6,7 @@ import 'dandanplay_service.dart';
 import 'package:http/http.dart' as http;
 import 'search_service.dart'; // 导入SearchService
 import 'package:flutter/foundation.dart'; // 导入debugPrint
+import '../providers/service_provider.dart';
 
 class WebApiService {
   final Router _router = Router();
@@ -33,6 +34,11 @@ class WebApiService {
     _router.post('/dandanplay/add_play_history', handleAddPlayHistoryRequest);
     _router.post('/dandanplay/add_favorite', handleAddFavoriteRequest);
     _router.delete('/dandanplay/remove_favorite/<animeId>', handleRemoveFavoriteRequest);
+    
+    // 本地媒体库相关API路由
+    _router.get('/media/libraries', handleGetLibrariesRequest);
+    _router.get('/media/local/items', handleGetLocalMediaItemsRequest);
+    _router.get('/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
   }
 
   Handler get handler => _router;
@@ -426,6 +432,255 @@ class WebApiService {
     } catch (e) {
       return Response.internalServerError(body: 'Error loading danmaku: $e');
     }
+  }
+
+  // 本地媒体库相关处理函数
+  Future<Response> handleGetLibrariesRequest(Request request) async {
+    try {
+      final List<Map<String, dynamic>> allLibraries = [];
+
+      // 1. 获取本地媒体库 (通过观看历史聚合)
+      final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
+      if (watchHistoryProvider.isLoaded && watchHistoryProvider.history.isNotEmpty) {
+        final localMediaCount = watchHistoryProvider.history
+            .where((item) => !item.filePath.startsWith('jellyfin://') && 
+                           !item.filePath.startsWith('emby://'))
+            .map((item) => item.animeId)
+            .where((animeId) => animeId != null)
+            .toSet()
+            .length;
+            
+        allLibraries.add({
+          'id': 'local',
+          'name': '本地媒体',
+          'type': 'local',
+          'itemCount': localMediaCount,
+        });
+      }
+
+      // 2. 获取Jellyfin媒体库
+      final jellyfinProvider = ServiceProvider.jellyfinProvider;
+      if (jellyfinProvider.isConnected) {
+        final jellyfinLibs = jellyfinProvider.availableLibraries.map((lib) => {
+          'id': lib.id,
+          'name': lib.name,
+          'type': 'jellyfin',
+          'itemCount': lib.totalItems ?? 0,
+        }).toList();
+        allLibraries.addAll(jellyfinLibs);
+      }
+
+      // 3. 获取Emby媒体库
+      final embyProvider = ServiceProvider.embyProvider;
+      if (embyProvider.isConnected) {
+        final embyLibs = embyProvider.availableLibraries.map((lib) => {
+          'id': lib.id,
+          'name': lib.name,
+          'type': 'emby',
+          'itemCount': lib.totalItems ?? 0,
+        }).toList();
+        allLibraries.addAll(embyLibs);
+      }
+
+      return Response.ok(
+        json.encode({
+          'success': true,
+          'libraries': allLibraries,
+        }),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(body: 'Error getting libraries: $e');
+    }
+  }
+
+  Future<Response> handleGetLocalMediaItemsRequest(Request request) async {
+    try {
+      final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
+      
+      if (!watchHistoryProvider.isLoaded) {
+        return Response.ok(
+          json.encode([]), // 返回空数组，与新番更新API格式一致
+          headers: {'Content-Type': 'application/json; charset=utf-8'},
+        );
+      }
+
+      // 过滤本地媒体项目
+      final localHistory = watchHistoryProvider.history
+          .where((item) => !item.filePath.startsWith('jellyfin://') && 
+                         !item.filePath.startsWith('emby://'))
+          .toList();
+
+      // 按动画ID聚合，保留最新的观看记录
+      final Map<int, dynamic> latestHistoryItemMap = {};
+      for (var item in localHistory) {
+        if (item.animeId != null) {
+          final animeId = item.animeId!;
+          if (latestHistoryItemMap.containsKey(animeId)) {
+            if (item.lastWatchTime.isAfter(latestHistoryItemMap[animeId]['lastWatchTime'])) {
+              latestHistoryItemMap[animeId] = {
+                'animeId': animeId,
+                'animeName': item.animeName,
+                'thumbnailPath': item.thumbnailPath,
+                'lastWatchTime': item.lastWatchTime,
+                'episodeTitle': item.episodeTitle,
+                'filePath': item.filePath,
+              };
+            }
+          } else {
+            latestHistoryItemMap[animeId] = {
+              'animeId': animeId,
+              'animeName': item.animeName,
+              'thumbnailPath': item.thumbnailPath,
+              'lastWatchTime': item.lastWatchTime,
+              'episodeTitle': item.episodeTitle,
+              'filePath': item.filePath,
+            };
+          }
+        }
+      }
+
+      // 按最后观看时间排序
+      final uniqueItems = latestHistoryItemMap.values.toList();
+      uniqueItems.sort((a, b) => b['lastWatchTime'].compareTo(a['lastWatchTime']));
+
+      // 获取每个动画的详细信息，构建完整的BangumiAnime对象
+      final List<Map<String, dynamic>> completeAnimes = [];
+      
+      for (var item in uniqueItems) {
+        try {
+          final animeDetail = await BangumiService.instance.getAnimeDetails(item['animeId']);
+          // 构建完整的BangumiAnime JSON，与新番更新API格式一致
+          completeAnimes.add({
+            'id': animeDetail.id,
+            'name': animeDetail.name,
+            'nameCn': animeDetail.nameCn,
+            'summary': animeDetail.summary,
+            'imageUrl': animeDetail.imageUrl,
+            'rating': animeDetail.rating,
+            'ratingDetails': animeDetail.ratingDetails,
+            'airDate': animeDetail.airDate,
+            'airWeekday': animeDetail.airWeekday,
+            'totalEpisodes': animeDetail.totalEpisodes,
+            'tags': animeDetail.tags,
+            'metadata': animeDetail.metadata,
+            'isNSFW': animeDetail.isNSFW,
+            'platform': animeDetail.platform,
+            'typeDescription': animeDetail.typeDescription,
+            'bangumiUrl': animeDetail.bangumiUrl,
+            'isOnAir': animeDetail.isOnAir,
+            'isFavorited': animeDetail.isFavorited,
+            'titles': animeDetail.titles,
+            'searchKeyword': animeDetail.searchKeyword,
+            'episodeList': [], // 暂时返回空数组，避免复杂的序列化问题
+            // 添加本地媒体库特有的字段
+            '_localLastWatchTime': item['lastWatchTime'].toIso8601String(),
+            '_localSource': _getSourceFromFilePath(item['filePath']),
+          });
+        } catch (e) {
+          // 如果无法获取详细信息，使用基本信息构建
+          completeAnimes.add({
+            'id': item['animeId'],
+            'name': item['animeName'] ?? '未知动画',
+            'nameCn': item['animeName'] ?? '未知动画',
+            'summary': '',
+            'imageUrl': item['thumbnailPath'] ?? '',
+            'rating': 0,
+            'ratingDetails': {},
+            'airDate': '',
+            'airWeekday': null,
+            'totalEpisodes': null,
+            'tags': [],
+            'metadata': [],
+            'isNSFW': false,
+            'platform': null,
+            'typeDescription': null,
+            'bangumiUrl': null,
+            'isOnAir': false,
+            'isFavorited': false,
+            'titles': [],
+            'searchKeyword': null,
+            'episodeList': [],
+            '_localLastWatchTime': item['lastWatchTime'].toIso8601String(),
+            '_localSource': _getSourceFromFilePath(item['filePath']),
+          });
+        }
+      }
+
+      return Response.ok(
+        json.encode(completeAnimes), // 直接返回BangumiAnime格式的数组
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(body: 'Error getting local media items: $e');
+    }
+  }
+
+  Future<Response> handleGetLocalMediaItemDetailRequest(Request request) async {
+    final animeIdStr = request.params['animeId'];
+    final animeId = int.tryParse(animeIdStr ?? '');
+    
+    if (animeId == null) {
+      return Response.badRequest(body: 'Invalid anime ID');
+    }
+
+    try {
+      // 获取番组详细信息
+      final animeDetail = await BangumiService.instance.getAnimeDetails(animeId);
+      
+      // 获取该动画的所有观看历史
+      final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
+      final animeHistory = watchHistoryProvider.history
+          .where((item) => item.animeId == animeId && 
+                         !item.filePath.startsWith('jellyfin://') && 
+                         !item.filePath.startsWith('emby://'))
+          .toList();
+      
+      // 按时间排序
+      animeHistory.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+      
+      final episodes = animeHistory.map((item) => {
+        'id': item.hashCode.toString(),
+        'title': item.episodeTitle ?? '未知剧集',
+        'filePath': item.filePath,
+        'lastWatchTime': item.lastWatchTime.toIso8601String(),
+        'progress': item.watchProgress,
+        'duration': item.duration,
+      }).toList();
+
+      final detailData = {
+        'success': true,
+        'item': {
+          'id': animeId.toString(),
+          'animeId': animeId,
+          'name': animeDetail.nameCn.isNotEmpty ? animeDetail.nameCn : animeDetail.name,
+          'nameOriginal': animeDetail.name,
+          'summary': animeDetail.summary,
+          'imageUrl': animeDetail.imageUrl,
+          'rating': animeDetail.rating,
+          'ratingDetails': animeDetail.ratingDetails,
+          'airDate': animeDetail.airDate,
+          'episodes': episodes,
+          'type': 'anime',
+          'source': episodes.isNotEmpty ? _getSourceFromFilePath(episodes.first['filePath'] as String) : 'local',
+        },
+      };
+
+      return Response.ok(
+        json.encode(detailData),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(body: 'Error getting anime detail: $e');
+    }
+  }
+
+  String? _getSourceFromFilePath(String filePath) {
+    if (filePath.startsWith('jellyfin://')) return 'Jellyfin';
+    if (filePath.startsWith('emby://')) return 'Emby';
+    if (filePath.contains('SMB://') || filePath.contains('smb://')) return 'SMB';
+    if (filePath.startsWith('http://') || filePath.startsWith('https://')) return 'Network';
+    return 'Local';
   }
 }
 

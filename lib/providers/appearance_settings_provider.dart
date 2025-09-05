@@ -38,11 +38,11 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       return false; // Web平台默认禁用动画
     }
     // 在移动端设备上默认启用动画
-    if (Platform.isIOS || Platform.isAndroid) {
+    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
       return true;
     }
     // 在桌面端设备上默认禁用动画
-    else if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+    else if (!kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
       return false;
     }
     // 其他未知平台，默认禁用

@@ -13,9 +13,10 @@ import 'package:shared_preferences/shared_preferences.dart'; // For image URL pe
 import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart'; 
-import 'dart:io'; 
 import 'dart:async';
-import 'dart:ui'; 
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -51,6 +52,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   // 🔥 CPU优化：防止重复处理相同的历史数据
   int _lastProcessedHistoryHashCode = 0;
   bool _isBackgroundFetching = false;
+  bool _hasWebDataLoaded = false; // 添加Web数据加载标记
   
   // 🔥 CPU优化：缓存已构建的卡片Widget
   final Map<String, Widget> _cardWidgetCache = {};
@@ -177,13 +179,63 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     });
 
     try {
-      final historyProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
-      if (!historyProvider.isLoaded && !historyProvider.isLoading) {
-        await historyProvider.loadHistory(); 
-      }
-      
-      if (historyProvider.isLoaded) {
-          await _processAndSortHistory(historyProvider.history);
+      if (kIsWeb) {
+        // Web environment: 完全模仿新番更新页面的逻辑
+        List<BangumiAnime> animes;
+        
+        try {
+          final response = await http.get(Uri.parse('/api/media/local/items'));
+          if (response.statusCode == 200) {
+            final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+            animes = data.map((d) => BangumiAnime.fromJson(d as Map<String, dynamic>)).toList();
+          } else {
+            throw Exception('Failed to load from API: ${response.statusCode}');
+          }
+        } catch (e) {
+          throw Exception('Failed to connect to the local API: $e');
+        }
+        
+        // 转换为WatchHistoryItem（保持兼容性）
+        final webHistoryItems = animes.map((anime) {
+          final animeJson = anime.toJson();
+          return WatchHistoryItem(
+            animeId: anime.id,
+            animeName: anime.nameCn.isNotEmpty ? anime.nameCn : anime.name,
+            episodeTitle: '',
+            filePath: 'web_${anime.id}',
+            lastWatchTime: animeJson['_localLastWatchTime'] != null 
+                ? DateTime.parse(animeJson['_localLastWatchTime']) 
+                : DateTime.now(),
+            watchProgress: 0.0,
+            lastPosition: 0,
+            duration: 0,
+            thumbnailPath: anime.imageUrl,
+          );
+        }).toList();
+        
+        // 缓存BangumiAnime数据
+        for (var anime in animes) {
+          _fetchedFullAnimeData[anime.id] = anime;
+        }
+        
+        if (mounted) {
+          setState(() {
+            _uniqueLibraryItems = webHistoryItems;
+            _isLoadingInitial = false;
+            _hasWebDataLoaded = true;
+            _cardWidgetCache.clear();
+          });
+        }
+      } else {
+        // Mobile/Desktop environment: use local providers
+        final historyProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+        if (!historyProvider.isLoaded && !historyProvider.isLoading) {
+          await historyProvider.loadHistory(); 
+        }
+        
+        if (historyProvider.isLoaded) {
+            await _processAndSortHistory(historyProvider.history);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -192,6 +244,79 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
           _isLoadingInitial = false;
         });
       }
+    }
+  }
+
+  Future<void> _fetchAndPersistFullDetailsInBackgroundForWeb() async {
+    if (_isBackgroundFetching) return;
+    _isBackgroundFetching = true;
+    
+    final prefs = await SharedPreferences.getInstance();
+    const int maxConcurrentRequests = 8; // 增加并发数
+    int processed = 0;
+    final total = _uniqueLibraryItems.where((item) => item.animeId != null).length;
+    
+    // 批量处理请求
+    final futures = <Future<void>>[];
+    
+    for (var historyItem in _uniqueLibraryItems) {
+      if (historyItem.animeId != null && !_fetchedFullAnimeData.containsKey(historyItem.animeId!)) {
+        final future = _fetchSingleAnimeDetail(historyItem.animeId!, prefs).then((_) {
+          processed++;
+          // 每处理5个项目批量更新一次UI，避免频繁更新
+          if (processed % 5 == 0 && mounted) {
+            setState(() {});
+          }
+        });
+        futures.add(future);
+        
+        // 控制并发数量
+        if (futures.length >= maxConcurrentRequests) {
+          await Future.any(futures);
+          // 移除已完成的Future (简化处理)
+          futures.clear();
+        }
+      }
+    }
+    
+    // 等待所有剩余请求完成
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
+    
+    // 最后一次UI更新
+    if (mounted) {
+      setState(() {});
+    }
+    
+    _isBackgroundFetching = false;
+  }
+  
+  Future<void> _fetchSingleAnimeDetail(int animeId, SharedPreferences prefs) async {
+    try {
+      final response = await http.get(Uri.parse('/api/bangumi/detail/$animeId'));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> animeDetailData = json.decode(utf8.decode(response.bodyBytes));
+        final animeDetail = BangumiAnime.fromJson(animeDetailData);
+        
+        if (mounted) {
+          _fetchedFullAnimeData[animeId] = animeDetail;
+          if (animeDetail.imageUrl.isNotEmpty) {
+            await prefs.setString('$_prefsKeyPrefix$animeId', animeDetail.imageUrl);
+            if (mounted) {
+              _persistedImageUrls[animeId] = animeDetail.imageUrl;
+            }
+          } else {
+            await prefs.remove('$_prefsKeyPrefix$animeId');
+            if (mounted && _persistedImageUrls.containsKey(animeId)) {
+              _persistedImageUrls.remove(animeId);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Silent fail for background requests
+      debugPrint('获取动画详情失败: $animeId - $e');
     }
   }
   
@@ -414,7 +539,7 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
         RepaintBoundary(
           child: Scrollbar(
             controller: _gridScrollController,
-            thickness: (Platform.isAndroid || Platform.isIOS) ? 0 : 4,
+            thickness: kIsWeb ? 4 : (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) ? 0 : 4,
             radius: const Radius.circular(2),
             child: GridView.builder(
               controller: _gridScrollController,

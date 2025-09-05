@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/utils/storage_service.dart' show StorageService;
@@ -130,7 +131,7 @@ class WatchHistoryProvider extends ChangeNotifier {
         if (validPath != originalPath) {
           // 同时修复缩略图路径
           String? fixedThumbnailPath = item.thumbnailPath;
-          if (Platform.isIOS && item.thumbnailPath != null) {
+          if (!kIsWeb && Platform.isIOS && item.thumbnailPath != null) {
             final fixedThumbnailPathResult = await iOSContainerPathFixer.validateAndFixFilePath(item.thumbnailPath!);
             if (fixedThumbnailPathResult != null) {
               fixedThumbnailPath = fixedThumbnailPathResult;
@@ -161,7 +162,7 @@ class WatchHistoryProvider extends ChangeNotifier {
       }
       
       // 2. iOS平台的FilePickerService回退处理
-      if (!fileExists && Platform.isIOS) {
+      if (!fileExists && !kIsWeb && Platform.isIOS) {
         fileExists = _filePickerService.checkFileExists(originalPath);
         
         if (!fileExists) {
