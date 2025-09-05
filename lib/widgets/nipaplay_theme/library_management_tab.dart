@@ -1699,97 +1699,132 @@ style: TextStyle(color: Colors.redAccent)),
     );
   }
 
+  // 获取显示用的文件夹路径（iOS使用相对路径，其他平台使用绝对路径）
+  Future<String> _getDisplayPath(String folderPath) async {
+    if (io.Platform.isIOS) {
+      try {
+        final appDir = await StorageService.getAppStorageDirectory();
+        final appPath = appDir.path;
+        
+        // 如果路径在应用目录下，显示相对路径
+        if (folderPath.startsWith(appPath)) {
+          String relativePath = folderPath.substring(appPath.length);
+          // 移除开头的斜杠
+          if (relativePath.startsWith('/')) {
+            relativePath = relativePath.substring(1);
+          }
+          // 如果是空字符串，表示是根目录
+          if (relativePath.isEmpty) {
+            return '应用根目录';
+          }
+          return '~/$relativePath';
+        }
+      } catch (e) {
+        debugPrint('获取相对路径失败: $e');
+      }
+    }
+    
+    // 其他平台或获取相对路径失败时，返回完整路径
+    return folderPath;
+  }
+
   // 统一的文件夹Tile构建方法
   Widget _buildFolderTile(String folderPath, ScanService scanService) {
-
+    return FutureBuilder<String>(
+      future: _getDisplayPath(folderPath),
+      builder: (context, snapshot) {
+        final displayPath = snapshot.data ?? folderPath;
+        
         return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 0.5,
-        ),
-      ),
-      child: ExpansionTile(
-          key: PageStorageKey<String>(folderPath),
-          leading: const Icon(Icons.folder_open_outlined, color: Colors.white70),
-          title: Row(
-            children: [
-              Expanded(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.1),
+              width: 0.5,
+            ),
+          ),
+          child: ExpansionTile(
+              key: PageStorageKey<String>(folderPath),
+              leading: const Icon(Icons.folder_open_outlined, color: Colors.white70),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      p.basename(folderPath),
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
-                  p.basename(folderPath),
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  displayPath,
+                  locale:Locale("zh-Hans","zh"),
+                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ],
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              folderPath,
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
-                onPressed: scanService.isScanning ? null : () => _handleRemoveFolder(folderPath),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
-                onPressed: scanService.isScanning
-                    ? null
-                    : () async {
-                        if (scanService.isScanning) {
-                          BlurSnackBar.show(context, '已有扫描任务在进行中。');
-                          return;
-                        }
-                        final confirm = await BlurDialog.show<bool>(
-                          context: context,
-                          title: '确认扫描',
-                          content: '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n• 检测文件夹内容是否有变化\n• 如无变化将快速跳过\n• 如有变化将进行全面扫描\n\n开始扫描？',
-                          actions: <Widget>[
-                            TextButton(
-                              child: const Text('取消', locale:Locale("zh-Hans","zh"),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                    constraints: const BoxConstraints(),
+                    onPressed: scanService.isScanning ? null : () => _handleRemoveFolder(folderPath),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                    constraints: const BoxConstraints(),
+                    onPressed: scanService.isScanning
+                        ? null
+                        : () async {
+                            if (scanService.isScanning) {
+                              BlurSnackBar.show(context, '已有扫描任务在进行中。');
+                              return;
+                            }
+                            final confirm = await BlurDialog.show<bool>(
+                              context: context,
+                              title: '确认扫描',
+                              content: '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n• 检测文件夹内容是否有变化\n• 如无变化将快速跳过\n• 如有变化将进行全面扫描\n\n开始扫描？',
+                              actions: <Widget>[
+                                TextButton(
+                                  child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
-                              onPressed: () => Navigator.of(context).pop(false),
-                            ),
-                            TextButton(
-                              child: const Text('扫描', locale:Locale("zh-Hans","zh"),
+                                  onPressed: () => Navigator.of(context).pop(false),
+                                ),
+                                TextButton(
+                                  child: const Text('扫描', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
-                              onPressed: () => Navigator.of(context).pop(true),
-                            ),
-                          ],
-                        );
-                        if (confirm == true) {
-                          await scanService.startDirectoryScan(folderPath, skipPreviouslyMatchedUnwatched: false);
-                          if (mounted) {
-                            BlurSnackBar.show(context, '已开始智能扫描: ${p.basename(folderPath)}');
-                          }
-                        }
-                      },
+                                  onPressed: () => Navigator.of(context).pop(true),
+                                ),
+                              ],
+                            );
+                            if (confirm == true) {
+                              await scanService.startDirectoryScan(folderPath, skipPreviouslyMatchedUnwatched: false);
+                              if (mounted) {
+                                BlurSnackBar.show(context, '已开始智能扫描: ${p.basename(folderPath)}');
+                              }
+                            }
+                          },
+                  ),
+                ],
               ),
-            ],
-          ),
-          onExpansionChanged: (isExpanded) {
-            if (isExpanded && _expandedFolderContents[folderPath] == null && !_loadingFolders.contains(folderPath)) {
-              Future.microtask(() => _loadFolderChildren(folderPath));
-            }
-          },
-          children: _loadingFolders.contains(folderPath)
-              ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
-              : _buildFileSystemNodes(_expandedFolderContents[folderPath] ?? [], folderPath, 1),
-        ),
+              onExpansionChanged: (isExpanded) {
+                if (isExpanded && _expandedFolderContents[folderPath] == null && !_loadingFolders.contains(folderPath)) {
+                  Future.microtask(() => _loadFolderChildren(folderPath));
+                }
+              },
+              children: _loadingFolders.contains(folderPath)
+                  ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
+                  : _buildFileSystemNodes(_expandedFolderContents[folderPath] ?? [], folderPath, 1),
+            ),
+        );
+      },
     );
   }
 

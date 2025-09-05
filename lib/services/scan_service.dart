@@ -120,32 +120,38 @@ class ScanService with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       List<String> rawFolders = prefs.getStringList(_scannedFoldersPrefsKey) ?? [];
       
-      // iOS平台：使用工具类修复容器路径变化
+      // iOS平台：使用工具类修复容器路径变化并清理失效路径
       if (Platform.isIOS && rawFolders.isNotEmpty) {
-        List<String> fixedFolders = [];
-        bool hasChanges = false;
+        List<String> validFolders = [];
+        int fixedCount = 0;
+        int removedCount = 0;
         
         for (String folder in rawFolders) {
           final validPath = await iOSContainerPathFixer.validateAndFixDirectoryPath(folder);
           if (validPath != null) {
-            fixedFolders.add(validPath);
+            validFolders.add(validPath);
             if (validPath != folder) {
-              hasChanges = true;
+              fixedCount++;
               debugPrint('ScanService: 修复扫描文件夹路径: $folder -> $validPath');
             }
           } else {
-            // 路径无法修复，保留原路径但标记为可能无效
-            fixedFolders.add(folder);
-            debugPrint('ScanService: 无法修复扫描文件夹路径: $folder');
+            // 路径无法修复且不存在，自动清理失效路径
+            removedCount++;
+            debugPrint('ScanService: 清理失效扫描文件夹路径: $folder');
           }
         }
         
-        _scannedFolders = fixedFolders;
+        _scannedFolders = validFolders;
         
-        // 如果有路径变化，保存修复后的路径
-        if (hasChanges) {
-          await prefs.setStringList(_scannedFoldersPrefsKey, fixedFolders);
-          debugPrint('ScanService: 已保存修复后的扫描文件夹路径');
+        // 如果有路径变化或清理了失效路径，保存更新后的路径列表
+        if (fixedCount > 0 || removedCount > 0) {
+          await prefs.setStringList(_scannedFoldersPrefsKey, validFolders);
+          if (fixedCount > 0) {
+            debugPrint('ScanService: 已修复 $fixedCount 个文件夹路径');
+          }
+          if (removedCount > 0) {
+            debugPrint('ScanService: 已清理 $removedCount 个失效文件夹路径');
+          }
         }
       } else {
         _scannedFolders = rawFolders;
