@@ -4,6 +4,8 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/video_file_scanner.dart';
+import 'package:nipaplay/services/concurrent_video_processor.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 import 'dart:async';
@@ -690,231 +692,94 @@ class ScanService with ChangeNotifier {
     if (!_scannedFolders.contains(directoryPath)) {
       _scannedFolders = List.from(_scannedFolders)..add(directoryPath);
       newFolderAddedToPrefs = true;
-      // No need to notifyListeners here for just adding to list, will be notified by _updateScanState or at end
     }
 
     if (newFolderAddedToPrefs) {
-      await _saveScannedFolders(); // Save if it's a genuinely new folder for persistence
-      // If _saveScannedFolders itself calls notifyListeners, this might be redundant
-      // but _scannedFolders list itself has changed, so a notify for that is good.
-      notifyListeners(); // For the list change itself if UI displays it before scan starts
+      await _saveScannedFolders();
+      notifyListeners();
     }
     
-    final directory = Directory(directoryPath);
-    List<File> videoFiles = [];
+    // 第一阶段：统计视频文件数量
+    _updateScanState(message: "正在统计视频文件...");
+    int videoFileCount;
+    List<File> videoFiles;
+    
     try {
-      if (await directory.exists()) {
-        await for (var entity in directory.list(recursive: true, followLinks: false)) {
-          if (!_isScanning) break; // Check service's scanning flag
-          if (entity is File) {
-            String extension = p.extension(entity.path).toLowerCase();
-            if (extension == '.mp4' || extension == '.mkv') {
-              videoFiles.add(entity);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      //debugPrint("ScanService: Error listing files in $directoryPath: $e");
-      _updateScanState(scanning: false, message: "列出 $directoryPath中的文件失败: $e", completed: true);
-      return;
-    }
-
-    if (!_isScanning && !isPartOfBatch) { // If scan was cancelled externally and not part of batch
-      _updateScanState(scanning: false, message: "扫描已取消: $directoryPath", completed: true);
-      return;
-    }
-    // If part of a batch and cancelled, rescanAllFolders handles the main message.
-
-    if (videoFiles.isEmpty) {
-      if (!isPartOfBatch) {
-        // 更新找到的文件总数为0
-        _totalFilesFound = 0;
-        
-        // 设置刚完成扫描的标志，用于UI检查
-        _justFinishedScanning = true;
-        
-        _updateScanState(scanning: false, message: "在 $directoryPath 中没有找到 mp4 或 mkv 文件。", completed: true);
-        
-        debugPrint("扫描结束，没有找到文件，已设置 _justFinishedScanning=$_justFinishedScanning, _totalFilesFound=$_totalFilesFound");
-      } else {
-        // For batch, just update message, overall completion handled by rescanAllFolders
-        _updateScanMessage("在 ${p.basename(directoryPath)} 中无视频文件。"); 
-        // We need to ensure _isScanning remains true if other folders are pending in batch.
-        // The caller (rescanAllFolders) will eventually set scanning to false.
-      }
-      return;
-    }
-
-    int filesProcessed = 0;
-    Set<String> addedAnimeTitles = {};
-    List<String> failedFiles = [];
-    int skippedFilesCount = 0;
-
-    for (File videoFile in videoFiles) {
-      if (!_isScanning) break;
-
-      if (skipPreviouslyMatchedUnwatched) {
-        WatchHistoryItem? existingItem = await WatchHistoryManager.getHistoryItem(videoFile.path);
-        if (existingItem != null &&
-            existingItem.animeId != null &&
-            existingItem.episodeId != null &&
-            existingItem.watchProgress <= 0.01) {
-          
-          filesProcessed++;
-          skippedFilesCount++;
-          _updateScanState(
-            progress: filesProcessed / videoFiles.length,
-            message: "已跳过 (已匹配): ${p.basename(videoFile.path)} ($filesProcessed/${videoFiles.length})"
-          );
-          continue;
-        }
-      }
-
-      filesProcessed++;
-      _updateScanState(
-          progress: filesProcessed / videoFiles.length,
-          message: "正在处理: ${p.basename(videoFile.path)} ($filesProcessed/${videoFiles.length})"
-      );
-
-      try {
-        final videoInfo = await DandanplayService.getVideoInfo(videoFile.path)
-            .timeout(const Duration(seconds: 20), onTimeout: () {
-          //debugPrint("ScanService: 获取 '${p.basename(videoFile.path)}' 的视频信息超时。");
-          throw TimeoutException('获取视频信息超时 (${p.basename(videoFile.path)})');
-        });
-
-        if (videoInfo['isMatched'] == true && videoInfo['matches'] != null && (videoInfo['matches'] as List).isNotEmpty) {
-          final match = videoInfo['matches'][0];
-          final animeIdFromMatch = match['animeId'] as int?;
-          final episodeIdFromMatch = match['episodeId'] as int?;
-          final animeTitleFromMatch = (match['animeTitle'] as String?)?.isNotEmpty == true
-              ? match['animeTitle'] as String
-              : p.basenameWithoutExtension(videoFile.path);
-          final episodeTitleFromMatch = match['episodeTitle'] as String?;
-
-          WatchHistoryItem? existingItem = await WatchHistoryManager.getHistoryItem(videoFile.path);
-          final int durationFromMatch = (videoInfo['duration'] is int)
-              ? videoInfo['duration'] as int
-              : (existingItem?.duration ?? 0);
-
-          if (animeIdFromMatch != null && episodeIdFromMatch != null) {
-            WatchHistoryItem itemToSave;
-            if (existingItem != null) {
-              if (existingItem.watchProgress > 0.01 && !existingItem.isFromScan) {
-                // Preserve user's watch progress if it exists and not from a previous scan
-                // Manually reconstruct WatchHistoryItem instead of using copyWith
-                itemToSave = WatchHistoryItem(
-                  filePath: existingItem.filePath, // Keep original file path
-                  animeName: animeTitleFromMatch, // Update
-                  episodeTitle: episodeTitleFromMatch, // Update
-                  episodeId: episodeIdFromMatch, // Update
-                  animeId: animeIdFromMatch, // Update
-                  watchProgress: existingItem.watchProgress, // Preserve
-                  lastPosition: existingItem.lastPosition, // Preserve
-                  duration: durationFromMatch, // Update from scan
-                  lastWatchTime: DateTime.now(), // Update to now
-                  thumbnailPath: existingItem.thumbnailPath, // Preserve
-                  isFromScan: false // Preserve original isFromScan status
-                );
-              } else {
-                // Update existing scanned item or overwrite placeholder if progress was 0
-                itemToSave = WatchHistoryItem(
-                    filePath: videoFile.path,
-                    animeName: animeTitleFromMatch,
-                    episodeTitle: episodeTitleFromMatch,
-                    episodeId: episodeIdFromMatch,
-                    animeId: animeIdFromMatch,
-                    watchProgress: existingItem.watchProgress, // Keep progress if it was a re-scan
-                    lastPosition: existingItem.lastPosition, // Keep position if re-scan
-                    duration: durationFromMatch,
-                    lastWatchTime: DateTime.now(),
-                    thumbnailPath: existingItem.thumbnailPath, // Preserve thumbnail
-                    isFromScan: true);
-              }
-            } else {
-              // New item from scan
-              itemToSave = WatchHistoryItem(
-                  filePath: videoFile.path,
-                  animeName: animeTitleFromMatch,
-                  episodeTitle: episodeTitleFromMatch,
-                  episodeId: episodeIdFromMatch,
-                  animeId: animeIdFromMatch,
-                  watchProgress: 0.0,
-                  lastPosition: 0,
-                  duration: durationFromMatch,
-                  lastWatchTime: DateTime.now(),
-                  thumbnailPath: null,
-                  isFromScan: true);
-            }
-            await WatchHistoryManager.addOrUpdateHistory(itemToSave);
-            addedAnimeTitles.add(animeTitleFromMatch);
-          } else {
-            failedFiles.add("${p.basename(videoFile.path)} (缺少ID)");
-          }
+      // 先快速统计文件数量，给用户反馈
+      videoFileCount = await VideoFileScanner.countVideoFiles(directoryPath);
+      if (videoFileCount == 0) {
+        if (!isPartOfBatch) {
+          _totalFilesFound = 0;
+          _justFinishedScanning = true;
+          _updateScanState(scanning: false, message: "在 $directoryPath 中没有找到 mp4 或 mkv 文件。", completed: true);
+          debugPrint("扫描结束，没有找到文件，已设置 _justFinishedScanning=$_justFinishedScanning, _totalFilesFound=$_totalFilesFound");
         } else {
-          failedFiles.add("${p.basename(videoFile.path)} (未匹配)");
+          _updateScanMessage("在 ${p.basename(directoryPath)} 中无视频文件。");
         }
-      } on TimeoutException {
-        failedFiles.add("${p.basename(videoFile.path)} (超时)");
-      } catch (e) {
-        failedFiles.add("${p.basename(videoFile.path)} (错误: ${e.toString().substring(0, min(e.toString().length, 30))})");
-        //debugPrint("ScanService: Error processing file ${videoFile.path}: $e");
+        return;
       }
+      
+      _updateScanState(message: "发现 $videoFileCount 个视频文件，开始并发扫描...");
+      
+      // 获取完整的视频文件列表
+      videoFiles = await VideoFileScanner.scanFolder(directoryPath);
+    } catch (e) {
+      _updateScanState(scanning: false, message: "列出 $directoryPath 中的文件失败: $e", completed: true);
+      return;
     }
 
-    if (!_isScanning && !isPartOfBatch) { // If scan was cancelled externally and not part of batch
+    if (!_isScanning && !isPartOfBatch) {
       _updateScanState(scanning: false, message: "扫描已取消: $directoryPath", completed: true);
       return;
     }
-    // If part of a batch and cancelled, rescanAllFolders handles the main message.
+
+    // 第二阶段：并发处理视频文件
+    int processedCount = 0;
+    final results = await ConcurrentVideoProcessor.processVideos(
+      videoFiles,
+      skipPreviouslyMatchedUnwatched: skipPreviouslyMatchedUnwatched,
+      onProgress: (processed, total, currentFile) {
+        if (!_isScanning) return;
+        processedCount = processed;
+        _updateScanState(
+          progress: processed / total,
+          message: "正在处理: $currentFile ($processed/$total)"
+        );
+      }
+    );
+
+    if (!_isScanning && !isPartOfBatch) {
+      _updateScanState(scanning: false, message: "扫描已取消: $directoryPath", completed: true);
+      return;
+    }
+
+    // 第三阶段：处理结果
+    final successResults = results.where((r) => r.success).toList();
+    final failedResults = results.where((r) => !r.success).toList();
+    final addedAnimeTitles = successResults
+        .where((r) => r.animeTitle != null)
+        .map((r) => r.animeTitle!)
+        .toSet();
+    final skippedFilesCount = videoFiles.length - results.length;
 
     if (!isPartOfBatch && _isScanning) {
-      if (filesProcessed > 0) {
-        // 更新找到的文件总数
-        _totalFilesFound = videoFiles.length;
-        
-        String completionMessage = "";
-        if (failedFiles.isNotEmpty) {
-          completionMessage = "扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。${failedFiles.length} 个文件处理失败。";
-        } else {
-          completionMessage = "扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。";
-        }
-        if (skippedFilesCount > 0) {
-          completionMessage += " 跳过了 $skippedFilesCount 个已匹配文件。";
-        }
-        
-        // 设置刚完成扫描的标志，用于UI检查
-        _justFinishedScanning = true;
-        
-        // 更新文件夹hash缓存
-        await _updateFolderHash(directoryPath);
-        
-        _updateScanState(scanning: false, progress: 1.0, message: completionMessage, completed: true);
-      } else {
-        // 更新找到的文件总数为0
-        _totalFilesFound = 0;
-        
-        // 设置刚完成扫描的标志，用于UI检查
-        _justFinishedScanning = true;
-        
-        // 即使没有找到文件，也要更新hash缓存（可能是文件被删除了）
-        await _updateFolderHash(directoryPath);
-        
-        _updateScanState(scanning: false, progress: 1.0, message: "扫描 $directoryPath 完成，未找到视频文件。", completed: true);
-      }
-    } else if (isPartOfBatch) {
-      // 在批量扫描中更新总文件数
-      _totalFilesFound += videoFiles.length;
+      _totalFilesFound = videoFiles.length;
       
-      // For batch, update message. Overall progress/completion is handled by rescanAllFolders.
-      // _updateScanMessage(completionMessage); // This might be too noisy if many folders
-      // The progress will be updated by rescanAllFolders.
-      // _isScanning should remain true if it's a batch scan and not the last folder.
-      // This means startDirectoryScan should NOT set _isScanning to false if isPartOfBatch is true,
-      // UNLESS it's the very last folder of the batch, which rescanAllFolders will handle.
-      // So, if isPartOfBatch, we don't call _updateScanState to set scanning to false here.
-      // Note: Hash update for batch scan is handled in rescanAllFolders method
+      String completionMessage = "";
+      if (failedResults.isNotEmpty) {
+        completionMessage = "并发扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。${failedResults.length} 个文件处理失败。";
+      } else {
+        completionMessage = "并发扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。";
+      }
+      if (skippedFilesCount > 0) {
+        completionMessage += " 跳过了 $skippedFilesCount 个已匹配文件。";
+      }
+      
+      _justFinishedScanning = true;
+      await _updateFolderHash(directoryPath);
+      _updateScanState(scanning: false, progress: 1.0, message: completionMessage, completed: true);
+    } else if (isPartOfBatch) {
+      _totalFilesFound += videoFiles.length;
     }
   }
 
