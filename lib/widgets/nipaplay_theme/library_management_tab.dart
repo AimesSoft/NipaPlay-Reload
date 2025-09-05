@@ -1583,31 +1583,9 @@ style: TextStyle(color: Colors.redAccent)),
     // 对根文件夹进行排序
     final sortedFolders = _sortFolderPaths(scanService.scannedFolders);
 
-    // 检测是否为桌面或平板设备
-    if (isDesktopOrTablet) {
-      // 桌面和平板设备使用真正的瀑布流布局
-      return Scrollbar(
-        controller: _listScrollController,
-        radius: const Radius.circular(2),
-        thickness: 4,
-        child: SingleChildScrollView(
-          controller: _listScrollController,
-          padding: const EdgeInsets.all(8),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return _buildWaterfallLayout(
-                scanService,
-                sortedFolders,
-                constraints.maxWidth,
-                300.0,
-                16.0,
-              );
-            },
-          ),
-        ),
-      );
-    } else {
-      // 移动设备使用单列ListView
+    // 检测是否为手机设备 - 手机设备始终使用单列布局
+    if (isPhone) {
+      // 手机设备使用单列ListView（包括平板，因为平板只能扫描应用目录，文件夹有限）
       if (io.Platform.isAndroid || io.Platform.isIOS) {
         return ListView.builder(
           controller: _listScrollController,
@@ -1632,6 +1610,28 @@ style: TextStyle(color: Colors.redAccent)),
           ),
         );
       }
+    } else {
+      // 桌面设备使用真正的瀑布流布局
+      return Scrollbar(
+        controller: _listScrollController,
+        radius: const Radius.circular(2),
+        thickness: 4,
+        child: SingleChildScrollView(
+          controller: _listScrollController,
+          padding: const EdgeInsets.all(8),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return _buildWaterfallLayout(
+                scanService,
+                sortedFolders,
+                constraints.maxWidth,
+                300.0,
+                16.0,
+              );
+            },
+          ),
+        ),
+      );
     }
   }
 
