@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
@@ -142,7 +143,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     } else {
       final videoFile = File(item.filePath);
       fileExists = videoFile.existsSync();
-      
+      if (!kIsWeb) {
       if (!fileExists && Platform.isIOS) {
         String altPath = filePath.startsWith('/private') 
             ? filePath.replaceFirst('/private', '') 
@@ -154,6 +155,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           item = item.copyWith(filePath: filePath);
           fileExists = true;
         }
+      }
       }
     }
     

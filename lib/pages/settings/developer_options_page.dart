@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:nipaplay/utils/platform_utils.dart' as platform;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/pages/settings/debug_log_viewer_page.dart';
@@ -69,8 +70,8 @@ class DeveloperOptionsPage extends StatelessWidget {
             
             const Divider(color: Colors.white12, height: 1),
             
-            // Linux存储迁移选项（仅Linux平台显示）
-            if (Platform.isLinux) ...[
+            // Linux存储迁移选项（仅Linux平台显示，Web环境下不显示）
+            if (!kIsWeb && platform.Platform.isLinux) ...[
               // 检查迁移状态
               ListTile(
                 title: const Text(
@@ -261,7 +262,7 @@ style: TextStyle(
 
   // 检查Linux存储迁移状态
   Future<void> _checkLinuxMigrationStatus(BuildContext context) async {
-    if (!Platform.isLinux) return;
+    if (kIsWeb || !platform.Platform.isLinux) return;
     
     try {
       final needsMigration = await LinuxStorageMigration.needsMigration();
@@ -298,7 +299,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
 
   // 手动触发存储迁移
   Future<void> _manualTriggerMigration(BuildContext context) async {
-    if (!Platform.isLinux) return;
+    if (kIsWeb || !platform.Platform.isLinux) return;
     
     final confirm = await BlurDialog.show<bool>(
       context: context,
@@ -378,16 +379,16 @@ style: TextStyle(color: Colors.orange)),
 
   // 显示存储目录信息
   Future<void> _showStorageDirectoryInfo(BuildContext context) async {
-    if (!Platform.isLinux) return;
+    if (kIsWeb || !platform.Platform.isLinux) return;
     
     try {
       final dataDir = await LinuxStorageMigration.getXDGDataDirectory();
       final cacheDir = await LinuxStorageMigration.getXDGCacheDirectory();
       
       // 获取环境变量信息
-      final xdgDataHome = Platform.environment['XDG_DATA_HOME'] ?? '未设置';
-      final xdgCacheHome = Platform.environment['XDG_CACHE_HOME'] ?? '未设置';
-      final homeDir = Platform.environment['HOME'] ?? '未知';
+      final xdgDataHome = platform.Platform.environment['XDG_DATA_HOME'] ?? '未设置';
+      final xdgCacheHome = platform.Platform.environment['XDG_CACHE_HOME'] ?? '未设置';
+      final homeDir = platform.Platform.environment['HOME'] ?? '未知';
       
       if (!context.mounted) return;
       
@@ -426,7 +427,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   
   // 紧急恢复个人文件
   Future<void> _emergencyRestorePersonalFiles(BuildContext context) async {
-    if (!Platform.isLinux) return;
+    if (kIsWeb || !platform.Platform.isLinux) return;
     
     final confirm = await BlurDialog.show<bool>(
       context: context,
