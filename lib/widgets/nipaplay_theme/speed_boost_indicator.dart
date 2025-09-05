@@ -36,10 +36,10 @@ class SpeedBoostIndicator extends StatelessWidget {
                           size: 20,
                         ),
                         const SizedBox(width: 8),
-                        const Text(
-                          "2x 倍速",
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                        Text(
+                          "${videoState.speedBoostRate}x 倍速",
+                          locale:const Locale("zh-Hans","zh"),
+                          style: const TextStyle(
                             color: Color.fromARGB(139, 255, 255, 255),
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
