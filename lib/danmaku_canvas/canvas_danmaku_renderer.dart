@@ -85,11 +85,20 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
   double _lastCurrentTime = 0;
   DanmakuScreen? _danmakuScreen;
   DanmakuOption? _currentOption;
+  
+  // 添加已添加弹幕的跟踪集合，避免重复添加
+  final Set<String> _addedDanmakuKeys = {};
 
   @override
   void initState() {
     super.initState();
     _initializeDanmakuScreen();
+    
+    // 初始化时处理弹幕
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      _processAndAddDanmaku(videoState.danmakuList, widget.currentTime);
+    });
   }
 
   void _initializeDanmakuScreen() {
@@ -154,9 +163,6 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
           }
         }
         
-        // 立即处理弹幕数据更新
-        _processAndAddDanmaku(videoState.danmakuList, widget.currentTime);
-        
         return _danmakuScreen!;
       },
     );
@@ -166,6 +172,7 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
   void dispose() {
     _controller?.clear();
     _controller = null;
+    _addedDanmakuKeys.clear(); // 清理弹幕键值缓存
     super.dispose();
   }
 
@@ -190,6 +197,22 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       // 重置时间记录，确保下次_processAndAddDanmaku能检测到变化
       _lastCurrentTime = widget.currentTime - 10.0; // 设置一个明显不同的值
     }
+
+    // 只在时间变化、播放状态变化或其他重要属性变化时处理弹幕
+    bool shouldProcessDanmaku = widget.currentTime != oldWidget.currentTime ||
+                                widget.isPlaying != oldWidget.isPlaying ||
+                                widget.fontSize != oldWidget.fontSize ||
+                                widget.opacity != oldWidget.opacity ||
+                                widget.displayArea != oldWidget.displayArea ||
+                                widget.visible != oldWidget.visible;
+
+    if (shouldProcessDanmaku) {
+      // 获取最新的弹幕列表并处理
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+        _processAndAddDanmaku(videoState.danmakuList, widget.currentTime);
+      });
+    }
   }
 
   // 处理并添加弹幕到Canvas渲染器
@@ -209,6 +232,7 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
     if (timeJumped) {
       //print('Canvas弹幕: 检测到时间跳跃 ${timeDiff}秒，清空当前弹幕并重新处理');
       _controller!.clear();
+      _addedDanmakuKeys.clear(); // 清空已添加弹幕的跟踪
       forceProcess = true;
     }
     
@@ -263,11 +287,19 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
         continue;
       }
 
+      // 创建弹幕唯一标识符，用于去重
+      final danmakuKey = '${time.toStringAsFixed(1)}_${text}_${danmakuData['type']}';
+      if (_addedDanmakuKeys.contains(danmakuKey)) {
+        //print('Canvas弹幕: 跳过重复弹幕: "$text" 时间=$time');
+        continue;
+      }
+
       // 将抽象弹幕模型转换为Canvas弹幕模型
       final canvasDanmaku = _convertToCanvasDanmaku(danmakuData, text);
       if (canvasDanmaku != null) {
         //print('Canvas弹幕: 准备添加弹幕 "$text" 时间=$time 类型=${canvasDanmaku.type}');
         _controller!.addDanmaku(canvasDanmaku);
+        _addedDanmakuKeys.add(danmakuKey); // 记录已添加的弹幕
         addedCount++;
       } else {
         //print('Canvas弹幕: 转换失败的弹幕: "$text"');
@@ -282,6 +314,12 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
     }
     
     //print('Canvas弹幕: 处理完成，处理了 $processedCount 条，添加了 $addedCount 条弹幕');
+    
+    // 定期清理过期的弹幕键值（超过30秒的弹幕键值），避免内存泄漏
+    if (_addedDanmakuKeys.length > 1000) {
+      _addedDanmakuKeys.clear();
+      //print('Canvas弹幕: 清理弹幕键值缓存，避免内存泄漏');
+    }
   }
 
   // 检查弹幕是否应该被屏蔽
