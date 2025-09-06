@@ -280,6 +280,8 @@ style: TextStyle(color: Colors.white)),
         return 'CPU 渲染引擎\n使用 Flutter Widget 进行绘制，兼容性好，但在低端设备上弹幕量大时可能卡顿。';
       case DanmakuRenderEngine.gpu:
         return 'GPU 渲染引擎 (实验性)\n使用自定义着色器和字体图集，性能更高，功耗更低，但目前仍在开发中。';
+      case DanmakuRenderEngine.canvas:
+        return 'Canvas 弹幕渲染引擎\n来自软件kazumi的开发者\n使用Canvas绘制弹幕，高性能，低功耗，支持大量弹幕同时显示。';
     }
   }
 
@@ -345,6 +347,12 @@ style: TextStyle(color: Colors.white),
               value: DanmakuRenderEngine.gpu,
               isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
               description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
+            ),
+            DropdownMenuItemData(
+              title: "Canvas 弹幕 (实验性)",
+              value: DanmakuRenderEngine.canvas,
+              isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
+              description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.canvas),
             ),
           ],
           onChanged: (engine) {

@@ -3,6 +3,7 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'danmaku_container.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
+import 'package:nipaplay/danmaku_canvas/canvas_danmaku_renderer.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -93,8 +94,26 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           );
         }
 
+        if (kernelType == DanmakuRenderEngine.canvas) {
+          return CanvasDanmakuManager.createRenderer(
+            fontSize: widget.fontSize,
+            opacity: widget.opacity,
+            displayArea: videoState.danmakuDisplayArea,
+            visible: widget.isVisible,
+            stacking: videoState.danmakuStacking,
+            mergeDanmaku: videoState.mergeDanmaku,
+            blockTopDanmaku: videoState.blockTopDanmaku,
+            blockBottomDanmaku: videoState.blockBottomDanmaku,
+            blockScrollDanmaku: videoState.blockScrollDanmaku,
+            blockWords: videoState.danmakuBlockWords,
+            currentTime: widget.currentPosition / 1000,
+            isPlaying: widget.isPlaying,
+            playbackRate: videoState.playbackRate,
+          );
+        }
+
         // Fallback to CPU rendering
-  return DanmakuContainer(
+        return DanmakuContainer(
           danmakuList: activeDanmakuList,
           currentTime: widget.currentPosition / 1000,
           videoDuration: widget.videoDuration / 1000,

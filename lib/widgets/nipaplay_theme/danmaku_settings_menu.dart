@@ -8,6 +8,7 @@ import 'settings_slider.dart';
 import 'blur_button.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class DanmakuSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -380,62 +381,64 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   }
                 ),
               ),
-              // 弹幕堆叠开关
-              Padding(
-                padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          '弹幕堆叠',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
+              // 弹幕堆叠开关（Canvas模式下隐藏）
+              if (DanmakuKernelFactory.getKernelType() != DanmakuRenderEngine.canvas)
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '弹幕堆叠',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                        Switch(
-                          value: videoState.danmakuStacking,
-                          onChanged: (value) {
-                            videoState.setDanmakuStacking(value);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SettingsHintText('允许多条弹幕重叠显示，适合弹幕密集场景'),
-                  ],
-                ),
-              ),
-              // 合并相同弹幕开关
-              Padding(
-                padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          '合并相同弹幕',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
+                          Switch(
+                            value: videoState.danmakuStacking,
+                            onChanged: (value) {
+                              videoState.setDanmakuStacking(value);
+                            },
                           ),
-                        ),
-                        Switch(
-                          value: videoState.mergeDanmaku,
-                          onChanged: (value) {
-                            videoState.setMergeDanmaku(value);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SettingsHintText('将内容相同的弹幕合并为一条显示，减少屏幕干扰'),
-                  ],
+                        ],
+                      ),
+                      const SettingsHintText('允许多条弹幕重叠显示，适合弹幕密集场景'),
+                    ],
+                  ),
                 ),
-              ),
+              // 合并相同弹幕开关（Canvas模式下隐藏）
+              if (DanmakuKernelFactory.getKernelType() != DanmakuRenderEngine.canvas)
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '合并相同弹幕',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Switch(
+                            value: videoState.mergeDanmaku,
+                            onChanged: (value) {
+                              videoState.setMergeDanmaku(value);
+                            },
+                          ),
+                        ],
+                      ),
+                      const SettingsHintText('将内容相同的弹幕合并为一条显示，减少屏幕干扰'),
+                    ],
+                  ),
+                ),
 
               // 弹幕类型屏蔽（移除标题，只保留开关）
               Padding(
