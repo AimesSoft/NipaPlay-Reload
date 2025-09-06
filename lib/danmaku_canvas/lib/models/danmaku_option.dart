@@ -34,6 +34,9 @@ class DanmakuOption {
   /// 为字幕预留空间
   final bool safeArea;
 
+  /// 播放速度，用于弹幕动画速度调整
+  final double playbackRate;
+
   DanmakuOption({
     this.fontSize = 16,
     this.fontWeight = 4,
@@ -47,6 +50,7 @@ class DanmakuOption {
     this.showStroke = true,
     this.massiveMode = false,
     this.safeArea = true,
+    this.playbackRate = 1.0,
   });
 
   DanmakuOption copyWith({
@@ -61,6 +65,7 @@ class DanmakuOption {
     bool? showStroke,
     bool? massiveMode,
     bool? safeArea,
+    double? playbackRate,
   }) {
     return DanmakuOption(
       area: area ?? this.area,
@@ -74,6 +79,7 @@ class DanmakuOption {
       showStroke: showStroke ?? this.showStroke,
       massiveMode: massiveMode ?? this.massiveMode,
       safeArea: safeArea ?? this.safeArea,
+      playbackRate: playbackRate ?? this.playbackRate,
     );
   }
 }

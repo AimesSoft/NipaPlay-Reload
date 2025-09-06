@@ -319,18 +319,18 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                           alignment: Alignment.centerLeft,
                           child: ComboBox<DanmakuRenderEngine>(
                             value: _selectedDanmakuRenderEngine,
-                            items: [
+                            items: const [
                               ComboBoxItem<DanmakuRenderEngine>(
                                 value: DanmakuRenderEngine.cpu,
-                                child: const Text('CPU 渲染'),
+                                child: Text('CPU 渲染'),
                               ),
                               ComboBoxItem<DanmakuRenderEngine>(
                                 value: DanmakuRenderEngine.gpu,
-                                child: const Text('GPU 渲染 (实验性)'),
+                                child: Text('GPU 渲染 (实验性)'),
                               ),
                               ComboBoxItem<DanmakuRenderEngine>(
                                 value: DanmakuRenderEngine.canvas,
-                                child: const Text('Canvas 弹幕'),
+                                child: Text('Canvas 弹幕 (实验性)'),
                               ),
                             ],
                             onChanged: (value) {

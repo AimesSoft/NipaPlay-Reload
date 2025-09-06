@@ -93,12 +93,12 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(seconds: _option.duration),
+      duration: Duration(milliseconds: (_option.duration * 1000 / _option.playbackRate).round()),
     )..repeat();
 
     _staticAnimationController = AnimationController(
       vsync: this,
-      duration: Duration(seconds: _option.duration),
+      duration: Duration(milliseconds: (_option.duration * 1000 / _option.playbackRate).round()),
     );
 
     WidgetsBinding.instance.addObserver(this);
@@ -107,8 +107,20 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 处理 Android/iOS 应用后台或熄屏导致的动画问题
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      pause();
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        // 应用切换到后台时暂停弹幕
+        if (_running) {
+          pause();
+        }
+        break;
+      case AppLifecycleState.resumed:
+        // 应用恢复到前台时不自动恢复播放
+        // 弹幕状态应该由外部控制器根据视频实际播放状态决定
+        break;
+      default:
+        break;
     }
   }
 
@@ -324,6 +336,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   void updateOption(DanmakuOption option) {
     bool needRestart = false;
     bool needClearParagraph = false;
+    bool needUpdateDuration = false;
+    
     if (_animationController.isAnimating) {
       _animationController.stop();
       needRestart = true;
@@ -331,6 +345,11 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
     if (option.fontSize != _option.fontSize) {
       needClearParagraph = true;
+    }
+    
+    // 检查播放速度是否发生变化
+    if (option.playbackRate != _option.playbackRate) {
+      needUpdateDuration = true;
     }
 
     /// 需要隐藏弹幕时清理已有弹幕
@@ -345,6 +364,12 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     }
     _option = option;
     _controller.option = _option;
+
+    // 如果播放速度发生变化，更新动画控制器的持续时间
+    if (needUpdateDuration) {
+      _animationController.duration = Duration(milliseconds: (_option.duration * 1000 / _option.playbackRate).round());
+      _staticAnimationController.duration = Duration(milliseconds: (_option.duration * 1000 / _option.playbackRate).round());
+    }
 
     /// 清理已经存在的 Paragraph 缓存
     if (needClearParagraph) {
@@ -437,7 +462,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     // _stopwatch.reset();
     _stopwatch.start();
 
-    final staticDuration = _option.duration * 1000;
+    final staticDuration = (_option.duration * 1000 / _option.playbackRate).round();
 
     while (_running && mounted) {
       await Future.delayed(const Duration(milliseconds: 100));
@@ -511,7 +536,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                     painter: ScrollDanmakuPainter(
                         _animationController.value,
                         _scrollDanmakuItems,
-                        _option.duration,
+                        (_option.duration / _option.playbackRate).round(),
                         _option.fontSize,
                         _option.fontWeight,
                         _option.showStroke,
@@ -531,7 +556,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                         _staticAnimationController.value,
                         _topDanmakuItems,
                         _bottomDanmakuItems,
-                        _option.duration,
+                        (_option.duration / _option.playbackRate).round(),
                         _option.fontSize,
                         _option.fontWeight,
                         _option.showStroke,

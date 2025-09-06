@@ -108,6 +108,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             blockWords: videoState.danmakuBlockWords,
             currentTime: widget.currentPosition / 1000,
             isPlaying: widget.isPlaying,
+            playbackRate: videoState.playbackRate,
           );
         }
 
