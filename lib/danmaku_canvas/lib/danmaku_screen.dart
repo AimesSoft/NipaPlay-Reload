@@ -142,6 +142,13 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
     if (content.type == DanmakuItemType.special) {
       if (!_option.hideSpecial) {
+        // 计算弹幕颜色的亮度，与其他内核保持一致
+        final color = content.color;
+        final luminance =
+            (0.299 * color.red + 0.587 * color.green + 0.114 * color.blue) / 255;
+        // 如果亮度小于0.2，说明是深色，使用白色描边；否则使用黑色描边
+        final strokeColor = luminance < 0.2 ? Colors.white : Colors.black;
+        
         (content as SpecialDanmakuContentItem).painterCache = TextPainter(
           text: TextSpan(
             text: content.text,
@@ -152,10 +159,10 @@ class _DanmakuScreenState extends State<DanmakuScreen>
               shadows: content.hasStroke
                   ? [
                       Shadow(
-                          color: Colors.black.withOpacity(
+                          color: strokeColor.withOpacity(
                               content.alphaTween?.begin ??
                                   content.color.opacity),
-                          blurRadius: 2)
+                          blurRadius: 0)  // 使用0像素模糊来匹配其他内核
                     ]
                   : null,
             ),
