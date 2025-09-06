@@ -8,6 +8,9 @@ enum DanmakuRenderEngine {
 
   /// GPU 渲染引擎
   gpu,
+
+  /// Canvas 弹幕渲染引擎
+  canvas,
 }
 
 /// 负责读写弹幕渲染引擎设置的工厂类

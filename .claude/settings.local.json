@@ -4,7 +4,11 @@
       "Bash(flutter analyze:*)",
       "Bash(grep -n \"void setShowControls\" lib/utils/video_player_state.dart)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebSearch",
+      "WebFetch(domain:pub.dev)",
+      "Read(//Users/dfsteve/.pub-cache/**)",
+      "Bash(flutter:*)"
     ],
     "deny": [],
     "ask": []

@@ -177,6 +177,8 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
         return '使用 Flutter Widget 进行绘制，兼容性好，但在低端设备上弹幕量大时可能卡顿';
       case DanmakuRenderEngine.gpu:
         return '使用自定义着色器和字体图集，性能更高，功耗更低，但目前仍在开发中';
+      case DanmakuRenderEngine.canvas:
+        return '使用Canvas绘制弹幕，高性能，低功耗，支持大量弹幕同时显示';
     }
   }
 
@@ -325,6 +327,10 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                               ComboBoxItem<DanmakuRenderEngine>(
                                 value: DanmakuRenderEngine.gpu,
                                 child: const Text('GPU 渲染 (实验性)'),
+                              ),
+                              ComboBoxItem<DanmakuRenderEngine>(
+                                value: DanmakuRenderEngine.canvas,
+                                child: const Text('Canvas 弹幕'),
                               ),
                             ],
                             onChanged: (value) {
