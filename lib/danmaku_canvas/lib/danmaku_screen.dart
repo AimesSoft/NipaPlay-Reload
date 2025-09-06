@@ -109,11 +109,15 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
-        // 应用切换到后台时暂停弹幕
+        // 只在应用真正进入后台时暂停弹幕（移动端）
         if (_running) {
           pause();
         }
+        break;
+      case AppLifecycleState.inactive:
+        // 桌面环境下窗口失去焦点时不暂停弹幕
+        // 只在移动端或真正的系统级别暂停时才暂停弹幕
+        // 注：inactive状态在桌面上通常只是窗口失去焦点，不应暂停弹幕
         break;
       case AppLifecycleState.resumed:
         // 应用恢复到前台时不自动恢复播放
