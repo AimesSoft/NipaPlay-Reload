@@ -312,6 +312,9 @@ class SystemResourceMonitor {
         case DanmakuRenderEngine.gpu:
           _danmakuKernelType = "GPU";
           break;
+        case DanmakuRenderEngine.canvas:
+          _danmakuKernelType = "Canvas";
+          break;
         default:
           _danmakuKernelType = "未知";
       }
