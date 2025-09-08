@@ -16,6 +16,8 @@ import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
 import 'right_edge_hover_menu.dart';
 import 'minimal_progress_bar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as p;
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -38,6 +40,35 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
 
   // <<< ADDED: Hold a reference to VideoPlayerState for managing the callback
   VideoPlayerState? _videoPlayerStateInstance;
+  String? _currentAnimeCoverUrl; // 当前番剧封面URL
+  int? _lastAnimeId; // 上次获取封面的番剧ID，用于避免重复请求
+
+  // 获取番剧封面URL
+  Future<String?> _getAnimeCoverUrl(int? animeId) async {
+    if (animeId == null) return null;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const prefsKeyPrefix = 'media_library_image_url_';
+      return prefs.getString('$prefsKeyPrefix$animeId');
+    } catch (e) {
+      debugPrint('获取番剧封面失败: $e');
+      return null;
+    }
+  }
+
+  // 更新封面URL（如果番剧ID变化）
+  void _updateAnimeCoverUrl(int? animeId) async {
+    if (animeId != _lastAnimeId) {
+      _lastAnimeId = animeId;
+      final coverUrl = await _getAnimeCoverUrl(animeId);
+      if (mounted && coverUrl != _currentAnimeCoverUrl) {
+        setState(() {
+          _currentAnimeCoverUrl = coverUrl;
+        });
+      }
+    }
+  }
 
   double getFontSize(VideoPlayerState videoState) {
     return videoState.actualDanmakuFontSize;
@@ -289,6 +320,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
         final uiThemeProvider = Provider.of<UIThemeProvider>(context);
         final textureId = videoState.player.textureId.value;
 
+        // 更新番剧封面URL（如果有番剧ID）
+        _updateAnimeCoverUrl(videoState.animeId);
+
         if (!videoState.hasVideo) {
           return Stack(
             children: [
@@ -298,11 +332,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                     ? FluentLoadingOverlay(
                         messages: videoState.statusMessages,
                         highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                        animeTitle: videoState.animeTitle,
+                        episodeTitle: videoState.episodeTitle,
+                        fileName: videoState.currentVideoPath?.split('/').last,
+                        coverImageUrl: _currentAnimeCoverUrl,
                       )
                     : LoadingOverlay(
                         messages: videoState.statusMessages,
                         backgroundOpacity: 0.5,
                         highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                        animeTitle: videoState.animeTitle,
+                        episodeTitle: videoState.episodeTitle,
+                        fileName: videoState.currentVideoPath?.split('/').last,
+                        coverImageUrl: _currentAnimeCoverUrl,
                       ),
             ],
           );
@@ -382,11 +424,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                     ? FluentLoadingOverlay(
                                         messages: videoState.statusMessages,
                                         highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                                        animeTitle: videoState.animeTitle,
+                                        episodeTitle: videoState.episodeTitle,
+                                        fileName: videoState.currentVideoPath?.split('/').last,
+                                        coverImageUrl: _currentAnimeCoverUrl,
                                       )
                                     : LoadingOverlay(
                                         messages: videoState.statusMessages,
                                         backgroundOpacity: 0.5,
                                         highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                                        animeTitle: videoState.animeTitle,
+                                        episodeTitle: videoState.episodeTitle,
+                                        fileName: videoState.currentVideoPath?.split('/').last,
+                                        coverImageUrl: _currentAnimeCoverUrl,
                                       ),
                               ),
                             
@@ -459,11 +509,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                                       ? FluentLoadingOverlay(
                                           messages: videoState.statusMessages,
                                           highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                                          animeTitle: videoState.animeTitle,
+                                          episodeTitle: videoState.episodeTitle,
+                                          fileName: videoState.currentVideoPath?.split('/').last,
+                                          coverImageUrl: _currentAnimeCoverUrl,
                                         )
                                       : LoadingOverlay(
                                           messages: videoState.statusMessages,
                                           backgroundOpacity: 0.5,
                                           highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                                          animeTitle: videoState.animeTitle,
+                                          episodeTitle: videoState.episodeTitle,
+                                          fileName: videoState.currentVideoPath?.split('/').last,
+                                          coverImageUrl: _currentAnimeCoverUrl,
                                         ),
                                 ),
                               

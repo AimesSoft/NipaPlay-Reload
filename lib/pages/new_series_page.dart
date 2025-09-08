@@ -243,6 +243,9 @@ style: TextStyle(color: Colors.white70))),
           LoadingOverlay(
             messages: [_loadingMessageForDetail], // LoadingOverlay expects a list of messages
             backgroundOpacity: 0.7, // Optional: customize opacity
+            animeTitle: null,
+            episodeTitle: null,
+            fileName: null,
           ),
       ],
     );

@@ -19,6 +19,12 @@ class LoadingOverlay extends StatefulWidget {
   final double fontSize;
   final bool isBold;
   final bool highPriorityAnimation;
+  
+  // 新增：媒体信息参数
+  final String? animeTitle;
+  final String? episodeTitle;
+  final String? fileName;
+  final String? coverImageUrl;
 
   const LoadingOverlay({
     super.key,
@@ -35,6 +41,10 @@ class LoadingOverlay extends StatefulWidget {
     this.fontSize = 16,
     this.isBold = true,
     this.highPriorityAnimation = true,
+    this.animeTitle,
+    this.episodeTitle,
+    this.fileName,
+    this.coverImageUrl,
   });
 
   @override
@@ -107,7 +117,9 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
   Widget build(BuildContext context) {
     // 计算比例尺寸时考虑屏幕大小
     final screenWidth = MediaQuery.of(context).size.width;
-    final effectiveWidth = widget.width < screenWidth ? widget.width : screenWidth;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final effectiveWidth = (widget.width * 2.5).clamp(600.0, screenWidth * 0.9); // 大幅增大控件宽度
+    final effectiveHeight = (widget.height ?? 300).clamp(280.0, screenHeight * 0.5); // 大幅增大控件高度
     
     // 获取文本样式
     final textStyle = TextStyle(
@@ -115,6 +127,20 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
       fontSize: widget.fontSize,
       fontWeight: widget.isBold ? FontWeight.w600 : FontWeight.normal,
       letterSpacing: 0.5,
+    );
+    
+    final titleStyle = TextStyle(
+      color: widget.textColor.withOpacity(widget.textOpacity * 0.9),
+      fontSize: widget.fontSize + 2,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.3,
+    );
+    
+    final subtitleStyle = TextStyle(
+      color: widget.textColor.withOpacity(widget.textOpacity * 0.8),
+      fontSize: widget.fontSize - 2,
+      fontWeight: FontWeight.w500,
+      letterSpacing: 0.2,
     );
     
     return Stack(
@@ -130,8 +156,9 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
             type: MaterialType.transparency,
             child: GlassmorphicContainer(
               width: effectiveWidth,
-              height: widget.height ?? 100, // 使用固定高度
-              borderRadius: widget.borderRadius,blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
+              height: effectiveHeight,
+              borderRadius: widget.borderRadius,
+              blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
               alignment: Alignment.center,
               border: widget.borderWidth,
               linearGradient: LinearGradient(
@@ -151,64 +178,197 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                 ],
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 20.0),
-                child: ScrollConfiguration(
-                  // 隐藏滚动条
-                  behavior: ScrollConfiguration.of(context).copyWith(
-                    scrollbars: false,
-                  ),
-                  child: widget.messages.isEmpty 
-                      ? const SizedBox() // 如果没有消息，显示空白
-                      : ListView.builder(
-                          controller: _scrollController,
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: widget.messages.length,
-                          itemBuilder: (context, index) {
-                            // 最新的消息使用打字机效果并添加闪烁光标
-                            if (index == widget.messages.length - 1) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 4.0),
-                                child: Stack(
-                                  children: [
-                                    // 打字机文本
-                                    TypingText(
-                                      messages: [widget.messages[index]],
-                                      style: textStyle,
-                                      typingSpeed: const Duration(milliseconds: 50),
-                                      deleteSpeed: const Duration(milliseconds: 30),
-                                      pauseDuration: const Duration(seconds: 1),
-                                      onTextChanged: _scrollToBottom, // 每次文本变化时滚动到底部
-                                    ),
-                                    // 闪烁的下划线光标
-                                    Positioned.fill(
-                                      child: TypingTextCursor(
-                                        text: widget.messages[index],
-                                        style: textStyle,
-                                        cursorAnimation: _cursorAnimation,
-                                        cursorColor: widget.textColor.withOpacity(widget.textOpacity),
-                                        typingSpeed: const Duration(milliseconds: 50),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                            // 历史消息直接显示
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 4.0),
-                              child: Text(
-                                widget.messages[index],
-                                style: textStyle,
-                              ),
-                            );
-                          },
+                padding: const EdgeInsets.all(20.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 左侧：媒体信息区域 (1/3 宽度)
+                    Expanded(
+                      flex: 1,
+                      child: _buildMediaInfoSection(titleStyle, subtitleStyle),
+                    ),
+                    // 分隔线
+                    Container(
+                      width: 1,
+                      margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            widget.textColor.withOpacity(0.1),
+                            widget.textColor.withOpacity(0.3),
+                            widget.textColor.withOpacity(0.1),
+                          ],
                         ),
+                      ),
+                    ),
+                    // 右侧：加载信息区域 (2/3 宽度)
+                    Expanded(
+                      flex: 2,
+                      child: _buildLoadingMessagesSection(textStyle),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  // 构建左侧媒体信息区域
+  Widget _buildMediaInfoSection(TextStyle titleStyle, TextStyle subtitleStyle) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 封面图片占位
+        if (widget.coverImageUrl != null)
+          Container(
+            width: 120,
+            height: 160, // 3:4 竖屏比例
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: widget.textColor.withOpacity(0.1),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                widget.coverImageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: widget.textColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.movie,
+                      size: 50,
+                      color: widget.textColor.withOpacity(0.5),
+                    ),
+                  );
+                },
+              ),
+            ),
+          )
+        else
+          Container(
+            width: 120,
+            height: 160, // 3:4 竖屏比例
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: widget.textColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.movie,
+              size: 50,
+              color: widget.textColor.withOpacity(0.5),
+            ),
+          ),
+        
+        // 动画名称
+        if (widget.animeTitle != null && widget.animeTitle!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              widget.animeTitle!,
+              style: titleStyle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        
+        // 集数标题
+        if (widget.episodeTitle != null && widget.episodeTitle!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              widget.episodeTitle!,
+              style: subtitleStyle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        
+        // 文件名（如果没有动画名时显示）
+        if ((widget.animeTitle == null || widget.animeTitle!.isEmpty) && 
+            widget.fileName != null && widget.fileName!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              widget.fileName!,
+              style: titleStyle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+    );
+  }
+
+  // 构建右侧加载消息区域
+  Widget _buildLoadingMessagesSection(TextStyle textStyle) {
+    return ScrollConfiguration(
+      // 隐藏滚动条
+      behavior: ScrollConfiguration.of(context).copyWith(
+        scrollbars: false,
+      ),
+      child: widget.messages.isEmpty 
+          ? Center(
+              child: Text(
+                '正在加载...',
+                style: textStyle,
+              ),
+            )
+          : ListView.builder(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              itemCount: widget.messages.length,
+              itemBuilder: (context, index) {
+                // 最新的消息使用打字机效果并添加闪烁光标
+                if (index == widget.messages.length - 1) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4.0),
+                    child: Stack(
+                      children: [
+                        // 打字机文本
+                        TypingText(
+                          messages: [widget.messages[index]],
+                          style: textStyle,
+                          typingSpeed: const Duration(milliseconds: 50),
+                          deleteSpeed: const Duration(milliseconds: 30),
+                          pauseDuration: const Duration(seconds: 1),
+                          onTextChanged: _scrollToBottom, // 每次文本变化时滚动到底部
+                        ),
+                        // 闪烁的下划线光标
+                        Positioned.fill(
+                          child: TypingTextCursor(
+                            text: widget.messages[index],
+                            style: textStyle,
+                            cursorAnimation: _cursorAnimation,
+                            cursorColor: widget.textColor.withOpacity(widget.textOpacity),
+                            typingSpeed: const Duration(milliseconds: 50),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                // 历史消息直接显示
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
+                  child: Text(
+                    widget.messages[index],
+                    style: textStyle,
+                  ),
+                );
+              },
+            ),
     );
   }
 }

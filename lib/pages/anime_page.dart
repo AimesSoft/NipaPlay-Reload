@@ -226,7 +226,12 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                 ),
                 if (_loadingVideo)
                   Positioned.fill(
-                    child: LoadingOverlay(messages: _loadingMessages),
+                    child: LoadingOverlay(
+                      messages: _loadingMessages,
+                      animeTitle: null,
+                      episodeTitle: null,
+                      fileName: null,
+                    ),
                   ),
               ],
             );
