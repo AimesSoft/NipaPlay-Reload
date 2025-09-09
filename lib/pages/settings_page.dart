@@ -17,6 +17,7 @@ import 'package:nipaplay/pages/settings/remote_media_library_page.dart'; // 导�
 import 'package:nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
 import 'package:nipaplay/pages/settings/ui_theme_page.dart'; // 导入UI主题设置页面
 import 'package:nipaplay/pages/settings/watch_history_page.dart';
+import 'package:nipaplay/pages/settings/backup_restore_page.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -156,6 +157,18 @@ style: TextStyle(
               _handleItemTap(const WatchHistoryPage(), "观看记录");
             },
           ),
+          if (!globals.isPhone)
+            ListTile(
+              title: const Text("备份与恢复",
+                  locale:Locale("zh-Hans","zh"),
+style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+              trailing: const Icon(Ionicons.chevron_forward_outline,
+                  color: Colors.white),
+              onTap: () {
+                _handleItemTap(const BackupRestorePage(), "备份与恢复");
+              },
+            ),
           ListTile(
             title: const Text("播放器",
                 locale:Locale("zh-Hans","zh"),
