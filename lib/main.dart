@@ -28,6 +28,7 @@ import 'package:flutter/services.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
@@ -396,6 +397,12 @@ void main(List<String> args) async {
     
     // 初始化观看记录管理器
     WatchHistoryManager.initialize(),
+    
+    // 初始化自动同步服务（仅桌面端）
+    if (globals.isDesktop) 
+      AutoSyncService.instance.initialize()
+    else 
+      Future.value(),
   ]).then((results) async {
     // BangumiService初始化完成后，检查并刷新缺少标签的缓存
     Future.microtask(() async {

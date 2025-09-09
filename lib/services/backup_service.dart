@@ -329,6 +329,69 @@ class BackupService {
     }
   }
 
+  /// 创建备份数据（供自动同步服务使用）
+  Future<Uint8List> createBackupData(List<WatchHistoryItem> historyItems) async {
+    return _createBackupData(historyItems);
+  }
+  
+  /// 静默导入观看历史（供自动同步使用，不显示UI提示）
+  Future<int> importWatchHistorySilent(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        return 0;
+      }
+
+      // 读取并解析备份数据
+      final bytes = await file.readAsBytes();
+      final historyItems = await _parseBackupData(bytes);
+      
+      if (historyItems.isEmpty) {
+        return 0;
+      }
+
+      final database = WatchHistoryDatabase.instance;
+      int restoredCount = 0;
+      
+      for (final item in historyItems) {
+        try {
+          if (await _isFileExists(item)) {
+            final existingItem = await database.getHistoryByFilePath(item.filePath);
+            
+            // 只有当备份的记录更新时才恢复
+            if (existingItem == null || item.lastWatchTime.isAfter(existingItem.lastWatchTime)) {
+              final finalThumbnailPath = item.thumbnailPath ?? existingItem?.thumbnailPath;
+              
+              final db = await database.database;
+              await db.update(
+                'watch_history',
+                {
+                  'watch_progress': item.watchProgress,
+                  'last_position': item.lastPosition,
+                  'duration': item.duration,
+                  'last_watch_time': item.lastWatchTime.toIso8601String(),
+                  'thumbnail_path': finalThumbnailPath,
+                },
+                where: 'file_path = ?',
+                whereArgs: [item.filePath],
+              );
+              
+              await _updateSharedPreferencesPosition(item.filePath, item.lastPosition);
+              restoredCount++;
+            }
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      return restoredCount;
+    } catch (e) {
+      debugPrint('静默导入观看历史失败: $e');
+      return 0;
+    }
+  }
+
   /// 检查文件是否存在
   Future<bool> _isFileExists(WatchHistoryItem item) async {
     try {

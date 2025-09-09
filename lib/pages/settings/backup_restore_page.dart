@@ -4,6 +4,8 @@ import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/services/backup_service.dart';
+import 'package:nipaplay/services/auto_sync_service.dart';
+import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -17,6 +19,24 @@ class BackupRestorePage extends StatefulWidget {
 
 class _BackupRestorePageState extends State<BackupRestorePage> {
   bool _isProcessing = false;
+  bool _autoSyncEnabled = false;
+  String? _autoSyncPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAutoSyncSettings();
+  }
+
+  Future<void> _loadAutoSyncSettings() async {
+    final enabled = await AutoSyncSettings.isEnabled();
+    final path = await AutoSyncSettings.getSyncPath();
+    
+    setState(() {
+      _autoSyncEnabled = enabled;
+      _autoSyncPath = path;
+    });
+  }
 
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
@@ -26,6 +46,78 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     
     // 如果是错误消息，也可以考虑使用不同的颜色或样式
     // 这里暂时使用同样的样式，因为 BlurSnackBar 没有错误样式参数
+  }
+
+  Future<void> _toggleAutoSync(bool enabled) async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      if (enabled && _autoSyncPath == null) {
+        // 需要先选择路径
+        await _selectAutoSyncPath();
+        return;
+      }
+
+      if (enabled) {
+        await AutoSyncService.instance.enable(_autoSyncPath!);
+        _showMessage('自动同步已启用');
+      } else {
+        await AutoSyncService.instance.disable();
+        _showMessage('自动同步已禁用');
+      }
+
+      await _loadAutoSyncSettings();
+    } catch (e) {
+      _showMessage('设置自动同步失败: $e', isError: true);
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
+  }
+
+  Future<void> _selectAutoSyncPath() async {
+    final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    
+    if (selectedDirectory == null) {
+      _showMessage('未选择同步路径');
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      await AutoSyncService.instance.enable(selectedDirectory);
+      _showMessage('自动同步已启用，路径: $selectedDirectory');
+      await _loadAutoSyncSettings();
+    } catch (e) {
+      _showMessage('设置同步路径失败: $e', isError: true);
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
+  }
+
+  Future<void> _manualSync() async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      await AutoSyncService.instance.manualSync();
+      _showMessage('手动同步完成');
+    } catch (e) {
+      _showMessage('手动同步失败: $e', isError: true);
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
   }
 
   Future<void> _backupHistory() async {
@@ -131,13 +223,63 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
+          // 自动同步设置卡片
           SettingsCard(
             child: Column(
               children: [
                 Container(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: const Text(
-                    '备份与恢复',
+                    '自动云同步',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                SettingsItem.toggle(
+                  title: '启用自动同步',
+                  subtitle: _autoSyncEnabled 
+                    ? '观看进度会自动同步到本地路径或云端' 
+                    : '启用后可实现多设备同步',
+                  enabled: !_isProcessing,
+                  value: _autoSyncEnabled,
+                  onChanged: _toggleAutoSync,
+                  icon: Icons.cloud_sync,
+                ),
+                if (_autoSyncEnabled && _autoSyncPath != null) ...[
+                  const SizedBox(height: 8),
+                  SettingsItem.button(
+                    title: '同步路径',
+                    subtitle: _autoSyncPath!.length > 50 
+                        ? '...${_autoSyncPath!.substring(_autoSyncPath!.length - 50)}'
+                        : _autoSyncPath!,
+                    enabled: !_isProcessing,
+                    onTap: _selectAutoSyncPath,
+                    icon: Icons.folder,
+                  ),
+                  const SizedBox(height: 8),
+                  SettingsItem.button(
+                    title: '立即同步',
+                    subtitle: '手动执行一次同步',
+                    enabled: !_isProcessing,
+                    onTap: _manualSync,
+                    icon: Icons.sync,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // 手动备份恢复卡片
+          SettingsCard(
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: const Text(
+                    '手动备份与恢复',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -178,7 +320,22 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
                 ),
                 SizedBox(height: 16),
                 Text(
-                  '• 备份文件格式：.nph (NipaPlay History)',
+                  '• 自动同步：启用后观看进度会自动保存到指定路径',
+                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '• 云同步：同步路径可以是SMB/NFS等网络位置',
+                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '• 固定文件：自动同步使用固定文件名 nipaplay_auto_sync.nph',
+                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '• 手动备份：支持自定义文件名的一次性备份',
                   style: TextStyle(fontSize: 14, color: Colors.white70),
                 ),
                 SizedBox(height: 8),

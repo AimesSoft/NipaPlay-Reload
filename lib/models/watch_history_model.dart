@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'watch_history_database.dart'; // 添加引入数据库类
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/services/auto_sync_service.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class WatchHistoryItem {
   String filePath;
@@ -518,6 +520,18 @@ class WatchHistoryManager {
         
         _cachedItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
         _lastWriteTime = DateTime.now();
+        
+        // 触发自动同步（仅桌面端）
+        if (globals.isDesktop) {
+          Future.microtask(() async {
+            try {
+              await AutoSyncService.instance.manualSync();
+            } catch (e) {
+              debugPrint('自动同步触发失败: $e');
+            }
+          });
+        }
+        
         return;
       } catch (e) {
         debugPrint('使用数据库更新历史记录失败: $e');
