@@ -202,11 +202,33 @@ class _ControlBarSettingsMenuState extends State<ControlBarSettingsMenu> {
                     ),
                     const SizedBox(height: 4),
                     const SettingsHintText('显示底部细进度条'),
+                    const SizedBox(height: 20),
                     
+                    // 弹幕密度曲线开关
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          '弹幕密度曲线',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Switch(
+                          value: widget.videoState.showDanmakuDensityChart,
+                          onChanged: (value) {
+                            widget.videoState.setShowDanmakuDensityChart(value);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const SettingsHintText('显示播放器底部弹幕密度曲线'),
                     if (videoState.minimalProgressBarEnabled) ...[
                       const SizedBox(height: 16),
                       const Text(
-                        '进度条颜色',
+                        '进度条和曲线颜色',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -226,6 +248,7 @@ class _ControlBarSettingsMenuState extends State<ControlBarSettingsMenu> {
                         ],
                       ),
                     ],
+                    
                   ],
                 ),
               ),

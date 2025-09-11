@@ -128,6 +128,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _minimalProgressBarEnabled = false; // 默认关闭
   static const String _minimalProgressBarColorKey = 'minimal_progress_bar_color';
   int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
+  static const String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
+  bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
   static const String _danmakuOpacityKey = 'danmaku_opacity';
   double _danmakuOpacity = 1.0; // 默认透明度
   static const String _danmakuVisibleKey = 'danmaku_visible';
@@ -304,6 +306,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get controlBarHeight => _controlBarHeight;
   bool get minimalProgressBarEnabled => _minimalProgressBarEnabled;
   Color get minimalProgressBarColor => Color(_minimalProgressBarColor);
+  bool get showDanmakuDensityChart => _showDanmakuDensityChart;
   double get danmakuOpacity => _danmakuOpacity;
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;
@@ -2880,6 +2883,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     final prefs = await SharedPreferences.getInstance();
     _minimalProgressBarEnabled = prefs.getBool(_minimalProgressBarEnabledKey) ?? false;
     _minimalProgressBarColor = prefs.getInt(_minimalProgressBarColorKey) ?? 0xFFFF7274;
+    _showDanmakuDensityChart = prefs.getBool(_showDanmakuDensityChartKey) ?? false;
     notifyListeners();
   }
 
@@ -2904,6 +2908,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _minimalProgressBarColor = color;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_minimalProgressBarColorKey, color);
+    notifyListeners();
+  }
+
+  // 设置弹幕密度图显示状态
+  Future<void> setShowDanmakuDensityChart(bool show) async {
+    _showDanmakuDensityChart = show;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showDanmakuDensityChartKey, show);
     notifyListeners();
   }
 

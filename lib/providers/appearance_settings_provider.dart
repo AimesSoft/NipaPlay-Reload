@@ -12,16 +12,19 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _enablePageAnimationKey = 'enable_page_animation';
   static const String _widgetBlurEffectKey = 'enable_widget_blur_effect';
   static const String _animeCardActionKey = 'anime_card_action';
+  static const String _showDanmakuDensityKey = 'show_danmaku_density_chart';
 
   // 默认值根据平台决定
   late bool _enablePageAnimation;
   late bool _enableWidgetBlurEffect;
   late AnimeCardAction _animeCardAction;
+  late bool _showDanmakuDensityChart;
 
   // 获取设置值
   bool get enablePageAnimation => _enablePageAnimation;
   bool get enableWidgetBlurEffect => _enableWidgetBlurEffect;
   AnimeCardAction get animeCardAction => _animeCardAction;
+  bool get showDanmakuDensityChart => _showDanmakuDensityChart;
 
   // 构造函数
   AppearanceSettingsProvider() {
@@ -29,6 +32,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _enablePageAnimation = _getDefaultAnimationValue();
     _enableWidgetBlurEffect = true; // 默认开启控件毛玻璃效果
     _animeCardAction = AnimeCardAction.synopsis; // 默认行为是显示简介
+    _showDanmakuDensityChart = true; // 默认显示弹幕密度曲线图
     _loadSettings();
   }
 
@@ -56,6 +60,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       // 从存储加载时使用平台相关的默认值
       _enablePageAnimation = prefs.getBool(_enablePageAnimationKey) ?? _getDefaultAnimationValue();
       _enableWidgetBlurEffect = prefs.getBool(_widgetBlurEffectKey) ?? true;
+      _showDanmakuDensityChart = prefs.getBool(_showDanmakuDensityKey) ?? true;
       
       // 加载番剧卡片点击行为设置
       final actionIndex = prefs.getInt(_animeCardActionKey);
@@ -113,6 +118,21 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setInt(_animeCardActionKey, value.index);
     } catch (e) {
       debugPrint('保存番剧卡片点击行为设置时出错: $e');
+    }
+  }
+
+  // 设置是否显示弹幕密度曲线图
+  Future<void> setShowDanmakuDensityChart(bool value) async {
+    if (_showDanmakuDensityChart == value) return;
+
+    _showDanmakuDensityChart = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_showDanmakuDensityKey, value);
+    } catch (e) {
+      debugPrint('保存弹幕密度图设置时出错: $e');
     }
   }
 } 

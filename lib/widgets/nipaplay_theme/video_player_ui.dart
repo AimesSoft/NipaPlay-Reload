@@ -16,6 +16,7 @@ import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
 import 'right_edge_hover_menu.dart';
 import 'minimal_progress_bar.dart';
+import 'danmaku_density_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 
@@ -451,6 +452,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                             
                             // 底部1像素白色进度条
                             const MinimalProgressBar(),
+                            
+                            // 弹幕密度曲线
+                            const DanmakuDensityBar(),
                           ],
                         )
                       : Focus(
@@ -535,6 +539,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
                               
                               // 底部1像素白色进度条
                               const MinimalProgressBar(),
+                              
+                              // 弹幕密度曲线
+                              const DanmakuDensityBar(),
                             ],
                           ),
                         ),
