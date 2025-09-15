@@ -14,6 +14,7 @@ import 'package:http/http.dart' as http;
 import 'globals.dart' as globals;
 import 'dart:convert';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/auto_sync_service.dart'; // 导入自动云同步服务
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
@@ -2163,6 +2164,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         syncService.dispose();
       } catch (e) {
         debugPrint('Emby播放销毁同步失败: $e');
+      }
+    }
+    
+    // 退出视频播放时触发自动云同步
+    if (_currentVideoPath != null) {
+      try {
+        // 使用Future.microtask在下一个事件循环中异步执行，避免dispose中的异步问题
+        Future.microtask(() async {
+          await AutoSyncService.instance.syncOnPlaybackEnd();
+          debugPrint('退出视频时云同步成功');
+        });
+      } catch (e) {
+        debugPrint('退出视频时云同步失败: $e');
       }
     }
     
@@ -4344,6 +4358,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 等待截图完成
       await Future.delayed(const Duration(milliseconds: 200));
       
+      // 退出视频播放时触发自动云同步
+      if (_currentVideoPath != null) {
+        try {
+          await AutoSyncService.instance.syncOnPlaybackEnd();
+          debugPrint('退出视频播放时云同步成功');
+        } catch (e) {
+          debugPrint('退出视频播放时云同步失败: $e');
+        }
+      }
+      
       return true; // 允许返回
     }
   }
@@ -4967,7 +4991,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 🔥 关键优化：使用Ticker代替Timer.periodic
     // Ticker会与显示刷新率同步，更精确地控制帧率
   // 如未创建过，则创建Ticker；注意此Ticker不受TickerMode影响（非Widget上下文），需手动启停
-  _uiUpdateTicker ??= Ticker((elapsed) {
+  _uiUpdateTicker ??= Ticker((elapsed) async {
       // 计算从上次更新到现在的时间增量
       final nowTime = DateTime.now().millisecondsSinceEpoch;
       final deltaTime = nowTime - _lastTickTime;
@@ -5038,6 +5062,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 // Emby同步：如果是Emby流媒体，报告播放结束
                 if (_currentVideoPath!.startsWith('emby://')) {
                   _handleEmbyPlaybackEnd(_currentVideoPath!);
+                }
+                
+                // 播放结束时触发自动云同步
+                try {
+                  await AutoSyncService.instance.syncOnPlaybackEnd();
+                } catch (e) {
+                  debugPrint('播放结束时云同步失败: $e');
                 }
                 
                 // 触发自动播放下一话

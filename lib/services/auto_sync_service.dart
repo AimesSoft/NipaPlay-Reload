@@ -93,19 +93,36 @@ class AutoSyncService {
     
     await _performSync();
   }
+
+  /// 在播放结束时触发同步
+  Future<void> syncOnPlaybackEnd() async {
+    if (_isSyncing) {
+      debugPrint('同步正在进行中，跳过播放结束同步');
+      return;
+    }
+    
+    final enabled = await AutoSyncSettings.isEnabled();
+    if (!enabled) {
+      debugPrint('自动同步未启用，跳过播放结束同步');
+      return;
+    }
+    
+    debugPrint('播放结束，开始执行云同步...');
+    await _performSync();
+  }
   
-  /// 启动自动同步定时器
+  /// 启动自动同步定时器（已禁用定时同步，改为播放结束时同步）
   Future<void> _startAutoSync() async {
     _stopAutoSync(); // 先停止现有的定时器
     
-    // 每30秒检查一次是否需要同步
-    _syncTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
-      if (!_isSyncing) {
-        await _performSync();
-      }
-    });
+    // 注释掉定时同步，改为播放结束时同步
+    // _syncTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+    //   if (!_isSyncing) {
+    //     await _performSync();
+    //   }
+    // });
     
-    debugPrint('自动同步定时器已启动');
+    debugPrint('自动同步已启动，但定时器已禁用，将在播放结束时同步');
   }
   
   /// 停止自动同步定时器
