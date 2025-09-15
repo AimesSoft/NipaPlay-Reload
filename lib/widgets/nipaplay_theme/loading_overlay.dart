@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals; // 添加globals导入
 import 'typing_text.dart'; // 重新导入TypingText
 import 'dart:async'; // 添加Timer的导入
+import 'dart:math' as math; // 添加math导入用于max/min计算
 
 class LoadingOverlay extends StatefulWidget {
   final List<String> messages;
@@ -115,11 +117,17 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    // 计算比例尺寸时考虑屏幕大小
+    // 计算比例尺寸时考虑屏幕大小，修复clamp参数顺序问题
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final effectiveWidth = (widget.width * 2.5).clamp(600.0, screenWidth * 0.9); // 大幅增大控件宽度
-    final effectiveHeight = (widget.height ?? 300).clamp(280.0, screenHeight * 0.5); // 大幅增大控件高度
+    
+    // 手机使用较小的宽度，平板和桌面使用较大的宽度
+    final targetWidth = globals.isPhone && !globals.isTablet 
+        ? math.min(screenWidth * 0.9, 400.0) // 手机上较小宽度
+        : math.min(screenWidth * 0.9, (widget.width * 2.5).clamp(300.0, 800.0)); // 平板/桌面较大宽度
+    
+    final effectiveWidth = math.max(300.0, targetWidth);
+    final effectiveHeight = math.max(200.0, math.min(screenHeight * 0.5, widget.height ?? 300));
     
     // 获取文本样式
     final textStyle = TextStyle(
@@ -179,37 +187,67 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
               ),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 左侧：媒体信息区域 (1/3 宽度)
-                    Expanded(
-                      flex: 1,
-                      child: _buildMediaInfoSection(titleStyle, subtitleStyle),
-                    ),
-                    // 分隔线
-                    Container(
-                      width: 1,
-                      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            widget.textColor.withOpacity(0.1),
-                            widget.textColor.withOpacity(0.3),
-                            widget.textColor.withOpacity(0.1),
-                          ],
-                        ),
+                child: globals.isPhone && !globals.isTablet 
+                    ? Column( // 手机上使用上下双行布局
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // 上方：媒体信息区域
+                          _buildMediaInfoSection(titleStyle, subtitleStyle),
+                          // 分隔线
+                          Container(
+                            height: 1,
+                            width: double.infinity,
+                            margin: const EdgeInsets.symmetric(vertical: 16.0),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [
+                                  widget.textColor.withOpacity(0.1),
+                                  widget.textColor.withOpacity(0.3),
+                                  widget.textColor.withOpacity(0.1),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // 下方：加载信息区域
+                          Expanded(
+                            child: _buildLoadingMessagesSection(textStyle),
+                          ),
+                        ],
+                      )
+                    : Row( // 平板和桌面保持双栏布局
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 左侧：媒体信息区域 (1/3 宽度)
+                          Expanded(
+                            flex: 1,
+                            child: _buildMediaInfoSection(titleStyle, subtitleStyle),
+                          ),
+                          // 分隔线
+                          Container(
+                            width: 1,
+                            margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  widget.textColor.withOpacity(0.1),
+                                  widget.textColor.withOpacity(0.3),
+                                  widget.textColor.withOpacity(0.1),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // 右侧：加载信息区域 (2/3 宽度)
+                          Expanded(
+                            flex: 2,
+                            child: _buildLoadingMessagesSection(textStyle),
+                          ),
+                        ],
                       ),
-                    ),
-                    // 右侧：加载信息区域 (2/3 宽度)
-                    Expanded(
-                      flex: 2,
-                      child: _buildLoadingMessagesSection(textStyle),
-                    ),
-                  ],
-                ),
               ),
             ),
           ),
@@ -220,21 +258,46 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
 
   // 构建左侧媒体信息区域
   Widget _buildMediaInfoSection(TextStyle titleStyle, TextStyle subtitleStyle) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 封面图片占位
-        if (widget.coverImageUrl != null)
-          Container(
-            width: 120,
-            height: 160, // 3:4 竖屏比例
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              color: widget.textColor.withOpacity(0.1),
-            ),
-            child: ClipRRect(
+    // 手机上使用横向布局，平板/桌面保持竖向布局
+    if (globals.isPhone && !globals.isTablet) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 封面图片（手机上较小）
+          _buildCoverImage(80, 106, titleStyle), // 3:4 比例，但更小
+          const SizedBox(width: 16),
+          // 文字信息
+          Expanded(
+            child: _buildTextInfo(titleStyle, subtitleStyle),
+          ),
+        ],
+      );
+    } else {
+      // 平板/桌面使用原来的竖向布局
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCoverImage(120, 160, titleStyle), // 原来的尺寸
+          _buildTextInfo(titleStyle, subtitleStyle),
+        ],
+      );
+    }
+  }
+
+  // 构建封面图片
+  Widget _buildCoverImage(double width, double height, TextStyle titleStyle) {
+    return Container(
+      width: width,
+      height: height,
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: widget.textColor.withOpacity(0.1),
+      ),
+      child: widget.coverImageUrl != null
+          ? ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.network(
                 widget.coverImageUrl!,
@@ -247,30 +310,27 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                     ),
                     child: Icon(
                       Icons.movie,
-                      size: 50,
+                      size: width * 0.4,
                       color: widget.textColor.withOpacity(0.5),
                     ),
                   );
                 },
               ),
-            ),
-          )
-        else
-          Container(
-            width: 120,
-            height: 160, // 3:4 竖屏比例
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: widget.textColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
+            )
+          : Icon(
               Icons.movie,
-              size: 50,
+              size: width * 0.4,
               color: widget.textColor.withOpacity(0.5),
             ),
-          ),
-        
+    );
+  }
+
+  // 构建文字信息
+  Widget _buildTextInfo(TextStyle titleStyle, TextStyle subtitleStyle) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start, // 都是左对齐，无需判断
+      children: [
         // 动画名称
         if (widget.animeTitle != null && widget.animeTitle!.isNotEmpty)
           Padding(
