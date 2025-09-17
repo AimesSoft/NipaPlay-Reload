@@ -600,8 +600,8 @@ class EmbyService {
       'X-Emby-Authorization': authHeader,
     };
     
-    // 设置默认超时时间为10秒
-    final requestTimeout = timeout ?? const Duration(seconds: 10);
+    // 设置默认超时时间为30秒
+    final requestTimeout = timeout ?? const Duration(seconds: 30);
     
     http.Response response;
     try {
@@ -651,7 +651,7 @@ class EmbyService {
       'X-Emby-Authorization': authHeader,
     };
     
-    final requestTimeout = timeout ?? const Duration(seconds: 10);
+  final requestTimeout = timeout ?? const Duration(seconds: 30);
     
     Exception? lastError;
     

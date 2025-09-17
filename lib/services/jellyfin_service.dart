@@ -1699,8 +1699,8 @@ class JellyfinService {
       headers['Content-Type'] = 'application/json';
     }
     
-    // 设置默认超时时间为10秒
-    final requestTimeout = timeout ?? const Duration(seconds: 10);
+    // 设置默认超时时间为30秒（弱网/公网/隧道场景更稳妥）
+    final requestTimeout = timeout ?? const Duration(seconds: 30);
     
     http.Response response;
     try {
@@ -1754,7 +1754,7 @@ class JellyfinService {
       headers['Content-Type'] = 'application/json';
     }
     
-    final requestTimeout = timeout ?? const Duration(seconds: 10);
+  final requestTimeout = timeout ?? const Duration(seconds: 30);
     
     Exception? lastError;
     
