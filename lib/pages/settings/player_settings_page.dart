@@ -14,6 +14,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/utils/player_kernel_manager.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -48,7 +49,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     super.didChangeDependencies();
     final playerState = Provider.of<VideoPlayerState>(context, listen: false);
     _decoderManager = playerState.decoderManager;
-    _playerCoreName = playerState.playerCoreName;
+    // 异步获取内核名称
+    _loadCurrentPlayerKernelName();
     
     if (!kIsWeb) {
       _getAvailableDecoders();
@@ -56,6 +58,13 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _loadDecoderSettings();
     _loadPlayerKernelSettings();
     _loadDanmakuRenderEngineSettings();
+  }
+  
+  Future<void> _loadCurrentPlayerKernelName() async {
+    final kernelName = await PlayerKernelManager.getCurrentPlayerKernel();
+    setState(() {
+      _playerCoreName = kernelName;
+    });
   }
 
   Future<void> _loadPlayerKernelSettings() async {

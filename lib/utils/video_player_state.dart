@@ -51,11 +51,13 @@ import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
 // 导入MediaKitPlayerAdapter
-import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 导入弹幕内核工厂
+import '../player_abstraction/player_factory.dart'; // 播放器工厂
+import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 弹幕内核工厂
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
 import 'package:flutter/scheduler.dart'; // 添加Ticker导入
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 import 'hotkey_service.dart'; // Added import for HotkeyService
+import 'player_kernel_manager.dart'; // 导入播放器内核管理器
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -70,9 +72,9 @@ enum PlayerStatus {
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
-  StreamSubscription? _playerKernelChangeSubscription; // 添加播放器内核切换事件订阅
-  StreamSubscription? _danmakuKernelChangeSubscription; // 添加弹幕内核切换事件订阅
   BuildContext? _context;
+  StreamSubscription? _playerKernelChangeSubscription; // 播放器内核切换事件订阅
+  StreamSubscription? _danmakuKernelChangeSubscription; // 弹幕内核切换事件订阅
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
   bool _showControls = true;
@@ -419,8 +421,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 解码器管理器相关的getter
   DecoderManager get decoderManager => _decoderManager;
-
-  // 获取播放器内核名称
+  
+  // 获取播放器内核名称（通过静态方法）
   String get playerCoreName => player.getPlayerKernelName();
   
   // 播放速度相关的getter
@@ -478,15 +480,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 加载跳过时间设置
     await _loadSkipSeconds();
 
-    // 订阅播放器内核切换事件
-    _playerKernelChangeSubscription = PlayerFactory.onKernelChanged.listen((_) {
-      _reinitializePlayer();
-    });
-
-    // 订阅弹幕内核切换事件
-    _danmakuKernelChangeSubscription = DanmakuKernelFactory.onKernelChanged.listen((newKernel) {
-      _reinitializeDanmaku(newKernel);
-    });
+    // 订阅内核切换事件
+    _subscribeToKernelChanges();
 
     // Ensure wakelock is disabled on initialization
     try {
@@ -495,6 +490,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } catch (e) {
       //debugPrint("Error disabling wakelock on init: $e");
     }
+  }
+
+  /// 订阅内核切换事件
+  void _subscribeToKernelChanges() {
+    // 订阅播放器内核切换事件
+    _playerKernelChangeSubscription = PlayerFactory.onKernelChanged.listen((_) {
+      debugPrint('[VideoPlayerState] 收到播放器内核切换事件，执行热切换');
+      PlayerKernelManager.performPlayerKernelHotSwap(this);
+    });
+
+    // 订阅弹幕内核切换事件
+    _danmakuKernelChangeSubscription = DanmakuKernelFactory.onKernelChanged.listen((newKernel) {
+      debugPrint('[VideoPlayerState] 收到弹幕内核切换事件: $newKernel');
+      PlayerKernelManager.performDanmakuKernelHotSwap(this, newKernel);
+    });
   }
 
   Future<void> _loadInitialBrightness() async {
@@ -3244,8 +3254,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> _prebuildGPUDanmakuCharsetIfNeeded() async {
     try {
       // 检查当前是否使用GPU弹幕内核
-      final kernelType = DanmakuKernelFactory.getKernelType();
-      if (kernelType != DanmakuRenderEngine.gpu) {
+      final currentKernel = await PlayerKernelManager.getCurrentDanmakuKernel();
+      if (currentKernel != 'GPU渲染') {
         return; // 不是GPU内核，跳过
       }
       
@@ -5183,112 +5193,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 仅在真正播放时启动Ticker；其他状态保持停止以避免空闲帧
     if (_status == PlayerStatus.playing) {
       _uiUpdateTicker!.start();
-      debugPrint('启动UI更新Ticker（playing），弹幕内核：${DanmakuKernelFactory.getKernelType()}');
+      debugPrint('启动UI更新Ticker（playing）');
     } else {
       _uiUpdateTicker!.stop();
       debugPrint('已准备UI更新Ticker但未启动（status=$_status）');
-    }
-  }
-
-  // 重新初始化播放器（用于切换内核）
-  Future<void> _reinitializePlayer() async {
-    debugPrint('[VideoPlayerState] 接收到内核切换事件，开始重新初始化播放器...');
-
-    // 1. 保存当前播放状态
-    final currentPath = _currentVideoPath;
-    final currentPosition = _position;
-    final currentDuration = _duration;
-    final currentProgress = _progress;
-    final currentVolume = player.volume;
-    final currentPlaybackRate = _playbackRate; // 保存当前播放速度
-    final wasPlaying = _status == PlayerStatus.playing;
-    final historyItem = WatchHistoryItem(
-      filePath: currentPath ?? '',
-      animeName: _animeTitle ?? '',
-      episodeTitle: _episodeTitle,
-      episodeId: _episodeId,
-      animeId: _animeId,
-      lastPosition: currentPosition.inMilliseconds,
-      duration: currentDuration.inMilliseconds,
-      watchProgress: currentProgress,
-      lastWatchTime: DateTime.now(),
-    );
-
-    if (currentPath == null) {
-      debugPrint('[VideoPlayerState] 没有正在播放的视频，无需重新初始化。');
-      // 如果没有视频在播放，只需要创建一个新的播放器实例以备后用
-      player.dispose();
-      player = Player();
-      _subtitleManager.updatePlayer(player);
-      _decoderManager.updatePlayer(player);
-      debugPrint('[VideoPlayerState] 已创建新的空播放器实例。');
-      return;
-    }
-
-    // 2. 释放旧播放器资源
-    await resetPlayer();
-
-    // 3. 创建新的播放器实例（Player()工厂会自动使用新的内核）
-    player = Player();
-    _subtitleManager.updatePlayer(player); // 更新字幕管理器中的播放器实例
-    _decoderManager.updatePlayer(player); // 更新解码器管理器中的播放器实例
-
-    // 4. 重新初始化播放
-    await initializePlayer(currentPath, historyItem: historyItem);
-
-    // 5. 恢复播放状态
-    if (hasVideo) {
-      player.volume = currentVolume;
-      // 恢复播放速度设置
-      if (currentPlaybackRate != 1.0) {
-        player.setPlaybackRate(currentPlaybackRate);
-        debugPrint('[VideoPlayerState] 恢复播放速度设置: ${currentPlaybackRate}x');
-      }
-      seekTo(currentPosition);
-      if (wasPlaying) {
-        play();
-      } else {
-        pause();
-      }
-      debugPrint('[VideoPlayerState] 播放器重新初始化完成，已恢复播放状态。');
-    } else {
-      debugPrint('[VideoPlayerState] 播放器重新初始化完成，但未能恢复播放（可能视频加载失败）。');
-    }
-  }
-
-  // 重新初始化弹幕渲染器
-  void _reinitializeDanmaku(DanmakuRenderEngine newKernel) {
-    debugPrint('接收到弹幕内核切换事件: $newKernel');
-
-    // 更新系统资源监视器中的状态
-    SystemResourceMonitor().updateDanmakuKernelType();
-    
-    // 重新创建弹幕控制器
-    danmakuController = _createDanmakuController(newKernel);
-    
-    // 重新加载当前弹幕数据
-    if (_danmakuList.isNotEmpty) {
-      danmakuController?.loadDanmaku(_danmakuList);
-      debugPrint('已将 ${_danmakuList.length} 条弹幕重新加载到新的弹幕控制器');
-    }
-
-    // 通知UI刷新，以便DanmakuOverlay可以重建
-    notifyListeners();
-  }
-
-  /// 创建弹幕控制器
-  dynamic _createDanmakuController(DanmakuRenderEngine kernelType) {
-    // 根据内核类型创建不同的弹幕控制器
-    switch (kernelType) {
-      case DanmakuRenderEngine.cpu:
-        // 返回CPU弹幕的控制器（如果需要）
-        // 假设这里返回一个通用的控制器或null
-        return null;
-      case DanmakuRenderEngine.gpu:
-        // GPU渲染在Widget层处理，这里不直接创建控制器
-        return null;
-      default:
-        return null;
     }
   }
 

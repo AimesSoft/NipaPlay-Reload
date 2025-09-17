@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'base_settings_menu.dart';
 import 'settings_hint_text.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -21,10 +22,12 @@ class PlaybackInfoMenu extends StatefulWidget {
 class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
   Map<String, dynamic>? _asyncDetailedInfo; // 缓存一次性异步获取的详细信息
   Map<String, dynamic>? _serverMeta; // 缓存服务器媒体元数据（流媒体时）
+  String _playerKernelName = 'Unknown'; // 缓存播放器内核名称
 
   @override
   void initState() {
     super.initState();
+    _loadPlayerKernelName(); // 预加载内核名称
     // 首帧后异步拉取详细信息（尤其是 mpv 的属性需要 await）
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final videoState = context.read<VideoPlayerState>();
@@ -53,6 +56,20 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
         } catch (_) {}
       }
     });
+  }
+  
+  Future<void> _loadPlayerKernelName() async {
+    try {
+      final kernelName = await PlayerKernelManager.getCurrentPlayerKernel();
+      if (mounted) {
+        setState(() {
+          _playerKernelName = kernelName;
+        });
+      }
+    } catch (e) {
+      // 如果获取失败，保持默认值
+      _playerKernelName = 'Unknown';
+    }
   }
   @override
   Widget build(BuildContext context) {
@@ -225,7 +242,7 @@ style: TextStyle(
   List<InfoItem> _getVideoInfo(VideoPlayerState videoState) {
     final mediaInfo = videoState.player.mediaInfo;
     final videoStreams = mediaInfo.video;
-  final playerKernelName = videoState.playerCoreName;
+    final playerKernelName = _playerKernelName; // 使用缓存的内核名称
     
     if (videoStreams == null || videoStreams.isEmpty) {
       return [
@@ -335,7 +352,7 @@ style: TextStyle(
   List<InfoItem> _getAudioInfo(VideoPlayerState videoState) {
     final mediaInfo = videoState.player.mediaInfo;
     final audioStreams = mediaInfo.audio;
-    final playerKernelName = videoState.playerCoreName;
+    final playerKernelName = _playerKernelName; // 使用缓存的内核名称
     
     if (audioStreams == null || audioStreams.isEmpty) {
       return [
