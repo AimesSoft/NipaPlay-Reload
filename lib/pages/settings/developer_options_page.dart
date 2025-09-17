@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
+// 证书相关的主机快捷信任按钮应用户要求移除，仅保留全局开关
 
 /// 开发者选项设置页面
 class DeveloperOptionsPage extends StatelessWidget {
@@ -23,6 +24,21 @@ class DeveloperOptionsPage extends StatelessWidget {
       builder: (context, devOptions, child) {
         return ListView(
           children: [
+            // 危险：全局允许无效/自签名证书（仅 IO 平台生效）
+            SettingsItem.toggle(
+              title: '允许自签名证书（全局）',
+              subtitle: '仅桌面/Android/iOS生效，Web无效。极度危险，仅在内网或调试时开启。',
+              icon: Ionicons.alert_circle_outline,
+              value: devOptions.allowInvalidCertsGlobal,
+              onChanged: (bool value) async {
+                await devOptions.setAllowInvalidCertsGlobal(value);
+                // 立即反馈
+                final status = value ? '已开启（不安全）' : '已关闭（默认安全）';
+                BlurSnackBar.show(context, '自签名证书全局开关：$status');
+              },
+            ),
+
+            const Divider(color: Colors.white12, height: 1),
             // 显示系统资源监控开关（所有平台可用）
             SettingsItem.toggle(
               title: '显示系统资源监控',

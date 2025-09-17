@@ -61,6 +61,7 @@ import 'utils/shortcut_tooltip_manager.dart';
 import 'utils/hotkey_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
+import 'package:nipaplay/services/http_client_initializer.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -70,6 +71,9 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 安装 HTTP 客户端覆盖（自签名证书信任规则），尽早生效
+  await HttpClientInitializer.install();
 
   // 初始化hotkey_manager
   if (globals.isDesktop) {

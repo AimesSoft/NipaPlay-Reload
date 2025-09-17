@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:nipaplay/services/certificate_trust_service.dart';
 
 /// 开发者选项Provider
 /// 管理应用中的开发者相关设置
@@ -21,6 +22,9 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   
   // 是否显示GPUDanmaku弹幕内核轨道编号
   bool _showGPUDanmakuTrackNumbers = false;
+
+  // 是否全局允许无效/自签名证书（仅 IO 平台生效，极度危险）
+  bool _allowInvalidCertsGlobal = false;
   
   // 获取显示系统资源监控状态
   bool get showSystemResources => _showSystemResources;
@@ -39,6 +43,9 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   
   // 获取GPUDanmaku弹幕内核轨道编号显示状态
   bool get showGPUDanmakuTrackNumbers => _showGPUDanmakuTrackNumbers;
+
+  // 获取是否全局允许无效/自签名证书（仅 IO 平台生效）
+  bool get allowInvalidCertsGlobal => _allowInvalidCertsGlobal;
   
   // 构造函数
   DeveloperOptionsProvider() {
@@ -76,6 +83,9 @@ class DeveloperOptionsProvider extends ChangeNotifier {
       'show_gpu_danmaku_track_numbers',
       defaultValue: false
     );
+
+    // 从证书信任服务加载全局允许开关（服务自身已持久化到 SharedPreferences）
+    _allowInvalidCertsGlobal = CertificateTrustService.instance.globalAllow;
     
     notifyListeners();
   }
@@ -137,6 +147,15 @@ class DeveloperOptionsProvider extends ChangeNotifier {
     if (_showGPUDanmakuTrackNumbers != value) {
       _showGPUDanmakuTrackNumbers = value;
       await SettingsStorage.saveBool('show_gpu_danmaku_track_numbers', _showGPUDanmakuTrackNumbers);
+      notifyListeners();
+    }
+  }
+
+  // 设置是否全局允许无效/自签名证书（仅 IO 平台生效）
+  Future<void> setAllowInvalidCertsGlobal(bool value) async {
+    if (_allowInvalidCertsGlobal != value) {
+      _allowInvalidCertsGlobal = value;
+      await CertificateTrustService.instance.setGlobalAllow(value);
       notifyListeners();
     }
   }
