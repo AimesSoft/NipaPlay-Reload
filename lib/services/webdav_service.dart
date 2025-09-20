@@ -630,21 +630,51 @@ class WebDAVService {
   
   /// 获取WebDAV文件的下载URL
   String getFileUrl(WebDAVConnection connection, String filePath) {
+    String finalUrl;
+    
     // 如果filePath已经是完整的绝对路径（如 /dav/file.mp4），
     // 则使用服务器的base URL + filePath
     if (filePath.startsWith('/')) {
       final baseUri = Uri.parse(connection.url);
-      final uri = Uri(
-        scheme: baseUri.scheme,
-        host: baseUri.host,
-        port: baseUri.port,
-        path: filePath,
-      );
-      return uri.toString();
+      
+      // 如果有用户名和密码，在URL中包含认证信息
+      if (connection.username.isNotEmpty && connection.password.isNotEmpty) {
+        final uri = Uri(
+          scheme: baseUri.scheme,
+          userInfo: '${Uri.encodeComponent(connection.username)}:${Uri.encodeComponent(connection.password)}',
+          host: baseUri.host,
+          port: baseUri.port,
+          path: filePath,
+        );
+        finalUrl = uri.toString();
+      } else {
+        final uri = Uri(
+          scheme: baseUri.scheme,
+          host: baseUri.host,
+          port: baseUri.port,
+          path: filePath,
+        );
+        finalUrl = uri.toString();
+      }
     } else {
       // 如果是相对路径，拼接到connection.url
-      return '${connection.url.replaceAll(RegExp(r'/$'), '')}/$filePath';
+      if (connection.username.isNotEmpty && connection.password.isNotEmpty) {
+        final baseUri = Uri.parse(connection.url);
+        final uri = Uri(
+          scheme: baseUri.scheme,
+          userInfo: '${Uri.encodeComponent(connection.username)}:${Uri.encodeComponent(connection.password)}',
+          host: baseUri.host,
+          port: baseUri.port,
+          path: '${baseUri.path}/$filePath',
+        );
+        finalUrl = uri.toString();
+      } else {
+        finalUrl = '${connection.url.replaceAll(RegExp(r'/$'), '')}/$filePath';
+      }
     }
+    
+    print('🎥 生成播放URL: $filePath → $finalUrl');
+    return finalUrl;
   }
   
   /// 获取连接状态
