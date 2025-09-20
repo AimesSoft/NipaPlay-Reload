@@ -2199,8 +2199,13 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     
     if (_loadingWebDAVFolders.contains(key)) return;
     
-    setState(() {
-      _loadingWebDAVFolders.add(key);
+    // 使用Future.microtask延迟setState调用，避免在build过程中调用
+    Future.microtask(() {
+      if (mounted) {
+        setState(() {
+          _loadingWebDAVFolders.add(key);
+        });
+      }
     });
     
     try {
