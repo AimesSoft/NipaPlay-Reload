@@ -21,6 +21,8 @@ import 'package:nipaplay/utils/globals.dart'; // 导入全局变量和设备检�
 // Import MethodChannel
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动弹幕匹配器
+import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
+import 'package:nipaplay/widgets/nipaplay_theme/webdav_connection_dialog.dart'; // 导入WebDAV连接对话框
 
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -45,6 +47,12 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   // 排序相关状态
   int _sortOption = 0; // 0: 文件名升序, 1: 文件名降序, 2: 修改时间升序, 3: 修改时间降序, 4: 大小升序, 5: 大小降序
 
+  // WebDAV相关状态
+  bool _showWebDAVFolders = false; // 控制显示本地文件夹还是WebDAV文件夹
+  List<WebDAVConnection> _webdavConnections = [];
+  final Map<String, List<WebDAVFile>> _webdavFolderContents = {};
+  final Set<String> _loadingWebDAVFolders = {};
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +62,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     
     // 加载保存的排序选项
     _loadSortOption();
+    
+    // 初始化WebDAV服务
+    _initWebDAVService();
   }
   
   // 提取为单独的方法，方便管理生命周期
@@ -73,6 +84,32 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         print('初始化ScanService监听器失败: $e');
       }
     });
+  }
+  
+  // 初始化WebDAV服务
+  Future<void> _initWebDAVService() async {
+    try {
+      await WebDAVService.instance.initialize();
+      if (mounted) {
+        setState(() {
+          _webdavConnections = WebDAVService.instance.connections;
+        });
+      }
+    } catch (e) {
+      debugPrint('初始化WebDAV服务失败: $e');
+    }
+  }
+  
+  // 显示WebDAV连接对话框
+  Future<void> _showWebDAVConnectionDialog() async {
+    final result = await WebDAVConnectionDialog.show(context);
+    if (result == true && mounted) {
+      // 刷新WebDAV连接列表
+      setState(() {
+        _webdavConnections = WebDAVService.instance.connections;
+      });
+      BlurSnackBar.show(context, 'WebDAV连接已添加，您可以切换到WebDAV视图查看');
+    }
   }
 
   @override
@@ -1076,8 +1113,76 @@ style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Text("媒体文件夹", locale:Locale("zh-Hans","zh"),
+              Row(
+                children: [
+                  const Text("媒体文件夹", locale:Locale("zh-Hans","zh"),
 style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 16),
+                  // 切换开关：本地文件夹 / WebDAV
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _showWebDAVFolders = false;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: !_showWebDAVFolders 
+                                  ? Colors.lightBlueAccent.withOpacity(0.3) 
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '本地',
+                              style: TextStyle(
+                                color: !_showWebDAVFolders ? Colors.white : Colors.white70,
+                                fontSize: 12,
+                                fontWeight: !_showWebDAVFolders ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _showWebDAVFolders = true;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _showWebDAVFolders 
+                                  ? Colors.lightBlueAccent.withOpacity(0.3) 
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'WebDAV',
+                              style: TextStyle(
+                                color: _showWebDAVFolders ? Colors.white : Colors.white70,
+                                fontSize: 12,
+                                fontWeight: _showWebDAVFolders ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               Row(
                 children: [
                   // 重置存储路径按钮 - 只在Android平台显示，macOS平台不支持自定义存储路径
@@ -1159,60 +1264,110 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: GlassmorphicContainer(
-            width: double.infinity,
-            height: 50,
-            borderRadius: 12,
-            blur: enableBlur ? 10 : 0,
-            alignment: Alignment.center,
-            border: 1,
-            linearGradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.15),
-                Colors.white.withOpacity(0.05),
-              ],
-            ),
-            borderGradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.3),
-                Colors.white.withOpacity(0.1),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: scanService.isScanning ? null : _pickAndScanDirectory,
-                borderRadius: BorderRadius.circular(12),
-                child: Center(
-                  child: FutureBuilder<bool>(
-                    future: io.Platform.isAndroid ? _isAndroid13Plus() : Future.value(false),
-                    builder: (context, snapshot) {
-                      String buttonText = '添加并扫描文件夹'; // 默认文本
-                      
-                      if (io.Platform.isIOS) {
-                        buttonText = '扫描NipaPlay文件夹';
-                      } else if (io.Platform.isAndroid) {
-                        // 如果future完成且为true，说明是Android 13+
-                        if (snapshot.hasData && snapshot.data == true) {
-                          buttonText = '扫描视频文件夹';
-                        } else {
-                          buttonText = '添加并扫描文件夹';
-                        }
-                      }
-                      
-                      return Text(
-                        buttonText,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                      );
-                    },
+          child: Row(
+            children: [
+              // 左侧按钮：添加本地文件夹
+              Expanded(
+                child: GlassmorphicContainer(
+                  width: double.infinity,
+                  height: 50,
+                  borderRadius: 12,
+                  blur: enableBlur ? 10 : 0,
+                  alignment: Alignment.center,
+                  border: 1,
+                  linearGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.15),
+                      Colors.white.withOpacity(0.05),
+                    ],
+                  ),
+                  borderGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.3),
+                      Colors.white.withOpacity(0.1),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: scanService.isScanning ? null : _pickAndScanDirectory,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Center(
+                        child: FutureBuilder<bool>(
+                          future: io.Platform.isAndroid ? _isAndroid13Plus() : Future.value(false),
+                          builder: (context, snapshot) {
+                            String buttonText = '添加本地文件夹'; // 默认文本
+                            
+                            if (io.Platform.isIOS) {
+                              buttonText = '扫描NipaPlay文件夹';
+                            } else if (io.Platform.isAndroid) {
+                              // 如果future完成且为true，说明是Android 13+
+                              if (snapshot.hasData && snapshot.data == true) {
+                                buttonText = '扫描视频文件夹';
+                              } else {
+                                buttonText = '添加本地文件夹';
+                              }
+                            }
+                            
+                            return Text(
+                              buttonText,
+                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              
+              const SizedBox(width: 12), // 间距
+              
+              // 右侧按钮：添加WebDAV服务器
+              Expanded(
+                child: GlassmorphicContainer(
+                  width: double.infinity,
+                  height: 50,
+                  borderRadius: 12,
+                  blur: enableBlur ? 10 : 0,
+                  alignment: Alignment.center,
+                  border: 1,
+                  linearGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.blue.withOpacity(0.15),
+                      Colors.blue.withOpacity(0.05),
+                    ],
+                  ),
+                  borderGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.blue.withOpacity(0.3),
+                      Colors.blue.withOpacity(0.1),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: scanService.isScanning ? null : _showWebDAVConnectionDialog,
+                      borderRadius: BorderRadius.circular(12),
+                      child: const Center(
+                        child: Text(
+                          '添加WebDAV服务器',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         if (scanService.isScanning || scanService.scanMessage.isNotEmpty)
@@ -1385,10 +1540,12 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
             ),
           ),
         Expanded(
-          child: scanService.scannedFolders.isEmpty && !scanService.isScanning
-              ? const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center, locale:Locale("zh-Hans","zh"),
+          child: _showWebDAVFolders
+              ? _buildWebDAVFoldersList() 
+              : (scanService.scannedFolders.isEmpty && !scanService.isScanning
+                  ? const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center, locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)))
-              : _buildResponsiveFolderList(scanService),
+                  : _buildResponsiveFolderList(scanService)),
         ),
       ],
     );
@@ -1833,5 +1990,392 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     if (!io.Platform.isAndroid) return false;
     final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
     return sdkVersion >= 33;
+  }
+  
+  // 构建WebDAV文件夹列表
+  Widget _buildWebDAVFoldersList() {
+    if (_webdavConnections.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.cloud_off, size: 64, color: Colors.white54),
+              SizedBox(height: 16),
+              Text(
+                '尚未添加任何WebDAV服务器。\n点击上方"添加WebDAV服务器"按钮开始。',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    return ListView.builder(
+      itemCount: _webdavConnections.length,
+      itemBuilder: (context, index) {
+        final connection = _webdavConnections[index];
+        return _buildWebDAVConnectionTile(connection);
+      },
+    );
+  }
+  
+  // 构建WebDAV连接Tile
+  Widget _buildWebDAVConnectionTile(WebDAVConnection connection) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: connection.isConnected 
+              ? Colors.green.withOpacity(0.3) 
+              : Colors.red.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: ExpansionTile(
+        key: PageStorageKey<String>('webdav_${connection.name}'),
+        leading: Icon(
+          Icons.cloud,
+          color: connection.isConnected ? Colors.green : Colors.red,
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                connection.name,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: connection.isConnected 
+                    ? Colors.green.withOpacity(0.2) 
+                    : Colors.red.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                connection.isConnected ? '已连接' : '未连接',
+                style: TextStyle(
+                  color: connection.isConnected ? Colors.green : Colors.red,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Text(
+            connection.url,
+            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit, color: Colors.white70, size: 20),
+              onPressed: () => _editWebDAVConnection(connection),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white70, size: 20),
+              onPressed: () => _removeWebDAVConnection(connection),
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white70, size: 20),
+              onPressed: () => _testWebDAVConnection(connection),
+            ),
+          ],
+        ),
+        onExpansionChanged: (isExpanded) {
+          if (isExpanded && connection.isConnected) {
+            _loadWebDAVFolderChildren(connection, '/');
+          }
+        },
+        children: connection.isConnected
+            ? _buildWebDAVFileNodes(connection, '/')
+            : [
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    '连接未建立，无法浏览文件。请点击刷新按钮重新连接。',
+                    style: TextStyle(color: Colors.white54),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+      ),
+    );
+  }
+  
+  // 构建WebDAV文件节点
+  List<Widget> _buildWebDAVFileNodes(WebDAVConnection connection, String path) {
+    final key = '${connection.name}:$path';
+    final files = _webdavFolderContents[key] ?? [];
+    
+    if (_loadingWebDAVFolders.contains(key)) {
+      return [
+        const Center(
+          child: Padding(
+            padding: EdgeInsets.all(16.0),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      ];
+    }
+    
+    if (files.isEmpty) {
+      return [
+        const Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text(
+            '文件夹为空或无法访问',
+            style: TextStyle(color: Colors.white54),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ];
+    }
+    
+    return files.map((file) {
+      if (file.isDirectory) {
+        return Padding(
+          padding: const EdgeInsets.only(left: 16.0),
+          child: ExpansionTile(
+            key: PageStorageKey<String>('${connection.name}:${file.path}'),
+            leading: const Icon(Icons.folder_outlined, color: Colors.white70),
+            title: Text(
+              file.name,
+              style: const TextStyle(color: Colors.white),
+            ),
+            trailing: TextButton(
+              onPressed: () => _scanWebDAVFolder(connection, file.path, file.name),
+              child: const Text(
+                '扫描',
+                style: TextStyle(color: Colors.lightBlueAccent),
+              ),
+            ),
+            onExpansionChanged: (isExpanded) {
+              if (isExpanded) {
+                _loadWebDAVFolderChildren(connection, file.path);
+              }
+            },
+            children: _buildWebDAVFileNodes(connection, file.path),
+          ),
+        );
+      } else {
+        return Padding(
+          padding: const EdgeInsets.only(left: 32.0),
+          child: ListTile(
+            leading: const Icon(Icons.videocam_outlined, color: Colors.white),
+            title: Text(
+              file.name,
+              style: const TextStyle(color: Colors.white),
+            ),
+            subtitle: file.size != null
+                ? Text(
+                    '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  )
+                : null,
+            onTap: () => _playWebDAVFile(connection, file),
+          ),
+        );
+      }
+    }).toList();
+  }
+  
+  // 加载WebDAV文件夹内容
+  Future<void> _loadWebDAVFolderChildren(WebDAVConnection connection, String path) async {
+    final key = '${connection.name}:$path';
+    
+    if (_loadingWebDAVFolders.contains(key)) return;
+    
+    setState(() {
+      _loadingWebDAVFolders.add(key);
+    });
+    
+    try {
+      final files = await WebDAVService.instance.listDirectory(connection, path);
+      if (mounted) {
+        setState(() {
+          _webdavFolderContents[key] = files;
+          _loadingWebDAVFolders.remove(key);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingWebDAVFolders.remove(key);
+        });
+        BlurSnackBar.show(context, '加载WebDAV文件夹失败: $e');
+      }
+    }
+  }
+  
+  // 扫描WebDAV文件夹
+  Future<void> _scanWebDAVFolder(WebDAVConnection connection, String folderPath, String folderName) async {
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '扫描WebDAV文件夹',
+      content: '确定要扫描WebDAV文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件添加到媒体库中。',
+      actions: [
+        TextButton(
+          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        TextButton(
+          child: const Text('扫描', style: TextStyle(color: Colors.lightBlueAccent)),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+    
+    if (confirm == true && mounted) {
+      try {
+        // 递归获取文件夹中的所有视频文件
+        final files = await _getWebDAVVideoFiles(connection, folderPath);
+        
+        // 将视频文件添加到媒体库
+        for (final file in files) {
+          final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
+          final historyItem = WatchHistoryItem(
+            filePath: fileUrl,
+            animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''), // 移除扩展名
+            episodeTitle: '',
+            duration: 0,
+            lastPosition: 0,
+            watchProgress: 0.0,
+            lastWatchTime: DateTime.now(),
+            isFromScan: true,
+          );
+          
+          await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        }
+        
+        if (mounted) {
+          BlurSnackBar.show(context, '已添加 ${files.length} 个视频文件到媒体库');
+        }
+      } catch (e) {
+        if (mounted) {
+          BlurSnackBar.show(context, '扫描WebDAV文件夹失败: $e');
+        }
+      }
+    }
+  }
+  
+  // 递归获取WebDAV文件夹中的视频文件
+  Future<List<WebDAVFile>> _getWebDAVVideoFiles(WebDAVConnection connection, String folderPath) async {
+    final List<WebDAVFile> videoFiles = [];
+    
+    try {
+      final files = await WebDAVService.instance.listDirectory(connection, folderPath);
+      
+      for (final file in files) {
+        if (file.isDirectory) {
+          // 递归获取子文件夹中的视频文件
+          final subFiles = await _getWebDAVVideoFiles(connection, file.path);
+          videoFiles.addAll(subFiles);
+        } else {
+          // 检查是否为视频文件
+          if (WebDAVService.instance.isVideoFile(file.name)) {
+            videoFiles.add(file);
+          }
+        }
+      }
+    } catch (e) {
+      print('获取WebDAV视频文件失败: $e');
+    }
+    
+    return videoFiles;
+  }
+  
+  // 播放WebDAV文件
+  void _playWebDAVFile(WebDAVConnection connection, WebDAVFile file) {
+    final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
+    final historyItem = WatchHistoryItem(
+      filePath: fileUrl,
+      animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''), // 移除扩展名
+      episodeTitle: '',
+      duration: 0,
+      lastPosition: 0,
+      watchProgress: 0.0,
+      lastWatchTime: DateTime.now(),
+    );
+    
+    widget.onPlayEpisode(historyItem);
+  }
+  
+  // 编辑WebDAV连接
+  Future<void> _editWebDAVConnection(WebDAVConnection connection) async {
+    final result = await WebDAVConnectionDialog.show(context, editConnection: connection);
+    if (result == true && mounted) {
+      setState(() {
+        _webdavConnections = WebDAVService.instance.connections;
+      });
+      BlurSnackBar.show(context, 'WebDAV连接已更新');
+    }
+  }
+  
+  // 删除WebDAV连接
+  Future<void> _removeWebDAVConnection(WebDAVConnection connection) async {
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '删除WebDAV连接',
+      content: '确定要删除WebDAV连接 "${connection.name}" 吗？',
+      actions: [
+        TextButton(
+          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        TextButton(
+          child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+    
+    if (confirm == true && mounted) {
+      await WebDAVService.instance.removeConnection(connection.name);
+      setState(() {
+        _webdavConnections = WebDAVService.instance.connections;
+        // 清理相关的文件夹内容缓存
+        _webdavFolderContents.removeWhere((key, value) => key.startsWith('${connection.name}:'));
+      });
+      BlurSnackBar.show(context, 'WebDAV连接已删除');
+    }
+  }
+  
+  // 测试WebDAV连接
+  Future<void> _testWebDAVConnection(WebDAVConnection connection) async {
+    try {
+      BlurSnackBar.show(context, '正在测试连接...');
+      await WebDAVService.instance.updateConnectionStatus(connection.name);
+      
+      if (mounted) {
+        setState(() {
+          _webdavConnections = WebDAVService.instance.connections;
+        });
+        
+        final updatedConnection = WebDAVService.instance.getConnection(connection.name);
+        if (updatedConnection?.isConnected == true) {
+          BlurSnackBar.show(context, '连接测试成功！');
+        } else {
+          BlurSnackBar.show(context, '连接测试失败');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '连接测试失败: $e');
+      }
+    }
   }
 } 
