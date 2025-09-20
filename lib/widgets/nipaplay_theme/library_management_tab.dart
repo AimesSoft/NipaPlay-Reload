@@ -1139,7 +1139,7 @@ style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
                               color: !_showWebDAVFolders 
-                                  ? Colors.lightBlueAccent.withOpacity(0.3) 
+                                  ? Colors.white.withOpacity(0.3) 
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -1164,7 +1164,7 @@ style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
                               color: _showWebDAVFolders 
-                                  ? Colors.lightBlueAccent.withOpacity(0.3) 
+                                  ? Colors.white.withOpacity(0.3) 
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -2031,9 +2031,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: connection.isConnected 
-              ? Colors.green.withOpacity(0.3) 
-              : Colors.red.withOpacity(0.3),
+          color: Colors.white.withOpacity(0.3),
           width: 1,
         ),
       ),
@@ -2041,7 +2039,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         key: PageStorageKey<String>('webdav_${connection.name}'),
         leading: Icon(
           Icons.cloud,
-          color: connection.isConnected ? Colors.green : Colors.red,
+          color: Colors.white,
         ),
         title: Row(
           children: [
@@ -2055,15 +2053,13 @@ style: TextStyle(color: Colors.lightBlueAccent)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: connection.isConnected 
-                    ? Colors.green.withOpacity(0.2) 
-                    : Colors.red.withOpacity(0.2),
+                color: Colors.white.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 connection.isConnected ? '已连接' : '未连接',
-                style: TextStyle(
-                  color: connection.isConnected ? Colors.green : Colors.red,
+                style: const TextStyle(
+                  color: Colors.white,
                   fontSize: 10,
                 ),
               ),
@@ -2160,7 +2156,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () => _scanWebDAVFolder(connection, file.path, file.name),
               child: const Text(
                 '扫描',
-                style: TextStyle(color: Colors.lightBlueAccent),
+                style: TextStyle(color: Colors.white),
               ),
             ),
             onExpansionChanged: (isExpanded) {
@@ -2238,7 +2234,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         TextButton(
-          child: const Text('扫描', style: TextStyle(color: Colors.lightBlueAccent)),
+          child: const Text('扫描', style: TextStyle(color: Colors.white)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
       ],

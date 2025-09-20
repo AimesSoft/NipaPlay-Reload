@@ -75,9 +75,9 @@ class _WebDAVFormState extends State<_WebDAVForm> {
             controller: _nameController,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              labelText: '连接名称',
+              labelText: '连接名称（可选）',
               labelStyle: const TextStyle(color: Colors.white70),
-              hintText: '例如：我的NAS',
+              hintText: '留空则自动生成',
               hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -95,9 +95,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
               fillColor: Colors.white.withOpacity(0.1),
             ),
             validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return '请输入连接名称';
-              }
+              // 连接名称现在是可选的，不需要验证
               return null;
             },
           ),
@@ -268,8 +266,27 @@ class _WebDAVFormState extends State<_WebDAVForm> {
     
     try {
       print('🧪 开始测试WebDAV连接...');
+      
+      String connectionName = _nameController.text.trim();
+      
+      // 如果没有提供连接名称，自动生成用于测试
+      if (connectionName.isEmpty) {
+        try {
+          final uri = Uri.parse(_urlController.text.trim());
+          final username = _usernameController.text.trim();
+          
+          if (username.isNotEmpty) {
+            connectionName = '${uri.host}@$username';
+          } else {
+            connectionName = uri.host;
+          }
+        } catch (e) {
+          connectionName = '测试连接';
+        }
+      }
+      
       final connection = WebDAVConnection(
-        name: _nameController.text.trim(),
+        name: connectionName,
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
@@ -313,8 +330,22 @@ class _WebDAVFormState extends State<_WebDAVForm> {
     });
     
     try {
+      String connectionName = _nameController.text.trim();
+      
+      // 如果没有提供连接名称，自动生成
+      if (connectionName.isEmpty) {
+        final uri = Uri.parse(_urlController.text.trim());
+        final username = _usernameController.text.trim();
+        
+        if (username.isNotEmpty) {
+          connectionName = '${uri.host}@$username';
+        } else {
+          connectionName = uri.host;
+        }
+      }
+      
       final connection = WebDAVConnection(
-        name: _nameController.text.trim(),
+        name: connectionName,
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
