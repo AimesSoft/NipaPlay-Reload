@@ -18,6 +18,7 @@ import 'package:nipaplay/pages/settings/remote_access_page.dart'; // 导入远�
 import 'package:nipaplay/pages/settings/ui_theme_page.dart'; // 导入UI主题设置页面
 import 'package:nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/pages/settings/backup_restore_page.dart';
+import 'package:nipaplay/pages/settings/network_settings_page.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -144,6 +145,17 @@ style: TextStyle(
                 color: Colors.white),
             onTap: () {
               _handleItemTap(const GeneralPage(), "通用设置");
+            },
+          ),
+          ListTile(
+            title: const Text("网络",
+                locale:Locale("zh-Hans","zh"),
+style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(const NetworkSettingsPage(), "网络设置");
             },
           ),
           ListTile(

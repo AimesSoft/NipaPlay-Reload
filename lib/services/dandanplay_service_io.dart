@@ -5,11 +5,13 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 import 'danmaku_cache_manager.dart';
 import 'debug_log_service.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
+  static const String userAgent = "NipaPlay/1.0";
   static String? _token;
   static String? _appSecret;
   static const String _videoCacheKey = 'video_recognition_cache';
@@ -32,6 +34,15 @@ class DandanplayService {
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
     await loadToken();
+    
+    // 输出当前使用的弹弹play服务器
+    final currentServer = await NetworkSettings.getDandanplayServer();
+    print('[弹弹play服务] 当前使用的服务器: $currentServer');
+  }
+
+  /// 获取当前弹弹play API基础URL
+  static Future<String> _getApiBaseUrl() async {
+    return await NetworkSettings.getDandanplayServer();
   }
 
   // 预加载最近更新的动画数据
@@ -42,12 +53,14 @@ class DandanplayService {
       final appSecret = await getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/bangumi/recent';
-      const apiUrl = 'https://api.dandanplay.net/api/v2/bangumi/recent?limit=20';
+      final baseUrl = await _getApiBaseUrl();
+      final apiUrl = '$baseUrl/api/v2/bangumi/recent?limit=20';
       
       final response = await http.get(
         Uri.parse(apiUrl),
         headers: {
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
@@ -117,10 +130,11 @@ class DandanplayService {
         final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
 
         final response = await http.post(
-          Uri.parse('https://api.dandanplay.net/api/v2/login/renew'),
+          Uri.parse('${await _getApiBaseUrl()}/api/v2/login/renew'),
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'User-Agent': userAgent,
             'X-AppId': appId,
             'X-Signature': generateSignature(appId, timestamp, '/api/v2/login/renew', appSecret),
             'X-Timestamp': '$timestamp',
@@ -223,7 +237,7 @@ class DandanplayService {
         final response = await http.get(
           Uri.parse('$server/nipaplay.php'),
           headers: {
-            'User-Agent': 'dandanplay/1.0.0',
+            'User-Agent': userAgent,
             'Accept': 'application/json',
           },
         ).timeout(const Duration(seconds: 5));
@@ -310,10 +324,11 @@ class DandanplayService {
       final hash = md5.convert(utf8.encode(hashString)).toString();
 
       final response = await http.post(
-        Uri.parse('https://api.dandanplay.net/api/v2/login'),
+        Uri.parse('${await _getApiBaseUrl()}/api/v2/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, '/api/v2/login', appSecret),
           'X-Timestamp': '$timestamp',
@@ -430,10 +445,11 @@ class DandanplayService {
       // 调试：打印签名生成细节
       final signature = generateSignature(appId, timestamp, '/api/v2/register', appSecret);
       final response = await http.post(
-        Uri.parse('https://api.dandanplay.net/api/v2/register'),
+        Uri.parse('${await _getApiBaseUrl()}/api/v2/register'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': signature,
           'X-Timestamp': '$timestamp',
@@ -521,12 +537,14 @@ class DandanplayService {
       final prefs = await SharedPreferences.getInstance();
       final isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
 
-      const apiUrl = 'https://api.dandanplay.net/api/v2/match';
+      final baseUrl = await _getApiBaseUrl();
+      final apiUrl = '$baseUrl/api/v2/match';
       ////debugPrint('发送请求到: $apiUrl');
       
       final headers = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'User-Agent': userAgent,
         'X-AppId': appId,
         'X-Signature': generateSignature(appId, timestamp, '/api/v2/match', appSecret),
         'X-Timestamp': '$timestamp',
@@ -635,7 +653,8 @@ class DandanplayService {
       final prefs = await SharedPreferences.getInstance();
       final chConvert = prefs.getBool('danmaku_convert_to_simplified') ?? true ? 1 : 0;
       
-      final apiUrl = 'https://api.dandanplay.net$apiPath?withRelated=true&chConvert=$chConvert';
+      final baseUrl = await _getApiBaseUrl();
+      final apiUrl = '$baseUrl$apiPath?withRelated=true&chConvert=$chConvert';
       
       ////debugPrint('发送弹幕请求: $apiUrl');
       ////debugPrint('请求头: X-AppId: $appId, X-Timestamp: $timestamp, 是否包含token: ${_token != null}');
@@ -644,6 +663,7 @@ class DandanplayService {
         Uri.parse(apiUrl),
         headers: {
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
@@ -771,7 +791,8 @@ class DandanplayService {
         queryParams['toDate'] = toDate.toUtc().toIso8601String();
       }
       
-      final uri = Uri.https('api.dandanplay.net', apiPath, queryParams.isNotEmpty ? queryParams : null);
+      final baseUrl = await _getApiBaseUrl();
+      final uri = Uri.parse('$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}');
       
       debugPrint('[弹弹play服务] 获取播放历史: $uri');
       
@@ -779,6 +800,7 @@ class DandanplayService {
         uri,
         headers: {
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
@@ -837,10 +859,11 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 提交播放历史: $episodeIdList');
       
       final response = await http.post(
-        Uri.parse('https://api.dandanplay.net$apiPath'),
+        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
@@ -878,6 +901,7 @@ class DandanplayService {
       
       final headers = {
         'Accept': 'application/json',
+        'User-Agent': userAgent,
         'X-AppId': appId,
         'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
         'X-Timestamp': '$timestamp',
@@ -891,7 +915,7 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 获取番剧详情: $bangumiId');
       
       final response = await http.get(
-        Uri.parse('https://api.dandanplay.net$apiPath'),
+        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
         headers: headers,
       );
 
@@ -982,7 +1006,8 @@ class DandanplayService {
         queryParams['onlyOnAir'] = 'true';
       }
       
-      final uri = Uri.https('api.dandanplay.net', apiPath, queryParams.isNotEmpty ? queryParams : null);
+      final baseUrl = await _getApiBaseUrl();
+      final uri = Uri.parse('$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}');
       
       debugPrint('[弹弹play服务] 获取用户收藏列表: $uri');
       
@@ -990,6 +1015,7 @@ class DandanplayService {
         uri,
         headers: {
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
@@ -1042,10 +1068,11 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 添加收藏: animeId=$animeId, status=$favoriteStatus');
       
       final response = await http.post(
-        Uri.parse('https://api.dandanplay.net$apiPath'),
+        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
@@ -1088,9 +1115,10 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 取消收藏: animeId=$animeId');
       
       final response = await http.delete(
-        Uri.parse('https://api.dandanplay.net$apiPath'),
+        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
         headers: {
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
@@ -1219,10 +1247,11 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 发送弹幕到: $episodeId, 内容: $comment');
       
       final response = await http.post(
-        Uri.parse('https://api.dandanplay.net$apiPath'),
+        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'User-Agent': userAgent,
           'X-AppId': appId,
           'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
