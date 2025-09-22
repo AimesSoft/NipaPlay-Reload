@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import UniformTypeIdentifiers
 
 @main
 class AppDelegate: FlutterAppDelegate {
@@ -10,7 +11,7 @@ class AppDelegate: FlutterAppDelegate {
   var newSeriesMenuItem: NSMenuItem?
   var settingsMenuItem: NSMenuItem?
   
-  // 连接到xib中定义的菜单 - 使用不同名称避免与基类冲突
+  // 连接到xib中定义的导航菜单 - 使用不同名称避免与基类冲突
   @IBOutlet weak var playerMenu: NSMenu!
   
   override func applicationDidFinishLaunching(_ notification: Notification) {
@@ -164,6 +165,114 @@ class AppDelegate: FlutterAppDelegate {
   @objc func openSettings(_ sender: Any?) {
     print("[AppDelegate] 菜单点击: 设置")
     invokeFlutterMethod("openSettings")
+  }
+  
+  // 显示关于页面
+  @objc func showAbout(_ sender: Any?) {
+    print("[AppDelegate] 菜单点击: 关于")
+    showAboutDialog()
+  }
+  
+  // 显示帮助
+  @objc func showHelp(_ sender: Any?) {
+    print("[AppDelegate] 菜单点击: 帮助")
+    showHelpDialog()
+  }
+  
+  // 打开 GitHub 页面
+  @objc func openGitHub(_ sender: Any?) {
+    if let url = URL(string: "https://github.com/MCDFsteve/NipaPlay-Reload") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+  
+  // 打开网站
+  @objc func openWebsite(_ sender: Any?) {
+    if let url = URL(string: "https://nipaplay.aimes-soft.com/") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+  
+  // 显示关于对话框
+  private func showAboutDialog() {
+    DispatchQueue.main.async {
+      let alert = NSAlert()
+      alert.messageText = "关于 NipaPlay"
+      
+      // 自动获取版本号
+      let version = self.getAppVersion()
+      
+      alert.informativeText = "NipaPlay - 跨平台弹幕视频播放器\n\n版本：\(version)\n\n一个支持多种视频格式和弹幕功能的现代化播放器。"
+      alert.alertStyle = .informational
+      alert.addButton(withTitle: "确定")
+      
+      if let window = NSApp.mainWindow {
+        alert.beginSheetModal(for: window, completionHandler: nil)
+      } else {
+        alert.runModal()
+      }
+    }
+  }
+  
+  // 获取应用版本号
+  private func getAppVersion() -> String {
+    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+      return version
+    }
+    return "1.0.0" // 默认版本号
+  }
+  
+  // 显示帮助对话框
+  private func showHelpDialog() {
+    DispatchQueue.main.async {
+      let alert = NSAlert()
+      alert.messageText = "NipaPlay 帮助"
+      alert.informativeText = """
+      快捷键：
+      • Cmd+U - 上传视频
+      • Cmd+W - 关闭窗口
+      • Cmd+Q - 退出应用
+      • Cmd+, - 偏好设置
+      • Cmd+1 - 主页
+      • Cmd+2 - 视频播放
+      • Cmd+3 - 媒体库
+      • Cmd+4 - 新番更新
+      
+      支持的视频格式：
+      MP4, MKV, AVI, MOV, WebM, WMV, M4V, 3GP, FLV, TS, M2TS
+      
+      更多信息请访问项目主页：
+      https://github.com/MCDFsteve/NipaPlay-Reload
+      https://nipaplay.aimes-soft.com/
+      """
+      alert.alertStyle = .informational
+      alert.addButton(withTitle: "访问 GitHub")
+      alert.addButton(withTitle: "访问网站")
+      alert.addButton(withTitle: "确定")
+      
+      if let window = NSApp.mainWindow {
+        alert.beginSheetModal(for: window) { response in
+          switch response {
+          case .alertFirstButtonReturn: // 访问 GitHub
+            self.openGitHub(nil)
+          case .alertSecondButtonReturn: // 访问网站
+            self.openWebsite(nil)
+          default:
+            break
+          }
+        }
+      } else {
+        let response = alert.runModal()
+        switch response {
+        case .alertFirstButtonReturn:
+          self.openGitHub(nil)
+        case .alertSecondButtonReturn:
+          self.openWebsite(nil)
+        default:
+          break
+        }
+      }
+    }
   }
   
   // 封装调用Flutter方法的逻辑
