@@ -281,7 +281,9 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
         }
         
         final charCenterX = currentX + charWidthScaled / 2;
-        final charCenterY = y + charHeightScaled / 2;
+        // 🔥 修复：计数文本底部对齐 - 基于主文本的高度调整Y坐标
+        final mainTextHeight = config.fontSize * fontSizeMultiplier;
+        final charCenterY = y + mainTextHeight - charHeightScaled / 2;
         
         // 验证中心点坐标是否有效
         if (!charCenterX.isFinite || !charCenterY.isFinite) {
