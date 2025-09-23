@@ -36,6 +36,8 @@ class GPUScrollDanmakuRenderer extends GPUDanmakuBaseRenderer {
           item.currentX!,
           item.currentY!,
           opacity,
+          fontSizeMultiplier: item.fontSizeMultiplier,
+          countText: item.countText,
         );
       }
     }
