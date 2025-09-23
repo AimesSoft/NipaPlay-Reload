@@ -311,8 +311,11 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
           if (type == 'bottom') {
             // 底部弹幕从底部开始计算，确保不会超出窗口
             newYPosition = newSize.height - (track + 1) * trackHeight - adjustedDanmakuHeight;
+          } else if (type == 'top') {
+            // 顶部弹幕需要减去字体大小以紧贴顶部
+            newYPosition = track * trackHeight + _verticalSpacing - widget.fontSize;
           } else {
-            // 其他弹幕从顶部开始计算，加上间距
+            // 滚动弹幕保持原有逻辑
             newYPosition = track * trackHeight + _verticalSpacing;
           }
           
@@ -529,7 +532,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             'width': danmakuWidth,
             'isMerged': isMerged,
           });
-          final yPosition = track * trackHeight + _verticalSpacing;
+          final yPosition = track * trackHeight + _verticalSpacing - widget.fontSize;
           _danmakuYPositions[danmakuKey] = yPosition;
           // 延迟更新状态
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -566,7 +569,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               'isMerged': isMerged,
               'mergeCount': mergeCount,
             });
-            final yPosition = track * trackHeight + _verticalSpacing;
+            final yPosition = track * trackHeight + _verticalSpacing - widget.fontSize;
             _danmakuYPositions[danmakuKey] = yPosition;
             // 延迟更新状态
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -596,7 +599,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
           'isMerged': isMerged,
           'mergeCount': mergeCount,
         });
-        final yPosition = track * trackHeight + _verticalSpacing;
+        final yPosition = track * trackHeight + _verticalSpacing - widget.fontSize;
         _danmakuYPositions[danmakuKey] = yPosition;
         // 延迟更新状态
         WidgetsBinding.instance.addPostFrameCallback((_) {
