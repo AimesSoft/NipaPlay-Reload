@@ -50,13 +50,13 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
         countText: content.countText,
       ),
       // 根据文本内容估算尺寸，以便CustomPaint有正确的绘制区域
-      // 🔥 修改：增加额外高度以适应emoji和带descender的字符
+      // 🔥 修复：使用精确的高度，避免第一次绘制时的拉伸问题
       size: Size(
         calculateTextWidth(
           content.text + (content.countText ?? ''),
           scale: 0.5 * content.fontSizeMultiplier,
         ),
-        config.fontSize * content.fontSizeMultiplier * 1.4, // 增加40%的高度缓冲
+        config.fontSize * content.fontSizeMultiplier, // 🔥 修复：使用精确高度
       ),
     );
   }
@@ -149,16 +149,16 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     
     final bool needsOpacityLayer = opacity < 1.0;
 
-    // 🔥 修改：仅在需要时创建透明层，增加额外高度以确保字符不被裁剪
+    // 🔥 修改：仅在需要时创建透明层，精确计算绘制区域
     if (needsOpacityLayer) {
       final width = calculateTextWidth(
         item.text + (countText ?? ''),
         scale: scale * fontSizeMultiplier,
       );
-      // 🔥 增加额外高度以适应emoji和带descender的字符
-      final height = config.fontSize * fontSizeMultiplier * 1.4; // 增加40%的高度缓冲
+      // 🔥 修复：使用精确的高度，不添加额外缓冲避免拉伸
+      final height = config.fontSize * fontSizeMultiplier;
       canvas.saveLayer(
-        Rect.fromLTWH(x, y + 5, width, height), // 向上偏移10%高度
+        Rect.fromLTWH(x, y, width, height), // 🔥 修复：不添加Y偏移，避免拉伸
         Paint()..color = Colors.white.withOpacity(opacity),
       );
     }
@@ -414,11 +414,11 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
         final item = items[i];
         final position = positions[i];
         final textWidth = calculateTextWidth(item.text, scale: scale);
-        // 🔥 修改：增加额外高度以适应emoji和带descender的字符
-        final textHeight = config.fontSize * 1.4; // 增加40%的高度缓冲
+        // 🔥 修复：使用精确的高度，避免拉伸
+        final textHeight = config.fontSize;
         
         minX = math.min(minX, position.dx);
-        minY = math.min(minY, position.dy - textHeight * 0.1); // 向上偏移10%高度
+        minY = math.min(minY, position.dy); // 🔥 修复：不添加Y偏移
         maxX = math.max(maxX, position.dx + textWidth);
         maxY = math.max(maxY, position.dy + textHeight);
       }

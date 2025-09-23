@@ -218,35 +218,58 @@ class DynamicFontAtlas {
 
     final newCharMap = <String, Rect>{};
 
+    // 🔥 修改：计算统一的基线高度，确保所有字符基线对齐
+    final baselineTextPainter = TextPainter(
+      text: TextSpan(
+        text: 'Ag你好😀yg|', // 包含各种字符类型的测试字符串
+        style: TextStyle(fontSize: fontSize * 2.0, color: color),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    baselineTextPainter.layout();
+    final unifiedBaseline = baselineTextPainter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    final unifiedRowHeight = actualHeight; // 使用之前计算的统一行高
+
     for (final charStr in _allChars) {
       final textPainter = TextPainter(
         text: TextSpan(
           text: charStr,
           locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: fontSize * 2.0, color: color), // 2x 渲染
+          style: TextStyle(fontSize: fontSize * 2.0, color: color), // 2x 渲染
         ),
         textDirection: TextDirection.ltr,
       );
       textPainter.layout();
-      
-      // 🔥 修改：计算包含上下边距的实际渲染高度
-      final actualCharHeight = textPainter.height + topPadding + bottomPadding;
 
       if (x + textPainter.width > atlasWidth) {
         x = 0;
-        y += maxRowHeight;
+        y += unifiedRowHeight;
         maxRowHeight = 0;
       }
       
-      // 🔥 修改：在绘制时添加顶部边距，确保字符不被裁剪
-      textPainter.paint(canvas, Offset(x, y + topPadding));
+      // 🔥 修改：计算字符基线，并基于统一基线进行绘制
+      final charBaseline = textPainter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+      final baselineOffset = unifiedBaseline - charBaseline;
+      
+      // 🔥 修复：确保字符不会超出行范围，计算安全的Y坐标范围
+      final baseDrawY = y + topPadding;
+      final targetY = baseDrawY + baselineOffset;
+      final minY = y.toDouble();
+      final maxY = (y + unifiedRowHeight - textPainter.height).toDouble();
+      
+      // 确保上限不小于下限，如果小于则使用下限
+      final safeMaxY = maxY > minY ? maxY : minY;
+      final actualDrawY = targetY.clamp(minY, safeMaxY);
+      
+      // 绘制字符，确保所有字符都基于统一的基线
+      textPainter.paint(canvas, Offset(x, actualDrawY));
 
-      // 🔥 修改：保存包含完整边距的字符矩形区域
-      newCharMap[charStr] = Rect.fromLTWH(x, y, textPainter.width, actualCharHeight);
+      // 🔥 修复：保存字符的实际绘制区域，确保在行范围内
+      newCharMap[charStr] = Rect.fromLTWH(x, actualDrawY, textPainter.width, textPainter.height);
       
       x += textPainter.width;
-      if (actualCharHeight > maxRowHeight) {
-        maxRowHeight = actualCharHeight;
+      if (unifiedRowHeight > maxRowHeight) {
+        maxRowHeight = unifiedRowHeight;
       }
     }
 
