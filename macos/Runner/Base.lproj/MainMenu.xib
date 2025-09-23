@@ -22,9 +22,63 @@
         <customObject id="YLy-65-1bz" customClass="NSFontManager"/>
         <menu title="Main Menu" systemMenu="main" id="AYu-sK-qS6">
             <items>
-                <menuItem title="播放器" id="1Xt-HY-uBw">
+                <!-- NipaPlay 应用菜单 -->
+                <menuItem title="NipaPlay" id="app-menu-item">
                     <modifierMask key="keyEquivalentModifierMask"/>
-                    <menu key="submenu" title="播放器" id="uQy-DD-JDr">
+                    <menu key="submenu" title="NipaPlay" systemMenu="apple" id="app-menu">
+                        <items>
+                            <menuItem title="关于 NipaPlay" id="about-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="showAbout:" target="Voe-Tx-rLC" id="about-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="app-separator-1"/>
+                            <menuItem title="偏好设置..." keyEquivalent="," id="preferences-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="openSettings:" target="Voe-Tx-rLC" id="preferences-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="app-separator-2"/>
+                            <menuItem title="服务" id="services-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="服务" systemMenu="services" id="services-menu"/>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="app-separator-3"/>
+                            <menuItem title="隐藏 NipaPlay" keyEquivalent="h" id="hide-app-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="hide:" target="-1" id="hide-app-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="隐藏其他" keyEquivalent="h" id="hide-others-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="hideOtherApplications:" target="-1" id="hide-others-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="显示全部" id="show-all-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="unhideAllApplications:" target="-1" id="show-all-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="app-separator-4"/>
+                            <menuItem title="退出 NipaPlay" keyEquivalent="q" id="quit-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="terminate:" target="-1" id="quit-action"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                
+                <!-- 文件菜单 -->
+                <menuItem title="文件" id="file-menu-item">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="文件" id="file-menu">
                         <items>
                             <menuItem title="上传视频" keyEquivalent="u" id="upload-video-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
@@ -32,35 +86,100 @@
                                     <action selector="uploadVideo:" target="Voe-Tx-rLC" id="upload-video-action"/>
                                 </connections>
                             </menuItem>
-                            <menuItem isSeparatorItem="YES" id="menu-separator"/>
-                            <menuItem title="主页" keyEquivalent="h" id="home-menu-item">
+                            <menuItem isSeparatorItem="YES" id="file-separator"/>
+                            <menuItem title="关闭窗口" keyEquivalent="w" id="close-window-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="performClose:" target="-1" id="close-window-action"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                
+                <!-- 导航菜单（原播放器菜单） -->
+                <menuItem title="导航" id="navigation-menu-item">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="导航" id="uQy-DD-JDr">
+                        <items>
+                            <menuItem title="主页" keyEquivalent="1" id="home-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openHome:" target="Voe-Tx-rLC" id="home-action"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="视频播放" keyEquivalent="1" id="video-playback-menu-item">
+                            <menuItem title="视频播放" keyEquivalent="2" id="video-playback-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openVideoPlayback:" target="Voe-Tx-rLC" id="video-playback-action"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="媒体库" keyEquivalent="2" id="media-library-menu-item">
+                            <menuItem title="媒体库" keyEquivalent="3" id="media-library-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openMediaLibrary:" target="Voe-Tx-rLC" id="media-library-action"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="新番更新" keyEquivalent="3" id="new-series-menu-item">
+                            <menuItem title="新番更新" keyEquivalent="4" id="new-series-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openNewSeries:" target="Voe-Tx-rLC" id="new-series-action"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="设置" keyEquivalent="4" id="settings-menu-item">
+                        </items>
+                    </menu>
+                </menuItem>
+                
+                <!-- 窗口菜单 -->
+                <menuItem title="窗口" id="window-menu-item">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="窗口" systemMenu="window" id="window-menu">
+                        <items>
+                            <menuItem title="最小化" keyEquivalent="m" id="minimize-menu-item">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
-                                    <action selector="openSettings:" target="Voe-Tx-rLC" id="settings-action"/>
+                                    <action selector="performMiniaturize:" target="-1" id="minimize-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="缩放" id="zoom-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="performZoom:" target="-1" id="zoom-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="window-separator"/>
+                            <menuItem title="前置全部窗口" id="bring-all-to-front-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="arrangeInFront:" target="-1" id="bring-all-to-front-action"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                
+                <!-- 帮助菜单 -->
+                <menuItem title="帮助" id="help-menu-item">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="帮助" systemMenu="help" id="help-menu">
+                        <items>
+                            <menuItem title="NipaPlay 帮助" keyEquivalent="?" id="help-menu-item-main">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="showHelp:" target="Voe-Tx-rLC" id="help-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="help-separator"/>
+                            <menuItem title="GitHub" id="github-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="openGitHub:" target="Voe-Tx-rLC" id="github-action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="网站" id="website-menu-item">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="openWebsite:" target="Voe-Tx-rLC" id="website-action"/>
                                 </connections>
                             </menuItem>
                         </items>
