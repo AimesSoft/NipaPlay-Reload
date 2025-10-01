@@ -1123,8 +1123,12 @@ class EmbyService {
           .map((item) => EmbyEpisodeInfo.fromJson(item))
           .toList();
       
-      // 按剧集编号排序
-      episodes.sort((a, b) => a.indexNumber?.compareTo(b.indexNumber ?? 0) ?? 0);
+      // 按剧集编号排序，将特别篇（indexNumber 为 null 或 0）排在最后
+      episodes.sort((a, b) {
+        final aIndex = (a.indexNumber == null || a.indexNumber == 0) ? 999999 : a.indexNumber!;
+        final bIndex = (b.indexNumber == null || b.indexNumber == 0) ? 999999 : b.indexNumber!;
+        return aIndex.compareTo(bIndex);
+      });
       
       return episodes;
     } else {
