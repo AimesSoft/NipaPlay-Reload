@@ -776,8 +776,12 @@ class EpisodeNavigationService {
         return EpisodeNavigationResult.failure('该季没有剧集');
       }
 
-      // 按集数排序
-      episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+      // 按集数排序，将特别篇（indexNumber 为 null 或 0）排在最后
+      episodes.sort((a, b) {
+        final aIndex = (a.indexNumber == null || a.indexNumber == 0) ? 999999 : a.indexNumber!;
+        final bIndex = (b.indexNumber == null || b.indexNumber == 0) ? 999999 : b.indexNumber!;
+        return aIndex.compareTo(bIndex);
+      });
 
       // 找到当前剧集的位置
       final currentIndex = episodes.indexWhere((ep) => ep.id == currentEpisodeId);
@@ -1041,8 +1045,12 @@ class EpisodeNavigationService {
         return EpisodeNavigationResult.failure('该季没有剧集');
       }
 
-      // 按集数排序
-      episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+      // 按集数排序，将特别篇（indexNumber 为 null 或 0）排在最后
+      episodes.sort((a, b) {
+        final aIndex = (a.indexNumber == null || a.indexNumber == 0) ? 999999 : a.indexNumber!;
+        final bIndex = (b.indexNumber == null || b.indexNumber == 0) ? 999999 : b.indexNumber!;
+        return aIndex.compareTo(bIndex);
+      });
 
       // 找到当前剧集的位置
       final currentIndex = episodes.indexWhere((ep) => ep.id == currentEpisodeId);
@@ -1202,8 +1210,12 @@ class EpisodeNavigationService {
         return EpisodeNavigationResult.failure('该季没有剧集');
       }
 
-      // 按集数排序
-      episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+      // 按集数排序，将特别篇（indexNumber 为 null 或 0）排在最后
+      episodes.sort((a, b) {
+        final aIndex = (a.indexNumber == null || a.indexNumber == 0) ? 999999 : a.indexNumber!;
+        final bIndex = (b.indexNumber == null || b.indexNumber == 0) ? 999999 : b.indexNumber!;
+        return aIndex.compareTo(bIndex);
+      });
 
       // 找到当前剧集的位置
       final currentIndex = episodes.indexWhere((ep) => ep.id == currentEpisodeId);

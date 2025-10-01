@@ -129,8 +129,12 @@ class _FluentPlaylistMenuState extends State<FluentPlaylistMenu> {
         throw Exception('该季没有找到剧集');
       }
       
-      // 按集数排序
-      episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+      // 按集数排序，将特别篇（indexNumber 为 null 或 0）排在最后
+      episodes.sort((a, b) {
+        final aIndex = (a.indexNumber == null || a.indexNumber == 0) ? 999999 : a.indexNumber!;
+        final bIndex = (b.indexNumber == null || b.indexNumber == 0) ? 999999 : b.indexNumber!;
+        return aIndex.compareTo(bIndex);
+      });
       
       // 缓存剧集信息并转换为播放列表格式
       _jellyfinEpisodeCache.clear();
@@ -173,8 +177,12 @@ class _FluentPlaylistMenuState extends State<FluentPlaylistMenu> {
         throw Exception('该季没有找到剧集');
       }
       
-      // 按集数排序
-      episodes.sort((a, b) => (a.indexNumber ?? 0).compareTo(b.indexNumber ?? 0));
+      // 按集数排序，将特别篇（indexNumber 为 null 或 0）排在最后
+      episodes.sort((a, b) {
+        final aIndex = (a.indexNumber == null || a.indexNumber == 0) ? 999999 : a.indexNumber!;
+        final bIndex = (b.indexNumber == null || b.indexNumber == 0) ? 999999 : b.indexNumber!;
+        return aIndex.compareTo(bIndex);
+      });
       
       // 缓存剧集信息
       _embyEpisodeCache.clear();
