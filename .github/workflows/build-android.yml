@@ -61,7 +61,14 @@ jobs:
         uses: ./.github/actions/setup-flutter
         with:
           flutter-version: ${{ inputs.flutter-version }}
-      
+
+      - name: Pre-download Gradle Wrapper
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew --version || true
+        continue-on-error: true
+
       - name: Build Android APK
         uses: ./.github/actions/build-android
         with:

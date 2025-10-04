@@ -25,7 +25,22 @@ runs:
   steps:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-    
+
+    - name: Configure Gradle
+      shell: bash
+      run: |
+        mkdir -p ~/.gradle
+        cat > ~/.gradle/gradle.properties << EOF
+        org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError
+        org.gradle.parallel=true
+        org.gradle.caching=true
+        org.gradle.daemon=true
+        systemProp.http.connectionTimeout=60000
+        systemProp.http.socketTimeout=60000
+        systemProp.https.connectionTimeout=60000
+        systemProp.https.socketTimeout=60000
+        EOF
+
     - name: Install Android build tools
       shell: bash
       run: |
