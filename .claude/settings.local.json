@@ -8,7 +8,8 @@
       "WebSearch",
       "WebFetch(domain:pub.dev)",
       "Read(//Users/dfsteve/.pub-cache/**)",
-      "Bash(flutter:*)"
+      "Bash(flutter:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
