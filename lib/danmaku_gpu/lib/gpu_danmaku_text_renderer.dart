@@ -41,22 +41,26 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
       createdAt: 0, // id is not used for rendering appearance
     );
 
-    return CustomPaint(
-      painter: _GpuDanmakuPainter(
-        renderer: this,
-        item: gpuItem,
-        opacity: opacity,
-        fontSizeMultiplier: content.fontSizeMultiplier,
-        countText: content.countText,
-      ),
-      // 根据文本内容估算尺寸，以便CustomPaint有正确的绘制区域
-      // 🔥 修复：使用精确的高度，避免第一次绘制时的拉伸问题
-      size: Size(
-        calculateTextWidth(
-          content.text + (content.countText ?? ''),
-          scale: 0.5 * content.fontSizeMultiplier,
+    // 🔥 修复：使用 Opacity Widget 控制整体透明度，避免 Canvas 层裁剪问题
+    return Opacity(
+      opacity: opacity,
+      child: CustomPaint(
+        painter: _GpuDanmakuPainter(
+          renderer: this,
+          item: gpuItem,
+          opacity: 1.0, // 传递 1.0，透明度由外层 Opacity Widget 控制
+          fontSizeMultiplier: content.fontSizeMultiplier,
+          countText: content.countText,
         ),
-        config.fontSize * content.fontSizeMultiplier, // 🔥 修复：使用精确高度
+        // 根据文本内容估算尺寸，以便CustomPaint有正确的绘制区域
+        // 🔥 修复：使用精确的高度，避免第一次绘制时的拉伸问题
+        size: Size(
+          calculateTextWidth(
+            content.text + (content.countText ?? ''),
+            scale: 0.5 * content.fontSizeMultiplier,
+          ),
+          config.fontSize * content.fontSizeMultiplier, // 🔥 修复：使用精确高度
+        ),
       ),
     );
   }
@@ -147,22 +151,6 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
       return;
     }
     
-    final bool needsOpacityLayer = opacity < 1.0;
-
-    // 🔥 修改：仅在需要时创建透明层，精确计算绘制区域
-    if (needsOpacityLayer) {
-      final width = calculateTextWidth(
-        item.text + (countText ?? ''),
-        scale: scale * fontSizeMultiplier,
-      );
-      // 🔥 修复：使用精确的高度，不添加额外缓冲避免拉伸
-      final height = config.fontSize * fontSizeMultiplier;
-      canvas.saveLayer(
-        Rect.fromLTWH(x, y, width, height), // 🔥 修复：不添加Y偏移，避免拉伸
-        Paint()..color = Colors.white.withOpacity(opacity),
-      );
-    }
-
     // 准备绘制参数
     final strokeTransforms = <RSTransform>[];
     final strokeRects = <Rect>[];
@@ -173,7 +161,7 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     final fillColors = <Color>[];
 
     final double strokeOffset = _getStrokeOffset();
-    // 🔥 修改：不再使用withOpacity修改颜色，保持原始颜色
+    // 🔥 修复：颜色保持原始不透明度，全局透明度由 GPUDanmakuOverlay 的 Opacity Widget 控制
     final shadowColor = _getShadowColor(item.color);
     final fillColor = item.color;
 
@@ -332,14 +320,11 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
     final paint = Paint()..filterQuality = FilterQuality.low; // 设置采样质量为low，实现抗锯齿
 
     // 验证参数完整性
-    if (strokeTransforms.length != strokeRects.length || 
+    if (strokeTransforms.length != strokeRects.length ||
         strokeTransforms.length != strokeColors.length ||
         fillTransforms.length != fillRects.length ||
         fillTransforms.length != fillColors.length) {
       debugPrint('GPU弹幕渲染器: 参数长度不匹配，跳过渲染');
-      if (needsOpacityLayer) {
-        canvas.restore();
-      }
       return;
     }
 
@@ -378,11 +363,6 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
         // 继续执行，不中断整个渲染流程
       }
     }
-    
-    // 🔥 修改：仅在创建了透明层时恢复画布状态
-    if (needsOpacityLayer) {
-      canvas.restore();
-    }
   }
 
   /// 批量渲染弹幕项目
@@ -404,48 +384,16 @@ class GpuDanmakuTextRenderer extends DanmakuTextRenderer {
       throw ArgumentError('Items and positions must have the same length');
     }
 
-    // 🔥 新增：如果透明度小于1.0，为整个批量渲染创建透明层
-    if (opacity < 1.0) {
-      // 计算整个批量渲染的边界
-      double minX = double.infinity;
-      double minY = double.infinity;
-      double maxX = -double.infinity;
-      double maxY = -double.infinity;
-      
-      for (int i = 0; i < items.length; i++) {
-        final item = items[i];
-        final position = positions[i];
-        final textWidth = calculateTextWidth(item.text, scale: scale);
-        // 🔥 修复：使用精确的高度，避免拉伸
-        final textHeight = config.fontSize;
-        
-        minX = math.min(minX, position.dx);
-        minY = math.min(minY, position.dy); // 🔥 修复：不添加Y偏移
-        maxX = math.max(maxX, position.dx + textWidth);
-        maxY = math.max(maxY, position.dy + textHeight);
-      }
-      
-      // 创建透明层
-      canvas.saveLayer(
-        Rect.fromLTWH(minX, minY, maxX - minX, maxY - minY),
-        Paint()..color = Colors.white.withOpacity(opacity),
-      );
-    }
-
+    // 🔥 修复：直接在每个弹幕项目上应用透明度
     for (int i = 0; i < items.length; i++) {
       renderItem(
         canvas,
         items[i],
         positions[i].dx,
         positions[i].dy,
-        1.0, // 🔥 修改：传递1.0，因为透明度已经在批量层处理
+        opacity, // 直接传递透明度
         scale: scale,
       );
-    }
-    
-    // 🔥 新增：恢复画布状态
-    if (opacity < 1.0) {
-      canvas.restore();
     }
   }
 
