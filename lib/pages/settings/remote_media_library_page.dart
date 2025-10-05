@@ -694,7 +694,6 @@ style: TextStyle(
   List<Widget> _buildFutureServices() {
     final services = [
       {'name': 'DLNA/UPnP', 'icon': Ionicons.wifi_outline, 'status': '计划中'},
-      {'name': 'WebDAV', 'icon': Ionicons.cloud_outline, 'status': '计划中'},
     ];
 
     return services.map((service) => ListTile(

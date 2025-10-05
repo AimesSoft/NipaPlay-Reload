@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -127,20 +128,68 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
     try {
       final uri = Uri.parse('${host.baseUrl}/api/media/local/share/animes');
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      debugPrint('📡 [共享媒体] 开始请求: $uri');
+      debugPrint('📡 [共享媒体] 主机信息: ${host.displayName} (${host.baseUrl})');
+
+      final response = await http.get(uri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('⏱️ [共享媒体] 请求超时 (10秒)');
+          throw TimeoutException('请求超时');
+        },
+      );
+
+      debugPrint('📡 [共享媒体] 响应状态码: ${response.statusCode}');
+
       if (response.statusCode != 200) {
+        debugPrint('❌ [共享媒体] HTTP错误: ${response.statusCode}, body: ${response.body}');
         throw Exception('HTTP ${response.statusCode}');
       }
+
       final payload = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final items = (payload['items'] ?? payload['data'] ?? []) as List<dynamic>;
+
+      debugPrint('✅ [共享媒体] 成功获取 ${items.length} 个番剧');
+
       _animeSummaries = items
           .map((item) => SharedRemoteAnimeSummary.fromJson(item as Map<String, dynamic>))
           .toList();
       _animeSummaries.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
       _episodeCache.clear();
       _updateHostStatus(host.id, isOnline: true, lastError: null);
-    } catch (e) {
-      _errorMessage = '同步远程媒体库失败: $e';
+    } catch (e, stackTrace) {
+      debugPrint('❌ [共享媒体] 请求失败: $e');
+      debugPrint('❌ [共享媒体] 错误类型: ${e.runtimeType}');
+      debugPrint('❌ [共享媒体] 堆栈跟踪:\n$stackTrace');
+
+      String friendlyError;
+      if (e.toString().contains('SocketException') || e.toString().contains('Connection')) {
+        if (e.toString().contains('No route to host') || e.toString().contains('errno = 65')) {
+          friendlyError = '无法连接到主机 ${host.baseUrl}\n错误详情: $e';
+          debugPrint('🔍 [共享媒体诊断] 网络路由问题，可能原因：');
+          debugPrint('  1. 设备不在同一局域网');
+          debugPrint('  2. 主机IP变更了');
+          debugPrint('  3. 防火墙阻止连接');
+        } else if (e.toString().contains('Connection refused')) {
+          friendlyError = '连接被拒绝，请确认主机已开启远程访问服务';
+          debugPrint('🔍 [共享媒体诊断] 端口拒绝连接，可能原因：');
+          debugPrint('  1. 远程访问服务未启动');
+          debugPrint('  2. 端口号错误');
+        } else if (e.toString().contains('timed out') || e.toString().contains('TimeoutException')) {
+          friendlyError = '连接超时，请检查网络连接或主机是否在线';
+          debugPrint('🔍 [共享媒体诊断] 连接超时，可能原因：');
+          debugPrint('  1. 网络延迟过高');
+          debugPrint('  2. 主机负载过高');
+          debugPrint('  3. 主机未响应');
+        } else {
+          friendlyError = '网络连接失败: $e';
+        }
+      } else if (e.toString().contains('HTTP')) {
+        friendlyError = '服务器响应错误: $e';
+      } else {
+        friendlyError = '同步失败: $e';
+      }
+      _errorMessage = friendlyError;
       _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
     } finally {
       _isLoading = false;
@@ -159,39 +208,72 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       throw Exception('未选择远程媒体库');
     }
 
-    final uri = Uri.parse('${host.baseUrl}/api/media/local/share/animes/$animeId');
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}');
-    }
-    final payload = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-    final episodes = (payload['data']?['episodes'] ?? payload['episodes'] ?? []) as List<dynamic>;
-    final episodeList = episodes
-        .map((episode) => SharedRemoteEpisode.fromJson(episode as Map<String, dynamic>))
-        .toList();
-    _episodeCache[animeId] = episodeList;
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/share/animes/$animeId');
+      debugPrint('📡 [剧集加载] 请求: $uri');
 
-    // 如果返回包含 anime 信息，但 summary 还没更新，则更新一下卡片显示
-    final data = payload['data']?['anime'] ?? payload['anime'];
-    if (data is Map<String, dynamic>) {
-      final summaryIndex = _animeSummaries.indexWhere((element) => element.animeId == animeId);
-      if (summaryIndex != -1 && data['lastWatchTime'] != null) {
-        final updatedSummary = SharedRemoteAnimeSummary.fromJson({
-          'animeId': animeId,
-          'name': data['name'] ?? _animeSummaries[summaryIndex].name,
-          'nameCn': data['nameCn'] ?? _animeSummaries[summaryIndex].nameCn,
-          'summary': data['summary'] ?? _animeSummaries[summaryIndex].summary,
-          'imageUrl': data['imageUrl'] ?? _animeSummaries[summaryIndex].imageUrl,
-          'lastWatchTime': data['lastWatchTime'],
-          'episodeCount': data['episodeCount'] ?? episodeList.length,
-          'hasMissingFiles': data['hasMissingFiles'] ?? false,
-        });
-        _animeSummaries[summaryIndex] = updatedSummary;
-        notifyListeners();
+      final response = await http.get(uri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('⏱️ [剧集加载] 请求超时');
+          throw TimeoutException('请求超时');
+        },
+      );
+
+      debugPrint('📡 [剧集加载] 响应状态码: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        debugPrint('❌ [剧集加载] HTTP错误: ${response.statusCode}');
+        throw Exception('HTTP ${response.statusCode}');
       }
-    }
 
-    return episodeList;
+      final payload = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final episodes = (payload['data']?['episodes'] ?? payload['episodes'] ?? []) as List<dynamic>;
+      final episodeList = episodes
+          .map((episode) => SharedRemoteEpisode.fromJson(episode as Map<String, dynamic>))
+          .toList();
+
+      debugPrint('✅ [剧集加载] 成功获取 ${episodeList.length} 集');
+
+      _episodeCache[animeId] = episodeList;
+
+      // 如果返回包含 anime 信息，但 summary 还没更新，则更新一下卡片显示
+      final data = payload['data']?['anime'] ?? payload['anime'];
+      if (data is Map<String, dynamic>) {
+        final summaryIndex = _animeSummaries.indexWhere((element) => element.animeId == animeId);
+        if (summaryIndex != -1 && data['lastWatchTime'] != null) {
+          final updatedSummary = SharedRemoteAnimeSummary.fromJson({
+            'animeId': animeId,
+            'name': data['name'] ?? _animeSummaries[summaryIndex].name,
+            'nameCn': data['nameCn'] ?? _animeSummaries[summaryIndex].nameCn,
+            'summary': data['summary'] ?? _animeSummaries[summaryIndex].summary,
+            'imageUrl': data['imageUrl'] ?? _animeSummaries[summaryIndex].imageUrl,
+            'lastWatchTime': data['lastWatchTime'],
+            'episodeCount': data['episodeCount'] ?? episodeList.length,
+            'hasMissingFiles': data['hasMissingFiles'] ?? false,
+          });
+          _animeSummaries[summaryIndex] = updatedSummary;
+          notifyListeners();
+        }
+      }
+
+      return episodeList;
+    } catch (e, stackTrace) {
+      debugPrint('❌ [剧集加载] 失败: $e');
+      debugPrint('❌ [剧集加载] 错误类型: ${e.runtimeType}');
+      debugPrint('❌ [剧集加载] 堆栈:\n$stackTrace');
+
+      if (e.toString().contains('SocketException') || e.toString().contains('Connection')) {
+        if (e.toString().contains('No route to host') || e.toString().contains('errno = 65')) {
+          throw Exception('无法连接到主机，请检查网络连接\n详情: $e');
+        } else if (e.toString().contains('Connection refused')) {
+          throw Exception('连接被拒绝，主机服务可能未启动\n详情: $e');
+        } else if (e.toString().contains('timed out') || e.toString().contains('TimeoutException')) {
+          throw Exception('连接超时，请检查网络或主机状态\n详情: $e');
+        }
+      }
+      rethrow;
+    }
   }
 
   Uri buildStreamUri(SharedRemoteEpisode episode) {
