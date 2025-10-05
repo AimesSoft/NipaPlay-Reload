@@ -1,6 +1,6 @@
 <div style="display: flex; align-items: center; justify-content: center;">
   <img src="https://github.com/user-attachments/assets/5366a99f-8906-4198-b2cf-2553252c0fb4" width="70%" style="margin-right: 20px;">
-  <img src="https://github.com/user-attachments/assets/1cb4db2a-7e85-4cca-81f5-f28a7ddeeda9" width="30%">
+  <img src="new-icon-apple.png" width="30%">
 </div>
 <img src="assets/images/main_image.png" width="100%">
 
@@ -21,43 +21,41 @@
 ## 下载
 
 - **Windows（x86 64）/Linux（amd64）/macOS（Intel&Apple Silicon）/Android（arm32&arm64&x86 64）**
-
+  
   - [GitHub Releases](https://github.com/mcdfsteve/nipaplay-reload/releases)
 - **iOS (TestFlight)**
-
+  
   - [点击这里通过 TestFlight 安装](https://testflight.apple.com/join/4JMh3t44)
 - **macOS (Homebrew)**
-
+  
   > 我们推荐 macOS 用户使用 [Homebrew](https://brew.sh/) 进行安装和管理。
-  >
-
+  
   1. **添加我们的软件源 (Tap):**
      *(此命令每个用户只需运行一次)*
-
+     
      ```bash
      brew tap Shinokawa/nipaplay-reload
      ```
   2. **安装 NipaPlay:**
-
+     
      ```bash
      brew install --cask nipaplay-reload
      ```
   3. **更新 NipaPlay:**
-
+     
      ```bash
      brew upgrade nipaplay-reload
      ```
 - **Arch Linux（x86 64）**
-
+  
   - 使用 `aur`助手
-
+    
     ```bash
     paru -S nipaplay-reload-bin
     ```
-
+    
     > 或
-    >
-
+    
     ```bash
     yay -S nipaplay-reload-bin
     ```
@@ -136,7 +134,7 @@
 ## 已实现功能
 
 - **视频播放**
-
+  
   - 支持本地视频文件播放
   - 支持Emby，Jellyfin视频播放
   - 支持切换播放器内核
@@ -160,14 +158,14 @@
   - 播放进度记忆
   - 倍速功能
 - **番剧管理**
-
+  
   - 新番时间表展示
   - 按星期分类显示
   - 番剧详情查看
   - 图片缓存管理
   - 历史记录同步
 - **设置中心**
-
+  
   - 毛玻璃设计风格，提供现代感界面
   - 适配平板布局和安卓TV
   - 主题模式切换（亮色/暗色）
@@ -177,6 +175,7 @@
   - 账户设置
   - 关于页面
 - 备份与恢复
+- 多设备远程访问
 
 ## 开发进度
 
@@ -196,7 +195,6 @@
   - 视频截图
   - 视频导出单独片段为gif
   - 完整的主题系统
-  - 完善的远程访问功能
   - 内置下载器并可通过app远程控制
   - 新番详情页面支持直接跳转网络媒体库
   - 在线url播放
@@ -208,7 +206,7 @@
 ## 使用的第三方库
 
 - **核心功能库**
-
+  
   - [fvp](https://pub.dev/packages/fvp) - 高性能视频播放器
   - [video_player](https://pub.dev/packages/video_player) - Flutter官方视频播放器
   - [media_kit](https://pub.dev/packages/media_kit) - 跨平台媒体播放框架
@@ -218,32 +216,32 @@
   - [crypto](https://pub.dev/packages/crypto) - 加密功能
   - [canvas_danmaku](https://pub.dev/packages/canvas_danmaku) - Canvas弹幕
 - **UI 相关**
-
+  
   - [glassmorphism](https://pub.dev/packages/glassmorphism) - 毛玻璃效果
   - [hugeicons](https://pub.dev/packages/hugeicons) - 图标库
   - [kmbal_ionicons](https://pub.dev/packages/kmbal_ionicons) - 图标库
   - [transparent_image](https://pub.dev/packages/transparent_image) - 透明图片占位符
 - **文件处理**
-
+  
   - [file_selector](https://pub.dev/packages/file_selector) - 文件选择器
   - [path_provider](https://pub.dev/packages/path_provider) - 路径提供
   - [path](https://pub.dev/packages/path) - 路径处理
   - [image_picker](https://pub.dev/packages/image_picker) - 图片选择器
   - [image](https://pub.dev/packages/image) - 图片处理
 - **状态管理**
-
+  
   - [provider](https://pub.dev/packages/provider) - 状态管理
   - [synchronized](https://pub.dev/packages/synchronized) - 同步控制
 - **数据存储**
-
+  
   - [shared_preferences](https://pub.dev/packages/shared_preferences) - 本地存储
   - [sqflite](https://pub.dev/packages/sqflite) - SQLite数据库
   - [sqflite_common_ffi](https://pub.dev/packages/sqflite_common_ffi) - 桌面平台SQLite支持
 - **网络相关**
-
+  
   - [cached_network_image](https://pub.dev/packages/cached_network_image) - 网络图片缓存
 - **系统功能**
-
+  
   - [window_manager](https://pub.dev/packages/window_manager) - 窗口管理
   - [package_info_plus](https://pub.dev/packages/package_info_plus) - 包信息
   - [url_launcher](https://pub.dev/packages/url_launcher) - URL 启动器
@@ -251,11 +249,11 @@
   - [wakelock_plus](https://pub.dev/packages/wakelock_plus) - 屏幕常亮
   - [screen_brightness](https://pub.dev/packages/screen_brightness) - 屏幕亮度控制
 - **工具库**
-
+  
   - [intl](https://pub.dev/packages/intl) - 国际化支持
   - [uuid](https://pub.dev/packages/uuid) - UUID生成器
 - **开发工具**
-
+  
   - [flutter_lints](https://pub.dev/packages/flutter_lints) - 代码检查
 
 ## 技术栈
@@ -310,3 +308,4 @@
 ## 关于看板娘
 
 - https://www.pixiv.net/artworks/130349456 （作者MCDFsteve）
+
