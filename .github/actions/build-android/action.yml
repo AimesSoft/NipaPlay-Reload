@@ -56,88 +56,92 @@ runs:
         echo "=== 构建Android APK (32位 + 64位) ==="
         # 构建32位和64位ARM架构的分离APK
         flutter build apk --release --split-per-abi
-        
+
+        # 构建通用APK (包含所有架构)
+        echo "=== 构建通用APK (包含所有架构) ==="
+        flutter build apk --release
+
         # 检查生成的APK文件
         echo "检查构建输出目录："
         ls -la build/app/outputs/flutter-apk/
-        
+
         # 创建签名配置文件
         echo "${{ inputs.signing-key }}" | base64 -d > keystore.jks
-        
+
         # 确保输出目录存在
         mkdir -p "build/app/outputs/apk/release"
-        
+
         # 检查实际生成的APK文件并动态处理
         echo "=== 检测生成的APK文件 ==="
         declare -A arch_apks=()
-        
+
         # 检查通用APK（如果配置了单一架构或未分架构）
         if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
           echo "发现通用APK: app-release.apk"
           arch_apks["universal"]="build/app/outputs/flutter-apk/app-release.apk"
         fi
-        
+
         # 检查分架构APK
         if [ -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ]; then
           echo "发现ARMv7 APK: app-armeabi-v7a-release.apk"
           arch_apks["armeabi-v7a"]="build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk"
         fi
-        
+
         if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
           echo "发现ARM64 APK: app-arm64-v8a-release.apk"
           arch_apks["arm64-v8a"]="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
         fi
-        
+
         if [ -f "build/app/outputs/flutter-apk/app-x86-release.apk" ]; then
           echo "发现x86 APK: app-x86-release.apk"
           arch_apks["x86"]="build/app/outputs/flutter-apk/app-x86-release.apk"
         fi
-        
+
         if [ -f "build/app/outputs/flutter-apk/app-x86_64-release.apk" ]; then
           echo "发现x86_64 APK: app-x86_64-release.apk"
           arch_apks["x86_64"]="build/app/outputs/flutter-apk/app-x86_64-release.apk"
         fi
-        
+
         # 检查是否找到了APK文件
         if [ ${#arch_apks[@]} -eq 0 ]; then
           echo "错误：未找到任何APK文件"
           exit 1
         fi
-        
+
         # 处理每个架构的APK
         signed_apks=()
         for arch in "${!arch_apks[@]}"; do
           input_apk="${arch_apks[$arch]}"
-          
+
           # 根据架构类型设置输出文件名
           if [ "$arch" = "universal" ]; then
             output_apk="build/app/outputs/apk/release/NipaPlay-${{ inputs.app-version }}-Android-universal.apk"
           else
             output_apk="build/app/outputs/apk/release/NipaPlay-${{ inputs.app-version }}-Android-${arch}.apk"
           fi
-          
+
           echo "=== 处理 ${arch} 架构 ==="
           echo "输入APK: $input_apk"
           echo "输出APK: $output_apk"
-          
+
           # 检查APK文件是否存在
           if [ ! -f "$input_apk" ]; then
             echo "错误：${arch} APK文件不存在: $input_apk"
             exit 1
           fi
-          
+
           # 检查APK文件是否有效
           if ! unzip -t "$input_apk" >/dev/null 2>&1; then
             echo "错误：${arch} APK文件损坏或无效: $input_apk"
             continue
           fi
-          
+
           # 使用zipalign对APK进行对齐
           temp_aligned="temp-aligned-${arch}.apk"
           $ANDROID_HOME/build-tools/29.0.3/zipalign -v -p 4 \
             "$input_apk" \
             "$temp_aligned"
-          
+
           # 使用apksigner对APK进行签名
           $ANDROID_HOME/build-tools/29.0.3/apksigner sign \
             --ks keystore.jks \
@@ -146,31 +150,31 @@ runs:
             --key-pass pass:${{ inputs.key-password }} \
             --out "$output_apk" \
             "$temp_aligned"
-          
+
           # 删除临时文件
           rm -f "$temp_aligned"
-          
+
           # 删除未签名的APK
           rm -f "$input_apk"
-          
+
           # 添加到已签名APK列表
           signed_apks+=("$output_apk")
           echo "✅ ${arch} APK签名完成: $output_apk"
         done
-        
+
         # 删除keystore
         rm -f keystore.jks
-        
+
         # 验证最终的APK文件
         echo "=== 最终APK文件列表 ==="
         ls -lh build/app/outputs/apk/release/NipaPlay*.apk
-        
+
         # 检查是否有成功生成的APK
         if [ ${#signed_apks[@]} -eq 0 ]; then
           echo "错误：没有成功生成任何APK文件"
           exit 1
         fi
-        
+
         # 输出APK路径（多个APK用分号分隔）
         apk_paths=$(IFS=';'; echo "${signed_apks[*]}")
         echo "apk_path=$apk_paths" >> $GITHUB_OUTPUT
