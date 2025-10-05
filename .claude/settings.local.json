@@ -9,7 +9,12 @@
       "WebFetch(domain:pub.dev)",
       "Read(//Users/dfsteve/.pub-cache/**)",
       "Bash(flutter:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(dart run flutter_launcher_icons)",
+      "Bash(magick new-icon.png -resize 64x64 assets/icons/flatpak/hicolor/64x64/apps/io.github.MCDFSteve.NipaPlay-Reload.png)",
+      "Bash(magick new-icon.png -resize 128x128 assets/icons/flatpak/hicolor/128x128/apps/io.github.MCDFSteve.NipaPlay-Reload.png)",
+      "Bash(magick new-icon.png -resize 256x256 assets/icons/flatpak/hicolor/256x256/apps/io.github.MCDFSteve.NipaPlay-Reload.png)",
+      "Bash(magick new-icon.png -resize 512x512 assets/icons/flatpak/hicolor/512x512/apps/io.github.MCDFSteve.NipaPlay-Reload.png)"
     ],
     "deny": [],
     "ask": []
