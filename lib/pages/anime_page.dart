@@ -26,7 +26,9 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/network_media_library_view.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_library_view.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 
@@ -263,10 +265,12 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   int _currentIndex = 0;
   bool _isJellyfinConnected = false;
   bool _isEmbyConnected = false;
+  bool _hasSharedRemoteHosts = false;
   
   // 动态计算标签页数量
   int get _tabCount {
     int count = 2; // 基础标签: 媒体库, 库管理
+    if (_hasSharedRemoteHosts) count++;
     if (_isJellyfinConnected) count++;
     if (_isEmbyConnected) count++;
     return count;
@@ -298,8 +302,10 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   void _checkConnectionStates() {
     final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
+    final sharedProvider = Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
     _isJellyfinConnected = jellyfinProvider.isConnected;
     _isEmbyConnected = embyProvider.isConnected;
+    _hasSharedRemoteHosts = sharedProvider.hosts.isNotEmpty;
     print('_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected');
   }
 
@@ -397,18 +403,20 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final enableAnimation = appearanceSettings.enablePageAnimation;
     
-    return Consumer2<JellyfinProvider, EmbyProvider>(
-      builder: (context, jellyfinProvider, embyProvider, child) {
+    return Consumer3<JellyfinProvider, EmbyProvider, SharedRemoteLibraryProvider>(
+      builder: (context, jellyfinProvider, embyProvider, sharedProvider, child) {
         final currentJellyfinConnectionState = jellyfinProvider.isConnected;
         final currentEmbyConnectionState = embyProvider.isConnected;
+        final currentSharedState = sharedProvider.hosts.isNotEmpty;
         
         // 检查连接状态是否改变
         if (_isJellyfinConnected != currentJellyfinConnectionState || 
-            _isEmbyConnected != currentEmbyConnectionState) {
-          print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState');
+            _isEmbyConnected != currentEmbyConnectionState ||
+            _hasSharedRemoteHosts != currentSharedState) {
+          print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState, Shared: $_hasSharedRemoteHosts -> $currentSharedState');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _updateTabController(currentJellyfinConnectionState, currentEmbyConnectionState);
+              _updateTabController(currentJellyfinConnectionState, currentEmbyConnectionState, currentSharedState);
             }
           });
         }
@@ -428,6 +436,16 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           ),
         ];
         
+        if (currentSharedState) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: SharedRemoteLibraryView(
+                onPlayEpisode: widget.onPlayEpisode,
+              ),
+            ),
+          );
+        }
+
         if (_isJellyfinConnected) {
           pageChildren.add(
             RepaintBoundary(
@@ -456,6 +474,10 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           const Tab(text: "库管理"),
         ];
         
+        if (currentSharedState) {
+          tabs.add(const Tab(text: "共享媒体"));
+        }
+
         if (_isJellyfinConnected) {
           tabs.add(const Tab(text: "Jellyfin"));
         }
@@ -548,12 +570,17 @@ style: TextStyle(color: Colors.white70, fontSize: 12),
     );
   }
   
-  void _updateTabController(bool isJellyfinConnected, bool isEmbyConnected) {
-    if (_isJellyfinConnected == isJellyfinConnected && _isEmbyConnected == isEmbyConnected) return;
+  void _updateTabController(bool isJellyfinConnected, bool isEmbyConnected, bool hasSharedHosts) {
+    if (_isJellyfinConnected == isJellyfinConnected &&
+        _isEmbyConnected == isEmbyConnected &&
+        _hasSharedRemoteHosts == hasSharedHosts) {
+      return;
+    }
     
     final oldIndex = _currentIndex;
     _isJellyfinConnected = isJellyfinConnected;
     _isEmbyConnected = isEmbyConnected;
+    _hasSharedRemoteHosts = hasSharedHosts;
     
     // 创建新的TabController
     final newController = TabController(

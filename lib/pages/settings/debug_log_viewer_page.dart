@@ -10,9 +10,9 @@ import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/glass_bottom_sheet.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -402,197 +402,127 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
 
   // 显示更多选项对话框
   void _showMoreOptions(BuildContext context) {
-    final navigatorState = Navigator.of(context);
-    
-    showModalBottomSheet(
+    GlassBottomSheet.show(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        decoration: const BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        child: GlassmorphicContainer(
-          width: double.infinity,
-          height: double.infinity,
-          borderRadius: 20,
-          blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
-          alignment: Alignment.center,
-          border: 1,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.3),
-              Colors.white.withOpacity(0.25),
-            ],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.5),
-              Colors.white.withOpacity(0.5),
-            ],
-          ),
-          child: Column(
-            children: [
-              // 拖拽条
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                alignment: Alignment.center,
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              
-              // 标题
-              const Padding(
-                padding: EdgeInsets.only(bottom: 16),
-                child: Text(
-                  '终端输出选项',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              
-              // 选项列表
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      // 显示时间戳开关
-                      _buildOptionItem(
-                        icon: Icons.access_time,
-                        title: '显示时间戳',
-                        isSwitch: true,
-                        switchValue: _showTimestamp,
-                        onSwitchChanged: (value) {
-                          setState(() {
-                            _showTimestamp = value;
-                          });
-                          SettingsStorage.saveBool('debug_log_show_timestamp', value);
-                          Navigator.pop(context);
-                        },
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // 自动滚动开关
-                      _buildOptionItem(
-                        icon: Icons.auto_awesome,
-                        title: '自动滚动',
-                        isSwitch: true,
-                        switchValue: _autoScroll,
-                        onSwitchChanged: (value) {
-                          setState(() {
-                            _autoScroll = value;
-                          });
-                          SettingsStorage.saveBool('debug_log_auto_scroll', value);
-                          Navigator.pop(context);
-                        },
-                      ),
-                      
-                      const SizedBox(height: 20),
-                      
-                      // 分隔线
-                      Divider(color: Colors.white.withOpacity(0.3)),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // 统计信息
-                      _buildOptionItem(
-                        icon: Icons.bar_chart,
-                        title: '统计信息',
-                        onTap: () {
-                          Navigator.pop(context);
-                          _showLogStatistics();
-                        },
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // 导出全部
-                      _buildOptionItem(
-                        icon: Icons.copy_all,
-                        title: Platform.isWindows || Platform.isMacOS || Platform.isLinux 
-                            ? '导出到文件' 
-                            : '导出全部',
-                        onTap: () {
-                          Navigator.pop(context);
-                          if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-                            _exportLogsToFile();
-                          } else {
-                            _exportLogs();
-                          }
-                        },
-                      ),
-                      
-                      // PC端额外显示复制到剪贴板选项
-                      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) ...[
-                        const SizedBox(height: 12),
-                        _buildOptionItem(
-                          icon: Icons.content_copy,
-                          title: '复制到剪贴板',
-                          onTap: () {
-                            Navigator.pop(context);
-                            _exportLogs();
-                          },
-                        ),
-                      ],
-                      
-                      const SizedBox(height: 12),
-                      
-                      // 分享二维码选项
-                      _buildOptionItem(
-                        icon: Icons.qr_code,
-                        title: '分享二维码',
-                        onTap: () {
-                          Navigator.pop(context);
-                          Future.microtask(() {
-                            if (mounted) {
-                              _showQRCode();
-                            }
-                          });
-                        },
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // 清空日志
-                      _buildOptionItem(
-                        icon: Icons.clear_all,
-                        title: '清空日志',
-                        iconColor: Colors.red,
-                        textColor: Colors.red,
-                        onTap: () {
-                          Navigator.pop(context);
-                          _clearLogs();
-                        },
-                      ),
-                      
-                      // 添加底部边距，确保最后一项可以完全显示
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
+      title: '终端输出选项',
+      height: MediaQuery.of(context).size.height * 0.6,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // 显示时间戳开关
+            _buildOptionItem(
+              icon: Icons.access_time,
+              title: '显示时间戳',
+              isSwitch: true,
+              switchValue: _showTimestamp,
+              onSwitchChanged: (value) {
+                setState(() {
+                  _showTimestamp = value;
+                });
+                SettingsStorage.saveBool('debug_log_show_timestamp', value);
+                Navigator.pop(context);
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            // 自动滚动开关
+            _buildOptionItem(
+              icon: Icons.auto_awesome,
+              title: '自动滚动',
+              isSwitch: true,
+              switchValue: _autoScroll,
+              onSwitchChanged: (value) {
+                setState(() {
+                  _autoScroll = value;
+                });
+                SettingsStorage.saveBool('debug_log_auto_scroll', value);
+                Navigator.pop(context);
+              },
+            ),
+
+            const SizedBox(height: 20),
+
+            // 分隔线
+            Divider(color: Colors.white.withOpacity(0.3)),
+
+            const SizedBox(height: 12),
+
+            // 统计信息
+            _buildOptionItem(
+              icon: Icons.bar_chart,
+              title: '统计信息',
+              onTap: () {
+                Navigator.pop(context);
+                _showLogStatistics();
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            // 导出全部
+            _buildOptionItem(
+              icon: Icons.copy_all,
+              title: Platform.isWindows || Platform.isMacOS || Platform.isLinux
+                  ? '导出到文件'
+                  : '导出全部',
+              onTap: () {
+                Navigator.pop(context);
+                if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+                  _exportLogsToFile();
+                } else {
+                  _exportLogs();
+                }
+              },
+            ),
+
+            // PC端额外显示复制到剪贴板选项
+            if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) ...[
+              const SizedBox(height: 12),
+              _buildOptionItem(
+                icon: Icons.content_copy,
+                title: '复制到剪贴板',
+                onTap: () {
+                  Navigator.pop(context);
+                  _exportLogs();
+                },
               ),
             ],
-          ),
+
+            const SizedBox(height: 12),
+
+            // 分享二维码选项
+            _buildOptionItem(
+              icon: Icons.qr_code,
+              title: '分享二维码',
+              onTap: () {
+                Navigator.pop(context);
+                Future.microtask(() {
+                  if (mounted) {
+                    _showQRCode();
+                  }
+                });
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            // 清空日志
+            _buildOptionItem(
+              icon: Icons.clear_all,
+              title: '清空日志',
+              iconColor: Colors.red,
+              textColor: Colors.red,
+              onTap: () {
+                Navigator.pop(context);
+                _clearLogs();
+              },
+            ),
+
+            // 添加底部边距，确保最后一项可以完全显示
+            const SizedBox(height: 16),
+          ],
         ),
       ),
     );

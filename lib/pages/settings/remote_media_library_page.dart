@@ -11,6 +11,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_card.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_library_settings_section.dart';
 
 class RemoteMediaLibraryPage extends StatefulWidget {
   const RemoteMediaLibraryPage({super.key});
@@ -61,14 +62,18 @@ style: TextStyle(color: Colors.white70),
             
             // Jellyfin服务器配置部分
             _buildJellyfinSection(jellyfinProvider),
-            
+
             const SizedBox(height: 20),
-            
+
             // Emby服务器配置部分
             _buildEmbySection(embyProvider),
-            
+
             const SizedBox(height: 20),
-            
+
+            const SharedRemoteLibrarySettingsSection(),
+
+            const SizedBox(height: 20),
+
             // 其他远程媒体库服务 (预留)
             _buildOtherServicesSection(),
           ],
@@ -870,4 +875,3 @@ style: TextStyle(color: Colors.red)),
     }
   }
 }
-

@@ -87,6 +87,17 @@ style: TextStyle(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
+                    // NipaPlay 选项
+                    _buildServerOptionWithImage(
+                      imageAsset: 'assets/images/logo512.png',
+                      title: 'NipaPlay',
+                      subtitle: '局域网媒体共享',
+                      color: Colors.blueAccent,
+                      onTap: () => Navigator.of(context).pop('nipaplay'),
+                    ),
+
+                    const SizedBox(height: 12),
+
                     // Jellyfin 选项
                     _buildServerOptionWithSvg(
                       svgAsset: 'assets/jellyfin.svg',
@@ -95,9 +106,9 @@ style: TextStyle(
                       color: Colors.lightBlueAccent,
                       onTap: () => Navigator.of(context).pop('jellyfin'),
                     ),
-                    
+
                     const SizedBox(height: 12),
-                    
+
                     // Emby 选项
                     _buildServerOptionWithSvg(
                       svgAsset: 'assets/emby.svg',
@@ -106,7 +117,7 @@ style: TextStyle(
                       color: const Color(0xFF52B54B),
                       onTap: () => Navigator.of(context).pop('emby'),
                     ),
-                    
+
                     // 添加底部边距，确保最后一项可以完全显示
                     const SizedBox(height: 16),
                   ],
@@ -200,4 +211,85 @@ style: TextStyle(
       ),
     );
   }
-} 
+
+  Widget _buildServerOptionWithImage({
+    required String imageAsset,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Logo图标
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Image.asset(
+                    imageAsset,
+                    width: 32,
+                    height: 32,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // 文本信息
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 箭头图标
+              Icon(
+                Ionicons.chevron_forward,
+                size: 16,
+                color: Colors.white.withOpacity(0.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

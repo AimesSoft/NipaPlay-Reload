@@ -7,10 +7,12 @@ import 'package:http/http.dart' as http;
 import 'search_service.dart'; // 导入SearchService
 import 'package:flutter/foundation.dart'; // 导入debugPrint
 import '../providers/service_provider.dart';
+import 'local_media_share_api.dart';
 
 class WebApiService {
   final Router _router = Router();
   final SearchService _searchService = SearchService.instance; // 获取SearchService实例
+  final LocalMediaShareApi _localMediaShareApi = LocalMediaShareApi();
 
   WebApiService() {
     _router.get('/bangumi/calendar', handleBangumiCalendarRequest);
@@ -39,6 +41,7 @@ class WebApiService {
     _router.get('/media/libraries', handleGetLibrariesRequest);
     _router.get('/media/local/items', handleGetLocalMediaItemsRequest);
     _router.get('/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
+    _router.mount('/media/local/share/', _localMediaShareApi.router);
   }
 
   Handler get handler => _router;
@@ -683,4 +686,3 @@ class WebApiService {
     return 'Local';
   }
 }
-

@@ -5,8 +5,10 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_library_management_tab.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/pages/media_library_page.dart';
+import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/library_management_tab.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/network_media_library_view.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_library_view.dart';
 
 class FluentMediaLibraryTabs extends StatefulWidget {
   final int initialIndex;
@@ -37,10 +39,11 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
   Widget build(BuildContext context) {
     return Consumer2<JellyfinProvider, EmbyProvider>(
       builder: (context, jellyfinProvider, embyProvider, child) {
+        final sharedProvider = Provider.of<SharedRemoteLibraryProvider>(context);
         final isJellyfinConnected = jellyfinProvider.isConnected;
         final isEmbyConnected = embyProvider.isConnected;
 
-        final tabs = _buildTabs(isJellyfinConnected, isEmbyConnected);
+        final tabs = _buildTabs(isJellyfinConnected, isEmbyConnected, sharedProvider);
 
         // Ensure currentIndex is valid
         if (_currentIndex >= tabs.length) {
@@ -58,7 +61,11 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
     );
   }
 
-  List<Tab> _buildTabs(bool isJellyfinConnected, bool isEmbyConnected) {
+  List<Tab> _buildTabs(
+    bool isJellyfinConnected,
+    bool isEmbyConnected,
+    SharedRemoteLibraryProvider sharedProvider,
+  ) {
     final List<Tab> tabs = [
       Tab(
         text: const Text('媒体库'),
@@ -74,6 +81,17 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
         ),
       ),
     ];
+
+    if (sharedProvider.hosts.isNotEmpty) {
+      tabs.add(
+        Tab(
+          text: const Text('共享媒体'),
+          body: SharedRemoteLibraryView(
+            onPlayEpisode: widget.onPlayEpisode,
+          ),
+        ),
+      );
+    }
 
     if (isJellyfinConnected) {
       tabs.add(

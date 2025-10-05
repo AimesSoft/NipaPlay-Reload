@@ -200,7 +200,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               ),
               const SizedBox(width: 12),
               const Text(
-                'Web远程访问',
+                '远程访问',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -229,22 +229,22 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               ),
               
               const SizedBox(height: 16),
-              
+
               const Text(
-                '启用Web服务器功能，可以通过浏览器远程访问和控制应用。此功能正在开发中，部分功能可能不完整。',
+                '启用后可通过浏览器或其他NipaPlay客户端远程访问本机媒体库。此功能正在开发中，部分功能可能不完整。',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
                 ),
               ),
-              
+
               const SizedBox(height: 16),
               
               // 启用/禁用开关
               _buildSettingItem(
                 icon: Icons.power_settings_new,
                 title: '启用Web服务器',
-                subtitle: '允许通过浏览器远程访问应用',
+                subtitle: '允许通过浏览器或其他客户端远程访问本机媒体库',
                 trailing: Switch(
                   value: _webServerEnabled,
                   onChanged: _toggleWebServer,

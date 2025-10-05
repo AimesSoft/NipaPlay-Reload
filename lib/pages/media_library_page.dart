@@ -12,7 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
 import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart'; 
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -22,6 +22,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dar
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 import 'package:nipaplay/widgets/nipaplay_theme/media_server_selection_sheet.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -332,6 +333,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         await _showJellyfinServerDialog();
       } else if (result == 'emby') {
         await _showEmbyServerDialog();
+      } else if (result == 'nipaplay') {
+        await SharedRemoteHostSelectionSheet.show(context);
       }
     }
   }
@@ -544,12 +547,12 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
             child: GridView.builder(
               controller: _gridScrollController,
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 150, 
-                childAspectRatio: 7/12,   
-                crossAxisSpacing: 8,      
-                mainAxisSpacing: 8,       
+                maxCrossAxisExtent: 150,
+                childAspectRatio: 7/12,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
               ),
-              padding: const EdgeInsets.all(0),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
               cacheExtent: 800,
               clipBehavior: Clip.hardEdge,
               physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
