@@ -120,7 +120,7 @@ flutter_launcher_icons:
     icon_size: 48
   macos:
     generate: true
-    image_path: "new-icon-apple.png"
+    image_path: "new-icon-mac.png"
   linux:
     generate: true
     image_path: "new-icon.png"
