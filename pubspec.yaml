@@ -111,27 +111,28 @@ flutter_launcher_icons:
   ios: true
   web:
     generate: true
-    image_path: "new-icon.png"
+    image_path: "icons/new-icon.png"
     background_color: "#ffffff"
     theme_color: "#ffffff"
   windows:
     generate: true
-    image_path: "new-icon.png"
+    image_path: "icons/new-icon.png"
     icon_size: 48
   macos:
     generate: true
-    image_path: "new-icon-mac.png"
+    image_path: "icons/new-icon-mac.png"
   linux:
     generate: true
-    image_path: "new-icon.png"
+    image_path: "icons/new-icon.png"
 
   # Android 使用 new-icon.png
-  image_path: "new-icon.png"
+  image_path: "icons/new-icon.png"
   adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "new-icon.png"
+  adaptive_icon_foreground: "icons/new-icon.png"
 
   # iOS 使用 new-icon-apple.png
-  image_path_ios: "new-icon-apple.png"
+  image_path_ios: "icons/new-icon-apple.png"
+  image_path_ios_dark_transparent:  "icons/new-icon-apple-dark.png"
   remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
