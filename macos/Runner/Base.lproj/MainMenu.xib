@@ -15,14 +15,13 @@
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="NipaPlay" customModuleProvider="target">
             <connections>
-                <outlet property="playerMenu" destination="uQy-DD-JDr" id="XBo-yE-nKs"/>
                 <outlet property="mainFlutterWindow" destination="QvC-M9-y7g" id="gIp-Ho-8D9"/>
+                <outlet property="playerMenu" destination="uQy-DD-JDr" id="XBo-yE-nKs"/>
             </connections>
         </customObject>
         <customObject id="YLy-65-1bz" customClass="NSFontManager"/>
         <menu title="Main Menu" systemMenu="main" id="AYu-sK-qS6">
             <items>
-                <!-- NipaPlay 应用菜单 -->
                 <menuItem title="NipaPlay" id="app-menu-item">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="NipaPlay" systemMenu="apple" id="app-menu">
@@ -35,7 +34,6 @@
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="app-separator-1"/>
                             <menuItem title="偏好设置..." keyEquivalent="," id="preferences-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openSettings:" target="Voe-Tx-rLC" id="preferences-action"/>
                                 </connections>
@@ -47,7 +45,6 @@
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="app-separator-3"/>
                             <menuItem title="隐藏 NipaPlay" keyEquivalent="h" id="hide-app-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="hide:" target="-1" id="hide-app-action"/>
                                 </connections>
@@ -66,7 +63,6 @@
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="app-separator-4"/>
                             <menuItem title="退出 NipaPlay" keyEquivalent="q" id="quit-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="terminate:" target="-1" id="quit-action"/>
                                 </connections>
@@ -74,21 +70,17 @@
                         </items>
                     </menu>
                 </menuItem>
-                
-                <!-- 文件菜单 -->
                 <menuItem title="文件" id="file-menu-item">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="文件" id="file-menu">
                         <items>
                             <menuItem title="上传视频" keyEquivalent="u" id="upload-video-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="uploadVideo:" target="Voe-Tx-rLC" id="upload-video-action"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="file-separator"/>
                             <menuItem title="关闭窗口" keyEquivalent="w" id="close-window-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="performClose:" target="-1" id="close-window-action"/>
                                 </connections>
@@ -96,32 +88,26 @@
                         </items>
                     </menu>
                 </menuItem>
-                
-                <!-- 导航菜单（原播放器菜单） -->
                 <menuItem title="导航" id="navigation-menu-item">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="导航" id="uQy-DD-JDr">
                         <items>
                             <menuItem title="主页" keyEquivalent="1" id="home-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openHome:" target="Voe-Tx-rLC" id="home-action"/>
                                 </connections>
                             </menuItem>
                             <menuItem title="视频播放" keyEquivalent="2" id="video-playback-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openVideoPlayback:" target="Voe-Tx-rLC" id="video-playback-action"/>
                                 </connections>
                             </menuItem>
                             <menuItem title="媒体库" keyEquivalent="3" id="media-library-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openMediaLibrary:" target="Voe-Tx-rLC" id="media-library-action"/>
                                 </connections>
                             </menuItem>
                             <menuItem title="新番更新" keyEquivalent="4" id="new-series-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="openNewSeries:" target="Voe-Tx-rLC" id="new-series-action"/>
                                 </connections>
@@ -129,14 +115,11 @@
                         </items>
                     </menu>
                 </menuItem>
-                
-                <!-- 窗口菜单 -->
                 <menuItem title="窗口" id="window-menu-item">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="窗口" systemMenu="window" id="window-menu">
                         <items>
                             <menuItem title="最小化" keyEquivalent="m" id="minimize-menu-item">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="performMiniaturize:" target="-1" id="minimize-action"/>
                                 </connections>
@@ -157,14 +140,11 @@
                         </items>
                     </menu>
                 </menuItem>
-                
-                <!-- 帮助菜单 -->
                 <menuItem title="帮助" id="help-menu-item">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="帮助" systemMenu="help" id="help-menu">
                         <items>
                             <menuItem title="NipaPlay 帮助" keyEquivalent="?" id="help-menu-item-main">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                                 <connections>
                                     <action selector="showHelp:" target="Voe-Tx-rLC" id="help-action"/>
                                 </connections>
@@ -191,11 +171,12 @@
         <window title="播放器" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" id="QvC-M9-y7g" customClass="MainFlutterWindow" customModule="NipaPlay" customModuleProvider="target">
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
             <rect key="contentRect" x="335" y="390" width="800" height="600"/>
-            <rect key="screenRect" x="0.0" y="0.0" width="1470" height="918"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1470" height="922"/>
             <view key="contentView" wantsLayer="YES" id="EiT-Mj-1SZ">
                 <rect key="frame" x="0.0" y="0.0" width="800" height="600"/>
                 <autoresizingMask key="autoresizingMask"/>
             </view>
+            <point key="canvasLocation" x="87" y="227"/>
         </window>
     </objects>
 </document>
