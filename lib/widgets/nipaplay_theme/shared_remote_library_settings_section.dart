@@ -8,6 +8,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_card.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
 
 class SharedRemoteLibrarySettingsSection extends StatelessWidget {
   const SharedRemoteLibrarySettingsSection({super.key});
@@ -20,11 +21,28 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.cloud_outlined, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Text(
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: ColorFiltered(
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                      child: Image.asset(
+                        'assets/nipaplay.png',
+                        width: 20,
+                        height: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
                     'NipaPlay 局域网媒体共享',
                     locale: Locale('zh', 'CN'),
                     style: TextStyle(
@@ -204,66 +222,46 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     BuildContext context,
     SharedRemoteLibraryProvider provider,
   ) async {
-    final nameController = TextEditingController();
-    final urlController = TextEditingController();
-
-    final result = await BlurDialog.show<bool>(
-      context: context,
+    await BlurLoginDialog.show(
+      context,
       title: '添加共享客户端',
-      contentWidget: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: nameController,
-            decoration: const InputDecoration(
-              labelText: '备注名称',
-              labelStyle: TextStyle(color: Colors.white70),
-            ),
-            style: const TextStyle(color: Colors.white),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: urlController,
-            decoration: const InputDecoration(
-              labelText: '访问地址（例如 http://192.168.x.x:8080）',
-              labelStyle: TextStyle(color: Colors.white70),
-            ),
-            style: const TextStyle(color: Colors.white),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+      fields: [
+        LoginField(
+          key: 'displayName',
+          label: '备注名称',
+          hint: '例如：家里的电脑',
+          required: false,
         ),
-        TextButton(
-          onPressed: () {
-            if (urlController.text.trim().isEmpty) {
-              BlurSnackBar.show(context, '请输入访问地址');
-              return;
-            }
-            Navigator.of(context).pop(true);
-          },
-          child: const Text('确定', style: TextStyle(color: Colors.white)),
+        LoginField(
+          key: 'baseUrl',
+          label: '访问地址',
+          hint: '例如：http://192.168.1.100:8080',
         ),
       ],
-    );
+      loginButtonText: '添加',
+      onLogin: (values) async {
+        try {
+          final displayName = values['displayName']?.trim().isEmpty ?? true
+              ? values['baseUrl']!.trim()
+              : values['displayName']!.trim();
 
-    if (result == true) {
-      try {
-        final displayName = nameController.text.trim().isEmpty
-            ? urlController.text.trim()
-            : nameController.text.trim();
-        await provider.addHost(
-          displayName: displayName,
-          baseUrl: urlController.text.trim(),
-        );
-        BlurSnackBar.show(context, '已添加共享客户端');
-      } catch (e) {
-        BlurSnackBar.show(context, '添加失败: $e');
-      }
-    }
+          await provider.addHost(
+            displayName: displayName,
+            baseUrl: values['baseUrl']!.trim(),
+          );
+
+          return LoginResult(
+            success: true,
+            message: '已添加共享客户端',
+          );
+        } catch (e) {
+          return LoginResult(
+            success: false,
+            message: '添加失败：$e',
+          );
+        }
+      },
+    );
   }
 
   Future<void> _confirmRemoveHost(

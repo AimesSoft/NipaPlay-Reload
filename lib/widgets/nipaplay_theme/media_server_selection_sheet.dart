@@ -89,10 +89,10 @@ style: TextStyle(
                   children: [
                     // NipaPlay 选项
                     _buildServerOptionWithImage(
-                      imageAsset: 'assets/images/logo512.png',
+                      imageAsset: 'assets/nipaplay.png',
                       title: 'NipaPlay',
                       subtitle: '局域网媒体共享',
-                      color: Colors.blueAccent,
+                      color: const Color(0xFFB39DDB), // 淡紫色
                       onTap: () => Navigator.of(context).pop('nipaplay'),
                     ),
 
@@ -245,10 +245,16 @@ style: TextStyle(
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: Image.asset(
-                    imageAsset,
-                    width: 32,
-                    height: 32,
+                  child: ColorFiltered(
+                    colorFilter: ColorFilter.mode(
+                      color,
+                      BlendMode.srcIn,
+                    ),
+                    child: Image.asset(
+                      imageAsset,
+                      width: 32,
+                      height: 32,
+                    ),
                   ),
                 ),
               ),

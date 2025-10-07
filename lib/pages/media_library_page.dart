@@ -23,6 +23,8 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 import 'package:nipaplay/widgets/nipaplay_theme/media_server_selection_sheet.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
+import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -334,8 +336,59 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       } else if (result == 'emby') {
         await _showEmbyServerDialog();
       } else if (result == 'nipaplay') {
-        await SharedRemoteHostSelectionSheet.show(context);
+        await _showNipaplayServerDialog();
       }
+    }
+  }
+
+  Future<void> _showNipaplayServerDialog() async {
+    final sharedRemoteProvider = Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+
+    // 如果已有主机，显示选择界面；否则显示添加主机的登录对话框
+    if (sharedRemoteProvider.hosts.isNotEmpty) {
+      await SharedRemoteHostSelectionSheet.show(context);
+    } else {
+      // 显示添加主机的登录对话框
+      await BlurLoginDialog.show(
+        context,
+        title: '添加NipaPlay共享客户端',
+        fields: [
+          LoginField(
+            key: 'displayName',
+            label: '备注名称',
+            hint: '例如：家里的电脑',
+            required: false,
+          ),
+          LoginField(
+            key: 'baseUrl',
+            label: '访问地址',
+            hint: '例如：http://192.168.1.100:8080',
+          ),
+        ],
+        loginButtonText: '添加',
+        onLogin: (values) async {
+          try {
+            final displayName = values['displayName']?.trim().isEmpty ?? true
+                ? values['baseUrl']!.trim()
+                : values['displayName']!.trim();
+
+            await sharedRemoteProvider.addHost(
+              displayName: displayName,
+              baseUrl: values['baseUrl']!.trim(),
+            );
+
+            return LoginResult(
+              success: true,
+              message: '已添加共享客户端',
+            );
+          } catch (e) {
+            return LoginResult(
+              success: false,
+              message: '添加失败：$e',
+            );
+          }
+        },
+      );
     }
   }
 
