@@ -28,7 +28,7 @@ jobs:
       FVP_DEPS_LATEST: 1
     steps:
       - name: Select Xcode version
-        run: sudo xcode-select -s /Applications/Xcode_26.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
       - name: Checkout repository
         uses: actions/checkout@v4
