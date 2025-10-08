@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/scheduler.dart'; // 导入TickerProvider
+import 'package:nipaplay/utils/subtitle_font_loader.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -22,7 +23,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   PlayerPlaybackState _state = PlayerPlaybackState.stopped;
   List<int> _activeSubtitleTracks = [];
   List<int> _activeAudioTracks = [];
-  StreamSubscription<Track>? _trackSubscription; 
 
   String? _lastKnownActiveSubtitleId;
   StreamSubscription<Track>? _trackSubscription;
@@ -76,7 +76,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     );
     _initializeHardwareDecoding();
     _initializeCodecs();
-    _setupSubtitleFonts();
+    unawaited(_setupSubtitleFonts());
     _controller.waitUntilFirstFrameRendered.then((_) {
       _updateTextureIdFromController();
     });
@@ -110,7 +110,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
   }
 
-  void _setupSubtitleFonts() {
+  Future<void> _setupSubtitleFonts() async {
     try {
       final dynamic platform = _player.platform;
       if (platform == null) {
@@ -125,6 +125,20 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       if (defaultTargetPlatform == TargetPlatform.android) {
         platform.setProperty?.call("sub-font", "Droid Sans Fallback");
         // PlayerConfiguration 已配置 libassAndroidFont，对应的目录无需在此覆盖。
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        platform.setProperty?.call("sub-font", "Droid Sans Fallback");
+        final fontInfo = await ensureSubtitleFontFromAsset(
+          assetPath: 'assets/subfont.ttf',
+          fileName: 'subfont.ttf',
+        );
+        if (fontInfo != null) {
+          final fontsDir = fontInfo['directory'];
+          platform.setProperty?.call("sub-fonts-dir", fontsDir);
+          platform.setProperty?.call("sub-file-paths", fontsDir);
+          debugPrint('MediaKit: iOS 字幕字体目录: $fontsDir');
+        } else {
+          debugPrint('MediaKit: iOS 字幕字体准备失败，使用系统字体回退');
+        }
       } else {
         platform.setProperty?.call("sub-font", "subfont");
         platform.setProperty?.call("sub-fonts-dir", "assets");
