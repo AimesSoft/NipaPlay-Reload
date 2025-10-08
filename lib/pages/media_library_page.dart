@@ -133,10 +133,10 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       return;
     }
 
-    final filteredHistory = watchHistory.where((item) => 
-      !item.filePath.startsWith('jellyfin://') &&
-      !item.filePath.startsWith('emby://')
-    ).toList();
+    final filteredHistory = watchHistory.where((item) =>
+        !item.filePath.startsWith('jellyfin://') &&
+        !item.filePath.startsWith('emby://') &&
+        !item.filePath.contains('/api/media/local/share/')).toList();
 
     final Map<int, WatchHistoryItem> latestHistoryItemMap = {};
     for (var item in filteredHistory) {

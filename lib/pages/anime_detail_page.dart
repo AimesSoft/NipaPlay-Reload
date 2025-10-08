@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/cached_network_image_widget.dart';
 // import 'package:nipaplay/widgets/nipaplay_theme/translation_button.dart'; // Removed
@@ -27,8 +28,19 @@ import 'package:meta/meta.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
+  final SharedRemoteAnimeSummary? sharedSummary;
+  final Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader;
+  final PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder;
+  final String? sharedSourceLabel;
 
-  const AnimeDetailPage({super.key, required this.animeId});
+  const AnimeDetailPage({
+    super.key,
+    required this.animeId,
+    this.sharedSummary,
+    this.sharedEpisodeLoader,
+    this.sharedEpisodeBuilder,
+    this.sharedSourceLabel,
+  });
 
   @override
   State<AnimeDetailPage> createState() => _AnimeDetailPageState();
@@ -40,7 +52,14 @@ class AnimeDetailPage extends StatefulWidget {
     }
   }
   
-  static Future<WatchHistoryItem?> show(BuildContext context, int animeId) {
+  static Future<WatchHistoryItem?> show(
+    BuildContext context,
+    int animeId, {
+    SharedRemoteAnimeSummary? sharedSummary,
+    Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader,
+    PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder,
+    String? sharedSourceLabel,
+  }) {
     // 获取外观设置Provider
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
     final enableAnimation = appearanceSettings.enablePageAnimation;
@@ -52,7 +71,13 @@ class AnimeDetailPage extends StatefulWidget {
       barrierLabel: '关闭详情页',
       transitionDuration: const Duration(milliseconds: 250),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return AnimeDetailPage(animeId: animeId);
+        return AnimeDetailPage(
+          animeId: animeId,
+          sharedSummary: sharedSummary,
+          sharedEpisodeLoader: sharedEpisodeLoader,
+          sharedEpisodeBuilder: sharedEpisodeBuilder,
+          sharedSourceLabel: sharedSourceLabel,
+        );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         // 如果禁用动画，直接返回child
@@ -87,6 +112,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   static BuildContext? _openPageContext;
   final BangumiService _bangumiService = BangumiService.instance;
   BangumiAnime? _detailedAnime;
+  SharedRemoteAnimeSummary? _sharedSummary;
+  String? _sharedSourceLabel;
+  Future<List<SharedRemoteEpisode>> Function()? _sharedEpisodeLoader;
+  PlayableItem Function(SharedRemoteEpisode episode)? _sharedEpisodeBuilder;
+  final Map<int, SharedRemoteEpisode> _sharedEpisodeMap = {};
+  final Map<int, PlayableItem> _sharedPlayableMap = {};
+  bool _isLoadingSharedEpisodes = false;
+  String? _sharedEpisodesError;
   bool _isLoading = true;
   String? _error;
   TabController? _tabController;
@@ -139,6 +172,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         initialIndex: Provider.of<AppearanceSettingsProvider>(context, listen: false)
             .animeCardAction == AnimeCardAction.synopsis ? 0 : 1
     );
+
+    _sharedSummary = widget.sharedSummary;
+    _sharedSourceLabel = widget.sharedSourceLabel;
+    _sharedEpisodeLoader = widget.sharedEpisodeLoader;
+    _sharedEpisodeBuilder = widget.sharedEpisodeBuilder;
+
+    if (_sharedEpisodeLoader != null && _sharedEpisodeBuilder != null) {
+      _loadSharedEpisodes();
+    }
     
     // 添加TabController监听
     _tabController!.addListener(_handleTabChange);
@@ -155,6 +197,38 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         _fetchDandanplayWatchStatus(_detailedAnime!);
       }
     });
+  }
+
+  Future<void> _loadSharedEpisodes() async {
+    if (_sharedEpisodeLoader == null || _sharedEpisodeBuilder == null) {
+      return;
+    }
+    setState(() {
+      _isLoadingSharedEpisodes = true;
+      _sharedEpisodesError = null;
+      _sharedEpisodes = [];
+      _sharedPlayableEpisodes = [];
+    });
+    try {
+      final episodes = await _sharedEpisodeLoader!.call();
+      final playable = episodes.map(_sharedEpisodeBuilder!).toList();
+      if (mounted) {
+        setState(() {
+          _sharedEpisodes = episodes;
+          _sharedPlayableEpisodes = playable;
+          _isLoadingSharedEpisodes = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _sharedEpisodesError = e.toString();
+          _isLoadingSharedEpisodes = false;
+          _sharedEpisodes = [];
+          _sharedPlayableEpisodes = [];
+        });
+      }
+    }
   }
 
   @override
@@ -349,7 +423,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   }
 
   Widget _buildSummaryView(BangumiAnime anime) {
-    final String summaryText = (anime.summary ?? '暂无简介')
+    final sharedSummary = _sharedSummary;
+    final String summaryText = (sharedSummary?.summary?.isNotEmpty == true
+            ? sharedSummary!.summary!
+            : (anime.summary ?? '暂无简介'))
         .replaceAll('<br>', ' ')
         .replaceAll('<br/>', ' ')
         .replaceAll('<br />', ' ');
@@ -360,9 +437,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             : '待定';
     
     // -- 开始修改 --
-    String coverImageUrl = anime.imageUrl;
+    String coverImageUrl = sharedSummary?.imageUrl ?? anime.imageUrl;
     if (kIsWeb) {
-      final encodedUrl = base64Url.encode(utf8.encode(anime.imageUrl));
+      final encodedUrl = base64Url.encode(utf8.encode(coverImageUrl));
       coverImageUrl = '/api/image_proxy?url=$encodedUrl';
     }
     // -- 结束修改 --
@@ -628,13 +705,15 @@ style: TextStyle(
                   const TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
                   TextSpan(text: anime.typeDescription)
                 ]))),
-          if (anime.totalEpisodes != null)
+          if ((sharedSummary?.episodeCount ?? anime.totalEpisodes) != null)
             Padding(
                 padding: const EdgeInsets.only(bottom: 4.0),
                 child: RichText(
                     text: TextSpan(style: valueStyle, children: [
                   const TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
-                  TextSpan(text: '${anime.totalEpisodes}话')
+                  TextSpan(
+                      text:
+                          '${(sharedSummary?.episodeCount ?? anime.totalEpisodes)}话')
                 ]))),
           if (anime.isOnAir != null)
             Padding(
@@ -709,6 +788,60 @@ style: TextStyle(
   }
 
   Widget _buildEpisodesListView(BangumiAnime anime) {
+    if (_sharedEpisodeBuilder != null) {
+      if (_isLoadingSharedEpisodes) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(20.0),
+            child: CircularProgressIndicator(color: Colors.white),
+          ),
+        );
+      }
+      if (_sharedEpisodesError != null) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Ionicons.alert_circle_outline,
+                    color: Colors.orangeAccent, size: 42),
+                const SizedBox(height: 12),
+                Text(
+                  _sharedEpisodesError!,
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                  ),
+                  onPressed: _loadSharedEpisodes,
+                  child: const Text(
+                    '重新加载',
+                    locale: Locale('zh', 'CN'),
+                    style: TextStyle(color: Colors.white),
+                  ),
+                )
+              ],
+            ),
+          ),
+        );
+      }
+      if (_sharedPlayableEpisodes.isEmpty) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(20.0),
+            child: Text('暂无共享媒体剧集',
+                locale: Locale('zh', 'CN'),
+                style: TextStyle(color: Colors.white70)),
+          ),
+        );
+      }
+      return _buildSharedEpisodesList();
+    }
+
     if (anime.episodeList == null || anime.episodeList!.isEmpty) {
       return const Center(
           child: Padding(
@@ -890,6 +1023,76 @@ style: TextStyle(
     );
   }
 
+  Widget _buildSharedEpisodesList() {
+    return Scrollbar(
+      radius: const Radius.circular(4),
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+        itemCount: _sharedPlayableEpisodes.length,
+        separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+        itemBuilder: (context, index) {
+          final remoteEpisode = _sharedEpisodes[index];
+          final playable = _sharedPlayableEpisodes[index];
+          final historyItem = playable.historyItem;
+          final bool playableFlag = remoteEpisode.fileExists;
+
+          double? progressFraction = historyItem?.watchProgress;
+          String? subtitle;
+          if (remoteEpisode.duration != null && remoteEpisode.duration! > 0) {
+            final minutes = (remoteEpisode.duration! / 60).floor();
+            subtitle = '时长 ${minutes} 分钟';
+          }
+          if (progressFraction != null && progressFraction > 0) {
+            final percent = (progressFraction * 100).clamp(0, 100).toStringAsFixed(0);
+            subtitle = subtitle == null ? '已观看 $percent%' : '$subtitle · 已观看 $percent%';
+          }
+
+          final episodeTitle = remoteEpisode.title;
+
+          return ListTile(
+            onTap: playableFlag
+                ? () async {
+                    await PlaybackService().play(playable);
+                    if (mounted) Navigator.of(context).pop();
+                  }
+                : () {
+                    BlurSnackBar.show(context, '原文件缺失，无法播放');
+                  },
+            leading: CircleAvatar(
+              backgroundColor: Colors.white12,
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ),
+            title: Text(
+              episodeTitle,
+              style: TextStyle(
+                color: playableFlag ? Colors.white : Colors.white38,
+                fontSize: 15,
+              ),
+            ),
+            subtitle: subtitle != null
+                ? Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  )
+                : null,
+            trailing: Icon(
+              playableFlag
+                  ? Ionicons.play_circle_outline
+                  : Ionicons.lock_closed_outline,
+              color: playableFlag ? Colors.white70 : Colors.white30,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildContent() {
     if (_isLoading) {
       return const Center(
@@ -934,6 +1137,12 @@ style: TextStyle(color: Colors.white70)),
     }
 
     final anime = _detailedAnime!;
+    final displayTitle = (_sharedSummary?.nameCn?.isNotEmpty == true)
+        ? _sharedSummary!.nameCn!
+        : anime.nameCn;
+    final displaySubTitle = (_sharedSummary?.name?.isNotEmpty == true)
+        ? _sharedSummary!.name
+        : anime.name;
     // 获取是否启用页面切换动画
     final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
     
@@ -947,12 +1156,52 @@ style: TextStyle(color: Colors.white70)),
             children: [
               Expanded(
                 child: Text(
-                  anime.nameCn,
+                  displayTitle,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: Colors.white, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (displaySubTitle != null &&
+                  displaySubTitle.isNotEmpty &&
+                  displaySubTitle != displayTitle)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(
+                    displaySubTitle,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.white60),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              if (_sharedSourceLabel != null)
+                Container(
+                  margin: const EdgeInsets.only(right: 8.0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white24, width: 0.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Ionicons.cloud_outline,
+                          size: 14, color: Colors.white70),
+                      const SizedBox(width: 4),
+                      Text(
+                        _sharedSourceLabel!,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
               
               // 收藏按钮（仅当登录弹弹play时显示）
               if (DandanplayService.isLoggedIn) ...[
