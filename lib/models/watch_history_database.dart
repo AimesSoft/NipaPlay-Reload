@@ -329,6 +329,25 @@ class WatchHistoryDatabase {
       return null;
     }
   }
+
+  // 根据共享媒体的 episode shareId 获取历史记录列表
+  Future<List<WatchHistoryItem>> getHistoriesBySharedEpisodeId(String shareEpisodeId) async {
+    final db = await database;
+
+    try {
+      final List<Map<String, dynamic>> maps = await db.query(
+        'watch_history',
+        where: 'file_path LIKE ?',
+        whereArgs: ['%$shareEpisodeId%'],
+        orderBy: 'last_watch_time DESC',
+      );
+
+      return maps.map((map) => _mapToWatchHistoryItem(map)).toList();
+    } catch (e) {
+      debugPrint('通过共享媒体EpisodeId获取历史记录失败: $e');
+      return [];
+    }
+  }
   
   // 根据番剧ID和集数ID获取历史记录
   Future<WatchHistoryItem?> getHistoryByEpisode(int animeId, int episodeId) async {

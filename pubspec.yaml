@@ -111,19 +111,19 @@ flutter_launcher_icons:
   ios: true
   web:
     generate: true
-    image_path: "icons/new-icon.png"
+    image_path: "icons/new-icon-win.png"
     background_color: "#ffffff"
     theme_color: "#ffffff"
   windows:
     generate: true
-    image_path: "icons/new-icon.png"
+    image_path: "icons/new-icon-win.png"
     icon_size: 48
   macos:
     generate: true
     image_path: "icons/new-icon-mac.png"
   linux:
     generate: true
-    image_path: "icons/new-icon.png"
+    image_path: "icons/new-icon-win.png"
 
   # Android 使用 new-icon.png
   image_path: "icons/new-icon.png"
