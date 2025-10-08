@@ -58,6 +58,7 @@ import 'package:flutter/scheduler.dart'; // 添加Ticker导入
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 import 'hotkey_service.dart'; // Added import for HotkeyService
 import 'player_kernel_manager.dart'; // 导入播放器内核管理器
+import 'shared_remote_history_helper.dart';
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -195,6 +196,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 从 historyItem 传入的弹幕 ID（用于保持弹幕关联）
   int? _episodeId; // 存储从 historyItem 传入的 episodeId
   int? _animeId; // 存储从 historyItem 传入的 animeId
+  WatchHistoryItem? _initialHistoryItem; // 记录首次传入的历史记录，便于初始化时复用元数据
   
   // 字幕管理器
   late SubtitleManager _subtitleManager;
@@ -343,6 +345,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 立即更新历史记录，确保历史记录卡片显示正确的动画名称
     _updateHistoryWithNewTitles();
+  }
+
+  Future<void> _removeHistoryEntry(String filePath) async {
+    try {
+      if (_context != null && _context!.mounted) {
+        await _context!.read<WatchHistoryProvider>().removeHistory(filePath);
+      } else {
+        await WatchHistoryManager.removeHistory(filePath);
+      }
+    } catch (e) {
+      debugPrint('删除历史记录时出错 ($filePath): $e');
+    }
   }
   
   /// 使用新的标题更新历史记录
@@ -811,6 +825,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     _clearPreviousVideoState(); // 清理旧状态
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
+    _initialHistoryItem = historyItem;
     
     // 从 historyItem 中获取弹幕 ID
     if (historyItem != null) {
@@ -1381,63 +1396,97 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 初始化观看记录
   Future<void> _initializeWatchHistory(String path) async {
     try {
-      
-      // 先检查是否已存在观看记录
-      final existingHistory = await WatchHistoryManager.getHistoryItem(path);
+    final sharedEpisodeId = SharedRemoteHistoryHelper.extractSharedEpisodeId(path);
+    final sharedEpisodeHistories = await SharedRemoteHistoryHelper
+        .loadHistoriesBySharedEpisodeId(sharedEpisodeId);
+
+      WatchHistoryItem? existingHistory = await WatchHistoryManager.getHistoryItem(path);
+
+      if (existingHistory == null && sharedEpisodeHistories.isNotEmpty) {
+        try {
+          existingHistory = sharedEpisodeHistories.firstWhere(
+            (item) => item.filePath == path,
+          );
+        } catch (_) {
+          existingHistory = sharedEpisodeHistories.first;
+        }
+        debugPrint(
+            '_initializeWatchHistory: 通过共享媒体EpisodeId匹配到已有记录: ${existingHistory.filePath}');
+      }
+
+      final duplicatesToRemove = <String>{};
+      for (final history in sharedEpisodeHistories) {
+        if (history.filePath != path) {
+          duplicatesToRemove.add(history.filePath);
+        }
+      }
+
+      for (final duplicatePath in duplicatesToRemove) {
+        debugPrint('_initializeWatchHistory: 移除重复的共享媒体历史记录: $duplicatePath');
+        await _removeHistoryEntry(duplicatePath);
+      }
 
       if (existingHistory != null) {
-
-        
-        // 如果已存在记录，只更新播放进度和时间相关信息
-        // 对于Jellyfin流媒体，如果有友好名称，则使用友好名称
         String finalAnimeName = existingHistory.animeName;
         String? finalEpisodeTitle = existingHistory.episodeTitle;
-        
-        bool isJellyfinStream = path.startsWith('jellyfin://');
-        bool isEmbyStream = path.startsWith('emby://');
-        if ((isJellyfinStream || isEmbyStream) && _animeTitle != null && _animeTitle!.isNotEmpty) {
-          finalAnimeName = _animeTitle!;
-          if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
-            finalEpisodeTitle = _episodeTitle!;
+
+        final bool isJellyfinStream = path.startsWith('jellyfin://');
+        final bool isEmbyStream = path.startsWith('emby://');
+        final bool isSharedRemoteStream =
+            SharedRemoteHistoryHelper.isSharedRemoteStreamPath(path);
+
+        if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
+          final animeNameCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+            SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
+            SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
+            SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
+          ]);
+          if (animeNameCandidate != null) {
+            finalAnimeName = animeNameCandidate;
           }
-          debugPrint('_initializeWatchHistory: 使用流媒体友好名称: $finalAnimeName - $finalEpisodeTitle');
+
+          final episodeTitleCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+            _episodeTitle,
+            _initialHistoryItem?.episodeTitle,
+            finalEpisodeTitle,
+          ]);
+          if (episodeTitleCandidate != null) {
+            finalEpisodeTitle = episodeTitleCandidate;
+          }
+
+          debugPrint('_initializeWatchHistory: 使用友好名称: $finalAnimeName - $finalEpisodeTitle');
         }
-        
+
         debugPrint(
             '已有观看记录存在，只更新播放进度: 动画=$finalAnimeName, 集数=$finalEpisodeTitle');
 
         final updatedHistory = WatchHistoryItem(
-          filePath: existingHistory.filePath,
+          filePath: path,
           animeName: finalAnimeName,
           episodeTitle: finalEpisodeTitle,
-          episodeId: existingHistory.episodeId,
-          animeId: existingHistory.animeId,
+          episodeId:
+              _episodeId ?? existingHistory.episodeId ?? _initialHistoryItem?.episodeId,
+          animeId: _animeId ?? existingHistory.animeId ?? _initialHistoryItem?.animeId,
           watchProgress: existingHistory.watchProgress,
           lastPosition: existingHistory.lastPosition,
           duration: existingHistory.duration,
           lastWatchTime: DateTime.now(),
-          thumbnailPath: existingHistory.thumbnailPath,
+          thumbnailPath: existingHistory.thumbnailPath ?? _initialHistoryItem?.thumbnailPath,
+          isFromScan: existingHistory.isFromScan,
         );
 
-        // Jellyfin同步：如果是Jellyfin流媒体，进行播放记录同步
         if (isJellyfinStream) {
           try {
-    
             final itemId = path.replaceFirst('jellyfin://', '');
             final syncService = JellyfinPlaybackSyncService();
-            // 使用原始历史记录进行同步，而不是新创建的记录
             final syncedHistory = await syncService.syncOnPlayStart(itemId, existingHistory);
             if (syncedHistory != null) {
-              // 使用同步后的历史记录
               await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
-              // 同时更新SharedPreferences中的播放位置
               await _saveVideoPosition(path, syncedHistory.lastPosition);
               debugPrint('Jellyfin同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
-              // 报告播放开始
               await syncService.reportPlaybackStart(itemId, syncedHistory);
             } else {
               await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
-              // 报告播放开始
               await syncService.reportPlaybackStart(itemId, updatedHistory);
             }
           } catch (e) {
@@ -1445,23 +1494,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
           }
         } else if (isEmbyStream) {
-          // Emby同步：如果是Emby流媒体，进行播放记录同步
           try {
             final itemId = path.replaceFirst('emby://', '');
             final syncService = EmbyPlaybackSyncService();
-            // 使用原始历史记录进行同步，而不是新创建的记录
             final syncedHistory = await syncService.syncOnPlayStart(itemId, existingHistory);
             if (syncedHistory != null) {
-              // 使用同步后的历史记录
               await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
-              // 同时更新SharedPreferences中的播放位置
               await _saveVideoPosition(path, syncedHistory.lastPosition);
               debugPrint('Emby同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
-              // 报告播放开始
               await syncService.reportPlaybackStart(itemId, syncedHistory);
             } else {
               await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
-              // 报告播放开始
               await syncService.reportPlaybackStart(itemId, updatedHistory);
             }
           } catch (e) {
@@ -1471,68 +1514,76 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         } else {
           await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
         }
-        
+
         if (_context != null && _context!.mounted) {
-          // 仅通知变更的那条记录，避免全量刷新导致的监听风暴
           await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
         }
         return;
       }
 
-      // 只有在没有现有记录时才创建全新记录
       final fileName = path.split('/').last;
+      final sanitizedFileName = fileName
+          .replaceAll(
+              RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$', caseSensitive: false), '')
+          .replaceAll(RegExp(r'[_\.-]'), ' ')
+          .trim();
 
-      // 尝试从文件名中提取更好的初始动画名称
-      String initialAnimeName = fileName;
+      final initialAnimeName = SharedRemoteHistoryHelper.firstNonEmptyString([
+            SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
+            SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
+            sanitizedFileName.isEmpty
+                ? null
+                : SharedRemoteHistoryHelper.normalizeHistoryName(sanitizedFileName),
+          ]) ??
+          '未知动画';
 
-      // 移除常见的文件扩展名
-      initialAnimeName = initialAnimeName.replaceAll(
-          RegExp(r'\.(mp4|mkv|avi|mov|flv|wmv)$', caseSensitive: false), '');
+      final initialEpisodeTitle = SharedRemoteHistoryHelper.firstNonEmptyString([
+        _initialHistoryItem?.episodeTitle,
+        _episodeTitle,
+      ]);
 
-      // 替换下划线、点和破折号为空格
-      initialAnimeName =
-          initialAnimeName.replaceAll(RegExp(r'[_\.-]'), ' ').trim();
+      final initialEpisodeId =
+          _episodeId ?? _initialHistoryItem?.episodeId;
+      final initialAnimeId = _animeId ?? _initialHistoryItem?.animeId;
+      final initialLastPosition = _position.inMilliseconds > 0
+          ? _position.inMilliseconds
+          : (_initialHistoryItem?.lastPosition ?? 0);
+      final initialDuration = _duration.inMilliseconds > 0
+          ? _duration.inMilliseconds
+          : (_initialHistoryItem?.duration ?? 0);
+      final initialProgress = _progress > 0
+          ? _progress
+          : (_initialHistoryItem?.watchProgress ?? 0.0);
 
-      // 如果处理后为空，则给一个默认值
-      if (initialAnimeName.isEmpty) {
-        initialAnimeName = "未知动画";
-      }
-
-      // 创建初始观看记录
       final item = WatchHistoryItem(
         filePath: path,
         animeName: initialAnimeName,
-        episodeId: _episodeId,
-        animeId: _animeId,
-        lastPosition: _position.inMilliseconds,
-        duration: _duration.inMilliseconds,
-        watchProgress: _progress,
+        episodeTitle: initialEpisodeTitle,
+        episodeId: initialEpisodeId,
+        animeId: initialAnimeId,
+        lastPosition: initialLastPosition,
+        duration: initialDuration,
+        watchProgress: initialProgress,
         lastWatchTime: DateTime.now(),
+        thumbnailPath: _initialHistoryItem?.thumbnailPath,
+        isFromScan: _initialHistoryItem?.isFromScan ?? false,
       );
 
-      //debugPrint('创建全新的观看记录: 动画=${item.animeName}');
-      
-      // 流媒体同步：如果是Jellyfin或Emby流媒体，也需要进行播放记录同步
-      bool isJellyfinStream = path.startsWith('jellyfin://');
-      bool isEmbyStream = path.startsWith('emby://');
-      
+      final bool isJellyfinStream = path.startsWith('jellyfin://');
+      final bool isEmbyStream = path.startsWith('emby://');
+
       if (isJellyfinStream) {
         try {
           final itemId = path.replaceFirst('jellyfin://', '');
           final syncService = JellyfinPlaybackSyncService();
-          // 对于新创建的记录，也进行同步检查
           final syncedHistory = await syncService.syncOnPlayStart(itemId, item);
           if (syncedHistory != null) {
-            // 使用同步后的历史记录
             await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
-            // 同时更新SharedPreferences中的播放位置
             await _saveVideoPosition(path, syncedHistory.lastPosition);
             debugPrint('Jellyfin同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
-            // 报告播放开始
             await syncService.reportPlaybackStart(itemId, syncedHistory);
           } else {
             await WatchHistoryManager.addOrUpdateHistory(item);
-            // 报告播放开始
             await syncService.reportPlaybackStart(itemId, item);
           }
         } catch (e) {
@@ -1543,19 +1594,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         try {
           final itemId = path.replaceFirst('emby://', '');
           final syncService = EmbyPlaybackSyncService();
-          // 对于新创建的记录，也进行同步检查
           final syncedHistory = await syncService.syncOnPlayStart(itemId, item);
           if (syncedHistory != null) {
-            // 使用同步后的历史记录
             await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
-            // 同时更新SharedPreferences中的播放位置
             await _saveVideoPosition(path, syncedHistory.lastPosition);
             debugPrint('Emby同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
-            // 报告播放开始
             await syncService.reportPlaybackStart(itemId, syncedHistory);
           } else {
             await WatchHistoryManager.addOrUpdateHistory(item);
-            // 报告播放开始
             await syncService.reportPlaybackStart(itemId, item);
           }
         } catch (e) {
@@ -1563,10 +1609,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           await WatchHistoryManager.addOrUpdateHistory(item);
         }
       } else {
-        // 保存到历史记录
         await WatchHistoryManager.addOrUpdateHistory(item);
       }
-      
+
       if (_context != null && _context!.mounted) {
         _context!.read<WatchHistoryProvider>().refresh();
       }
@@ -1900,6 +1945,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _episodeTitle = null;
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
+    _initialHistoryItem = null;
     _danmakuList.clear();
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
@@ -1937,6 +1983,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _episodeTitle = null;
     _episodeId = null; // 清除弹幕ID
     _animeId = null; // 清除弹幕ID
+    _initialHistoryItem = null;
     _danmakuList.clear();
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
@@ -2624,6 +2671,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 在Web平台上，我们没有直接的文件访问权限，所以返回一个基于路径的哈希值
       return md5.convert(utf8.encode(filePath)).toString();
     }
+    if (filePath.startsWith('http://') ||
+        filePath.startsWith('https://') ||
+        filePath.startsWith('jellyfin://') ||
+        filePath.startsWith('emby://')) {
+      return md5.convert(utf8.encode(filePath)).toString();
+    }
     try {
       final file = File(filePath);
       if (!file.existsSync()) {
@@ -2637,7 +2690,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } catch (e) {
       //debugPrint('计算文件哈希值失败: $e');
       // 返回一个基于文件名的备用哈希值
-      return md5.convert(utf8.encode(filePath.split('/').last)).toString();
+      return md5.convert(utf8.encode(filePath)).toString();
     }
   }
 
@@ -3364,28 +3417,47 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         String? finalEpisodeTitle = existingHistory.episodeTitle;
         
         // 检查是否是流媒体并且当前有更好的名称
-        bool isJellyfinStream = _currentVideoPath!.startsWith('jellyfin://');
-        bool isEmbyStream = _currentVideoPath!.startsWith('emby://');
-        if ((isJellyfinStream || isEmbyStream) && _animeTitle != null && _animeTitle!.isNotEmpty) {
-          // 对于流媒体，如果有友好名称，则使用友好名称
-          finalAnimeName = _animeTitle!;
-          if (_episodeTitle != null && _episodeTitle!.isNotEmpty) {
-            finalEpisodeTitle = _episodeTitle!;
+        final bool isJellyfinStream = _currentVideoPath!.startsWith('jellyfin://');
+        final bool isEmbyStream = _currentVideoPath!.startsWith('emby://');
+      final bool isSharedRemoteStream =
+          SharedRemoteHistoryHelper.isSharedRemoteStreamPath(_currentVideoPath!);
+      if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
+        final animeNameCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+          SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
+          SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
+          SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
+        ]);
+        if (animeNameCandidate != null) {
+          finalAnimeName = animeNameCandidate;
+        }
+
+        final episodeTitleCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+          _episodeTitle,
+          _initialHistoryItem?.episodeTitle,
+          finalEpisodeTitle,
+          ]);
+          if (episodeTitleCandidate != null) {
+            finalEpisodeTitle = episodeTitleCandidate;
           }
-          debugPrint('VideoPlayerState: 使用流媒体友好名称更新记录: $finalAnimeName - $finalEpisodeTitle');
+          debugPrint(
+              'VideoPlayerState: 使用流媒体/共享媒体友好名称更新记录: $finalAnimeName - $finalEpisodeTitle');
         }
         
         final updatedHistory = WatchHistoryItem(
           filePath: existingHistory.filePath,
           animeName: finalAnimeName,
           episodeTitle: finalEpisodeTitle,
-          episodeId: _episodeId ?? existingHistory.episodeId, // 优先使用存储的 episodeId
-          animeId: _animeId ?? existingHistory.animeId, // 优先使用存储的 animeId
+          episodeId: _episodeId ??
+              existingHistory.episodeId ??
+              _initialHistoryItem?.episodeId, // 优先使用存储的 episodeId
+          animeId: _animeId ??
+              existingHistory.animeId ??
+              _initialHistoryItem?.animeId, // 优先使用存储的 animeId
           watchProgress: _progress,
           lastPosition: _position.inMilliseconds,
           duration: _duration.inMilliseconds,
           lastWatchTime: DateTime.now(),
-          thumbnailPath: thumbnailPath,
+          thumbnailPath: thumbnailPath ?? _initialHistoryItem?.thumbnailPath,
           isFromScan: existingHistory.isFromScan,
         );
 

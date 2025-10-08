@@ -50,6 +50,54 @@ class BangumiAnime {
     this.episodeList,
   });
 
+  BangumiAnime copyWith({
+    int? id,
+    String? name,
+    String? nameCn,
+    String? imageUrl,
+    String? summary,
+    String? airDate,
+    int? airWeekday,
+    double? rating,
+    Map<String, dynamic>? ratingDetails,
+    List<String>? tags,
+    List<String>? metadata,
+    bool? isNSFW,
+    String? platform,
+    int? totalEpisodes,
+    String? typeDescription,
+    String? bangumiUrl,
+    bool? isOnAir,
+    bool? isFavorited,
+    List<Map<String, String>>? titles,
+    String? searchKeyword,
+    List<EpisodeData>? episodeList,
+  }) {
+    return BangumiAnime(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      nameCn: nameCn ?? this.nameCn,
+      imageUrl: imageUrl ?? this.imageUrl,
+      summary: summary ?? this.summary,
+      airDate: airDate ?? this.airDate,
+      airWeekday: airWeekday ?? this.airWeekday,
+      rating: rating ?? this.rating,
+      ratingDetails: ratingDetails ?? this.ratingDetails,
+      tags: tags ?? this.tags,
+      metadata: metadata ?? this.metadata,
+      isNSFW: isNSFW ?? this.isNSFW,
+      platform: platform ?? this.platform,
+      totalEpisodes: totalEpisodes ?? this.totalEpisodes,
+      typeDescription: typeDescription ?? this.typeDescription,
+      bangumiUrl: bangumiUrl ?? this.bangumiUrl,
+      isOnAir: isOnAir ?? this.isOnAir,
+      isFavorited: isFavorited ?? this.isFavorited,
+      titles: titles ?? this.titles,
+      searchKeyword: searchKeyword ?? this.searchKeyword,
+      episodeList: episodeList ?? this.episodeList,
+    );
+  }
+
   // Used for list items from Dandanplay's /api/v2/bangumi/shin (BangumiIntro schema)
   factory BangumiAnime.fromDandanplayIntro(Map<String, dynamic> json) {
     final String? imgUrl = json['imageUrl'];

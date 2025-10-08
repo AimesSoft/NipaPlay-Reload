@@ -7,12 +7,12 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/pages/media_library_page.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/glass_bottom_sheet.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
 
 class SharedRemoteLibraryView extends StatefulWidget {
@@ -226,57 +226,23 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     SharedRemoteAnimeSummary anime,
   ) async {
     try {
-      final episodes = await provider.loadAnimeEpisodes(anime.animeId);
-      if (!mounted) return;
-      await GlassBottomSheet.show(
-        context: context,
-        title: anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
-        height: MediaQuery.of(context).size.height * 0.55,
-        child: _buildEpisodeList(episodes, (episode) {
-          final watchItem = provider.buildWatchHistoryItem(anime: anime, episode: episode);
-          widget.onPlayEpisode?.call(watchItem);
-          Navigator.of(context).pop();
-        }),
+      final provider =
+          Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+      await ThemedAnimeDetail.show(
+        context,
+        anime.animeId,
+        sharedSummary: anime,
+        sharedEpisodeLoader: () => provider.loadAnimeEpisodes(anime.animeId,
+            force: true),
+        sharedEpisodeBuilder: (episode) => provider.buildPlayableItem(
+          anime: anime,
+          episode: episode,
+        ),
+        sharedSourceLabel: provider.activeHost?.displayName,
       );
     } catch (e) {
       if (!mounted) return;
-      BlurSnackBar.show(context, '加载剧集失败: $e');
+      BlurSnackBar.show(context, '打开详情失败: $e');
     }
   }
-
-  Widget _buildEpisodeList(
-    List<SharedRemoteEpisode> episodes,
-    void Function(SharedRemoteEpisode) onPlay,
-  ) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      itemCount: episodes.length,
-      separatorBuilder: (_, __) => const Divider(color: Colors.white12, height: 1),
-      itemBuilder: (_, index) {
-        final episode = episodes[index];
-        final playable = episode.fileExists;
-        return ListTile(
-          onTap: playable ? () => onPlay(episode) : null,
-          leading: CircleAvatar(
-            backgroundColor: Colors.white12,
-            child: Text('${index + 1}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          ),
-          title: Text(
-            episode.title,
-            style: const TextStyle(color: Colors.white, fontSize: 15),
-          ),
-          subtitle: Text(
-            playable ? '可播放' : '原文件缺失',
-            locale: const Locale('zh', 'CN'),
-            style: TextStyle(
-              color: playable ? Colors.white54 : Colors.orangeAccent,
-              fontSize: 12,
-            ),
-          ),
-          trailing: const Icon(Ionicons.play_circle_outline, color: Colors.white70),
-        );
-      },
-    );
-  }
 }
-

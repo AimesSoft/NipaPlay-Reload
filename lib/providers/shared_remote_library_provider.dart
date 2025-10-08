@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/models/playable_item.dart';
@@ -131,13 +134,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       debugPrint('📡 [共享媒体] 开始请求: $uri');
       debugPrint('📡 [共享媒体] 主机信息: ${host.displayName} (${host.baseUrl})');
 
-      final response = await http.get(uri).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          debugPrint('⏱️ [共享媒体] 请求超时 (10秒)');
-          throw TimeoutException('请求超时');
-        },
-      );
+      final response = await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
 
       debugPrint('📡 [共享媒体] 响应状态码: ${response.statusCode}');
 
@@ -212,13 +209,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       final uri = Uri.parse('${host.baseUrl}/api/media/local/share/animes/$animeId');
       debugPrint('📡 [剧集加载] 请求: $uri');
 
-      final response = await http.get(uri).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          debugPrint('⏱️ [剧集加载] 请求超时');
-          throw TimeoutException('请求超时');
-        },
-      );
+      final response = await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
 
       debugPrint('📡 [剧集加载] 响应状态码: ${response.statusCode}');
 
@@ -276,6 +267,112 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
+  Future<http.Response> _sendGetRequest(Uri uri, {Duration timeout = const Duration(seconds: 10)}) async {
+    final sanitizedUri = _sanitizeUri(uri);
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      'User-Agent': 'NipaPlay/1.0',
+    };
+
+    final authHeader = _buildBasicAuthHeader(uri);
+    if (authHeader != null) {
+      headers['Authorization'] = authHeader;
+    }
+
+    final client = IOClient(_createHttpClient(uri));
+    try {
+      return await client
+          .get(sanitizedUri, headers: headers)
+          .timeout(timeout, onTimeout: () {
+        throw TimeoutException('请求超时');
+      });
+    } finally {
+      client.close();
+    }
+  }
+
+  Uri _sanitizeUri(Uri source) {
+    return Uri(
+      scheme: source.scheme,
+      host: source.host,
+      port: source.hasPort ? source.port : null,
+      path: source.path,
+      query: source.hasQuery ? source.query : null,
+      fragment: source.fragment.isEmpty ? null : source.fragment,
+    );
+  }
+
+  String? _buildBasicAuthHeader(Uri uri) {
+    if (uri.userInfo.isEmpty) {
+      return null;
+    }
+
+    final separatorIndex = uri.userInfo.indexOf(':');
+    String username;
+    String password;
+    if (separatorIndex >= 0) {
+      username = uri.userInfo.substring(0, separatorIndex);
+      password = uri.userInfo.substring(separatorIndex + 1);
+    } else {
+      username = uri.userInfo;
+      password = '';
+    }
+
+    username = Uri.decodeComponent(username);
+    password = Uri.decodeComponent(password);
+
+    return 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+  }
+
+  HttpClient _createHttpClient(Uri uri) {
+    final httpClient = HttpClient();
+    httpClient.userAgent = 'NipaPlay/1.0';
+    httpClient.autoUncompress = false;
+    if (_shouldBypassProxy(uri.host)) {
+      httpClient.findProxy = (_) => 'DIRECT';
+    }
+    return httpClient;
+  }
+
+  bool _shouldBypassProxy(String host) {
+    if (host.isEmpty) {
+      return false;
+    }
+
+    if (host == 'localhost' || host == '127.0.0.1') {
+      return true;
+    }
+
+    final ip = InternetAddress.tryParse(host);
+    if (ip != null) {
+      if (ip.type == InternetAddressType.IPv4) {
+        final bytes = ip.rawAddress;
+        if (bytes.length == 4) {
+          final first = bytes[0];
+          final second = bytes[1];
+          if (first == 10) return true;
+          if (first == 127) return true;
+          if (first == 192 && second == 168) return true;
+          if (first == 172 && second >= 16 && second <= 31) return true;
+        }
+      } else if (ip.type == InternetAddressType.IPv6) {
+        if (ip.isLoopback) {
+          return true;
+        }
+        final firstByte = ip.rawAddress.isNotEmpty ? ip.rawAddress[0] : 0;
+        if (firstByte & 0xfe == 0xfc) {
+          return true;
+        }
+      }
+    } else {
+      if (host.endsWith('.local')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   Uri buildStreamUri(SharedRemoteEpisode episode) {
     final host = activeHost;
     if (host == null) {
@@ -317,7 +414,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       title: watchItem.animeName,
       subtitle: episode.title,
       animeId: anime.animeId,
-      episodeId: episode.shareId.hashCode,
+      episodeId: episode.episodeId ?? episode.shareId.hashCode,
       historyItem: watchItem,
       actualPlayUrl: watchItem.filePath,
     );

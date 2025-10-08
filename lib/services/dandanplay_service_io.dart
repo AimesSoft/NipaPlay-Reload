@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io' if (dart.library.io) 'dart:io';
 import 'dart:async';
+import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'danmaku_cache_manager.dart';
 import 'debug_log_service.dart';
+import 'package:nipaplay/utils/remote_media_fetcher.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -492,133 +493,133 @@ class DandanplayService {
     if (kIsWeb) {
       throw Exception('Web版不支持从本地文件获取视频信息。');
     }
+
     try {
-      final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final bool isRemotePath = videoPath.startsWith('http://') || videoPath.startsWith('https://');
+
+      if (isRemotePath) {
+        try {
+          final remoteHead = await RemoteMediaFetcher.fetchHead(Uri.parse(videoPath));
+          return _getVideoInfoWithMetadata(
+            fileName: remoteHead.fileName,
+            fileHash: remoteHead.hash,
+            fileSize: remoteHead.fileSize,
+          );
+        } catch (e) {
+          debugPrint('DandanplayService: 获取远程媒体信息失败: $e');
+          rethrow;
+        }
+      }
+
       final file = File(videoPath);
-      final fileName = file.path.split('/').last;
+      if (!file.existsSync()) {
+        throw Exception('文件不存在: $videoPath');
+      }
+
+      final fileName = file.uri.pathSegments.isNotEmpty
+          ? file.uri.pathSegments.last
+          : file.path.split('/').last;
       final fileSize = await file.length();
       final fileHash = await _d(file);
 
-      // 尝试从缓存获取视频信息
-      final cachedInfo = await getCachedVideoInfo(fileHash);
-      if (cachedInfo != null) {
-        ////debugPrint('从缓存获取视频信息: $fileName, hash=$fileHash');
-        // 检查缓存中是否有 episodeId
-        if (cachedInfo['matches'] != null && cachedInfo['matches'].isNotEmpty) {
-          final match = cachedInfo['matches'][0];
+      return _getVideoInfoWithMetadata(
+        fileName: fileName,
+        fileHash: fileHash,
+        fileSize: fileSize,
+      );
+    } catch (e) {
+      throw Exception('获取视频信息失败: ${e.toString()}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> _getVideoInfoWithMetadata({
+    required String fileName,
+    required String fileHash,
+    required int fileSize,
+  }) async {
+    // 尝试从缓存获取视频信息
+    final cachedInfo = await getCachedVideoInfo(fileHash);
+    if (cachedInfo != null) {
+      if (cachedInfo['matches'] != null && cachedInfo['matches'].isNotEmpty) {
+        final match = cachedInfo['matches'][0];
+        if (match['episodeId'] != null && match['animeId'] != null) {
+          try {
+            final episodeId = match['episodeId'].toString();
+            final animeId = match['animeId'] as int;
+            final danmakuData = await getDanmaku(episodeId, animeId);
+            cachedInfo['comments'] = danmakuData['comments'];
+          } catch (e) {
+            debugPrint('从缓存匹配信息获取弹幕失败: $e');
+          }
+        }
+      }
+
+      _ensureVideoInfoTitles(cachedInfo);
+      return cachedInfo;
+    }
+
+    final appSecret = await getAppSecret();
+    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+
+    final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
+
+    final baseUrl = await _getApiBaseUrl();
+    final apiUrl = '$baseUrl/api/v2/match';
+
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'User-Agent': userAgent,
+      'X-AppId': appId,
+      'X-Signature': generateSignature(appId, timestamp, '/api/v2/match', appSecret),
+      'X-Timestamp': '$timestamp',
+      if (isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
+    };
+
+    final body = json.encode({
+      'fileName': fileName,
+      'fileHash': fileHash,
+      'fileSize': fileSize,
+      'matchMode': 'hashAndFileName',
+      if (isLoggedIn && _token != null) 'token': _token,
+    });
+
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: headers,
+      body: body,
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+
+      if (data['isMatched'] == true) {
+        _ensureVideoInfoTitles(data);
+
+        await saveVideoInfoToCache(fileHash, data);
+
+        if (data['matches'] != null && data['matches'].isNotEmpty) {
+          final match = data['matches'][0];
           if (match['episodeId'] != null && match['animeId'] != null) {
             try {
               final episodeId = match['episodeId'].toString();
               final animeId = match['animeId'] as int;
-              ////debugPrint('从缓存匹配信息获取弹幕，episodeId=$episodeId, animeId=$animeId');
               final danmakuData = await getDanmaku(episodeId, animeId);
-              // 直接使用弹幕数据，不添加额外的 danmaku 字段
-              cachedInfo['comments'] = danmakuData['comments'];
+              data['comments'] = danmakuData['comments'];
             } catch (e) {
-              ////debugPrint('从缓存匹配信息获取弹幕失败: $e');
+              debugPrint('获取弹幕失败: $e');
             }
           }
         }
-        
-        // 确保缓存数据中包含格式化后的动画标题和集数标题
-        _ensureVideoInfoTitles(cachedInfo);
-        
-        return cachedInfo;
-      }
 
-      ////debugPrint('发送视频匹配请求:');
-      ////debugPrint('文件名: $fileName');
-      ////debugPrint('文件大小: $fileSize');
-      ////debugPrint('文件哈希: $fileHash');
-      ////debugPrint('是否有Token: ${_token != null}');
-
-      // 检查是否登录
-      final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
-
-      final baseUrl = await _getApiBaseUrl();
-      final apiUrl = '$baseUrl/api/v2/match';
-      ////debugPrint('发送请求到: $apiUrl');
-      
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': userAgent,
-        'X-AppId': appId,
-        'X-Signature': generateSignature(appId, timestamp, '/api/v2/match', appSecret),
-        'X-Timestamp': '$timestamp',
-        if (isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
-      };
-      ////debugPrint('请求头: ${headers.keys.toList()}');
-      
-      final body = json.encode({
-        'fileName': fileName,
-        'fileHash': fileHash,
-        'fileSize': fileSize,
-        'matchMode': 'hashAndFileName',
-        if (isLoggedIn && _token != null) 'token': _token,
-      });
-      
-      ////debugPrint('请求体长度: ${body.length}');
-
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: headers,
-        body: body,
-      );
-
-      ////debugPrint('API响应状态码: ${response.statusCode}');
-      ////debugPrint('API响应头: ${response.headers}');
-      
-      if (response.body.length < 1000) {
-        ////debugPrint('API响应体: ${response.body}');
+        return data;
       } else {
-        ////debugPrint('API响应体长度: ${response.body.length}');
+        throw Exception('无法识别该视频');
       }
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        ////debugPrint('解析后的数据: ${data.keys.toList()}');
-        
-        if (data['isMatched'] == true) {
-          // 确保返回数据中包含格式化后的动画标题和集数标题
-          _ensureVideoInfoTitles(data);
-          
-          // 保存到缓存
-          await saveVideoInfoToCache(fileHash, data);
-          ////debugPrint('视频信息已保存到缓存');
-          
-          // 获取弹幕信息
-          if (data['matches'] != null && data['matches'].isNotEmpty) {
-            final match = data['matches'][0];
-            if (match['episodeId'] != null && match['animeId'] != null) {
-              try {
-                final episodeId = match['episodeId'].toString();
-                final animeId = match['animeId'] as int;
-                ////debugPrint('从API匹配结果获取弹幕，episodeId=$episodeId, animeId=$animeId');
-                final danmakuData = await getDanmaku(episodeId, animeId);
-                // 直接使用弹幕数据，不添加额外的 danmaku 字段
-                data['comments'] = danmakuData['comments'];
-              } catch (e) {
-                ////debugPrint('获取弹幕失败: $e');
-              }
-            }
-          }
-          
-          return data;
-        } else {
-          ////debugPrint('视频未匹配: isMatched=${data['isMatched']}');
-          throw Exception('无法识别该视频');
-        }
-      } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
-        ////debugPrint('获取视频信息失败: HTTP ${response.statusCode}, 错误信息=$errorMessage');
-        throw Exception('获取视频信息失败: $errorMessage');
-      }
-    } catch (e) {
-      ////debugPrint('获取视频信息时发生错误: $e');
-      throw Exception('获取视频信息失败: ${e.toString()}');
+    } else {
+      final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+      throw Exception('获取视频信息失败: $errorMessage');
     }
   }
 
@@ -770,6 +771,7 @@ class DandanplayService {
       ////debugPrint('确保标题完整性: 动画=${videoInfo['animeTitle']}, 集数=${videoInfo['episodeTitle']}');
     }
   }
+
 
   // 获取用户播放历史
   static Future<Map<String, dynamic>> getUserPlayHistory({DateTime? fromDate, DateTime? toDate}) async {
@@ -1294,4 +1296,4 @@ class DandanplayService {
       rethrow;
     }
   }
-} 
+}
