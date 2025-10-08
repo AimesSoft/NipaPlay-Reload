@@ -2671,6 +2671,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 在Web平台上，我们没有直接的文件访问权限，所以返回一个基于路径的哈希值
       return md5.convert(utf8.encode(filePath)).toString();
     }
+    if (filePath.startsWith('http://') ||
+        filePath.startsWith('https://') ||
+        filePath.startsWith('jellyfin://') ||
+        filePath.startsWith('emby://')) {
+      return md5.convert(utf8.encode(filePath)).toString();
+    }
     try {
       final file = File(filePath);
       if (!file.existsSync()) {
@@ -2684,7 +2690,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } catch (e) {
       //debugPrint('计算文件哈希值失败: $e');
       // 返回一个基于文件名的备用哈希值
-      return md5.convert(utf8.encode(filePath.split('/').last)).toString();
+      return md5.convert(utf8.encode(filePath)).toString();
     }
   }
 

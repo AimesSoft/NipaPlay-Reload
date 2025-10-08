@@ -414,7 +414,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       title: watchItem.animeName,
       subtitle: episode.title,
       animeId: anime.animeId,
-      episodeId: episode.shareId.hashCode,
+      episodeId: episode.episodeId ?? episode.shareId.hashCode,
       historyItem: watchItem,
       actualPlayUrl: watchItem.filePath,
     );
