@@ -5,40 +5,54 @@ import './abstract_player.dart';
 import './player_enums.dart';
 import './player_data_models.dart';
 import 'dart:async';
+import 'package:nipaplay/utils/subtitle_font_loader.dart';
 
 // Enum Converters
 PlayerPlaybackState _toPlayerPlaybackState(mdk.PlaybackState state) {
   if (state == mdk.PlaybackState.stopped) return PlayerPlaybackState.stopped;
   if (state == mdk.PlaybackState.paused) return PlayerPlaybackState.paused;
   if (state == mdk.PlaybackState.playing) return PlayerPlaybackState.playing;
-  return PlayerPlaybackState.stopped; 
+  return PlayerPlaybackState.stopped;
 }
 
 mdk.PlaybackState _fromPlayerPlaybackState(PlayerPlaybackState state) {
   switch (state) {
-    case PlayerPlaybackState.stopped: return mdk.PlaybackState.stopped;
-    case PlayerPlaybackState.paused: return mdk.PlaybackState.paused;
-    case PlayerPlaybackState.playing: return mdk.PlaybackState.playing;
+    case PlayerPlaybackState.stopped:
+      return mdk.PlaybackState.stopped;
+    case PlayerPlaybackState.paused:
+      return mdk.PlaybackState.paused;
+    case PlayerPlaybackState.playing:
+      return mdk.PlaybackState.playing;
   }
 }
 
 PlayerMediaType _toPlayerMediaType(mdk.MediaType type) {
   switch (type) {
-    case mdk.MediaType.unknown: return PlayerMediaType.unknown;
-    case mdk.MediaType.video: return PlayerMediaType.video;
-    case mdk.MediaType.audio: return PlayerMediaType.audio;
-    case mdk.MediaType.subtitle: return PlayerMediaType.subtitle;
-    default: throw ArgumentError('Unknown MDK MediaType: $type');
+    case mdk.MediaType.unknown:
+      return PlayerMediaType.unknown;
+    case mdk.MediaType.video:
+      return PlayerMediaType.video;
+    case mdk.MediaType.audio:
+      return PlayerMediaType.audio;
+    case mdk.MediaType.subtitle:
+      return PlayerMediaType.subtitle;
+    default:
+      throw ArgumentError('Unknown MDK MediaType: $type');
   }
 }
 
 mdk.MediaType _fromPlayerMediaType(PlayerMediaType type) {
   switch (type) {
-    case PlayerMediaType.unknown: return mdk.MediaType.unknown;
-    case PlayerMediaType.video: return mdk.MediaType.video;
-    case PlayerMediaType.audio: return mdk.MediaType.audio;
-    case PlayerMediaType.subtitle: return mdk.MediaType.subtitle;
-    default: throw ArgumentError('Unknown PlayerMediaType: $type');
+    case PlayerMediaType.unknown:
+      return mdk.MediaType.unknown;
+    case PlayerMediaType.video:
+      return mdk.MediaType.video;
+    case PlayerMediaType.audio:
+      return mdk.MediaType.audio;
+    case PlayerMediaType.subtitle:
+      return mdk.MediaType.subtitle;
+    default:
+      throw ArgumentError('Unknown PlayerMediaType: $type');
   }
 }
 
@@ -48,34 +62,34 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
     video: mdkInfo.video?.map((v) {
       String? codecNameValue;
       try {
-          try {
-              dynamic trackCodecName = (v as dynamic).codecName; 
-              if (trackCodecName is String && trackCodecName.isNotEmpty) {
-                  codecNameValue = trackCodecName;
-              }
-          } catch (_) {}
-
-          if (codecNameValue == null) {
-              codecNameValue = v.codec.toString();
-              if (codecNameValue.startsWith('Instance of')) {
-                  codecNameValue = 'Unknown Codec';
-              }
+        try {
+          dynamic trackCodecName = (v as dynamic).codecName;
+          if (trackCodecName is String && trackCodecName.isNotEmpty) {
+            codecNameValue = trackCodecName;
           }
-            } catch (e) {
+        } catch (_) {}
+
+        if (codecNameValue == null) {
+          codecNameValue = v.codec.toString();
+          if (codecNameValue.startsWith('Instance of')) {
+            codecNameValue = 'Unknown Codec';
+          }
+        }
+      } catch (e) {
         codecNameValue = 'Error Retrieving Codec';
       }
       return PlayerVideoStreamInfo(
         codec: PlayerVideoCodecParams(
             width: v.codec.width ?? 0,
-            height: v.codec.height ?? 0, 
-            name: codecNameValue
-        ),
-        codecName: codecNameValue, 
+            height: v.codec.height ?? 0,
+            name: codecNameValue),
+        codecName: codecNameValue,
       );
     }).toList(),
     subtitle: mdkInfo.subtitle?.map((sMdk) {
       return PlayerSubtitleStreamInfo(
-        title: sMdk.metadata['title'] ?? 'Subtitle track ${mdkInfo.subtitle!.indexOf(sMdk)}',
+        title: sMdk.metadata['title'] ??
+            'Subtitle track ${mdkInfo.subtitle!.indexOf(sMdk)}',
         language: sMdk.metadata['language'] ?? 'unknown',
         metadata: sMdk.metadata,
         rawRepresentation: sMdk.toString(),
@@ -109,33 +123,32 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
           } catch (e) {
             codecNameValue = mdkAudioCodec.toString();
             if (codecNameValue.startsWith('Instance of')) {
-                codecNameValue = 'Unknown Codec';
+              codecNameValue = 'Unknown Codec';
             }
           }
 
           try {
             bitRate = (mdkAudioCodec as dynamic)?.bit_rate as int?;
-          } catch (e) { }
+          } catch (e) {}
           try {
             channels = (mdkAudioCodec as dynamic)?.channels as int?;
-          } catch (e) { }
+          } catch (e) {}
           try {
             sampleRate = (mdkAudioCodec as dynamic)?.sample_rate as int?;
-          } catch (e) { }
+          } catch (e) {}
         }
 
         try {
-            dynamic mdkMetadata = (aMdk as dynamic)?.metadata;
-            if (mdkMetadata is Map) {
-                 metadata = mdkMetadata.map((key, value) => MapEntry(key.toString(), value.toString()));
-                 title = metadata['title'];
-                 language = metadata['language'];
-            }
-        } catch (e) { }
+          dynamic mdkMetadata = (aMdk as dynamic)?.metadata;
+          if (mdkMetadata is Map) {
+            metadata = mdkMetadata.map(
+                (key, value) => MapEntry(key.toString(), value.toString()));
+            title = metadata['title'];
+            language = metadata['language'];
+          }
+        } catch (e) {}
+      } catch (e) {}
 
-      } catch (e) {
-      }
-      
       return PlayerAudioStreamInfo(
         codec: PlayerAudioCodecParams(
           name: codecNameValue,
@@ -172,13 +185,64 @@ class MdkPlayerAdapter implements AbstractPlayer {
     } catch (e) {
       debugPrint('MDK: 初始化设置失败: $e');
     }
+
+    _configureSubtitleFonts();
+  }
+
+  void _configureSubtitleFonts() {
+    if (!(defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS)) {
+      return;
+    }
+
+    unawaited(() async {
+      try {
+        final fontInfo = await ensureSubtitleFontFromAsset(
+          assetPath: 'assets/subfont.ttf',
+          fileName: 'subfont.ttf',
+        );
+
+        if (fontInfo == null) {
+          debugPrint('MDK: 字幕字体准备失败，使用系统默认字体');
+          return;
+        }
+
+        final fontsDir = fontInfo['directory'];
+        final fontFile = fontInfo['filePath'];
+        if (fontsDir == null || fontFile == null) {
+          debugPrint('MDK: 字幕字体路径信息不完整');
+          return;
+        }
+        const fontName = 'Droid Sans Fallback';
+
+        try {
+          _mdkPlayer.setProperty('subtitle.font', fontName);
+          _mdkPlayer.setProperty('subtitle.fonts.dir', fontsDir);
+          _mdkPlayer.setProperty('subtitle.fonts.file', fontFile);
+        } catch (e) {
+          debugPrint('MDK: 设置播放器字幕字体失败: $e');
+        }
+
+        try {
+          mdk.setGlobalOption('subtitle.font', fontName);
+          mdk.setGlobalOption('subtitle.fonts.dir', fontsDir);
+          mdk.setGlobalOption('subtitle.fonts.file', fontFile);
+        } catch (e) {
+          debugPrint('MDK: 设置全局字幕字体失败: $e');
+        }
+
+        debugPrint('MDK: 字幕字体已配置，目录: $fontsDir');
+      } catch (e) {
+        debugPrint('MDK: 配置字幕字体过程中出错: $e');
+      }
+    }());
   }
 
   @override
   double get volume => _mdkPlayer.volume;
   @override
   set volume(double value) => _mdkPlayer.volume = value;
-  
+
   @override
   double get playbackRate => _playbackRate;
   @override
@@ -195,7 +259,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   PlayerPlaybackState get state => _toPlayerPlaybackState(_mdkPlayer.state);
   @override
-  set state(PlayerPlaybackState value) => _mdkPlayer.state = _fromPlayerPlaybackState(value);
+  set state(PlayerPlaybackState value) =>
+      _mdkPlayer.state = _fromPlayerPlaybackState(value);
 
   @override
   ValueListenable<int?> get textureId => _mdkPlayer.textureId;
@@ -210,16 +275,14 @@ class MdkPlayerAdapter implements AbstractPlayer {
       try {
         videoDecoders = getDecoders(PlayerMediaType.video);
         audioDecoders = getDecoders(PlayerMediaType.audio);
-      } catch (e) {
-      }
-      
+      } catch (e) {}
+
       try {
         _mdkPlayer.dispose();
-      } catch (e) {
-      }
-      
-      _mdkPlayer = mdk.Player(); 
-      _applyInitialSettings(); 
+      } catch (e) {}
+
+      _mdkPlayer = mdk.Player();
+      _applyInitialSettings();
 
       try {
         if (videoDecoders.isNotEmpty) {
@@ -228,9 +291,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
         if (audioDecoders.isNotEmpty) {
           setDecoders(PlayerMediaType.audio, audioDecoders);
         }
-      } catch (e) {
-      }
-
+      } catch (e) {}
     } else if (value.isEmpty && _mdkPlayer.media.isNotEmpty) {
       _mdkPlayer.state = mdk.PlaybackState.stopped;
       _mdkPlayer.setMedia("", mdk.MediaType.video);
@@ -245,12 +306,14 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   List<int> get activeSubtitleTracks => _mdkPlayer.activeSubtitleTracks;
   @override
-  set activeSubtitleTracks(List<int> value) => _mdkPlayer.activeSubtitleTracks = value;
+  set activeSubtitleTracks(List<int> value) =>
+      _mdkPlayer.activeSubtitleTracks = value;
 
   @override
   List<int> get activeAudioTracks => _mdkPlayer.activeAudioTracks;
   @override
-  set activeAudioTracks(List<int> value) => _mdkPlayer.activeAudioTracks = value;
+  set activeAudioTracks(List<int> value) =>
+      _mdkPlayer.activeAudioTracks = value;
 
   @override
   int get position => _mdkPlayer.position;
@@ -263,7 +326,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
     try {
       final originalFuture = _mdkPlayer.updateTexture();
       return originalFuture.timeout(const Duration(seconds: 10), onTimeout: () {
-        throw TimeoutException('Texture update timed out for ${_mdkPlayer.media}');
+        throw TimeoutException(
+            'Texture update timed out for ${_mdkPlayer.media}');
       });
     } catch (e) {
       rethrow;
@@ -271,7 +335,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
-  void setMedia(String path, PlayerMediaType type) => _mdkPlayer.setMedia(path, _fromPlayerMediaType(type));
+  void setMedia(String path, PlayerMediaType type) =>
+      _mdkPlayer.setMedia(path, _fromPlayerMediaType(type));
 
   @override
   Future<void> prepare() async {
@@ -289,7 +354,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   void seek({required int position}) {
-    _mdkPlayer.seek(position: position); 
+    _mdkPlayer.seek(position: position);
   }
 
   @override
@@ -297,7 +362,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) async {
-    final Uint8List? frameBytes = await _mdkPlayer.snapshot(width: width, height: height);
+    final Uint8List? frameBytes =
+        await _mdkPlayer.snapshot(width: width, height: height);
     if (frameBytes == null) {
       if (width <= 0) width = 128;
       if (height <= 0) height = 72;
@@ -329,7 +395,11 @@ class MdkPlayerAdapter implements AbstractPlayer {
       decodersString = _mdkPlayer.getProperty("audio.decoders") ?? "";
     }
     if (decodersString.isEmpty) return [];
-    return decodersString.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    return decodersString
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
   }
 
   @override
@@ -346,16 +416,14 @@ class MdkPlayerAdapter implements AbstractPlayer {
   Future<void> playDirectly() async {
     try {
       _mdkPlayer.state = mdk.PlaybackState.playing;
-        } catch (e) {
-    }
+    } catch (e) {}
   }
-  
+
   @override
   Future<void> pauseDirectly() async {
     try {
       _mdkPlayer.state = mdk.PlaybackState.paused;
-        } catch (e) {
-    }
+    } catch (e) {}
   }
 
   @override
@@ -399,10 +467,18 @@ class MdkPlayerAdapter implements AbstractPlayer {
         int? bitRate;
         int? channels;
         int? sampleRate;
-        try { name = c?.name as String?; } catch (_) {}
-        try { bitRate = c?.bit_rate as int?; } catch (_) {}
-        try { channels = c?.channels as int?; } catch (_) {}
-        try { sampleRate = c?.sample_rate as int?; } catch (_) {}
+        try {
+          name = c?.name as String?;
+        } catch (_) {}
+        try {
+          bitRate = c?.bit_rate as int?;
+        } catch (_) {}
+        try {
+          channels = c?.channels as int?;
+        } catch (_) {}
+        try {
+          sampleRate = c?.sample_rate as int?;
+        } catch (_) {}
         return {
           'codecName': name,
           'bitRate': bitRate,
@@ -420,4 +496,4 @@ class MdkPlayerAdapter implements AbstractPlayer {
   Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
     return getDetailedMediaInfo();
   }
-} 
+}
