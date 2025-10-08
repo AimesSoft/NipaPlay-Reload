@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
+import 'package:path/path.dart' as p;
 import 'dart:async';
 
 class FluentSubtitleListMenu extends StatefulWidget {
@@ -37,19 +38,19 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
   @override
   void initState() {
     super.initState();
-    
+
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
         _loadSubtitles();
       }
     });
-    
+
     _refreshTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
       if (mounted) {
         _updateCurrentSubtitle();
       }
     });
-    
+
     _scrollController.addListener(_handleScroll);
   }
 
@@ -62,15 +63,19 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
 
   void _handleScroll() {
     if (_isLoadingWindow || _allSubtitleEntries.isEmpty) return;
-    
+
     final scrollPosition = _scrollController.position.pixels;
     final isNearTop = scrollPosition < 500;
-    final isNearBottom = _scrollController.position.maxScrollExtent - scrollPosition < 500;
-    
+    final isNearBottom =
+        _scrollController.position.maxScrollExtent - scrollPosition < 500;
+
     if (isNearTop && _windowStartIndex > 0) {
-      int newStartIndex = (_windowStartIndex - _bufferSize).clamp(0, _allSubtitleEntries.length - 1);
+      int newStartIndex = (_windowStartIndex - _bufferSize)
+          .clamp(0, _allSubtitleEntries.length - 1);
       _updateVisibleWindow(newStartIndex);
-    } else if (isNearBottom && _windowStartIndex + _visibleEntries.length < _allSubtitleEntries.length) {
+    } else if (isNearBottom &&
+        _windowStartIndex + _visibleEntries.length <
+            _allSubtitleEntries.length) {
       int newStartIndex = _windowStartIndex;
       if (_visibleEntries.length >= _windowSize) {
         newStartIndex = _windowStartIndex + (_bufferSize ~/ 2);
@@ -87,7 +92,7 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
 
     try {
       _currentTimeMs = widget.videoState.position.inMilliseconds;
-      
+
       if (widget.videoState.player.activeSubtitleTracks.isEmpty) {
         setState(() {
           _isLoading = false;
@@ -95,29 +100,38 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
         });
         return;
       }
-      
+
       String? subtitlePath = widget.videoState.getActiveExternalSubtitlePath();
-      
+
       if (subtitlePath == null || subtitlePath.isEmpty) {
         // 尝试查找默认字幕文件
         if (widget.videoState.currentVideoPath != null) {
-          subtitlePath = _subtitleService.findDefaultSubtitleFile(widget.videoState.currentVideoPath!);
+          subtitlePath = _subtitleService
+              .findDefaultSubtitleFile(widget.videoState.currentVideoPath!);
         }
       }
-      
+
       if (subtitlePath != null && subtitlePath.isNotEmpty) {
+        final extension = p.extension(subtitlePath).toLowerCase();
+        if (extension == '.sup') {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = '当前为图像字幕(.sup)，暂不支持预览内容';
+          });
+          return;
+        }
         final entries = await _subtitleService.parseSubtitleFile(subtitlePath);
-        
+
         if (mounted) {
           setState(() {
             _allSubtitleEntries = entries;
             _isLoading = false;
-            
+
             if (entries.isEmpty) {
               _errorMessage = '字幕文件解析后没有内容，可能格式不兼容';
               return;
             }
-            
+
             final nearestIndex = _findNearestSubtitleIndex(_currentTimeMs);
             _initializeVisibleWindow(nearestIndex);
           });
@@ -125,14 +139,14 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
       } else {
         // 处理内嵌字幕
         final subtitleText = widget.videoState.getCurrentSubtitleText();
-        
+
         if (subtitleText.isNotEmpty) {
           final currentEntry = SubtitleEntry(
             startTimeMs: _currentTimeMs - 1000,
             endTimeMs: _currentTimeMs + 4000,
             content: subtitleText,
           );
-          
+
           setState(() {
             _allSubtitleEntries = [currentEntry];
             _visibleEntries = [currentEntry];
@@ -141,7 +155,7 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
           });
           return;
         }
-        
+
         setState(() {
           _isLoading = false;
           _errorMessage = '无法解析字幕内容，请确保已正确加载字幕文件';
@@ -158,17 +172,20 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
   }
 
   void _initializeVisibleWindow(int centerIndex) {
-    _windowStartIndex = (centerIndex - _windowSize ~/ 2).clamp(0, _allSubtitleEntries.length - _windowSize);
+    _windowStartIndex = (centerIndex - _windowSize ~/ 2)
+        .clamp(0, _allSubtitleEntries.length - _windowSize);
     if (_windowStartIndex < 0) _windowStartIndex = 0;
-    
+
     int windowEndIndex = _windowStartIndex + _windowSize;
     if (windowEndIndex > _allSubtitleEntries.length) {
       windowEndIndex = _allSubtitleEntries.length;
-      _windowStartIndex = (windowEndIndex - _windowSize).clamp(0, windowEndIndex);
+      _windowStartIndex =
+          (windowEndIndex - _windowSize).clamp(0, windowEndIndex);
     }
-    
-    _visibleEntries = _allSubtitleEntries.sublist(_windowStartIndex, windowEndIndex);
-    
+
+    _visibleEntries =
+        _allSubtitleEntries.sublist(_windowStartIndex, windowEndIndex);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         final localIndex = centerIndex - _windowStartIndex;
@@ -182,37 +199,40 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
 
   void _updateVisibleWindow(int newStartIndex) {
     if (_isLoadingWindow || _allSubtitleEntries.isEmpty) return;
-    
+
     setState(() {
       _isLoadingWindow = true;
     });
-    
+
     newStartIndex = newStartIndex.clamp(0, _allSubtitleEntries.length - 1);
-    int newEndIndex = (newStartIndex + _windowSize * 2).clamp(0, _allSubtitleEntries.length);
-    
-    final currentScrollPosition = _scrollController.hasClients ? _scrollController.position.pixels : 0;
-    final currentEstimatedIndex = (currentScrollPosition / _estimatedItemHeight).floor();
+    int newEndIndex =
+        (newStartIndex + _windowSize * 2).clamp(0, _allSubtitleEntries.length);
+
+    final currentScrollPosition =
+        _scrollController.hasClients ? _scrollController.position.pixels : 0;
+    final currentEstimatedIndex =
+        (currentScrollPosition / _estimatedItemHeight).floor();
     final relativePosition = currentEstimatedIndex - _windowStartIndex;
-    
+
     setState(() {
       if (newStartIndex != _windowStartIndex) {
         _windowStartIndex = newStartIndex;
-        _visibleEntries = _allSubtitleEntries.sublist(newStartIndex, newEndIndex);
+        _visibleEntries =
+            _allSubtitleEntries.sublist(newStartIndex, newEndIndex);
       } else if (newEndIndex > _windowStartIndex + _visibleEntries.length) {
         final additionalEntries = _allSubtitleEntries.sublist(
-          _windowStartIndex + _visibleEntries.length, 
-          newEndIndex
-        );
+            _windowStartIndex + _visibleEntries.length, newEndIndex);
         _visibleEntries.addAll(additionalEntries);
       }
-      
+
       _isLoadingWindow = false;
     });
-    
+
     if (newStartIndex != _windowStartIndex && relativePosition >= 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
-          final newScrollPosition = (relativePosition + newStartIndex) * _estimatedItemHeight;
+          final newScrollPosition =
+              (relativePosition + newStartIndex) * _estimatedItemHeight;
           if (newScrollPosition != currentScrollPosition) {
             _scrollController.jumpTo(newScrollPosition);
           }
@@ -223,49 +243,51 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
 
   int _findNearestSubtitleIndex(int currentTimeMs) {
     if (_allSubtitleEntries.isEmpty) return 0;
-    
+
     for (int i = 0; i < _allSubtitleEntries.length; i++) {
       final entry = _allSubtitleEntries[i];
-      if (currentTimeMs >= entry.startTimeMs && currentTimeMs <= entry.endTimeMs) {
+      if (currentTimeMs >= entry.startTimeMs &&
+          currentTimeMs <= entry.endTimeMs) {
         return i;
       }
     }
-    
+
     int closestIndex = 0;
     int minDistance = -1;
-    
+
     for (int i = 0; i < _allSubtitleEntries.length; i++) {
       final entry = _allSubtitleEntries[i];
       final distance = (entry.startTimeMs - currentTimeMs).abs();
-      
+
       if (minDistance == -1 || distance < minDistance) {
         minDistance = distance;
         closestIndex = i;
       }
     }
-    
+
     return closestIndex;
   }
 
   void _updateCurrentSubtitle() {
     if (!mounted) return;
-    
+
     final currentPositionMs = widget.videoState.position.inMilliseconds;
     _currentTimeMs = currentPositionMs;
-    
-    final hasActiveSubtitles = widget.videoState.player.activeSubtitleTracks.isNotEmpty;
+
+    final hasActiveSubtitles =
+        widget.videoState.player.activeSubtitleTracks.isNotEmpty;
     final subtitlePath = widget.videoState.getActiveExternalSubtitlePath();
-    
+
     if (hasActiveSubtitles && subtitlePath == null) {
       final newSubtitleText = widget.videoState.getCurrentSubtitleText();
-      
+
       if (newSubtitleText.isNotEmpty) {
         final currentEntry = SubtitleEntry(
           startTimeMs: _currentTimeMs - 1000,
           endTimeMs: _currentTimeMs + 4000,
           content: newSubtitleText,
         );
-        
+
         setState(() {
           _allSubtitleEntries = [currentEntry];
           _visibleEntries = [currentEntry];
@@ -274,29 +296,32 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
         return;
       }
     }
-    
+
     if (_allSubtitleEntries.isEmpty) return;
-    
+
     final globalIndex = _findNearestSubtitleIndex(currentPositionMs);
     final localIndex = globalIndex - _windowStartIndex;
-    final isInVisibleWindow = localIndex >= 0 && localIndex < _visibleEntries.length;
-    
+    final isInVisibleWindow =
+        localIndex >= 0 && localIndex < _visibleEntries.length;
+
     if (!isInVisibleWindow) {
       _updateVisibleWindow(globalIndex - (_windowSize ~/ 2));
       return;
     }
-    
+
     if (localIndex != _currentSubtitleIndex) {
       setState(() {
         _currentSubtitleIndex = localIndex;
       });
-      
+
       if (_scrollController.hasClients) {
         final itemOffset = localIndex * _estimatedItemHeight;
         final visibleStart = _scrollController.offset;
-        final visibleEnd = visibleStart + _scrollController.position.viewportDimension;
-        
-        if (itemOffset < visibleStart || itemOffset > visibleEnd - _estimatedItemHeight) {
+        final visibleEnd =
+            visibleStart + _scrollController.position.viewportDimension;
+
+        if (itemOffset < visibleStart ||
+            itemOffset > visibleEnd - _estimatedItemHeight) {
           _scrollController.animateTo(
             itemOffset,
             duration: const Duration(milliseconds: 300),
@@ -313,8 +338,9 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
 
   @override
   Widget build(BuildContext context) {
-    final hasActiveSubtitles = widget.videoState.player.activeSubtitleTracks.isNotEmpty;
-    
+    final hasActiveSubtitles =
+        widget.videoState.player.activeSubtitleTracks.isNotEmpty;
+
     return Column(
       children: [
         // 提示信息
@@ -332,20 +358,22 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
               Text(
                 '点击任意字幕可跳转到对应时间',
                 style: FluentTheme.of(context).typography.caption?.copyWith(
-                  color: FluentTheme.of(context).resources.textFillColorTertiary,
-                ),
+                      color: FluentTheme.of(context)
+                          .resources
+                          .textFillColorTertiary,
+                    ),
               ),
             ],
           ),
         ),
-        
+
         // 分隔线
         Container(
           height: 1,
           margin: const EdgeInsets.symmetric(horizontal: 16),
           color: FluentTheme.of(context).resources.controlStrokeColorDefault,
         ),
-        
+
         // 字幕列表内容
         Expanded(
           child: _isLoading
@@ -357,9 +385,12 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                       const SizedBox(height: 16),
                       Text(
                         '加载字幕中...',
-                        style: FluentTheme.of(context).typography.body?.copyWith(
-                          color: FluentTheme.of(context).resources.textFillColorSecondary,
-                        ),
+                        style:
+                            FluentTheme.of(context).typography.body?.copyWith(
+                                  color: FluentTheme.of(context)
+                                      .resources
+                                      .textFillColorSecondary,
+                                ),
                       ),
                     ],
                   ),
@@ -372,21 +403,33 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                           Icon(
                             FluentIcons.closed_caption,
                             size: 48,
-                            color: FluentTheme.of(context).resources.textFillColorSecondary,
+                            color: FluentTheme.of(context)
+                                .resources
+                                .textFillColorSecondary,
                           ),
                           const SizedBox(height: 16),
                           Text(
                             '没有激活的字幕轨道',
-                            style: FluentTheme.of(context).typography.bodyLarge?.copyWith(
-                              color: FluentTheme.of(context).resources.textFillColorSecondary,
-                            ),
+                            style: FluentTheme.of(context)
+                                .typography
+                                .bodyLarge
+                                ?.copyWith(
+                                  color: FluentTheme.of(context)
+                                      .resources
+                                      .textFillColorSecondary,
+                                ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             '请在字幕轨道设置中激活字幕',
-                            style: FluentTheme.of(context).typography.caption?.copyWith(
-                              color: FluentTheme.of(context).resources.textFillColorTertiary,
-                            ),
+                            style: FluentTheme.of(context)
+                                .typography
+                                .caption
+                                ?.copyWith(
+                                  color: FluentTheme.of(context)
+                                      .resources
+                                      .textFillColorTertiary,
+                                ),
                           ),
                         ],
                       ),
@@ -399,21 +442,33 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                               Icon(
                                 FluentIcons.error,
                                 size: 48,
-                                color: FluentTheme.of(context).resources.textFillColorSecondary,
+                                color: FluentTheme.of(context)
+                                    .resources
+                                    .textFillColorSecondary,
                               ),
                               const SizedBox(height: 16),
                               Text(
                                 '加载失败',
-                                style: FluentTheme.of(context).typography.bodyLarge?.copyWith(
-                                  color: FluentTheme.of(context).resources.textFillColorSecondary,
-                                ),
+                                style: FluentTheme.of(context)
+                                    .typography
+                                    .bodyLarge
+                                    ?.copyWith(
+                                      color: FluentTheme.of(context)
+                                          .resources
+                                          .textFillColorSecondary,
+                                    ),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 _errorMessage,
-                                style: FluentTheme.of(context).typography.caption?.copyWith(
-                                  color: FluentTheme.of(context).resources.textFillColorTertiary,
-                                ),
+                                style: FluentTheme.of(context)
+                                    .typography
+                                    .caption
+                                    ?.copyWith(
+                                      color: FluentTheme.of(context)
+                                          .resources
+                                          .textFillColorTertiary,
+                                    ),
                                 textAlign: TextAlign.center,
                               ),
                             ],
@@ -427,14 +482,21 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                                   Icon(
                                     FluentIcons.closed_caption,
                                     size: 48,
-                                    color: FluentTheme.of(context).resources.textFillColorSecondary,
+                                    color: FluentTheme.of(context)
+                                        .resources
+                                        .textFillColorSecondary,
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
                                     '当前字幕轨道没有可显示的字幕内容',
-                                    style: FluentTheme.of(context).typography.bodyLarge?.copyWith(
-                                      color: FluentTheme.of(context).resources.textFillColorSecondary,
-                                    ),
+                                    style: FluentTheme.of(context)
+                                        .typography
+                                        .bodyLarge
+                                        ?.copyWith(
+                                          color: FluentTheme.of(context)
+                                              .resources
+                                              .textFillColorSecondary,
+                                        ),
                                   ),
                                 ],
                               ),
@@ -447,35 +509,51 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                                   itemCount: _visibleEntries.length,
                                   itemBuilder: (context, index) {
                                     final entry = _visibleEntries[index];
-                                    final isCurrentSubtitle = index == _currentSubtitleIndex;
-                                    
+                                    final isCurrentSubtitle =
+                                        index == _currentSubtitleIndex;
+
                                     return Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 2),
                                       child: HoverButton(
-                                        onPressed: () => _seekToTime(entry.startTimeMs),
+                                        onPressed: () =>
+                                            _seekToTime(entry.startTimeMs),
                                         builder: (context, states) {
                                           return Container(
                                             width: double.infinity,
                                             padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
                                               color: isCurrentSubtitle
-                                                  ? FluentTheme.of(context).accentColor.withValues(alpha: 0.2)
+                                                  ? FluentTheme.of(context)
+                                                      .accentColor
+                                                      .withValues(alpha: 0.2)
                                                   : states.isHovered
-                                                      ? FluentTheme.of(context).resources.subtleFillColorSecondary
+                                                      ? FluentTheme.of(context)
+                                                          .resources
+                                                          .subtleFillColorSecondary
                                                       : Colors.transparent,
-                                              borderRadius: BorderRadius.circular(4),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
                                               border: isCurrentSubtitle
                                                   ? Border.all(
-                                                      color: FluentTheme.of(context).accentColor,
+                                                      color: FluentTheme.of(
+                                                              context)
+                                                          .accentColor,
                                                       width: 1,
                                                     )
                                                   : Border.all(
-                                                      color: FluentTheme.of(context).resources.controlStrokeColorDefault.withValues(alpha: 0.3),
+                                                      color: FluentTheme.of(
+                                                              context)
+                                                          .resources
+                                                          .controlStrokeColorDefault
+                                                          .withValues(
+                                                              alpha: 0.3),
                                                       width: 0.5,
                                                     ),
                                             ),
                                             child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 // 时间戳行
@@ -485,33 +563,74 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                                                       FluentIcons.clock,
                                                       size: 12,
                                                       color: isCurrentSubtitle
-                                                          ? FluentTheme.of(context).accentColor
-                                                          : FluentTheme.of(context).resources.textFillColorSecondary,
+                                                          ? FluentTheme.of(
+                                                                  context)
+                                                              .accentColor
+                                                          : FluentTheme.of(
+                                                                  context)
+                                                              .resources
+                                                              .textFillColorSecondary,
                                                     ),
                                                     const SizedBox(width: 6),
                                                     Text(
                                                       entry.formattedStartTime,
-                                                      style: FluentTheme.of(context).typography.caption?.copyWith(
-                                                        color: isCurrentSubtitle
-                                                            ? FluentTheme.of(context).accentColor
-                                                            : FluentTheme.of(context).resources.textFillColorSecondary,
-                                                        fontWeight: isCurrentSubtitle ? FontWeight.w600 : FontWeight.normal,
-                                                      ),
+                                                      style: FluentTheme.of(
+                                                              context)
+                                                          .typography
+                                                          .caption
+                                                          ?.copyWith(
+                                                            color: isCurrentSubtitle
+                                                                ? FluentTheme.of(
+                                                                        context)
+                                                                    .accentColor
+                                                                : FluentTheme.of(
+                                                                        context)
+                                                                    .resources
+                                                                    .textFillColorSecondary,
+                                                            fontWeight:
+                                                                isCurrentSubtitle
+                                                                    ? FontWeight
+                                                                        .w600
+                                                                    : FontWeight
+                                                                        .normal,
+                                                          ),
                                                     ),
                                                     Text(
                                                       ' → ',
-                                                      style: FluentTheme.of(context).typography.caption?.copyWith(
-                                                        color: FluentTheme.of(context).resources.textFillColorTertiary,
-                                                      ),
+                                                      style:
+                                                          FluentTheme.of(
+                                                                  context)
+                                                              .typography
+                                                              .caption
+                                                              ?.copyWith(
+                                                                color: FluentTheme.of(
+                                                                        context)
+                                                                    .resources
+                                                                    .textFillColorTertiary,
+                                                              ),
                                                     ),
                                                     Text(
                                                       entry.formattedEndTime,
-                                                      style: FluentTheme.of(context).typography.caption?.copyWith(
-                                                        color: isCurrentSubtitle
-                                                            ? FluentTheme.of(context).accentColor
-                                                            : FluentTheme.of(context).resources.textFillColorSecondary,
-                                                        fontWeight: isCurrentSubtitle ? FontWeight.w600 : FontWeight.normal,
-                                                      ),
+                                                      style: FluentTheme.of(
+                                                              context)
+                                                          .typography
+                                                          .caption
+                                                          ?.copyWith(
+                                                            color: isCurrentSubtitle
+                                                                ? FluentTheme.of(
+                                                                        context)
+                                                                    .accentColor
+                                                                : FluentTheme.of(
+                                                                        context)
+                                                                    .resources
+                                                                    .textFillColorSecondary,
+                                                            fontWeight:
+                                                                isCurrentSubtitle
+                                                                    ? FontWeight
+                                                                        .w600
+                                                                    : FontWeight
+                                                                        .normal,
+                                                          ),
                                                     ),
                                                   ],
                                                 ),
@@ -519,12 +638,25 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                                                 // 字幕内容
                                                 Text(
                                                   entry.content,
-                                                  style: FluentTheme.of(context).typography.body?.copyWith(
-                                                    color: isCurrentSubtitle
-                                                        ? FluentTheme.of(context).accentColor
-                                                        : FluentTheme.of(context).resources.textFillColorPrimary,
-                                                    fontWeight: isCurrentSubtitle ? FontWeight.w600 : FontWeight.normal,
-                                                  ),
+                                                  style: FluentTheme.of(context)
+                                                      .typography
+                                                      .body
+                                                      ?.copyWith(
+                                                        color: isCurrentSubtitle
+                                                            ? FluentTheme.of(
+                                                                    context)
+                                                                .accentColor
+                                                            : FluentTheme.of(
+                                                                    context)
+                                                                .resources
+                                                                .textFillColorPrimary,
+                                                        fontWeight:
+                                                            isCurrentSubtitle
+                                                                ? FontWeight
+                                                                    .w600
+                                                                : FontWeight
+                                                                    .normal,
+                                                      ),
                                                 ),
                                               ],
                                             ),
@@ -534,7 +666,7 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                                     );
                                   },
                                 ),
-                                
+
                                 // 加载指示器
                                 if (_isLoadingWindow)
                                   Positioned(
@@ -543,10 +675,14 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: FluentTheme.of(context).resources.solidBackgroundFillColorSecondary,
+                                        color: FluentTheme.of(context)
+                                            .resources
+                                            .solidBackgroundFillColorSecondary,
                                         borderRadius: BorderRadius.circular(4),
                                         border: Border.all(
-                                          color: FluentTheme.of(context).resources.controlStrokeColorDefault,
+                                          color: FluentTheme.of(context)
+                                              .resources
+                                              .controlStrokeColorDefault,
                                         ),
                                       ),
                                       child: const SizedBox(

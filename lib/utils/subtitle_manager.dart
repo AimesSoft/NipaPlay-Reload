@@ -178,13 +178,15 @@ class SubtitleManager extends ChangeNotifier {
     try {
       final file = File(path);
       if (await file.exists()) {
-        // 检查文件扩展名，只处理.ass和.srt文件
+        // 仅对文本字幕进行预解析，图像字幕(.sup)直接交给播放器
         final extension = p.extension(path).toLowerCase();
-        if (extension == '.ass' || extension == '.srt') {
+        if (extension == '.ass' || extension == '.srt' || extension == '.ssa') {
           // 解析字幕文件
           final entries = await SubtitleParser.parseAssFile(path);
           _subtitleCache[path] = entries;
           notifyListeners();
+        } else if (extension == '.sup') {
+          debugPrint('SubtitleManager: 检测到sup字幕，跳过文本解析');
         }
       }
     } catch (e) {
@@ -387,7 +389,7 @@ class SubtitleManager extends ChangeNotifier {
       }
 
       // 常见字幕文件扩展名按优先级排序
-      final subtitleExts = ['.ass', '.srt', '.ssa', '.sub'];
+      final subtitleExts = ['.ass', '.srt', '.ssa', '.sub', '.sup'];
 
       // 搜索可能的字幕文件
       for (final ext in subtitleExts) {
