@@ -58,6 +58,7 @@ import 'package:flutter/scheduler.dart'; // 添加Ticker导入
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 import 'hotkey_service.dart'; // Added import for HotkeyService
 import 'player_kernel_manager.dart'; // 导入播放器内核管理器
+import 'shared_remote_history_helper.dart';
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -344,65 +345,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     
     // 立即更新历史记录，确保历史记录卡片显示正确的动画名称
     _updateHistoryWithNewTitles();
-  }
-
-  String? _firstNonEmptyString(List<String?> candidates) {
-    for (final candidate in candidates) {
-      if (candidate == null) continue;
-      final trimmed = candidate.trim();
-      if (trimmed.isNotEmpty) {
-        return trimmed;
-      }
-    }
-    return null;
-  }
-
-  String? _normalizeHistoryName(String? value) {
-    if (value == null) {
-      return null;
-    }
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-    final lower = trimmed.toLowerCase();
-    if (lower == 'stream' || lower == 'unknown') {
-      return null;
-    }
-    return trimmed;
-  }
-
-  bool _isSharedRemoteStreamPath(String path) {
-    if (path.isEmpty) {
-      return false;
-    }
-    final lowerPath = path.toLowerCase();
-    if (!lowerPath.startsWith('http://') && !lowerPath.startsWith('https://')) {
-      return false;
-    }
-    return lowerPath.contains('/api/media/local/share/episodes/') ||
-        lowerPath.contains('/api/media/local/share/animes/') ||
-        lowerPath.contains('/api/media/local/share/stream');
-  }
-
-  String? _extractSharedEpisodeId(String path) {
-    final episodesMatch = RegExp(r'/episodes/([^/?]+)/').firstMatch(path);
-    if (episodesMatch != null) {
-      return episodesMatch.group(1);
-    }
-
-    final sharedRemoteMatch = RegExp(r'^sharedremote://[^/]+/([A-Za-z0-9]+)/')
-        .firstMatch(path);
-    if (sharedRemoteMatch != null) {
-      return sharedRemoteMatch.group(1);
-    }
-
-    final eidQueryMatch = RegExp(r'[?&]eid=([^&]+)').firstMatch(path);
-    if (eidQueryMatch != null) {
-      return eidQueryMatch.group(1);
-    }
-
-    return null;
   }
 
   Future<void> _removeHistoryEntry(String filePath) async {
@@ -1454,12 +1396,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 初始化观看记录
   Future<void> _initializeWatchHistory(String path) async {
     try {
-      final sharedEpisodeId = _extractSharedEpisodeId(path);
-      List<WatchHistoryItem> sharedEpisodeHistories = [];
-      if (sharedEpisodeId != null) {
-        sharedEpisodeHistories =
-            await WatchHistoryDatabase.instance.getHistoriesBySharedEpisodeId(sharedEpisodeId);
-      }
+    final sharedEpisodeId = SharedRemoteHistoryHelper.extractSharedEpisodeId(path);
+    final sharedEpisodeHistories = await SharedRemoteHistoryHelper
+        .loadHistoriesBySharedEpisodeId(sharedEpisodeId);
 
       WatchHistoryItem? existingHistory = await WatchHistoryManager.getHistoryItem(path);
 
@@ -1493,19 +1432,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
         final bool isJellyfinStream = path.startsWith('jellyfin://');
         final bool isEmbyStream = path.startsWith('emby://');
-        final bool isSharedRemoteStream = _isSharedRemoteStreamPath(path);
+        final bool isSharedRemoteStream =
+            SharedRemoteHistoryHelper.isSharedRemoteStreamPath(path);
 
         if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
-          final animeNameCandidate = _firstNonEmptyString([
-            _normalizeHistoryName(_animeTitle),
-            _normalizeHistoryName(_initialHistoryItem?.animeName),
-            _normalizeHistoryName(finalAnimeName),
+          final animeNameCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+            SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
+            SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
+            SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
           ]);
           if (animeNameCandidate != null) {
             finalAnimeName = animeNameCandidate;
           }
 
-          final episodeTitleCandidate = _firstNonEmptyString([
+          final episodeTitleCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
             _episodeTitle,
             _initialHistoryItem?.episodeTitle,
             finalEpisodeTitle,
@@ -1588,16 +1528,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           .replaceAll(RegExp(r'[_\.-]'), ' ')
           .trim();
 
-      final initialAnimeName = _firstNonEmptyString([
-            _normalizeHistoryName(_animeTitle),
-            _normalizeHistoryName(_initialHistoryItem?.animeName),
+      final initialAnimeName = SharedRemoteHistoryHelper.firstNonEmptyString([
+            SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
+            SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
             sanitizedFileName.isEmpty
                 ? null
-                : _normalizeHistoryName(sanitizedFileName),
+                : SharedRemoteHistoryHelper.normalizeHistoryName(sanitizedFileName),
           ]) ??
           '未知动画';
 
-      final initialEpisodeTitle = _firstNonEmptyString([
+      final initialEpisodeTitle = SharedRemoteHistoryHelper.firstNonEmptyString([
         _initialHistoryItem?.episodeTitle,
         _episodeTitle,
       ]);
@@ -3473,22 +3413,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 检查是否是流媒体并且当前有更好的名称
         final bool isJellyfinStream = _currentVideoPath!.startsWith('jellyfin://');
         final bool isEmbyStream = _currentVideoPath!.startsWith('emby://');
-        final bool isSharedRemoteStream =
-            _isSharedRemoteStreamPath(_currentVideoPath!);
-        if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
-          final animeNameCandidate = _firstNonEmptyString([
-            _normalizeHistoryName(_animeTitle),
-            _normalizeHistoryName(_initialHistoryItem?.animeName),
-            _normalizeHistoryName(finalAnimeName),
-          ]);
-          if (animeNameCandidate != null) {
-            finalAnimeName = animeNameCandidate;
-          }
+      final bool isSharedRemoteStream =
+          SharedRemoteHistoryHelper.isSharedRemoteStreamPath(_currentVideoPath!);
+      if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
+        final animeNameCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+          SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
+          SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
+          SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
+        ]);
+        if (animeNameCandidate != null) {
+          finalAnimeName = animeNameCandidate;
+        }
 
-          final episodeTitleCandidate = _firstNonEmptyString([
-            _episodeTitle,
-            _initialHistoryItem?.episodeTitle,
-            finalEpisodeTitle,
+        final episodeTitleCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+          _episodeTitle,
+          _initialHistoryItem?.episodeTitle,
+          finalEpisodeTitle,
           ]);
           if (episodeTitleCandidate != null) {
             finalEpisodeTitle = episodeTitleCandidate;
