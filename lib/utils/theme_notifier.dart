@@ -10,7 +10,7 @@ class ThemeNotifier with ChangeNotifier {
 
   ThemeNotifier({
     ThemeMode initialThemeMode = ThemeMode.system,
-    String initialBackgroundImageMode = "看板娘",
+    String initialBackgroundImageMode = "看板娘2",
     String initialCustomBackgroundPath = 'assets/backempty.png',
   })  : _themeMode = initialThemeMode,
         _backgroundImageMode = initialBackgroundImageMode,

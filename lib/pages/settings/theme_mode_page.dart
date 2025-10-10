@@ -265,6 +265,11 @@ class _ThemeModePageState extends State<ThemeModePage> {
                   isSelected: widget.themeNotifier.backgroundImageMode == "看板娘",
                 ),
                 DropdownMenuItemData(
+                  title: "看板娘2",
+                  value: "看板娘2",
+                  isSelected: widget.themeNotifier.backgroundImageMode == "看板娘2",
+                ),
+                DropdownMenuItemData(
                   title: "关闭",
                   value: "关闭",
                   isSelected: widget.themeNotifier.backgroundImageMode == "关闭",

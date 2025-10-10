@@ -11,6 +11,10 @@ String backgroundImageUrl = (globals.isDesktop || globals.isTablet)
     ? 'assets/images/main_image.png'
     : 'assets/images/main_image_mobile.png';
 
+String backgroundImageUrl2 = (globals.isDesktop || globals.isTablet)
+    ? 'assets/images/main_image2.png'
+    : 'assets/images/main_image_mobile2.png';
+
 class BackgroundWithBlur extends StatelessWidget {
   final Widget child;
 
@@ -73,6 +77,11 @@ class BackgroundWithBlur extends StatelessWidget {
     } else if (globals.backgroundImageMode == '看板娘') {
       return Image.asset(
         backgroundImageUrl,
+        fit: BoxFit.cover,
+      );
+    } else if (globals.backgroundImageMode == '看板娘2') {
+      return Image.asset(
+        backgroundImageUrl2,
         fit: BoxFit.cover,
       );
     } else if (globals.backgroundImageMode == '自定义') {
