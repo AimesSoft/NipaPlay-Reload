@@ -50,6 +50,7 @@ import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
+import 'anime4k_shader_manager.dart';
 // 导入MediaKitPlayerAdapter
 import '../player_abstraction/player_factory.dart'; // 播放器工厂
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 弹幕内核工厂
@@ -113,7 +114,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isControlsHovered = false;
   bool _isSeeking = false;
   final FocusNode _focusNode = FocusNode();
-  
+
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
   static const String _lastVideoKey = 'last_video_path';
@@ -122,17 +123,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   List<Map<String, dynamic>> _danmakuList = [];
-  
+
   // 多轨道弹幕系统
   final Map<String, Map<String, dynamic>> _danmakuTracks = {};
   final Map<String, bool> _danmakuTrackEnabled = {};
   static const String _controlBarHeightKey = 'control_bar_height';
   double _controlBarHeight = 20.0; // 默认高度
-  static const String _minimalProgressBarEnabledKey = 'minimal_progress_bar_enabled';
+  static const String _minimalProgressBarEnabledKey =
+      'minimal_progress_bar_enabled';
   bool _minimalProgressBarEnabled = false; // 默认关闭
-  static const String _minimalProgressBarColorKey = 'minimal_progress_bar_color';
+  static const String _minimalProgressBarColorKey =
+      'minimal_progress_bar_color';
   int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
-  static const String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
+  static const String _showDanmakuDensityChartKey =
+      'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
   static const String _danmakuOpacityKey = 'danmaku_opacity';
   double _danmakuOpacity = 1.0; // 默认透明度
@@ -142,7 +146,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _mergeDanmaku = false; // 默认不合并弹幕
   static const String _danmakuStackingKey = 'danmaku_stacking';
   bool _danmakuStacking = false; // 默认不启用弹幕堆叠
-  
+
+  static const String _anime4kProfileKey = 'anime4k_profile';
+  Anime4KProfile _anime4kProfile = Anime4KProfile.off;
+  List<String> _anime4kShaderPaths = const <String>[];
+
   // 弹幕类型屏蔽
   static const String _blockTopDanmakuKey = 'block_top_danmaku';
   static const String _blockBottomDanmakuKey = 'block_bottom_danmaku';
@@ -150,23 +158,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _blockTopDanmaku = false; // 默认不屏蔽顶部弹幕
   bool _blockBottomDanmaku = false; // 默认不屏蔽底部弹幕
   bool _blockScrollDanmaku = false; // 默认不屏蔽滚动弹幕
-  
+
   // 时间轴告知弹幕轨道状态
   bool _isTimelineDanmakuEnabled = true;
-  
+
   // 弹幕屏蔽词
   static const String _danmakuBlockWordsKey = 'danmaku_block_words';
   List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
   int _totalDanmakuCount = 0; // 添加一个字段来存储总弹幕数
-  
+
   // 弹幕字体大小设置
   static const String _danmakuFontSizeKey = 'danmaku_font_size';
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
-  
+
   // 弹幕轨道显示区域设置
   static const String _danmakuDisplayAreaKey = 'danmaku_display_area';
   double _danmakuDisplayArea = 1.0; // 默认全屏显示（1.0=全部，0.67=2/3，0.33=1/3）
-  
+
   // 添加播放速度相关状态
   static const String _playbackRateKey = 'playback_rate';
   double _playbackRate = 1.0; // 默认1倍速
@@ -174,15 +182,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _normalPlaybackRate = 1.0; // 正常播放速度
   static const String _speedBoostRateKey = 'speed_boost_rate';
   double _speedBoostRate = 2.0; // 长按倍速播放的倍率，默认2倍速
-  
+
   // 快进快退时间设置
   static const String _seekStepSecondsKey = 'seek_step_seconds';
   int _seekStepSeconds = 10; // 默认10秒
-  
+
   // 跳过时间设置
   static const String _skipSecondsKey = 'skip_seconds';
   int _skipSeconds = 90; // 默认90秒
-  
+
   dynamic danmakuController; // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
   bool _isFullscreenTransitioning = false;
@@ -192,12 +200,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final List<VoidCallback> _thumbnailUpdateListeners = []; // 缩略图更新监听器列表
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性
-  
+
   // 从 historyItem 传入的弹幕 ID（用于保持弹幕关联）
   int? _episodeId; // 存储从 historyItem 传入的 episodeId
   int? _animeId; // 存储从 historyItem 传入的 animeId
   WatchHistoryItem? _initialHistoryItem; // 记录首次传入的历史记录，便于初始化时复用元数据
-  
+
   // 字幕管理器
   late SubtitleManager _subtitleManager;
 
@@ -220,9 +228,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isSeekingViaDrag = false;
   Duration _dragSeekStartPosition = Duration.zero;
   double _accumulatedDragDx = 0.0;
-  Timer? _seekIndicatorTimer; // For showing a temporary seek UI (not implemented yet)
-  OverlayEntry? _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
-  Duration _dragSeekTargetPosition = Duration.zero; // To show target position during drag
+  Timer?
+      _seekIndicatorTimer; // For showing a temporary seek UI (not implemented yet)
+  OverlayEntry?
+      _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
+  Duration _dragSeekTargetPosition =
+      Duration.zero; // To show target position during drag
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
 
   // 倍速指示器状态
@@ -235,12 +246,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 加载状态相关
   bool _isInFinalLoadingPhase = false; // 是否处于最终加载阶段，用于优化动画性能
-  
+
   // 解码器管理器
   late DecoderManager _decoderManager;
 
   bool _hasInitialScreenshot = false; // 添加标记跟踪是否已进行第一次播放截图
-  
+
   // 平板设备菜单栏隐藏状态
   bool _isAppBarHidden = false;
 
@@ -257,12 +268,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void toggleAppBarVisibility() async {
     if (isTablet) {
       _isAppBarHidden = !_isAppBarHidden;
-      
+
       // 当切换到全屏状态时，同时隐藏系统状态栏
       if (_isAppBarHidden) {
         // 进入全屏状态，隐藏系统UI
         try {
-          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+          await SystemChrome.setEnabledSystemUIMode(
+              SystemUiMode.immersiveSticky);
         } catch (e) {
           debugPrint('隐藏系统UI时出错: $e');
         }
@@ -274,7 +286,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           debugPrint('显示系统UI时出错: $e');
         }
       }
-      
+
       notifyListeners();
     }
   }
@@ -318,6 +330,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get danmakuFontSize => _danmakuFontSize;
   double get danmakuDisplayArea => _danmakuDisplayArea;
   bool get danmakuStacking => _danmakuStacking;
+  Anime4KProfile get anime4kProfile => _anime4kProfile;
+  bool get isAnime4KEnabled => _anime4kProfile != Anime4KProfile.off;
+  bool get isAnime4KSupported => _supportsAnime4KForCurrentPlayer();
+  List<String> get anime4kShaderPaths => List.unmodifiable(_anime4kShaderPaths);
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
@@ -326,23 +342,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
   int? get animeId => _animeId; // 添加动画ID getter
   int? get episodeId => _episodeId; // 添加剧集ID getter
-  
+
   // 获取时间轴告知弹幕轨道状态
   bool get isTimelineDanmakuEnabled => _isTimelineDanmakuEnabled;
-  
+
   // 添加setter方法以支持手动匹配后立即更新标题
   void setAnimeTitle(String? title) {
     _animeTitle = title;
     notifyListeners();
-    
+
     // 立即更新历史记录，确保历史记录卡片显示正确的动画名称
     _updateHistoryWithNewTitles();
   }
-  
+
   void setEpisodeTitle(String? title) {
     _episodeTitle = title;
     notifyListeners();
-    
+
     // 立即更新历史记录，确保历史记录卡片显示正确的动画名称
     _updateHistoryWithNewTitles();
   }
@@ -358,24 +374,26 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('删除历史记录时出错 ($filePath): $e');
     }
   }
-  
+
   /// 使用新的标题更新历史记录
   Future<void> _updateHistoryWithNewTitles() async {
     if (_currentVideoPath == null) return;
-    
+
     // 只有当两个标题都有值时才更新
     if (_animeTitle == null || _animeTitle!.isEmpty) return;
-    
+
     try {
-      debugPrint('[VideoPlayerState] 使用新标题更新历史记录: $_animeTitle - $_episodeTitle');
-      
+      debugPrint(
+          '[VideoPlayerState] 使用新标题更新历史记录: $_animeTitle - $_episodeTitle');
+
       // 获取现有历史记录
-      final existingHistory = await WatchHistoryDatabase.instance.getHistoryByFilePath(_currentVideoPath!);
+      final existingHistory = await WatchHistoryDatabase.instance
+          .getHistoryByFilePath(_currentVideoPath!);
       if (existingHistory == null) {
         debugPrint('[VideoPlayerState] 未找到现有历史记录，跳过更新');
         return;
       }
-      
+
       // 创建更新后的历史记录
       final updatedHistory = WatchHistoryItem(
         filePath: existingHistory.filePath,
@@ -390,26 +408,29 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         thumbnailPath: existingHistory.thumbnailPath,
         isFromScan: existingHistory.isFromScan,
       );
-      
+
       // 保存更新后的记录
-      await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(updatedHistory);
-      
-      debugPrint('[VideoPlayerState] 成功更新历史记录: ${updatedHistory.animeName} - ${updatedHistory.episodeTitle}');
-      
+      await WatchHistoryDatabase.instance
+          .insertOrUpdateWatchHistory(updatedHistory);
+
+      debugPrint(
+          '[VideoPlayerState] 成功更新历史记录: ${updatedHistory.animeName} - ${updatedHistory.episodeTitle}');
+
       // 通知UI刷新历史记录
       if (_context != null && _context!.mounted) {
         _context!.read<WatchHistoryProvider>().refresh();
       }
-      
     } catch (e) {
       debugPrint('[VideoPlayerState] 更新历史记录时出错: $e');
     }
   }
-  
+
   // 字幕管理器相关的getter
   SubtitleManager get subtitleManager => _subtitleManager;
-  String? get currentExternalSubtitlePath => _subtitleManager.currentExternalSubtitlePath;
-  Map<String, Map<String, dynamic>> get subtitleTrackInfo => _subtitleManager.subtitleTrackInfo;
+  String? get currentExternalSubtitlePath =>
+      _subtitleManager.currentExternalSubtitlePath;
+  Map<String, Map<String, dynamic>> get subtitleTrackInfo =>
+      _subtitleManager.subtitleTrackInfo;
 
   // Brightness Getters
   double get currentScreenBrightness => _currentBrightness;
@@ -417,11 +438,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // Volume Getters
   double get currentSystemVolume => _currentVolume;
-  bool get isVolumeUIVisible => _isVolumeIndicatorVisible; // Renamed for clarity
+  bool get isVolumeUIVisible =>
+      _isVolumeIndicatorVisible; // Renamed for clarity
 
   // Seek Indicator Getter
-  bool get isSeekIndicatorVisible => _isSeekIndicatorVisible; // <<< ADDED THIS GETTER
-  Duration get dragSeekTargetPosition => _dragSeekTargetPosition; // <<< ADDED THIS GETTER
+  bool get isSeekIndicatorVisible =>
+      _isSeekIndicatorVisible; // <<< ADDED THIS GETTER
+  Duration get dragSeekTargetPosition =>
+      _dragSeekTargetPosition; // <<< ADDED THIS GETTER
 
   // 弹幕类型屏蔽Getters
   bool get blockTopDanmaku => _blockTopDanmaku;
@@ -435,15 +459,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 解码器管理器相关的getter
   DecoderManager get decoderManager => _decoderManager;
-  
+
   // 获取播放器内核名称（通过静态方法）
   String get playerCoreName => player.getPlayerKernelName();
-  
+
   // 播放速度相关的getter
   double get playbackRate => _playbackRate;
   bool get isSpeedBoostActive => _isSpeedBoostActive;
   double get speedBoostRate => _speedBoostRate;
-  
+
   // 快进快退时间的getter
   int get seekStepSeconds => _seekStepSeconds;
   // 跳过时间的getter
@@ -461,8 +485,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       await _loadInitialBrightness(); // Load initial brightness for phone
       await _loadInitialVolume(); // <<< CALL ADDED
     }
-  // 不在初始化时启动帧级Ticker，避免空闲/非播放状态也持续产帧
-  _startUiUpdateTimer(); // 仅创建/准备Ticker，是否启动由播放状态决定
+    // 不在初始化时启动帧级Ticker，避免空闲/非播放状态也持续产帧
+    _startUiUpdateTimer(); // 仅创建/准备Ticker，是否启动由播放状态决定
     _setupWindowManagerListener();
     _focusNode.requestFocus();
     await _loadLastVideo();
@@ -472,27 +496,30 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await _loadDanmakuVisible(); // 加载弹幕可见性
     await _loadMergeDanmaku(); // 加载弹幕合并设置
     await _loadDanmakuStacking(); // 加载弹幕堆叠设置
-    
+
     // 加载弹幕类型屏蔽设置
     await _loadBlockTopDanmaku();
     await _loadBlockBottomDanmaku();
     await _loadBlockScrollDanmaku();
-    
+
     // 加载弹幕屏蔽词
     await _loadDanmakuBlockWords();
-    
+
     // 加载弹幕字体大小和显示区域
     await _loadDanmakuFontSize();
     await _loadDanmakuDisplayArea();
-    
+
     // 加载播放速度设置
     await _loadPlaybackRate();
-    
+
     // 加载快进快退时间设置
     await _loadSeekStepSeconds();
-    
+
     // 加载跳过时间设置
     await _loadSkipSeconds();
+
+    // 加载 Anime4K 设置并尝试立即应用
+    await _loadAnime4KProfile();
 
     // 订阅内核切换事件
     _subscribeToKernelChanges();
@@ -515,7 +542,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     });
 
     // 订阅弹幕内核切换事件
-    _danmakuKernelChangeSubscription = DanmakuKernelFactory.onKernelChanged.listen((newKernel) {
+    _danmakuKernelChangeSubscription =
+        DanmakuKernelFactory.onKernelChanged.listen((newKernel) {
       debugPrint('[VideoPlayerState] 收到弹幕内核切换事件: $newKernel');
       PlayerKernelManager.performDanmakuKernelHotSwap(this, newKernel);
     });
@@ -540,9 +568,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (!globals.isPhone) return;
     try {
       // Get initial volume from the MDK player (0.0 - 1.0 range)
- 
-       _currentVolume = player.volume; 
-          _currentVolume = _currentVolume.clamp(0.0, 1.0); // Ensure it's within 0-1 range
+
+      _currentVolume = player.volume;
+      _currentVolume =
+          _currentVolume.clamp(0.0, 1.0); // Ensure it's within 0-1 range
       _initialDragVolume = _currentVolume;
       //debugPrint("Initial system volume loaded from player (0-1 range): $_currentVolume");
     } catch (e) {
@@ -570,21 +599,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     final screenHeight = MediaQuery.of(context).size.height;
     // 修改灵敏度：拖动屏幕高度的 80% (0.8) 对应亮度从0到1的变化。
-    final sensitivityFactor = screenHeight * 0.3; 
+    final sensitivityFactor = screenHeight * 0.3;
 
     double change = -verticalDragDelta / sensitivityFactor;
     // 使用 _initialDragBrightness 作为基准来计算变化量
     double newBrightness = _initialDragBrightness + change;
     newBrightness = newBrightness.clamp(0.0, 1.0);
 
-    
-
     try {
       await ScreenBrightness().setScreenBrightness(newBrightness);
       _currentBrightness = newBrightness;
       // 更新 _initialDragBrightness 为当前成功设置的亮度，以确保下次拖拽的起点是连贯的
-      _initialDragBrightness = newBrightness; 
-      _showBrightnessIndicator(); 
+      _initialDragBrightness = newBrightness;
+      _showBrightnessIndicator();
       notifyListeners();
       ////debugPrint("[VideoPlayerState] Brightness updated. Current: $_currentBrightness, InitialDrag: $_initialDragBrightness");
     } catch (e) {
@@ -621,7 +648,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       transform: Matrix4.translationValues(
-                        videoState.isBrightnessIndicatorVisible ? -35.0 : 70.0, // Slide from right
+                        videoState.isBrightnessIndicatorVisible
+                            ? -35.0
+                            : 70.0, // Slide from right
                         0.0,
                         0.0,
                       ),
@@ -636,8 +665,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       );
       Overlay.of(_context!).insert(_brightnessOverlayEntry!);
     }
-    
-    notifyListeners(); 
+
+    notifyListeners();
 
     _brightnessIndicatorTimer?.cancel();
     _brightnessIndicatorTimer = Timer(const Duration(seconds: 2), () {
@@ -650,11 +679,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (!globals.isPhone) return;
     _brightnessIndicatorTimer?.cancel();
 
-    if (_isBrightnessIndicatorVisible) { 
+    if (_isBrightnessIndicatorVisible) {
       _isBrightnessIndicatorVisible = false;
-      notifyListeners(); 
+      notifyListeners();
 
-      Future.delayed(const Duration(milliseconds: 150), () { 
+      Future.delayed(const Duration(milliseconds: 150), () {
         if (_brightnessOverlayEntry != null) {
           _brightnessOverlayEntry!.remove();
           _brightnessOverlayEntry = null;
@@ -662,8 +691,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       });
     } else {
       if (_brightnessOverlayEntry != null) {
-          _brightnessOverlayEntry!.remove();
-          _brightnessOverlayEntry = null;
+        _brightnessOverlayEntry!.remove();
+        _brightnessOverlayEntry = null;
       }
     }
   }
@@ -671,10 +700,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // Volume Indicator Overlay Methods
   void _showVolumeIndicator() {
     // if (!globals.isPhone || _context == null) return; // 原始判断可能阻止PC
-    debugPrint("[VideoPlayerState] _showVolumeIndicator: _context is ${_context == null ? 'null' : 'valid'}, globals.isPhone is ${globals.isPhone}");
+    debugPrint(
+        "[VideoPlayerState] _showVolumeIndicator: _context is ${_context == null ? 'null' : 'valid'}, globals.isPhone is ${globals.isPhone}");
     if (_context == null) return; // Context 是必须的
 
-    _isVolumeIndicatorVisible = true; 
+    _isVolumeIndicatorVisible = true;
 
     if (_volumeOverlayEntry == null) {
       _volumeOverlayEntry = OverlayEntry(
@@ -691,7 +721,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       transform: Matrix4.translationValues(
-                        videoState.isVolumeUIVisible ? 35.0 : -70.0, // Slide from left
+                        videoState.isVolumeUIVisible
+                            ? 35.0
+                            : -70.0, // Slide from left
                         0.0,
                         0.0,
                       ),
@@ -716,7 +748,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void _hideVolumeIndicator() {
     // if (!globals.isPhone) return; // 原始判断可能阻止PC
-    debugPrint("[VideoPlayerState] _hideVolumeIndicator: globals.isPhone is ${globals.isPhone}");
+    debugPrint(
+        "[VideoPlayerState] _hideVolumeIndicator: globals.isPhone is ${globals.isPhone}");
 
     _volumeIndicatorTimer?.cancel();
 
@@ -765,13 +798,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     final positions = prefs.getString(_videoPositionsKey) ?? '{}';
     final Map<String, dynamic> positionMap =
         Map<String, dynamic>.from(json.decode(positions));
-    
+
     // 1. 直接查找原路径
     int position = positionMap[path] ?? 0;
     if (position > 0) {
       return position;
     }
-    
+
     // 2. iOS平台：尝试修复容器路径查找进度
     if (Platform.isIOS) {
       final fixedPath = await iOSContainerPathFixer.fixContainerPath(path);
@@ -785,7 +818,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           return position;
         }
       }
-      
+
       // 3. iOS进度回退：通过视频识别结果查询进度
       if (_animeId != null && _episodeId != null) {
         try {
@@ -793,8 +826,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               .getHistoryByEpisode(_animeId!, _episodeId!);
           if (historyByEpisode != null && historyByEpisode.lastPosition > 0) {
             debugPrint('通过视频识别回退查找到播放进度: ${historyByEpisode.lastPosition} ms');
-            debugPrint('匹配视频: ${historyByEpisode.animeName} - ${historyByEpisode.episodeTitle}');
-            
+            debugPrint(
+                '匹配视频: ${historyByEpisode.animeName} - ${historyByEpisode.episodeTitle}');
+
             // 保存到新路径
             positionMap[path] = historyByEpisode.lastPosition;
             await prefs.setString(_videoPositionsKey, json.encode(positionMap));
@@ -805,14 +839,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
     }
-    
+
     return 0;
   }
 
-
-
   Future<void> initializePlayer(String videoPath,
-      {WatchHistoryItem? historyItem, String? historyFilePath, String? actualPlayUrl}) async {
+      {WatchHistoryItem? historyItem,
+      String? historyFilePath,
+      String? actualPlayUrl}) async {
     // 每次切换新视频时，重置自动连播倒计时状态，防止高强度测试下卡死
     try {
       AutoNextEpisodeService.instance.cancelAutoNext();
@@ -821,56 +855,62 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     if (_status == PlayerStatus.loading ||
         _status == PlayerStatus.recognizing) {
-      _setStatus(PlayerStatus.idle, message: "取消了之前的加载任务", clearPreviousMessages: true);
+      _setStatus(PlayerStatus.idle,
+          message: "取消了之前的加载任务", clearPreviousMessages: true);
     }
     _clearPreviousVideoState(); // 清理旧状态
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
     _initialHistoryItem = historyItem;
-    
+
     // 从 historyItem 中获取弹幕 ID
     if (historyItem != null) {
       _episodeId = historyItem.episodeId;
       _animeId = historyItem.animeId;
-      debugPrint('VideoPlayerState: 从 historyItem 获取弹幕 ID - episodeId: $_episodeId, animeId: $_animeId');
+      debugPrint(
+          'VideoPlayerState: 从 historyItem 获取弹幕 ID - episodeId: $_episodeId, animeId: $_animeId');
     } else {
       _episodeId = null;
       _animeId = null;
       debugPrint('VideoPlayerState: 没有 historyItem，重置弹幕 ID');
     }
-    
+
     // 检查是否为网络URL (HTTP或HTTPS)
-    bool isNetworkUrl = videoPath.startsWith('http://') || videoPath.startsWith('https://');
-    
+    bool isNetworkUrl =
+        videoPath.startsWith('http://') || videoPath.startsWith('https://');
+
     // 检查是否是流媒体（jellyfin://协议、emby://协议）
     bool isJellyfinStream = videoPath.startsWith('jellyfin://');
     bool isEmbyStream = videoPath.startsWith('emby://');
-    
+
     // 对于本地文件才检查存在性，网络URL和流媒体默认认为"存在"
-    bool fileExists = isNetworkUrl || isJellyfinStream || isEmbyStream || kIsWeb;
-    
+    bool fileExists =
+        isNetworkUrl || isJellyfinStream || isEmbyStream || kIsWeb;
+
     // 为网络URL添加特定日志
     if (isNetworkUrl) {
       debugPrint('检测到流媒体URL: $videoPath');
       _statusMessages.add('正在准备流媒体播放...');
       notifyListeners();
     } else if (isJellyfinStream) {
-      debugPrint('检测到Jellyfin流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
+      debugPrint(
+          '检测到Jellyfin流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
       _statusMessages.add('正在准备Jellyfin流媒体播放...');
       notifyListeners();
     } else if (isEmbyStream) {
-      debugPrint('检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
+      debugPrint(
+          '检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
       _statusMessages.add('正在准备Emby流媒体播放...');
       notifyListeners();
     }
-    
+
     if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
       // 使用FilePickerService处理文件路径问题
       if (Platform.isIOS) {
         final filePickerService = FilePickerService();
-        
+
         // 首先检查文件是否存在
         fileExists = filePickerService.checkFileExists(videoPath);
-        
+
         // 如果文件不存在，尝试获取有效的文件路径
         if (!fileExists) {
           final validPath = await filePickerService.getValidFilePath(videoPath);
@@ -880,15 +920,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             fileExists = true;
           } else {
             // 检查是否是iOS临时文件路径
-            if (videoPath.contains('/tmp/') || 
-                videoPath.contains('-Inbox/') || 
+            if (videoPath.contains('/tmp/') ||
+                videoPath.contains('-Inbox/') ||
                 videoPath.contains('/Inbox/')) {
               debugPrint('检测到iOS临时文件路径: $videoPath');
               // 尝试从原始路径获取文件名，然后检查是否在持久化目录中
               final fileName = p.basename(videoPath);
               final docDir = await StorageService.getAppStorageDirectory();
               final persistentPath = '${docDir.path}/Videos/$fileName';
-              
+
               if (File(persistentPath).existsSync()) {
                 debugPrint('找到持久化存储中的文件: $persistentPath');
                 videoPath = persistentPath;
@@ -908,14 +948,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } else {
       debugPrint('检测到网络URL或流媒体: $videoPath');
     }
-    
+
     if (!fileExists) {
       debugPrint('VideoPlayerState: 文件不存在或无法访问: $videoPath');
-      _setStatus(PlayerStatus.error, message: '找不到文件或无法访问: ${p.basename(videoPath)}');
+      _setStatus(PlayerStatus.error,
+          message: '找不到文件或无法访问: ${p.basename(videoPath)}');
       _error = '文件不存在或无法访问';
       return;
     }
-    
+
     // 对网络URL和Jellyfin流媒体进行特殊处理
     if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
       debugPrint('VideoPlayerState: 准备流媒体URL: $videoPath');
@@ -925,7 +966,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         await http.head(Uri.parse(videoPath));
       } catch (e) {
         // 如果网络请求失败，使用专门的错误处理逻辑
-        await _handleStreamUrlLoadingError(videoPath, e is Exception ? e : Exception(e.toString()));
+        await _handleStreamUrlLoadingError(
+            videoPath, e is Exception ? e : Exception(e.toString()));
         return; // 避免继续处理
       }
     } else if ((isJellyfinStream || isEmbyStream) && actualPlayUrl != null) {
@@ -935,11 +977,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         await http.head(Uri.parse(actualPlayUrl));
       } catch (e) {
         // 如果网络请求失败，使用专门的错误处理逻辑
-        await _handleStreamUrlLoadingError(actualPlayUrl, e is Exception ? e : Exception(e.toString()));
+        await _handleStreamUrlLoadingError(
+            actualPlayUrl, e is Exception ? e : Exception(e.toString()));
         return; // 避免继续处理
       }
     }
-    
+
     // 更新字幕管理器的视频路径
     _subtitleManager.setCurrentVideoPath(videoPath);
 
@@ -975,9 +1018,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 清除视频资源
       player.state = PlaybackState.stopped;
       player.setMedia("", MediaType.video); // 使用空字符串和视频类型清除媒体
-      
+
       // 释放旧纹理
-      if (player.textureId.value != null) { // Keep the null check for reading
+      if (player.textureId.value != null) {
+        // Keep the null check for reading
         // player.textureId.value = null; // COMMENTED OUT - ValueListenable has no setter
       }
       // 等待纹理完全释放
@@ -1005,28 +1049,32 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       player.prepare();
 
       // 针对Jellyfin流媒体，给予更长的初始化时间
-      final bool isJellyfinStreaming = videoPath.contains('jellyfin://') || videoPath.contains('emby://');
-      final int initializationTimeout = isJellyfinStreaming ? 30000 : 15000; // Jellyfin: 30秒, 其他: 15秒
-      
-      debugPrint('VideoPlayerState: 播放器初始化超时设置: ${initializationTimeout}ms (${isJellyfinStreaming ? 'Jellyfin流媒体' : '本地文件'})');
+      final bool isJellyfinStreaming =
+          videoPath.contains('jellyfin://') || videoPath.contains('emby://');
+      final int initializationTimeout =
+          isJellyfinStreaming ? 30000 : 15000; // Jellyfin: 30秒, 其他: 15秒
+
+      debugPrint(
+          'VideoPlayerState: 播放器初始化超时设置: ${initializationTimeout}ms (${isJellyfinStreaming ? 'Jellyfin流媒体' : '本地文件'})');
 
       // 等待播放器准备完成，设置超时
       int waitCount = 0;
       const int maxWaitCount = 100; // 最大等待次数
       const int waitInterval = 100; // 每次等待100毫秒
-      
+
       while (waitCount < maxWaitCount) {
         await Future.delayed(const Duration(milliseconds: waitInterval));
         waitCount++;
-        
+
         // 检查播放器状态
-        if (player.state == PlaybackState.playing || 
+        if (player.state == PlaybackState.playing ||
             player.state == PlaybackState.paused ||
             (player.mediaInfo.duration > 0 && player.textureId.value != null)) {
-          debugPrint('VideoPlayerState: 播放器准备完成，等待时间: ${waitCount * waitInterval}ms');
+          debugPrint(
+              'VideoPlayerState: 播放器准备完成，等待时间: ${waitCount * waitInterval}ms');
           break;
         }
-        
+
         // 检查是否超时
         if (waitCount * waitInterval >= initializationTimeout) {
           debugPrint('VideoPlayerState: 播放器初始化超时 (${initializationTimeout}ms)');
@@ -1062,7 +1110,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         final videoTrack = player.mediaInfo.video![0];
         if (videoTrack.codec.width > 0 && videoTrack.codec.height > 0) {
           _aspectRatio = videoTrack.codec.width / videoTrack.codec.height;
-          debugPrint('VideoPlayerState: 从mediaInfo设置视频宽高比: $_aspectRatio (${videoTrack.codec.width}x${videoTrack.codec.height})');
+          debugPrint(
+              'VideoPlayerState: 从mediaInfo设置视频宽高比: $_aspectRatio (${videoTrack.codec.width}x${videoTrack.codec.height})');
         } else {
           // 备用方案：从播放器状态获取视频尺寸
           debugPrint('VideoPlayerState: mediaInfo中视频尺寸为0，尝试从播放器状态获取');
@@ -1073,7 +1122,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               player.snapshot().then((frame) {
                 if (frame != null && frame.width > 0 && frame.height > 0) {
                   _aspectRatio = frame.width / frame.height;
-                  debugPrint('VideoPlayerState: 从snapshot设置视频宽高比: $_aspectRatio (${frame.width}x${frame.height})');
+                  debugPrint(
+                      'VideoPlayerState: 从snapshot设置视频宽高比: $_aspectRatio (${frame.width}x${frame.height})');
                   notifyListeners(); // 通知UI更新
                 }
               });
@@ -1082,18 +1132,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             }
           });
         }
-        
+
         // 更新当前解码器信息
         // 获取解码器信息（异步方式）
         final activeDecoder = await getActiveDecoder();
         SystemResourceMonitor().setActiveDecoder(activeDecoder);
         debugPrint('当前视频解码器: $activeDecoder');
-        
+
         // 如果检测到使用软解，但硬件解码开关已打开，尝试强制启用硬件解码
         if (activeDecoder.contains("软解")) {
           final prefs = await SharedPreferences.getInstance();
-          final useHardwareDecoder = prefs.getBool('use_hardware_decoder') ?? true;
-          
+          final useHardwareDecoder =
+              prefs.getBool('use_hardware_decoder') ?? true;
+
           if (useHardwareDecoder) {
             debugPrint('检测到使用软解但硬件解码已启用，尝试强制启用硬件解码...');
             // 延迟执行以避免干扰视频初始化
@@ -1119,7 +1170,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           final fullString = track.toString().toLowerCase();
           if (simplifiedKeywords.any((kw) => fullString.contains(kw))) {
             preferredSubtitleIndex = i;
-            debugPrint('VideoPlayerState: 自动选择简体中文字幕: ${track.title ?? fullString}');
+            debugPrint(
+                'VideoPlayerState: 自动选择简体中文字幕: ${track.title ?? fullString}');
             break; // 找到最佳匹配，跳出循环
           }
         }
@@ -1131,7 +1183,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             final fullString = track.toString().toLowerCase();
             if (traditionalKeywords.any((kw) => fullString.contains(kw))) {
               preferredSubtitleIndex = i;
-              debugPrint('VideoPlayerState: 自动选择繁体中文字幕: ${track.title ?? fullString}');
+              debugPrint(
+                  'VideoPlayerState: 自动选择繁体中文字幕: ${track.title ?? fullString}');
               break;
             }
           }
@@ -1143,7 +1196,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             final track = subtitles[i];
             if (track.language == 'chi' || track.language == 'zho') {
               preferredSubtitleIndex = i;
-              debugPrint('VideoPlayerState: 自动选择语言代码为中文的字幕: ${track.title ?? track.toString().toLowerCase()}');
+              debugPrint(
+                  'VideoPlayerState: 自动选择语言代码为中文的字幕: ${track.title ?? track.toString().toLowerCase()}');
               break;
             }
           }
@@ -1152,9 +1206,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 如果找到了优先的字幕轨道，就激活它
         if (preferredSubtitleIndex != null) {
           player.activeSubtitleTracks = [preferredSubtitleIndex];
-          
+
           // 更新字幕轨道信息
-          if (player.mediaInfo.subtitle != null && 
+          if (player.mediaInfo.subtitle != null &&
               preferredSubtitleIndex < player.mediaInfo.subtitle!.length) {
             final track = player.mediaInfo.subtitle![preferredSubtitleIndex];
             _subtitleManager.updateSubtitleTrackInfo('embedded_subtitle', {
@@ -1166,10 +1220,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         } else {
           debugPrint('VideoPlayerState: 未找到符合条件的中文字幕轨道，将使用播放器默认设置。');
         }
-        
+
         // 无论是否有优先字幕轨道，都更新所有字幕轨道信息
         _subtitleManager.updateAllSubtitleTracksInfo();
-        
+
         // 通知字幕轨道变化
         _subtitleManager.onSubtitleTrackChanged();
       }
@@ -1241,17 +1295,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       bool jellyfinDanmakuHandled = false;
       try {
         // 检查是否是Jellyfin视频并尝试使用historyItem中的IDs直接加载弹幕
-        jellyfinDanmakuHandled = await _checkAndLoadStreamingDanmaku(videoPath, historyItem);
+        jellyfinDanmakuHandled =
+            await _checkAndLoadStreamingDanmaku(videoPath, historyItem);
       } catch (e) {
         debugPrint('检查Jellyfin弹幕时出错: $e');
         // 错误处理时不设置jellyfinDanmakuHandled为true，下面会继续常规处理
       }
-      
+
       // 如果不是Jellyfin视频或者Jellyfin视频没有预设的弹幕IDs，则检查是否有手动匹配的弹幕
       if (!jellyfinDanmakuHandled) {
         // 检查是否有手动匹配的弹幕ID
-        if (_episodeId != null && _animeId != null && _episodeId! > 0 && _animeId! > 0) {
-          debugPrint('检测到手动匹配的弹幕ID，直接加载: episodeId=$_episodeId, animeId=$_animeId');
+        if (_episodeId != null &&
+            _animeId != null &&
+            _episodeId! > 0 &&
+            _animeId! > 0) {
+          debugPrint(
+              '检测到手动匹配的弹幕ID，直接加载: episodeId=$_episodeId, animeId=$_animeId');
           try {
             _setStatus(PlayerStatus.recognizing, message: '正在加载手动匹配的弹幕...');
             await loadDanmaku(_episodeId.toString(), _animeId.toString());
@@ -1277,29 +1336,31 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           }
         }
       }
-      
+
       // 设置进入最终加载阶段，以优化动画性能
       _isInFinalLoadingPhase = true;
       notifyListeners();
-      
+
       //debugPrint('11. 设置准备就绪状态...');
       // 设置状态为准备就绪
       _setStatus(PlayerStatus.ready, message: '准备就绪');
-      
+
       // 使用屏幕方向管理器设置播放时的屏幕方向
       if (globals.isPhone) {
         debugPrint(
             'VideoPlayerState: Device is phone. Setting video playing orientation.');
         await ScreenOrientationManager.instance.setVideoPlayingOrientation();
-        
+
         // 平板设备默认隐藏菜单栏（全屏状态）
         if (globals.isTablet) {
           _isAppBarHidden = true;
-          debugPrint('VideoPlayerState: Tablet detected, hiding app bar by default.');
-          
+          debugPrint(
+              'VideoPlayerState: Tablet detected, hiding app bar by default.');
+
           // 同时隐藏系统UI
           try {
-            await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+            await SystemChrome.setEnabledSystemUIMode(
+                SystemUiMode.immersiveSticky);
           } catch (e) {
             debugPrint('隐藏系统UI时出错: $e');
           }
@@ -1315,7 +1376,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 从中间恢复
         if (player.state == PlaybackState.playing) {
           // Player is already playing after seek (e.g., underlying engine auto-resumed)
-          _setStatus(PlayerStatus.playing, message: '正在播放 (恢复)'); // Sync our status
+          _setStatus(PlayerStatus.playing,
+              message: '正在播放 (恢复)'); // Sync our status
           // debugPrint('VideoPlayerState: Player already playing on resume. Directly starting screenshot timer.'); // <--- REMOVED PRINT
           _startScreenshotTimer(); // Start timer directly
         } else {
@@ -1396,11 +1458,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 初始化观看记录
   Future<void> _initializeWatchHistory(String path) async {
     try {
-    final sharedEpisodeId = SharedRemoteHistoryHelper.extractSharedEpisodeId(path);
-    final sharedEpisodeHistories = await SharedRemoteHistoryHelper
-        .loadHistoriesBySharedEpisodeId(sharedEpisodeId);
+      final sharedEpisodeId =
+          SharedRemoteHistoryHelper.extractSharedEpisodeId(path);
+      final sharedEpisodeHistories =
+          await SharedRemoteHistoryHelper.loadHistoriesBySharedEpisodeId(
+              sharedEpisodeId);
 
-      WatchHistoryItem? existingHistory = await WatchHistoryManager.getHistoryItem(path);
+      WatchHistoryItem? existingHistory =
+          await WatchHistoryManager.getHistoryItem(path);
 
       if (existingHistory == null && sharedEpisodeHistories.isNotEmpty) {
         try {
@@ -1436,16 +1501,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             SharedRemoteHistoryHelper.isSharedRemoteStreamPath(path);
 
         if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
-          final animeNameCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+          final animeNameCandidate =
+              SharedRemoteHistoryHelper.firstNonEmptyString([
             SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
-            SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
+            SharedRemoteHistoryHelper.normalizeHistoryName(
+                _initialHistoryItem?.animeName),
             SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
           ]);
           if (animeNameCandidate != null) {
             finalAnimeName = animeNameCandidate;
           }
 
-          final episodeTitleCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
+          final episodeTitleCandidate =
+              SharedRemoteHistoryHelper.firstNonEmptyString([
             _episodeTitle,
             _initialHistoryItem?.episodeTitle,
             finalEpisodeTitle,
@@ -1454,7 +1522,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             finalEpisodeTitle = episodeTitleCandidate;
           }
 
-          debugPrint('_initializeWatchHistory: 使用友好名称: $finalAnimeName - $finalEpisodeTitle');
+          debugPrint(
+              '_initializeWatchHistory: 使用友好名称: $finalAnimeName - $finalEpisodeTitle');
         }
 
         debugPrint(
@@ -1464,14 +1533,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           filePath: path,
           animeName: finalAnimeName,
           episodeTitle: finalEpisodeTitle,
-          episodeId:
-              _episodeId ?? existingHistory.episodeId ?? _initialHistoryItem?.episodeId,
-          animeId: _animeId ?? existingHistory.animeId ?? _initialHistoryItem?.animeId,
+          episodeId: _episodeId ??
+              existingHistory.episodeId ??
+              _initialHistoryItem?.episodeId,
+          animeId: _animeId ??
+              existingHistory.animeId ??
+              _initialHistoryItem?.animeId,
           watchProgress: existingHistory.watchProgress,
           lastPosition: existingHistory.lastPosition,
           duration: existingHistory.duration,
           lastWatchTime: DateTime.now(),
-          thumbnailPath: existingHistory.thumbnailPath ?? _initialHistoryItem?.thumbnailPath,
+          thumbnailPath: existingHistory.thumbnailPath ??
+              _initialHistoryItem?.thumbnailPath,
           isFromScan: existingHistory.isFromScan,
         );
 
@@ -1479,11 +1552,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           try {
             final itemId = path.replaceFirst('jellyfin://', '');
             final syncService = JellyfinPlaybackSyncService();
-            final syncedHistory = await syncService.syncOnPlayStart(itemId, existingHistory);
+            final syncedHistory =
+                await syncService.syncOnPlayStart(itemId, existingHistory);
             if (syncedHistory != null) {
               await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
               await _saveVideoPosition(path, syncedHistory.lastPosition);
-              debugPrint('Jellyfin同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
+              debugPrint(
+                  'Jellyfin同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
               await syncService.reportPlaybackStart(itemId, syncedHistory);
             } else {
               await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
@@ -1497,11 +1572,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           try {
             final itemId = path.replaceFirst('emby://', '');
             final syncService = EmbyPlaybackSyncService();
-            final syncedHistory = await syncService.syncOnPlayStart(itemId, existingHistory);
+            final syncedHistory =
+                await syncService.syncOnPlayStart(itemId, existingHistory);
             if (syncedHistory != null) {
               await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
               await _saveVideoPosition(path, syncedHistory.lastPosition);
-              debugPrint('Emby同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
+              debugPrint(
+                  'Emby同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
               await syncService.reportPlaybackStart(itemId, syncedHistory);
             } else {
               await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
@@ -1516,7 +1593,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
 
         if (_context != null && _context!.mounted) {
-          await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
+          await _context!
+              .read<WatchHistoryProvider>()
+              .addOrUpdateHistory(updatedHistory);
         }
         return;
       }
@@ -1530,20 +1609,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
       final initialAnimeName = SharedRemoteHistoryHelper.firstNonEmptyString([
             SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
-            SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
+            SharedRemoteHistoryHelper.normalizeHistoryName(
+                _initialHistoryItem?.animeName),
             sanitizedFileName.isEmpty
                 ? null
-                : SharedRemoteHistoryHelper.normalizeHistoryName(sanitizedFileName),
+                : SharedRemoteHistoryHelper.normalizeHistoryName(
+                    sanitizedFileName),
           ]) ??
           '未知动画';
 
-      final initialEpisodeTitle = SharedRemoteHistoryHelper.firstNonEmptyString([
+      final initialEpisodeTitle =
+          SharedRemoteHistoryHelper.firstNonEmptyString([
         _initialHistoryItem?.episodeTitle,
         _episodeTitle,
       ]);
 
-      final initialEpisodeId =
-          _episodeId ?? _initialHistoryItem?.episodeId;
+      final initialEpisodeId = _episodeId ?? _initialHistoryItem?.episodeId;
       final initialAnimeId = _animeId ?? _initialHistoryItem?.animeId;
       final initialLastPosition = _position.inMilliseconds > 0
           ? _position.inMilliseconds
@@ -1580,7 +1661,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           if (syncedHistory != null) {
             await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
             await _saveVideoPosition(path, syncedHistory.lastPosition);
-            debugPrint('Jellyfin同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
+            debugPrint(
+                'Jellyfin同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
             await syncService.reportPlaybackStart(itemId, syncedHistory);
           } else {
             await WatchHistoryManager.addOrUpdateHistory(item);
@@ -1598,7 +1680,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           if (syncedHistory != null) {
             await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
             await _saveVideoPosition(path, syncedHistory.lastPosition);
-            debugPrint('Emby同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
+            debugPrint(
+                'Emby同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
             await syncService.reportPlaybackStart(itemId, syncedHistory);
           } else {
             await WatchHistoryManager.addOrUpdateHistory(item);
@@ -1623,40 +1706,46 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> resetPlayer() async {
     try {
       _isResetting = true; // 设置重置标志
-      
+
       // 在停止播放前保存最后的观看记录
       if (_currentVideoPath != null) {
         await _updateWatchHistory();
       }
-      
+
       // Jellyfin同步：如果是Jellyfin流媒体，停止同步
-      if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+      if (_currentVideoPath != null &&
+          _currentVideoPath!.startsWith('jellyfin://')) {
         try {
           final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
           final syncService = JellyfinPlaybackSyncService();
-          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          final historyItem =
+              await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
           if (historyItem != null) {
-            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            await syncService.reportPlaybackStopped(itemId, historyItem,
+                isCompleted: false);
           }
         } catch (e) {
           debugPrint('Jellyfin播放停止同步失败: $e');
         }
       }
-      
+
       // Emby同步：如果是Emby流媒体，停止同步
-      if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+      if (_currentVideoPath != null &&
+          _currentVideoPath!.startsWith('emby://')) {
         try {
           final itemId = _currentVideoPath!.replaceFirst('emby://', '');
           final syncService = EmbyPlaybackSyncService();
-          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          final historyItem =
+              await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
           if (historyItem != null) {
-            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            await syncService.reportPlaybackStopped(itemId, historyItem,
+                isCompleted: false);
           }
         } catch (e) {
           debugPrint('Emby播放停止同步失败: $e');
         }
       }
-      
+
       // 重置解码器信息
       SystemResourceMonitor().setActiveDecoder("未知");
 
@@ -1680,7 +1769,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       await Future.delayed(const Duration(milliseconds: 100));
 
       // 释放纹理，确保资源被正确释放
-      if (player.textureId.value != null) { // Keep the null check for reading
+      if (player.textureId.value != null) {
+        // Keep the null check for reading
         _disposeTextureResources();
         // player.textureId.value = null; // COMMENTED OUT
       }
@@ -1695,14 +1785,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _duration = Duration.zero;
       _progress = 0.0;
       _error = null;
-      _animeTitle = null;  // 清除动画标题
+      _animeTitle = null; // 清除动画标题
       _episodeTitle = null; // 清除集数标题
       _danmakuList = []; // 清除弹幕列表
       _danmakuTracks.clear();
       _danmakuTrackEnabled.clear();
       _subtitleManager.clearSubtitleTrackInfo();
       _isAppBarHidden = false; // 重置平板设备菜单栏隐藏状态
-      
+
       // 重置系统UI显示状态
       if (globals.isPhone && globals.isTablet) {
         try {
@@ -1711,21 +1801,21 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           debugPrint('重置系统UI时出错: $e');
         }
       }
-      
+
       _setStatus(PlayerStatus.idle);
 
       // 使用屏幕方向管理器重置屏幕方向
       if (globals.isPhone) {
         await ScreenOrientationManager.instance.resetOrientation();
       }
-      
+
       // 关闭唤醒锁
       try {
         WakelockPlus.disable();
       } catch (e) {
         //debugPrint("Error disabling wakelock: $e");
       }
-      
+
       notifyListeners();
     } catch (e) {
       //debugPrint('重置播放器时出错: $e');
@@ -1763,16 +1853,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void _setStatus(PlayerStatus newStatus,
       {String? message, bool clearPreviousMessages = false}) {
     // 在状态即将从loading或recognizing变为ready或playing时，设置最终加载阶段标志
-    if ((_status == PlayerStatus.loading || _status == PlayerStatus.recognizing) && 
-        (newStatus == PlayerStatus.ready || newStatus == PlayerStatus.playing)) {
+    if ((_status == PlayerStatus.loading ||
+            _status == PlayerStatus.recognizing) &&
+        (newStatus == PlayerStatus.ready ||
+            newStatus == PlayerStatus.playing)) {
       _isInFinalLoadingPhase = true;
-      
+
       // 延迟通知UI刷新，给足够时间处理状态变更
       Future.microtask(() {
         notifyListeners();
       });
     }
-    
+
     if (clearPreviousMessages) {
       _statusMessages.clear();
     }
@@ -1794,7 +1886,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       } catch (e) {
         ////debugPrint("Error enabling wakelock: $e");
       }
-      
+
       // 在播放开始后一小段时间重置最终加载阶段标志
       Future.delayed(const Duration(milliseconds: 200), () {
         _isInFinalLoadingPhase = false;
@@ -1838,9 +1930,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         player.state = PlaybackState.paused;
         _setStatus(PlayerStatus.paused, message: '已暂停');
       });
-      
+
       // Jellyfin同步：如果是Jellyfin流媒体，报告暂停状态
-      if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+      if (_currentVideoPath != null &&
+          _currentVideoPath!.startsWith('jellyfin://')) {
         try {
           final syncService = JellyfinPlaybackSyncService();
           syncService.reportPlaybackPaused(_position.inMilliseconds);
@@ -1848,9 +1941,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           debugPrint('Jellyfin暂停状态报告失败: $e');
         }
       }
-      
+
       // Emby同步：如果是Emby流媒体，报告暂停状态
-      if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+      if (_currentVideoPath != null &&
+          _currentVideoPath!.startsWith('emby://')) {
         try {
           final syncService = EmbyPlaybackSyncService();
           syncService.reportPlaybackPaused(_position.inMilliseconds);
@@ -1858,28 +1952,28 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           debugPrint('Emby暂停状态报告失败: $e');
         }
       }
-      
+
       _saveCurrentPositionToHistory();
       // 在暂停时触发截图
       _captureConditionalScreenshot("暂停时");
-  // 停止UI更新Ticker，避免继续产帧
-  _uiUpdateTicker?.stop();
+      // 停止UI更新Ticker，避免继续产帧
+      _uiUpdateTicker?.stop();
       // WakelockPlus.disable(); // Already handled by _setStatus
     }
   }
 
   void play() {
     // <<< ADDED DEBUG LOG >>>
-    debugPrint('[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
+    debugPrint(
+        '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
     if (hasVideo &&
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
-      
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
       player.playDirectly().then((_) {
         //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
         // 设置状态
         _setStatus(PlayerStatus.playing, message: '开始播放');
-        
+
         // 播放开始时提交观看记录到弹弹play
         _submitWatchHistoryToDandanplay();
       }).catchError((e) {
@@ -1887,14 +1981,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 尝试使用传统方法
         player.state = PlaybackState.playing;
         _setStatus(PlayerStatus.playing, message: '开始播放');
-        
+
         // 播放开始时提交观看记录到弹弹play
         _submitWatchHistoryToDandanplay();
       });
-      
+
       // <<< ADDED DEBUG LOG >>>
-      debugPrint('[VideoPlayerState] play() -> _status set to PlayerStatus.playing. Notifying listeners.');
-      
+      debugPrint(
+          '[VideoPlayerState] play() -> _status set to PlayerStatus.playing. Notifying listeners.');
+
       // 在首次播放时进行截图
       if (!_hasInitialScreenshot) {
         _hasInitialScreenshot = true;
@@ -1923,13 +2018,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> stop() async {
     if (_status != PlayerStatus.idle && _status != PlayerStatus.disposed) {
       _setStatus(PlayerStatus.idle, message: '播放已停止');
-      
+
       // 停止UI更新定时器和Ticker
       _uiUpdateTimer?.cancel();
       if (_uiUpdateTicker != null) {
         _uiUpdateTicker!.stop();
       }
-      
+
       player.state = PlaybackState.stopped; // Changed from player.stop()
       _resetVideoState();
     }
@@ -1972,7 +2067,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _progress = 0.0;
     _duration = Duration.zero;
     _playbackTimeMs.value = 0;
-    if (!_isErrorStopping) { // <<< MODIFIED HERE
+    if (!_isErrorStopping) {
+      // <<< MODIFIED HERE
       _error = null;
     }
     _currentVideoPath = null;
@@ -2021,7 +2117,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _setStatus(PlayerStatus.playing);
       }
 
-  // 立即更新UI状态
+      // 立即更新UI状态
       _position = clampedPosition;
       // 同步高频时间轴，确保弹幕立即跳转
       _playbackTimeMs.value = _position.inMilliseconds.toDouble();
@@ -2130,10 +2226,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 右边缘悬浮菜单管理方法
   void setRightEdgeHovered(bool hovered) {
     if (_isRightEdgeHovered == hovered) return;
-    
+
     _isRightEdgeHovered = hovered;
     _rightEdgeHoverTimer?.cancel();
-    
+
     if (hovered) {
       // 鼠标进入右边缘，显示悬浮菜单
       _showHoverSettingsMenu();
@@ -2143,13 +2239,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         _hideHoverSettingsMenu();
       });
     }
-    
+
     notifyListeners();
   }
 
   void _showHoverSettingsMenu() {
     if (_hoverSettingsMenuOverlay != null || _context == null) return;
-    
+
     // 导入设置菜单组件，这里需要延迟导入避免循环依赖
     Future.microtask(() {
       if (_context != null && _context!.mounted) {
@@ -2158,7 +2254,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             return _buildHoverSettingsMenu(context);
           },
         );
-        
+
         Overlay.of(_context!).insert(_hoverSettingsMenuOverlay!);
       }
     });
@@ -2197,9 +2293,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (hasVideo) {
       _captureConditionalScreenshot("销毁前");
     }
-    
+
     // Jellyfin同步：如果是Jellyfin流媒体，停止同步
-    if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+    if (_currentVideoPath != null &&
+        _currentVideoPath!.startsWith('jellyfin://')) {
       try {
         final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
         final syncService = JellyfinPlaybackSyncService();
@@ -2210,7 +2307,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('Jellyfin播放销毁同步失败: $e');
       }
     }
-    
+
     // Emby同步：如果是Emby流媒体，停止同步
     if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
       try {
@@ -2223,7 +2320,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('Emby播放销毁同步失败: $e');
       }
     }
-    
+
     // 退出视频播放时触发自动云同步
     if (_currentVideoPath != null) {
       try {
@@ -2236,43 +2333,49 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('退出视频时云同步失败: $e');
       }
     }
-    
+
     player.dispose();
     _focusNode.dispose();
     _uiUpdateTimer?.cancel(); // 清理UI更新定时器
-    
+
     // 🔥 新增：清理Ticker资源
     if (_uiUpdateTicker != null) {
       _uiUpdateTicker!.stop();
       _uiUpdateTicker!.dispose();
       _uiUpdateTicker = null;
     }
-    
+
     _hideControlsTimer?.cancel();
     _hideMouseTimer?.cancel();
     _autoHideTimer?.cancel();
     _screenshotTimer?.cancel();
-    _brightnessIndicatorTimer?.cancel(); // Already cancelled here or in _hideBrightnessIndicator
-    if (_brightnessOverlayEntry != null) { // ADDED THIS BLOCK
+    _brightnessIndicatorTimer
+        ?.cancel(); // Already cancelled here or in _hideBrightnessIndicator
+    if (_brightnessOverlayEntry != null) {
+      // ADDED THIS BLOCK
       _brightnessOverlayEntry!.remove();
       _brightnessOverlayEntry = null;
     }
     _volumeIndicatorTimer?.cancel(); // <<< ADDED
-    if (_volumeOverlayEntry != null) { // <<< ADDED
+    if (_volumeOverlayEntry != null) {
+      // <<< ADDED
       _volumeOverlayEntry!.remove();
       _volumeOverlayEntry = null;
     }
     _seekIndicatorTimer?.cancel(); // <<< ADDED
-    if (_seekOverlayEntry != null) { // <<< ADDED
+    if (_seekOverlayEntry != null) {
+      // <<< ADDED
       _seekOverlayEntry!.remove();
       _seekOverlayEntry = null;
     }
-    if (_speedBoostOverlayEntry != null) { // 清理倍速指示器
+    if (_speedBoostOverlayEntry != null) {
+      // 清理倍速指示器
       _speedBoostOverlayEntry!.remove();
       _speedBoostOverlayEntry = null;
     }
     _rightEdgeHoverTimer?.cancel(); // 清理右边缘悬浮定时器
-    if (_hoverSettingsMenuOverlay != null) { // 清理悬浮设置菜单
+    if (_hoverSettingsMenuOverlay != null) {
+      // 清理悬浮设置菜单
       _hoverSettingsMenuOverlay!.remove();
       _hoverSettingsMenuOverlay = null;
     }
@@ -2459,11 +2562,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 if (cachedDanmakuRaw != null) {
                   //debugPrint('从缓存加载弹幕...');
                   _setStatus(PlayerStatus.recognizing, message: '正在从缓存解析弹幕...');
-                  
+
                   // 设置最终加载阶段标志，减少动画性能消耗
                   _isInFinalLoadingPhase = true;
                   notifyListeners();
-                  
+
                   _danmakuList = await compute(parseDanmakuListInBackground,
                       cachedDanmakuRaw as List<dynamic>?);
 
@@ -2493,7 +2596,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 // 设置最终加载阶段标志，减少动画性能消耗
                 _isInFinalLoadingPhase = true;
                 notifyListeners();
-                
+
                 _setStatus(PlayerStatus.recognizing, message: '正在解析网络弹幕...');
                 if (danmakuData['comments'] != null &&
                     danmakuData['comments'] is List) {
@@ -2515,8 +2618,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 }
 
                 notifyListeners();
-                _setStatus(PlayerStatus.recognizing, message: '弹幕加载完成 (${_danmakuList.length}条)');
-                
+                _setStatus(PlayerStatus.recognizing,
+                    message: '弹幕加载完成 (${_danmakuList.length}条)');
+
                 // 如果是GPU模式，预构建字符集
                 await _prebuildGPUDanmakuCharsetIfNeeded();
               } catch (e) {
@@ -2555,14 +2659,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       //debugPrint('更新观看记录开始，视频路径: $path');
       // 获取现有记录
       WatchHistoryItem? existingHistory;
-      
+
       if (_context != null && _context!.mounted) {
         final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
         existingHistory = await watchHistoryProvider.getHistoryItem(path);
       } else {
-        existingHistory = await WatchHistoryDatabase.instance.getHistoryByFilePath(path);
+        existingHistory =
+            await WatchHistoryDatabase.instance.getHistoryByFilePath(path);
       }
-      
+
       if (existingHistory == null) {
         //debugPrint('未找到现有观看记录，跳过更新');
         return;
@@ -2650,14 +2755,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
       debugPrint(
           '准备保存更新后的观看记录，动画名: ${updatedHistory.animeName}, 集数: ${updatedHistory.episodeTitle}');
-      
+
       // 保存更新后的记录
       if (_context != null && _context!.mounted) {
-        await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
+        await _context!
+            .read<WatchHistoryProvider>()
+            .addOrUpdateHistory(updatedHistory);
       } else {
-        await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(updatedHistory);
+        await WatchHistoryDatabase.instance
+            .insertOrUpdateWatchHistory(updatedHistory);
       }
-      
+
       debugPrint('成功更新观看记录');
     } catch (e) {
       debugPrint('更新观看记录时出错: $e');
@@ -2724,12 +2832,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       // 获取当前播放记录
       WatchHistoryItem? existingHistory;
-      
+
       if (_context != null && _context!.mounted) {
         final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
-        existingHistory = await watchHistoryProvider.getHistoryItem(_currentVideoPath!);
+        existingHistory =
+            await watchHistoryProvider.getHistoryItem(_currentVideoPath!);
       } else {
-        existingHistory = await WatchHistoryDatabase.instance.getHistoryByFilePath(_currentVideoPath!);
+        existingHistory = await WatchHistoryDatabase.instance
+            .getHistoryByFilePath(_currentVideoPath!);
       }
 
       if (existingHistory != null) {
@@ -2738,7 +2848,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           filePath: existingHistory.filePath,
           animeName: existingHistory.animeName,
           episodeTitle: existingHistory.episodeTitle,
-          episodeId: _episodeId ?? existingHistory.episodeId, // 优先使用存储的 episodeId
+          episodeId:
+              _episodeId ?? existingHistory.episodeId, // 优先使用存储的 episodeId
           animeId: _animeId ?? existingHistory.animeId, // 优先使用存储的 animeId
           watchProgress: _progress, // 更新当前进度
           lastPosition: _position.inMilliseconds, // 更新当前位置
@@ -2750,11 +2861,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
         // 保存更新后的记录
         if (_context != null && _context!.mounted) {
-          await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
+          await _context!
+              .read<WatchHistoryProvider>()
+              .addOrUpdateHistory(updatedHistory);
         } else {
-          await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(updatedHistory);
+          await WatchHistoryDatabase.instance
+              .insertOrUpdateWatchHistory(updatedHistory);
         }
-        
+
         debugPrint('观看记录缩略图已更新: $thumbnailPath');
 
         // 通知缩略图已更新，需要刷新UI
@@ -2812,14 +2926,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       const int targetHeight = 0; // 使用0表示使用原始高度
 
       // 使用Player的snapshot方法获取当前帧，保留原始宽高比
-      final videoFrame = await player.snapshot(width: targetWidth, height: targetHeight);
+      final videoFrame =
+          await player.snapshot(width: targetWidth, height: targetHeight);
       if (videoFrame == null) {
         debugPrint('截图失败: 播放器返回了null');
         return null;
       }
-      
+
       // 检查截图尺寸
-      debugPrint('获取到的截图尺寸: ${videoFrame.width}x${videoFrame.height}, 字节数: ${videoFrame.bytes.length}');
+      debugPrint(
+          '获取到的截图尺寸: ${videoFrame.width}x${videoFrame.height}, 字节数: ${videoFrame.bytes.length}');
 
       // 使用缓存的哈希值或重新计算哈希值
       String videoFileHash;
@@ -2844,10 +2960,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 检查截图数据是否已经是PNG格式 (检查PNG文件头 - 89 50 4E 47)
       bool isPngFormat = false;
       if (videoFrame.bytes.length > 8) {
-        isPngFormat = videoFrame.bytes[0] == 0x89 && 
-                      videoFrame.bytes[1] == 0x50 && 
-                      videoFrame.bytes[2] == 0x4E && 
-                      videoFrame.bytes[3] == 0x47;
+        isPngFormat = videoFrame.bytes[0] == 0x89 &&
+            videoFrame.bytes[1] == 0x50 &&
+            videoFrame.bytes[2] == 0x4E &&
+            videoFrame.bytes[3] == 0x47;
       }
 
       if (isPngFormat) {
@@ -2861,11 +2977,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         debugPrint('检测到非PNG格式的截图数据，进行转换处理');
         try {
           // 确定图像尺寸
-          final width = videoFrame.width > 0 ? videoFrame.width : 1920; // 如果宽度为0，使用默认宽度
-          final height = videoFrame.height > 0 ? videoFrame.height : 1080; // 如果高度为0，使用默认高度
-          
+          final width =
+              videoFrame.width > 0 ? videoFrame.width : 1920; // 如果宽度为0，使用默认宽度
+          final height =
+              videoFrame.height > 0 ? videoFrame.height : 1080; // 如果高度为0，使用默认高度
+
           debugPrint('创建图像使用尺寸: ${width}x$height');
-          
+
           // 从bytes创建图像
           final image = img.Image.fromBytes(
             width: width,
@@ -2876,18 +2994,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
           // 检查图像是否成功创建
           if (image.width != width || image.height != height) {
-            debugPrint('警告: 创建的图像尺寸(${image.width}x${image.height})与预期(${width}x$height)不符');
+            debugPrint(
+                '警告: 创建的图像尺寸(${image.width}x${image.height})与预期(${width}x$height)不符');
           }
 
           // 编码为PNG格式
           final pngBytes = img.encodePng(image);
           await thumbnailFile.writeAsBytes(pngBytes);
-          
+
           debugPrint('成功保存转换后的截图，保留了${width}x$height的原始比例');
           return thumbnailPath;
         } catch (e) {
           debugPrint('处理图像数据时出错: $e');
-          
+
           // 转换失败，尝试直接保存原始数据
           try {
             debugPrint('尝试直接保存原始截图数据');
@@ -2958,9 +3077,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 加载最小化进度条设置
   Future<void> _loadMinimalProgressBarSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    _minimalProgressBarEnabled = prefs.getBool(_minimalProgressBarEnabledKey) ?? false;
-    _minimalProgressBarColor = prefs.getInt(_minimalProgressBarColorKey) ?? 0xFFFF7274;
-    _showDanmakuDensityChart = prefs.getBool(_showDanmakuDensityChartKey) ?? false;
+    _minimalProgressBarEnabled =
+        prefs.getBool(_minimalProgressBarEnabledKey) ?? false;
+    _minimalProgressBarColor =
+        prefs.getInt(_minimalProgressBarColorKey) ?? 0xFFFF7274;
+    _showDanmakuDensityChart =
+        prefs.getBool(_showDanmakuDensityChartKey) ?? false;
     notifyListeners();
   }
 
@@ -3101,7 +3223,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 更新内部状态变量，确保新的弹幕ID被保存
       final parsedAnimeId = int.tryParse(animeIdStr) ?? 0;
       final episodeIdInt = int.tryParse(episodeId) ?? 0;
-      
+
       if (episodeIdInt > 0 && parsedAnimeId > 0) {
         _episodeId = episodeIdInt;
         _animeId = parsedAnimeId;
@@ -3114,19 +3236,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (cachedDanmaku != null) {
         debugPrint('从缓存中找到弹幕数据，共${cachedDanmaku.length}条');
         _setStatus(PlayerStatus.recognizing, message: '正在从缓存加载弹幕...');
-        
+
         // 设置最终加载阶段标志，减少动画性能消耗
         _isInFinalLoadingPhase = true;
         notifyListeners();
-        
+
         // 加载弹幕到控制器
         danmakuController?.loadDanmaku(cachedDanmaku);
         _setStatus(PlayerStatus.playing,
             message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
-        
+
         // 解析弹幕数据并添加到弹弹play轨道
-        final parsedDanmaku = await compute(parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
-        
+        final parsedDanmaku = await compute(
+            parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
+
         _danmakuTracks['dandanplay'] = {
           'name': '弹弹play',
           'source': 'dandanplay',
@@ -3136,13 +3259,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           'count': parsedDanmaku.length,
         };
         _danmakuTrackEnabled['dandanplay'] = true;
-        
+
         // 重新计算合并后的弹幕列表
         _updateMergedDanmakuList();
-        
+
         // 移除GPU弹幕字符集预构建调用
         // await _prebuildGPUDanmakuCharsetIfNeeded();
-        
+
         notifyListeners();
         return;
       }
@@ -3150,26 +3273,29 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('缓存中没有找到弹幕，从网络加载中...');
       // 从网络加载弹幕
       final animeId = int.tryParse(animeIdStr) ?? 0;
-      
+
       // 设置最终加载阶段标志，减少动画性能消耗
       _isInFinalLoadingPhase = true;
       notifyListeners();
-      
+
       final danmakuData = await DandanplayService.getDanmaku(episodeId, animeId)
-                              .timeout(const Duration(seconds: 15), onTimeout: () {
+          .timeout(const Duration(seconds: 15), onTimeout: () {
         throw TimeoutException('加载弹幕超时');
       });
-      
+
       if (danmakuData['comments'] != null && danmakuData['comments'] is List) {
         debugPrint('成功从网络加载弹幕，共${danmakuData['count']}条');
-        
+
         // 加载弹幕到控制器
-        final filteredDanmaku = danmakuData['comments'].where((d) => !shouldBlockDanmaku(d)).toList();
+        final filteredDanmaku = danmakuData['comments']
+            .where((d) => !shouldBlockDanmaku(d))
+            .toList();
         danmakuController?.loadDanmaku(filteredDanmaku);
-        
+
         // 解析弹幕数据并添加到弹弹play轨道
-        final parsedDanmaku = await compute(parseDanmakuListInBackground, danmakuData['comments'] as List<dynamic>?);
-        
+        final parsedDanmaku = await compute(parseDanmakuListInBackground,
+            danmakuData['comments'] as List<dynamic>?);
+
         _danmakuTracks['dandanplay'] = {
           'name': '弹弹play',
           'source': 'dandanplay',
@@ -3179,13 +3305,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           'count': parsedDanmaku.length,
         };
         _danmakuTrackEnabled['dandanplay'] = true;
-        
+
         // 重新计算合并后的弹幕列表
         _updateMergedDanmakuList();
-        
+
         // 移除GPU弹幕字符集预构建调用
         await _prebuildGPUDanmakuCharsetIfNeeded();
-        
+
         _setStatus(PlayerStatus.playing,
             message: '弹幕加载完成 (${danmakuData['count']}条)');
         notifyListeners();
@@ -3200,13 +3326,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   // 从本地JSON数据加载弹幕（多轨道模式）
-  Future<void> loadDanmakuFromLocal(Map<String, dynamic> jsonData, {String? trackName}) async {
+  Future<void> loadDanmakuFromLocal(Map<String, dynamic> jsonData,
+      {String? trackName}) async {
     try {
       debugPrint('开始从本地JSON加载弹幕...');
-      
+
       // 解析弹幕数据，支持多种格式
       List<dynamic> comments = [];
-      
+
       if (jsonData.containsKey('comments') && jsonData['comments'] is List) {
         // 标准格式：comments字段包含数组
         comments = jsonData['comments'];
@@ -3240,11 +3367,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
 
       // 解析弹幕数据
-      final parsedDanmaku = await compute(parseDanmakuListInBackground, comments);
-      
+      final parsedDanmaku =
+          await compute(parseDanmakuListInBackground, comments);
+
       // 生成轨道名称
-      final String finalTrackName = trackName ?? 'local_${DateTime.now().millisecondsSinceEpoch}';
-      
+      final String finalTrackName =
+          trackName ?? 'local_${DateTime.now().millisecondsSinceEpoch}';
+
       // 添加到本地轨道
       _danmakuTracks[finalTrackName] = {
         'name': trackName ?? '本地轨道${_danmakuTracks.length}',
@@ -3254,14 +3383,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         'loadTime': DateTime.now(),
       };
       _danmakuTrackEnabled[finalTrackName] = true;
-      
+
       // 重新计算合并后的弹幕列表
       _updateMergedDanmakuList();
-      
+
       debugPrint('本地弹幕轨道添加完成: $finalTrackName，共${comments.length}条');
-      _setStatus(PlayerStatus.playing, message: '本地弹幕轨道添加完成 (${comments.length}条)');
+      _setStatus(PlayerStatus.playing,
+          message: '本地弹幕轨道添加完成 (${comments.length}条)');
       notifyListeners();
-      
     } catch (e) {
       debugPrint('加载本地弹幕失败: $e');
       _setStatus(PlayerStatus.playing, message: '本地弹幕加载失败');
@@ -3272,33 +3401,35 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 更新合并后的弹幕列表
   void _updateMergedDanmakuList() {
     final List<Map<String, dynamic>> mergedList = [];
-    
+
     // 合并所有启用的轨道
     for (final trackId in _danmakuTracks.keys) {
       if (_danmakuTrackEnabled[trackId] == true) {
         final trackData = _danmakuTracks[trackId]!;
-        final trackDanmaku = trackData['danmakuList'] as List<Map<String, dynamic>>;
+        final trackDanmaku =
+            trackData['danmakuList'] as List<Map<String, dynamic>>;
         mergedList.addAll(trackDanmaku);
       }
     }
-    
+
     // 重新排序
     mergedList.sort((a, b) {
       final timeA = (a['time'] as double?) ?? 0.0;
       final timeB = (b['time'] as double?) ?? 0.0;
       return timeA.compareTo(timeB);
     });
-    
+
     _totalDanmakuCount = mergedList.length;
-    final filteredList = mergedList.where((d) => !shouldBlockDanmaku(d)).toList();
+    final filteredList =
+        mergedList.where((d) => !shouldBlockDanmaku(d)).toList();
     _danmakuList = filteredList;
 
     danmakuController?.clearDanmaku();
     danmakuController?.loadDanmaku(filteredList);
-    
+
     // 通过更新key来强制刷新DanmakuOverlay
     _danmakuOverlayKey = 'danmaku_${DateTime.now().millisecondsSinceEpoch}';
-    
+
     debugPrint('弹幕轨道合并及过滤完成，显示${_danmakuList.length}条，总计${mergedList.length}条');
     notifyListeners(); // 确保通知UI更新
   }
@@ -3311,20 +3442,20 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       if (currentKernel != 'GPU渲染') {
         return; // 不是GPU内核，跳过
       }
-      
+
       if (_danmakuList.isEmpty) {
         return; // 没有弹幕数据，跳过
       }
-      
+
       debugPrint('VideoPlayerState: 检测到GPU弹幕内核，开始预构建字符集');
       _setStatus(PlayerStatus.recognizing, message: '正在优化GPU弹幕字符集...');
-      
+
       // 使用过滤后的弹幕列表来预构建字符集，避免屏蔽词字符被包含
       final filteredDanmakuList = getFilteredDanmakuList();
-      
+
       // 调用GPU弹幕覆盖层的预构建方法
       await GPUDanmakuOverlay.prebuildDanmakuCharset(filteredDanmakuList);
-      
+
       debugPrint('VideoPlayerState: GPU弹幕字符集预构建完成');
     } catch (e) {
       debugPrint('VideoPlayerState: GPU弹幕字符集预构建失败: $e');
@@ -3348,7 +3479,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('不能删除弹弹play轨道');
       return;
     }
-    
+
     if (_danmakuTracks.containsKey(trackId)) {
       _danmakuTracks.remove(trackId);
       _danmakuTrackEnabled.remove(trackId);
@@ -3374,7 +3505,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_isResetting) {
       return;
     }
-    
+
     if (_status == PlayerStatus.idle || _status == PlayerStatus.error) {
       return;
     }
@@ -3382,13 +3513,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       // 使用 Provider 获取播放记录
       WatchHistoryItem? existingHistory;
-      
+
       if (_context != null && _context!.mounted) {
         final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
-        existingHistory = await watchHistoryProvider.getHistoryItem(_currentVideoPath!);
+        existingHistory =
+            await watchHistoryProvider.getHistoryItem(_currentVideoPath!);
       } else {
         // 不使用 Provider 更新状态，避免不必要的 UI 刷新
-        existingHistory = await WatchHistoryDatabase.instance.getHistoryByFilePath(_currentVideoPath!);
+        existingHistory = await WatchHistoryDatabase.instance
+            .getHistoryByFilePath(_currentVideoPath!);
       }
 
       if (existingHistory != null) {
@@ -3415,26 +3548,31 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 对于Jellyfin流媒体，优先使用当前实例变量中的友好名称（如果有的话）
         String finalAnimeName = existingHistory.animeName;
         String? finalEpisodeTitle = existingHistory.episodeTitle;
-        
-        // 检查是否是流媒体并且当前有更好的名称
-        final bool isJellyfinStream = _currentVideoPath!.startsWith('jellyfin://');
-        final bool isEmbyStream = _currentVideoPath!.startsWith('emby://');
-      final bool isSharedRemoteStream =
-          SharedRemoteHistoryHelper.isSharedRemoteStreamPath(_currentVideoPath!);
-      if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
-        final animeNameCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
-          SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
-          SharedRemoteHistoryHelper.normalizeHistoryName(_initialHistoryItem?.animeName),
-          SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
-        ]);
-        if (animeNameCandidate != null) {
-          finalAnimeName = animeNameCandidate;
-        }
 
-        final episodeTitleCandidate = SharedRemoteHistoryHelper.firstNonEmptyString([
-          _episodeTitle,
-          _initialHistoryItem?.episodeTitle,
-          finalEpisodeTitle,
+        // 检查是否是流媒体并且当前有更好的名称
+        final bool isJellyfinStream =
+            _currentVideoPath!.startsWith('jellyfin://');
+        final bool isEmbyStream = _currentVideoPath!.startsWith('emby://');
+        final bool isSharedRemoteStream =
+            SharedRemoteHistoryHelper.isSharedRemoteStreamPath(
+                _currentVideoPath!);
+        if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
+          final animeNameCandidate =
+              SharedRemoteHistoryHelper.firstNonEmptyString([
+            SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
+            SharedRemoteHistoryHelper.normalizeHistoryName(
+                _initialHistoryItem?.animeName),
+            SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
+          ]);
+          if (animeNameCandidate != null) {
+            finalAnimeName = animeNameCandidate;
+          }
+
+          final episodeTitleCandidate =
+              SharedRemoteHistoryHelper.firstNonEmptyString([
+            _episodeTitle,
+            _initialHistoryItem?.episodeTitle,
+            finalEpisodeTitle,
           ]);
           if (episodeTitleCandidate != null) {
             finalEpisodeTitle = episodeTitleCandidate;
@@ -3442,7 +3580,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           debugPrint(
               'VideoPlayerState: 使用流媒体/共享媒体友好名称更新记录: $finalAnimeName - $finalEpisodeTitle');
         }
-        
+
         final updatedHistory = WatchHistoryItem(
           filePath: existingHistory.filePath,
           animeName: finalAnimeName,
@@ -3474,7 +3612,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             debugPrint('Jellyfin播放进度同步失败: $e');
           }
         }
-        
+
         // Emby同步：如果是Emby流媒体，同步播放进度（每秒同步一次）
         if (isEmbyStream) {
           try {
@@ -3488,13 +3626,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             debugPrint('Emby播放进度同步失败: $e');
           }
         }
-        
+
         // 通过 Provider 更新记录
         if (_context != null && _context!.mounted) {
-          await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(updatedHistory);
+          await _context!
+              .read<WatchHistoryProvider>()
+              .addOrUpdateHistory(updatedHistory);
         } else {
           // 直接使用数据库更新
-          await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(updatedHistory);
+          await WatchHistoryDatabase.instance
+              .insertOrUpdateWatchHistory(updatedHistory);
         }
       } else {
         // 如果记录不存在，创建新记录
@@ -3539,10 +3680,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
         // 通过 Provider 添加记录
         if (_context != null && _context!.mounted) {
-          await _context!.read<WatchHistoryProvider>().addOrUpdateHistory(newHistory);
+          await _context!
+              .read<WatchHistoryProvider>()
+              .addOrUpdateHistory(newHistory);
         } else {
           // 直接使用数据库添加
-          await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(newHistory);
+          await WatchHistoryDatabase.instance
+              .insertOrUpdateWatchHistory(newHistory);
         }
       }
     } catch (e) {
@@ -3608,7 +3752,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           width: targetWidth, // Should be videoFrame.width
           height: targetHeight, // Should be videoFrame.height
           bytes: videoFrame.bytes.buffer, // CHANGED to get ByteBuffer
-          numChannels: 4, 
+          numChannels: 4,
         );
 
         // 编码为PNG格式
@@ -3666,7 +3810,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       {double window = 15.0}) {
     // 先过滤掉被屏蔽的弹幕
     final filteredDanmakuList = getFilteredDanmakuList();
-    
+
     // 然后在过滤后的列表中查找时间窗口内的弹幕
     return filteredDanmakuList.where((d) {
       final t = d['time'] as double? ?? 0.0;
@@ -3679,8 +3823,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (!globals.isPhone) return;
     _initialDragVolume = _currentVolume;
     _showVolumeIndicator(); // We'll define this next
-    debugPrint(
-        "Volume drag started. Initial drag volume: $_initialDragVolume");
+    debugPrint("Volume drag started. Initial drag volume: $_initialDragVolume");
   }
 
   Future<void> updateVolumeOnDrag(
@@ -3688,7 +3831,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (!globals.isPhone) return;
 
     final screenHeight = MediaQuery.of(context).size.height;
-    final sensitivityFactor = screenHeight * 0.3; // Same sensitivity as brightness for now
+    final sensitivityFactor =
+        screenHeight * 0.3; // Same sensitivity as brightness for now
 
     double change = -verticalDragDelta / sensitivityFactor;
     double newVolume = _initialDragVolume + change;
@@ -3696,11 +3840,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     try {
       // Set system volume using MDK player.volume (0.0-1.0 range)
- // Check if volume property is available
-      player.volume = newVolume; 
-          _currentVolume = newVolume; 
-      _initialDragVolume = newVolume; 
-      _showVolumeIndicator(); 
+      // Check if volume property is available
+      player.volume = newVolume;
+      _currentVolume = newVolume;
+      _initialDragVolume = newVolume;
+      _showVolumeIndicator();
       notifyListeners();
     } catch (e) {
       //debugPrint("Failed to set system volume via player: $e");
@@ -3709,8 +3853,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void endVolumeDrag() {
     if (!globals.isPhone) return;
-    debugPrint(
-        "Volume drag ended. Current volume: $_currentVolume");
+    debugPrint("Volume drag ended. Current volume: $_currentVolume");
   }
 
   static const int _textureIdCounter = 0;
@@ -3722,12 +3865,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       // Prioritize actual player volume, fallback to _currentVolume
       double currentVolume = player.volume ?? _currentVolume;
-      double newVolume = (currentVolume + (step ?? _volumeStep)).clamp(0.0, 1.0);
-      
+      double newVolume =
+          (currentVolume + (step ?? _volumeStep)).clamp(0.0, 1.0);
+
       player.volume = newVolume;
-          _currentVolume = newVolume;
+      _currentVolume = newVolume;
       // Keep _initialDragVolume in sync in case a touch/mouse drag starts later
-      _initialDragVolume = newVolume; 
+      _initialDragVolume = newVolume;
       _showVolumeIndicator();
       notifyListeners();
       //debugPrint("Volume increased to: $_currentVolume via keyboard");
@@ -3742,10 +3886,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     try {
       // Prioritize actual player volume, fallback to _currentVolume
       double currentVolume = player.volume ?? _currentVolume;
-      double newVolume = (currentVolume - (step ?? _volumeStep)).clamp(0.0, 1.0);
+      double newVolume =
+          (currentVolume - (step ?? _volumeStep)).clamp(0.0, 1.0);
 
       player.volume = newVolume;
-          _currentVolume = newVolume;
+      _currentVolume = newVolume;
       // Keep _initialDragVolume in sync in case a touch/mouse drag starts later
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
@@ -3755,7 +3900,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       //debugPrint("Failed to decrease volume via keyboard: $e");
     }
   }
-  
+
   // Seek Drag Methods
   void startSeekDrag(BuildContext context) {
     if (!globals.isPhone) return; // Add platform check
@@ -3766,7 +3911,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _dragSeekTargetPosition = _position;
     _showSeekIndicator(); // <<< CALL ADDED
     //debugPrint("Seek drag started. Start position: $_dragSeekStartPosition");
-    notifyListeners(); 
+    notifyListeners();
   }
 
   void updateSeekDrag(double deltaDx, BuildContext context) {
@@ -3775,14 +3920,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     _accumulatedDragDx += deltaDx;
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     // Sensitivity: 滑动整个屏幕宽度对应总时长的N分之一，例如1/3或者一个固定时长如60秒
     // 修改灵敏度：1像素约等于6秒，这样轻滑动大约10-15像素就是10秒左右
     const double pixelsPerSecond = 6.0; // 增大数值以减少灵敏度(原来是1.0)
-    double seekOffsetSeconds = _accumulatedDragDx / pixelsPerSecond; 
+    double seekOffsetSeconds = _accumulatedDragDx / pixelsPerSecond;
 
-    Duration newPositionDuration = _dragSeekStartPosition + Duration(seconds: seekOffsetSeconds.round());
-    
+    Duration newPositionDuration =
+        _dragSeekStartPosition + Duration(seconds: seekOffsetSeconds.round());
+
     // Clamp newPosition between Duration.zero and video duration
     int newPositionMillis = newPositionDuration.inMilliseconds;
     if (_duration > Duration.zero) {
@@ -3799,7 +3945,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void endSeekDrag() {
     if (!globals.isPhone) return; // Add platform check
     if (!hasVideo || !_isSeekingViaDrag) return;
-    
+
     seekTo(_dragSeekTargetPosition);
     _isSeekingViaDrag = false;
     _accumulatedDragDx = 0.0;
@@ -3810,7 +3956,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // Seek Indicator Overlay Methods
   void _showSeekIndicator() {
-    if (!globals.isPhone || _context == null) return; // Ensure context is available
+    if (!globals.isPhone || _context == null)
+      return; // Ensure context is available
     _isSeekIndicatorVisible = true;
 
     if (_seekOverlayEntry == null) {
@@ -3826,13 +3973,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           );
         },
       );
-      Overlay.of(_context!).insert(_seekOverlayEntry!); 
+      Overlay.of(_context!).insert(_seekOverlayEntry!);
     }
     notifyListeners(); // To trigger opacity animation in SeekIndicator
 
     // Optional: Timer to auto-hide if drag ends abruptly or no more updates
     _seekIndicatorTimer?.cancel();
-    // _seekIndicatorTimer = Timer(const Duration(seconds: 2), () { 
+    // _seekIndicatorTimer = Timer(const Duration(seconds: 2), () {
     //   _hideSeekIndicator();
     // });
   }
@@ -3846,7 +3993,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       notifyListeners(); // Trigger fade-out animation
 
       // Wait for fade-out animation to complete before removing
-      Future.delayed(const Duration(milliseconds: 200), () { // Match SeekIndicator fade duration
+      Future.delayed(const Duration(milliseconds: 200), () {
+        // Match SeekIndicator fade duration
         if (_seekOverlayEntry != null) {
           _seekOverlayEntry!.remove();
           _seekOverlayEntry = null;
@@ -3880,7 +4028,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 隐藏倍速指示器
   void _hideSpeedBoostIndicator() {
-
     // Wait for fade-out animation to complete before removing
     Future.delayed(const Duration(milliseconds: 200), () {
       if (_speedBoostOverlayEntry != null) {
@@ -3904,7 +4051,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       'ita': '意大利语',
       'rus': '俄语',
     };
-    
+
     // 常见的语言标识符
     final Map<String, String> languagePatterns = {
       r'chi|chs|zh|中文|简体|繁体|chi.*?simplified|chinese': '中文',
@@ -3937,32 +4084,34 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 更新指定的字幕轨道信息
   void _updateSubtitleTracksInfo(int trackIndex) {
-    if (player.mediaInfo.subtitle == null || 
+    if (player.mediaInfo.subtitle == null ||
         trackIndex >= player.mediaInfo.subtitle!.length) {
       return;
     }
-    
+
     final track = player.mediaInfo.subtitle![trackIndex];
     // 尝试从track中提取title和language
     String title = '轨道 $trackIndex';
     String language = '未知';
-    
+
     final fullString = track.toString();
     if (fullString.contains('metadata: {')) {
-      final metadataStart = fullString.indexOf('metadata: {') + 'metadata: {'.length;
+      final metadataStart =
+          fullString.indexOf('metadata: {') + 'metadata: {'.length;
       final metadataEnd = fullString.indexOf('}', metadataStart);
-      
+
       if (metadataEnd > metadataStart) {
         final metadataStr = fullString.substring(metadataStart, metadataEnd);
-        
+
         // 提取title
         final titleMatch = RegExp(r'title: ([^,}]+)').firstMatch(metadataStr);
         if (titleMatch != null) {
           title = titleMatch.group(1)?.trim() ?? title;
         }
-        
+
         // 提取language
-        final languageMatch = RegExp(r'language: ([^,}]+)').firstMatch(metadataStr);
+        final languageMatch =
+            RegExp(r'language: ([^,}]+)').firstMatch(metadataStr);
         if (languageMatch != null) {
           language = languageMatch.group(1)?.trim() ?? language;
           // 获取映射后的语言名称
@@ -3970,7 +4119,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
     }
-    
+
     // 更新VideoPlayerState的字幕轨道信息
     _subtitleManager.updateSubtitleTrackInfo('embedded_subtitle_$trackIndex', {
       'index': trackIndex,
@@ -3978,34 +4127,33 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       'language': language,
       'isActive': player.activeSubtitleTracks.contains(trackIndex)
     });
-    
+
     // 清除外部字幕信息的激活状态
-    if (player.activeSubtitleTracks.contains(trackIndex) && 
+    if (player.activeSubtitleTracks.contains(trackIndex) &&
         _subtitleManager.subtitleTrackInfo.containsKey('external_subtitle')) {
-      _subtitleManager.updateSubtitleTrackInfo('external_subtitle', {
-        'isActive': false
-      });
+      _subtitleManager
+          .updateSubtitleTrackInfo('external_subtitle', {'isActive': false});
     }
   }
-  
+
   // 更新所有字幕轨道信息
   void _updateAllSubtitleTracksInfo() {
     if (player.mediaInfo.subtitle == null) {
       return;
     }
-    
+
     // 清除之前的内嵌字幕轨道信息
     for (final key in List.from(_subtitleManager.subtitleTrackInfo.keys)) {
       if (key.startsWith('embedded_subtitle_')) {
         _subtitleManager.subtitleTrackInfo.remove(key);
       }
     }
-    
+
     // 更新所有内嵌字幕轨道信息
     for (var i = 0; i < player.mediaInfo.subtitle!.length; i++) {
       _updateSubtitleTracksInfo(i);
     }
-    
+
     // 在更新完成后检查当前激活的字幕轨道并确保相应的信息被更新
     if (player.activeSubtitleTracks.isNotEmpty) {
       final activeIndex = player.activeSubtitleTracks.first;
@@ -4016,12 +4164,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           'title': player.mediaInfo.subtitle![activeIndex - 1].toString(),
           'isActive': true,
         });
-        
+
         // 通知字幕轨道变化
         _subtitleManager.onSubtitleTrackChanged();
       }
     }
-    
+
     notifyListeners();
   }
 
@@ -4033,47 +4181,49 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 设置外部字幕并更新路径
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
-    _subtitleManager.setExternalSubtitle(path, isManualSetting: isManualSetting);
+    _subtitleManager.setExternalSubtitle(path,
+        isManualSetting: isManualSetting);
   }
 
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
     _subtitleManager.forceSetExternalSubtitle(path);
   }
-  
+
   // 桥接方法：预加载字幕文件
   Future<void> preloadSubtitleFile(String path) async {
     await _subtitleManager.preloadSubtitleFile(path);
   }
-  
+
   // 桥接方法：获取当前活跃的外部字幕文件路径
   String? getActiveExternalSubtitlePath() {
     return _subtitleManager.getActiveExternalSubtitlePath();
   }
-  
+
   // 桥接方法：获取当前显示的字幕文本
   String getCurrentSubtitleText() {
     return _subtitleManager.getCurrentSubtitleText();
   }
-  
+
   // 桥接方法：当字幕轨道改变时调用
   void onSubtitleTrackChanged() {
     _subtitleManager.onSubtitleTrackChanged();
   }
-  
+
   // 桥接方法：获取缓存的字幕内容
   List<dynamic>? getCachedSubtitle(String path) {
     return _subtitleManager.getCachedSubtitle(path);
   }
-  
+
   // 桥接方法：获取弹幕/字幕轨道信息
-  Map<String, Map<String, dynamic>> get danmakuTrackInfo => _subtitleManager.subtitleTrackInfo;
-  
+  Map<String, Map<String, dynamic>> get danmakuTrackInfo =>
+      _subtitleManager.subtitleTrackInfo;
+
   // 桥接方法：更新弹幕/字幕轨道信息
   void updateDanmakuTrackInfo(String key, Map<String, dynamic> info) {
     _subtitleManager.updateSubtitleTrackInfo(key, info);
   }
-  
+
   // 桥接方法：清除弹幕/字幕轨道信息
   void clearDanmakuTrackInfo() {
     _subtitleManager.clearSubtitleTrackInfo();
@@ -4091,7 +4241,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _blockTopDanmaku = prefs.getBool(_blockTopDanmakuKey) ?? false;
     notifyListeners();
   }
-  
+
   // 设置顶部弹幕屏蔽
   Future<void> setBlockTopDanmaku(bool block) async {
     if (_blockTopDanmaku != block) {
@@ -4101,14 +4251,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _updateMergedDanmakuList();
     }
   }
-  
+
   // 加载底部弹幕屏蔽设置
   Future<void> _loadBlockBottomDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
     _blockBottomDanmaku = prefs.getBool(_blockBottomDanmakuKey) ?? false;
     notifyListeners();
   }
-  
+
   // 设置底部弹幕屏蔽
   Future<void> setBlockBottomDanmaku(bool block) async {
     if (_blockBottomDanmaku != block) {
@@ -4118,14 +4268,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _updateMergedDanmakuList();
     }
   }
-  
+
   // 加载滚动弹幕屏蔽设置
   Future<void> _loadBlockScrollDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
     _blockScrollDanmaku = prefs.getBool(_blockScrollDanmakuKey) ?? false;
     notifyListeners();
   }
-  
+
   // 设置滚动弹幕屏蔽
   Future<void> setBlockScrollDanmaku(bool block) async {
     if (_blockScrollDanmaku != block) {
@@ -4135,7 +4285,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _updateMergedDanmakuList();
     }
   }
-  
+
   // 加载弹幕屏蔽词列表
   Future<void> _loadDanmakuBlockWords() async {
     final prefs = await SharedPreferences.getInstance();
@@ -4153,7 +4303,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     notifyListeners();
   }
-  
+
   // 添加弹幕屏蔽词
   Future<void> addDanmakuBlockWord(String word) async {
     if (word.isNotEmpty && !_danmakuBlockWords.contains(word)) {
@@ -4162,7 +4312,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _updateMergedDanmakuList();
     }
   }
-  
+
   // 移除弹幕屏蔽词
   Future<void> removeDanmakuBlockWord(String word) async {
     if (_danmakuBlockWords.contains(word)) {
@@ -4171,16 +4321,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _updateMergedDanmakuList();
     }
   }
-  
+
   // 保存弹幕屏蔽词列表
   Future<void> _saveDanmakuBlockWords() async {
     final prefs = await SharedPreferences.getInstance();
     final blockWordsJson = json.encode(_danmakuBlockWords);
     await prefs.setString(_danmakuBlockWordsKey, blockWordsJson);
   }
-  
 
-  
   // 检查弹幕是否应该被屏蔽
   bool shouldBlockDanmaku(Map<String, dynamic> danmaku) {
     final String type = danmaku['type']?.toString() ?? '';
@@ -4197,10 +4345,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     return false;
   }
-  
+
   // 获取过滤后的弹幕列表
   List<Map<String, dynamic>> getFilteredDanmakuList() {
-    return _danmakuList.where((danmaku) => !shouldBlockDanmaku(danmaku)).toList();
+    return _danmakuList
+        .where((danmaku) => !shouldBlockDanmaku(danmaku))
+        .toList();
   }
 
   // 添加setter用于设置外部字幕自动加载回调
@@ -4221,9 +4371,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _decoderManager.updateDecoders(decoders);
     notifyListeners();
   }
-  
+
   // 播放速度相关方法
-  
+
   // 加载播放速度设置
   Future<void> _loadPlaybackRate() async {
     final prefs = await SharedPreferences.getInstance();
@@ -4232,13 +4382,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _normalPlaybackRate = 1.0; // 始终重置为1.0
     notifyListeners();
   }
-  
+
   // 保存播放速度设置
   Future<void> setPlaybackRate(double rate) async {
     _playbackRate = rate;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_playbackRateKey, rate);
-    
+
     // 立即应用新的播放速度
     if (hasVideo) {
       player.setPlaybackRate(rate);
@@ -4246,7 +4396,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     notifyListeners();
   }
-  
+
   // 设置长按倍速播放的倍率
   Future<void> setSpeedBoostRate(double rate) async {
     _speedBoostRate = rate;
@@ -4254,44 +4404,44 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await prefs.setDouble(_speedBoostRateKey, rate);
     notifyListeners();
   }
-  
+
   // 开始倍速播放（长按开始）
   void startSpeedBoost() {
     if (!hasVideo || _isSpeedBoostActive) return;
-    
+
     // 保存当前播放速度，以便长按结束时恢复
     _normalPlaybackRate = _playbackRate;
     _isSpeedBoostActive = true;
-    
+
     // 使用配置的倍速
     player.setPlaybackRate(_speedBoostRate);
     debugPrint('开始长按倍速播放: ${_speedBoostRate}x (之前: ${_normalPlaybackRate}x)');
-    
+
     // 显示倍速指示器
     _showSpeedBoostIndicator();
-    
+
     notifyListeners();
   }
-  
+
   // 结束倍速播放（长按结束）
   void stopSpeedBoost() {
     if (!hasVideo || !_isSpeedBoostActive) return;
-    
+
     _isSpeedBoostActive = false;
     // 恢复到长按前的播放速度
     player.setPlaybackRate(_normalPlaybackRate);
     debugPrint('结束长按倍速播放，恢复到: ${_normalPlaybackRate}x');
-    
+
     // 隐藏倍速指示器
     _hideSpeedBoostIndicator();
-    
+
     notifyListeners();
   }
-  
+
   // 切换播放速度按钮功能
   void togglePlaybackRate() {
     if (!hasVideo) return;
-    
+
     if (_isSpeedBoostActive) {
       // 如果正在长按倍速播放，结束长按
       stopSpeedBoost();
@@ -4306,16 +4456,16 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
     }
   }
-  
+
   // 快进快退时间设置相关方法
-  
+
   // 加载快进快退时间设置
   Future<void> _loadSeekStepSeconds() async {
     final prefs = await SharedPreferences.getInstance();
     _seekStepSeconds = prefs.getInt(_seekStepSecondsKey) ?? 10; // 默认10秒
     notifyListeners();
   }
-  
+
   // 保存快进快退时间设置
   Future<void> setSeekStepSeconds(int seconds) async {
     _seekStepSeconds = seconds;
@@ -4323,14 +4473,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await prefs.setInt(_seekStepSecondsKey, seconds);
     notifyListeners();
   }
-  
+
   // 加载跳过时间设置
   Future<void> _loadSkipSeconds() async {
     final prefs = await SharedPreferences.getInstance();
     _skipSeconds = prefs.getInt(_skipSecondsKey) ?? 90; // 默认90秒
     notifyListeners();
   }
-  
+
   // 保存跳过时间设置
   Future<void> setSkipSeconds(int seconds) async {
     _skipSeconds = seconds;
@@ -4338,16 +4488,95 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     await prefs.setInt(_skipSecondsKey, seconds);
     notifyListeners();
   }
-  
+
+  Future<void> _loadAnime4KProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int stored =
+          prefs.getInt(_anime4kProfileKey) ?? Anime4KProfile.off.index;
+      if (stored >= 0 && stored < Anime4KProfile.values.length) {
+        _anime4kProfile = Anime4KProfile.values[stored];
+      } else {
+        _anime4kProfile = Anime4KProfile.off;
+      }
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 读取 Anime4K 设置失败: $e');
+      _anime4kProfile = Anime4KProfile.off;
+    }
+
+    await applyAnime4KProfileToCurrentPlayer();
+    notifyListeners();
+  }
+
+  Future<void> setAnime4KProfile(Anime4KProfile profile) async {
+    if (_anime4kProfile == profile) {
+      // 仍然确保当前播放器应用该配置，便于热切换后快速生效。
+      await applyAnime4KProfileToCurrentPlayer();
+      return;
+    }
+
+    _anime4kProfile = profile;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_anime4kProfileKey, profile.index);
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 保存 Anime4K 设置失败: $e');
+    }
+
+    await applyAnime4KProfileToCurrentPlayer();
+    notifyListeners();
+  }
+
+  Future<void> applyAnime4KProfileToCurrentPlayer() async {
+    if (!_supportsAnime4KForCurrentPlayer()) {
+      _anime4kShaderPaths = const <String>[];
+      return;
+    }
+
+    if (_anime4kProfile == Anime4KProfile.off) {
+      _anime4kShaderPaths = const <String>[];
+      try {
+        player.setProperty('glsl-shaders', '');
+      } catch (e) {
+        debugPrint('[VideoPlayerState] 清除 Anime4K 着色器失败: $e');
+      }
+      return;
+    }
+
+    try {
+      final List<String> shaderPaths =
+          await Anime4KShaderManager.getShaderPathsForProfile(
+        _anime4kProfile,
+      );
+      _anime4kShaderPaths = List.unmodifiable(shaderPaths);
+      final String propertyValue =
+          Anime4KShaderManager.buildMpvShaderList(shaderPaths);
+      player.setProperty('glsl-shaders', propertyValue);
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 应用 Anime4K 着色器失败: $e');
+    }
+  }
+
+  bool _supportsAnime4KForCurrentPlayer() {
+    if (kIsWeb) {
+      return false;
+    }
+    try {
+      return player.getPlayerKernelName() == 'Media Kit';
+    } catch (_) {
+      return false;
+    }
+  }
+
   // 跳过功能
   void skip() {
     final currentPosition = position;
     final newPosition = currentPosition + Duration(seconds: _skipSeconds);
     seekTo(newPosition);
   }
-  
+
   // 弹幕字体大小和显示区域相关方法
-  
+
   // 加载弹幕字体大小
   Future<void> _loadDanmakuFontSize() async {
     final prefs = await SharedPreferences.getInstance();
@@ -4397,11 +4626,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     const double baseMultiplier = 1.5;
     const double baseFontSize = 30.0; // 基准字体大小
     final double currentFontSize = actualDanmakuFontSize;
-    
+
     // 保持轨道间距与字体大小的比例关系
     return baseMultiplier * (currentFontSize / baseFontSize);
   }
-  
+
   // 获取当前活跃解码器，代理到解码器管理器
   Future<String> getActiveDecoder() async {
     final decoder = await _decoderManager.getActiveDecoder();
@@ -4420,7 +4649,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 强制启用硬件解码，代理到解码器管理器
   Future<void> forceEnableHardwareDecoder() async {
-        if (_status == PlayerStatus.playing || _status == PlayerStatus.paused) {
+    if (_status == PlayerStatus.playing || _status == PlayerStatus.paused) {
       await _decoderManager.forceEnableHardwareDecoder();
       // 稍后检查解码器状态
       await Future.delayed(const Duration(seconds: 1));
@@ -4436,10 +4665,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     } else {
       // 在返回按钮点击时进行截图
       _captureConditionalScreenshot("返回按钮时");
-      
+
       // 等待截图完成
       await Future.delayed(const Duration(milliseconds: 200));
-      
+
       // 退出视频播放时触发自动云同步
       if (_currentVideoPath != null) {
         try {
@@ -4449,7 +4678,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           debugPrint('退出视频播放时云同步失败: $e');
         }
       }
-      
+
       return true; // 允许返回
     }
   }
@@ -4457,17 +4686,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 条件性截图方法
   Future<void> _captureConditionalScreenshot(String triggerEvent) async {
     if (_currentVideoPath == null || !hasVideo || _isCapturingFrame) return;
-    
+
     _isCapturingFrame = true;
     try {
       final newThumbnailPath = await _captureVideoFrameWithoutPausing();
       if (newThumbnailPath != null) {
         _currentThumbnailPath = newThumbnailPath;
         debugPrint('条件截图完成($triggerEvent): $_currentThumbnailPath');
-        
+
         // 更新观看记录中的缩略图
         await _updateWatchHistoryWithNewThumbnail(newThumbnailPath);
-        
+
         // 截图后检查解码器状态
         await _decoderManager.checkDecoderAfterScreenshot();
       }
@@ -4479,21 +4708,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   // 处理流媒体URL的加载错误
-  Future<void> _handleStreamUrlLoadingError(String videoPath, Exception e) async {
+  Future<void> _handleStreamUrlLoadingError(
+      String videoPath, Exception e) async {
     debugPrint('流媒体URL加载失败: $videoPath, 错误: $e');
-    
+
     // 检查是否为流媒体 URL
     if (videoPath.contains('jellyfin') || videoPath.contains('/Videos/')) {
       _setStatus(PlayerStatus.error, message: 'Jellyfin流媒体加载失败，请检查网络连接');
       _error = '无法连接到Jellyfin服务器，请确保网络连接正常';
-    } else if (videoPath.contains('emby') || videoPath.contains('/emby/Videos/')) {
+    } else if (videoPath.contains('emby') ||
+        videoPath.contains('/emby/Videos/')) {
       _setStatus(PlayerStatus.error, message: 'Emby流媒体加载失败，请检查网络连接');
       _error = '无法连接到Emby服务器，请确保网络连接正常';
     } else {
       _setStatus(PlayerStatus.error, message: '流媒体加载失败，请检查网络连接');
       _error = '无法加载流媒体，请检查URL和网络连接';
     }
-    
+
     // 通知监听器
     notifyListeners();
   }
@@ -4504,80 +4735,81 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // 从jellyfin://协议URL中提取itemId
       final itemId = videoPath.replaceFirst('jellyfin://', '');
       debugPrint('[Jellyfin字幕] 开始加载外挂字幕，itemId: $itemId');
-      
+
       // 获取字幕轨道信息
-      final subtitleTracks = await JellyfinService.instance.getSubtitleTracks(itemId);
-      
+      final subtitleTracks =
+          await JellyfinService.instance.getSubtitleTracks(itemId);
+
       if (subtitleTracks.isEmpty) {
         debugPrint('[Jellyfin字幕] 未找到字幕轨道');
         return;
       }
-      
+
       // 查找外挂字幕轨道
-      final externalSubtitles = subtitleTracks.where((track) => track['type'] == 'external').toList();
-      
+      final externalSubtitles =
+          subtitleTracks.where((track) => track['type'] == 'external').toList();
+
       if (externalSubtitles.isEmpty) {
         debugPrint('[Jellyfin字幕] 未找到外挂字幕轨道');
         return;
       }
-      
+
       debugPrint('[Jellyfin字幕] 找到 ${externalSubtitles.length} 个外挂字幕轨道');
-      
+
       // 优先选择中文字幕
       Map<String, dynamic>? preferredSubtitle;
-      
+
       // 首先查找简体中文
       preferredSubtitle = externalSubtitles.firstWhere(
         (track) {
           final title = track['title']?.toLowerCase() ?? '';
           final language = track['language']?.toLowerCase() ?? '';
-          return language.contains('chi') || 
-                 title.contains('简体') || 
-                 title.contains('中文') ||
-                 title.contains('sc') ||      // 支持scjp格式
-                 title.contains('tc') ||      // 支持tcjp格式
-                 title.startsWith('scjp') ||  // 精确匹配scjp开头
-                 title.startsWith('tcjp');    // 精确匹配tcjp开头
+          return language.contains('chi') ||
+              title.contains('简体') ||
+              title.contains('中文') ||
+              title.contains('sc') || // 支持scjp格式
+              title.contains('tc') || // 支持tcjp格式
+              title.startsWith('scjp') || // 精确匹配scjp开头
+              title.startsWith('tcjp'); // 精确匹配tcjp开头
         },
         orElse: () => externalSubtitles.first,
       );
-      
+
       // 如果没有中文，选择默认字幕或第一个
       preferredSubtitle ??= externalSubtitles.firstWhere(
-          (track) => track['isDefault'] == true,
-          orElse: () => externalSubtitles.first,
-        );
-      
+        (track) => track['isDefault'] == true,
+        orElse: () => externalSubtitles.first,
+      );
+
       final subtitleIndex = preferredSubtitle['index'];
       final subtitleCodec = preferredSubtitle['codec'];
       final subtitleTitle = preferredSubtitle['title'];
-      
-      debugPrint('[Jellyfin字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
-      
+
+      debugPrint(
+          '[Jellyfin字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
+
       // 下载字幕文件
-      final subtitleFilePath = await JellyfinService.instance.downloadSubtitleFile(
-        itemId, 
-        subtitleIndex, 
-        subtitleCodec
-      );
-      
+      final subtitleFilePath = await JellyfinService.instance
+          .downloadSubtitleFile(itemId, subtitleIndex, subtitleCodec);
+
       if (subtitleFilePath != null) {
         debugPrint('[Jellyfin字幕] 字幕文件下载成功: $subtitleFilePath');
-        
+
         // 等待播放器完全初始化
         // TODO: [技术债] 此处使用固定延迟等待播放器初始化，非常不可靠。
         // 在网络或设备性能较差时可能导致字幕加载失败。
         // 后续应重构为监听播放器的 isInitialized 状态。
         await Future.delayed(const Duration(milliseconds: 1000));
-        
+
         // 加载外挂字幕
-        _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
-        
+        _subtitleManager.setExternalSubtitle(subtitleFilePath,
+            isManualSetting: false);
+
         debugPrint('[Jellyfin字幕] 外挂字幕加载完成');
       } else {
         debugPrint('[Jellyfin字幕] 字幕文件下载失败');
       }
-        } catch (e) {
+    } catch (e) {
       debugPrint('[Jellyfin字幕] 加载外挂字幕时出错: $e');
     }
   }
@@ -4589,13 +4821,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final itemId = videoPath.replaceFirst('emby://', '');
       debugPrint('[Emby字幕] 开始加载外挂字幕，itemId: $itemId');
       // 获取字幕轨道信息
-      final subtitleTracks = await EmbyService.instance.getSubtitleTracks(itemId);
+      final subtitleTracks =
+          await EmbyService.instance.getSubtitleTracks(itemId);
       if (subtitleTracks.isEmpty) {
         debugPrint('[Emby字幕] 未找到字幕轨道');
         return;
       }
       // 查找外挂字幕轨道
-      final externalSubtitles = subtitleTracks.where((track) => track['type'] == 'external').toList();
+      final externalSubtitles =
+          subtitleTracks.where((track) => track['type'] == 'external').toList();
       if (externalSubtitles.isEmpty) {
         debugPrint('[Emby字幕] 未找到外挂字幕轨道');
         return;
@@ -4608,25 +4842,26 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         (track) {
           final title = track['title']?.toLowerCase() ?? '';
           final language = track['language']?.toLowerCase() ?? '';
-          return language.contains('chi') || 
-                 title.contains('简体') || 
-                 title.contains('中文') ||
-                 title.contains('sc') ||      // 支持scjp格式
-                 title.contains('tc') ||      // 支持tcjp格式
-                 title.startsWith('scjp') ||  // 精确匹配scjp开头
-                 title.startsWith('tcjp');    // 精确匹配tcjp开头
+          return language.contains('chi') ||
+              title.contains('简体') ||
+              title.contains('中文') ||
+              title.contains('sc') || // 支持scjp格式
+              title.contains('tc') || // 支持tcjp格式
+              title.startsWith('scjp') || // 精确匹配scjp开头
+              title.startsWith('tcjp'); // 精确匹配tcjp开头
         },
         orElse: () => externalSubtitles.first,
       );
       // 如果没有中文，选择默认字幕或第一个
       preferredSubtitle ??= externalSubtitles.firstWhere(
-          (track) => track['isDefault'] == true,
-          orElse: () => externalSubtitles.first,
-        );
+        (track) => track['isDefault'] == true,
+        orElse: () => externalSubtitles.first,
+      );
       final subtitleIndex = preferredSubtitle['index'];
       final subtitleCodec = preferredSubtitle['codec'];
       final subtitleTitle = preferredSubtitle['title'];
-      debugPrint('[Emby字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
+      debugPrint(
+          '[Emby字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
       // 下载字幕文件
       final subtitleFilePath = await EmbyService.instance.downloadSubtitleFile(
         itemId,
@@ -4641,56 +4876,65 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         // 后续应重构为监听播放器的 isInitialized 状态。
         await Future.delayed(const Duration(milliseconds: 1000));
         // 加载外挂字幕
-        _subtitleManager.setExternalSubtitle(subtitleFilePath, isManualSetting: false);
+        _subtitleManager.setExternalSubtitle(subtitleFilePath,
+            isManualSetting: false);
         debugPrint('[Emby字幕] 外挂字幕加载完成');
       } else {
         debugPrint('[Emby字幕] 字幕文件下载失败');
       }
-        } catch (e) {
+    } catch (e) {
       debugPrint('[Emby字幕] 加载外挂字幕时出错: $e');
     }
   }
 
   // 检查是否是流媒体视频并使用现有的IDs直接加载弹幕
-  Future<bool> _checkAndLoadStreamingDanmaku(String videoPath, WatchHistoryItem? historyItem) async {
+  Future<bool> _checkAndLoadStreamingDanmaku(
+      String videoPath, WatchHistoryItem? historyItem) async {
     // 检查是否是Jellyfin视频URL (多种可能格式)
-    bool isJellyfinStream = videoPath.startsWith('jellyfin://') || 
-                           (videoPath.contains('jellyfin') && videoPath.startsWith('http')) ||
-                           (videoPath.contains('/Videos/') && videoPath.contains('/stream')) ||
-                           (videoPath.contains('MediaSourceId=') && videoPath.contains('api_key='));
-    
+    bool isJellyfinStream = videoPath.startsWith('jellyfin://') ||
+        (videoPath.contains('jellyfin') && videoPath.startsWith('http')) ||
+        (videoPath.contains('/Videos/') && videoPath.contains('/stream')) ||
+        (videoPath.contains('MediaSourceId=') &&
+            videoPath.contains('api_key='));
+
     // 检查是否是Emby视频URL (多种可能格式)
-    bool isEmbyStream = videoPath.startsWith('emby://') || 
-                       (videoPath.contains('emby') && videoPath.startsWith('http')) ||
-                       (videoPath.contains('/emby/Videos/') && videoPath.contains('/stream')) ||
-                       (videoPath.contains('api_key=') && videoPath.contains('emby'));
-                           
+    bool isEmbyStream = videoPath.startsWith('emby://') ||
+        (videoPath.contains('emby') && videoPath.startsWith('http')) ||
+        (videoPath.contains('/emby/Videos/') &&
+            videoPath.contains('/stream')) ||
+        (videoPath.contains('api_key=') && videoPath.contains('emby'));
+
     if ((isJellyfinStream || isEmbyStream) && historyItem != null) {
-      debugPrint('检测到流媒体视频URL: $videoPath (Jellyfin: $isJellyfinStream, Emby: $isEmbyStream)');
-      
+      debugPrint(
+          '检测到流媒体视频URL: $videoPath (Jellyfin: $isJellyfinStream, Emby: $isEmbyStream)');
+
       // 检查historyItem是否包含所需的danmaku IDs
       if (historyItem.episodeId != null && historyItem.animeId != null) {
-        debugPrint('使用historyItem的IDs直接加载Jellyfin弹幕: episodeId=${historyItem.episodeId}, animeId=${historyItem.animeId}');
-        
+        debugPrint(
+            '使用historyItem的IDs直接加载Jellyfin弹幕: episodeId=${historyItem.episodeId}, animeId=${historyItem.animeId}');
+
         try {
           // 使用已有的episodeId和animeId直接加载弹幕，跳过文件哈希计算
-          _setStatus(PlayerStatus.recognizing, message: '正在为Jellyfin流媒体加载弹幕...');
-          await loadDanmaku(historyItem.episodeId.toString(), historyItem.animeId.toString());
-          
+          _setStatus(PlayerStatus.recognizing,
+              message: '正在为Jellyfin流媒体加载弹幕...');
+          await loadDanmaku(
+              historyItem.episodeId.toString(), historyItem.animeId.toString());
+
           // 更新当前实例的弹幕ID
           _episodeId = historyItem.episodeId;
           _animeId = historyItem.animeId;
-          
+
           // 如果历史记录中有正确的动画名称和剧集标题，立即更新当前实例
-          if (historyItem.animeName.isNotEmpty && historyItem.animeName != 'Unknown') {
+          if (historyItem.animeName.isNotEmpty &&
+              historyItem.animeName != 'Unknown') {
             _animeTitle = historyItem.animeName;
             _episodeTitle = historyItem.episodeTitle;
             debugPrint('[流媒体弹幕] 从历史记录更新标题: $_animeTitle - $_episodeTitle');
-            
+
             // 立即更新历史记录，确保UI显示正确的信息
             await _updateHistoryWithNewTitles();
           }
-          
+
           return true; // 表示已处理
         } catch (e) {
           debugPrint('Jellyfin流媒体弹幕加载失败: $e');
@@ -4701,7 +4945,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           return true; // 尽管失败，但仍标记为已处理
         }
       } else {
-        debugPrint('Jellyfin流媒体historyItem缺少弹幕IDs: episodeId=${historyItem.episodeId}, animeId=${historyItem.animeId}');
+        debugPrint(
+            'Jellyfin流媒体historyItem缺少弹幕IDs: episodeId=${historyItem.episodeId}, animeId=${historyItem.animeId}');
         _setStatus(PlayerStatus.recognizing, message: 'Jellyfin视频匹配数据不完整，跳过弹幕');
       }
     }
@@ -4715,7 +4960,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('[观看记录] 未登录弹弹play账号，跳过回传观看记录');
       return;
     }
-    
+
     if (_currentVideoPath == null || _episodeId == null) {
       debugPrint('[观看记录] 缺少必要信息（视频路径或episodeId），跳过回传观看记录');
       return;
@@ -4723,13 +4968,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     try {
       debugPrint('[观看记录] 开始向弹弹play提交观看记录: episodeId=$_episodeId');
-      
+
       final result = await DandanplayService.addPlayHistory(
         episodeIdList: [_episodeId!],
         addToFavorite: false,
         rating: 0,
       );
-      
+
       if (result['success'] == true) {
         debugPrint('[观看记录] 观看记录提交成功');
       } else {
@@ -4739,100 +4984,106 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       debugPrint('[观看记录] 提交观看记录时出错: $e');
     }
   }
-  
+
   // 检查是否可以播放上一话
   bool get canPlayPreviousEpisode {
     if (_currentVideoPath == null) return false;
-    
+
     final navigationService = EpisodeNavigationService.instance;
-    
+
     // 如果有剧集信息，可以使用数据库导航
     if (navigationService.canUseDatabaseNavigation(_animeId, _episodeId)) {
       return true;
     }
-    
+
     // 如果是本地文件，可以使用文件系统导航
     if (navigationService.canUseFileSystemNavigation(_currentVideoPath!)) {
       return true;
     }
-    
+
     // 如果是流媒体，可以使用简单导航（Jellyfin/Emby的adjacentTo API）
     if (navigationService.canUseStreamingNavigation(_currentVideoPath!)) {
       return true;
     }
-    
+
     return false;
   }
-  
+
   // 检查是否可以播放下一话
   bool get canPlayNextEpisode {
     if (_currentVideoPath == null) return false;
-    
+
     final navigationService = EpisodeNavigationService.instance;
-    
+
     // 如果有剧集信息，可以使用数据库导航
     if (navigationService.canUseDatabaseNavigation(_animeId, _episodeId)) {
       return true;
     }
-    
+
     // 如果是本地文件，可以使用文件系统导航
     if (navigationService.canUseFileSystemNavigation(_currentVideoPath!)) {
       return true;
     }
-    
+
     // 如果是流媒体，可以使用简单导航（Jellyfin/Emby的adjacentTo API）
     if (navigationService.canUseStreamingNavigation(_currentVideoPath!)) {
       return true;
     }
-    
+
     return false;
   }
-  
+
   // 播放上一话
   Future<void> playPreviousEpisode() async {
     if (!canPlayPreviousEpisode || _currentVideoPath == null) {
       debugPrint('[上一话] 无法播放上一话：检查条件不满足');
       return;
     }
-    
+
     try {
       debugPrint('[上一话] 开始使用剧集导航服务查找上一话');
-      
+
       // Jellyfin同步：如果是Jellyfin流媒体，先报告播放停止
-      if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+      if (_currentVideoPath != null &&
+          _currentVideoPath!.startsWith('jellyfin://')) {
         try {
           final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
           final syncService = JellyfinPlaybackSyncService();
-          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          final historyItem =
+              await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
           if (historyItem != null) {
-            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            await syncService.reportPlaybackStopped(itemId, historyItem,
+                isCompleted: false);
             debugPrint('[上一话] Jellyfin播放停止报告完成');
           }
         } catch (e) {
           debugPrint('[上一话] Jellyfin播放停止报告失败: $e');
         }
       }
-      
+
       // Emby同步：如果是Emby流媒体，先报告播放停止
-      if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+      if (_currentVideoPath != null &&
+          _currentVideoPath!.startsWith('emby://')) {
         try {
           final itemId = _currentVideoPath!.replaceFirst('emby://', '');
           final syncService = EmbyPlaybackSyncService();
-          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          final historyItem =
+              await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
           if (historyItem != null) {
-            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            await syncService.reportPlaybackStopped(itemId, historyItem,
+                isCompleted: false);
             debugPrint('[上一话] Emby播放停止报告完成');
           }
         } catch (e) {
           debugPrint('[上一话] Emby播放停止报告失败: $e');
         }
       }
-      
+
       // 暂停当前视频
       if (_status == PlayerStatus.playing) {
         togglePlayPause();
       }
-      
+
       // 使用剧集导航服务
       final navigationService = EpisodeNavigationService.instance;
       final result = await navigationService.getPreviousEpisode(
@@ -4840,30 +5091,29 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         animeId: _animeId,
         episodeId: _episodeId,
       );
-      
+
       if (result.success) {
         debugPrint('[上一话] ${result.message}');
-        
+
         // 根据结果类型调用不同的播放逻辑
         if (result.historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
           final historyItem = result.historyItem!;
-          
+
           // 检查是否为Jellyfin或Emby流媒体，如果是则需要获取实际的HTTP URL
           if (historyItem.filePath.startsWith('jellyfin://')) {
             try {
               // 从jellyfin://协议URL中提取episodeId（简单格式：jellyfin://episodeId）
-              final episodeId = historyItem.filePath.replaceFirst('jellyfin://', '');
+              final episodeId =
+                  historyItem.filePath.replaceFirst('jellyfin://', '');
               // 获取实际的HTTP流媒体URL
-              final actualPlayUrl = JellyfinService.instance.getStreamUrl(episodeId);
+              final actualPlayUrl =
+                  JellyfinService.instance.getStreamUrl(episodeId);
               debugPrint('[上一话] 获取Jellyfin流媒体URL: $actualPlayUrl');
-              
+
               // 使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(
-                historyItem.filePath, 
-                historyItem: historyItem, 
-                actualPlayUrl: actualPlayUrl
-              );
+              await initializePlayer(historyItem.filePath,
+                  historyItem: historyItem, actualPlayUrl: actualPlayUrl);
             } catch (e) {
               debugPrint('[上一话] 获取Jellyfin流媒体URL失败: $e');
               _showEpisodeErrorMessage('上一话', '获取流媒体URL失败: $e');
@@ -4876,15 +5126,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
               // 获取实际的HTTP流媒体URL
-              final actualPlayUrl = await EmbyService.instance.getStreamUrl(episodeId);
+              final actualPlayUrl =
+                  await EmbyService.instance.getStreamUrl(episodeId);
               debugPrint('[上一话] 获取Emby流媒体URL: $actualPlayUrl');
-              
+
               // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(
-                historyItem.filePath, 
-                historyItem: historyItem, 
-                actualPlayUrl: actualPlayUrl
-              );
+              await initializePlayer(historyItem.filePath,
+                  historyItem: historyItem, actualPlayUrl: actualPlayUrl);
             } catch (e) {
               debugPrint('[上一话] 获取Emby流媒体URL失败: $e');
               _showEpisodeErrorMessage('上一话', '获取流媒体URL失败: $e');
@@ -4892,12 +5140,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             }
           } else {
             // 本地文件或其他类型
-            await initializePlayer(historyItem.filePath, historyItem: historyItem);
+            await initializePlayer(historyItem.filePath,
+                historyItem: historyItem);
           }
         } else if (result.filePath != null) {
           // 从文件系统找到的文件，需要创建基本的历史记录
-          final historyItemForPrevVideo = await WatchHistoryDatabase.instance.getHistoryByFilePath(result.filePath!);
-          await initializePlayer(result.filePath!, historyItem: historyItemForPrevVideo);
+          final historyItemForPrevVideo = await WatchHistoryDatabase.instance
+              .getHistoryByFilePath(result.filePath!);
+          await initializePlayer(result.filePath!,
+              historyItem: historyItemForPrevVideo);
         }
       } else {
         debugPrint('[上一话] ${result.message}');
@@ -4908,52 +5159,58 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _showEpisodeErrorMessage('上一话', e.toString());
     }
   }
-  
+
   // 播放下一话
   Future<void> playNextEpisode() async {
     if (!canPlayNextEpisode || _currentVideoPath == null) {
       debugPrint('[下一话] 无法播放下一话：检查条件不满足');
       return;
     }
-    
+
     try {
       debugPrint('[下一话] 开始使用剧集导航服务查找下一话 (自动播放触发)');
-      
+
       // Jellyfin同步：如果是Jellyfin流媒体，先报告播放停止
-      if (_currentVideoPath != null && _currentVideoPath!.startsWith('jellyfin://')) {
+      if (_currentVideoPath != null &&
+          _currentVideoPath!.startsWith('jellyfin://')) {
         try {
           final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
           final syncService = JellyfinPlaybackSyncService();
-          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          final historyItem =
+              await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
           if (historyItem != null) {
-            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            await syncService.reportPlaybackStopped(itemId, historyItem,
+                isCompleted: false);
             debugPrint('[下一话] Jellyfin播放停止报告完成');
           }
         } catch (e) {
           debugPrint('[下一话] Jellyfin播放停止报告失败: $e');
         }
       }
-      
+
       // Emby同步：如果是Emby流媒体，先报告播放停止
-      if (_currentVideoPath != null && _currentVideoPath!.startsWith('emby://')) {
+      if (_currentVideoPath != null &&
+          _currentVideoPath!.startsWith('emby://')) {
         try {
           final itemId = _currentVideoPath!.replaceFirst('emby://', '');
           final syncService = EmbyPlaybackSyncService();
-          final historyItem = await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          final historyItem =
+              await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
           if (historyItem != null) {
-            await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: false);
+            await syncService.reportPlaybackStopped(itemId, historyItem,
+                isCompleted: false);
             debugPrint('[下一话] Emby播放停止报告完成');
           }
         } catch (e) {
           debugPrint('[下一话] Emby播放停止报告失败: $e');
         }
       }
-      
+
       // 暂停当前视频
       if (_status == PlayerStatus.playing) {
         togglePlayPause();
       }
-      
+
       // 使用剧集导航服务
       final navigationService = EpisodeNavigationService.instance;
       final result = await navigationService.getNextEpisode(
@@ -4961,30 +5218,29 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         animeId: _animeId,
         episodeId: _episodeId,
       );
-      
+
       if (result.success) {
         debugPrint('[下一话] ${result.message}');
-        
+
         // 根据结果类型调用不同的播放逻辑
         if (result.historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
           final historyItem = result.historyItem!;
-          
+
           // 检查是否为Jellyfin或Emby流媒体，如果是则需要获取实际的HTTP URL
           if (historyItem.filePath.startsWith('jellyfin://')) {
             try {
               // 从jellyfin://协议URL中提取episodeId（简单格式：jellyfin://episodeId）
-              final episodeId = historyItem.filePath.replaceFirst('jellyfin://', '');
+              final episodeId =
+                  historyItem.filePath.replaceFirst('jellyfin://', '');
               // 获取实际的HTTP流媒体URL
-              final actualPlayUrl = JellyfinService.instance.getStreamUrl(episodeId);
+              final actualPlayUrl =
+                  JellyfinService.instance.getStreamUrl(episodeId);
               debugPrint('[下一话] 获取Jellyfin流媒体URL: $actualPlayUrl');
-              
+
               // 使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(
-                historyItem.filePath, 
-                historyItem: historyItem, 
-                actualPlayUrl: actualPlayUrl
-              );
+              await initializePlayer(historyItem.filePath,
+                  historyItem: historyItem, actualPlayUrl: actualPlayUrl);
             } catch (e) {
               debugPrint('[下一话] 获取Jellyfin流媒体URL失败: $e');
               _showEpisodeErrorMessage('下一话', '获取流媒体URL失败: $e');
@@ -4997,15 +5253,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
               // 获取实际的HTTP流媒体URL
-              final actualPlayUrl = await EmbyService.instance.getStreamUrl(episodeId);
+              final actualPlayUrl =
+                  await EmbyService.instance.getStreamUrl(episodeId);
               debugPrint('[下一话] 获取Emby流媒体URL: $actualPlayUrl');
-              
+
               // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(
-                historyItem.filePath, 
-                historyItem: historyItem, 
-                actualPlayUrl: actualPlayUrl
-              );
+              await initializePlayer(historyItem.filePath,
+                  historyItem: historyItem, actualPlayUrl: actualPlayUrl);
             } catch (e) {
               debugPrint('[下一话] 获取Emby流媒体URL失败: $e');
               _showEpisodeErrorMessage('下一话', '获取流媒体URL失败: $e');
@@ -5013,12 +5267,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             }
           } else {
             // 本地文件或其他类型
-            await initializePlayer(historyItem.filePath, historyItem: historyItem);
+            await initializePlayer(historyItem.filePath,
+                historyItem: historyItem);
           }
         } else if (result.filePath != null) {
           // 从文件系统找到的文件，需要创建基本的历史记录
-          final historyItemForNextVideo = await WatchHistoryDatabase.instance.getHistoryByFilePath(result.filePath!);
-          await initializePlayer(result.filePath!, historyItem: historyItemForNextVideo);
+          final historyItemForNextVideo = await WatchHistoryDatabase.instance
+              .getHistoryByFilePath(result.filePath!);
+          await initializePlayer(result.filePath!,
+              historyItem: historyItemForNextVideo);
         }
       } else {
         debugPrint('[下一话] ${result.message}');
@@ -5029,9 +5286,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _showEpisodeErrorMessage('下一话', e.toString());
     }
   }
-  
 
-  
   // 显示剧集未找到的消息
   void _showEpisodeNotFoundMessage(String episodeType) {
     if (_context != null) {
@@ -5043,7 +5298,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       // );
     }
   }
-  
+
   // 显示剧集错误消息
   void _showEpisodeErrorMessage(String episodeType, String error) {
     if (_context != null) {
@@ -5056,30 +5311,31 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
-    // 启动UI更新定时器（根据弹幕内核类型设置不同的更新频率，同时处理数据保存）
+  // 启动UI更新定时器（根据弹幕内核类型设置不同的更新频率，同时处理数据保存）
   void _startUiUpdateTimer() {
-  // 取消现有定时器；Ticker仅在需要时复用
-  _uiUpdateTimer?.cancel();
-  // 若已有Ticker，先停止，避免重复启动造成持续产帧
-  _uiUpdateTicker?.stop();
-    
+    // 取消现有定时器；Ticker仅在需要时复用
+    _uiUpdateTimer?.cancel();
+    // 若已有Ticker，先停止，避免重复启动造成持续产帧
+    _uiUpdateTicker?.stop();
+
     // 记录上次更新时间，用于计算时间增量
-  _lastTickTime = DateTime.now().millisecondsSinceEpoch;
-  // 初始化节流时间戳
-  _lastUiNotifyMs = _lastTickTime;
-  _lastSaveTimeMs = _lastTickTime;
-  _lastSavedPositionMs = _position.inMilliseconds;
-    
+    _lastTickTime = DateTime.now().millisecondsSinceEpoch;
+    // 初始化节流时间戳
+    _lastUiNotifyMs = _lastTickTime;
+    _lastSaveTimeMs = _lastTickTime;
+    _lastSavedPositionMs = _position.inMilliseconds;
+
     // 🔥 关键优化：使用Ticker代替Timer.periodic
     // Ticker会与显示刷新率同步，更精确地控制帧率
-  // 如未创建过，则创建Ticker；注意此Ticker不受TickerMode影响（非Widget上下文），需手动启停
-  _uiUpdateTicker ??= Ticker((elapsed) async {
+    // 如未创建过，则创建Ticker；注意此Ticker不受TickerMode影响（非Widget上下文），需手动启停
+    _uiUpdateTicker ??= Ticker((elapsed) async {
       // 计算从上次更新到现在的时间增量
       final nowTime = DateTime.now().millisecondsSinceEpoch;
       final deltaTime = nowTime - _lastTickTime;
       _lastTickTime = nowTime;
-      final bool shouldUiNotify = (nowTime - _lastUiNotifyMs) >= _uiUpdateIntervalMs;
-      
+      final bool shouldUiNotify =
+          (nowTime - _lastUiNotifyMs) >= _uiUpdateIntervalMs;
+
       // 更新弹幕控制器的时间戳
       if (danmakuController != null) {
         try {
@@ -5094,12 +5350,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           debugPrint('更新弹幕时间戳失败: $e');
         }
       }
-      
+
       if (!_isSeeking && hasVideo) {
         if (_status == PlayerStatus.playing) {
           final playerPosition = player.position;
           final playerDuration = player.mediaInfo.duration;
-          
+
           if (playerPosition >= 0 && playerDuration > 0) {
             // 更新UI显示
             _position = Duration(milliseconds: playerPosition);
@@ -5107,12 +5363,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
             // 高频时间轴：每帧更新弹幕时间
             _playbackTimeMs.value = _position.inMilliseconds.toDouble();
-            
+
             // 节流保存播放位置：时间或位移达到阈值时才写
             if (_currentVideoPath != null) {
               final int posMs = _position.inMilliseconds;
-              final bool byTime = (nowTime - _lastSaveTimeMs) >= _positionSaveIntervalMs;
-              final bool byDelta = (_lastSavedPositionMs < 0) || ((posMs - _lastSavedPositionMs).abs() >= _positionSaveDeltaThresholdMs);
+              final bool byTime =
+                  (nowTime - _lastSaveTimeMs) >= _positionSaveIntervalMs;
+              final bool byDelta = (_lastSavedPositionMs < 0) ||
+                  ((posMs - _lastSavedPositionMs).abs() >=
+                      _positionSaveDeltaThresholdMs);
               if (byTime || byDelta) {
                 _saveVideoPosition(_currentVideoPath!, posMs);
                 _lastSaveTimeMs = nowTime;
@@ -5135,31 +5394,32 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                 _saveVideoPosition(_currentVideoPath!, 0);
                 debugPrint(
                     'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
-                
+
                 // Jellyfin同步：如果是Jellyfin流媒体，报告播放结束
                 if (_currentVideoPath!.startsWith('jellyfin://')) {
                   _handleJellyfinPlaybackEnd(_currentVideoPath!);
                 }
-                
+
                 // Emby同步：如果是Emby流媒体，报告播放结束
                 if (_currentVideoPath!.startsWith('emby://')) {
                   _handleEmbyPlaybackEnd(_currentVideoPath!);
                 }
-                
+
                 // 播放结束时触发自动云同步
                 try {
                   await AutoSyncService.instance.syncOnPlaybackEnd();
                 } catch (e) {
                   debugPrint('播放结束时云同步失败: $e');
                 }
-                
+
                 // 触发自动播放下一话
                 if (_context != null && _context!.mounted) {
-                  AutoNextEpisodeService.instance.startAutoNextEpisode(_context!, _currentVideoPath!);
+                  AutoNextEpisodeService.instance
+                      .startAutoNextEpisode(_context!, _currentVideoPath!);
                 }
               }
             }
-            
+
             if (shouldUiNotify) {
               _lastUiNotifyMs = nowTime;
               notifyListeners();
@@ -5168,72 +5428,85 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             // 错误处理逻辑（原来在10秒定时器中）
             // 当播放器返回无效的 position 或 duration 时
             // 增加额外检查以避免在字幕操作等特殊情况下误报
-            
+
             // 如果之前已经有有效的时长信息，而现在临时返回0，可能是正常的操作过程
             final bool hasValidDurationBefore = _duration.inMilliseconds > 0;
-            final bool isTemporaryInvalid = hasValidDurationBefore && playerPosition == 0 && playerDuration == 0;
-            
+            final bool isTemporaryInvalid = hasValidDurationBefore &&
+                playerPosition == 0 &&
+                playerDuration == 0;
+
             // 检查是否是Jellyfin流媒体正在初始化
-            final bool isJellyfinInitializing = _currentVideoPath != null && 
-                (_currentVideoPath!.contains('jellyfin://') || _currentVideoPath!.contains('emby://')) &&
+            final bool isJellyfinInitializing = _currentVideoPath != null &&
+                (_currentVideoPath!.contains('jellyfin://') ||
+                    _currentVideoPath!.contains('emby://')) &&
                 _status == PlayerStatus.loading;
-            
+
             // 检查是否是播放器正在重置过程中
-            final bool isPlayerResetting = player.state == PlaybackState.stopped && 
+            final bool isPlayerResetting = player.state ==
+                    PlaybackState.stopped &&
                 (_status == PlayerStatus.idle || _status == PlayerStatus.error);
-            
+
             // 检查是否正在执行resetPlayer操作
-            final bool isInResetProcess = _currentVideoPath == null && _status == PlayerStatus.idle;
-            
-            if (isTemporaryInvalid || isJellyfinInitializing || isPlayerResetting || isInResetProcess || _isResetting) {
+            final bool isInResetProcess =
+                _currentVideoPath == null && _status == PlayerStatus.idle;
+
+            if (isTemporaryInvalid ||
+                isJellyfinInitializing ||
+                isPlayerResetting ||
+                isInResetProcess ||
+                _isResetting) {
               // 跳过错误检测的各种情况
               return;
             }
-            
+
             final String pathForErrorLog = _currentVideoPath ?? "未知路径";
             final String baseName = p.basename(pathForErrorLog);
-            
+
             // 优先使用来自播放器适配器的特定错误消息
             String userMessage;
-            if (player.mediaInfo.specificErrorMessage != null && player.mediaInfo.specificErrorMessage!.isNotEmpty) {
+            if (player.mediaInfo.specificErrorMessage != null &&
+                player.mediaInfo.specificErrorMessage!.isNotEmpty) {
               userMessage = player.mediaInfo.specificErrorMessage!;
             } else {
-              final String technicalDetail = '(pos: $playerPosition, dur: $playerDuration)';
+              final String technicalDetail =
+                  '(pos: $playerPosition, dur: $playerDuration)';
               userMessage = '视频文件 "$baseName" 可能已损坏或无法读取 $technicalDetail';
             }
 
-            debugPrint('VideoPlayerState: 播放器返回无效的视频数据 (position: $playerPosition, duration: $playerDuration) 路径: $pathForErrorLog. 错误信息: $userMessage. 已停止播放并设置为错误状态.');
-            
-            _error = userMessage; 
+            debugPrint(
+                'VideoPlayerState: 播放器返回无效的视频数据 (position: $playerPosition, duration: $playerDuration) 路径: $pathForErrorLog. 错误信息: $userMessage. 已停止播放并设置为错误状态.');
 
-            player.state = PlaybackState.stopped; 
-            
+            _error = userMessage;
+
+            player.state = PlaybackState.stopped;
+
             // 停止定时器和Ticker
             if (_uiUpdateTicker?.isTicking ?? false) {
               _uiUpdateTicker!.stop();
               _uiUpdateTicker!.dispose();
               _uiUpdateTicker = null;
             }
-            
-            _setStatus(PlayerStatus.error, message: userMessage); 
+
+            _setStatus(PlayerStatus.error, message: userMessage);
 
             _position = Duration.zero;
             _progress = 0.0;
-            _duration = Duration.zero; 
-            
+            _duration = Duration.zero;
+
             WidgetsBinding.instance.addPostFrameCallback((_) async {
               // 1. 执行 handleBackButton 逻辑 (处理全屏、截图等)
               await handleBackButton();
-              
+
               // 2. DO NOT call resetPlayer() here. The dialog's action will call it.
 
               // 3. 通知UI层执行pop/显示对话框等
               onSeriousPlaybackErrorAndShouldPop?.call();
             });
 
-            return; 
+            return;
           }
-        } else if (_status == PlayerStatus.paused && _lastSeekPosition != null) {
+        } else if (_status == PlayerStatus.paused &&
+            _lastSeekPosition != null) {
           // 暂停状态：使用最后一次seek的位置
           _position = _lastSeekPosition!;
           _playbackTimeMs.value = _position.inMilliseconds.toDouble();
@@ -5242,8 +5515,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             // 暂停下也节流保存位置
             if (_currentVideoPath != null) {
               final int posMs = _position.inMilliseconds;
-              final bool byTime = (nowTime - _lastSaveTimeMs) >= _positionSaveIntervalMs;
-              final bool byDelta = (_lastSavedPositionMs < 0) || ((posMs - _lastSavedPositionMs).abs() >= _positionSaveDeltaThresholdMs);
+              final bool byTime =
+                  (nowTime - _lastSaveTimeMs) >= _positionSaveIntervalMs;
+              final bool byDelta = (_lastSavedPositionMs < 0) ||
+                  ((posMs - _lastSavedPositionMs).abs() >=
+                      _positionSaveDeltaThresholdMs);
               if (byTime || byDelta) {
                 _saveVideoPosition(_currentVideoPath!, posMs);
                 _lastSaveTimeMs = nowTime;
@@ -5288,7 +5564,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   // 将一条新弹幕添加到指定的轨道，如果轨道不存在则创建
-  void addDanmakuToNewTrack(Map<String, dynamic> danmaku, {String trackName = '我的弹幕'}) {
+  void addDanmakuToNewTrack(Map<String, dynamic> danmaku,
+      {String trackName = '我的弹幕'}) {
     if (danmaku.containsKey('time') && danmaku.containsKey('content')) {
       final trackId = 'local_$trackName';
 
@@ -5306,7 +5583,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
 
       // 添加弹幕到轨道
-      final trackDanmaku = _danmakuTracks[trackId]!['danmakuList'] as List<Map<String, dynamic>>;
+      final trackDanmaku =
+          _danmakuTracks[trackId]!['danmakuList'] as List<Map<String, dynamic>>;
       trackDanmaku.add(danmaku);
       _danmakuTracks[trackId]!['count'] = trackDanmaku.length;
 
@@ -5328,10 +5606,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 显示发送弹幕对话框
   void showSendDanmakuDialog() {
     debugPrint('[VideoPlayerState] 快捷键触发发送弹幕');
-    
+
     // 先检查是否已经有弹幕对话框在显示
     final dialogManager = DanmakuDialogManager();
-    
+
     // 如果已经在显示弹幕对话框，则关闭它，否则显示新对话框
     if (!dialogManager.handleSendDanmakuHotkey()) {
       // 对话框未显示，显示新对话框
@@ -5343,7 +5621,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
         return;
       }
-      
+
       DanmakuDialogManager().showSendDanmakuDialog(
         context: _context!,
         episodeId: episodeId!,
@@ -5364,10 +5642,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 切换时间轴告知弹幕轨道
   void toggleTimelineDanmaku(bool enabled) {
     _isTimelineDanmakuEnabled = enabled;
-    
+
     if (enabled) {
       // 生成并添加时间轴弹幕轨道
-      final timelineDanmaku = TimelineDanmakuService.generateTimelineDanmaku(_duration);
+      final timelineDanmaku =
+          TimelineDanmakuService.generateTimelineDanmaku(_duration);
       _danmakuTracks['timeline'] = {
         'name': timelineDanmaku['name'],
         'source': timelineDanmaku['source'],
@@ -5380,11 +5659,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _danmakuTracks.remove('timeline');
       _danmakuTrackEnabled.remove('timeline');
     }
-    
+
     _updateMergedDanmakuList();
     notifyListeners();
   }
-  
+
   /// 处理Jellyfin播放结束的同步
   Future<void> _handleJellyfinPlaybackEnd(String videoPath) async {
     try {
@@ -5392,13 +5671,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final syncService = JellyfinPlaybackSyncService();
       final historyItem = await WatchHistoryManager.getHistoryItem(videoPath);
       if (historyItem != null) {
-        await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: true);
+        await syncService.reportPlaybackStopped(itemId, historyItem,
+            isCompleted: true);
       }
     } catch (e) {
       debugPrint('Jellyfin播放结束同步失败: $e');
     }
   }
-  
+
   /// 处理Emby播放结束的同步
   Future<void> _handleEmbyPlaybackEnd(String videoPath) async {
     try {
@@ -5406,7 +5686,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final syncService = EmbyPlaybackSyncService();
       final historyItem = await WatchHistoryManager.getHistoryItem(videoPath);
       if (historyItem != null) {
-        await syncService.reportPlaybackStopped(itemId, historyItem, isCompleted: true);
+        await syncService.reportPlaybackStopped(itemId, historyItem,
+            isCompleted: true);
       }
     } catch (e) {
       debugPrint('Emby播放结束同步失败: $e');
@@ -5423,7 +5704,8 @@ extension JellyfinQualitySwitch on VideoPlayerState {
     bool burnInSubtitle = false,
   }) async {
     try {
-      if (_currentVideoPath == null || !_currentVideoPath!.startsWith('jellyfin://')) {
+      if (_currentVideoPath == null ||
+          !_currentVideoPath!.startsWith('jellyfin://')) {
         return;
       }
 
@@ -5494,7 +5776,8 @@ extension EmbyQualitySwitch on VideoPlayerState {
     bool burnInSubtitle = false,
   }) async {
     try {
-      if (_currentVideoPath == null || !_currentVideoPath!.startsWith('emby://')) {
+      if (_currentVideoPath == null ||
+          !_currentVideoPath!.startsWith('emby://')) {
         return;
       }
 

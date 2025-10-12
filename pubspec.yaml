@@ -150,6 +150,7 @@ flutter:
     - assets/jellyfin.svg
     - assets/emby.svg
     - assets/images/
+    - assets/shaders/anime4k/
     # --- Web UI Assets ---
     - assets/web/
     - assets/web/assets/
