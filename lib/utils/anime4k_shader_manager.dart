@@ -87,10 +87,9 @@ class Anime4KShaderManager {
       return '';
     }
 
-    // mpv expects GLSL shader lists to be semicolon-delimited on every platform.
-    // Using ':' on Unix-like systems makes mpv treat the whole string as a single
-    // (and therefore invalid) path, so the shaders never load. Always use ';'.
-    return shaderPaths.join(';');
+    // mpv 在 Windows 上使用分号分隔，在类 Unix 平台使用冒号分隔。
+    final String separator = Platform.isWindows ? ';' : ':';
+    return shaderPaths.join(separator);
   }
 
   static Future<Map<String, String>> _ensureShaderCache() async {

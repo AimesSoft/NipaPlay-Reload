@@ -1351,6 +1351,20 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   String? getProperty(String name) {
+    try {
+      final dynamic platform = _player.platform;
+      if (platform != null && platform.getProperty != null) {
+        final dynamic value = platform.getProperty(name);
+        if (value is String) {
+          return value;
+        }
+        if (value != null && value is! Future) {
+          return value.toString();
+        }
+      }
+    } catch (_) {
+      // 忽略异常，回退到缓存值
+    }
     return _properties[name];
   }
 
@@ -1373,6 +1387,17 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   @override
   Future<void> pauseDirectly() async {
     await _player.pause();
+  }
+
+  @override
+  Future<void> setVideoSurfaceSize({int? width, int? height}) async {
+    try {
+      await _controller.setSize(width: width, height: height);
+      debugPrint(
+          'MediaKit: 调整视频纹理尺寸为 ${width ?? 'auto'}x${height ?? 'auto'}');
+    } catch (e) {
+      debugPrint('MediaKit: 调整视频纹理尺寸失败: $e');
+    }
   }
 
   void _setupDefaultTrackSelectionBehavior() {
@@ -1589,6 +1614,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'video-params/colormatrix': _gp('video-params/colormatrix'),
           'video-params/colorprimaries': _gp('video-params/colorprimaries'),
           'video-params/transfer': _gp('video-params/transfer'),
+          'video-params/w': _gp('video-params/w'),
+          'video-params/h': _gp('video-params/h'),
+          'video-params/dw': _gp('video-params/dw'),
+          'video-params/dh': _gp('video-params/dh'),
           // codecs
           'video-codec': _gp('video-codec'),
           'audio-codec': _gp('audio-codec'),
@@ -1601,6 +1630,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'audio-params/channel-layout': _gp('audio-params/channel-layout'),
           'audio-params/format': _gp('audio-params/format'),
           // track ids
+          'dwidth': _gp('dwidth'),
+          'dheight': _gp('dheight'),
+          'video-out-params/w': _gp('video-out-params/w'),
+          'video-out-params/h': _gp('video-out-params/h'),
           'vid': _gp('vid'),
           'aid': _gp('aid'),
           'sid': _gp('sid'),
@@ -1708,6 +1741,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'video-params/colorprimaries':
               await _gp('video-params/colorprimaries'),
           'video-params/transfer': await _gp('video-params/transfer'),
+          'video-params/w': await _gp('video-params/w'),
+          'video-params/h': await _gp('video-params/h'),
+          'video-params/dw': await _gp('video-params/dw'),
+          'video-params/dh': await _gp('video-params/dh'),
           'video-codec': await _gp('video-codec'),
           'audio-codec': await _gp('audio-codec'),
           'audio-codec-name': await _gp('audio-codec-name'),
@@ -1718,6 +1755,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'audio-params/channel-layout':
               await _gp('audio-params/channel-layout'),
           'audio-params/format': await _gp('audio-params/format'),
+          'dwidth': await _gp('dwidth'),
+          'dheight': await _gp('dheight'),
+          'video-out-params/w': await _gp('video-out-params/w'),
+          'video-out-params/h': await _gp('video-out-params/h'),
           'vid': await _gp('vid'),
           'aid': await _gp('aid'),
           'sid': await _gp('sid'),

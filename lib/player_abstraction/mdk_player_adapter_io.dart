@@ -413,6 +413,11 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
+  Future<void> setVideoSurfaceSize({int? width, int? height}) async {
+    // MDK 内核由自身窗口管理渲染尺寸，这里保持空实现。
+  }
+
+  @override
   Future<void> playDirectly() async {
     try {
       _mdkPlayer.state = mdk.PlaybackState.playing;

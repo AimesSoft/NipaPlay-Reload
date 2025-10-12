@@ -72,6 +72,28 @@ enum PlayerStatus {
   disposed // 已释放
 }
 
+class _VideoDimensionSnapshot {
+  final int? srcWidth;
+  final int? srcHeight;
+  final int? displayWidth;
+  final int? displayHeight;
+
+  const _VideoDimensionSnapshot({
+    required this.srcWidth,
+    required this.srcHeight,
+    required this.displayWidth,
+    required this.displayHeight,
+  });
+
+  bool get hasSource =>
+      srcWidth != null && srcWidth! > 0 && srcHeight != null && srcHeight! > 0;
+
+  bool get hasDisplay => displayWidth != null &&
+      displayWidth! > 0 &&
+      displayHeight != null &&
+      displayHeight! > 0;
+}
+
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
   BuildContext? _context;
@@ -150,6 +172,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const String _anime4kProfileKey = 'anime4k_profile';
   Anime4KProfile _anime4kProfile = Anime4KProfile.off;
   List<String> _anime4kShaderPaths = const <String>[];
+  static const Map<String, String> _anime4kRecommendedMpvOptions = {
+    'scale': 'ewa_lanczossharp',
+    'cscale': 'ewa_lanczossoft',
+    'dscale': 'mitchell',
+    'sigmoid-upscaling': 'yes',
+    'deband': 'yes',
+    'scale-antiring': '0.7',
+  };
+  static const Map<String, String> _anime4kDefaultMpvOptions = {
+    'scale': 'bilinear',
+    'cscale': 'bilinear',
+    'dscale': 'mitchell',
+    'sigmoid-upscaling': 'no',
+    'deband': 'no',
+    'scale-antiring': '0.0',
+  };
 
   // 弹幕类型屏蔽
   static const String _blockTopDanmakuKey = 'block_top_danmaku';
@@ -1900,6 +1938,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       } catch (e) {
         ////debugPrint("Error disabling wakelock: $e");
       }
+    }
+
+    if (newStatus == PlayerStatus.ready || newStatus == PlayerStatus.playing) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _logCurrentVideoDimensions(context: 'status ${newStatus.name}');
+      });
     }
 
     notifyListeners();
@@ -4535,11 +4579,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     if (_anime4kProfile == Anime4KProfile.off) {
       _anime4kShaderPaths = const <String>[];
+      _applyAnime4KMpvTuning(enable: false);
       try {
         player.setProperty('glsl-shaders', '');
       } catch (e) {
         debugPrint('[VideoPlayerState] 清除 Anime4K 着色器失败: $e');
       }
+      await _updateAnime4KSurfaceScale(enable: false);
+      await _logCurrentVideoDimensions(context: 'Anime4K off');
       return;
     }
 
@@ -4551,7 +4598,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _anime4kShaderPaths = List.unmodifiable(shaderPaths);
       final String propertyValue =
           Anime4KShaderManager.buildMpvShaderList(shaderPaths);
+      _applyAnime4KMpvTuning(enable: true);
       player.setProperty('glsl-shaders', propertyValue);
+      debugPrint(
+        '[VideoPlayerState] Anime4K 着色器已应用: $propertyValue',
+      );
+      try {
+        final String? currentValue = player.getProperty('glsl-shaders');
+        debugPrint(
+          '[VideoPlayerState] Anime4K 当前播放器属性: ${currentValue ?? '<null>'}',
+        );
+      } catch (e) {
+        debugPrint('[VideoPlayerState] 读取 Anime4K 属性失败: $e');
+      }
+      await _updateAnime4KSurfaceScale(enable: true);
+      await _logCurrentVideoDimensions(
+        context: 'Anime4K ${_anime4kProfile.name}',
+      );
     } catch (e) {
       debugPrint('[VideoPlayerState] 应用 Anime4K 着色器失败: $e');
     }
@@ -4565,6 +4628,208 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       return player.getPlayerKernelName() == 'Media Kit';
     } catch (_) {
       return false;
+    }
+  }
+
+  void _applyAnime4KMpvTuning({required bool enable}) {
+    final Map<String, String> options = enable
+        ? _anime4kRecommendedMpvOptions
+        : _anime4kDefaultMpvOptions;
+    options.forEach((String key, String value) {
+      try {
+        player.setProperty(key, value);
+        debugPrint('[VideoPlayerState] Anime4K 调整 $key=$value');
+      } catch (e) {
+        debugPrint('[VideoPlayerState] 设置 $key=$value 失败: $e');
+      }
+    });
+  }
+
+  Future<void> _logCurrentVideoDimensions({String context = ''}) async {
+    try {
+      final _VideoDimensionSnapshot snapshot =
+          await _collectVideoDimensions();
+
+      final String contextLabel = context.isEmpty ? '' : ' [$context]';
+      final String srcLabel = snapshot.hasSource
+          ? '${snapshot.srcWidth}x${snapshot.srcHeight}'
+          : '未知';
+      final String dispLabel = snapshot.hasDisplay
+          ? '${snapshot.displayWidth}x${snapshot.displayHeight}'
+          : '未知';
+
+      debugPrint(
+        '[VideoPlayerState] Anime4K 分辨率$contextLabel 源=$srcLabel, 输出=$dispLabel',
+      );
+    } catch (e) {
+      debugPrint('[VideoPlayerState] Anime4K 分辨率日志失败: $e');
+    }
+  }
+
+  Future<void> _updateAnime4KSurfaceScale({
+    required bool enable,
+    int retry = 0,
+  }) async {
+    const int maxRetry = 10;
+
+    try {
+      if (!enable) {
+        await player.setVideoSurfaceSize();
+        debugPrint('[VideoPlayerState] Anime4K 纹理尺寸恢复为自动');
+        return;
+      }
+
+      final double factor = _anime4kScaleFactorForProfile(_anime4kProfile);
+      if (factor <= 1.0) {
+        await player.setVideoSurfaceSize();
+        return;
+      }
+
+      final _VideoDimensionSnapshot snapshot =
+          await _collectVideoDimensions();
+      if (!snapshot.hasSource) {
+        if (retry < maxRetry) {
+          await Future.delayed(const Duration(milliseconds: 200));
+          await _updateAnime4KSurfaceScale(enable: enable, retry: retry + 1);
+        } else {
+          debugPrint(
+              '[VideoPlayerState] Anime4K 源分辨率未知，无法调整纹理尺寸 (已重试${maxRetry}次)');
+        }
+        return;
+      }
+
+      final int targetWidth = (snapshot.srcWidth! * factor).round();
+      final int targetHeight = (snapshot.srcHeight! * factor).round();
+
+      if (snapshot.displayWidth == targetWidth &&
+          snapshot.displayHeight == targetHeight) {
+        // 已经是目标尺寸
+        return;
+      }
+
+      await player.setVideoSurfaceSize(
+        width: targetWidth,
+        height: targetHeight,
+      );
+      debugPrint(
+        '[VideoPlayerState] Anime4K 纹理尺寸调整为 ${targetWidth}x$targetHeight',
+      );
+    } catch (e) {
+      if (retry < maxRetry) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        await _updateAnime4KSurfaceScale(enable: enable, retry: retry + 1);
+      } else {
+        debugPrint('[VideoPlayerState] 调整 Anime4K 纹理尺寸失败: $e');
+      }
+    }
+  }
+
+  Future<_VideoDimensionSnapshot> _collectVideoDimensions({
+    int attempts = 6,
+    Duration interval = const Duration(milliseconds: 200),
+  }) async {
+    int? srcWidth;
+    int? srcHeight;
+    int? dispWidth;
+    int? dispHeight;
+
+    Map<String, dynamic> _toStringKeyedMap(dynamic raw) {
+      if (raw is Map) {
+        return raw.map((dynamic key, dynamic value) =>
+            MapEntry(key.toString(), value));
+      }
+      return <String, dynamic>{};
+    }
+
+    int? _toInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is double) return value.round();
+      if (value is String) {
+        final String trimmed = value.trim();
+        final int? parsedInt = int.tryParse(trimmed);
+        if (parsedInt != null) {
+          return parsedInt;
+        }
+        final double? parsedDouble = double.tryParse(trimmed);
+        if (parsedDouble != null) {
+          return parsedDouble.round();
+        }
+        final String digitsOnly =
+            trimmed.replaceAll(RegExp(r'[^0-9.-]'), '');
+        final int? fallbackInt = int.tryParse(digitsOnly);
+        if (fallbackInt != null) {
+          return fallbackInt;
+        }
+        final double? fallbackDouble = double.tryParse(digitsOnly);
+        if (fallbackDouble != null) {
+          return fallbackDouble.round();
+        }
+      }
+      return null;
+    }
+
+    for (int attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) {
+        await Future.delayed(interval);
+      }
+
+      final Map<String, dynamic> info =
+          await player.getDetailedMediaInfoAsync();
+
+      final Map<String, dynamic> mpvProps =
+          _toStringKeyedMap(info['mpvProperties']);
+      final Map<String, dynamic> videoParams =
+          _toStringKeyedMap(info['videoParams']);
+
+      srcWidth = _toInt(mpvProps['video-params/w']) ??
+          _toInt(videoParams['width']) ??
+          srcWidth;
+      srcHeight = _toInt(mpvProps['video-params/h']) ??
+          _toInt(videoParams['height']) ??
+          srcHeight;
+
+      dispWidth = _toInt(mpvProps['dwidth']) ??
+          _toInt(mpvProps['video-out-params/w']) ??
+          _toInt(mpvProps['video-params/dw']) ??
+          dispWidth;
+      dispHeight = _toInt(mpvProps['dheight']) ??
+          _toInt(mpvProps['video-out-params/h']) ??
+          _toInt(mpvProps['video-params/dh']) ??
+          dispHeight;
+
+      if (srcWidth != null &&
+          srcHeight != null &&
+          dispWidth != null &&
+          dispHeight != null) {
+        break;
+      }
+    }
+
+    if ((srcWidth == null || srcHeight == null) &&
+        player.mediaInfo.video != null &&
+        player.mediaInfo.video!.isNotEmpty) {
+      final codec = player.mediaInfo.video!.first.codec;
+      srcWidth ??= codec.width;
+      srcHeight ??= codec.height;
+    }
+
+    return _VideoDimensionSnapshot(
+      srcWidth: srcWidth,
+      srcHeight: srcHeight,
+      displayWidth: dispWidth,
+      displayHeight: dispHeight,
+    );
+  }
+
+  double _anime4kScaleFactorForProfile(Anime4KProfile profile) {
+    switch (profile) {
+      case Anime4KProfile.off:
+        return 1.0;
+      case Anime4KProfile.lite:
+      case Anime4KProfile.standard:
+      case Anime4KProfile.high:
+        return 2.0;
     }
   }
 
