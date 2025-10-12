@@ -380,7 +380,6 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           builder: (context, videoState, child) {
             final Anime4KProfile currentProfile = videoState.anime4kProfile;
             final bool supportsAnime4K = videoState.isAnime4KSupported;
-            final String kernelName = videoState.player.getPlayerKernelName();
 
             final items = Anime4KProfile.values
                 .map(
@@ -393,30 +392,32 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 )
                 .toList();
 
-            final String subtitleText = supportsAnime4K
-                ? '使用 Anime4K GLSL 着色器提升二次元画面清晰度'
-                : '仅在 Libmpv 内核下生效（当前内核：$kernelName）';
+        if (_selectedKernelType != PlayerKernelType.mediaKit) {
+          return const SizedBox.shrink();
+        }
 
-            return SettingsItem.dropdown(
-              title: 'Anime4K 超分辨率',
-              subtitle: subtitleText,
-              icon: Ionicons.color_wand_outline,
-              items: items,
-              onChanged: (dynamic value) async {
-                if (value is! Anime4KProfile) return;
-                await videoState.setAnime4KProfile(value);
-                if (!context.mounted) return;
-                final bool stillSupported = videoState.isAnime4KSupported;
-                final String suffix = stillSupported ? '' : '（切换到 Libmpv 后生效）';
-                final String option = _getAnime4KProfileTitle(value);
-                final String message = value == Anime4KProfile.off
-                    ? '已关闭 Anime4K${suffix.isEmpty ? '' : suffix}'
-                    : 'Anime4K 已切换为$option${suffix.isEmpty ? '' : suffix}';
-                BlurSnackBar.show(context, message);
-              },
-            );
+        if (!supportsAnime4K) {
+          return const SizedBox.shrink();
+        }
+
+        return SettingsItem.dropdown(
+          title: 'Anime4K 超分辨率（实验性）',
+          subtitle: '使用 Anime4K GLSL 着色器提升二次元画面清晰度',
+          icon: Ionicons.color_wand_outline,
+          items: items,
+          onChanged: (dynamic value) async {
+            if (value is! Anime4KProfile) return;
+            await videoState.setAnime4KProfile(value);
+            if (!context.mounted) return;
+            final String option = _getAnime4KProfileTitle(value);
+            final String message = value == Anime4KProfile.off
+                ? '已关闭 Anime4K'
+                : 'Anime4K 已切换为$option';
+            BlurSnackBar.show(context, message);
           },
-        ),
+        );
+      },
+    ),
 
         const Divider(color: Colors.white12, height: 1),
 

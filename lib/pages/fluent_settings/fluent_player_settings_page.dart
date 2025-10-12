@@ -248,7 +248,6 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
     final videoState = context.watch<VideoPlayerState>();
     final bool supportsAnime4K = videoState.isAnime4KSupported;
     final Anime4KProfile currentAnime4KProfile = videoState.anime4kProfile;
-    final String kernelName = videoState.player.getPlayerKernelName();
 
     return ScaffoldPage(
       header: const PageHeader(
@@ -320,72 +319,66 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
 
               const SizedBox(height: 16),
 
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Anime4K 超分辨率',
-                        style: FluentTheme.of(context).typography.subtitle,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        supportsAnime4K
-                            ? '使用 Anime4K GLSL 着色器提升二次元画面清晰度'
-                            : '仅在 Libmpv 内核下生效（当前内核：$kernelName）',
-                        style: FluentTheme.of(context).typography.caption,
-                      ),
-                      const SizedBox(height: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('预设'),
-                          const SizedBox(height: 8),
-                          ComboBox<Anime4KProfile>(
-                            value: currentAnime4KProfile,
-                            items: Anime4KProfile.values
-                                .map(
-                                  (profile) => ComboBoxItem<Anime4KProfile>(
-                                    value: profile,
-                                    child: Text(
-                                      _getAnime4KProfileTitle(profile),
+              if (supportsAnime4K &&
+                  _selectedKernelType == PlayerKernelType.mediaKit)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Anime4K 超分辨率（实验性）',
+                          style: FluentTheme.of(context).typography.subtitle,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '使用 Anime4K GLSL 着色器提升二次元画面清晰度',
+                          style: FluentTheme.of(context).typography.caption,
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('预设'),
+                            const SizedBox(height: 8),
+                            ComboBox<Anime4KProfile>(
+                              value: currentAnime4KProfile,
+                              items: Anime4KProfile.values
+                                  .map(
+                                    (profile) => ComboBoxItem<Anime4KProfile>(
+                                      value: profile,
+                                      child: Text(
+                                        _getAnime4KProfileTitle(profile),
+                                      ),
                                     ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) async {
-                              if (value == null) return;
-                              await videoState.setAnime4KProfile(value);
-                              if (!mounted) return;
-                              final bool stillSupported =
-                                  videoState.isAnime4KSupported;
-                              final String suffix =
-                                  stillSupported ? '' : '（切换到 Libmpv 后生效）';
+                                  )
+                                  .toList(),
+                              onChanged: (value) async {
+                                if (value == null) return;
+                                await videoState.setAnime4KProfile(value);
+                                if (!mounted) return;
                               final String option =
                                   _getAnime4KProfileTitle(value);
                               final String message = value == Anime4KProfile.off
-                                  ? '已关闭 Anime4K${suffix.isEmpty ? '' : suffix}'
-                                  : 'Anime4K 已切换为$option${suffix.isEmpty ? '' : suffix}';
-                              _showSuccessInfoBar(message);
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            supportsAnime4K
-                                ? _getAnime4KProfileDescription(
-                                    currentAnime4KProfile,
-                                  )
-                                : '${_getAnime4KProfileDescription(currentAnime4KProfile)}\n（仅在 Libmpv 内核下生效，当前内核：$kernelName）',
-                            style: FluentTheme.of(context).typography.caption,
-                          ),
-                        ],
-                      ),
-                    ],
+                                  ? '已关闭 Anime4K'
+                                  : 'Anime4K 已切换为$option';
+                                _showSuccessInfoBar(message);
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _getAnime4KProfileDescription(
+                                currentAnime4KProfile,
+                              ),
+                              style: FluentTheme.of(context).typography.caption,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
               const SizedBox(height: 16),
 
