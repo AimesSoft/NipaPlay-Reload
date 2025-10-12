@@ -49,6 +49,7 @@ abstract class AbstractPlayer {
   List<String> getDecoders(PlayerMediaType type);
   String? getProperty(String key);
   void setProperty(String key, String value);
+  Future<void> setVideoSurfaceSize({int? width, int? height});
   
   // NEW DIRECT PLAYBACK METHODS
   /// 直接开始播放，绕过状态设置

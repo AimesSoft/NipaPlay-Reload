@@ -756,6 +756,11 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
     _properties[key] = value;
   }
 
+  @override
+  Future<void> setVideoSurfaceSize({int? width, int? height}) async {
+    // video_player 插件使用 Flutter 纹理，由外层控制，保持空实现。
+  }
+
   /// 尝试创建或重建控制器
   /// 
   /// 如果媒体路径为空，返回false

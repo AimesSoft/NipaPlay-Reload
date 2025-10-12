@@ -130,6 +130,9 @@ class Player {
   String? getProperty(String key) => _delegate.getProperty(key);
   
   void setProperty(String key, String value) => _delegate.setProperty(key, value);
+
+  Future<void> setVideoSurfaceSize({int? width, int? height}) =>
+      _delegate.setVideoSurfaceSize(width: width, height: height);
   
   // 直接播放控制方法
   Future<void> playDirectly() => _delegate.playDirectly();

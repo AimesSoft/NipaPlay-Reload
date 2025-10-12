@@ -11,9 +11,9 @@ import '../models/watch_history_model.dart';
 /// 播放器内核管理器
 /// 提供多内核支持的静态工具方法
 class PlayerKernelManager {
-  
   /// 为VideoPlayerState执行播放器内核热切换
-  static Future<void> performPlayerKernelHotSwap(VideoPlayerState videoPlayerState) async {
+  static Future<void> performPlayerKernelHotSwap(
+      VideoPlayerState videoPlayerState) async {
     debugPrint('[PlayerKernelManager] 开始执行播放器内核热切换...');
 
     // 1. 保存当前播放状态
@@ -43,6 +43,7 @@ class PlayerKernelManager {
       videoPlayerState.player = Player();
       videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
       videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
+      await videoPlayerState.applyAnime4KProfileToCurrentPlayer();
       debugPrint('[PlayerKernelManager] 已创建新的空播放器实例');
       return;
     }
@@ -54,9 +55,11 @@ class PlayerKernelManager {
     videoPlayerState.player = Player();
     videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
+    await videoPlayerState.applyAnime4KProfileToCurrentPlayer();
 
     // 4. 重新初始化播放
-    await videoPlayerState.initializePlayer(currentPath, historyItem: historyItem);
+    await videoPlayerState.initializePlayer(currentPath,
+        historyItem: historyItem);
 
     // 5. 恢复播放状态
     if (videoPlayerState.hasVideo) {
@@ -79,16 +82,19 @@ class PlayerKernelManager {
   }
 
   /// 为VideoPlayerState执行弹幕内核热切换
-  static void performDanmakuKernelHotSwap(VideoPlayerState videoPlayerState, DanmakuRenderEngine newKernel) {
+  static void performDanmakuKernelHotSwap(
+      VideoPlayerState videoPlayerState, DanmakuRenderEngine newKernel) {
     debugPrint('[PlayerKernelManager] 执行弹幕内核热切换: $newKernel');
 
     // 重新创建弹幕控制器
     videoPlayerState.danmakuController = _createDanmakuController(newKernel);
-    
+
     // 重新加载当前弹幕数据
     if (videoPlayerState.danmakuList.isNotEmpty) {
-      videoPlayerState.danmakuController?.loadDanmaku(videoPlayerState.danmakuList);
-      debugPrint('[PlayerKernelManager] 已将 ${videoPlayerState.danmakuList.length} 条弹幕重新加载到新的弹幕控制器');
+      videoPlayerState.danmakuController
+          ?.loadDanmaku(videoPlayerState.danmakuList);
+      debugPrint(
+          '[PlayerKernelManager] 已将 ${videoPlayerState.danmakuList.length} 条弹幕重新加载到新的弹幕控制器');
     }
 
     // 通知UI刷新，以便DanmakuOverlay可以重建
@@ -109,11 +115,11 @@ class PlayerKernelManager {
         return null;
     }
   }
-  
+
   /// 获取支持的播放器内核列表
   static List<String> getSupportedPlayerKernels() {
     List<String> kernels = ['FVP', 'Media Kit', 'Video Player'];
-    
+
     // 根据平台过滤支持的内核
     if (kIsWeb) {
       // Web平台只支持特定内核
@@ -128,7 +134,7 @@ class PlayerKernelManager {
       // 桌面平台支持所有内核
       return kernels;
     }
-    
+
     return kernels;
   }
 
@@ -142,7 +148,7 @@ class PlayerKernelManager {
   static Future<void> setPlayerKernel(String kernel) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('player_kernel', kernel);
-    
+
     // 转换为枚举值
     PlayerKernelType kernelType;
     switch (kernel) {
@@ -158,7 +164,7 @@ class PlayerKernelManager {
       default:
         kernelType = PlayerKernelType.mdk;
     }
-    
+
     // 通知PlayerFactory内核已改变
     await PlayerFactory.saveKernelType(kernelType);
   }
@@ -178,7 +184,7 @@ class PlayerKernelManager {
   static Future<void> setDanmakuKernel(String kernel) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('danmaku_kernel', kernel);
-    
+
     // 转换为枚举值
     DanmakuRenderEngine engine;
     switch (kernel) {
@@ -191,7 +197,7 @@ class PlayerKernelManager {
       default:
         engine = DanmakuRenderEngine.gpu;
     }
-    
+
     // 通知DanmakuKernelFactory内核已改变
     await DanmakuKernelFactory.saveKernelType(engine);
   }
@@ -213,7 +219,7 @@ class PlayerKernelManager {
       default:
         playerKernelName = 'Unknown';
     }
-    
+
     return {
       'player_kernel': playerKernelName,
       'danmaku_kernel': DanmakuKernelFactory.getKernelType().toString(),
@@ -233,13 +239,13 @@ class PlayerKernelManager {
   /// 检查是否支持硬件解码
   static bool _supportsHardwareDecode() {
     if (kIsWeb) return false;
-    
+
     if (Platform.isAndroid || Platform.isIOS) {
       return true; // 移动平台通常支持硬件解码
     } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       return true; // 桌面平台需要具体检测，这里简化为true
     }
-    
+
     return false;
   }
 

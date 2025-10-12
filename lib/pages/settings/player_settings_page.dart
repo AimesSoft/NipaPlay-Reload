@@ -15,6 +15,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
+import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -27,14 +28,14 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   static const String _selectedDecodersKey = 'selected_decoders';
   static const String _playerKernelTypeKey = 'player_kernel_type';
   static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
-  
+
   List<String> _availableDecoders = [];
   List<String> _selectedDecoders = [];
   late DecoderManager _decoderManager;
   String _playerCoreName = "MDK";
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
   DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.cpu;
-  
+
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();
   final GlobalKey _danmakuRenderEngineDropdownKey = GlobalKey();
@@ -51,7 +52,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _decoderManager = playerState.decoderManager;
     // 异步获取内核名称
     _loadCurrentPlayerKernelName();
-    
+
     if (!kIsWeb) {
       _getAvailableDecoders();
     }
@@ -59,7 +60,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _loadPlayerKernelSettings();
     _loadDanmakuRenderEngineSettings();
   }
-  
+
   Future<void> _loadCurrentPlayerKernelName() async {
     final kernelName = await PlayerKernelManager.getCurrentPlayerKernel();
     setState(() {
@@ -74,7 +75,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       _updatePlayerCoreName();
     });
   }
-  
+
   void _updatePlayerCoreName() {
     // 从当前选定的内核类型决定显示名称
     switch (_selectedKernelType) {
@@ -91,7 +92,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         _playerCoreName = "MDK";
     }
   }
-  
+
   Future<void> _savePlayerKernelSettings(PlayerKernelType kernelType) async {
     // 使用新的静态方法保存设置
     await PlayerFactory.saveKernelType(kernelType);
@@ -105,7 +106,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       _updatePlayerCoreName();
     });
   }
-  
+
   void _showRestartDialog() {
     BlurDialog.show(
       context: context,
@@ -123,11 +124,12 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               windowManager.close();
             } else {
               // Web 平台可以提示用户手动刷新
-               Navigator.of(context).pop();
+              Navigator.of(context).pop();
             }
           },
-          child: const Text('确定', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white)),
+          child: const Text('确定',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white)),
         ),
       ],
     );
@@ -166,7 +168,7 @@ style: TextStyle(color: Colors.white)),
   void _getAvailableDecoders() {
     if (kIsWeb) return;
     final allDecoders = _decoderManager.getAllSupportedDecoders();
-    
+
     if (Platform.isMacOS) {
       _availableDecoders = allDecoders['macos']!;
     } else if (Platform.isIOS) {
@@ -180,41 +182,44 @@ style: TextStyle(color: Colors.white)),
     } else {
       _availableDecoders = ["FFmpeg"];
     }
-    _selectedDecoders.retainWhere((decoder) => _availableDecoders.contains(decoder));
+    _selectedDecoders
+        .retainWhere((decoder) => _availableDecoders.contains(decoder));
     if (_selectedDecoders.isEmpty && _availableDecoders.isNotEmpty) {
-        _initializeSelectedDecodersWithPlatformDefaults();
+      _initializeSelectedDecodersWithPlatformDefaults();
     }
   }
 
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
-    
+
     if (context.mounted) {
       await _decoderManager.updateDecoders(_selectedDecoders);
-        
+
       if (!kIsWeb) {
-        final playerState = Provider.of<VideoPlayerState>(context, listen: false);
-        if (playerState.hasVideo && 
-            playerState.player.mediaInfo.video != null && 
+        final playerState =
+            Provider.of<VideoPlayerState>(context, listen: false);
+        if (playerState.hasVideo &&
+            playerState.player.mediaInfo.video != null &&
             playerState.player.mediaInfo.video!.isNotEmpty) {
-          
           final videoTrack = playerState.player.mediaInfo.video![0];
           final codecString = videoTrack.toString().toLowerCase();
           if (codecString.contains('hevc') || codecString.contains('h265')) {
             debugPrint('检测到设置变更时正在播放HEVC视频，应用特殊优化...');
-            
+
             if (Platform.isMacOS) {
-              if (_selectedDecoders.isNotEmpty && _selectedDecoders[0] != "VT") {
+              if (_selectedDecoders.isNotEmpty &&
+                  _selectedDecoders[0] != "VT") {
                 _selectedDecoders.remove("VT");
                 _selectedDecoders.insert(0, "VT");
-                
-                await prefs.setStringList(_selectedDecodersKey, _selectedDecoders);
+
+                await prefs.setStringList(
+                    _selectedDecodersKey, _selectedDecoders);
                 await _decoderManager.updateDecoders(_selectedDecoders);
-                
+
                 BlurSnackBar.show(context, '已优化解码器设置以支持HEVC硬件解码');
               }
-              
+
               await playerState.forceEnableHardwareDecoder();
             }
           }
@@ -229,18 +234,19 @@ style: TextStyle(color: Colors.white)),
     });
   }
 
-  Future<void> _saveDanmakuRenderEngineSettings(DanmakuRenderEngine engine) async {
+  Future<void> _saveDanmakuRenderEngineSettings(
+      DanmakuRenderEngine engine) async {
     await DanmakuKernelFactory.saveKernelType(engine);
-    
+
     if (context.mounted) {
       BlurSnackBar.show(context, '弹幕渲染引擎已切换');
     }
-    
+
     setState(() {
       _selectedDanmakuRenderEngine = engine;
     });
   }
-  
+
   void _showRestartDanmakuDialog() {
     BlurDialog.show(
       context: context,
@@ -252,8 +258,9 @@ style: TextStyle(color: Colors.white)),
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.grey)),
+          child: const Text('取消',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.grey)),
         ),
         TextButton(
           onPressed: () {
@@ -265,8 +272,9 @@ style: TextStyle(color: Colors.grey)),
               windowManager.close();
             }
           },
-          child: const Text('确定', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white)),
+          child: const Text('确定',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white)),
         ),
       ],
     );
@@ -294,6 +302,32 @@ style: TextStyle(color: Colors.white)),
     }
   }
 
+  String _getAnime4KProfileTitle(Anime4KProfile profile) {
+    switch (profile) {
+      case Anime4KProfile.off:
+        return '关闭';
+      case Anime4KProfile.lite:
+        return '轻量';
+      case Anime4KProfile.standard:
+        return '标准';
+      case Anime4KProfile.high:
+        return '高质量';
+    }
+  }
+
+  String _getAnime4KProfileDescription(Anime4KProfile profile) {
+    switch (profile) {
+      case Anime4KProfile.off:
+        return '关闭 Anime4K 着色器，保持原始视频画面';
+      case Anime4KProfile.lite:
+        return '启用 x2 超分辨率和轻度降噪，性能开销较小';
+      case Anime4KProfile.standard:
+        return '恢复纹理 + 超分辨率的平衡方案，画质与性能兼顾';
+      case Anime4KProfile.high:
+        return '高光抑制 + 恢复 + 超分辨率，画质最佳，对性能要求最高';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Web 平台不显示此页面内容，或者显示一个提示信息
@@ -301,8 +335,8 @@ style: TextStyle(color: Colors.white)),
       return const Center(
         child: Text(
           '播放器设置在Web平台不可用',
-          locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white),
+          locale: Locale("zh-Hans", "zh"),
+          style: TextStyle(color: Colors.white),
         ),
       );
     }
@@ -323,13 +357,15 @@ style: TextStyle(color: Colors.white),
               title: "Video Player",
               value: PlayerKernelType.videoPlayer,
               isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
-              description: _getPlayerKernelDescription(PlayerKernelType.videoPlayer),
+              description:
+                  _getPlayerKernelDescription(PlayerKernelType.videoPlayer),
             ),
             DropdownMenuItemData(
               title: "Libmpv",
               value: PlayerKernelType.mediaKit,
               isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
-              description: _getPlayerKernelDescription(PlayerKernelType.mediaKit),
+              description:
+                  _getPlayerKernelDescription(PlayerKernelType.mediaKit),
             ),
           ],
           onChanged: (kernelType) {
@@ -337,9 +373,54 @@ style: TextStyle(color: Colors.white),
           },
           dropdownKey: _playerKernelDropdownKey,
         ),
-        
+
         const Divider(color: Colors.white12, height: 1),
-        
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final Anime4KProfile currentProfile = videoState.anime4kProfile;
+            final bool supportsAnime4K = videoState.isAnime4KSupported;
+
+            final items = Anime4KProfile.values
+                .map(
+                  (profile) => DropdownMenuItemData(
+                    title: _getAnime4KProfileTitle(profile),
+                    value: profile,
+                    isSelected: profile == currentProfile,
+                    description: _getAnime4KProfileDescription(profile),
+                  ),
+                )
+                .toList();
+
+        if (_selectedKernelType != PlayerKernelType.mediaKit) {
+          return const SizedBox.shrink();
+        }
+
+        if (!supportsAnime4K) {
+          return const SizedBox.shrink();
+        }
+
+        return SettingsItem.dropdown(
+          title: 'Anime4K 超分辨率（实验性）',
+          subtitle: '使用 Anime4K GLSL 着色器提升二次元画面清晰度',
+          icon: Ionicons.color_wand_outline,
+          items: items,
+          onChanged: (dynamic value) async {
+            if (value is! Anime4KProfile) return;
+            await videoState.setAnime4KProfile(value);
+            if (!context.mounted) return;
+            final String option = _getAnime4KProfileTitle(value);
+            final String message = value == Anime4KProfile.off
+                ? '已关闭 Anime4K'
+                : 'Anime4K 已切换为$option';
+            BlurSnackBar.show(context, message);
+          },
+        );
+      },
+    ),
+
+        const Divider(color: Colors.white12, height: 1),
+
         SettingsItem.dropdown(
           title: "弹幕渲染引擎",
           subtitle: "选择弹幕的渲染方式",
@@ -348,20 +429,26 @@ style: TextStyle(color: Colors.white),
             DropdownMenuItemData(
               title: "CPU 渲染",
               value: DanmakuRenderEngine.cpu,
-              isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
-              description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
+              isSelected:
+                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
+              description:
+                  _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
             ),
             DropdownMenuItemData(
               title: "GPU 渲染 (实验性)",
               value: DanmakuRenderEngine.gpu,
-              isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
-              description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
+              isSelected:
+                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
+              description:
+                  _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
             ),
             DropdownMenuItemData(
               title: "Canvas 弹幕 (实验性)",
               value: DanmakuRenderEngine.canvas,
-              isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
-              description: _getDanmakuRenderEngineDescription(DanmakuRenderEngine.canvas),
+              isSelected:
+                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
+              description: _getDanmakuRenderEngineDescription(
+                  DanmakuRenderEngine.canvas),
             ),
           ],
           onChanged: (engine) {
@@ -369,9 +456,9 @@ style: TextStyle(color: Colors.white),
           },
           dropdownKey: _danmakuRenderEngineDropdownKey,
         ),
-        
+
         const Divider(color: Colors.white12, height: 1),
-        
+
         // 弹幕转换简体中文开关
         Consumer<SettingsProvider>(
           builder: (context, settingsProvider, child) {
@@ -383,50 +470,51 @@ style: TextStyle(color: Colors.white),
               onChanged: (bool value) {
                 settingsProvider.setDanmakuConvertToSimplified(value);
                 if (context.mounted) {
-                  BlurSnackBar.show(context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
+                  BlurSnackBar.show(
+                      context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
                 }
               },
             );
           },
         ),
-        
+
         const Divider(color: Colors.white12, height: 1),
-        
+
         if (_selectedKernelType == PlayerKernelType.mdk) ...[
           // 这里可以添加解码器相关设置
         ],
       ],
     );
   }
-  
+
   String _getDecoderDescription() {
     if (kIsWeb) return 'Web平台使用浏览器内置解码器';
     if (Platform.isMacOS || Platform.isIOS) {
       return 'VT: macOS/iOS 视频工具箱硬件加速\n'
-             'hap: HAP 视频格式解码\n'
-             'FFmpeg: 软件解码，支持绝大多数格式\n'
-             'dav1d: 高效AV1解码器';
+          'hap: HAP 视频格式解码\n'
+          'FFmpeg: 软件解码，支持绝大多数格式\n'
+          'dav1d: 高效AV1解码器';
     } else if (Platform.isWindows) {
       return 'MFT:d3d=11: 媒体基础转换D3D11加速\n'
-             'D3D11: 直接3D 11硬件加速\n'
-             'DXVA: DirectX视频加速\n'
-             'CUDA: NVIDIA GPU加速\n'
-             'hap: HAP 视频格式解码\n'
-             'FFmpeg: 软件解码，支持绝大多数格式\n'
-             'dav1d: 高效AV1解码器';
+          'D3D11: 直接3D 11硬件加速\n'
+          'DXVA: DirectX视频加速\n'
+          'CUDA: NVIDIA GPU加速\n'
+          'hap: HAP 视频格式解码\n'
+          'FFmpeg: 软件解码，支持绝大多数格式\n'
+          'dav1d: 高效AV1解码器';
     } else if (Platform.isLinux) {
       return 'VAAPI: 视频加速API\n'
-             'VDPAU: 视频解码和演示API\n'
-             'CUDA: NVIDIA GPU加速\n'
-             'hap: HAP 视频格式解码\n'
-             'FFmpeg: 软件解码，支持绝大多数格式\n'
-             'dav1d: 高效AV1解码器';
+          'VDPAU: 视频解码和演示API\n'
+          'CUDA: NVIDIA GPU加速\n'
+          'hap: HAP 视频格式解码\n'
+          'FFmpeg: 软件解码，支持绝大多数格式\n'
+          'dav1d: 高效AV1解码器';
     } else if (Platform.isAndroid) {
       return 'AMediaCodec: Android媒体编解码器\n'
-             'FFmpeg: 软件解码，支持绝大多数格式\n'
-             'dav1d: 高效AV1解码器';
+          'FFmpeg: 软件解码，支持绝大多数格式\n'
+          'dav1d: 高效AV1解码器';
     } else {
       return 'FFmpeg: 软件解码，支持绝大多数格式';
     }
   }
-} 
+}

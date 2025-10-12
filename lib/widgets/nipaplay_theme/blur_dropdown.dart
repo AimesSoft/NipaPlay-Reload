@@ -14,7 +14,7 @@ import 'package:provider/provider.dart';
 class BlurDropdown<T> extends StatefulWidget {
   final GlobalKey dropdownKey;
   final List<DropdownMenuItemData<T>> items;
-  final Function(T) onItemSelected;
+  final ValueChanged<T> onItemSelected;
 
   const BlurDropdown({
     super.key,
@@ -87,14 +87,13 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     }
   }
 
-
   T? _findInitialValue() {
-    try {
-      return widget.items.firstWhere((item) => item.isSelected).value;
-    } catch (e) {
-      // If no item is marked as selected, return null or the first item's value
-      return widget.items.isNotEmpty ? widget.items.first.value : null;
+    for (final DropdownMenuItemData<T> item in widget.items) {
+      if (item.isSelected) {
+        return item.value;
+      }
     }
+    return widget.items.isNotEmpty ? widget.items.first.value : null;
   }
 
   @override
@@ -116,24 +115,25 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
             }
           },
           child: MouseRegion(
-    cursor: SystemMouseCursors.click,
-          child: Row(
-             mainAxisSize: MainAxisSize.min, // Keep original layout
-             children: [
+            cursor: SystemMouseCursors.click,
+            child: Row(
+              mainAxisSize: MainAxisSize.min, // Keep original layout
+              children: [
                 Text(
                   _getSelectedItemText(),
                   style: getTitleTextStyle(context),
                 ),
                 const SizedBox(width: 10),
                 RotationTransition(
-                  turns: Tween(begin: 0.0, end: 0.5).animate(_animationController),
+                  turns:
+                      Tween(begin: 0.0, end: 0.5).animate(_animationController),
                   child: const Icon(
                     Ionicons.chevron_down_outline,
                     color: Colors.white,
                   ),
                 ),
-             ],
-          ),
+              ],
+            ),
           ),
         ),
       ],
@@ -141,13 +141,17 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
   }
 
   String _getSelectedItemText() {
-    final selectedItem = widget.items.firstWhere(
-      (item) => item.value == _currentSelectedValue,
-      orElse: () => widget.items.isNotEmpty
-          ? widget.items.first // Default to first if none selected or initial value not found
-          : DropdownMenuItemData(title: '', value: null as T), // Handle empty list case
-    );
-    return selectedItem.title;
+    if (widget.items.isEmpty) {
+      return '';
+    }
+
+    for (final DropdownMenuItemData<T> item in widget.items) {
+      if (item.value == _currentSelectedValue) {
+        return item.title;
+      }
+    }
+
+    return widget.items.first.title;
   }
 
   void _openDropdown() {
@@ -156,9 +160,9 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     // Ensure any previous overlay is removed (shouldn't happen often, but safe)
     _removeOverlay();
 
-
     // Find the RenderBox of the trigger element using the key
-    final RenderBox? renderBox = widget.dropdownKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? renderBox =
+        widget.dropdownKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return; // Safety check
 
     final size = renderBox.size;
@@ -169,7 +173,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     // 计算下拉菜单的初始位置
     double top = position.dy + size.height + 5;
     double maxHeight = screenHeight * 0.7; // 最大高度为屏幕高度的70%
-    
+
     // 检查下拉菜单是否会超出屏幕底部
     double estimatedHeight = widget.items.length * 50.0; // 估算每个项目的高度
     if (top + estimatedHeight > screenHeight) {
@@ -223,13 +227,14 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                 child: Container(
                   constraints: BoxConstraints(
                     maxWidth: screenWidth - left - safeRight > 100
-                              ? screenWidth - left - safeRight
-                              : size.width * 1.5,
+                        ? screenWidth - left - safeRight
+                        : size.width * 1.5,
                     maxHeight: screenHeight - top - 10, // 动态计算最大高度
                   ),
                   decoration: BoxDecoration(
                     border: Border.all(color: borderColor, width: 0.5),
-                    color: const Color.fromARGB(255, 130, 130, 130).withOpacity(0.5),
+                    color: const Color.fromARGB(255, 130, 130, 130)
+                        .withOpacity(0.5),
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
@@ -245,8 +250,14 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                     borderRadius: BorderRadius.circular(10),
                     child: BackdropFilter(
                       filter: ImageFilter.blur(
-                        sigmaX: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
-                        sigmaY: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
+                        sigmaX: Provider.of<AppearanceSettingsProvider>(context)
+                                .enableWidgetBlurEffect
+                            ? 25
+                            : 0,
+                        sigmaY: Provider.of<AppearanceSettingsProvider>(context)
+                                .enableWidgetBlurEffect
+                            ? 25
+                            : 0,
                       ),
                       child: ListView.builder(
                         shrinkWrap: true,
@@ -286,9 +297,10 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                               ),
                             ),
                           );
-                          
+
                           // 如果有描述，则包装在HoverTooltipBubble中
-                          if (item.description != null && item.description!.isNotEmpty) {
+                          if (item.description != null &&
+                              item.description!.isNotEmpty) {
                             return HoverTooltipBubble(
                               text: item.description!,
                               showDelay: const Duration(milliseconds: 300),
@@ -321,8 +333,9 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
   // --- Updated Close Dropdown Method ---
   void _closeDropdown() {
     // Only proceed if the dropdown is actually open and not already animating closed
-    if (!_isDropdownOpen || (_animationController.status == AnimationStatus.reverse)) {
-       return;
+    if (!_isDropdownOpen ||
+        (_animationController.status == AnimationStatus.reverse)) {
+      return;
     }
 
     // Start the reverse animation (fade/scale out)
@@ -331,24 +344,24 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       // Safely remove the overlay *after* the animation finishes
       _removeOverlay();
       // Update the state *after* removal to prevent build errors if widget disposed quickly
-      if (mounted) { // Check if the widget is still in the tree
-         setState(() {
-           _isDropdownOpen = false;
-         });
+      if (mounted) {
+        // Check if the widget is still in the tree
+        setState(() {
+          _isDropdownOpen = false;
+        });
       }
     }).catchError((error) {
-       // Handle potential errors during animation reversal if needed
-       //////debugPrint("Error closing dropdown animation: $error");
-       // Still try to remove overlay and update state in case of error
-       _removeOverlay();
-        if (mounted) {
-           setState(() {
-             _isDropdownOpen = false;
-           });
-        }
+      // Handle potential errors during animation reversal if needed
+      //////debugPrint("Error closing dropdown animation: $error");
+      // Still try to remove overlay and update state in case of error
+      _removeOverlay();
+      if (mounted) {
+        setState(() {
+          _isDropdownOpen = false;
+        });
+      }
     });
   }
-
 
   Widget _buildMenuItem(DropdownMenuItemData<T> item) {
     bool isSelected = item.value == _currentSelectedValue;
@@ -358,25 +371,32 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
         onTap: () {
           widget.onItemSelected(item.value);
           // Update state immediately for visual feedback if desired
-          if (mounted) { // Check if widget is still mounted
+          if (mounted) {
+            // Check if widget is still mounted
             setState(() {
               _currentSelectedValue = item.value;
             });
           }
           _closeDropdown(); // Close dropdown after selecting
         },
-        borderRadius: BorderRadius.circular(4), // Optional: for InkWell splash shape
+        borderRadius:
+            BorderRadius.circular(4), // Optional: for InkWell splash shape
         child: Container(
           width: double.infinity, // Ensure item takes full width
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent, // Subtle selection highlight
+          color: isSelected
+              ? Colors.white.withOpacity(0.1)
+              : Colors.transparent, // Subtle selection highlight
           child: Text(
             item.title,
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+            locale: Locale("zh-Hans", "zh"),
+            style: TextStyle(
               fontSize: 15,
-              color: Colors.white.withOpacity(isSelected ? 1.0 : 0.8), // Adjust opacity
-              fontWeight: isSelected ? FontWeight.w900 : FontWeight.normal, // Adjust font weight
+              color: Colors.white
+                  .withOpacity(isSelected ? 1.0 : 0.8), // Adjust opacity
+              fontWeight: isSelected
+                  ? FontWeight.w900
+                  : FontWeight.normal, // Adjust font weight
             ),
             textAlign: TextAlign.start, // Ensure text aligns left
           ),
@@ -400,14 +420,14 @@ class DropdownMenuItemData<T> {
     this.description, // 新增：描述信息
   });
 
-   // Added for easy comparison, especially for finding the initial value
-   @override
-   bool operator ==(Object other) =>
-       identical(this, other) ||
-       other is DropdownMenuItemData &&
-           runtimeType == other.runtimeType &&
-           value == other.value;
+  // Added for easy comparison, especially for finding the initial value
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DropdownMenuItemData &&
+          runtimeType == other.runtimeType &&
+          value == other.value;
 
-   @override
-   int get hashCode => value.hashCode;
+  @override
+  int get hashCode => value.hashCode;
 }
