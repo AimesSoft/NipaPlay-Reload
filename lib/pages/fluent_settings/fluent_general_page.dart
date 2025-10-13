@@ -2,6 +2,9 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_info_bar.dart';
+import 'package:provider/provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 // 定义SharedPreferences键值
 const String globalFilterAdultContentKey = 'global_filter_adult_content';
@@ -94,6 +97,8 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
       );
     }
 
+    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
+
     return ScaffoldPage(
       header: const PageHeader(
         title: Text('通用设置'),
@@ -154,7 +159,7 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
             
             const SizedBox(height: 16),
             
-            // 内容过滤设置
+            // 番剧卡片点击行为
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -162,36 +167,42 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '内容过滤',
+                      '番剧卡片行为',
                       style: FluentTheme.of(context).typography.subtitle,
                     ),
                     const SizedBox(height: 16),
-                    
-                    Row(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('过滤成人内容 (全局)'),
-                              const SizedBox(height: 4),
-                              Text(
-                                '在新番列表等处隐藏成人内容',
-                                style: FluentTheme.of(context).typography.caption,
+                        const Text('点击行为'),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ComboBox<AnimeCardAction>(
+                            value: appearanceSettings.animeCardAction,
+                            items: const [
+                              ComboBoxItem<AnimeCardAction>(
+                                value: AnimeCardAction.synopsis,
+                                child: Text('简介'),
+                              ),
+                              ComboBoxItem<AnimeCardAction>(
+                                value: AnimeCardAction.episodeList,
+                                child: Text('剧集列表'),
                               ),
                             ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                appearanceSettings.setAnimeCardAction(value);
+                              }
+                            },
                           ),
                         ),
-                        ToggleSwitch(
-                          checked: _filterAdultContent,
-                          onChanged: (value) {
-                            setState(() {
-                              _filterAdultContent = value;
-                            });
-                            _saveFilterPreference(value);
-                          },
-                        ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '选择点击番剧卡片后的默认展示内容。',
+                      style: FluentTheme.of(context).typography.caption,
                     ),
                   ],
                 ),
@@ -199,6 +210,52 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
             ),
             
             const SizedBox(height: 16),
+            
+            // 内容过滤设置
+            if (!globals.isPhone) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '内容过滤',
+                        style: FluentTheme.of(context).typography.subtitle,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('过滤成人内容 (全局)'),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '在新番列表等处隐藏成人内容',
+                                  style: FluentTheme.of(context).typography.caption,
+                                ),
+                              ],
+                            ),
+                          ),
+                          ToggleSwitch(
+                            checked: _filterAdultContent,
+                            onChanged: (value) {
+                              setState(() {
+                                _filterAdultContent = value;
+                              });
+                              _saveFilterPreference(value);
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             
             // 缓存管理
             Card(
