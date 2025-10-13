@@ -22,7 +22,28 @@ class BangumiSyncService {
   static const String _syncStatusKey = 'bangumi_sync_status';
   static const String _syncedItemsKey = 'bangumi_synced_items';
 
+  // 调试开关配置
+  /// 是否启用详细调试信息
+  static bool enableDetailedDebugLog = false;
+  
+  /// 只为特定animeId启用详细调试（为空表示对所有动画启用）
+  static Set<int> debugAnimeIds = {};
+
   BangumiSyncService._();
+
+  /// 检查是否应该为指定动画输出详细调试信息
+  static bool _shouldDebugAnime(int animeId) {
+    if (!enableDetailedDebugLog) return false;
+    if (debugAnimeIds.isEmpty) return true; // 空集合表示调试所有动画
+    return debugAnimeIds.contains(animeId);
+  }
+
+  /// 条件性输出调试信息
+  static void _debugLog(int animeId, String message) {
+    if (_shouldDebugAnime(animeId)) {
+      debugPrint(message);
+    }
+  }
 
   /// 初始化服务
   static Future<void> initialize() async {
@@ -283,6 +304,21 @@ class BangumiSyncService {
         e.watchProgress > 0.1
       ).length;
 
+      // 🔍 详细调试信息：查看所有剧集的观看进度（受调试开关控制）
+      if (_shouldDebugAnime(animeId)) {
+        debugPrint('[Bangumi同步] ═══════ 剧集详细信息 ═══════');
+        debugPrint('[Bangumi同步] 动画: $animeName (ID: $animeId)');
+        debugPrint('[Bangumi同步] 总剧集数: ${episodes.length}');
+        debugPrint('[Bangumi同步] 有效观看数: $watchedEpisodesCount');
+        debugPrint('[Bangumi同步] ─────────────────────────────');
+        for (var i = 0; i < episodes.length; i++) {
+          final ep = episodes[i];
+          final progress = (ep.watchProgress * 100).toStringAsFixed(1);
+          debugPrint('[Bangumi同步] 第${i + 1}条记录: 集=${ep.episodeId}, 进度=${progress}%, 标题=${ep.episodeTitle ?? "无"}');
+        }
+        debugPrint('[Bangumi同步] ═════════════════════════════');
+      }
+
       // 更新动画收藏状态（使用PATCH确保更新而非替换）
       final collectionResult = await BangumiApiService.updateUserCollection(
         subjectId,
@@ -356,6 +392,10 @@ class BangumiSyncService {
       int syncedEpisodeCount = 0;
       final List<Map<String, dynamic>> episodeUpdates = [];
 
+      if (_shouldDebugAnime(animeId)) {
+        debugPrint('[Bangumi同步] ═══════ 开始剧集匹配和同步 ═══════');
+      }
+      
       for (var watchHistoryItem in episodes) {
         // 尝试通过集数匹配Bangumi剧集
         Map<String, dynamic>? matchedBangumiEpisode;
@@ -374,15 +414,23 @@ class BangumiSyncService {
             
             if (sort != null && sort == watchHistoryItem.episodeId) {
               matchedBangumiEpisode = bangumiEp;
+              _debugLog(animeId, '[Bangumi同步] ✓ 匹配成功: 本地集=${watchHistoryItem.episodeId}, Bangumi集=${sort}, ID=${bangumiEp['id']}');
               break;
             }
           }
+          
+          if (matchedBangumiEpisode == null) {
+            _debugLog(animeId, '[Bangumi同步] ✗ 未找到匹配: 本地集=${watchHistoryItem.episodeId}, 进度=${(watchHistoryItem.watchProgress * 100).toStringAsFixed(1)}%');
+          }
+        } else {
+          _debugLog(animeId, '[Bangumi同步] ✗ 跳过: episodeId为null');
         }
 
         if (matchedBangumiEpisode != null) {
           final bangumiEpisodeId = matchedBangumiEpisode['id'] as int?;
           if (bangumiEpisodeId != null) {
             final episodeType = _mapWatchProgressToEpisodeType(watchHistoryItem.watchProgress);
+            final progress = (watchHistoryItem.watchProgress * 100).toStringAsFixed(1);
             
             // 只同步有明确观看状态的剧集（想看或看过）
             if (episodeType == 1 || episodeType == 2) {
@@ -391,12 +439,18 @@ class BangumiSyncService {
                 'type': episodeType,
               });
               syncedEpisodeCount++;
-              debugPrint('[Bangumi同步] 准备更新剧集状态: ID=$bangumiEpisodeId, 类型=$episodeType');
+              final typeStr = episodeType == 1 ? '想看' : '看过';
+              _debugLog(animeId, '[Bangumi同步] ➤ 将同步: 集=${watchHistoryItem.episodeId}, ID=$bangumiEpisodeId, 类型=$typeStr($episodeType), 进度=$progress%');
             } else {
-              debugPrint('[Bangumi同步] 跳过剧集更新: ID=$bangumiEpisodeId, 进度=${watchHistoryItem.watchProgress}（未达到收藏阈值）');
+              _debugLog(animeId, '[Bangumi同步] ⊘ 跳过同步: 集=${watchHistoryItem.episodeId}, ID=$bangumiEpisodeId, 进度=$progress%（阈值: ≤10%想看, ≥80%看过, 其他不同步）');
             }
           }
         }
+      }
+      
+      if (_shouldDebugAnime(animeId)) {
+        debugPrint('[Bangumi同步] ═════════════════════════════════════');
+        debugPrint('[Bangumi同步] 匹配结果: 将同步 $syncedEpisodeCount 集，共 ${episodes.length} 集记录');
       }
 
       // 批量更新剧集状态
