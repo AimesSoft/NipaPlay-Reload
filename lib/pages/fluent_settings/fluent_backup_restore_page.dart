@@ -237,6 +237,7 @@ class _FluentBackupRestorePageState extends State<FluentBackupRestorePage> {
         padding: const EdgeInsets.all(24.0),
         child: SingleChildScrollView(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Card(
                 child: Padding(

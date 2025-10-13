@@ -97,6 +97,7 @@ class _FluentNetworkSettingsPageState extends State<FluentNetworkSettingsPage> {
       content: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Card(
               child: Padding(
