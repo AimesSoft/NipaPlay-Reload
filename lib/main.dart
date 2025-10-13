@@ -719,7 +719,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
             return fluent.FluentApp(
               title: 'NipaPlay',
               debugShowCheckedModeBanner: false,
-              theme: fluent.FluentThemeData.dark(),
+              theme: fluent.FluentThemeData.light(),
+              darkTheme: fluent.FluentThemeData.dark(),
+              themeMode: uiThemeProvider.fluentThemeMode,
               navigatorKey: navigatorKey,
               home: FluentMainPage(launchFilePath: widget.launchFilePath),
               builder: (context, appChild) {

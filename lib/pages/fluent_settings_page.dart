@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:nipaplay/pages/fluent_settings/fluent_account_page.dart';
 import 'package:nipaplay/pages/fluent_settings/fluent_ui_theme_page.dart';
+import 'package:nipaplay/pages/fluent_settings/fluent_appearance_page.dart';
 import 'package:nipaplay/pages/fluent_settings/fluent_general_page.dart';
 import 'package:nipaplay/pages/fluent_settings/fluent_player_settings_page.dart';
 import 'package:nipaplay/pages/fluent_settings/fluent_about_page.dart';
@@ -24,6 +25,7 @@ class _FluentSettingsPageState extends State<FluentSettingsPage> {
   final List<Widget> _settingsPages = [
     const FluentAccountPage(),
     const FluentUIThemePage(),
+    const FluentAppearancePage(),
     const FluentGeneralPage(),
     const FluentWatchHistoryPage(),
     const FluentPlayerSettingsPage(),
@@ -37,6 +39,7 @@ class _FluentSettingsPageState extends State<FluentSettingsPage> {
   final List<String> _settingsTitles = [
     '账号',
     '主题（实验性）',
+    '外观',
     '通用',
     '观看记录',
     '播放器',
@@ -50,6 +53,7 @@ class _FluentSettingsPageState extends State<FluentSettingsPage> {
   final List<IconData> _settingsIcons = [
     FluentIcons.contact,
     FluentIcons.color,
+    FluentIcons.brightness,
     FluentIcons.settings,
     FluentIcons.history,
     FluentIcons.play,
