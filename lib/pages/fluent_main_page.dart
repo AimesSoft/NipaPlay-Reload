@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FluentMainPage extends StatefulWidget {
   final String? launchFilePath;
@@ -26,7 +27,7 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
   bool isMaximized = false;
   bool _showSplash = true;
   int _selectedIndex = 0;
-  
+
   // 热键管理相关变量
   VideoPlayerState? _videoPlayerState;
   bool _hotkeysAreRegistered = false;
@@ -51,6 +52,7 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
+    _loadStartupPage();
     
     // 隐藏启动画面
     Future.delayed(const Duration(seconds: 2), () {
@@ -78,6 +80,27 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
         //debugPrint('[FluentHotkeyManager] HotkeyService已初始化');
       }
     });
+  }
+
+  Future<void> _loadStartupPage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedIndex = prefs.getInt('default_page_index') ?? 0;
+      final clampedIndex = storedIndex.clamp(0, _pages.length - 1);
+      if (!mounted) return;
+      setState(() {
+        _selectedIndex = clampedIndex;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final tabChangeNotifier =
+            Provider.of<TabChangeNotifier>(context, listen: false);
+        tabChangeNotifier.changeTab(_selectedIndex);
+      });
+    } catch (e) {
+      debugPrint('[FluentMainPage] 加载默认页面失败: $e');
+    }
   }
 
   @override
