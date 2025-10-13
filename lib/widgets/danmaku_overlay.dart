@@ -106,7 +106,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             blockBottomDanmaku: videoState.blockBottomDanmaku,
             blockScrollDanmaku: videoState.blockScrollDanmaku,
             blockWords: videoState.danmakuBlockWords,
-            currentTime: widget.currentPosition / 1000,
+            currentTime: widget.currentPosition / 1000 +
+                settingsProvider.danmakuTimeOffset,
             isPlaying: widget.isPlaying,
             playbackRate: videoState.playbackRate,
           );
