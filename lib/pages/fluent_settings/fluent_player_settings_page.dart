@@ -1,6 +1,7 @@
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
@@ -28,6 +29,7 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
   DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.cpu;
   bool _isLoading = true;
+  Anime4KProfile? _anime4kSelectionOverride;
 
   @override
   void initState() {
@@ -247,7 +249,21 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
 
     final videoState = context.watch<VideoPlayerState>();
     final bool supportsAnime4K = videoState.isAnime4KSupported;
-    final Anime4KProfile currentAnime4KProfile = videoState.anime4kProfile;
+    final Anime4KProfile providerAnime4KProfile = videoState.anime4kProfile;
+
+    if (_anime4kSelectionOverride != null &&
+        _anime4kSelectionOverride == providerAnime4KProfile) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _anime4kSelectionOverride = null;
+          });
+        }
+      });
+    }
+
+    final Anime4KProfile currentAnime4KProfile =
+        _anime4kSelectionOverride ?? providerAnime4KProfile;
 
     return ScaffoldPage(
       header: const PageHeader(
@@ -342,29 +358,36 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                           children: [
                             const Text('预设'),
                             const SizedBox(height: 8),
-                            ComboBox<Anime4KProfile>(
-                              value: currentAnime4KProfile,
-                              items: Anime4KProfile.values
-                                  .map(
-                                    (profile) => ComboBoxItem<Anime4KProfile>(
-                                      value: profile,
-                                      child: Text(
-                                        _getAnime4KProfileTitle(profile),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: ComboBox<Anime4KProfile>(
+                                value: currentAnime4KProfile,
+                                items: Anime4KProfile.values
+                                    .map(
+                                      (profile) => ComboBoxItem<Anime4KProfile>(
+                                        value: profile,
+                                        child: Text(
+                                          _getAnime4KProfileTitle(profile),
+                                        ),
                                       ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) async {
-                                if (value == null) return;
-                                await videoState.setAnime4KProfile(value);
-                                if (!mounted) return;
-                              final String option =
-                                  _getAnime4KProfileTitle(value);
-                              final String message = value == Anime4KProfile.off
-                                  ? '已关闭 Anime4K'
-                                  : 'Anime4K 已切换为$option';
-                                _showSuccessInfoBar(message);
-                              },
+                                    )
+                                    .toList(),
+                                onChanged: (value) async {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _anime4kSelectionOverride = value;
+                                  });
+                                  await videoState.setAnime4KProfile(value);
+                                  if (!mounted) return;
+                                  final String option =
+                                      _getAnime4KProfileTitle(value);
+                                  final String message =
+                                      value == Anime4KProfile.off
+                                          ? '已关闭 Anime4K'
+                                          : 'Anime4K 已切换为$option';
+                                  _showSuccessInfoBar(message);
+                                },
+                              ),
                             ),
                             const SizedBox(height: 12),
                             Text(
