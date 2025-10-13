@@ -14,6 +14,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/utils/message_helper.dart';
+import 'package:provider/provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class FluentAnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -89,7 +91,15 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
   void initState() {
     super.initState();
     _openPageContext = context;
-    _tabController = material.TabController(length: 2, vsync: this);
+    final appearanceSettings =
+        Provider.of<AppearanceSettingsProvider>(context, listen: false);
+    _currentTabIndex =
+        appearanceSettings.animeCardAction == AnimeCardAction.synopsis ? 0 : 1;
+    _tabController = material.TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: _currentTabIndex,
+    );
     _tabController!.addListener(_handleTabChange);
     
     _bangumiService.cleanExpiredDetailCache().then((_) {
@@ -155,6 +165,9 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
           _detailedAnime = anime;
           _isLoading = false;
         });
+        if (_currentTabIndex == 1 && DandanplayService.isLoggedIn) {
+          _fetchDandanplayWatchStatus(anime);
+        }
       }
     } catch (e) {
       if (mounted) {
