@@ -322,7 +322,7 @@ class BangumiSyncService {
       // 更新动画收藏状态（使用PATCH确保更新而非替换）
       final collectionResult = await BangumiApiService.updateUserCollection(
         subjectId,
-        targetCollectionType,
+        type: targetCollectionType,
         //comment: '通过NipaPlay同步 (观看${watchedEpisodesCount}/${episodes.length}集)',
       );
 
