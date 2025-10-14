@@ -7,6 +7,7 @@ import 'account_controller.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Material Design版本的账号页面
 class MaterialAccountPage extends StatefulWidget {
@@ -16,8 +17,11 @@ class MaterialAccountPage extends StatefulWidget {
   State<MaterialAccountPage> createState() => _MaterialAccountPageState();
 }
 
-class _MaterialAccountPageState extends State<MaterialAccountPage> 
+class _MaterialAccountPageState extends State<MaterialAccountPage>
     with AccountPageController {
+
+  // 页面切换状态：true为弹弹play页面，false为Bangumi页面
+  bool _showDandanplayPage = true;
 
   @override
   void showMessage(String message) {
@@ -129,42 +133,104 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '弹弹play账号',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+            // 自定义TabView样式的选择器
+            _buildCustomTabSelector(blurValue),
             const SizedBox(height: 16),
-            if (isLoggedIn) ...[
-              _buildLoggedInView(blurValue),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+            // 根据状态显示不同的内容
+            Expanded(
+              child: _showDandanplayPage 
+                  ? _buildDandanplayPage(blurValue) 
+                  : _buildBangumiPage(blurValue),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建自定义Tab选择器
+  Widget _buildCustomTabSelector(double blurValue) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 0.5,
+            ),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // 计算每个选项的准确宽度
+              final optionWidth = (constraints.maxWidth - 8) / 2; // 减去左右边距
+              
+              return Stack(
+                children: [
+                  // 滑动指示器（放在底层）
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    left: _showDandanplayPage ? 4 : null,
+                    right: _showDandanplayPage ? null : 4,
+                    top: 4,
+                    bottom: 4,
+                    width: optionWidth,
                     child: Container(
-                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: Colors.white.withOpacity(0.3),
-                          width: 0.5,
+                          width: 1,
                         ),
                       ),
-                      child: MaterialUserActivity(key: ValueKey(username)),
                     ),
                   ),
-                ),
-              ),
-            ] else
-              _buildLoggedOutView(blurValue),
-          ],
+                  // 可点击选项（只有一层，带文字）
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildTabOption('Dandanplay账户', true),
+                      ),
+                      Expanded(
+                        child: _buildTabOption('Bangumi同步', false),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabOption(String text, bool isDandanplay) {
+    final isActive = _showDandanplayPage == isDandanplay;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showDandanplayPage = isDandanplay;
+        });
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        alignment: Alignment.center,
+        child: Text(
+          text,
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(
+            color: isActive ? Colors.white : Colors.white70,
+            fontSize: 14,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
       ),
     );
@@ -317,6 +383,389 @@ style: TextStyle(color: Colors.white70),
         ),
         const Divider(color: Colors.white12, height: 1),
       ],
+    );
+  }
+
+  Widget _buildBangumiSyncSection(double blurValue) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.3),
+              width: 0.5,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.sync, color: Colors.white, size: 24),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Bangumi观看记录同步',
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              if (isBangumiLoggedIn) ...[
+                // 已登录状态
+                _buildBangumiLoggedInView(),
+              ] else ...[
+                // 未登录状态
+                _buildBangumiLoggedOutView(),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBangumiLoggedInView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 用户信息
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '已连接到 ${bangumiUserInfo?['nickname'] ?? bangumiUserInfo?['username'] ?? 'Bangumi'}',
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (lastBangumiSyncTime != null)
+                      Text(
+                        '上次同步: ${_formatDateTime(lastBangumiSyncTime!)}',
+                        locale: const Locale("zh-Hans", "zh"),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 同步状态
+        if (isBangumiSyncing) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Colors.blue.withOpacity(0.3),
+                width: 0.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    bangumiSyncStatus,
+                    locale: const Locale("zh-Hans", "zh"),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // 操作按钮
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildActionButton(
+              '同步到Bangumi',
+              Icons.sync,
+              isBangumiSyncing ? null : () => performBangumiSync(forceFullSync: false),
+            ),
+            _buildActionButton(
+              '同步所有本地记录',
+              Icons.sync_alt,
+              isBangumiSyncing ? null : () => performBangumiSync(forceFullSync: true),
+            ),
+            _buildActionButton(
+              '验证令牌',
+              Icons.wifi_protected_setup,
+              isLoading ? null : testBangumiConnection,
+            ),
+            _buildActionButton(
+              '清除同步记录缓存',
+              Icons.clear_all,
+              clearBangumiSyncCache,
+            ),
+            _buildActionButton(
+              '删除Bangumi令牌',
+              Icons.logout,
+              clearBangumiToken,
+              isDestructive: true,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBangumiLoggedOutView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '同步本地观看历史到Bangumi收藏',
+          locale: Locale("zh-Hans", "zh"),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // 可点击的URL链接
+        Row(
+          children: [
+            const Text(
+              '需要在 ',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+            GestureDetector(
+              onTap: () async {
+                const url = 'https://next.bgm.tv/demo/access-token';
+                try {
+                  final uri = Uri.parse(url);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } else {
+                    if (mounted) {
+                      BlurSnackBar.show(context, '无法打开链接');
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    BlurSnackBar.show(context, '打开链接失败：$e');
+                  }
+                }
+              },
+              child: const Text(
+                'https://next.bgm.tv/demo/access-token',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  color: Color(0xFF53A8DC), // 使用弹弹play的蓝色作为链接色
+                  fontSize: 12,
+                  decoration: TextDecoration.underline,
+                  decorationColor: Color(0xFF53A8DC),
+                ),
+              ),
+            ),
+            const Text(
+              ' 创建访问令牌',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        
+        // 令牌输入框
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 0.5,
+            ),
+          ),
+          child: TextField(
+            controller: bangumiTokenController,
+            decoration: const InputDecoration(
+              hintText: '请输入Bangumi访问令牌',
+              hintStyle: TextStyle(color: Colors.white54),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.all(16),
+            ),
+            style: const TextStyle(color: Colors.white),
+            obscureText: true,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 保存按钮
+        SizedBox(
+          width: double.infinity,
+          child: _buildActionButton(
+            '保存令牌',
+            Icons.save,
+            isLoading ? null : saveBangumiToken,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(
+    String text,
+    IconData icon,
+    VoidCallback? onPressed, {
+    bool isDestructive = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onPressed,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDestructive 
+                ? Colors.red.withOpacity(0.2)
+                : Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isDestructive
+                  ? Colors.red.withOpacity(0.3)
+                  : Colors.white.withOpacity(0.2),
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: onPressed != null 
+                    ? (isDestructive ? Colors.red : Colors.white)
+                    : Colors.white38,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                text,
+                locale: const Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  color: onPressed != null 
+                      ? (isDestructive ? Colors.red : Colors.white)
+                      : Colors.white38,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}天前';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}小时前';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}分钟前';
+    } else {
+      return '刚刚';
+    }
+  }
+
+  // 构建弹弹play页面内容
+  Widget _buildDandanplayPage(double blurValue) {
+    return Column(
+      children: [
+        if (isLoggedIn) ...[
+          _buildLoggedInView(blurValue),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: MaterialUserActivity(key: ValueKey(username)),
+                ),
+              ),
+            ),
+          ),
+        ] else ...[
+          _buildLoggedOutView(blurValue),
+        ],
+      ],
+    );
+  }
+
+  // 构建Bangumi页面内容
+  Widget _buildBangumiPage(double blurValue) {
+    return SingleChildScrollView(
+      child: _buildBangumiSyncSection(blurValue),
     );
   }
 }

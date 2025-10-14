@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -18,6 +19,7 @@ import 'dart:io'; // Added for File operations
 import 'package:nipaplay/widgets/nipaplay_theme/switchable_view.dart'; // 添加SwitchableView组件
 import 'package:nipaplay/widgets/nipaplay_theme/tag_search_widget.dart'; // 添加标签搜索组件
 import 'package:nipaplay/widgets/nipaplay_theme/rating_dialog.dart'; // 添加评分对话框
+import 'package:nipaplay/widgets/nipaplay_theme/bangumi_collection_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'dart:convert';
@@ -30,7 +32,8 @@ class AnimeDetailPage extends StatefulWidget {
   final int animeId;
   final SharedRemoteAnimeSummary? sharedSummary;
   final Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader;
-  final PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder;
+  final PlayableItem Function(SharedRemoteEpisode episode)?
+      sharedEpisodeBuilder;
   final String? sharedSourceLabel;
 
   const AnimeDetailPage({
@@ -44,14 +47,15 @@ class AnimeDetailPage extends StatefulWidget {
 
   @override
   State<AnimeDetailPage> createState() => _AnimeDetailPageState();
-  
+
   static void popIfOpen() {
-    if (_AnimeDetailPageState._openPageContext != null && _AnimeDetailPageState._openPageContext!.mounted) {
+    if (_AnimeDetailPageState._openPageContext != null &&
+        _AnimeDetailPageState._openPageContext!.mounted) {
       Navigator.of(_AnimeDetailPageState._openPageContext!).pop();
       _AnimeDetailPageState._openPageContext = null;
     }
   }
-  
+
   static Future<WatchHistoryItem?> show(
     BuildContext context,
     int animeId, {
@@ -61,9 +65,10 @@ class AnimeDetailPage extends StatefulWidget {
     String? sharedSourceLabel,
   }) {
     // 获取外观设置Provider
-    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
+    final appearanceSettings =
+        Provider.of<AppearanceSettingsProvider>(context, listen: false);
     final enableAnimation = appearanceSettings.enablePageAnimation;
-    
+
     return showGeneralDialog<WatchHistoryItem>(
       context: context,
       barrierDismissible: true,
@@ -89,12 +94,12 @@ class AnimeDetailPage extends StatefulWidget {
             child: child,
           );
         }
-        
+
         final curvedAnimation = CurvedAnimation(
           parent: animation,
           curve: Curves.easeOutBack,
         );
-        
+
         return ScaleTransition(
           scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
           child: FadeTransition(
@@ -125,28 +130,38 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   TabController? _tabController;
   // 添加外观设置
   AppearanceSettingsProvider? _appearanceSettings;
-  
+
   // 弹弹play观看状态相关
   /// 存储弹弹play的观看状态
-  Map<int, bool> _dandanplayWatchStatus = {}; 
-  
+  Map<int, bool> _dandanplayWatchStatus = {};
+
   /// 是否正在加载弹弹play状态
-  bool _isLoadingDandanplayStatus = false; 
-  
+  bool _isLoadingDandanplayStatus = false;
+
   // 弹弹play收藏状态相关
   /// 是否已收藏
-  bool _isFavorited = false; 
-  
+  bool _isFavorited = false;
+
   /// 是否正在加载收藏状态
-  bool _isLoadingFavoriteStatus = false; 
-  
+  bool _isLoadingFavoriteStatus = false;
+
   /// 是否正在切换收藏状态
-  bool _isTogglingFavorite = false; 
+  bool _isTogglingFavorite = false;
 
   // 弹弹play用户评分相关
   int _userRating = 0; // 用户评分（0-10，0代表未评分）
   bool _isLoadingUserRating = false; // 是否正在加载用户评分
   bool _isSubmittingRating = false; // 是否正在提交评分
+
+  // Bangumi云端收藏相关
+  int? _bangumiSubjectId;
+  String? _bangumiComment;
+  bool _isLoadingBangumiCollection = false;
+  bool _hasBangumiCollection = false;
+  int _bangumiUserRating = 0;
+  int _bangumiCollectionType = 0;
+  int _bangumiEpisodeStatus = 0;
+  bool _isSavingBangumiCollection = false;
 
   // 新增：评分到评价文本的映射
   static const Map<int, String> _ratingEvaluationMap = {
@@ -162,6 +177,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     10: '超神作',
   };
 
+  static const Map<int, String> _collectionTypeLabels = {
+    1: '想看',
+    2: '已看',
+    3: '在看',
+    4: '搁置',
+    5: '抛弃',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -169,9 +192,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     _tabController = TabController(
         length: 2,
         vsync: this,
-        initialIndex: Provider.of<AppearanceSettingsProvider>(context, listen: false)
-            .animeCardAction == AnimeCardAction.synopsis ? 0 : 1
-    );
+        initialIndex:
+            Provider.of<AppearanceSettingsProvider>(context, listen: false)
+                        .animeCardAction ==
+                    AnimeCardAction.synopsis
+                ? 0
+                : 1);
 
     _sharedSummary = widget.sharedSummary;
     _sharedSourceLabel = widget.sharedSourceLabel;
@@ -181,18 +207,18 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     if (_sharedEpisodeLoader != null && _sharedEpisodeBuilder != null) {
       _loadSharedEpisodes();
     }
-    
+
     // 添加TabController监听
     _tabController!.addListener(_handleTabChange);
-    
+
     // 启动时异步清理过期缓存
     _bangumiService.cleanExpiredDetailCache().then((_) {
       debugPrint("[番剧详情] 已清理过期的番剧详情缓存");
     });
     _fetchAnimeDetails().then((_) {
       // 如果初始化时默认打开剧集列表，立即获取云同步状态
-      if (_detailedAnime != null && 
-          _tabController!.index == 1 && 
+      if (_detailedAnime != null &&
+          _tabController!.index == 1 &&
           DandanplayService.isLoggedIn) {
         _fetchDandanplayWatchStatus(_detailedAnime!);
       }
@@ -239,7 +265,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   void didChangeDependencies() {
     super.didChangeDependencies();
     // 获取外观设置provider
-    _appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
+    _appearanceSettings =
+        Provider.of<AppearanceSettingsProvider>(context, listen: false);
   }
 
   @override
@@ -251,12 +278,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     _tabController?.dispose();
     super.dispose();
   }
-  
+
   // 处理标签切换
   void _handleTabChange() {
     if (_tabController!.indexIsChanging) {
       // 当切换到剧集列表标签（索引1）时，刷新观看状态
-      if (_tabController!.index == 1 && _detailedAnime != null && DandanplayService.isLoggedIn) {
+      if (_tabController!.index == 1 &&
+          _detailedAnime != null &&
+          DandanplayService.isLoggedIn) {
         // 只有在没有加载过状态时才获取
         if (_dandanplayWatchStatus.isEmpty) {
           _fetchDandanplayWatchStatus(_detailedAnime!);
@@ -273,6 +302,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     setState(() {
       _isLoading = true;
       _error = null;
+      _bangumiSubjectId = null;
+      _bangumiComment = null;
+      _isLoadingBangumiCollection = false;
+      _hasBangumiCollection = false;
+      _bangumiUserRating = 0;
+      _bangumiCollectionType = 0;
+      _bangumiEpisodeStatus = 0;
+      _isSavingBangumiCollection = false;
     });
     try {
       BangumiAnime anime;
@@ -280,12 +317,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       if (kIsWeb) {
         // Web environment: fetch from local API
         try {
-          final response = await http.get(Uri.parse('/api/bangumi/detail/${widget.animeId}'));
+          final response = await http
+              .get(Uri.parse('/api/bangumi/detail/${widget.animeId}'));
           if (response.statusCode == 200) {
             final data = json.decode(utf8.decode(response.bodyBytes));
             anime = BangumiAnime.fromJson(data as Map<String, dynamic>);
           } else {
-            throw Exception('Failed to load details from API: ${response.statusCode}');
+            throw Exception(
+                'Failed to load details from API: ${response.statusCode}');
           }
         } catch (e) {
           throw Exception('Failed to connect to the local details API: $e');
@@ -294,12 +333,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         // Mobile/Desktop environment: fetch from service
         anime = await BangumiService.instance.getAnimeDetails(widget.animeId);
       }
-      
+
       if (mounted) {
         setState(() {
           _detailedAnime = anime;
           _isLoading = false;
         });
+
+        _loadBangumiUserData(anime);
       }
     } catch (e) {
       if (mounted) {
@@ -314,7 +355,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   // 获取弹弹play观看状态
   Future<void> _fetchDandanplayWatchStatus(BangumiAnime anime) async {
     // 如果未登录弹弹play或没有剧集信息，跳过
-    if (!DandanplayService.isLoggedIn || anime.episodeList == null || anime.episodeList!.isEmpty) {
+    if (!DandanplayService.isLoggedIn ||
+        anime.episodeList == null ||
+        anime.episodeList!.isEmpty) {
       // 重置加载状态
       setState(() {
         _isLoadingDandanplayStatus = false;
@@ -323,33 +366,36 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       });
       return;
     }
-    
+
     setState(() {
       _isLoadingDandanplayStatus = true;
       _isLoadingFavoriteStatus = true;
       _isLoadingUserRating = true;
     });
-    
+
     try {
       // 提取所有剧集的episodeId（使用id属性）
       final List<int> episodeIds = anime.episodeList!
           .where((episode) => episode.id > 0) // 确保id有效
           .map((episode) => episode.id)
           .toList();
-      
+
       // 并行获取观看状态、收藏状态和用户评分
-      final Future<Map<int, bool>> watchStatusFuture = episodeIds.isNotEmpty 
+      final Future<Map<int, bool>> watchStatusFuture = episodeIds.isNotEmpty
           ? DandanplayService.getEpisodesWatchStatus(episodeIds)
           : Future.value(<int, bool>{});
-          
-      final Future<bool> favoriteStatusFuture = DandanplayService.isAnimeFavorited(anime.id);
-      final Future<int> userRatingFuture = DandanplayService.getUserRatingForAnime(anime.id);
-      
-      final results = await Future.wait([watchStatusFuture, favoriteStatusFuture, userRatingFuture]);
+
+      final Future<bool> favoriteStatusFuture =
+          DandanplayService.isAnimeFavorited(anime.id);
+      final Future<int> userRatingFuture =
+          DandanplayService.getUserRatingForAnime(anime.id);
+
+      final results = await Future.wait(
+          [watchStatusFuture, favoriteStatusFuture, userRatingFuture]);
       final watchStatus = results[0] as Map<int, bool>;
       final isFavorited = results[1] as bool;
       final userRating = results[2] as int;
-      
+
       if (mounted) {
         setState(() {
           _dandanplayWatchStatus = watchStatus;
@@ -372,18 +418,314 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     }
   }
 
+  int? _extractBangumiSubjectId(BangumiAnime anime) {
+    final url = anime.bangumiUrl;
+    if (url == null || url.isEmpty) {
+      return null;
+    }
+
+    final directMatch = RegExp(r'/subject/(\d+)').firstMatch(url);
+    if (directMatch != null) {
+      return int.tryParse(directMatch.group(1)!);
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      if (uri.queryParameters.containsKey('subject_id')) {
+        final parsed = int.tryParse(uri.queryParameters['subject_id'] ?? '');
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+
+      for (var i = uri.pathSegments.length - 1; i >= 0; i--) {
+        final segment = uri.pathSegments[i];
+        final parsed = int.tryParse(segment);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+    }
+
+    RegExpMatch? lastMatch;
+    for (final match in RegExp(r'(\d+)').allMatches(url)) {
+      lastMatch = match;
+    }
+    if (lastMatch != null) {
+      return int.tryParse(lastMatch.group(1)!);
+    }
+
+    return null;
+  }
+
+  Future<void> _loadBangumiUserData(BangumiAnime anime) async {
+    if (!BangumiApiService.isLoggedIn) {
+      try {
+        await BangumiApiService.initialize();
+      } catch (e) {
+        debugPrint('[番剧详情] 初始化Bangumi API失败: $e');
+      }
+    }
+
+    if (!BangumiApiService.isLoggedIn) {
+      if (mounted) {
+        setState(() {
+          _bangumiSubjectId = null;
+          _bangumiComment = null;
+          _isLoadingBangumiCollection = false;
+          _hasBangumiCollection = false;
+          _bangumiUserRating = 0;
+          _bangumiCollectionType = 0;
+          _bangumiEpisodeStatus = 0;
+        });
+      }
+      return;
+    }
+
+    final subjectId = _extractBangumiSubjectId(anime);
+    if (subjectId == null) {
+      if (mounted) {
+        setState(() {
+          _bangumiSubjectId = null;
+          _bangumiComment = null;
+          _isLoadingBangumiCollection = false;
+          _hasBangumiCollection = false;
+          _bangumiUserRating = 0;
+          _bangumiCollectionType = 0;
+          _bangumiEpisodeStatus = 0;
+        });
+      }
+      debugPrint('[番剧详情] 未能解析Bangumi条目ID: ${anime.bangumiUrl}');
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _bangumiSubjectId = subjectId;
+        _bangumiComment = null;
+        _isLoadingBangumiCollection = true;
+        _hasBangumiCollection = false;
+        _bangumiUserRating = 0;
+        _bangumiCollectionType = 0;
+        _bangumiEpisodeStatus = 0;
+      });
+    }
+
+    try {
+      final result = await BangumiApiService.getUserCollection(subjectId);
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        Map<String, dynamic>? data;
+        if (result['data'] is Map) {
+          data = Map<String, dynamic>.from(result['data'] as Map);
+        }
+
+        if (data == null) {
+          setState(() {
+            _bangumiSubjectId = subjectId;
+            _bangumiComment = null;
+            _isLoadingBangumiCollection = false;
+            _hasBangumiCollection = false;
+            _bangumiUserRating = 0;
+            _bangumiCollectionType = 0;
+            _bangumiEpisodeStatus = 0;
+          });
+          return;
+        }
+
+        int userRating = 0;
+        final ratingData = data['rating'];
+        if (ratingData is Map && ratingData['score'] is num) {
+          userRating = (ratingData['score'] as num).round();
+        } else if (ratingData is num) {
+          userRating = ratingData.round();
+        } else {
+          final rateValue = data['rate'];
+          if (rateValue is num) {
+            userRating = rateValue.round();
+          }
+        }
+
+        int collectionType = 0;
+        final typeData = data['type'];
+        if (typeData is int) {
+          collectionType = typeData;
+        }
+
+        int episodeStatus = 0;
+        final epStatusData = data['ep_status'];
+        if (epStatusData is int) {
+          episodeStatus = epStatusData;
+        }
+
+        String? comment;
+        final rawComment = data['comment'];
+        if (rawComment is String) {
+          final trimmed = rawComment.trim();
+          if (trimmed.isNotEmpty) {
+            comment = trimmed;
+          }
+        }
+
+        setState(() {
+          _bangumiSubjectId = subjectId;
+          _hasBangumiCollection = true;
+          _bangumiComment = comment;
+          _bangumiUserRating = userRating;
+          _bangumiCollectionType = collectionType;
+          _bangumiEpisodeStatus = episodeStatus;
+          _isLoadingBangumiCollection = false;
+        });
+      } else {
+        setState(() {
+          _bangumiSubjectId = subjectId;
+          _bangumiComment = null;
+          _isLoadingBangumiCollection = false;
+          _hasBangumiCollection = false;
+          _bangumiUserRating = 0;
+          _bangumiCollectionType = 0;
+          _bangumiEpisodeStatus = 0;
+        });
+
+        if (result['statusCode'] != 404) {
+          debugPrint('[番剧详情] 获取Bangumi收藏信息失败: ${result['message']}');
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      debugPrint('[番剧详情] 获取Bangumi评论失败: $e');
+      setState(() {
+        _bangumiSubjectId = subjectId;
+        _isLoadingBangumiCollection = false;
+      });
+    }
+  }
+
   String _formatDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '';
     try {
       // 移除 T00:00:00 部分
       dateStr = dateStr.replaceAll(RegExp(r'T\d{2}:\d{2}:\d{2}'), '');
-      
+
       final parts = dateStr.split('-');
       if (parts.length >= 3) return '${parts[0]}年${parts[1]}月${parts[2]}日';
       return dateStr;
     } catch (e) {
       return dateStr ?? '';
     }
+  }
+
+  String _collectionTypeLabel(int type) {
+    return _collectionTypeLabels[type] ?? '未收藏';
+  }
+
+  int _getTotalEpisodeCount(BangumiAnime anime) {
+    if (anime.totalEpisodes != null && anime.totalEpisodes! > 0) {
+      return anime.totalEpisodes!;
+    }
+    if (anime.episodeList != null && anime.episodeList!.isNotEmpty) {
+      return anime.episodeList!.length;
+    }
+    return 0;
+  }
+
+  String _formatEpisodeTotal(BangumiAnime anime) {
+    final total = _getTotalEpisodeCount(anime);
+    return total > 0 ? total.toString() : '-';
+  }
+
+  Future<bool> _syncBangumiCollection({
+    int? rating,
+    int? collectionType,
+    String? comment,
+    int? episodeStatus,
+  }) async {
+    if (_detailedAnime == null) return false;
+
+    if (!BangumiApiService.isLoggedIn) {
+      try {
+        await BangumiApiService.initialize();
+      } catch (e) {
+        debugPrint('[番剧详情] 初始化Bangumi API失败: $e');
+      }
+    }
+
+    if (!BangumiApiService.isLoggedIn) {
+      return false;
+    }
+
+    final subjectId =
+        _bangumiSubjectId ?? _extractBangumiSubjectId(_detailedAnime!);
+    if (subjectId == null) {
+      return false;
+    }
+
+    final int normalizedType;
+    if (collectionType != null && collectionType >= 1 && collectionType <= 5) {
+      normalizedType = collectionType;
+    } else {
+      normalizedType = _bangumiCollectionType != 0 ? _bangumiCollectionType : 3;
+    }
+
+    final int? ratingPayload =
+        (rating != null && rating >= 1 && rating <= 10) ? rating : null;
+    final int totalEpisodes = _getTotalEpisodeCount(_detailedAnime!);
+    final int normalizedEpisodeStatus = (() {
+      final int base = episodeStatus ?? _bangumiEpisodeStatus;
+      if (totalEpisodes > 0) {
+        return base.clamp(0, totalEpisodes);
+      }
+      return base.clamp(0, 999);
+    })();
+    final String? commentPayload = comment == null ? null : comment.trim();
+
+    try {
+      Map<String, dynamic> result;
+      if (_hasBangumiCollection) {
+        result = await BangumiApiService.updateUserCollection(
+          subjectId,
+          type: normalizedType,
+          comment: commentPayload,
+          rate: ratingPayload,
+          epStatus: normalizedEpisodeStatus,
+        );
+      } else {
+        result = await BangumiApiService.addUserCollection(
+          subjectId,
+          normalizedType,
+          rate: ratingPayload,
+          epStatus: normalizedEpisodeStatus,
+          comment: commentPayload,
+        );
+      }
+
+      if (result['success'] == true) {
+        if (mounted) {
+          setState(() {
+            _bangumiSubjectId = subjectId;
+            _hasBangumiCollection = true;
+            _bangumiCollectionType = normalizedType;
+            _bangumiEpisodeStatus = normalizedEpisodeStatus;
+            if (commentPayload != null) {
+              _bangumiComment =
+                  commentPayload.isNotEmpty ? commentPayload : null;
+            }
+            if (ratingPayload != null) {
+              _bangumiUserRating = ratingPayload;
+            }
+          });
+        }
+        return true;
+      }
+
+      debugPrint('[番剧详情] Bangumi收藏更新失败: ${result['message']}');
+    } catch (e) {
+      debugPrint('[番剧详情] Bangumi收藏更新异常: $e');
+    }
+
+    return false;
   }
 
   static const Map<int, String> _weekdays = {
@@ -439,7 +781,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         airWeekday != null && _weekdays.containsKey(airWeekday)
             ? _weekdays[airWeekday]!
             : '待定';
-    
+
     // -- 开始修改 --
     String coverImageUrl = sharedSummary?.imageUrl ?? anime.imageUrl;
     if (kIsWeb) {
@@ -563,99 +905,179 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   child: _buildRatingStars(bangumiRatingValue.toDouble())),
               TextSpan(
                   text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
                       color: Colors.yellow[600],
                       fontWeight: FontWeight.bold,
                       fontSize: 14)),
               TextSpan(
                   text: bangumiEvaluationText,
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
                       color: Colors.white.withOpacity(0.7), fontSize: 12))
             ])),
             const SizedBox(height: 6),
           ],
-          
-          // 弹弹play用户评分区域（仅在登录时显示）
-          if (DandanplayService.isLoggedIn) ...[
+
+          // Bangumi云端收藏信息
+          if (BangumiApiService.isLoggedIn) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 我的打分显示
-                if (_userRating > 0) ...[
+                if (_isLoadingBangumiCollection)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white.withOpacity(0.8)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '正在加载Bangumi收藏信息...',
+                        style: valueStyle.copyWith(fontSize: 12),
+                      ),
+                    ],
+                  )
+                else
                   RichText(
-                    text: TextSpan(children: [
-                      TextSpan(text: '我的打分: ', style: boldWhiteKeyStyle.copyWith(color: Colors.blue)),
-                      TextSpan(
-                        text: '$_userRating 分 ',
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      TextSpan(
-                        text: '(${_ratingEvaluationMap[_userRating] ?? ''})',
-                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                          color: Colors.blue.withOpacity(0.7),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ]),
-                  ),
-                  const SizedBox(width: 12),
-                ],
-                
-                // 我要打分按钮
-                GestureDetector(
-                  onTap: _isSubmittingRating ? null : _showRatingDialog,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.2),
-                      border: Border.all(
-                        color: Colors.blue.withOpacity(0.6),
-                        width: 1,
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    text: TextSpan(
+                      style: valueStyle.copyWith(fontSize: 12),
                       children: [
-                        if (_isLoadingUserRating || _isSubmittingRating) ...[
-                          const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: Colors.blue,
+                        const TextSpan(
+                          text: '我的Bangumi评分: ',
+                          style: TextStyle(
+                              color: Color(0xFFEB4994),
+                              fontWeight: FontWeight.bold),
+                        ),
+                        if (_bangumiUserRating > 0) ...[
+                          TextSpan(
+                            text: '$_bangumiUserRating 分',
+                            style: const TextStyle(
+                              color: Color(0xFFEB4994),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
                             ),
                           ),
-                          const SizedBox(width: 4),
+                          TextSpan(
+                            text: _ratingEvaluationMap[_bangumiUserRating] !=
+                                    null
+                                ? ' (${_ratingEvaluationMap[_bangumiUserRating]})'
+                                : '',
+                            style: TextStyle(
+                              color: const Color(0xFFEB4994).withOpacity(0.75),
+                              fontSize: 12,
+                            ),
+                          ),
                         ] else
-                          Icon(
-                            _userRating > 0 ? Ionicons.star : Ionicons.star_outline,
-                            color: Colors.blue,
-                            size: 14,
+                          const TextSpan(
+                            text: '未评分',
+                            style: TextStyle(color: Colors.white70),
                           ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _userRating > 0 ? '修改评分' : '我要打分',
-                          style: const TextStyle(
-                            color: Colors.blue,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
                       ],
                     ),
+                  ),
+                const SizedBox(width: 12),
+                TextButton.icon(
+                  onPressed: (_isLoadingBangumiCollection ||
+                          _isSavingBangumiCollection)
+                      ? null
+                      : _showRatingDialog,
+                  style: ButtonStyle(
+                    foregroundColor: MaterialStateProperty.resolveWith(
+                      (states) => Colors.white.withOpacity(
+                        states.contains(MaterialState.disabled) ? 0.45 : 0.9,
+                      ),
+                    ),
+                  ),
+                  icon: _isSavingBangumiCollection
+                      ? SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Theme.of(context).colorScheme.primary),
+                          ),
+                        )
+                      : const Icon(Icons.edit, size: 16),
+                  label: const Text(
+                    '编辑Bangumi评分',
+                    style: TextStyle(fontSize: 12),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 6),
+            if (!_isLoadingBangumiCollection && _hasBangumiCollection) ...[
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    '收藏状态: ${_collectionTypeLabel(_bangumiCollectionType)}',
+                    style: valueStyle.copyWith(fontSize: 12),
+                  ),
+                  Text(
+                    '观看进度: ${_bangumiEpisodeStatus}/${_formatEpisodeTotal(anime)}',
+                    style: valueStyle.copyWith(fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+            ] else if (!_isLoadingBangumiCollection) ...[
+              Text(
+                '尚未在Bangumi收藏此番剧',
+                style: valueStyle.copyWith(fontSize: 12, color: Colors.white70),
+              ),
+              const SizedBox(height: 6),
+            ],
+            if (!_isLoadingBangumiCollection)
+              Builder(builder: (context) {
+                if (_bangumiComment != null && _bangumiComment!.isNotEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 6.0),
+                    padding: const EdgeInsets.all(8.0),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.15),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '我的Bangumi短评',
+                          style: boldWhiteKeyStyle.copyWith(
+                              fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _bangumiComment!,
+                          style: valueStyle.copyWith(fontSize: 12, height: 1.4),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                if (_hasBangumiCollection) {
+                  return Text(
+                    '暂无Bangumi短评',
+                    style: valueStyle.copyWith(
+                        fontSize: 12, color: Colors.white70),
+                  );
+                }
+                return const SizedBox.shrink();
+              }),
           ],
           if (anime.ratingDetails != null &&
               anime.ratingDetails!.entries.any((entry) =>
@@ -689,8 +1111,8 @@ style: TextStyle(
                                     fontWeight: FontWeight.normal)),
                             TextSpan(
                                 text: score.toStringAsFixed(1),
-                                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                                locale: Locale("zh-Hans", "zh"),
+                                style: TextStyle(
                                     color: Colors.white.withOpacity(0.95)))
                           ]));
                     }).toList())),
@@ -791,7 +1213,6 @@ style: TextStyle(
     );
   }
 
-
   Widget _buildEpisodesListView(BangumiAnime anime) {
     final bool hasSharedEpisodes =
         _sharedEpisodeBuilder != null && _sharedEpisodeMap.isNotEmpty;
@@ -855,16 +1276,15 @@ style: TextStyle(
         final episode = anime.episodeList![index];
         final sharedEpisode =
             hasSharedEpisodes ? _sharedEpisodeMap[episode.id] : null;
-        final sharedPlayable = sharedEpisode != null
-            ? _sharedPlayableMap[episode.id]
-            : null;
+        final sharedPlayable =
+            sharedEpisode != null ? _sharedPlayableMap[episode.id] : null;
         final bool sharedPlayableAvailable = sharedEpisode != null &&
             sharedPlayable != null &&
             sharedEpisode.fileExists;
 
         return FutureBuilder<WatchHistoryItem?>(
-          future: WatchHistoryManager.getHistoryItemByEpisode(
-              anime.id, episode.id),
+          future:
+              WatchHistoryManager.getHistoryItemByEpisode(anime.id, episode.id),
           builder: (context, historySnapshot) {
             Widget leadingIcon =
                 const SizedBox(width: 20); // Default empty space
@@ -876,10 +1296,10 @@ style: TextStyle(
             double progress = sharedEpisode?.progress ?? 0.0;
             bool progressFromHistory = false;
             bool isFromScan = false;
-            final historyItem = historySnapshot.connectionState ==
-                    ConnectionState.done
-                ? historySnapshot.data
-                : null;
+            final historyItem =
+                historySnapshot.connectionState == ConnectionState.done
+                    ? historySnapshot.data
+                    : null;
 
             if (historyItem != null) {
               final historyProgress = historyItem.watchProgress;
@@ -961,7 +1381,9 @@ style: TextStyle(
                             if (_dandanplayWatchStatus[episode.id] == true)
                               const SizedBox(width: 4),
                             Text(
-                              _dandanplayWatchStatus[episode.id] == true ? '已看' : '',
+                              _dandanplayWatchStatus[episode.id] == true
+                                  ? '已看'
+                                  : '',
                               locale: const Locale('zh-Hans', 'zh'),
                               style: TextStyle(
                                 color: Colors.green.withOpacity(0.9),
@@ -1001,8 +1423,7 @@ style: TextStyle(
                     return;
                   }
 
-                  if (historySnapshot.connectionState ==
-                          ConnectionState.done &&
+                  if (historySnapshot.connectionState == ConnectionState.done &&
                       historyItem != null &&
                       historyItem.filePath.isNotEmpty) {
                     final file = File(historyItem.filePath);
@@ -1046,13 +1467,13 @@ style: TextStyle(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text('加载详情失败:',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white.withOpacity(0.8))),
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(color: Colors.white.withOpacity(0.8))),
               const SizedBox(height: 8),
               Text(
                 _error ?? '未知错误',
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.white.withOpacity(0.7)),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -1060,15 +1481,16 @@ style: TextStyle(color: Colors.white.withOpacity(0.7)),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white.withOpacity(0.2)),
                 onPressed: _fetchAnimeDetails,
-                child: const Text('重试', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white)),
+                child: const Text('重试',
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: Colors.white)),
               ),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child:
-                    const Text('关闭', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+                child: const Text('关闭',
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: Colors.white70)),
               ),
             ],
           ),
@@ -1085,13 +1507,12 @@ style: TextStyle(color: Colors.white70)),
         : anime.name;
     // 获取是否启用页面切换动画
     final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
-    
+
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-          child: 
-              Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
@@ -1142,7 +1563,7 @@ style: TextStyle(color: Colors.white70)),
                     ],
                   ),
                 ),
-              
+
               // 收藏按钮（仅当登录弹弹play时显示）
               if (DandanplayService.isLoggedIn) ...[
                 IconButton(
@@ -1156,14 +1577,16 @@ style: TextStyle(color: Colors.white70)),
                           ),
                         )
                       : Icon(
-                          _isFavorited ? Ionicons.heart : Ionicons.heart_outline,
+                          _isFavorited
+                              ? Ionicons.heart
+                              : Ionicons.heart_outline,
                           color: _isFavorited ? Colors.red : Colors.white70,
                           size: 24,
                         ),
                   onPressed: _isTogglingFavorite ? null : _toggleFavorite,
                 ),
               ],
-              
+
               IconButton(
                 icon: const Icon(Ionicons.close_circle_outline,
                     color: Colors.white70, size: 28),
@@ -1187,15 +1610,29 @@ style: TextStyle(color: Colors.white70)),
           ),
           indicatorWeight: 3,
           tabs: const [
-            Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.document_text_outline, size: 18), SizedBox(width: 8), Text('简介')])),
-            Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.film_outline, size: 18), SizedBox(width: 8), Text('剧集')])),
+            Tab(
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                  Icon(Ionicons.document_text_outline, size: 18),
+                  SizedBox(width: 8),
+                  Text('简介')
+                ])),
+            Tab(
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                  Icon(Ionicons.film_outline, size: 18),
+                  SizedBox(width: 8),
+                  Text('剧集')
+                ])),
           ],
         ),
         Expanded(
           child: SwitchableView(
             enableAnimation: enableAnimation, // 使用外观设置的动画开关
             currentIndex: _tabController?.index ?? 0,
-            physics: enableAnimation 
+            physics: enableAnimation
                 ? const PageScrollPhysics() // 开启动画时使用页面滑动物理效果
                 : const NeverScrollableScrollPhysics(), // 关闭动画时禁止滑动
             onPageChanged: (index) {
@@ -1255,7 +1692,7 @@ style: TextStyle(color: Colors.white70)),
   void _openTagSearch() {
     // 获取当前番剧的标签列表
     final currentTags = _detailedAnime?.tags ?? [];
-    
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1337,19 +1774,118 @@ style: TextStyle(color: Colors.white70)),
   // 显示评分对话框
   void _showRatingDialog() {
     if (_detailedAnime == null) return;
-    
-    RatingDialog.show(
-      context: context,
-      animeTitle: _detailedAnime!.nameCn,
-      initialRating: _userRating,
-      onRatingSubmitted: _handleRatingSubmitted,
-    );
+
+    if (BangumiApiService.isLoggedIn) {
+      final initialRating =
+          _bangumiUserRating > 0 ? _bangumiUserRating : _userRating;
+      final initialType =
+          _bangumiCollectionType != 0 ? _bangumiCollectionType : 3;
+      final int totalEpisodes =
+          _detailedAnime != null ? _getTotalEpisodeCount(_detailedAnime!) : 0;
+
+      BangumiCollectionDialog.show(
+        context: context,
+        animeTitle: _detailedAnime!.nameCn,
+        initialRating: initialRating,
+        initialCollectionType: initialType,
+        initialComment: _bangumiComment,
+        initialEpisodeStatus: _bangumiEpisodeStatus,
+        totalEpisodes: totalEpisodes,
+        onSubmit: _handleBangumiCollectionSubmitted,
+      );
+    } else {
+      RatingDialog.show(
+        context: context,
+        animeTitle: _detailedAnime!.nameCn,
+        initialRating: _userRating,
+        onRatingSubmitted: _handleRatingSubmitted,
+      );
+    }
+  }
+
+  Future<void> _handleBangumiCollectionSubmitted(
+    BangumiCollectionSubmitResult result,
+  ) async {
+    if (_detailedAnime == null) return;
+
+    setState(() {
+      _isSavingBangumiCollection = true;
+    });
+
+    final int rating = result.rating;
+    final int collectionType = result.collectionType;
+    final String comment = result.comment.trim();
+    final int episodeStatus = result.episodeStatus;
+
+    bool bangumiSuccess = false;
+    Object? bangumiError;
+
+    final bool shouldSyncDandan = DandanplayService.isLoggedIn && rating >= 1;
+    bool dandanSuccess = !shouldSyncDandan;
+    Object? dandanError;
+
+    try {
+      bangumiSuccess = await _syncBangumiCollection(
+        rating: rating,
+        collectionType: collectionType,
+        comment: comment,
+        episodeStatus: episodeStatus,
+      );
+      if (!bangumiSuccess) {
+        bangumiError = '未知错误';
+      }
+    } catch (e) {
+      bangumiSuccess = false;
+      bangumiError = e;
+    }
+
+    if (shouldSyncDandan) {
+      try {
+        await DandanplayService.submitUserRating(
+          animeId: _detailedAnime!.id,
+          rating: rating,
+        );
+        dandanSuccess = true;
+        if (mounted) {
+          setState(() {
+            _userRating = rating;
+          });
+        }
+      } catch (e) {
+        dandanError = e;
+      }
+    } else if (mounted) {
+      setState(() {
+        _userRating = rating;
+      });
+    }
+
+    if (mounted) {
+      setState(() {
+        _isSavingBangumiCollection = false;
+      });
+
+      if (bangumiSuccess && dandanSuccess) {
+        final String message =
+            shouldSyncDandan ? 'Bangumi收藏与评分已同步' : 'Bangumi收藏已更新';
+        _showBlurSnackBar(context, message);
+      } else {
+        final List<String> parts = [];
+        if (!bangumiSuccess) {
+          parts.add('Bangumi: ${bangumiError ?? '更新失败'}');
+        }
+        if (!dandanSuccess) {
+          parts.add('弹弹play: ${dandanError ?? '评分同步失败'}');
+        }
+        _showBlurSnackBar(context, parts.join('；'));
+      }
+    }
   }
 
   // 处理评分提交
   Future<void> _handleRatingSubmitted(int rating) async {
     if (_detailedAnime == null) return;
-    
+
     setState(() {
       _isSubmittingRating = true;
     });
@@ -1359,13 +1895,19 @@ style: TextStyle(color: Colors.white70)),
         animeId: _detailedAnime!.id,
         rating: rating,
       );
-      
+
+      final bool bangumiSynced = await _syncBangumiCollection(rating: rating);
+
       if (mounted) {
         setState(() {
           _userRating = rating;
           _isSubmittingRating = false;
         });
-        _showBlurSnackBar(context, '评分提交成功');
+        if (bangumiSynced) {
+          _showBlurSnackBar(context, '评分提交成功，已同步Bangumi');
+        } else {
+          _showBlurSnackBar(context, '评分提交成功');
+        }
       }
     } catch (e) {
       debugPrint('[番剧详情] 提交评分失败: $e');
@@ -1419,7 +1961,7 @@ class _HoverableTagState extends State<_HoverableTag> {
                 linearGradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: _isHovered 
+                  colors: _isHovered
                       ? [
                           Colors.white.withOpacity(0.25),
                           Colors.white.withOpacity(0.15),
@@ -1449,15 +1991,14 @@ class _HoverableTagState extends State<_HoverableTag> {
                   ),
                   child: Text(
                     widget.tag,
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(
                       fontSize: 12,
-                      color: _isHovered 
-                          ? Colors.white 
+                      color: _isHovered
+                          ? Colors.white
                           : Colors.white.withOpacity(0.9),
-                      fontWeight: _isHovered 
-                          ? FontWeight.w600 
-                          : FontWeight.w500,
+                      fontWeight:
+                          _isHovered ? FontWeight.w600 : FontWeight.w500,
                     ),
                   ),
                 ),
