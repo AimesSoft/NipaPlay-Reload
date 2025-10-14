@@ -146,7 +146,7 @@ class AccountPageSelectionSheet extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
+                  color: color.withOpacity(0.8), // 提高透明度到80%，让颜色更亮
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Padding(

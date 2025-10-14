@@ -10,6 +10,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Material Design版本的账号页面
 class MaterialAccountPage extends StatefulWidget {
@@ -514,13 +515,56 @@ style: TextStyle(color: Colors.white70),
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          '需要在 https://next.bgm.tv/demo/access-token 创建访问令牌',
-          locale: Locale("zh-Hans", "zh"),
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
-          ),
+
+        // 可点击的URL链接
+        Row(
+          children: [
+            const Text(
+              '需要在 ',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+            GestureDetector(
+              onTap: () async {
+                const url = 'https://next.bgm.tv/demo/access-token';
+                try {
+                  final uri = Uri.parse(url);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } else {
+                    if (mounted) {
+                      BlurSnackBar.show(context, '无法打开链接');
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    BlurSnackBar.show(context, '打开链接失败：$e');
+                  }
+                }
+              },
+              child: const Text(
+                'https://next.bgm.tv/demo/access-token',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  color: Color(0xFF53A8DC), // 使用弹弹play的蓝色作为链接色
+                  fontSize: 12,
+                  decoration: TextDecoration.underline,
+                  decorationColor: Color(0xFF53A8DC),
+                ),
+              ),
+            ),
+            const Text(
+              ' 创建访问令牌',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         

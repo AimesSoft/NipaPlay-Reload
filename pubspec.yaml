@@ -144,6 +144,8 @@ flutter:
     - assets/images/logo512.png
     - assets/backempty.png
     - assets/nipaplay.png
+    - assets/dandanplay.png
+    - assets/bangumi.png
     - assets/images/main_image.png
     - assets/images/main_image_mobile.png
     - assets/subfont.ttf
