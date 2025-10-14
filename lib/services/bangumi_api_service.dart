@@ -188,7 +188,7 @@ class BangumiApiService {
   static Future<Map<String, dynamic>> _makeRequest(
     String method,
     String path, {
-    Map<String, dynamic>? body,
+    dynamic body,
     Map<String, String>? queryParams,
   }) async {
     if (_accessToken == null) {
@@ -473,21 +473,57 @@ class BangumiApiService {
   ) async {
     debugPrint('[Bangumi API] 批量更新剧集收藏状态: $subjectId, ${episodes.length}个剧集');
 
-    final body = <String, dynamic>{
-      'episode_id': episodes,
-    };
+    // 根据Bangumi API文档，请求体格式为：
+    // {"episode_id": [id1, id2, ...], "type": 收藏类型}
+    // 我们按type分组，分别发送请求
 
-    final result = await _makeRequest(
-        'PATCH', '/v0/users/-/collections/$subjectId/episodes',
-        body: body);
+    final Map<int, List<int>> typeGroups = {};
+    for (final episode in episodes) {
+      final int type = episode['type'] as int;
+      final int id = episode['id'] as int;
 
-    if (result['success']) {
-      debugPrint('[Bangumi API] 剧集收藏状态批量更新成功');
-    } else {
-      debugPrint('[Bangumi API] 剧集收藏状态批量更新失败: ${result['message']}');
+      if (!typeGroups.containsKey(type)) {
+        typeGroups[type] = [];
+      }
+      typeGroups[type]!.add(id);
     }
 
-    return result;
+    // 发送每个type组的请求
+    bool allSuccess = true;
+    String lastError = '';
+
+    for (final entry in typeGroups.entries) {
+      final int type = entry.key;
+      final List<int> episodeIds = entry.value;
+
+      // 跳过未收藏状态(type=0)，因为不需要发送请求
+      if (type == 0) continue;
+
+      final body = {
+        'episode_id': episodeIds,
+        'type': type,
+      };
+
+      final result = await _makeRequest(
+          'PATCH', '/v0/users/-/collections/$subjectId/episodes',
+          body: body);
+
+      if (!result['success']) {
+        allSuccess = false;
+        lastError = result['message'] ?? '未知错误';
+        debugPrint('[Bangumi API] 批量更新剧集收藏状态失败 (type=$type): ${result['message']}');
+      } else {
+        debugPrint('[Bangumi API] 批量更新剧集收藏状态成功 (type=$type, ${episodeIds.length}个剧集)');
+      }
+    }
+
+    if (allSuccess) {
+      debugPrint('[Bangumi API] 剧集收藏状态批量更新成功');
+      return {'success': true};
+    } else {
+      debugPrint('[Bangumi API] 剧集收藏状态批量更新失败: $lastError');
+      return {'success': false, 'message': lastError};
+    }
   }
 
   /// 获取条目信息
@@ -567,10 +603,11 @@ class BangumiApiService {
       'keyword': keyword,
     };
 
-    if (type != null)
+    if (type != null) {
       body['filter'] = {
         'type': [type]
       };
+    }
     if (tag != null && tag.isNotEmpty) {
       body['filter'] = (body['filter'] as Map<String, dynamic>?) ?? {};
       body['filter']['tag'] = tag;

@@ -741,24 +741,48 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       return;
     }
 
-    final List<Map<String, dynamic>> payload = [];
-    for (int index = 0; index < episodes.length; index++) {
-      final episodeId = episodes[index].id;
-      if (episodeId <= 0) continue;
-      final type = index < clampedTarget ? 2 : 0;
-      payload.add({'id': episodeId, 'type': type});
-    }
-
-    if (payload.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _bangumiEpisodeStatus = clampedTarget;
-        });
-      }
-      return;
-    }
-
     try {
+      // 先获取Bangumi的episode列表
+      final episodesResult = await BangumiApiService.getSubjectEpisodes(
+        subjectId,
+        type: 0, // 正片
+        limit: 200, // 获取更多episodes
+      );
+
+      if (!episodesResult['success'] || episodesResult['data'] == null) {
+        debugPrint('[番剧详情] 获取Bangumi episodes失败');
+        return;
+      }
+
+      final bangumiEpisodes = List<Map<String, dynamic>>.from(
+          episodesResult['data']['data'] ?? []);
+
+      if (bangumiEpisodes.isEmpty) {
+        debugPrint('[番剧详情] Bangumi episodes为空');
+        return;
+      }
+
+      // 建立episode映射（基于集数序号）
+      final List<Map<String, dynamic>> payload = [];
+      for (int index = 0; index < clampedTarget && index < bangumiEpisodes.length; index++) {
+        final bangumiEpisode = bangumiEpisodes[index];
+        final bangumiEpisodeId = bangumiEpisode['id'] as int?;
+
+        if (bangumiEpisodeId != null) {
+          final type = index < clampedTarget ? 2 : 0; // 2=看过, 0=未收藏
+          payload.add({'id': bangumiEpisodeId, 'type': type});
+        }
+      }
+
+      if (payload.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _bangumiEpisodeStatus = clampedTarget;
+          });
+        }
+        return;
+      }
+
       final result = await BangumiApiService.batchUpdateEpisodeCollections(
         subjectId,
         payload,
