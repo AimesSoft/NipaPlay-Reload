@@ -507,7 +507,9 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                     min: 0,
                     max: maxValue.toDouble(),
                     divisions: maxValue > 0 ? maxValue : null,
-                    onChanged: (value) => _updateEpisodeStatus(value.round()),
+                    onChanged: _isSubmitting
+                        ? null
+                        : (value) => _updateEpisodeStatus(value.round()),
                   ),
                 ),
               ),

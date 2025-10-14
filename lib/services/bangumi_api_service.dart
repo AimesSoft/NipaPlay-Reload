@@ -358,7 +358,6 @@ class BangumiApiService {
     String? comment,
     int? rate,
     bool? private,
-    int? epStatus,
   }) async {
     debugPrint('[Bangumi API] 添加收藏: subjectId=$subjectId, type=$type');
 
@@ -369,7 +368,6 @@ class BangumiApiService {
     if (comment != null) body['comment'] = comment;
     if (rate != null && rate >= 1 && rate <= 10) body['rate'] = rate;
     if (private != null) body['private'] = private;
-    if (epStatus != null && epStatus >= 0) body['ep_status'] = epStatus;
 
     final result = await _makeRequest(
         'POST', '/v0/users/-/collections/$subjectId',
@@ -397,7 +395,6 @@ class BangumiApiService {
     String? comment,
     int? rate,
     bool? private,
-    int? epStatus,
   }) async {
     debugPrint('[Bangumi API] 更新收藏状态: subjectId=$subjectId, type=$type');
 
@@ -407,7 +404,6 @@ class BangumiApiService {
     if (comment != null) body['comment'] = comment;
     if (rate != null && rate >= 1 && rate <= 10) body['rate'] = rate;
     if (private != null) body['private'] = private;
-    if (epStatus != null && epStatus >= 0) body['ep_status'] = epStatus;
 
     final result = await _makeRequest(
         'POST', '/v0/users/-/collections/$subjectId',

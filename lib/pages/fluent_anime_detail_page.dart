@@ -1361,14 +1361,6 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
 
     final int? ratingPayload =
         (rating != null && rating >= 1 && rating <= 10) ? rating : null;
-    final int totalEpisodes = _getTotalEpisodeCount(_detailedAnime!);
-    final int normalizedEpisodeStatus = (() {
-      final int base = episodeStatus ?? _bangumiEpisodeStatus;
-      if (totalEpisodes > 0) {
-        return base.clamp(0, totalEpisodes);
-      }
-      return base.clamp(0, 999);
-    })();
     final String? commentPayload = comment == null ? null : comment.trim();
 
     try {
@@ -1379,14 +1371,12 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
           type: normalizedType,
           comment: commentPayload,
           rate: ratingPayload,
-          epStatus: normalizedEpisodeStatus,
         );
       } else {
         result = await BangumiApiService.addUserCollection(
           subjectId,
           normalizedType,
           rate: ratingPayload,
-          epStatus: normalizedEpisodeStatus,
           comment: commentPayload,
         );
       }
@@ -1397,7 +1387,6 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
             _bangumiSubjectId = subjectId;
             _hasBangumiCollection = true;
             _bangumiCollectionType = normalizedType;
-            _bangumiEpisodeStatus = normalizedEpisodeStatus;
             if (commentPayload != null) {
               _bangumiComment =
                   commentPayload.isNotEmpty ? commentPayload : null;
@@ -1407,6 +1396,15 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
             }
           });
         }
+
+        if (episodeStatus != null) {
+          if (episodeStatus != _bangumiEpisodeStatus) {
+            await _syncBangumiEpisodeProgress(subjectId, episodeStatus);
+          } else if (mounted) {
+            _bangumiEpisodeStatus = episodeStatus;
+          }
+        }
+
         return true;
       }
 
@@ -1415,6 +1413,62 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
       debugPrint('[番剧详情] Bangumi收藏更新异常: $e');
     }
     return false;
+  }
+
+  Future<void> _syncBangumiEpisodeProgress(
+      int subjectId, int desiredStatus) async {
+    final episodes = _detailedAnime?.episodeList;
+    final totalEpisodes = _getTotalEpisodeCount(_detailedAnime!);
+    final int clampedTarget = totalEpisodes > 0
+        ? desiredStatus.clamp(0, totalEpisodes)
+        : desiredStatus.clamp(0, 999);
+
+    if (episodes == null || episodes.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _bangumiEpisodeStatus = clampedTarget;
+        });
+      }
+      return;
+    }
+
+    final List<Map<String, dynamic>> payload = [];
+    for (int index = 0; index < episodes.length; index++) {
+      final episodeId = episodes[index].id;
+      if (episodeId <= 0) continue;
+      final type = index < clampedTarget ? 2 : 0;
+      payload.add({'id': episodeId, 'type': type});
+    }
+
+    if (payload.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _bangumiEpisodeStatus = clampedTarget;
+        });
+      }
+      return;
+    }
+
+    try {
+      final result = await BangumiApiService.batchUpdateEpisodeCollections(
+        subjectId,
+        payload,
+      );
+
+      if (result['success'] == true) {
+        if (mounted) {
+          setState(() {
+            _bangumiEpisodeStatus = clampedTarget;
+          });
+        }
+      } else {
+        final message = result['message'] ?? '进度同步失败';
+        throw Exception(message);
+      }
+    } catch (e) {
+      debugPrint('[番剧详情] Bangumi进度同步异常: $e');
+      rethrow;
+    }
   }
 
   // 显示评分对话框
@@ -1513,7 +1567,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
 
       if (bangumiSuccess && dandanSuccess) {
         final String message =
-            shouldSyncDandan ? 'Bangumi收藏与评分已同步' : 'Bangumi收藏已更新';
+            shouldSyncDandan ? 'Bangumi收藏、评分与进度已同步' : 'Bangumi收藏已更新';
         MessageHelper.showMessage(context, message);
       } else {
         final List<String> parts = [];
