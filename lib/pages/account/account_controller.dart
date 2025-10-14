@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/services/bangumi_api_service.dart';
+import 'package:nipaplay/services/bangumi_sync_service.dart';
 
 /// 账号页面的业务逻辑控制器
 /// 包含所有共享的功能和状态管理
@@ -13,17 +15,27 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
   final registerPasswordController = TextEditingController();
   final registerEmailController = TextEditingController();
   final registerScreenNameController = TextEditingController();
+  // Bangumi相关控制器
+  final bangumiTokenController = TextEditingController();
   
   // 状态变量
   bool isLoggedIn = false;
   String username = '';
   bool isLoading = false;
   String? avatarUrl;
+  
+  // Bangumi相关状态
+  bool isBangumiLoggedIn = false;
+  Map<String, dynamic>? bangumiUserInfo;
+  bool isBangumiSyncing = false;
+  String bangumiSyncStatus = '';
+  DateTime? lastBangumiSyncTime;
 
   @override
   void initState() {
     super.initState();
     loadLoginStatus();
+    loadBangumiStatus();
   }
 
   @override
@@ -34,6 +46,7 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     registerPasswordController.dispose();
     registerEmailController.dispose();
     registerScreenNameController.dispose();
+    bangumiTokenController.dispose();
     super.dispose();
   }
 
@@ -209,4 +222,217 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
 
   /// 显示注册对话框 - 子类需要实现具体的UI
   void showRegisterDialog();
+
+  /// 加载Bangumi登录状态
+  Future<void> loadBangumiStatus() async {
+    await BangumiApiService.initialize();
+    
+    final stats = await BangumiSyncService.getSyncStatistics();
+    
+    if (mounted) {
+      setState(() {
+        isBangumiLoggedIn = BangumiApiService.isLoggedIn;
+        bangumiUserInfo = BangumiApiService.userInfo;
+        
+        if (stats['success']) {
+          final lastSyncTimeStr = stats['lastSyncTime'] as String?;
+          if (lastSyncTimeStr != null) {
+            try {
+              lastBangumiSyncTime = DateTime.parse(lastSyncTimeStr);
+            } catch (e) {
+              lastBangumiSyncTime = null;
+            }
+          }
+        }
+      });
+    }
+  }
+
+  /// 保存Bangumi访问令牌
+  Future<void> saveBangumiToken() async {
+    final logService = DebugLogService();
+    
+    if (bangumiTokenController.text.trim().isEmpty) {
+      showMessage('请输入访问令牌');
+      return;
+    }
+
+    logService.addLog('[账号控制器] 保存Bangumi访问令牌', level: 'INFO', tag: 'BangumiSync');
+
+    if (mounted) {
+      setState(() {
+        isLoading = true;
+      });
+    }
+
+    try {
+      final result = await BangumiApiService.saveAccessToken(bangumiTokenController.text.trim());
+
+      logService.addLog('[账号控制器] Bangumi令牌保存结果: ${result.toString()}', level: 'INFO', tag: 'BangumiSync');
+
+      if (result['success']) {
+        await loadBangumiStatus();
+        bangumiTokenController.clear();
+        if (mounted) {
+          showMessage(result['message'] ?? 'Bangumi授权成功');
+        }
+      } else {
+        if (mounted) {
+          showMessage(result['message'] ?? 'Bangumi授权失败');
+        }
+      }
+    } catch (e, stackTrace) {
+      logService.addError('[账号控制器] 保存Bangumi令牌时发生异常: $e', tag: 'BangumiSync');
+      logService.addError('[账号控制器] 异常堆栈: $stackTrace', tag: 'BangumiSync');
+      if (mounted) {
+        showMessage('保存失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// 清除Bangumi访问令牌
+  Future<void> clearBangumiToken() async {
+    final logService = DebugLogService();
+    
+    logService.addLog('[账号控制器] 清除Bangumi访问令牌', level: 'INFO', tag: 'BangumiSync');
+
+    try {
+      final result = await BangumiApiService.clearAccessToken();
+
+      if (result['success']) {
+        await loadBangumiStatus();
+        if (mounted) {
+          showMessage(result['message'] ?? 'Bangumi授权已清除');
+        }
+      } else {
+        if (mounted) {
+          showMessage(result['message'] ?? '清除失败');
+        }
+      }
+    } catch (e) {
+      logService.addError('[账号控制器] 清除Bangumi令牌时发生异常: $e', tag: 'BangumiSync');
+      if (mounted) {
+        showMessage('清除失败: $e');
+      }
+    }
+  }
+
+  /// 执行Bangumi同步
+  Future<void> performBangumiSync({bool forceFullSync = false}) async {
+    final logService = DebugLogService();
+    
+    if (!isBangumiLoggedIn) {
+      showMessage('请先设置Bangumi访问令牌');
+      return;
+    }
+
+    logService.addLog('[账号控制器] 开始Bangumi同步，全量同步: $forceFullSync', level: 'INFO', tag: 'BangumiSync');
+
+    if (mounted) {
+      setState(() {
+        isBangumiSyncing = true;
+        bangumiSyncStatus = '准备同步...';
+      });
+    }
+
+    try {
+      final result = await BangumiSyncService.syncWatchHistoryToBangumi(
+        forceFullSync: forceFullSync,
+        progressCallback: (status) {
+          if (mounted) {
+            setState(() {
+              bangumiSyncStatus = status;
+            });
+          }
+        },
+        countCallback: (current, total) {
+          if (mounted) {
+            setState(() {
+              bangumiSyncStatus = '同步中... ($current/$total)';
+            });
+          }
+        },
+      );
+
+      logService.addLog('[账号控制器] Bangumi同步结果: ${result.toString()}', level: 'INFO', tag: 'BangumiSync');
+
+      if (result['success']) {
+        await loadBangumiStatus();
+        if (mounted) {
+          showMessage(result['message'] ?? '同步完成');
+        }
+      } else {
+        if (mounted) {
+          showMessage(result['message'] ?? '同步失败');
+        }
+      }
+    } catch (e, stackTrace) {
+      logService.addError('[账号控制器] Bangumi同步时发生异常: $e', tag: 'BangumiSync');
+      logService.addError('[账号控制器] 异常堆栈: $stackTrace', tag: 'BangumiSync');
+      if (mounted) {
+        showMessage('同步失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isBangumiSyncing = false;
+          bangumiSyncStatus = '';
+        });
+      }
+    }
+  }
+
+  /// 测试Bangumi连接
+  Future<void> testBangumiConnection() async {
+    if (!isBangumiLoggedIn) {
+      showMessage('请先设置Bangumi访问令牌');
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        isLoading = true;
+      });
+    }
+
+    try {
+      final result = await BangumiSyncService.testBangumiConnection();
+
+      if (result['success']) {
+        showMessage('连接测试成功');
+      } else {
+        showMessage(result['message'] ?? '连接测试失败');
+      }
+    } catch (e) {
+      showMessage('连接测试失败: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// 清除Bangumi同步缓存
+  Future<void> clearBangumiSyncCache() async {
+    try {
+      final result = await BangumiSyncService.clearSyncCache();
+      
+      if (result['success']) {
+        await loadBangumiStatus();
+        showMessage(result['message'] ?? '缓存已清除');
+      } else {
+        showMessage(result['message'] ?? '清除缓存失败');
+      }
+    } catch (e) {
+      showMessage('清除缓存失败: $e');
+    }
+  }
 }
