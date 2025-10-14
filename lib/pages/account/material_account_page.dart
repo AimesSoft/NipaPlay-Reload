@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/account_page_selection_sheet.dart';
 import 'account_controller.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 /// Material Design版本的账号页面
 class MaterialAccountPage extends StatefulWidget {
@@ -16,8 +19,22 @@ class MaterialAccountPage extends StatefulWidget {
   State<MaterialAccountPage> createState() => _MaterialAccountPageState();
 }
 
-class _MaterialAccountPageState extends State<MaterialAccountPage> 
+class _MaterialAccountPageState extends State<MaterialAccountPage>
     with AccountPageController {
+
+  // 页面切换状态：true为弹弹play页面，false为Bangumi页面
+  bool _showDandanplayPage = true;
+
+  // 显示页面选择弹窗
+  Future<void> _showPageSelectionDialog() async {
+    final result = await AccountPageSelectionSheet.show(context);
+
+    if (result != null && mounted) {
+      setState(() {
+        _showDandanplayPage = result == 'dandanplay';
+      });
+    }
+  }
 
   @override
   void showMessage(String message) {
@@ -124,52 +141,42 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '弹弹play账号',
-              locale:Locale("zh-Hans","zh"),
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (isLoggedIn) ...[
-              _buildLoggedInView(blurValue),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 0.5,
-                        ),
-                      ),
-                      child: MaterialUserActivity(key: ValueKey(username)),
-                    ),
+      body: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 页面标题
+                Text(
+                  _showDandanplayPage ? '弹弹play账号' : 'Bangumi同步',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
-              ),
-            ] else ...[
-              _buildLoggedOutView(blurValue),
-              const SizedBox(height: 24),
-            ],
-            // Bangumi同步部分
-            _buildBangumiSyncSection(blurValue),
-          ],
-        ),
+                const SizedBox(height: 16),
+                // 根据状态显示不同的内容
+                Expanded(
+                  child: _showDandanplayPage ? _buildDandanplayPage(blurValue) : _buildBangumiPage(blurValue),
+                ),
+              ],
+            ),
+          ),
+          // 右下角切换按钮
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionGlassButton(
+              iconData: Ionicons.layers_outline,
+              onPressed: _showPageSelectionDialog,
+              description: '选择页面\n在弹弹play账号和Bangumi同步之间切换',
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -621,5 +628,46 @@ style: TextStyle(color: Colors.white70),
     } else {
       return '刚刚';
     }
+  }
+
+  // 构建弹弹play页面内容
+  Widget _buildDandanplayPage(double blurValue) {
+    return Column(
+      children: [
+        if (isLoggedIn) ...[
+          _buildLoggedInView(blurValue),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: MaterialUserActivity(key: ValueKey(username)),
+                ),
+              ),
+            ),
+          ),
+        ] else ...[
+          _buildLoggedOutView(blurValue),
+        ],
+      ],
+    );
+  }
+
+  // 构建Bangumi页面内容
+  Widget _buildBangumiPage(double blurValue) {
+    return SingleChildScrollView(
+      child: _buildBangumiSyncSection(blurValue),
+    );
   }
 }
