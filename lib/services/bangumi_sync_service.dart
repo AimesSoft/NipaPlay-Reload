@@ -290,7 +290,7 @@ class BangumiSyncService {
         final addResult = await BangumiApiService.addUserCollection(
           subjectId,
           targetCollectionType,
-          comment: '通过NipaPlay同步新增收藏',
+          //comment: '通过NipaPlay同步新增收藏',
         );
         
         if (!addResult['success']) {
@@ -323,7 +323,7 @@ class BangumiSyncService {
       final collectionResult = await BangumiApiService.updateUserCollection(
         subjectId,
         targetCollectionType,
-        comment: '通过NipaPlay同步 (观看${watchedEpisodesCount}/${episodes.length}集)',
+        //comment: '通过NipaPlay同步 (观看${watchedEpisodesCount}/${episodes.length}集)',
       );
 
       if (!collectionResult['success']) {
