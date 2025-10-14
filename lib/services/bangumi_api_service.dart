@@ -413,39 +413,6 @@ class BangumiApiService {
     return result;
   }
 
-  /// 更新用户收藏评分
-  static Future<Map<String, dynamic>> updateUserCollectionRating(
-    int subjectId,
-    int rating,
-  ) async {
-    debugPrint('[Bangumi API] 更新收藏评分: subjectId=$subjectId, rating=$rating');
-
-    if (rating < 1 || rating > 10) {
-      return {
-        'success': false,
-        'message': '评分必须在1-10之间',
-      };
-    }
-
-    final body = <String, dynamic>{
-      'score': rating,
-    };
-
-    final result = await _makeRequest(
-      'PUT',
-      '/v0/users/-/collections/$subjectId/rating',
-      body: body,
-    );
-
-    if (result['success']) {
-      debugPrint('[Bangumi API] 收藏评分更新成功');
-    } else {
-      debugPrint('[Bangumi API] 收藏评分更新失败: ${result['message']}');
-    }
-
-    return result;
-  }
-
   /// 获取用户剧集收藏状态
   ///
   /// [subjectId] 条目ID

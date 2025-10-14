@@ -695,24 +695,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             }
           });
         }
-        bool ratingUpdated = true;
         if (ratingPayload != null) {
-          final ratingResult =
-              await BangumiApiService.updateUserCollectionRating(
-            subjectId,
-            ratingPayload,
-          );
-          ratingUpdated = ratingResult['success'] == true;
-          if (ratingUpdated && mounted) {
-            setState(() {
-              _bangumiUserRating = ratingPayload;
-            });
-          } else if (!ratingUpdated) {
-            final message = ratingResult['message'] ?? '评分更新失败';
-            throw Exception('Bangumi评分更新失败: $message');
-          }
+          debugPrint('[番剧详情] 跳过Bangumi评分同步，评分仅同步到弹弹play');
         }
-        return ratingUpdated;
+        return true;
       }
 
       debugPrint('[番剧详情] Bangumi收藏更新失败: ${result['message']}');
@@ -1848,8 +1834,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       });
 
       if (bangumiSuccess && dandanSuccess) {
-        final String message =
-            shouldSyncDandan ? '收藏信息已更新，评分已同步' : 'Bangumi收藏已更新';
+        final String message = shouldSyncDandan
+            ? 'Bangumi收藏已更新，评分已同步到弹弹play'
+            : 'Bangumi收藏已更新';
         _showBlurSnackBar(context, message);
       } else {
         final List<String> parts = [];
