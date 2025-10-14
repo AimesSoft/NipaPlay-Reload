@@ -3,13 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/account_page_selection_sheet.dart';
 import 'account_controller.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Material Design版本的账号页面
@@ -25,17 +22,6 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   // 页面切换状态：true为弹弹play页面，false为Bangumi页面
   bool _showDandanplayPage = true;
-
-  // 显示页面选择弹窗
-  Future<void> _showPageSelectionDialog() async {
-    final result = await AccountPageSelectionSheet.show(context);
-
-    if (result != null && mounted) {
-      setState(() {
-        _showDandanplayPage = result == 'dandanplay';
-      });
-    }
-  }
 
   @override
   void showMessage(String message) {
@@ -142,42 +128,110 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 页面标题
-                Text(
-                  _showDandanplayPage ? '弹弹play账号' : 'Bangumi同步',
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 自定义TabView样式的选择器
+            _buildCustomTabSelector(blurValue),
+            const SizedBox(height: 16),
+            // 根据状态显示不同的内容
+            Expanded(
+              child: _showDandanplayPage 
+                  ? _buildDandanplayPage(blurValue) 
+                  : _buildBangumiPage(blurValue),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建自定义Tab选择器
+  Widget _buildCustomTabSelector(double blurValue) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 0.5,
+            ),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // 计算每个选项的准确宽度
+              final optionWidth = (constraints.maxWidth - 8) / 2; // 减去左右边距
+              
+              return Stack(
+                children: [
+                  // 滑动指示器（放在底层）
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    left: _showDandanplayPage ? 4 : null,
+                    right: _showDandanplayPage ? null : 4,
+                    top: 4,
+                    bottom: 4,
+                    width: optionWidth,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                // 根据状态显示不同的内容
-                Expanded(
-                  child: _showDandanplayPage ? _buildDandanplayPage(blurValue) : _buildBangumiPage(blurValue),
-                ),
-              ],
-            ),
+                  // 可点击选项（只有一层，带文字）
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildTabOption('Dandanplay账户', true),
+                      ),
+                      Expanded(
+                        child: _buildTabOption('Bangumi同步', false),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
-          // 右下角切换按钮
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: FloatingActionGlassButton(
-              iconData: Ionicons.layers_outline,
-              onPressed: _showPageSelectionDialog,
-              description: '选择页面\n在弹弹play账号和Bangumi同步之间切换',
-            ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabOption(String text, bool isDandanplay) {
+    final isActive = _showDandanplayPage == isDandanplay;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showDandanplayPage = isDandanplay;
+        });
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        alignment: Alignment.center,
+        child: Text(
+          text,
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(
+            color: isActive ? Colors.white : Colors.white70,
+            fontSize: 14,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
-        ],
+        ),
       ),
     );
   }
