@@ -678,13 +678,13 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                         TextSpan(
                           text: '我的Bangumi评分: ',
                           style: boldKeyStyle?.copyWith(
-                              color: FluentTheme.of(context).accentColor),
+                              color: const Color(0xFFEB4994)),
                         ),
                         if (_bangumiUserRating > 0) ...[
                           TextSpan(
                             text: '$_bangumiUserRating 分',
-                            style: TextStyle(
-                              color: FluentTheme.of(context).accentColor,
+                            style: const TextStyle(
+                              color: Color(0xFFEB4994),
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
                             ),
@@ -698,9 +698,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                                 .typography
                                 .caption
                                 ?.copyWith(
-                                  color: FluentTheme.of(context)
-                                      .accentColor
-                                      .withOpacity(0.7),
+                                  color:
+                                      const Color(0xFFEB4994).withOpacity(0.75),
                                   fontSize: 12,
                                 ),
                           ),
@@ -1331,6 +1330,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
     int? rating,
     int? collectionType,
     String? comment,
+    int? episodeStatus,
   }) async {
     if (_detailedAnime == null) return false;
 
@@ -1361,6 +1361,14 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
 
     final int? ratingPayload =
         (rating != null && rating >= 1 && rating <= 10) ? rating : null;
+    final int totalEpisodes = _getTotalEpisodeCount(_detailedAnime!);
+    final int normalizedEpisodeStatus = (() {
+      final int base = episodeStatus ?? _bangumiEpisodeStatus;
+      if (totalEpisodes > 0) {
+        return base.clamp(0, totalEpisodes);
+      }
+      return base.clamp(0, 999);
+    })();
     final String? commentPayload = comment == null ? null : comment.trim();
 
     try {
@@ -1371,12 +1379,14 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
           type: normalizedType,
           comment: commentPayload,
           rate: ratingPayload,
+          epStatus: normalizedEpisodeStatus,
         );
       } else {
         result = await BangumiApiService.addUserCollection(
           subjectId,
           normalizedType,
           rate: ratingPayload,
+          epStatus: normalizedEpisodeStatus,
           comment: commentPayload,
         );
       }
@@ -1387,6 +1397,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
             _bangumiSubjectId = subjectId;
             _hasBangumiCollection = true;
             _bangumiCollectionType = normalizedType;
+            _bangumiEpisodeStatus = normalizedEpisodeStatus;
             if (commentPayload != null) {
               _bangumiComment =
                   commentPayload.isNotEmpty ? commentPayload : null;
@@ -1415,6 +1426,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
           _bangumiUserRating > 0 ? _bangumiUserRating : _userRating;
       final initialType =
           _bangumiCollectionType != 0 ? _bangumiCollectionType : 3;
+      final int totalEpisodes =
+          _detailedAnime != null ? _getTotalEpisodeCount(_detailedAnime!) : 0;
 
       BangumiCollectionDialog.show(
         context: context,
@@ -1422,6 +1435,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
         initialRating: initialRating,
         initialCollectionType: initialType,
         initialComment: _bangumiComment,
+        initialEpisodeStatus: _bangumiEpisodeStatus,
+        totalEpisodes: totalEpisodes,
         onSubmit: _handleBangumiCollectionSubmitted,
       );
     } else {
@@ -1446,6 +1461,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
     final int rating = result.rating;
     final int collectionType = result.collectionType;
     final String comment = result.comment.trim();
+    final int episodeStatus = result.episodeStatus;
 
     bool bangumiSuccess = false;
     Object? bangumiError;
@@ -1459,6 +1475,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
         rating: rating,
         collectionType: collectionType,
         comment: comment,
+        episodeStatus: episodeStatus,
       );
       if (!bangumiSuccess) {
         bangumiError = '未知错误';
@@ -1495,9 +1512,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
       });
 
       if (bangumiSuccess && dandanSuccess) {
-        final String message = shouldSyncDandan
-            ? 'Bangumi收藏与评分已同步'
-            : 'Bangumi收藏已更新';
+        final String message =
+            shouldSyncDandan ? 'Bangumi收藏与评分已同步' : 'Bangumi收藏已更新';
         MessageHelper.showMessage(context, message);
       } else {
         final List<String> parts = [];

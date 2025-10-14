@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -8,11 +9,13 @@ class BangumiCollectionSubmitResult {
   final int rating;
   final int collectionType;
   final String comment;
+  final int episodeStatus;
 
   const BangumiCollectionSubmitResult({
     required this.rating,
     required this.collectionType,
     required this.comment,
+    required this.episodeStatus,
   });
 }
 
@@ -21,6 +24,8 @@ class BangumiCollectionDialog extends StatefulWidget {
   final int initialRating;
   final int initialCollectionType;
   final String? initialComment;
+  final int initialEpisodeStatus;
+  final int totalEpisodes;
   final Future<void> Function(BangumiCollectionSubmitResult result) onSubmit;
 
   const BangumiCollectionDialog({
@@ -29,6 +34,8 @@ class BangumiCollectionDialog extends StatefulWidget {
     required this.initialRating,
     required this.initialCollectionType,
     this.initialComment,
+    required this.initialEpisodeStatus,
+    required this.totalEpisodes,
     required this.onSubmit,
   });
 
@@ -38,6 +45,8 @@ class BangumiCollectionDialog extends StatefulWidget {
     required int initialRating,
     required int initialCollectionType,
     String? initialComment,
+    required int initialEpisodeStatus,
+    required int totalEpisodes,
     required Future<void> Function(BangumiCollectionSubmitResult result)
         onSubmit,
   }) {
@@ -53,6 +62,8 @@ class BangumiCollectionDialog extends StatefulWidget {
           initialRating: initialRating,
           initialCollectionType: initialCollectionType,
           initialComment: initialComment,
+          initialEpisodeStatus: initialEpisodeStatus,
+          totalEpisodes: totalEpisodes,
           onSubmit: onSubmit,
         );
       },
@@ -73,6 +84,7 @@ class BangumiCollectionDialog extends StatefulWidget {
 }
 
 class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
+  static const Color _accentColor = Color(0xFFEB4994);
   static const Map<int, String> _ratingEvaluationMap = {
     1: '不忍直视',
     2: '很差',
@@ -97,6 +109,8 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
   late int _selectedRating;
   late int _selectedCollectionType;
   late TextEditingController _commentController;
+  late TextEditingController _episodeController;
+  late int _selectedEpisodeStatus;
   bool _isSubmitting = false;
 
   @override
@@ -110,11 +124,17 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
         validTypes.contains(initialType) ? initialType : 3;
     _commentController =
         TextEditingController(text: widget.initialComment ?? '');
+    final total = widget.totalEpisodes;
+    final initialEpisode = widget.initialEpisodeStatus;
+    _selectedEpisodeStatus = initialEpisode.clamp(0, total > 0 ? total : 999);
+    _episodeController =
+        TextEditingController(text: _selectedEpisodeStatus.toString());
   }
 
   @override
   void dispose() {
     _commentController.dispose();
+    _episodeController.dispose();
     super.dispose();
   }
 
@@ -160,9 +180,9 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '编辑Bangumi收藏',
+                        '编辑Bangumi评分',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
+                              color: _accentColor,
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
                             ),
@@ -182,6 +202,8 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                       _buildRatingSection(),
                       const SizedBox(height: 20),
                       _buildCollectionSection(),
+                      const SizedBox(height: 20),
+                      _buildEpisodeStatusSection(),
                       const SizedBox(height: 20),
                       _buildCommentInput(),
                       const SizedBox(height: 24),
@@ -225,9 +247,10 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                 const SizedBox(height: 4),
                 Text(
                   _ratingEvaluationMap[_selectedRating] ?? '',
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: _accentColor.withOpacity(0.9),
                     fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -284,11 +307,11 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                 height: 28,
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? Colors.blue.withOpacity(0.3)
+                      ? _accentColor.withOpacity(0.3)
                       : Colors.transparent,
                   border: Border.all(
                     color: isSelected
-                        ? Colors.blue
+                        ? _accentColor
                         : Colors.white.withOpacity(0.3),
                     width: 1,
                   ),
@@ -299,7 +322,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                     '$rating',
                     style: TextStyle(
                       color: isSelected
-                          ? Colors.blue
+                          ? _accentColor
                           : Colors.white.withOpacity(0.8),
                       fontSize: 12,
                       fontWeight:
@@ -320,7 +343,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          '观看进度',
+          '收藏状态',
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w600,
@@ -344,11 +367,11 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? Colors.blue.withOpacity(0.25)
+                      ? _accentColor.withOpacity(0.25)
                       : Colors.white.withOpacity(0.08),
                   border: Border.all(
                     color: isSelected
-                        ? Colors.blue
+                        ? _accentColor
                         : Colors.white.withOpacity(0.25),
                     width: 1,
                   ),
@@ -358,7 +381,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                   label,
                   style: TextStyle(
                     color: isSelected
-                        ? Colors.blueAccent
+                        ? _accentColor
                         : Colors.white.withOpacity(0.85),
                     fontSize: 13,
                     fontWeight:
@@ -371,6 +394,151 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
         ),
       ],
     );
+  }
+
+  Widget _buildEpisodeStatusSection() {
+    final total = widget.totalEpisodes;
+    final hasTotal = total > 0;
+    final maxValue = hasTotal ? total : 999;
+
+    Widget buildAdjustButton(int delta, IconData icon) {
+      return InkWell(
+        onTap: _isSubmitting
+            ? null
+            : () {
+                final nextValue = _selectedEpisodeStatus + delta;
+                final int sanitized = nextValue < 0
+                    ? 0
+                    : (nextValue > maxValue ? maxValue : nextValue);
+                _updateEpisodeStatus(sanitized);
+              },
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: _accentColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: _accentColor.withOpacity(0.4),
+              width: 1,
+            ),
+          ),
+          child: Icon(icon, size: 16, color: _accentColor),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '观看进度',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            buildAdjustButton(-1, Ionicons.remove),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 72,
+              child: TextField(
+                controller: _episodeController,
+                enabled: !_isSubmitting,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.08),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide:
+                        BorderSide(color: Colors.white.withOpacity(0.25)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide:
+                        BorderSide(color: Colors.white.withOpacity(0.25)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: const BorderSide(color: _accentColor),
+                  ),
+                ),
+                onChanged: (value) {
+                  if (value.isEmpty) {
+                    _updateEpisodeStatus(0);
+                    return;
+                  }
+                  final parsed = int.tryParse(value);
+                  if (parsed != null) {
+                    final int sanitized = parsed < 0
+                        ? 0
+                        : (parsed > maxValue ? maxValue : parsed);
+                    _updateEpisodeStatus(sanitized);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            buildAdjustButton(1, Ionicons.add),
+            if (hasTotal) ...[
+              const SizedBox(width: 16),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: _accentColor,
+                    inactiveTrackColor: Colors.white.withOpacity(0.2),
+                    thumbColor: _accentColor,
+                    overlayColor: _accentColor.withOpacity(0.2),
+                  ),
+                  child: Slider(
+                    value: _selectedEpisodeStatus.clamp(0, maxValue).toDouble(),
+                    min: 0,
+                    max: maxValue.toDouble(),
+                    divisions: maxValue > 0 ? maxValue : null,
+                    onChanged: (value) => _updateEpisodeStatus(value.round()),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          hasTotal
+              ? '当前进度：$_selectedEpisodeStatus/$total 集'
+              : '当前进度：$_selectedEpisodeStatus 集',
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  void _updateEpisodeStatus(int newValue) {
+    final total = widget.totalEpisodes;
+    final maxValue = total > 0 ? total : 999;
+    final int clampedValue = newValue.clamp(0, maxValue);
+    if (_selectedEpisodeStatus == clampedValue &&
+        _episodeController.text == clampedValue.toString()) {
+      return;
+    }
+    setState(() {
+      _selectedEpisodeStatus = clampedValue;
+      if (_episodeController.text != clampedValue.toString()) {
+        _episodeController.text = clampedValue.toString();
+      }
+    });
   }
 
   Widget _buildCommentInput() {
@@ -393,7 +561,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
           maxLength: 200,
           style:
               const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
-          cursorColor: Colors.blueAccent,
+          cursorColor: _accentColor,
           decoration: InputDecoration(
             counterStyle: const TextStyle(color: Colors.white54, fontSize: 11),
             hintText: '写下你的短评（可选）',
@@ -407,8 +575,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide:
-                  const BorderSide(color: Colors.blueAccent, width: 1.2),
+              borderSide: const BorderSide(color: _accentColor, width: 1.2),
             ),
           ),
         ),
@@ -447,7 +614,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
             onPressed:
                 _isSubmitting || _selectedRating == 0 ? null : _handleSubmit,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueAccent.withOpacity(0.85),
+              backgroundColor: _accentColor.withOpacity(0.9),
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -484,6 +651,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
       rating: _selectedRating,
       collectionType: _selectedCollectionType,
       comment: _commentController.text,
+      episodeStatus: _selectedEpisodeStatus,
     );
 
     try {
