@@ -387,6 +387,11 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
           userRating = (ratingData['score'] as num).round();
         } else if (ratingData is num) {
           userRating = ratingData.round();
+        } else {
+          final rateValue = data['rate'];
+          if (rateValue is num) {
+            userRating = rateValue.round();
+          }
         }
 
         int collectionType = 0;
@@ -724,9 +729,29 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                         ),
                         const SizedBox(width: 4),
                       ] else
-                        const Icon(FluentIcons.edit, size: 14),
+                        Icon(
+                          FluentIcons.edit,
+                          size: 14,
+                          color: Colors.white.withOpacity(
+                            (_isLoadingBangumiCollection ||
+                                    _isSavingBangumiCollection)
+                                ? 0.45
+                                : 0.9,
+                          ),
+                        ),
                       const SizedBox(width: 4),
-                      const Text('编辑Bangumi收藏', style: TextStyle(fontSize: 12)),
+                      Text(
+                        '编辑Bangumi评分',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(
+                            (_isLoadingBangumiCollection ||
+                                    _isSavingBangumiCollection)
+                                ? 0.45
+                                : 0.9,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),

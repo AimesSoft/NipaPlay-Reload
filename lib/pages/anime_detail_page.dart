@@ -541,6 +541,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           userRating = (ratingData['score'] as num).round();
         } else if (ratingData is num) {
           userRating = ratingData.round();
+        } else {
+          final rateValue = data['rate'];
+          if (rateValue is num) {
+            userRating = rateValue.round();
+          }
         }
 
         int collectionType = 0;
@@ -971,6 +976,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           _isSavingBangumiCollection)
                       ? null
                       : _showRatingDialog,
+                  style: ButtonStyle(
+                    foregroundColor: MaterialStateProperty.resolveWith(
+                      (states) => Colors.white.withOpacity(
+                        states.contains(MaterialState.disabled) ? 0.45 : 0.9,
+                      ),
+                    ),
+                  ),
                   icon: _isSavingBangumiCollection
                       ? SizedBox(
                           width: 14,
@@ -983,7 +995,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                         )
                       : const Icon(Icons.edit, size: 16),
                   label: const Text(
-                    '编辑Bangumi收藏',
+                    '编辑Bangumi评分',
                     style: TextStyle(fontSize: 12),
                   ),
                 ),
