@@ -851,7 +851,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             : (anime.summary ?? '暂无简介'))
         .replaceAll('<br>', ' ')
         .replaceAll('<br/>', ' ')
-        .replaceAll('<br />', ' ');
+        .replaceAll('<br />', ' ')
+        .replaceAll('```', '');
     final airWeekday = anime.airWeekday;
     final String weekdayString =
         airWeekday != null && _weekdays.containsKey(airWeekday)

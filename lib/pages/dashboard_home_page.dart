@@ -3119,7 +3119,13 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
               // 获取详细信息和高清图片
               final bangumiService = BangumiService.instance;
               final animeDetail = await bangumiService.getAnimeDetails(candidate.animeId!);
-              detailedSubtitle = animeDetail.summary?.isNotEmpty == true ? animeDetail.summary! : null;
+              detailedSubtitle = animeDetail.summary?.isNotEmpty == true
+                  ? animeDetail.summary!
+                      .replaceAll('<br>', ' ')
+                      .replaceAll('<br/>', ' ')
+                      .replaceAll('<br />', ' ')
+                      .replaceAll('```', '')
+                  : null;
               
               // 获取高清图片
               highQualityImageUrl = await _getHighQualityImage(candidate.animeId!, animeDetail);

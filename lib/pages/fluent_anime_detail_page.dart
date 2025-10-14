@@ -505,7 +505,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
     final String summaryText = (anime.summary ?? '暂无简介')
         .replaceAll('<br>', ' ')
         .replaceAll('<br/>', ' ')
-        .replaceAll('<br />', ' ');
+        .replaceAll('<br />', ' ')
+        .replaceAll('```', '');
     final airWeekday = anime.airWeekday;
     final String weekdayString =
         airWeekday != null && _weekdays.containsKey(airWeekday)
