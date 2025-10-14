@@ -1345,11 +1345,13 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
           subjectId,
           type: normalizedType,
           comment: commentPayload,
+          rate: ratingPayload,
         );
       } else {
         result = await BangumiApiService.addUserCollection(
           subjectId,
           normalizedType,
+          rate: ratingPayload,
           comment: commentPayload,
         );
       }
@@ -1364,10 +1366,10 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
               _bangumiComment =
                   commentPayload.isNotEmpty ? commentPayload : null;
             }
+            if (ratingPayload != null) {
+              _bangumiUserRating = ratingPayload;
+            }
           });
-        }
-        if (ratingPayload != null) {
-          debugPrint('[番剧详情] 跳过Bangumi评分同步，评分仅同步到弹弹play');
         }
         return true;
       }
@@ -1469,7 +1471,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
 
       if (bangumiSuccess && dandanSuccess) {
         final String message = shouldSyncDandan
-            ? 'Bangumi收藏已更新，评分已同步到弹弹play'
+            ? 'Bangumi收藏与评分已同步'
             : 'Bangumi收藏已更新';
         MessageHelper.showMessage(context, message);
       } else {

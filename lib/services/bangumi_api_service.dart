@@ -350,11 +350,13 @@ class BangumiApiService {
   /// [subjectId] 条目ID
   /// [type] 收藏类型: 1=Wish, 2=Done, 3=Doing, 4=OnHold, 5=Dropped
   /// [comment] 评论（可选）
+  /// [rate] 评分 1-10（可选）
   /// [private] 是否私密收藏（可选）
   static Future<Map<String, dynamic>> addUserCollection(
     int subjectId,
     int type, {
     String? comment,
+    int? rate,
     bool? private,
   }) async {
     debugPrint('[Bangumi API] 添加收藏: subjectId=$subjectId, type=$type');
@@ -364,6 +366,7 @@ class BangumiApiService {
     };
 
     if (comment != null) body['comment'] = comment;
+    if (rate != null && rate >= 1 && rate <= 10) body['rate'] = rate;
     if (private != null) body['private'] = private;
 
     final result = await _makeRequest(
@@ -384,11 +387,13 @@ class BangumiApiService {
   /// [subjectId] 条目ID
   /// [type] 收藏类型: 1=Wish, 2=Done, 3=Doing, 4=OnHold, 5=Dropped
   /// [comment] 评论（可选）
+  /// [rate] 评分 1-10（可选）
   /// [private] 是否私密收藏（可选）
   static Future<Map<String, dynamic>> updateUserCollection(
     int subjectId, {
     int? type,
     String? comment,
+    int? rate,
     bool? private,
   }) async {
     debugPrint('[Bangumi API] 更新收藏状态: subjectId=$subjectId, type=$type');
@@ -397,11 +402,11 @@ class BangumiApiService {
 
     if (type != null && type >= 1 && type <= 5) body['type'] = type;
     if (comment != null) body['comment'] = comment;
+    if (rate != null && rate >= 1 && rate <= 10) body['rate'] = rate;
     if (private != null) body['private'] = private;
 
-    // 使用PATCH方法更新，而不是POST替换
     final result = await _makeRequest(
-        'PATCH', '/v0/users/-/collections/$subjectId',
+        'POST', '/v0/users/-/collections/$subjectId',
         body: body);
 
     if (result['success']) {
