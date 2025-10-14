@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -148,6 +149,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   bool _isLoadingUserRating = false; // 是否正在加载用户评分
   bool _isSubmittingRating = false; // 是否正在提交评分
 
+  // Bangumi用户评论相关
+  String? _bangumiComment;
+  bool _isLoadingBangumiComment = false;
+
   // 新增：评分到评价文本的映射
   static const Map<int, String> _ratingEvaluationMap = {
     1: '不忍直视',
@@ -273,6 +278,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     setState(() {
       _isLoading = true;
       _error = null;
+      _bangumiComment = null;
+      _isLoadingBangumiComment = false;
     });
     try {
       BangumiAnime anime;
@@ -300,6 +307,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           _detailedAnime = anime;
           _isLoading = false;
         });
+
+        _loadBangumiUserData(anime);
       }
     } catch (e) {
       if (mounted) {
@@ -369,6 +378,129 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           _isLoadingUserRating = false;
         });
       }
+    }
+  }
+
+  int? _extractBangumiSubjectId(BangumiAnime anime) {
+    final url = anime.bangumiUrl;
+    if (url == null || url.isEmpty) {
+      return null;
+    }
+
+    final directMatch = RegExp(r'/subject/(\d+)').firstMatch(url);
+    if (directMatch != null) {
+      return int.tryParse(directMatch.group(1)!);
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      if (uri.queryParameters.containsKey('subject_id')) {
+        final parsed = int.tryParse(uri.queryParameters['subject_id'] ?? '');
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+
+      for (var i = uri.pathSegments.length - 1; i >= 0; i--) {
+        final segment = uri.pathSegments[i];
+        final parsed = int.tryParse(segment);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+    }
+
+    RegExpMatch? lastMatch;
+    for (final match in RegExp(r'(\d+)').allMatches(url)) {
+      lastMatch = match;
+    }
+    if (lastMatch != null) {
+      return int.tryParse(lastMatch.group(1)!);
+    }
+
+    return null;
+  }
+
+  Future<void> _loadBangumiUserData(BangumiAnime anime) async {
+    if (!BangumiApiService.isLoggedIn) {
+      try {
+        await BangumiApiService.initialize();
+      } catch (e) {
+        debugPrint('[番剧详情] 初始化Bangumi API失败: $e');
+      }
+    }
+
+    if (!BangumiApiService.isLoggedIn) {
+      if (mounted) {
+        setState(() {
+          _bangumiComment = null;
+          _isLoadingBangumiComment = false;
+        });
+      }
+      return;
+    }
+
+    final subjectId = _extractBangumiSubjectId(anime);
+    if (subjectId == null) {
+      if (mounted) {
+        setState(() {
+          _bangumiComment = null;
+          _isLoadingBangumiComment = false;
+        });
+      }
+      debugPrint('[番剧详情] 未能解析Bangumi条目ID: ${anime.bangumiUrl}');
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _bangumiComment = null;
+        _isLoadingBangumiComment = true;
+      });
+    }
+
+    try {
+      final result = await BangumiApiService.getUserCollection(subjectId);
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        Map<String, dynamic>? data;
+        if (result['data'] is Map) {
+          data = Map<String, dynamic>.from(result['data'] as Map);
+        }
+
+        String? comment;
+        if (data != null) {
+          final rawComment = data['comment'];
+          if (rawComment is String) {
+            final trimmed = rawComment.trim();
+            if (trimmed.isNotEmpty) {
+              comment = trimmed;
+            }
+          }
+        }
+
+        setState(() {
+          _bangumiComment = comment;
+          _isLoadingBangumiComment = false;
+        });
+      } else {
+        setState(() {
+          _bangumiComment = null;
+          _isLoadingBangumiComment = false;
+        });
+
+        if (result['statusCode'] != 404) {
+          debugPrint('[番剧详情] 获取Bangumi收藏信息失败: ${result['message']}');
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      debugPrint('[番剧详情] 获取Bangumi评论失败: $e');
+      setState(() {
+        _isLoadingBangumiComment = false;
+      });
     }
   }
 
@@ -656,6 +788,61 @@ style: TextStyle(
               ],
             ),
             const SizedBox(height: 6),
+          ],
+          if (BangumiApiService.isLoggedIn) ...[
+            if (_isLoadingBangumiComment)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6.0),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white.withOpacity(0.8)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '正在加载Bangumi云端短评...',
+                      style: valueStyle.copyWith(fontSize: 12),
+                    ),
+                  ],
+                ),
+              )
+            else if (_bangumiComment != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 6.0),
+                padding: const EdgeInsets.all(8.0),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.15),
+                    width: 0.8,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '我的Bangumi短评',
+                      style: boldWhiteKeyStyle.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _bangumiComment!,
+                      style: valueStyle.copyWith(fontSize: 12, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
           ],
           if (anime.ratingDetails != null &&
               anime.ratingDetails!.entries.any((entry) =>
