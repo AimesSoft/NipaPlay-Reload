@@ -305,7 +305,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     final sharedProvider = Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
     _isJellyfinConnected = jellyfinProvider.isConnected;
     _isEmbyConnected = embyProvider.isConnected;
-    _hasSharedRemoteHosts = sharedProvider.hosts.isNotEmpty;
+    _hasSharedRemoteHosts = sharedProvider.hasReachableActiveHost;
     print('_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected');
   }
 
@@ -407,7 +407,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
       builder: (context, jellyfinProvider, embyProvider, sharedProvider, child) {
         final currentJellyfinConnectionState = jellyfinProvider.isConnected;
         final currentEmbyConnectionState = embyProvider.isConnected;
-        final currentSharedState = sharedProvider.hosts.isNotEmpty;
+        final currentSharedState = sharedProvider.hasReachableActiveHost;
         
         // 检查连接状态是否改变
         if (_isJellyfinConnected != currentJellyfinConnectionState || 

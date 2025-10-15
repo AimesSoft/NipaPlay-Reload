@@ -82,7 +82,7 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
       ),
     ];
 
-    if (sharedProvider.hosts.isNotEmpty) {
+    if (sharedProvider.hasReachableActiveHost) {
       tabs.add(
         Tab(
           text: const Text('共享媒体'),

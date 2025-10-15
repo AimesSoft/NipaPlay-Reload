@@ -182,7 +182,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
               Row(
                 children: [
                   TextButton(
-                    onPressed: () => provider.refreshLibrary(),
+                    onPressed: () => provider.refreshLibrary(userInitiated: true),
                     child: const Text('刷新', style: TextStyle(color: Colors.white70)),
                   ),
                   TextButton(

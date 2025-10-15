@@ -26,6 +26,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   bool _isInitializing = true;
+  bool _autoRefreshPaused = false;
+  DateTime? _lastRefreshFailureAt;
 
   List<SharedRemoteHost> get hosts => List.unmodifiable(_hosts);
   String? get activeHostId => _activeHostId;
@@ -42,6 +44,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   bool get isInitializing => _isInitializing;
   String? get errorMessage => _errorMessage;
   bool get hasActiveHost => _activeHostId != null && _hosts.any((h) => h.id == _activeHostId);
+  bool get hasReachableActiveHost => activeHost?.isOnline == true;
 
   Future<void> _loadPersistedHosts() async {
     try {
@@ -90,7 +93,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     _activeHostId = id;
     await _persistHosts();
     notifyListeners();
-    await refreshLibrary();
+    await refreshLibrary(userInitiated: true);
     return host;
   }
 
@@ -104,7 +107,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     await _persistHosts();
     notifyListeners();
     if (_activeHostId != null) {
-      await refreshLibrary();
+      await refreshLibrary(userInitiated: true);
     }
   }
 
@@ -116,12 +119,23 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     _episodeCache.clear();
     await _persistHosts();
     notifyListeners();
-    await refreshLibrary();
+    await refreshLibrary(userInitiated: true);
   }
 
-  Future<void> refreshLibrary() async {
+  Future<void> refreshLibrary({bool userInitiated = false}) async {
     final host = activeHost;
     if (host == null) {
+      return;
+    }
+
+    if (userInitiated) {
+      _autoRefreshPaused = false;
+      _lastRefreshFailureAt = null;
+    } else if (_autoRefreshPaused) {
+      final message = _lastRefreshFailureAt != null
+          ? '⏳ [共享媒体] 自动刷新已暂停（上次失败 ${_lastRefreshFailureAt!.toLocal()}），等待手动刷新'
+          : '⏳ [共享媒体] 自动刷新已暂停，等待手动刷新';
+      debugPrint(message);
       return;
     }
 
@@ -154,10 +168,16 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _animeSummaries.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
       _episodeCache.clear();
       _updateHostStatus(host.id, isOnline: true, lastError: null);
+      _autoRefreshPaused = false;
+      _lastRefreshFailureAt = null;
     } catch (e, stackTrace) {
       debugPrint('❌ [共享媒体] 请求失败: $e');
       debugPrint('❌ [共享媒体] 错误类型: ${e.runtimeType}');
-      debugPrint('❌ [共享媒体] 堆栈跟踪:\n$stackTrace');
+      if (e is TimeoutException) {
+        debugPrint('ℹ️ [共享媒体] 请求超时，已暂停自动刷新等待手动重试');
+      } else {
+        debugPrint('❌ [共享媒体] 堆栈跟踪:\n$stackTrace');
+      }
 
       String friendlyError;
       if (e.toString().contains('SocketException') || e.toString().contains('Connection')) {
@@ -186,8 +206,14 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       } else {
         friendlyError = '同步失败: $e';
       }
+      _animeSummaries = [];
+      _episodeCache.clear();
       _errorMessage = friendlyError;
       _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
+      if (!userInitiated) {
+        _autoRefreshPaused = true;
+        _lastRefreshFailureAt = DateTime.now();
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -434,7 +460,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     final normalized = _normalizeBaseUrl(newUrl);
     _hosts[index] = _hosts[index].copyWith(baseUrl: normalized);
     if (_activeHostId == hostId) {
-      await refreshLibrary();
+      await refreshLibrary(userInitiated: true);
     }
     await _persistHosts();
     notifyListeners();

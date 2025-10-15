@@ -499,7 +499,7 @@ class _SharedLibrarySection extends StatelessWidget {
                     ),
                     const Spacer(),
                     Button(
-                      onPressed: provider.refreshLibrary,
+                      onPressed: () => provider.refreshLibrary(userInitiated: true),
                       child: const Text('刷新'),
                     ),
                   ],

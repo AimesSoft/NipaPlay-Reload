@@ -206,7 +206,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 BlurSnackBar.show(context, '请先添加并选择共享客户端');
                 return;
               }
-              provider.refreshLibrary();
+              provider.refreshLibrary(userInitiated: true);
             },
           ),
           const SizedBox(height: 16),
