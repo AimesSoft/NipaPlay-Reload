@@ -879,6 +879,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                                     ? '/api/image_proxy?url=${base64Url.encode(utf8.encode(anime.imageUrl!))}'
                                     : anime.imageUrl!,
                                 fit: BoxFit.cover,
+                                loadMode: CachedImageLoadMode.legacy, // 标签搜索中的番剧海报使用legacy模式，避免海报突然切换
                               )
                             : const Icon(
                                 Ionicons.image,
@@ -1296,6 +1297,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                                     ? '/api/image_proxy?url=${base64Url.encode(utf8.encode(anime.imageUrl!))}'
                                     : anime.imageUrl!,
                                 fit: BoxFit.cover,
+                                loadMode: CachedImageLoadMode.legacy, // 标签搜索中的番剧海报使用legacy模式，避免海报突然切换
                               )
                             : const Icon(
                                 Ionicons.image,

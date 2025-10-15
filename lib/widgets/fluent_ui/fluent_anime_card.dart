@@ -162,6 +162,7 @@ class _FluentAnimeCardState extends State<FluentAnimeCard> with TickerProviderSt
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        loadMode: CachedImageLoadMode.legacy, // 番剧卡片统一使用legacy模式，避免海报突然切换
         errorBuilder: (context, error) => _buildPlaceholder(context),
       );
     }

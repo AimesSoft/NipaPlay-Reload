@@ -961,7 +961,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           imageUrl: coverImageUrl, // 使用处理后的URL
                           width: 130,
                           height: 195,
-                          fit: BoxFit.cover))),
+                          fit: BoxFit.cover,
+                          loadMode: CachedImageLoadMode.legacy))), // 番剧详情页面统一使用legacy模式，避免海报突然切换
             Expanded(
               child: SizedBox(
                 height: 195,

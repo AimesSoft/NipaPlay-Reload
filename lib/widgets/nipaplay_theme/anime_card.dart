@@ -135,9 +135,7 @@ class _AnimeCardState extends State<AnimeCard> {
         // 网格场景禁用淡入动画，减少saveLayer
         fadeDuration: Duration.zero,
         delayLoad: widget.delayLoad, // 使用延迟加载参数
-        loadMode: widget.useLegacyImageLoadMode
-          ? CachedImageLoadMode.legacy
-          : CachedImageLoadMode.hybrid,
+        loadMode: CachedImageLoadMode.legacy, // 番剧卡片统一使用legacy模式，避免海报突然切换
         errorBuilder: (context, error) {
           return _buildPlaceholder(context);
         },
