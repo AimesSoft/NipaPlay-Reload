@@ -26,6 +26,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:meta/meta.dart';
 
 class AnimeDetailPage extends StatefulWidget {
@@ -216,10 +217,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       debugPrint("[番剧详情] 已清理过期的番剧详情缓存");
     });
     _fetchAnimeDetails().then((_) {
-      // 如果初始化时默认打开剧集列表，立即获取云同步状态
       if (_detailedAnime != null &&
-          _tabController!.index == 1 &&
-          DandanplayService.isLoggedIn) {
+          DandanplayService.isLoggedIn &&
+          _dandanplayWatchStatus.isEmpty &&
+          (globals.isDesktopOrTablet || _tabController!.index == 1)) {
         _fetchDandanplayWatchStatus(_detailedAnime!);
       }
     });
@@ -1584,6 +1585,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         : anime.name;
     // 获取是否启用页面切换动画
     final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
+    final bool isDesktopOrTablet = globals.isDesktopOrTablet;
 
     return Column(
       children: [
@@ -1672,57 +1674,60 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             ],
           ),
         ),
-        TabBar(
-          controller: _tabController,
-          dividerColor: const Color.fromARGB(59, 255, 255, 255),
-          dividerHeight: 3.0,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorSize: TabBarIndicatorSize.tab,
-          indicatorPadding: const EdgeInsets.only(top: 46, left: 15, right: 15),
-          indicator: BoxDecoration(
-            color: Colors.white, // 设置指示器的颜色
-
-            borderRadius: BorderRadius.circular(30), // 设置圆角矩形的圆角半径
-          ),
-          indicatorWeight: 3,
-          tabs: const [
-            Tab(
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                  Icon(Ionicons.document_text_outline, size: 18),
-                  SizedBox(width: 8),
-                  Text('简介')
-                ])),
-            Tab(
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                  Icon(Ionicons.film_outline, size: 18),
-                  SizedBox(width: 8),
-                  Text('剧集')
-                ])),
-          ],
-        ),
-        Expanded(
-          child: SwitchableView(
-            enableAnimation: enableAnimation, // 使用外观设置的动画开关
-            currentIndex: _tabController?.index ?? 0,
-            physics: enableAnimation
-                ? const PageScrollPhysics() // 开启动画时使用页面滑动物理效果
-                : const NeverScrollableScrollPhysics(), // 关闭动画时禁止滑动
-            onPageChanged: (index) {
-              if ((_tabController?.index ?? 0) != index) {
-                _tabController?.animateTo(index);
-              }
-            },
-            children: [
-              // 使用RepaintBoundary隔离绘制边界，减少重绘范围
-              RepaintBoundary(child: _buildSummaryView(anime)),
-              RepaintBoundary(child: _buildEpisodesListView(anime)),
+        if (!isDesktopOrTablet)
+          TabBar(
+            controller: _tabController,
+            dividerColor: const Color.fromARGB(59, 255, 255, 255),
+            dividerHeight: 3.0,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicatorPadding:
+                const EdgeInsets.only(top: 46, left: 15, right: 15),
+            indicator: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+            ),
+            indicatorWeight: 3,
+            tabs: const [
+              Tab(
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                    Icon(Ionicons.document_text_outline, size: 18),
+                    SizedBox(width: 8),
+                    Text('简介')
+                  ])),
+              Tab(
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                    Icon(Ionicons.film_outline, size: 18),
+                    SizedBox(width: 8),
+                    Text('剧集')
+                  ])),
             ],
           ),
+        if (isDesktopOrTablet) const SizedBox(height: 8),
+        Expanded(
+          child: isDesktopOrTablet
+              ? _buildDesktopTabletLayout(anime)
+              : SwitchableView(
+                  enableAnimation: enableAnimation,
+                  currentIndex: _tabController?.index ?? 0,
+                  physics: enableAnimation
+                      ? const PageScrollPhysics()
+                      : const NeverScrollableScrollPhysics(),
+                  onPageChanged: (index) {
+                    if ((_tabController?.index ?? 0) != index) {
+                      _tabController?.animateTo(index);
+                    }
+                  },
+                  children: [
+                    RepaintBoundary(child: _buildSummaryView(anime)),
+                    RepaintBoundary(child: _buildEpisodesListView(anime)),
+                  ],
+                ),
         ),
       ],
     );
@@ -1761,6 +1766,29 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           ),
           child: _buildContent(),
         ),
+      ),
+    );
+  }
+
+  // 桌面/平板使用左右分屏展示
+  Widget _buildDesktopTabletLayout(BangumiAnime anime) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: RepaintBoundary(child: _buildSummaryView(anime)),
+          ),
+          Container(
+            width: 1,
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            color: Colors.white.withOpacity(0.12),
+          ),
+          Expanded(
+            child: RepaintBoundary(child: _buildEpisodesListView(anime)),
+          ),
+        ],
       ),
     );
   }
