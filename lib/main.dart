@@ -311,16 +311,22 @@ void main(List<String> args) async {
       }
     } else if (call.method == 'openNewSeries') {
       try {
+        // iOS平台不支持新番更新页面，直接返回错误信息
+        if (Platform.isIOS) {
+          print('[Dart] iOS平台不支持新番更新功能');
+          return 'iOS平台不支持新番更新功能';
+        }
+
         final context = navigatorKey.currentState?.overlay?.context;
         if (context == null) {
           print('[Dart] 错误: 无法获取UI上下文');
           return '错误: 无法获取UI上下文';
         }
-        
+
         Future.microtask(() {
           _navigateToPage(context, 3); // 切换到新番更新页面（索引3）
         });
-        
+
         return '正在切换到新番更新页面';
       } catch (e) {
         print('[Dart] 错误: $e');
@@ -333,11 +339,13 @@ void main(List<String> args) async {
           print('[Dart] 错误: 无法获取UI上下文');
           return '错误: 无法获取UI上下文';
         }
-        
+
         Future.microtask(() {
-          _navigateToPage(context, 4); // 切换到设置页面（索引4）
+          // 根据平台选择正确的设置页面索引
+          final settingsIndex = Platform.isIOS ? 3 : 4;
+          _navigateToPage(context, settingsIndex); // 切换到设置页面
         });
-        
+
         return '正在切换到设置页面';
       } catch (e) {
         print('[Dart] 错误: $e');
@@ -793,15 +801,29 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
 
 class MainPage extends StatefulWidget {
   final String? launchFilePath;
-  final List<Widget> pages = [
-    const DashboardHomePage(),
-    const PlayVideoPage(),
-    const AnimePage(),
-    const NewSeriesPage(),
-    const SettingsPage(),
-  ];
 
-  MainPage({super.key, this.launchFilePath});
+  // 根据平台动态创建pages列表
+  static List<Widget> createPages() {
+    List<Widget> pages = [
+      const DashboardHomePage(),
+      const PlayVideoPage(),
+      const AnimePage(),
+    ];
+
+    // 仅在非iOS平台添加新番更新页面
+    if (!Platform.isIOS) {
+      pages.add(const NewSeriesPage());
+    }
+
+    pages.add(const SettingsPage());
+    return pages;
+  }
+
+  late final List<Widget> pages;
+
+  MainPage({super.key, this.launchFilePath}) {
+    pages = createPages();
+  }
 
   @override
   // ignore: library_private_types_in_public_api
@@ -931,14 +953,30 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   Future<void> _initializeController() async {
     final prefs = await SharedPreferences.getInstance();
     _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
-    
+
+    // 在iOS平台上确保默认页面索引不会指向新番更新页面
+    // iOS: 索引顺序为 0-主页, 1-视频播放, 2-媒体库, 3-设置
+    // 其他平台: 索引顺序为 0-主页, 1-视频播放, 2-媒体库, 3-新番更新, 4-设置
+    if (Platform.isIOS && _defaultPageIndex >= 3) {
+      // 如果默认页面是新番更新页面(索引3)或设置页面(索引4)，在iOS上需要调整
+      if (_defaultPageIndex == 3) {
+        // 原来的新番更新页面，调整为设置页面
+        _defaultPageIndex = 3; // iOS上设置页面的索引
+      } else if (_defaultPageIndex == 4) {
+        // 原来的设置页面，调整为设置页面
+        _defaultPageIndex = 3; // iOS上设置页面的索引
+      }
+    }
+
     if (mounted) {
+      // 根据平台动态设置TabController长度
+      final tabLength = Platform.isIOS ? 4 : 5;
       globalTabController = TabController(
-        length: 5,
+        length: tabLength,
         vsync: this,
         initialIndex: _defaultPageIndex,
       );
-      debugPrint('[MainPageState] TabController initialized with index: $_defaultPageIndex');
+      debugPrint('[MainPageState] TabController initialized with length: $tabLength, index: $_defaultPageIndex');
     }
   }
 

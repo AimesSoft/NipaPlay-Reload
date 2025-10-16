@@ -9,6 +9,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 
 // Define the key for SharedPreferences
 const String globalFilterAdultContentKey = 'global_filter_adult_content';
@@ -26,6 +27,26 @@ class _GeneralPageState extends State<GeneralPage> {
   int _defaultPageIndex = 0;
   final GlobalKey _defaultPageDropdownKey = GlobalKey();
 
+  // 根据平台生成默认页面选项
+  List<DropdownMenuItemData<int>> _getDefaultPageItems() {
+    List<DropdownMenuItemData<int>> items = [
+      DropdownMenuItemData(title: "主页", value: 0, isSelected: _defaultPageIndex == 0),
+      DropdownMenuItemData(title: "视频播放", value: 1, isSelected: _defaultPageIndex == 1),
+      DropdownMenuItemData(title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
+    ];
+
+    // 仅在非iOS平台添加新番更新选项
+    if (!Platform.isIOS) {
+      items.add(DropdownMenuItemData(title: "新番更新", value: 3, isSelected: _defaultPageIndex == 3));
+    }
+
+    // 添加设置选项，根据平台调整索引
+    final settingsIndex = Platform.isIOS ? 3 : 4;
+    items.add(DropdownMenuItemData(title: "设置", value: settingsIndex, isSelected: _defaultPageIndex == settingsIndex));
+
+    return items;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -37,7 +58,15 @@ class _GeneralPageState extends State<GeneralPage> {
     if (mounted) {
       setState(() {
         _filterAdultContent = prefs.getBool(globalFilterAdultContentKey) ?? true;
-        _defaultPageIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
+        var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
+
+        // 在iOS平台上，如果存储的索引是新番更新页面(3)，调整为设置页面(3)
+        // 如果存储的索引是设置页面(4)，也调整为设置页面(3)
+        if (Platform.isIOS && storedIndex >= 3) {
+          storedIndex = 3; // iOS上设置页面的索引
+        }
+
+        _defaultPageIndex = storedIndex;
       });
     }
   }
@@ -75,13 +104,7 @@ class _GeneralPageState extends State<GeneralPage> {
                   title: "默认展示页面",
                   subtitle: "选择应用启动后默认显示的页面",
                   icon: Ionicons.home_outline,
-                  items: [
-                    DropdownMenuItemData(title: "主页", value: 0, isSelected: _defaultPageIndex == 0),
-                    DropdownMenuItemData(title: "视频播放", value: 1, isSelected: _defaultPageIndex == 1),
-                    DropdownMenuItemData(title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
-                    DropdownMenuItemData(title: "新番更新", value: 3, isSelected: _defaultPageIndex == 3),
-                    DropdownMenuItemData(title: "设置", value: 4, isSelected: _defaultPageIndex == 4),
-                  ],
+                  items: _getDefaultPageItems(),
                   onChanged: (index) {
                     setState(() {
                       _defaultPageIndex = index;

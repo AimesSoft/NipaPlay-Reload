@@ -5,6 +5,7 @@ import 'package:nipaplay/widgets/fluent_ui/fluent_info_bar.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'dart:io';
 
 const String globalFilterAdultContentKey = 'global_filter_adult_content';
 const String defaultPageIndexKey = 'default_page_index';
@@ -21,13 +22,22 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
   int _defaultPageIndex = 0;
   bool _isLoading = true;
 
-  final List<String> _pageNames = [
-    '主页',
-    '视频播放',
-    '媒体库',
-    '新番更新',
-    '设置',
-  ];
+  // 根据平台生成页面名称列表
+  List<String> get _pageNames {
+    List<String> names = [
+      '主页',
+      '视频播放',
+      '媒体库',
+    ];
+
+    // 仅在非iOS平台添加新番更新
+    if (!Platform.isIOS) {
+      names.add('新番更新');
+    }
+
+    names.add('设置');
+    return names;
+  }
 
   @override
   void initState() {
@@ -41,7 +51,14 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
       if (!mounted) return;
       setState(() {
         _filterAdultContent = prefs.getBool(globalFilterAdultContentKey) ?? true;
-        _defaultPageIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
+        var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
+
+        // 在iOS平台上，如果存储的索引是新番更新页面(3)或设置页面(4)，调整为设置页面(3)
+        if (Platform.isIOS && storedIndex >= 3) {
+          storedIndex = 3; // iOS上设置页面的索引
+        }
+
+        _defaultPageIndex = storedIndex;
         _isLoading = false;
       });
     } catch (_) {
