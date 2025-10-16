@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'account_controller.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
@@ -96,20 +97,20 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           // 先记录日志
           logService.addLog('[Material账号页面] 注册对话框onLogin回调被调用', level: 'INFO', tag: 'AccountPage');
           logService.addLog('[Material账号页面] 收到的values: ${values.toString()}', level: 'INFO', tag: 'AccountPage');
-          
+
           // 设置控制器的值
           registerUsernameController.text = values['username'] ?? '';
           registerPasswordController.text = values['password'] ?? '';
           registerEmailController.text = values['email'] ?? '';
           registerScreenNameController.text = values['screenName'] ?? '';
-          
+
           logService.addLog('[Material账号页面] 准备调用performRegister', level: 'INFO', tag: 'AccountPage');
-          
+
           // 调用注册方法
           await performRegister();
-          
+
           logService.addLog('[Material账号页面] performRegister执行完成，isLoggedIn=$isLoggedIn', level: 'INFO', tag: 'AccountPage');
-          
+
           return LoginResult(success: isLoggedIn, message: isLoggedIn ? '注册成功' : '注册失败');
         } catch (e) {
           // 捕获并记录详细错误
@@ -118,6 +119,74 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           return LoginResult(success: false, message: '注册失败: $e');
         }
       },
+    );
+  }
+
+  @override
+  void showDeleteAccountDialog(String deleteAccountUrl) {
+    BlurDialog.show(
+      context: context,
+      title: '账号注销确认',
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '警告：账号注销是不可逆操作！',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '注销后将：',
+            style: TextStyle(color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '• 永久删除您的弹弹play账号\n• 清除所有个人数据和收藏\n• 无法恢复已发送的弹幕\n• 失去所有积分和等级',
+            style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '点击"继续注销"将在浏览器中打开注销页面，请在页面中完成最终确认。',
+            style: TextStyle(color: Colors.yellow),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text(
+            '取消',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+        TextButton(
+          onPressed: () async {
+            Navigator.of(context).pop();
+            try {
+              // 打开浏览器跳转到注销页面
+              final uri = Uri.parse(deleteAccountUrl);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(
+                  uri,
+                  mode: LaunchMode.externalApplication,
+                );
+              } else {
+                showMessage('无法打开注销页面');
+              }
+            } catch (e) {
+              showMessage('打开注销页面失败: $e');
+            }
+          },
+          child: const Text(
+            '继续注销',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
     );
   }
 
@@ -331,9 +400,61 @@ style: TextStyle(
                         SizedBox(width: 4),
                         Text(
                           '退出',
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                          locale: Locale("zh-Hans", "zh"),
+                          style: TextStyle(
                             color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 账号注销按钮
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: isLoading ? null : startDeleteAccount,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.red.withOpacity(0.3),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isLoading)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                            ),
+                          )
+                        else
+                          const Icon(
+                            Icons.delete_forever,
+                            color: Colors.red,
+                            size: 16,
+                          ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isLoading ? '处理中...' : '注销账号',
+                          locale: const Locale("zh-Hans", "zh"),
+                          style: const TextStyle(
+                            color: Colors.red,
                             fontSize: 14,
                           ),
                         ),

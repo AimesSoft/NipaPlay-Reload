@@ -214,6 +214,55 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     }
   }
 
+  /// 开始账号注销流程
+  Future<void> startDeleteAccount() async {
+    try {
+      setState(() {
+        isLoading = true;
+      });
+
+      // 获取注销页面URL
+      final deleteAccountUrl = await DandanplayService.startDeleteAccountProcess();
+
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+
+        // 显示确认对话框，然后打开浏览器页面
+        showDeleteAccountDialog(deleteAccountUrl);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+        showMessage('启动账号注销失败: $e');
+      }
+    }
+  }
+
+  /// 完成账号注销后的处理
+  Future<void> completeAccountDeletion() async {
+    try {
+      // 执行注销后的清理工作
+      await DandanplayService.completeAccountDeletion();
+
+      if (mounted) {
+        setState(() {
+          isLoggedIn = false;
+          username = '';
+          avatarUrl = null;
+        });
+        showMessage('账号注销完成');
+      }
+    } catch (e) {
+      if (mounted) {
+        showMessage('注销后清理失败: $e');
+      }
+    }
+  }
+
   /// 显示消息 - 子类需要实现具体的UI显示方式
   void showMessage(String message);
 
@@ -222,6 +271,9 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
 
   /// 显示注册对话框 - 子类需要实现具体的UI
   void showRegisterDialog();
+
+  /// 显示账号注销确认对话框 - 子类需要实现具体的UI
+  void showDeleteAccountDialog(String deleteAccountUrl);
 
   /// 加载Bangumi登录状态
   Future<void> loadBangumiStatus() async {

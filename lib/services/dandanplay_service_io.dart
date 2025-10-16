@@ -1296,4 +1296,101 @@ class DandanplayService {
       rethrow;
     }
   }
+
+  // 获取WebToken（用于账号注销等特殊场景）
+  static Future<Map<String, dynamic>> getWebToken({
+    required String business,
+  }) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能获取WebToken');
+    }
+
+    try {
+      debugPrint('[弹弹play服务] 获取WebToken: business=$business');
+
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final apiPath = '/api/v2/oauth/webToken';
+
+      final response = await http.get(
+        Uri.parse('${await _getApiBaseUrl()}$apiPath?business=$business'),
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      debugPrint('[弹弹play服务] 获取WebToken响应: ${response.statusCode}');
+      debugPrint('[弹弹play服务] 获取WebToken响应内容: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        debugPrint('[弹弹play服务] WebToken解析后数据: $data');
+        debugPrint('[弹弹play服务] WebToken获取成功');
+        return data;
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '获取WebToken失败';
+        throw Exception('获取WebToken失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 获取WebToken时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 开启账号注销流程
+  static Future<String> startDeleteAccountProcess() async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能注销账号');
+    }
+
+    try {
+      debugPrint('[弹弹play服务] 开始账号注销流程');
+
+      // 1. 获取用于账号注销的WebToken
+      final webTokenData = await getWebToken(business: 'deleteAccount');
+      debugPrint('[弹弹play服务] 获取到的WebToken数据: $webTokenData');
+
+      // 检查数据结构和webToken字段
+      final webToken = webTokenData['webToken'];
+      debugPrint('[弹弹play服务] 提取的webToken: $webToken');
+
+      if (webToken == null || webToken.toString().isEmpty) {
+        debugPrint('[弹弹play服务] WebToken为空或null，完整响应数据: $webTokenData');
+        throw Exception('获取账号注销WebToken失败：响应中没有webToken字段');
+      }
+
+      // 2. 构建注销页面URL
+      final deleteAccountUrl = '${await _getApiBaseUrl()}/api/v2/oauth/deleteAccount?webToken=$webToken';
+
+      debugPrint('[弹弹play服务] 账号注销URL: $deleteAccountUrl');
+
+      return deleteAccountUrl;
+    } catch (e) {
+      debugPrint('[弹弹play服务] 启动账号注销流程时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 完成账号注销后的清理工作
+  static Future<void> completeAccountDeletion() async {
+    debugPrint('[弹弹play服务] 执行账号注销后的清理工作');
+
+    try {
+      // 清除本地登录信息
+      await clearLoginInfo();
+
+      // 清除弹幕缓存
+      await DanmakuCacheManager.clearExpiredCache();
+
+      debugPrint('[弹弹play服务] 账号注销清理完成');
+    } catch (e) {
+      debugPrint('[弹弹play服务] 账号注销清理时出错: $e');
+      // 即使清理出错，也不抛出异常，因为主要的注销操作已经完成
+    }
+  }
 }
