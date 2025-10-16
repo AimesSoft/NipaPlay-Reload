@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' as material;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:nipaplay/widgets/user_activity/fluent_user_activity.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_info_bar.dart';
@@ -193,15 +194,21 @@ class _FluentAccountPageState extends State<FluentAccountPage>
           onPressed: () async {
             Navigator.of(context).pop();
             try {
-              // 打开浏览器跳转到注销页面
-              final uri = Uri.parse(deleteAccountUrl);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(
-                  uri,
-                  mode: LaunchMode.externalApplication,
-                );
+              // Web和其他平台分别处理URL打开
+              if (kIsWeb) {
+                // Web平台暂时显示URL让用户手动复制
+                showMessage('请复制以下链接到浏览器中打开：$deleteAccountUrl');
               } else {
-                showMessage('无法打开注销页面');
+                // 移动端和桌面端使用url_launcher
+                final uri = Uri.parse(deleteAccountUrl);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
+                } else {
+                  showMessage('无法打开注销页面');
+                }
               }
             } catch (e) {
               showMessage('打开注销页面失败: $e');

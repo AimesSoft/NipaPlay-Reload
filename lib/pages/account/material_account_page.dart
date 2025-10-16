@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
@@ -167,15 +168,21 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           onPressed: () async {
             Navigator.of(context).pop();
             try {
-              // 打开浏览器跳转到注销页面
-              final uri = Uri.parse(deleteAccountUrl);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(
-                  uri,
-                  mode: LaunchMode.externalApplication,
-                );
+              // Web和其他平台分别处理URL打开
+              if (kIsWeb) {
+                // Web平台暂时显示URL让用户手动复制
+                showMessage('请复制以下链接到浏览器中打开：$deleteAccountUrl');
               } else {
-                showMessage('无法打开注销页面');
+                // 移动端和桌面端使用url_launcher
+                final uri = Uri.parse(deleteAccountUrl);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
+                } else {
+                  showMessage('无法打开注销页面');
+                }
               }
             } catch (e) {
               showMessage('打开注销页面失败: $e');
@@ -706,12 +713,18 @@ style: TextStyle(color: Colors.white70),
               onTap: () async {
                 const url = 'https://next.bgm.tv/demo/access-token';
                 try {
-                  final uri = Uri.parse(url);
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  if (kIsWeb) {
+                    // Web平台暂时显示URL让用户手动复制
+                    showMessage('请复制以下链接到浏览器中打开：$url');
                   } else {
-                    if (mounted) {
-                      BlurSnackBar.show(context, '无法打开链接');
+                    // 移动端和桌面端使用url_launcher
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    } else {
+                      if (mounted) {
+                        BlurSnackBar.show(context, '无法打开链接');
+                      }
                     }
                   }
                 } catch (e) {
