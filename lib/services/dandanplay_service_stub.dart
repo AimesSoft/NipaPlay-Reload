@@ -561,7 +561,7 @@ class DandanplayService {
           'comment': comment,
         }),
       );
-      
+
       if (response.statusCode == 200) {
         return json.decode(response.body);
       } else {
@@ -570,6 +570,71 @@ class DandanplayService {
     } catch (e) {
       debugPrint('[弹弹play服务-Web] 发送弹幕失败: $e');
       return {'success': false, 'message': '发送弹幕失败: ${e.toString()}'};
+    }
+  }
+
+  // Web版本的账号注销方法（简化实现）
+  static Future<Map<String, dynamic>> getWebToken({
+    required String business,
+  }) async {
+    if (!_isLoggedIn) {
+      throw Exception('需要登录才能获取WebToken');
+    }
+
+    try {
+      debugPrint('[弹弹play服务-Web] 获取WebToken: business=$business');
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/dandanplay/webtoken?business=$business'),
+      );
+
+      debugPrint('[弹弹play服务-Web] 获取WebToken响应: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        debugPrint('[弹弹play服务-Web] WebToken获取成功');
+        return data;
+      } else {
+        throw Exception('获取WebToken失败: HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务-Web] 获取WebToken时出错: $e');
+      rethrow;
+    }
+  }
+
+  static Future<String> startDeleteAccountProcess() async {
+    if (!_isLoggedIn) {
+      throw Exception('需要登录才能注销账号');
+    }
+
+    try {
+      debugPrint('[弹弹play服务-Web] 开始账号注销流程');
+
+      // Web版本直接返回弹弹play官网的注销页面
+      // 因为Web版本无法直接使用OAuth WebToken
+      final deleteAccountUrl = 'https://www.dandanplay.com/user/profile';
+
+      debugPrint('[弹弹play服务-Web] 账号注销URL: $deleteAccountUrl');
+
+      return deleteAccountUrl;
+    } catch (e) {
+      debugPrint('[弹弹play服务-Web] 启动账号注销流程时出错: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> completeAccountDeletion() async {
+    debugPrint('[弹弹play服务-Web] 执行账号注销后的清理工作');
+
+    try {
+      // 清除本地登录信息
+      await clearLoginInfo();
+
+      debugPrint('[弹弹play服务-Web] 账号注销清理完成');
+    } catch (e) {
+      debugPrint('[弹弹play服务-Web] 账号注销清理时出错: $e');
+      // 即使清理出错，也不抛出异常，因为主要的注销操作已经完成
     }
   }
 } 
