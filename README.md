@@ -23,9 +23,13 @@
 - **Windows（x86 64）/Linux（amd64）/macOS（Intel&Apple Silicon）/Android（arm32&arm64&x86 64）**
   
   - [GitHub Releases](https://github.com/mcdfsteve/nipaplay-reload/releases)
-- **iOS (TestFlight)**
+- **iOS (App Store)**
   
-  - [点击这里通过 TestFlight 安装](https://testflight.apple.com/join/4JMh3t44)
+  - <a href="https://apps.apple.com/cn/app/nipaplay/id6751284970" target="_blank">
+    <img src="others/download.png" alt="下载">
+
+</a>
+
 - **macOS (Homebrew)**
   
   > 我们推荐 macOS 用户使用 [Homebrew](https://brew.sh/) 进行安装和管理。
