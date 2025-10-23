@@ -801,103 +801,51 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       );
     }
 
-    final sheetScope = CupertinoBottomSheetScope.maybeOf(context);
-    final double sheetTopInset = sheetScope?.contentTopInset ?? 0;
-    final double sheetTopSpacing = sheetScope?.contentTopSpacing ?? 8;
-
-    // 完全照搬主页面的 Stack 结构
-    return ColoredBox(
-      color: backgroundColor,
-      child: Stack(
-        children: [
-          CustomScrollView(
-            controller: _scrollController,
-            physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics()),
-            slivers: [
-              if (sheetTopInset > 0)
-                SliverToBoxAdapter(
-                  child: SizedBox(height: sheetTopInset/1.3),
-                ),
-              // 加载指示器
-              if (provider.isLoading)
-                SliverToBoxAdapter(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CupertinoActivityIndicator(radius: 8),
-                        SizedBox(width: 8),
-                        Text('正在刷新…', style: TextStyle(fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                ),
-              // 番剧列表
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(20, sheetTopSpacing, 20, 20),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      if (index.isOdd) {
-                        return const SizedBox(height: 12);
-                      }
-                      final animeIndex = index ~/ 2;
-                      final anime = animeSummaries[animeIndex];
-                      return _buildAnimeListItem(anime, provider);
-                    },
-                    childCount: animeSummaries.length * 2 - 1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          // 顶部渐变遮罩
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
+    return CupertinoBottomSheetContentLayout(
+      controller: _scrollController,
+      backgroundColor: backgroundColor,
+      floatingTitleOpacity: titleOpacity,
+      sliversBuilder: (context, topSpacing) {
+        final slivers = <Widget>[];
+        if (provider.isLoading) {
+          slivers.add(
+            SliverToBoxAdapter(
               child: Container(
-                height: sheetTopInset,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      backgroundColor,
-                      backgroundColor.withOpacity(0.0),
-                    ],
-                    stops: const [0.0, 1.0],
-                  ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CupertinoActivityIndicator(radius: 8),
+                    SizedBox(width: 8),
+                    Text('正在刷新…', style: TextStyle(fontSize: 13)),
+                  ],
                 ),
               ),
             ),
-          ),
-          // 浮动标题 - 滚动时渐隐
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: titleOpacity,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 68, 0),
-                  child: Text(
-                    '共享媒体库',
-                    style: CupertinoTheme.of(context)
-                        .textTheme
-                        .navTitleTextStyle
-                        .copyWith(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                ),
+          );
+        }
+
+        slivers.add(
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 20),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  if (index.isOdd) {
+                    return const SizedBox(height: 12);
+                  }
+                  final animeIndex = index ~/ 2;
+                  final anime = animeSummaries[animeIndex];
+                  return _buildAnimeListItem(anime, provider);
+                },
+                childCount: animeSummaries.length * 2 - 1,
               ),
             ),
           ),
-        ],
-      ),
+        );
+
+        return slivers;
+      },
     );
   }
 

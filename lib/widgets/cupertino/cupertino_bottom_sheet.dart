@@ -89,6 +89,8 @@ class CupertinoBottomSheet extends StatelessWidget {
     return CupertinoBottomSheetScope(
       contentTopInset: contentTopInset,
       contentTopSpacing: contentTopSpacing,
+      title: title,
+      floatingTitle: floatingTitle && hasTitle,
       child: Align(
         alignment: Alignment.bottomCenter,
         child: ClipRRect(
@@ -168,10 +170,14 @@ class CupertinoBottomSheet extends StatelessWidget {
 class CupertinoBottomSheetScope extends InheritedWidget {
   final double contentTopInset;
   final double contentTopSpacing;
+  final String? title;
+  final bool floatingTitle;
 
   const CupertinoBottomSheetScope({
     required this.contentTopInset,
     required this.contentTopSpacing,
+    required this.title,
+    required this.floatingTitle,
     required super.child,
     super.key,
   });
@@ -184,6 +190,118 @@ class CupertinoBottomSheetScope extends InheritedWidget {
   @override
   bool updateShouldNotify(covariant CupertinoBottomSheetScope oldWidget) {
     return contentTopInset != oldWidget.contentTopInset ||
-        contentTopSpacing != oldWidget.contentTopSpacing;
+        contentTopSpacing != oldWidget.contentTopSpacing ||
+        title != oldWidget.title ||
+        floatingTitle != oldWidget.floatingTitle;
+  }
+}
+
+typedef CupertinoBottomSheetSliversBuilder = List<Widget> Function(
+    BuildContext context, double contentTopSpacing);
+
+/// 提供与上拉菜单视觉保持一致的滚动内容布局，
+/// 自动处理顶部留白、渐变遮罩以及浮动标题。
+class CupertinoBottomSheetContentLayout extends StatelessWidget {
+  final ScrollController? controller;
+  final ScrollPhysics? physics;
+  final Color? backgroundColor;
+  final double floatingTitleOpacity;
+  final CupertinoBottomSheetSliversBuilder sliversBuilder;
+
+  const CupertinoBottomSheetContentLayout({
+    super.key,
+    this.controller,
+    this.physics,
+    this.backgroundColor,
+    this.floatingTitleOpacity = 1.0,
+    required this.sliversBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = CupertinoBottomSheetScope.maybeOf(context);
+    final double contentTopInset = scope?.contentTopInset ?? 0;
+    final double contentTopSpacing = scope?.contentTopSpacing ?? 0;
+    final bool showFloatingTitle =
+        (scope?.floatingTitle ?? false) && (scope?.title?.isNotEmpty ?? false);
+    final String? title = scope?.title;
+
+    final Color effectiveBackground = backgroundColor ??
+        CupertinoDynamicColor.resolve(
+          CupertinoColors.systemGroupedBackground,
+          context,
+        );
+
+    final slivers = sliversBuilder(context, contentTopSpacing);
+    final double effectiveFloatingTitleOpacity =
+        floatingTitleOpacity.clamp(0.0, 1.0).toDouble();
+
+    return ColoredBox(
+      color: effectiveBackground,
+      child: Stack(
+        children: [
+          CustomScrollView(
+            controller: controller,
+            physics: physics ??
+                const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+            slivers: [
+              if (contentTopInset > 0)
+                SliverToBoxAdapter(
+                  child: SizedBox(height: contentTopInset / 1.3),
+                ),
+              ...slivers,
+            ],
+          ),
+          if (contentTopInset > 0)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Container(
+                  height: contentTopInset,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        effectiveBackground,
+                        effectiveBackground.withOpacity(0.0),
+                      ],
+                      stops: const [0.0, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (showFloatingTitle && title != null)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: effectiveFloatingTitleOpacity,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 68, 0),
+                    child: Text(
+                      title,
+                      style: CupertinoTheme.of(context)
+                          .textTheme
+                          .navTitleTextStyle
+                          .copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
