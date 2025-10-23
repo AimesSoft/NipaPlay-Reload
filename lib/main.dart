@@ -67,6 +67,7 @@ import 'utils/hotkey_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
+import 'package:nipaplay/providers/bottom_bar_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -465,6 +466,7 @@ void main(List<String> args) async {
     runApp(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider(create: (_) => BottomBarProvider()),
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
           ChangeNotifierProvider(create: (_) => VideoPlayerState()),
           ChangeNotifierProvider(

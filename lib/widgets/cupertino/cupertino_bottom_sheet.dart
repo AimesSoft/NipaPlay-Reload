@@ -1,5 +1,7 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:provider/provider.dart';
+import 'package:nipaplay/providers/bottom_bar_provider.dart';
 
 /// 通用的 Cupertino 风格上拉菜单容器
 /// 提供标准的上拉菜单外观和行为，内容完全可自定义
@@ -41,18 +43,28 @@ class CupertinoBottomSheet extends StatelessWidget {
     bool showCloseButton = true,
     VoidCallback? onClose,
     bool floatingTitle = false,
-  }) {
-    return showCupertinoModalPopup<T>(
-      context: context,
-      builder: (BuildContext context) => CupertinoBottomSheet(
-        title: title,
-        heightRatio: heightRatio,
-        showCloseButton: showCloseButton,
-        onClose: onClose,
-        floatingTitle: floatingTitle,
-        child: child,
-      ),
-    );
+  }) async {
+    // 隐藏底部导航栏
+    final bottomBarProvider = Provider.of<BottomBarProvider>(context, listen: false);
+    bottomBarProvider.hideBottomBar();
+
+    try {
+      final result = await showCupertinoModalPopup<T>(
+        context: context,
+        builder: (BuildContext context) => CupertinoBottomSheet(
+          title: title,
+          heightRatio: heightRatio,
+          showCloseButton: showCloseButton,
+          onClose: onClose,
+          floatingTitle: floatingTitle,
+          child: child,
+        ),
+      );
+      return result;
+    } finally {
+      // 恢复底部导航栏显示
+      bottomBarProvider.showBottomBar();
+    }
   }
 
   @override
@@ -103,6 +115,7 @@ class CupertinoBottomSheet extends StatelessWidget {
             ),
             child: SafeArea(
               top: false,
+              bottom: false,
               child: Stack(
                 children: [
                   Positioned.fill(child: content),
