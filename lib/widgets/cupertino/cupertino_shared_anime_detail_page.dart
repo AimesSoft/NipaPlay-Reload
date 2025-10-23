@@ -80,33 +80,45 @@ class _CupertinoSharedAnimeDetailPageState
       context,
     );
 
-    return CupertinoBottomSheetContentLayout(
-      controller: _scrollController,
-      backgroundColor: backgroundColor,
-      floatingTitleOpacity: 0,
-      sliversBuilder: (context, topSpacing) {
-        final hostName = context
-            .watch<SharedRemoteLibraryProvider>()
-            .activeHost
-            ?.displayName;
-        return [
-          SliverToBoxAdapter(
-            child: _buildHeader(context, topSpacing, hostName),
-          ),
-          SliverToBoxAdapter(
-            child: _buildSegmentedControl(context),
-          ),
-          if (_currentSegment == _infoSegment)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                child: _buildInfoSection(context, hostName),
+    return Stack(
+      children: [
+        CupertinoBottomSheetContentLayout(
+          controller: _scrollController,
+          backgroundColor: backgroundColor,
+          floatingTitleOpacity: 0,
+          sliversBuilder: (context, topSpacing) {
+            final hostName = context
+                .watch<SharedRemoteLibraryProvider>()
+                .activeHost
+                ?.displayName;
+            return [
+              SliverToBoxAdapter(
+                child: _buildHeader(context, topSpacing, hostName),
               ),
-            )
-          else
-            ..._buildEpisodeSlivers(context),
-        ];
-      },
+              SliverToBoxAdapter(
+                child: _buildSegmentedControl(context),
+              ),
+              if (_currentSegment == _infoSegment)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                    child: _buildInfoSection(context, hostName),
+                  ),
+                )
+              else
+                ..._buildEpisodeSlivers(context),
+            ];
+          },
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          child: Padding(
+            padding: EdgeInsets.all(_toolbarPadding),
+            child: _buildBackButton(context),
+          ),
+        ),
+      ],
     );
   }
 
@@ -122,94 +134,53 @@ class _CupertinoSharedAnimeDetailPageState
     final title = widget.anime.nameCn?.isNotEmpty == true
         ? widget.anime.nameCn!
         : widget.anime.name;
-
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, topSpacing + 12, 20, 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      padding: EdgeInsets.fromLTRB(20, 25, 20, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IOS26Button.child(
-            onPressed: () => Navigator.of(context).maybePop(),
-            style: IOS26ButtonStyle.glass,
-            size: IOS26ButtonSize.large,
-            child: Icon(
-              CupertinoIcons.back,
-              size: 22,
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
               color: primaryColor,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: primaryColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                  ),
-                ),
-                if (hostName != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '来源：$hostName',
-                    style: TextStyle(
-                      color: secondaryColor,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ],
+          if (hostName != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '来源：$hostName',
+              style: TextStyle(
+                color: secondaryColor,
+                fontSize: 13,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildSegmentedControl(BuildContext context) {
-    final borderColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.separator, context);
-    final backgroundColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.secondarySystemBackground,
-      context,
-    );
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor.withOpacity(0.6)),
+      child: AdaptiveSegmentedControl(
+        labels: const ['详情', '剧集'],
+        selectedIndex: _currentSegment,
+        color: CupertinoDynamicColor.resolve(
+          CupertinoColors.white,
+          context,
         ),
-        child: CupertinoSlidingSegmentedControl<int>(
-          groupValue: _currentSegment,
-          backgroundColor: backgroundColor,
-          padding: const EdgeInsets.all(4),
-          children: const {
-            _infoSegment: Padding(
-              padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-              child: Text('详情'),
-            ),
-            _episodesSegment: Padding(
-              padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-              child: Text('剧集'),
-            ),
-          },
-          onValueChanged: (value) {
-            if (value == null) return;
-            setState(() {
-              _currentSegment = value;
-            });
-          },
-        ),
+        onValueChanged: (index) {
+          setState(() {
+            _currentSegment = index;
+          });
+        },
       ),
     );
   }
@@ -651,6 +622,26 @@ class _CupertinoSharedAnimeDetailPageState
     }
   }
 
+  Widget _buildBackButton(BuildContext context) {
+    final iconColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+
+    return SizedBox(
+      width: _toolbarButtonSize,
+      height: _toolbarButtonSize,
+      child: IOS26Button.child(
+        onPressed: () => Navigator.of(context).maybePop(),
+        style: IOS26ButtonStyle.glass,
+        size: IOS26ButtonSize.large,
+        child: Icon(
+          CupertinoIcons.chevron_left,
+          size: 24,
+          color: iconColor,
+        ),
+      ),
+    );
+  }
+
   String? _resolveImageUrl(SharedRemoteLibraryProvider provider) {
     final imageUrl = widget.anime.imageUrl;
     if (imageUrl == null || imageUrl.isEmpty) {
@@ -674,4 +665,8 @@ class _CupertinoSharedAnimeDetailPageState
     _scrollController.dispose();
     super.dispose();
   }
+
+  static const double _toolbarPadding = 12;
+  static const double _toolbarButtonSize = 36;
+  static const double _headerSpacing = 12;
 }
