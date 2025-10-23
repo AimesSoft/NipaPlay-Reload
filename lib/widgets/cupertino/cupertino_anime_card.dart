@@ -54,60 +54,57 @@ class CupertinoAnimeCard extends StatelessWidget {
           color: resolvedCardColor,
           borderRadius: BorderRadius.circular(20),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 封面图片区域
-            AspectRatio(
-              aspectRatio: 7 / 10,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
-                ),
-                child: _buildPosterImage(context),
-              ),
-            ),
-            // 信息区域
+            // 封面图片区域 - 使用 Expanded 确保填充
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 标题
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: labelColor,
-                        height: 1.2,
-                      ),
+              flex: 7,
+              child: _buildPosterImage(context),
+            ),
+            // 信息区域 - 固定高度
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 标题
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: labelColor,
+                      height: 1.2,
                     ),
-                    const SizedBox(height: 6),
-                    // 剧集信息
-                    Text(
-                      episodeLabel,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: secondaryLabelColor,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  // 剧集信息
+                  Text(
+                    episodeLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secondaryLabelColor,
                     ),
-                    const Spacer(),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (lastWatchTime != null) ...[
+                    const SizedBox(height: 4),
                     // 最后观看时间
-                    if (lastWatchTime != null)
-                      Text(
-                        '最近观看 ${_formatDateTime(lastWatchTime!)}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: secondaryLabelColor.withOpacity(0.8),
-                        ),
+                    Text(
+                      '最近观看 ${_formatDateTime(lastWatchTime!)}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: secondaryLabelColor.withOpacity(0.8),
                       ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
           ],
