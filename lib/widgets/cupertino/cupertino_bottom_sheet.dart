@@ -26,7 +26,7 @@ class CupertinoBottomSheet extends StatelessWidget {
     super.key,
     this.title,
     required this.child,
-    this.heightRatio = 0.88,
+    this.heightRatio = 0.92,
     this.showCloseButton = true,
     this.onClose,
     this.floatingTitle = false,
@@ -37,7 +37,7 @@ class CupertinoBottomSheet extends StatelessWidget {
     required BuildContext context,
     String? title,
     required Widget child,
-    double heightRatio = 0.88,
+    double heightRatio = 0.92,
     bool showCloseButton = true,
     VoidCallback? onClose,
     bool floatingTitle = false,
@@ -46,11 +46,11 @@ class CupertinoBottomSheet extends StatelessWidget {
       context: context,
       builder: (BuildContext context) => CupertinoBottomSheet(
         title: title,
-        child: child,
         heightRatio: heightRatio,
         showCloseButton: showCloseButton,
         onClose: onClose,
         floatingTitle: floatingTitle,
+        child: child,
       ),
     );
   }
@@ -109,14 +109,14 @@ class CupertinoBottomSheet extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         20,
-        showCloseButton ? 28 : 24,
+        showCloseButton ? 36 : 28,
         showCloseButton ? 68 : 20,
         8,
       ),
       child: Text(
         title!,
         style: CupertinoTheme.of(context).textTheme.navTitleTextStyle.copyWith(
-              fontSize: 18,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
             ),
       ),

@@ -845,10 +845,13 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
               child: Opacity(
                 opacity: titleOpacity,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 68, 0),
                   child: Text(
                     '共享媒体库',
-                    style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .navTitleTextStyle
+                        .copyWith(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
