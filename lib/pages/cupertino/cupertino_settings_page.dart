@@ -44,7 +44,6 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
     );
 
     final titleOpacity = (1.0 - (_scrollOffset / 100.0)).clamp(0.0, 1.0);
-    final navBarOpacity = (_scrollOffset / 100.0).clamp(0.0, 1.0);
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return ColoredBox(
@@ -55,8 +54,8 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
             controller: _scrollController,
             physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
             slivers: [
-              SliverToBoxAdapter(
-                child: SizedBox(height: statusBarHeight + 52 + 12),
+              SliverPadding(
+                padding: EdgeInsets.only(top: statusBarHeight + 52 + 12),
               ),
               SliverFillRemaining(
                 hasScrollBody: false,
@@ -92,30 +91,23 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
               ),
             ],
           ),
-          // 顶部模糊导航栏背景
+          // 顶部白色渐变遮罩
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Opacity(
-              opacity: navBarOpacity,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    height: statusBarHeight + 44,
-                    decoration: BoxDecoration(
-                      color: backgroundColor.withOpacity(0.8),
-                      border: Border(
-                        bottom: BorderSide(
-                          color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.separator,
-                            context,
-                          ).withOpacity(navBarOpacity * 0.3),
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
+            child: IgnorePointer(
+              child: Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      backgroundColor,
+                      backgroundColor.withOpacity(0.0),
+                    ],
+                    stops: const [0.0, 1.0],
                   ),
                 ),
               ),
@@ -125,13 +117,21 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
             top: statusBarHeight,
             left: 0,
             right: 0,
-            child: Opacity(
-              opacity: titleOpacity,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Text(
-                  '设置',
-                  style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: titleOpacity,
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(
+                    sigmaX: (1.0 - titleOpacity) * 5,
+                    sigmaY: (1.0 - titleOpacity) * 5,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Text(
+                      '设置',
+                      style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+                    ),
+                  ),
                 ),
               ),
             ),

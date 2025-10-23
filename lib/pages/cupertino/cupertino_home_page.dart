@@ -403,9 +403,6 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     // 计算标题透明度 (滚动0-100px时逐渐消失)
     final titleOpacity = (1.0 - (_scrollOffset / 100.0)).clamp(0.0, 1.0);
 
-    // 计算导航栏模糊背景透明度 (滚动0-100px时逐渐显示)
-    final navBarOpacity = (_scrollOffset / 100.0).clamp(0.0, 1.0);
-
     // 获取状态栏高度
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
@@ -417,11 +414,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             controller: _scrollController,
             physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
             slivers: [
-              // 顶部留空，为大标题预留空间
-              SliverToBoxAdapter(
-                child: SizedBox(height: statusBarHeight + 52 + 12), // 状态栏 + 大标题高度 + 间距
+              // 顶部留空，为大标题和状态栏预留空间
+              SliverPadding(
+                padding: EdgeInsets.only(top: statusBarHeight + 52), // 状态栏 + 大标题高度 + 间距
+                sliver: CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
               ),
-              CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
               SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
               SliverToBoxAdapter(child: _buildHeroSection()),
               SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
@@ -448,47 +445,48 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
             ],
           ),
-          // 顶部模糊导航栏背景
+          // 顶部白色渐变遮罩
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Opacity(
-              opacity: navBarOpacity,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    height: statusBarHeight + 44, // 状态栏 + 导航栏标准高度
-                    decoration: BoxDecoration(
-                      color: backgroundColor.withOpacity(0.8),
-                      border: Border(
-                        bottom: BorderSide(
-                          color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.separator,
-                            context,
-                          ).withOpacity(navBarOpacity * 0.3),
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
+            child: IgnorePointer(
+              child: Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      backgroundColor,
+                      backgroundColor.withOpacity(0.0),
+                    ],
+                    stops: const [0.0, 1.0],
                   ),
                 ),
               ),
             ),
           ),
-          // 自定义大标题 - 使用 Stack 叠加
+          // 自定义大标题 - 使用 Stack 叠加，带模糊效果
           Positioned(
             top: statusBarHeight,
             left: 0,
             right: 0,
-            child: Opacity(
-              opacity: titleOpacity,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Text(
-                  '主页',
-                  style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: titleOpacity,
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(
+                    sigmaX: (1.0 - titleOpacity) * 5, // 随着透明度降低而增加模糊
+                    sigmaY: (1.0 - titleOpacity) * 5,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                    child: Text(
+                      '主页',
+                      style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+                    ),
+                  ),
                 ),
               ),
             ),
