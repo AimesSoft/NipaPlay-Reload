@@ -744,44 +744,86 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       );
     }
 
-    return Column(
+    return Stack(
       children: [
-        if (provider.isLoading)
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CupertinoActivityIndicator(radius: 8),
-                SizedBox(width: 8),
-                Text('正在刷新…', style: TextStyle(fontSize: 13)),
-              ],
+        CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            // 顶部padding，避免被标题遮挡
+            const SliverPadding(
+              padding: EdgeInsets.only(top: 60),
             ),
-          ),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 160,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.66,
+            // 加载指示器
+            if (provider.isLoading)
+              SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CupertinoActivityIndicator(radius: 8),
+                      SizedBox(width: 8),
+                      Text('正在刷新…', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ),
+            // 番剧列表
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    if (index.isOdd) {
+                      return const SizedBox(height: 12);
+                    }
+                    final animeIndex = index ~/ 2;
+                    final anime = animeSummaries[animeIndex];
+                    return _buildAnimeListItem(anime, provider);
+                  },
+                  childCount: animeSummaries.length * 2 - 1,
+                ),
+              ),
             ),
-            itemCount: animeSummaries.length,
-            itemBuilder: (context, index) {
-              final anime = animeSummaries[index];
-              return _buildAnimeGridItem(anime, provider);
-            },
+          ],
+        ),
+        // 顶部渐变遮罩
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: Container(
+              height: 80,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemBackground,
+                      context,
+                    ),
+                    CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemBackground,
+                      context,
+                    ).withOpacity(0.0),
+                  ],
+                  stops: const [0.0, 1.0],
+                ),
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildAnimeGridItem(SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) {
+  Widget _buildAnimeListItem(SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) {
     final imageUrl = _resolveImageUrl(provider, anime.imageUrl);
     final title = anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name;
     final episodeLabel = _buildEpisodeLabel(anime);
+    final sourceLabel = provider.activeHost?.displayName;
 
     return CupertinoAnimeCard(
       title: title,
@@ -790,6 +832,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       lastWatchTime: anime.lastWatchTime,
       onTap: () => _openAnimeDetailFromBottomSheet(anime, provider),
       isLoading: provider.isLoading,
+      sourceLabel: sourceLabel,
+      rating: null, // TODO: 等后端支持后添加评分
     );
   }
 
