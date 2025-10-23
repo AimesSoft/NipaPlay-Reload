@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -273,10 +274,16 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                   children: [
                     _buildActionButton(
                       context,
+                      label: '查看媒体库',
+                      icon: CupertinoIcons.collections,
+                      onPressed: () => _showMediaLibraryBottomSheet(provider),
+                      primary: true,
+                    ),
+                    _buildActionButton(
+                      context,
                       label: '刷新媒体库',
                       icon: CupertinoIcons.refresh,
                       onPressed: () => _refreshActiveHost(provider),
-                      primary: true,
                     ),
                     _buildActionButton(
                       context,
@@ -477,7 +484,6 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   ) {
     final hasHosts = provider.hosts.isNotEmpty;
     final hasActiveHost = provider.hasActiveHost;
-    final animeSummaries = provider.animeSummaries;
 
     if (provider.isInitializing) {
       return [
@@ -496,7 +502,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
             context,
             icon: CupertinoIcons.cloud,
             title: '尚未添加共享客户端',
-            subtitle: '请在下方按钮中添加一台已开启远程访问的 NipaPlay 客户端。',
+            subtitle: '请在上方按钮中添加一台已开启远程访问的 NipaPlay 客户端。',
           ),
         ),
       ];
@@ -516,74 +522,18 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       ];
     }
 
-    if (provider.isLoading && animeSummaries.isEmpty) {
-      return [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: const Center(child: CupertinoActivityIndicator()),
-        ),
-      ];
-    }
-
-    if (animeSummaries.isEmpty) {
-      final subtitle = provider.hasReachableActiveHost
-          ? '该客户端的媒体库为空，稍后再试试。'
-          : '当前客户端离线或不可达，请确认远程设备在线后重试。';
-      return [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: _buildEmptyPlaceholder(
-            context,
-            icon: CupertinoIcons.folder,
-            title: '尚未同步到番剧',
-            subtitle: subtitle,
-          ),
-        ),
-      ];
-    }
-
-    final slivers = <Widget>[];
-
-    if (provider.isLoading) {
-      slivers.add(
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                CupertinoActivityIndicator(radius: 8),
-                SizedBox(width: 8),
-                Text('正在刷新…', style: TextStyle(fontSize: 13)),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    slivers.add(
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-        sliver: SliverGrid(
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 160,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 0.66,
-          ),
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final anime = animeSummaries[index];
-              return _buildAnimeGridItem(context, provider, anime, cardColor);
-            },
-            childCount: animeSummaries.length,
-          ),
+    // 如果有活跃主机，显示提示用户点击"查看媒体库"按钮
+    return [
+      SliverFillRemaining(
+        hasScrollBody: false,
+        child: _buildEmptyPlaceholder(
+          context,
+          icon: CupertinoIcons.collections,
+          title: '媒体库已连接',
+          subtitle: '点击上方的"查看媒体库"按钮来浏览内容。',
         ),
       ),
-    );
-
-    return slivers;
+    ];
   }
 
   Widget _buildEmptyPlaceholder(
@@ -625,134 +575,6 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     );
   }
 
-  Widget _buildAnimeGridItem(
-    BuildContext context,
-    SharedRemoteLibraryProvider provider,
-    SharedRemoteAnimeSummary anime,
-    Color cardColor,
-  ) {
-    final resolvedCardColor = CupertinoDynamicColor.resolve(cardColor, context);
-    final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final secondaryLabelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-    final imageUrl = _resolveImageUrl(provider, anime.imageUrl);
-
-    return GestureDetector(
-      onTap: () => _openAnimeDetail(context, provider, anime),
-      child: Container(
-        decoration: BoxDecoration(
-          color: resolvedCardColor,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 7 / 10,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: _buildPosterImage(context, imageUrl),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: labelColor,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _buildEpisodeLabel(anime),
-                      style: TextStyle(fontSize: 12, color: secondaryLabelColor),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const Spacer(),
-                    Text(
-                      '最近观看 ${_timeFormatter.format(anime.lastWatchTime.toLocal())}',
-                      style: TextStyle(fontSize: 11, color: secondaryLabelColor.withOpacity(0.8)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPosterImage(BuildContext context, String? imageUrl) {
-    final placeholderColor = CupertinoDynamicColor.resolve(CupertinoColors.systemFill, context);
-
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(
-        color: placeholderColor,
-        child: const Center(
-          child: Icon(CupertinoIcons.photo_on_rectangle, size: 26, color: CupertinoColors.inactiveGray),
-        ),
-      );
-    }
-
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        return Container(
-          color: placeholderColor,
-          child: const Center(
-            child: Icon(
-              CupertinoIcons.exclamationmark_triangle,
-              color: CupertinoColors.systemOrange,
-              size: 24,
-            ),
-          ),
-        );
-      },
-      filterQuality: FilterQuality.low,
-    );
-  }
-
-  String _buildEpisodeLabel(SharedRemoteAnimeSummary anime) {
-    final buffer = StringBuffer('共${anime.episodeCount}集');
-    if (anime.hasMissingFiles) {
-      buffer.write(' · 缺失文件');
-    }
-    return buffer.toString();
-  }
-
-  String _formatDateTime(DateTime? time) {
-    if (time == null) {
-      return '尚未同步';
-    }
-    return _timeFormatter.format(time.toLocal());
-  }
-
-  String? _resolveImageUrl(SharedRemoteLibraryProvider provider, String? imageUrl) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return null;
-    }
-    if (imageUrl.startsWith('http')) {
-      return imageUrl;
-    }
-    final baseUrl = provider.activeHost?.baseUrl;
-    if (baseUrl == null || baseUrl.isEmpty) {
-      return imageUrl;
-    }
-    if (imageUrl.startsWith('/')) {
-      return '$baseUrl$imageUrl';
-    }
-    return '$baseUrl/$imageUrl';
-  }
-
   Widget _buildSectionTitle(String title) {
     final textStyle = CupertinoTheme.of(context).textTheme.navTitleTextStyle;
     return Padding(
@@ -762,6 +584,20 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
         style: textStyle?.copyWith(fontSize: 22, fontWeight: FontWeight.w600) ??
             const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
       ),
+    );
+  }
+
+  String _formatDateTime(DateTime? time) {
+    if (time == null) {
+      return '尚未同步';
+    }
+    return _timeFormatter.format(time.toLocal());
+  }
+
+  Future<void> _showMediaLibraryBottomSheet(SharedRemoteLibraryProvider provider) async {
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext context) => _MediaLibraryBottomSheet(provider: provider),
     );
   }
 
@@ -814,12 +650,322 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       }
     }
   }
+}
 
-  Future<void> _openAnimeDetail(
-    BuildContext context,
-    SharedRemoteLibraryProvider provider,
-    SharedRemoteAnimeSummary anime,
-  ) async {
+class _MediaLibraryBottomSheet extends StatefulWidget {
+  final SharedRemoteLibraryProvider provider;
+
+  const _MediaLibraryBottomSheet({required this.provider});
+
+  @override
+  State<_MediaLibraryBottomSheet> createState() => _MediaLibraryBottomSheetState();
+}
+
+class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
+  final DateFormat _timeFormatter = DateFormat('MM-dd HH:mm');
+
+  @override
+  void initState() {
+    super.initState();
+    // 自动刷新媒体库数据
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.provider.animeSummaries.isEmpty) {
+        widget.provider.refreshLibrary(userInitiated: true);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxHeight = screenHeight * 0.9;
+
+    return Container(
+      height: maxHeight,
+      decoration: BoxDecoration(
+        color: CupertinoDynamicColor.resolve(
+          CupertinoDynamicColor.withBrightness(
+            color: CupertinoColors.systemBackground,
+            darkColor: CupertinoColors.darkBackgroundGray,
+          ),
+          context,
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // 顶部拖拽指示器和标题
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemGrey3,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '共享媒体库',
+                          style: CupertinoTheme.of(context).textTheme.navTitleTextStyle?.copyWith(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Icon(CupertinoIcons.xmark_circle_fill, size: 28),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1),
+          // 媒体库内容
+          Expanded(
+            child: Consumer<SharedRemoteLibraryProvider>(
+              builder: (context, provider, _) {
+                return _buildMediaLibraryContent(provider);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMediaLibraryContent(SharedRemoteLibraryProvider provider) {
+    final animeSummaries = provider.animeSummaries;
+
+    if (provider.isLoading && animeSummaries.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoActivityIndicator(),
+            SizedBox(height: 16),
+            Text('正在加载媒体库...', style: TextStyle(color: CupertinoColors.secondaryLabel)),
+          ],
+        ),
+      );
+    }
+
+    if (animeSummaries.isEmpty) {
+      final subtitle = provider.hasReachableActiveHost
+          ? '该客户端的媒体库为空，稍后再试试。'
+          : '当前客户端离线或不可达，请确认远程设备在线后重试。';
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                CupertinoIcons.folder,
+                size: 52,
+                color: CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '尚未同步到番剧',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context),
+                ),
+              ),
+              const SizedBox(height: 24),
+              CupertinoButton.filled(
+                onPressed: () => provider.refreshLibrary(userInitiated: true),
+                child: const Text('重新刷新'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        if (provider.isLoading)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CupertinoActivityIndicator(radius: 8),
+                SizedBox(width: 8),
+                Text('正在刷新…', style: TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 160,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.66,
+            ),
+            itemCount: animeSummaries.length,
+            itemBuilder: (context, index) {
+              final anime = animeSummaries[index];
+              return _buildAnimeGridItem(anime, provider);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAnimeGridItem(SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) {
+    final resolvedCardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final secondaryLabelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final imageUrl = _resolveImageUrl(provider, anime.imageUrl);
+
+    return GestureDetector(
+      onTap: () => _openAnimeDetailFromBottomSheet(anime, provider),
+      child: Container(
+        decoration: BoxDecoration(
+          color: resolvedCardColor,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 7 / 10,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                child: _buildPosterImage(imageUrl),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: labelColor,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _buildEpisodeLabel(anime),
+                      style: TextStyle(fontSize: 12, color: secondaryLabelColor),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const Spacer(),
+                    Text(
+                      '最近观看 ${_timeFormatter.format(anime.lastWatchTime.toLocal())}',
+                      style: TextStyle(fontSize: 11, color: secondaryLabelColor.withOpacity(0.8)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPosterImage(String? imageUrl) {
+    final placeholderColor = CupertinoDynamicColor.resolve(CupertinoColors.systemFill, context);
+
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Container(
+        color: placeholderColor,
+        child: const Center(
+          child: Icon(CupertinoIcons.photo_on_rectangle, size: 26, color: CupertinoColors.inactiveGray),
+        ),
+      );
+    }
+
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) {
+        return Container(
+          color: placeholderColor,
+          child: const Center(
+            child: Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              color: CupertinoColors.systemOrange,
+              size: 24,
+            ),
+          ),
+        );
+      },
+      filterQuality: FilterQuality.low,
+    );
+  }
+
+  String _buildEpisodeLabel(SharedRemoteAnimeSummary anime) {
+    final buffer = StringBuffer('共${anime.episodeCount}集');
+    if (anime.hasMissingFiles) {
+      buffer.write(' · 缺失文件');
+    }
+    return buffer.toString();
+  }
+
+  String? _resolveImageUrl(SharedRemoteLibraryProvider provider, String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return null;
+    }
+    if (imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+    final baseUrl = provider.activeHost?.baseUrl;
+    if (baseUrl == null || baseUrl.isEmpty) {
+      return imageUrl;
+    }
+    if (imageUrl.startsWith('/')) {
+      return '$baseUrl$imageUrl';
+    }
+    return '$baseUrl/$imageUrl';
+  }
+
+  Future<void> _openAnimeDetailFromBottomSheet(SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) async {
+    // 关闭底部弹出菜单
+    Navigator.of(context).pop();
+
+    // 获取主页面的context并调用_openAnimeDetail
     try {
       await ThemedAnimeDetail.show(
         context,
