@@ -11,6 +11,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 
 class CupertinoMediaLibraryPage extends StatefulWidget {
   const CupertinoMediaLibraryPage({super.key});
@@ -595,9 +596,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   }
 
   Future<void> _showMediaLibraryBottomSheet(SharedRemoteLibraryProvider provider) async {
-    await showCupertinoModalPopup<void>(
+    await CupertinoBottomSheet.show(
       context: context,
-      builder: (BuildContext context) => _MediaLibraryBottomSheet(provider: provider),
+      title: '共享媒体库',
+      child: _MediaLibraryContent(provider: provider),
     );
   }
 
@@ -652,16 +654,18 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   }
 }
 
-class _MediaLibraryBottomSheet extends StatefulWidget {
+/// 媒体库内容组件
+/// 只负责显示媒体库的内容，不包含上拉菜单容器
+class _MediaLibraryContent extends StatefulWidget {
   final SharedRemoteLibraryProvider provider;
 
-  const _MediaLibraryBottomSheet({required this.provider});
+  const _MediaLibraryContent({required this.provider});
 
   @override
-  State<_MediaLibraryBottomSheet> createState() => _MediaLibraryBottomSheetState();
+  State<_MediaLibraryContent> createState() => _MediaLibraryContentState();
 }
 
-class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
+class _MediaLibraryContentState extends State<_MediaLibraryContent> {
   final DateFormat _timeFormatter = DateFormat('MM-dd HH:mm');
 
   @override
@@ -677,61 +681,10 @@ class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = screenHeight * 0.92;
-
-    return Container(
-      height: maxHeight,
-      decoration: BoxDecoration(
-        color: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGroupedBackground,
-          context,
-        ),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          // 顶部标题栏
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '共享媒体库',
-                    style: CupertinoTheme.of(context).textTheme.navTitleTextStyle?.copyWith(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: IOS26Button.child(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: IOS26ButtonStyle.glass,
-                    size: IOS26ButtonSize.large,
-                    child: Icon(
-                      CupertinoIcons.xmark,
-                      size: 24,
-                      color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // 媒体库内容
-          Expanded(
-            child: Consumer<SharedRemoteLibraryProvider>(
-              builder: (context, provider, _) {
-                return _buildMediaLibraryContent(provider);
-              },
-            ),
-          ),
-        ],
-      ),
+    return Consumer<SharedRemoteLibraryProvider>(
+      builder: (context, provider, _) {
+        return _buildMediaLibraryContent(provider);
+      },
     );
   }
 
