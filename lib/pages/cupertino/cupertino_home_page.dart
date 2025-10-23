@@ -557,11 +557,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 child: _buildPosterBackground(item.imageUrl!),
               ),
             ),
-          // 底部渐变遮罩 + 文字信息
+          // 底部渐变遮罩覆盖整个卡片底部
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
+            height: cardHeight * 0.5, // 遮罩覆盖卡片底部60%高度
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
@@ -574,6 +575,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                   ],
                 ),
               ),
+            ),
+          ),
+          // 文字信息叠加在最上层
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
