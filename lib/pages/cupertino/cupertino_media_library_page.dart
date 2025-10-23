@@ -595,6 +595,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     await CupertinoBottomSheet.show(
       context: context,
       title: '共享媒体库',
+      floatingTitle: true, // 使用浮动标题
       child: _MediaLibraryContent(provider: provider),
     );
   }
@@ -662,15 +663,32 @@ class _MediaLibraryContent extends StatefulWidget {
 }
 
 class _MediaLibraryContentState extends State<_MediaLibraryContent> {
+  final ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0.0;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     // 自动刷新媒体库数据
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.provider.animeSummaries.isEmpty) {
         widget.provider.refreshLibrary(userInitiated: true);
       }
     });
+  }
+
+  void _onScroll() {
+    if (!mounted) return;
+    setState(() {
+      _scrollOffset = _scrollController.offset;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -684,6 +702,11 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
 
   Widget _buildMediaLibraryContent(SharedRemoteLibraryProvider provider) {
     final animeSummaries = provider.animeSummaries;
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
+    final titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
 
     if (provider.isLoading && animeSummaries.isEmpty) {
       return const Center(
@@ -744,78 +767,95 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       );
     }
 
-    return Stack(
-      children: [
-        CustomScrollView(
-          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-          slivers: [
-            // 顶部padding，避免被标题遮挡
-            const SliverPadding(
-              padding: EdgeInsets.only(top: 60),
-            ),
-            // 加载指示器
-            if (provider.isLoading)
-              SliverToBoxAdapter(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CupertinoActivityIndicator(radius: 8),
-                      SizedBox(width: 8),
-                      Text('正在刷新…', style: TextStyle(fontSize: 13)),
-                    ],
+    // 完全照搬主页面的 Stack 结构
+    return ColoredBox(
+      color: backgroundColor,
+      child: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            slivers: [
+              // 顶部 padding,让标题有空间显示
+              const SliverPadding(
+                padding: EdgeInsets.only(top: 52),
+              ),
+              // 加载指示器
+              if (provider.isLoading)
+                SliverToBoxAdapter(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CupertinoActivityIndicator(radius: 8),
+                        SizedBox(width: 8),
+                        Text('正在刷新…', style: TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
+              // 番剧列表
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      if (index.isOdd) {
+                        return const SizedBox(height: 12);
+                      }
+                      final animeIndex = index ~/ 2;
+                      final anime = animeSummaries[animeIndex];
+                      return _buildAnimeListItem(anime, provider);
+                    },
+                    childCount: animeSummaries.length * 2 - 1,
                   ),
                 ),
               ),
-            // 番剧列表
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    if (index.isOdd) {
-                      return const SizedBox(height: 12);
-                    }
-                    final animeIndex = index ~/ 2;
-                    final anime = animeSummaries[animeIndex];
-                    return _buildAnimeListItem(anime, provider);
-                  },
-                  childCount: animeSummaries.length * 2 - 1,
-                ),
-              ),
-            ),
-          ],
-        ),
-        // 顶部渐变遮罩
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: IgnorePointer(
-            child: Container(
-              height: 80,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    CupertinoDynamicColor.resolve(
-                      CupertinoColors.systemBackground,
-                      context,
-                    ),
-                    CupertinoDynamicColor.resolve(
-                      CupertinoColors.systemBackground,
-                      context,
-                    ).withOpacity(0.0),
-                  ],
-                  stops: const [0.0, 1.0],
+            ],
+          ),
+          // 顶部渐变遮罩
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      backgroundColor,
+                      backgroundColor.withOpacity(0.0),
+                    ],
+                    stops: const [0.0, 1.0],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+          // 浮动标题 - 滚动时渐隐
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: titleOpacity,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  child: Text(
+                    '共享媒体库',
+                    style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
