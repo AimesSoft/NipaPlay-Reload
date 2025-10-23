@@ -3,9 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,6 +27,7 @@ class CupertinoHomePage extends StatefulWidget {
 class _CupertinoHomePageState extends State<CupertinoHomePage> {
   final PageController _pageController = PageController();
   final DateFormat _dateFormat = DateFormat('MM-dd HH:mm');
+  final ScrollController _scrollController = ScrollController();
 
   Timer? _autoScrollTimer;
   Timer? _reloadDebounce;
@@ -36,6 +35,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   int _currentIndex = 0;
   bool _isLoadingRecommended = false;
   bool _didScheduleInitialLoad = false;
+  double _scrollOffset = 0.0;
 
   List<_CupertinoRecommendedItem> _recommendedItems = [];
 
@@ -52,6 +52,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!mounted) return;
+    setState(() {
+      _scrollOffset = _scrollController.offset;
+    });
   }
 
   @override
@@ -98,6 +106,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     _autoScrollTimer?.cancel();
     _reloadDebounce?.cancel();
     _pageController.dispose();
+    _scrollController.dispose();
 
     _jellyfinProvider?.removeListener(_onSourceChanged);
     _embyProvider?.removeListener(_onSourceChanged);
@@ -390,50 +399,68 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       context,
     );
 
+    // 计算标题透明度 (滚动0-100px时逐渐消失)
+    final titleOpacity = (1.0 - (_scrollOffset / 100.0)).clamp(0.0, 1.0);
+
+    // 获取状态栏高度
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+
     return ColoredBox(
       color: backgroundColor,
-      child: SafeArea(
-        top: true,
-        bottom: false,
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-          slivers: [
-            SliverToBoxAdapter(
+      child: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            slivers: [
+              // 顶部留空，为大标题预留空间
+              SliverToBoxAdapter(
+                child: SizedBox(height: statusBarHeight + 52 + 12), // 状态栏 + 大标题高度 + 间距
+              ),
+              CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
+              SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
+              SliverToBoxAdapter(child: _buildHeroSection()),
+              SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
+              SliverToBoxAdapter(
+                child: Consumer<WatchHistoryProvider>(
+                  builder: (context, provider, _) {
+                    final recentItems = _buildRecentItems(provider.history);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      child: recentItems.isEmpty
+                          ? _buildEmptyRecentPlaceholder()
+                          : Column(
+                              children: recentItems
+                                  .map((item) => Padding(
+                                        padding: const EdgeInsets.only(bottom: 12),
+                                        child: _buildRecentCard(item),
+                                      ))
+                                  .toList(),
+                            ),
+                    );
+                  },
+                ),
+              ),
+              const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+            ],
+          ),
+          // 自定义大标题 - 使用 Stack 叠加
+          Positioned(
+            top: statusBarHeight,
+            left: 0,
+            right: 0,
+            child: Opacity(
+              opacity: titleOpacity,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                 child: Text(
                   '主页',
                   style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
                 ),
               ),
             ),
-            CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
-            SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
-            SliverToBoxAdapter(child: _buildHeroSection()),
-            SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
-            SliverToBoxAdapter(
-              child: Consumer<WatchHistoryProvider>(
-                builder: (context, provider, _) {
-                  final recentItems = _buildRecentItems(provider.history);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    child: recentItems.isEmpty
-                        ? _buildEmptyRecentPlaceholder()
-                        : Column(
-                            children: recentItems
-                                .map((item) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
-                                      child: _buildRecentCard(item),
-                                    ))
-                                .toList(),
-                          ),
-                  );
-                },
-              ),
-            ),
-            const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

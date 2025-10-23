@@ -1,6 +1,5 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_home_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_media_library_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_settings_page.dart';
@@ -28,14 +27,9 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     return AdaptiveScaffold(
       minimizeBehavior: TabBarMinimizeBehavior.never,
       enableBlur: true,
-      body: ColoredBox(
-        color: CupertinoColors.systemGroupedBackground,
-        child: SafeArea(
-          child: IndexedStack(
-            index: _selectedIndex,
-            children: _pages,
-          ),
-        ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
       ),
       bottomNavigationBar: AdaptiveBottomNavigationBar(
         useNativeBottomBar: true,
