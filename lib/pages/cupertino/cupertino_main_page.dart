@@ -36,7 +36,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         ),
       ),
       bottomNavigationBar: AdaptiveBottomNavigationBar(
-        useNativeBottomBar: true,
+        useNativeBottomBar: false,
         items: const [
           AdaptiveNavigationDestination(
             icon: 'house.fill',

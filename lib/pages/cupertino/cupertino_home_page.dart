@@ -27,7 +27,7 @@ class CupertinoHomePage extends StatefulWidget {
 }
 
 class _CupertinoHomePageState extends State<CupertinoHomePage> {
-  final PageController _pageController = PageController(viewportFraction: 0.88);
+  final PageController _pageController = PageController();
   final DateFormat _dateFormat = DateFormat('MM-dd HH:mm');
 
   Timer? _autoScrollTimer;
@@ -448,8 +448,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       );
     }
 
+    const horizontalMargin = 20.0;
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardWidth = screenWidth * _pageController.viewportFraction;
+    final cardWidth = screenWidth - horizontalMargin * 2;
     final imageHeight = cardWidth * 9 / 16;
     const double contentHeight = 148;
 
@@ -466,7 +467,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         itemBuilder: (context, index) {
           final item = _recommendedItems[index];
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: horizontalMargin),
             child: _buildPosterCard(item, imageHeight, contentHeight),
           );
         },
@@ -493,13 +494,6 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.24),
-            blurRadius: 28,
-            offset: const Offset(0, 18),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -693,15 +687,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       decoration: BoxDecoration(
         color: resolvedBackground,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
-          ),
-        ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
