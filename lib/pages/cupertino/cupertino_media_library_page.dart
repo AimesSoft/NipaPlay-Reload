@@ -684,10 +684,7 @@ class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
       height: maxHeight,
       decoration: BoxDecoration(
         color: CupertinoDynamicColor.resolve(
-          CupertinoDynamicColor.withBrightness(
-            color: CupertinoColors.systemBackground,
-            darkColor: CupertinoColors.darkBackgroundGray,
-          ),
+          CupertinoColors.systemGroupedBackground,
           context,
         ),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
