@@ -1,4 +1,5 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_home_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_media_library_page.dart';
@@ -25,10 +26,13 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   @override
   Widget build(BuildContext context) {
     return AdaptiveScaffold(
-      body: SafeArea(
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: _pages,
+      body: ColoredBox(
+        color: CupertinoColors.systemGroupedBackground,
+        child: SafeArea(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: _pages,
+          ),
         ),
       ),
       bottomNavigationBar: AdaptiveBottomNavigationBar(

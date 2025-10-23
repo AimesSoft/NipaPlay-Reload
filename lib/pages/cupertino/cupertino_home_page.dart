@@ -390,40 +390,50 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       context,
     );
 
-    return Container(
+    return ColoredBox(
       color: backgroundColor,
-      child: CustomScrollView(
-        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-        slivers: [
-          const CupertinoSliverNavigationBar(
-            largeTitle: Text('主页'),
-          ),
-          CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
-          SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
-          SliverToBoxAdapter(child: _buildHeroSection()),
-          SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
-          SliverToBoxAdapter(
-            child: Consumer<WatchHistoryProvider>(
-              builder: (context, provider, _) {
-                final recentItems = _buildRecentItems(provider.history);
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: recentItems.isEmpty
-                      ? _buildEmptyRecentPlaceholder()
-                      : Column(
-                          children: recentItems
-                              .map((item) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: _buildRecentCard(item),
-                                  ))
-                              .toList(),
-                        ),
-                );
-              },
+      child: SafeArea(
+        top: true,
+        bottom: false,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                child: Text(
+                  '主页',
+                  style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+                ),
+              ),
             ),
-          ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
-        ],
+            CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
+            SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
+            SliverToBoxAdapter(child: _buildHeroSection()),
+            SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
+            SliverToBoxAdapter(
+              child: Consumer<WatchHistoryProvider>(
+                builder: (context, provider, _) {
+                  final recentItems = _buildRecentItems(provider.history);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: recentItems.isEmpty
+                        ? _buildEmptyRecentPlaceholder()
+                        : Column(
+                            children: recentItems
+                                .map((item) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: _buildRecentCard(item),
+                                    ))
+                                .toList(),
+                          ),
+                  );
+                },
+              ),
+            ),
+            const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+          ],
+        ),
       ),
     );
   }
@@ -440,10 +450,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final cardWidth = screenWidth * _pageController.viewportFraction;
-    final cardHeight = cardWidth * 9 / 16;
+    final imageHeight = cardWidth * 9 / 16;
+    const double contentHeight = 148;
 
     return SizedBox(
-      height: cardHeight,
+      height: imageHeight + contentHeight,
       child: PageView.builder(
         controller: _pageController,
         itemCount: _recommendedItems.length,
@@ -456,14 +467,18 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           final item = _recommendedItems[index];
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: _buildPosterCard(item),
+            child: _buildPosterCard(item, imageHeight, contentHeight),
           );
         },
       ),
     );
   }
 
-  Widget _buildPosterCard(_CupertinoRecommendedItem item) {
+  Widget _buildPosterCard(
+    _CupertinoRecommendedItem item,
+    double imageHeight,
+    double contentHeight,
+  ) {
     final cardColor = CupertinoDynamicColor.resolve(
       CupertinoDynamicColor.withBrightness(
         color: CupertinoColors.white,
@@ -486,37 +501,26 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (item.imageUrl != null)
-              _buildPosterBackground(item.imageUrl!)
-            else
-              Container(color: cardColor),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.white.withOpacity(0.0),
-                      Colors.white.withOpacity(0.4),
-                      Colors.white,
-                    ],
-                  ),
-                ),
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            child: SizedBox(
+              height: imageHeight,
+              width: double.infinity,
+              child: item.imageUrl != null
+                  ? _buildPosterBackground(item.imageUrl!)
+                  : Container(color: cardColor),
             ),
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 20,
+          ),
+          SizedBox(
+            height: contentHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   _buildCardMetaRow(item),
                   const SizedBox(height: 10),
@@ -553,13 +557,13 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                       ],
                     ),
                   ],
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   _buildPageIndicator(item),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -623,7 +627,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           width: isActive ? 16 : 6,
           height: 6,
           decoration: BoxDecoration(
-            color: isActive ? Colors.white : Colors.white38,
+            color: isActive
+                ? CupertinoColors.activeBlue
+                : CupertinoColors.systemGrey3,
             borderRadius: BorderRadius.circular(3),
           ),
         );
