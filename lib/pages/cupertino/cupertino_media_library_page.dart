@@ -1,12 +1,12 @@
 import 'dart:ui';
 
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
@@ -766,41 +766,53 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   }
 
   Future<void> _openAddHostDialog(SharedRemoteLibraryProvider provider) async {
-    await BlurLoginDialog.show(
-      context,
+    final result = await AdaptiveAlertDialog.show(
+      context: context,
       title: '添加NipaPlay共享客户端',
-      fields: const [
-        LoginField(
-          key: 'displayName',
-          label: '备注名称',
-          hint: '例如：家里的电脑',
-          required: false,
+      message: '请输入共享客户端的访问地址',
+      icon: 'network',
+      input: AdaptiveAlertDialogInput(
+        placeholder: '例如：http://192.168.1.100:8080',
+        initialValue: '',
+        keyboardType: TextInputType.url,
+      ),
+      actions: [
+        AlertAction(
+          title: '取消',
+          style: AlertActionStyle.cancel,
+          onPressed: () {},
         ),
-        LoginField(
-          key: 'baseUrl',
-          label: '访问地址',
-          hint: '例如：http://192.168.1.100:8080',
+        AlertAction(
+          title: '添加',
+          style: AlertActionStyle.primary,
+          onPressed: () {},
         ),
       ],
-      loginButtonText: '添加',
-      onLogin: (values) async {
-        try {
-          final displayNameRaw = values['displayName']?.trim() ?? '';
-          final baseUrl = values['baseUrl']?.trim() ?? '';
-          if (baseUrl.isEmpty) {
-            return const LoginResult(success: false, message: '请输入访问地址');
-          }
-          final displayName = displayNameRaw.isEmpty ? baseUrl : displayNameRaw;
-          await provider.addHost(
-            displayName: displayName,
-            baseUrl: baseUrl,
-          );
-          return const LoginResult(success: true, message: '已添加共享客户端');
-        } catch (e) {
-          return LoginResult(success: false, message: '添加失败：$e');
-        }
-      },
     );
+
+    if (result != null && result.isNotEmpty) {
+      final baseUrl = result.trim();
+      if (baseUrl.isEmpty) {
+        if (mounted) {
+          BlurSnackBar.show(context, '请输入访问地址');
+        }
+        return;
+      }
+
+      try {
+        await provider.addHost(
+          displayName: baseUrl,
+          baseUrl: baseUrl,
+        );
+        if (mounted) {
+          BlurSnackBar.show(context, '已添加共享客户端');
+        }
+      } catch (e) {
+        if (mounted) {
+          BlurSnackBar.show(context, '添加失败：$e');
+        }
+      }
+    }
   }
 
   Future<void> _openAnimeDetail(
