@@ -778,7 +778,7 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
             slivers: [
               // 顶部 padding,让标题有空间显示
               const SliverPadding(
-                padding: EdgeInsets.only(top: 52),
+                padding: EdgeInsets.only(top: 35),
               ),
               // 加载指示器
               if (provider.isLoading)
@@ -797,7 +797,7 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
                 ),
               // 番剧列表
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
