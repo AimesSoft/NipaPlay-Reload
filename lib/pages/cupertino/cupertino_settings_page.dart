@@ -43,7 +43,7 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
       context,
     );
 
-    final titleOpacity = (1.0 - (_scrollOffset / 100.0)).clamp(0.0, 1.0);
+    final titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return ColoredBox(
@@ -120,17 +120,11 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
             child: IgnorePointer(
               child: Opacity(
                 opacity: titleOpacity,
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(
-                    sigmaX: (1.0 - titleOpacity) * 5,
-                    sigmaY: (1.0 - titleOpacity) * 5,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Text(
-                      '设置',
-                      style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  child: Text(
+                    '设置',
+                    style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
                   ),
                 ),
               ),

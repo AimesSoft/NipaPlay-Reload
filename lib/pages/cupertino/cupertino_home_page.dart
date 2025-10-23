@@ -400,8 +400,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       context,
     );
 
-    // 计算标题透明度 (滚动0-100px时逐渐消失)
-    final titleOpacity = (1.0 - (_scrollOffset / 100.0)).clamp(0.0, 1.0);
+    // 计算标题透明度 (滚动0-10px时快速消失)
+    final titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
 
     // 获取状态栏高度
     final statusBarHeight = MediaQuery.of(context).padding.top;
@@ -467,7 +467,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               ),
             ),
           ),
-          // 自定义大标题 - 使用 Stack 叠加，带模糊效果
+          // 自定义大标题 - 使用 Stack 叠加
           Positioned(
             top: statusBarHeight,
             left: 0,
@@ -475,17 +475,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             child: IgnorePointer(
               child: Opacity(
                 opacity: titleOpacity,
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(
-                    sigmaX: (1.0 - titleOpacity) * 5, // 随着透明度降低而增加模糊
-                    sigmaY: (1.0 - titleOpacity) * 5,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-                    child: Text(
-                      '主页',
-                      style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  child: Text(
+                    '主页',
+                    style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
                   ),
                 ),
               ),
