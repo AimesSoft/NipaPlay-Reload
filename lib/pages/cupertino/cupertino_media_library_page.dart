@@ -171,6 +171,13 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
           context,
         ),
         borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: CupertinoColors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
