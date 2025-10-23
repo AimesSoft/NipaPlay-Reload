@@ -385,11 +385,19 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
+
+    return Container(
+      color: backgroundColor,
       child: CustomScrollView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         slivers: [
+          const CupertinoSliverNavigationBar(
+            largeTitle: Text('主页'),
+          ),
           CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
           SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
           SliverToBoxAdapter(child: _buildHeroSection()),
@@ -431,7 +439,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     }
 
     return SizedBox(
-      height: 280,
+      height: 320,
       child: PageView.builder(
         controller: _pageController,
         itemCount: _recommendedItems.length,
@@ -455,87 +463,97 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     final resolvedBackground = CupertinoDynamicColor.resolve(CupertinoColors.secondarySystemBackground, context);
     final resolvedFill = CupertinoDynamicColor.resolve(CupertinoColors.systemFill, context);
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: Stack(
-        fit: StackFit.expand,
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
+      context,
+    );
+    final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final secondaryLabelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.24),
+            blurRadius: 28,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (item.imageUrl != null)
-            _buildPosterBackground(item.imageUrl!)
-          else
-            Container(color: resolvedBackground),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.black.withOpacity(0.05),
-                    Colors.black.withOpacity(0.45),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: item.imageUrl != null
+                  ? _buildPosterBackground(item.imageUrl!)
+                  : Container(color: resolvedBackground),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _sourceIcon(item.source),
+                size: 16,
+                color: CupertinoColors.activeBlue,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _sourceLabel(item.source),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: CupertinoColors.activeBlue,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            item.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: labelColor,
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 20,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: 6),
+          Text(
+            item.subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: secondaryLabelColor,
+              fontSize: 14,
+            ),
+          ),
+          if (item.rating != null) ...[
+            const SizedBox(height: 10),
+            Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: resolvedFill.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _sourceLabel(item.source),
-                    style: const TextStyle(fontSize: 12, color: Colors.white),
-                  ),
-                ),
-                const SizedBox(height: 12),
+                const Icon(CupertinoIcons.star_fill, color: Color(0xFFFFD166), size: 16),
+                const SizedBox(width: 4),
                 Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  item.rating!.toStringAsFixed(1),
+                  style: TextStyle(color: secondaryLabelColor),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  item.subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
-                ),
-                if (item.rating != null) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(CupertinoIcons.star_fill, color: Color(0xFFFFD166), size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        item.rating!.toStringAsFixed(1),
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 14),
-                _buildPageIndicator(item),
               ],
             ),
-          ),
+          ],
+          const SizedBox(height: 16),
+          _buildPageIndicator(item),
         ],
       ),
     );
@@ -594,12 +612,25 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Widget _buildEmptyRecentPlaceholder() {
-    final resolvedBackground = CupertinoDynamicColor.resolve(CupertinoColors.secondarySystemFill, context);
+    final resolvedBackground = CupertinoDynamicColor.resolve(
+      CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
+      context,
+    );
     return Container(
       height: 140,
       decoration: BoxDecoration(
-        color: resolvedBackground.withOpacity(0.6),
+        color: resolvedBackground,
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: const Center(
         child: Text(
@@ -611,13 +642,26 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Widget _buildRecentCard(WatchHistoryItem item) {
-    final resolvedBackground = CupertinoDynamicColor.resolve(CupertinoColors.secondarySystemBackground, context);
+    final resolvedBackground = CupertinoDynamicColor.resolve(
+      CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
+      context,
+    );
     final progress = item.duration > 0 ? item.watchProgress.clamp(0.0, 1.0) : 0.0;
 
     return Container(
       decoration: BoxDecoration(
         color: resolvedBackground,
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Column(
@@ -707,6 +751,19 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         return '本地媒体';
       case _CupertinoRecommendedSource.placeholder:
         return '提示';
+    }
+  }
+
+  IconData _sourceIcon(_CupertinoRecommendedSource source) {
+    switch (source) {
+      case _CupertinoRecommendedSource.jellyfin:
+        return CupertinoIcons.tv;
+      case _CupertinoRecommendedSource.emby:
+        return CupertinoIcons.tv_music_note;
+      case _CupertinoRecommendedSource.local:
+        return CupertinoIcons.tray_full;
+      case _CupertinoRecommendedSource.placeholder:
+        return CupertinoIcons.info_circle;
     }
   }
 

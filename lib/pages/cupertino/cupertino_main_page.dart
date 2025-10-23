@@ -33,17 +33,17 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
       ),
       bottomNavigationBar: AdaptiveBottomNavigationBar(
         useNativeBottomBar: true,
-        items: [
+        items: const [
           AdaptiveNavigationDestination(
-            icon: PlatformInfo.isIOS ? 'house.fill' : Icons.home_filled,
+            icon: 'house.fill',
             label: '主页',
           ),
           AdaptiveNavigationDestination(
-            icon: PlatformInfo.isIOS ? 'play.rectangle.fill' : Icons.video_library_rounded,
+            icon: 'play.rectangle.fill',
             label: '媒体库',
           ),
           AdaptiveNavigationDestination(
-            icon: PlatformInfo.isIOS ? 'gearshape.fill' : Icons.settings_rounded,
+            icon: 'gearshape.fill',
             label: '设置',
           ),
         ],
