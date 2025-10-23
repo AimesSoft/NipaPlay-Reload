@@ -1,6 +1,8 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+
+import 'package:nipaplay/pages/cupertino/account/cupertino_account_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_home_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_media_library_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_settings_page.dart';
@@ -19,8 +21,8 @@ class CupertinoMainPage extends StatefulWidget {
 class _CupertinoMainPageState extends State<CupertinoMainPage> {
   int _selectedIndex = 0;
 
-  // 为每个页面创建bounce控制器的GlobalKey
   final List<GlobalKey<CupertinoBounceWrapperState>> _bounceKeys = [
+    GlobalKey<CupertinoBounceWrapperState>(),
     GlobalKey<CupertinoBounceWrapperState>(),
     GlobalKey<CupertinoBounceWrapperState>(),
     GlobalKey<CupertinoBounceWrapperState>(),
@@ -29,13 +31,13 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   static const List<Widget> _pages = [
     CupertinoHomePage(),
     CupertinoMediaLibraryPage(),
+    CupertinoAccountPage(),
     CupertinoSettingsPage(),
   ];
 
   @override
   void initState() {
     super.initState();
-    // 首次进入时触发初始页面的动画
     WidgetsBinding.instance.addPostFrameCallback((_) {
       CupertinoBounceWrapper.playAnimation(_bounceKeys[_selectedIndex]);
     });
@@ -56,7 +58,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
               key: ValueKey<int>(_selectedIndex),
               child: CupertinoBounceWrapper(
                 key: _bounceKeys[_selectedIndex],
-                autoPlay: false, // 禁用自动播放，手动控制
+                autoPlay: false,
                 child: _pages[_selectedIndex],
               ),
             ),
@@ -73,6 +75,10 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                 label: '媒体库',
               ),
               AdaptiveNavigationDestination(
+                icon: 'person.crop.circle.fill',
+                label: '账户',
+              ),
+              AdaptiveNavigationDestination(
                 icon: 'gearshape.fill',
                 label: '设置',
               ),
@@ -85,7 +91,6 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
               setState(() {
                 _selectedIndex = index;
               });
-              // 等待页面切换动画完成后再触发bounce动画
               Future.delayed(const Duration(milliseconds: 50), () {
                 if (mounted) {
                   CupertinoBounceWrapper.playAnimation(_bounceKeys[index]);

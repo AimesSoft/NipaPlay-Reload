@@ -156,10 +156,10 @@ class CupertinoBottomSheet extends StatelessWidget {
     return SizedBox(
       width: _closeButtonSize,
       height: _closeButtonSize,
-      child: IOS26Button.child(
+      child: AdaptiveButton.child(
         onPressed: onClose ?? () => Navigator.of(context).pop(),
-        style: IOS26ButtonStyle.glass,
-        size: IOS26ButtonSize.large,
+        style: AdaptiveButtonStyle.glass,
+        size: AdaptiveButtonSize.large,
         child: Icon(
           CupertinoIcons.xmark,
           size: 24,

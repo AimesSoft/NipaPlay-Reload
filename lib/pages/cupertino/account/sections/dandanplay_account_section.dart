@@ -1,0 +1,117 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
+
+import '../widgets/account_action_button.dart';
+import '../widgets/account_profile_card.dart';
+
+class CupertinoDandanplayAccountSection extends StatelessWidget {
+  final bool isLoggedIn;
+  final String username;
+  final String? avatarUrl;
+  final bool isLoading;
+  final VoidCallback onLogin;
+  final VoidCallback onRegister;
+  final VoidCallback onLogout;
+  final VoidCallback onDeleteAccount;
+  final Widget userActivity;
+
+  const CupertinoDandanplayAccountSection({
+    super.key,
+    required this.isLoggedIn,
+    required this.username,
+    required this.avatarUrl,
+    required this.isLoading,
+    required this.onLogin,
+    required this.onRegister,
+    required this.onLogout,
+    required this.onDeleteAccount,
+    required this.userActivity,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoggedIn) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CupertinoAccountProfileCard(
+            username: username,
+            avatarUrl: avatarUrl,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoAccountActionButton(
+                  label: '退出登录',
+                  iosIcon: CupertinoIcons.square_arrow_left,
+                  onPressed: onLogout,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: CupertinoAccountActionButton(
+                  label: isLoading ? '处理中...' : '注销账号',
+                  iosIcon: CupertinoIcons.delete,
+                  destructive: true,
+                  isLoading: isLoading,
+                  onPressed: isLoading ? null : onDeleteAccount,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          userActivity,
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AdaptiveCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '登录弹弹play账号',
+                style: CupertinoTheme.of(context)
+                    .textTheme
+                    .textStyle
+                    .copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '登录后可同步观看记录、收藏和应用设置。',
+                style: CupertinoTheme.of(context)
+                    .textTheme
+                    .textStyle
+                    .copyWith(color: CupertinoColors.systemGrey),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        AdaptiveFormSection.insetGrouped(
+          children: [
+            AdaptiveListTile(
+              leading: const Icon(CupertinoIcons.person_crop_circle),
+              title: const Text('立即登录'),
+              subtitle: const Text('使用已有账号同步数据'),
+              trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
+              onTap: onLogin,
+            ),
+            AdaptiveListTile(
+              leading: const Icon(CupertinoIcons.person_badge_plus),
+              title: const Text('注册新账号'),
+              subtitle: const Text('创建弹弹play账号，解锁更多功能'),
+              trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
+              onTap: onRegister,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
