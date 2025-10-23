@@ -538,8 +538,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       ),
       context,
     );
-    final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final secondaryLabelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
     return Container(
       height: cardHeight,
@@ -569,12 +569,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.7),
+                    Colors.black.withOpacity(0.0),
+                    Colors.black.withOpacity(0.5),
                   ],
                 ),
               ),
-              padding: const EdgeInsets.fromLTRB(20, 40, 20, 18),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
