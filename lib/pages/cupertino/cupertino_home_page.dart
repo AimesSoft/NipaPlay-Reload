@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -503,11 +504,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     const horizontalMargin = 20.0;
     final screenWidth = MediaQuery.of(context).size.width;
     final cardWidth = screenWidth - horizontalMargin * 2;
-    final imageHeight = cardWidth * 9 / 16;
-    const double contentHeight = 148;
+    final cardHeight = cardWidth / (3 / 2); // 整个卡片 3:2 横图比例
 
     return SizedBox(
-      height: imageHeight + contentHeight,
+      height: cardHeight,
       child: PageView.builder(
         controller: _pageController,
         itemCount: _recommendedItems.length,
@@ -520,7 +520,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           final item = _recommendedItems[index];
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: horizontalMargin),
-            child: _buildPosterCard(item, imageHeight, contentHeight),
+            child: _buildPosterCard(item, cardHeight),
           );
         },
       ),
@@ -529,8 +529,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Widget _buildPosterCard(
     _CupertinoRecommendedItem item,
-    double imageHeight,
-    double contentHeight,
+    double cardHeight,
   ) {
     final cardColor = CupertinoDynamicColor.resolve(
       CupertinoDynamicColor.withBrightness(
@@ -543,30 +542,42 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     final secondaryLabelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
     return Container(
+      height: cardHeight,
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(24),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            child: SizedBox(
-              height: imageHeight,
-              width: double.infinity,
-              child: item.imageUrl != null
-                  ? _buildPosterBackground(item.imageUrl!)
-                  : Container(color: cardColor),
+          // 背景图片铺满整个卡片
+          if (item.imageUrl != null)
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: _buildPosterBackground(item.imageUrl!),
+              ),
             ),
-          ),
-          SizedBox(
-            height: contentHeight,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+          // 底部渐变遮罩 + 文字信息
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.7),
+                  ],
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 40, 20, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildCardMetaRow(item),
                   const SizedBox(height: 10),
@@ -574,10 +585,16 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                     item.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: labelColor,
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontSize: 22,
                       fontWeight: FontWeight.w600,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black45,
+                          blurRadius: 8,
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -586,7 +603,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: secondaryLabelColor,
+                      color: Colors.white.withOpacity(0.9),
                       fontSize: 14,
                     ),
                   ),
@@ -598,7 +615,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                         const SizedBox(width: 4),
                         Text(
                           item.rating!.toStringAsFixed(1),
-                          style: TextStyle(color: secondaryLabelColor),
+                          style: const TextStyle(color: Colors.white),
                         ),
                       ],
                     ),
