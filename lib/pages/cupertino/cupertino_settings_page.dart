@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/cupertino.dart';
 
 class CupertinoSettingsPage extends StatefulWidget {
@@ -42,6 +44,7 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
     );
 
     final titleOpacity = (1.0 - (_scrollOffset / 100.0)).clamp(0.0, 1.0);
+    final navBarOpacity = (_scrollOffset / 100.0).clamp(0.0, 1.0);
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return ColoredBox(
@@ -88,6 +91,35 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
                 ),
               ),
             ],
+          ),
+          // 顶部模糊导航栏背景
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Opacity(
+              opacity: navBarOpacity,
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    height: statusBarHeight + 44,
+                    decoration: BoxDecoration(
+                      color: backgroundColor.withOpacity(0.8),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.separator,
+                            context,
+                          ).withOpacity(navBarOpacity * 0.3),
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
           Positioned(
             top: statusBarHeight,

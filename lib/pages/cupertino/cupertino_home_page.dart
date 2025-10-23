@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
@@ -402,6 +403,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     // 计算标题透明度 (滚动0-100px时逐渐消失)
     final titleOpacity = (1.0 - (_scrollOffset / 100.0)).clamp(0.0, 1.0);
 
+    // 计算导航栏模糊背景透明度 (滚动0-100px时逐渐显示)
+    final navBarOpacity = (_scrollOffset / 100.0).clamp(0.0, 1.0);
+
     // 获取状态栏高度
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
@@ -443,6 +447,35 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               ),
               const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
             ],
+          ),
+          // 顶部模糊导航栏背景
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Opacity(
+              opacity: navBarOpacity,
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    height: statusBarHeight + 44, // 状态栏 + 导航栏标准高度
+                    decoration: BoxDecoration(
+                      color: backgroundColor.withOpacity(0.8),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.separator,
+                            context,
+                          ).withOpacity(navBarOpacity * 0.3),
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
           // 自定义大标题 - 使用 Stack 叠加
           Positioned(
