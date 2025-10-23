@@ -678,7 +678,7 @@ class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = screenHeight * 0.95;
+    final maxHeight = screenHeight * 0.92;
 
     return Container(
       height: maxHeight,
@@ -709,19 +709,22 @@ class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
                   ),
                 ),
                 SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: IOS26Button.sfSymbol(
-                    sfSymbol: SFSymbol('xmark.circle.fill'),
+                  width: 42,
+                  height: 42,
+                  child: IOS26Button.child(
                     onPressed: () => Navigator.of(context).pop(),
                     style: IOS26ButtonStyle.glass,
                     size: IOS26ButtonSize.medium,
+                    child: Icon(
+                      CupertinoIcons.xmark,
+                      size: 24,
+                      color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          Divider(height: 1),
           // 媒体库内容
           Expanded(
             child: Consumer<SharedRemoteLibraryProvider>(
