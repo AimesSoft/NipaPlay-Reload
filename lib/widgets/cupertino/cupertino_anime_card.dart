@@ -28,6 +28,9 @@ class CupertinoAnimeCard extends StatelessWidget {
   /// 评分（0-10）
   final double? rating;
 
+  /// 简介
+  final String? summary;
+
   const CupertinoAnimeCard({
     super.key,
     required this.title,
@@ -38,6 +41,7 @@ class CupertinoAnimeCard extends StatelessWidget {
     this.isLoading = false,
     this.sourceLabel,
     this.rating,
+    this.summary,
   });
 
   @override
@@ -99,111 +103,133 @@ class CupertinoAnimeCard extends StatelessWidget {
             const SizedBox(width: 12),
             // 右侧：文字信息
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // 上部分：标题和来源/评分
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 标题
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: labelColor,
-                          height: 1.3,
+              child: SizedBox(
+                height: 168, // 与封面高度对齐
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 上部分：标题和来源/评分
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 标题
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: labelColor,
+                            height: 1.3,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      // 来源和评分
-                      Row(
-                        children: [
-                          if (sourceLabel != null) ...[
-                            Text(
-                              '来源：$sourceLabel',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: secondaryLabelColor,
-                              ),
-                            ),
-                            if (rating != null && rating! > 0) const SizedBox(width: 12),
-                          ],
-                          if (rating != null && rating! > 0) ...[
-                            Icon(
-                              CupertinoIcons.star_fill,
-                              size: 13,
-                              color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.systemYellow,
-                                context,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              rating!.toStringAsFixed(1),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: labelColor,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                  // 下部分：剧集信息和观看时间
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 剧集信息
-                      Row(
-                        children: [
-                          Icon(
-                            CupertinoIcons.play_rectangle,
-                            size: 14,
-                            color: secondaryLabelColor,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            episodeLabel,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: secondaryLabelColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      // 最后观看时间
-                      if (lastWatchTime != null)
+                        const SizedBox(height: 8),
+                        // 来源和评分
                         Row(
                           children: [
-                            Icon(
-                              CupertinoIcons.time,
-                              size: 14,
-                              color: secondaryLabelColor,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                _formatDateTime(lastWatchTime!),
+                            if (sourceLabel != null) ...[
+                              Text(
+                                '来源：$sourceLabel',
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 13,
                                   color: secondaryLabelColor,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
+                              if (rating != null && rating! > 0) const SizedBox(width: 12),
+                            ],
+                            if (rating != null && rating! > 0) ...[
+                              Icon(
+                                CupertinoIcons.star_fill,
+                                size: 13,
+                                color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.systemYellow,
+                                  context,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                rating!.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: labelColor,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                    // 下部分：剧集信息、观看时间和简介
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.end, // 将内容推到底部
+                        children: [
+                          // 剧集信息
+                          Row(
+                            children: [
+                              Icon(
+                                CupertinoIcons.play_rectangle,
+                                size: 14,
+                                color: secondaryLabelColor,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                episodeLabel,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: secondaryLabelColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          // 最后观看时间
+                          if (lastWatchTime != null) ...[
+                            Row(
+                              children: [
+                                Icon(
+                                  CupertinoIcons.time,
+                                  size: 14,
+                                  color: secondaryLabelColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    _formatDateTime(lastWatchTime!),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: secondaryLabelColor,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // 简介预览 - 填充剩余空间
+                            if (summary != null && summary!.trim().isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: Text(
+                                  _cleanSummary(summary!),
+                                  maxLines: 10, // 允许更多行数,但会被容器限制
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: secondaryLabelColor.withOpacity(0.9),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -289,5 +315,14 @@ class CupertinoAnimeCard extends StatelessWidget {
       final formatter = DateFormat('MM-dd HH:mm');
       return formatter.format(time.toLocal());
     }
+  }
+
+  /// 清理简介文本，移除HTML标签
+  String _cleanSummary(String summary) {
+    return summary
+        .replaceAll(RegExp(r'<br\s*/?>'), ' ')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('```', '')
+        .trim();
   }
 }

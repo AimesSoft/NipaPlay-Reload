@@ -969,6 +969,7 @@ class _CupertinoMediaLibraryListPageState
       isLoading: provider.isLoading,
       sourceLabel: sourceLabel,
       rating: null,
+      summary: anime.summary,
     );
   }
 
