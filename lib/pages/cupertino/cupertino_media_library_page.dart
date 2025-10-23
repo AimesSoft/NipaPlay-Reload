@@ -1,8 +1,5 @@
-import 'dart:ui';
-
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -12,6 +9,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_anime_card.dart';
 
 class CupertinoMediaLibraryPage extends StatefulWidget {
   const CupertinoMediaLibraryPage({super.key});
@@ -153,7 +151,6 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   ) {
     final hasHosts = provider.hosts.isNotEmpty;
     final activeHost = provider.activeHost;
-    final resolvedCardColor = CupertinoDynamicColor.resolve(cardColor, context);
     final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final secondaryLabelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
@@ -582,8 +579,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
       child: Text(
         title,
-        style: textStyle?.copyWith(fontSize: 22, fontWeight: FontWeight.w600) ??
-            const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+        style: textStyle.copyWith(fontSize: 22, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -666,8 +662,6 @@ class _MediaLibraryContent extends StatefulWidget {
 }
 
 class _MediaLibraryContentState extends State<_MediaLibraryContent> {
-  final DateFormat _timeFormatter = DateFormat('MM-dd HH:mm');
-
   @override
   void initState() {
     super.initState();
@@ -785,96 +779,17 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
   }
 
   Widget _buildAnimeGridItem(SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) {
-    final resolvedCardColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.secondarySystemBackground,
-      context,
-    );
-    final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final secondaryLabelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final imageUrl = _resolveImageUrl(provider, anime.imageUrl);
+    final title = anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name;
+    final episodeLabel = _buildEpisodeLabel(anime);
 
-    return GestureDetector(
+    return CupertinoAnimeCard(
+      title: title,
+      imageUrl: imageUrl,
+      episodeLabel: episodeLabel,
+      lastWatchTime: anime.lastWatchTime,
       onTap: () => _openAnimeDetailFromBottomSheet(anime, provider),
-      child: Container(
-        decoration: BoxDecoration(
-          color: resolvedCardColor,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 7 / 10,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: _buildPosterImage(imageUrl),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: labelColor,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _buildEpisodeLabel(anime),
-                      style: TextStyle(fontSize: 12, color: secondaryLabelColor),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const Spacer(),
-                    Text(
-                      '最近观看 ${_timeFormatter.format(anime.lastWatchTime.toLocal())}',
-                      style: TextStyle(fontSize: 11, color: secondaryLabelColor.withOpacity(0.8)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPosterImage(String? imageUrl) {
-    final placeholderColor = CupertinoDynamicColor.resolve(CupertinoColors.systemFill, context);
-
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(
-        color: placeholderColor,
-        child: const Center(
-          child: Icon(CupertinoIcons.photo_on_rectangle, size: 26, color: CupertinoColors.inactiveGray),
-        ),
-      );
-    }
-
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        return Container(
-          color: placeholderColor,
-          child: const Center(
-            child: Icon(
-              CupertinoIcons.exclamationmark_triangle,
-              color: CupertinoColors.systemOrange,
-              size: 24,
-            ),
-          ),
-        );
-      },
-      filterQuality: FilterQuality.low,
+      isLoading: provider.isLoading,
     );
   }
 
