@@ -26,6 +26,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   @override
   Widget build(BuildContext context) {
     return AdaptiveScaffold(
+      minimizeBehavior: TabBarMinimizeBehavior.never,
+      enableBlur: true,
       body: ColoredBox(
         color: CupertinoColors.systemGroupedBackground,
         child: SafeArea(
@@ -36,7 +38,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         ),
       ),
       bottomNavigationBar: AdaptiveBottomNavigationBar(
-        useNativeBottomBar: false,
+        useNativeBottomBar: true,
         items: const [
           AdaptiveNavigationDestination(
             icon: 'house.fill',

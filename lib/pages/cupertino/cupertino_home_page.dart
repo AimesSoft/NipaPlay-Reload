@@ -656,13 +656,6 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       decoration: BoxDecoration(
         color: resolvedBackground,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
       ),
       child: const Center(
         child: Text(
