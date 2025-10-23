@@ -7,9 +7,9 @@ import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_anime_card.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
 
 class CupertinoMediaLibraryPage extends StatefulWidget {
   const CupertinoMediaLibraryPage({super.key});
@@ -702,6 +702,91 @@ class _MediaLibraryContent extends StatefulWidget {
 }
 
 class _MediaLibraryContentState extends State<_MediaLibraryContent> {
+  final GlobalKey<NavigatorState> _navigatorKey =
+      GlobalKey(debugLabel: 'cupertinoMediaSheetNavigator');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.provider.animeSummaries.isEmpty) {
+        widget.provider.refreshLibrary(userInitiated: true);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+      value: widget.provider,
+      child: WillPopScope(
+        onWillPop: () async {
+          final navigator = _navigatorKey.currentState;
+          if (navigator != null && navigator.canPop()) {
+            navigator.pop();
+            return false;
+          }
+          return true;
+        },
+        child: Navigator(
+          key: _navigatorKey,
+          initialRoute: _CupertinoMediaLibraryRoutes.list,
+          onGenerateRoute: (settings) {
+            switch (settings.name) {
+              case _CupertinoMediaLibraryRoutes.list:
+                return CupertinoPageRoute(
+                  builder: (_) => _CupertinoMediaLibraryListPage(
+                    onAnimeTap: _handleAnimeTap,
+                  ),
+                  settings: const RouteSettings(
+                    name: _CupertinoMediaLibraryRoutes.list,
+                  ),
+                );
+              case _CupertinoMediaLibraryRoutes.detail:
+                final anime = settings.arguments as SharedRemoteAnimeSummary;
+                return CupertinoPageRoute(
+                  builder: (_) => CupertinoSharedAnimeDetailPage(anime: anime),
+                  settings: const RouteSettings(
+                    name: _CupertinoMediaLibraryRoutes.detail,
+                  ),
+                );
+              default:
+                return CupertinoPageRoute(
+                  builder: (_) => const SizedBox.shrink(),
+                );
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  void _handleAnimeTap(SharedRemoteAnimeSummary anime) {
+    _navigatorKey.currentState?.pushNamed(
+      _CupertinoMediaLibraryRoutes.detail,
+      arguments: anime,
+    );
+  }
+}
+
+class _CupertinoMediaLibraryRoutes {
+  static const String list = 'list';
+  static const String detail = 'detail';
+}
+
+class _CupertinoMediaLibraryListPage extends StatefulWidget {
+  const _CupertinoMediaLibraryListPage({required this.onAnimeTap});
+
+  final ValueChanged<SharedRemoteAnimeSummary> onAnimeTap;
+
+  @override
+  State<_CupertinoMediaLibraryListPage> createState() =>
+      _CupertinoMediaLibraryListPageState();
+}
+
+class _CupertinoMediaLibraryListPageState
+    extends State<_CupertinoMediaLibraryListPage> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
 
@@ -709,16 +794,12 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    // 自动刷新媒体库数据
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.provider.animeSummaries.isEmpty) {
-        widget.provider.refreshLibrary(userInitiated: true);
-      }
-    });
   }
 
   void _onScroll() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _scrollOffset = _scrollController.offset;
     });
@@ -734,12 +815,15 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
   Widget build(BuildContext context) {
     return Consumer<SharedRemoteLibraryProvider>(
       builder: (context, provider, _) {
-        return _buildMediaLibraryContent(provider);
+        return _buildContent(context, provider);
       },
     );
   }
 
-  Widget _buildMediaLibraryContent(SharedRemoteLibraryProvider provider) {
+  Widget _buildContent(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
     final animeSummaries = provider.animeSummaries;
     final backgroundColor = CupertinoDynamicColor.resolve(
       CupertinoColors.systemGroupedBackground,
@@ -754,8 +838,10 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
           children: [
             CupertinoActivityIndicator(),
             SizedBox(height: 16),
-            Text('正在加载媒体库...',
-                style: TextStyle(color: CupertinoColors.secondaryLabel)),
+            Text(
+              '正在加载媒体库...',
+              style: TextStyle(color: CupertinoColors.secondaryLabel),
+            ),
           ],
         ),
       );
@@ -775,7 +861,9 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
                 CupertinoIcons.folder,
                 size: 52,
                 color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.inactiveGray, context),
+                  CupertinoColors.inactiveGray,
+                  context,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -785,7 +873,9 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.label, context),
+                    CupertinoColors.label,
+                    context,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -796,7 +886,9 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
                   fontSize: 14,
                   height: 1.4,
                   color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondaryLabel, context),
+                    CupertinoColors.secondaryLabel,
+                    context,
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -845,7 +937,7 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
                   }
                   final animeIndex = index ~/ 2;
                   final anime = animeSummaries[animeIndex];
-                  return _buildAnimeListItem(anime, provider);
+                  return _buildAnimeCard(context, provider, anime);
                 },
                 childCount: animeSummaries.length * 2 - 1,
               ),
@@ -858,8 +950,11 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
     );
   }
 
-  Widget _buildAnimeListItem(
-      SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) {
+  Widget _buildAnimeCard(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+    SharedRemoteAnimeSummary anime,
+  ) {
     final imageUrl = _resolveImageUrl(provider, anime.imageUrl);
     final title = anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name;
     final episodeLabel = _buildEpisodeLabel(anime);
@@ -870,10 +965,10 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       imageUrl: imageUrl,
       episodeLabel: episodeLabel,
       lastWatchTime: anime.lastWatchTime,
-      onTap: () => _openAnimeDetailFromBottomSheet(anime, provider),
+      onTap: () => widget.onAnimeTap(anime),
       isLoading: provider.isLoading,
       sourceLabel: sourceLabel,
-      rating: null, // TODO: 等后端支持后添加评分
+      rating: null,
     );
   }
 
@@ -886,7 +981,9 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
   }
 
   String? _resolveImageUrl(
-      SharedRemoteLibraryProvider provider, String? imageUrl) {
+    SharedRemoteLibraryProvider provider,
+    String? imageUrl,
+  ) {
     if (imageUrl == null || imageUrl.isEmpty) {
       return null;
     }
@@ -901,30 +998,5 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       return '$baseUrl$imageUrl';
     }
     return '$baseUrl/$imageUrl';
-  }
-
-  Future<void> _openAnimeDetailFromBottomSheet(SharedRemoteAnimeSummary anime,
-      SharedRemoteLibraryProvider provider) async {
-    // 关闭底部弹出菜单
-    Navigator.of(context).pop();
-
-    // 获取主页面的context并调用_openAnimeDetail
-    try {
-      await ThemedAnimeDetail.show(
-        context,
-        anime.animeId,
-        sharedSummary: anime,
-        sharedEpisodeLoader: () =>
-            provider.loadAnimeEpisodes(anime.animeId, force: true),
-        sharedEpisodeBuilder: (episode) => provider.buildPlayableItem(
-          anime: anime,
-          episode: episode,
-        ),
-        sharedSourceLabel: provider.activeHost?.displayName,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      BlurSnackBar.show(context, '打开详情失败: $e');
-    }
   }
 }
