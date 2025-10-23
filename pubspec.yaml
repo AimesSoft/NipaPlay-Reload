@@ -93,6 +93,7 @@ dependencies:
   system_info2: ^3.0.1
   hotkey_manager: ^0.2.3
   fluent_ui: ^4.12.0
+  adaptive_platform_ui: ^0.1.96
 
 dev_dependencies:
   flutter_test:

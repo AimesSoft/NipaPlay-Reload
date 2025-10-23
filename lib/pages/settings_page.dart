@@ -124,18 +124,17 @@ style: TextStyle(
                   );
             },
           ),
-          if (!globals.isPhone)
-            ListTile(
-              title: const Text("主题（实验性）",
-                  locale:Locale("zh-Hans","zh"),
+          ListTile(
+            title: const Text("主题（实验性）",
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-              trailing: const Icon(Ionicons.chevron_forward_outline,
-                  color: Colors.white),
-              onTap: () {
-                _handleItemTap(const UIThemePage(), "主题设置");
-              },
-            ),
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(const UIThemePage(), "主题设置");
+            },
+          ),
           ListTile(
             title: const Text("通用",
                 locale:Locale("zh-Hans","zh"),

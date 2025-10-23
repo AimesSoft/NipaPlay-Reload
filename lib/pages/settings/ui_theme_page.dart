@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dropdown.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
@@ -69,6 +70,18 @@ style: TextStyle(
   }
 
   Widget _buildThemeSelector(UIThemeProvider uiThemeProvider) {
+    final availableThemes = UIThemeType.values.where((theme) {
+      if (theme == UIThemeType.cupertino) {
+        return globals.isPhone;
+      }
+      return true;
+    }).toList()
+      ..sort((a, b) => a.index.compareTo(b.index));
+
+    if (!availableThemes.contains(uiThemeProvider.currentTheme)) {
+      availableThemes.add(uiThemeProvider.currentTheme);
+    }
+
     return Row(
       children: [
         const Text(
@@ -84,7 +97,7 @@ style: TextStyle(
         Expanded(
           child: BlurDropdown<UIThemeType>(
             dropdownKey: _themeDropdownKey,
-            items: UIThemeType.values.map((theme) {
+            items: availableThemes.map((theme) {
               return DropdownMenuItemData<UIThemeType>(
                 title: uiThemeProvider.getThemeName(theme),
                 value: theme,
@@ -168,6 +181,31 @@ style: TextStyle(
             SizedBox(height: 8),
             Text(
               '• Microsoft 设计语言\n• 亚克力材质\n• 现代化界面\n• 统一的交互体验',
+              locale:Locale("zh-Hans","zh"),
+style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+          ],
+        );
+      case UIThemeType.cupertino:
+        return const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Cupertino 主题',
+              locale:Locale("zh-Hans","zh"),
+style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '• 贴近原生 iOS 体验\n• 自适应平台控件\n• 支持浅色/深色模式\n• 底部导航布局',
               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                 color: Colors.white70,

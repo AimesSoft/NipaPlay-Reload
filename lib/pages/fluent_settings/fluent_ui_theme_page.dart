@@ -204,6 +204,52 @@ class _FluentUIThemePageState extends State<FluentUIThemePage> {
             const Text('• 亚克力材质\n• 统一的导航\n• 现代化控件\n• 桌面端优化'),
           ],
         );
+
+      case UIThemeType.cupertino:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFF0A84FF),
+                    ),
+                    child: const Icon(
+                      FluentIcons.phone,
+                      color: material.Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Cupertino 主题'),
+                      SizedBox(height: 4),
+                      Text('贴近原生 iOS 的控件样式'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '特色功能：',
+              style: FluentTheme.of(context).typography.caption,
+            ),
+            const SizedBox(height: 8),
+            const Text('• 自适应平台控件\n• 底部原生导航栏\n• 深浅模式同步\n• iOS 动效体验'),
+          ],
+        );
     }
   }
 

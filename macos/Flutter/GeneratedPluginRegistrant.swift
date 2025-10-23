@@ -17,7 +17,7 @@ import path_provider_foundation
 import screen_brightness_macos
 import screen_retriever_macos
 import shared_preferences_foundation
-import sqflite_darwin
+import sqflite
 import url_launcher_macos
 import video_player_avfoundation
 import volume_controller

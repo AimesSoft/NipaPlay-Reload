@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 enum UIThemeType {
   nipaplay,
   fluentUI,
+  cupertino,
 }
 
 class UIThemeProvider extends ChangeNotifier {
@@ -20,6 +21,7 @@ class UIThemeProvider extends ChangeNotifier {
 
   bool get isNipaplayTheme => _currentTheme == UIThemeType.nipaplay;
   bool get isFluentUITheme => _currentTheme == UIThemeType.fluentUI;
+  bool get isCupertinoTheme => _currentTheme == UIThemeType.cupertino;
 
   UIThemeProvider() {
     _loadTheme();
@@ -79,6 +81,8 @@ class UIThemeProvider extends ChangeNotifier {
         return 'NipaPlay';
       case UIThemeType.fluentUI:
         return 'Fluent UI';
+      case UIThemeType.cupertino:
+        return 'Cupertino';
     }
   }
 

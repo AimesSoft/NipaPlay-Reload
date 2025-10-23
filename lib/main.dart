@@ -1,5 +1,8 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -16,6 +19,7 @@ import 'pages/settings_page.dart';
 import 'pages/play_video_page.dart';
 import 'pages/new_series_page.dart';
 import 'pages/dashboard_home_page.dart';
+import 'pages/cupertino/cupertino_main_page.dart';
 import 'utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
@@ -737,6 +741,34 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
                   children: [
                     appChild!, // The app's content
                     if (_isDragging) const DragDropOverlay(),
+                  ],
+                );
+              },
+            );
+          } else if (uiThemeProvider.isCupertinoTheme && globals.isPhone) {
+            return AdaptiveApp(
+              title: 'NipaPlay',
+              navigatorKey: navigatorKey,
+              themeMode: themeNotifier.themeMode,
+              materialLightTheme: AppTheme.lightTheme,
+              materialDarkTheme: AppTheme.darkTheme,
+              cupertinoLightTheme: const CupertinoThemeData(brightness: Brightness.light),
+              cupertinoDarkTheme: const CupertinoThemeData(brightness: Brightness.dark),
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('zh', 'CN'),
+                Locale('en', ''),
+              ],
+              home: CupertinoMainPage(launchFilePath: widget.launchFilePath),
+              builder: (context, appChild) {
+                return Stack(
+                  children: [
+                    appChild ?? const SizedBox.shrink(),
+                    if (_isDragging && globals.isDesktop) const DragDropOverlay(),
                   ],
                 );
               },
