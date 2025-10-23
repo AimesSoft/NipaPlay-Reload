@@ -63,7 +63,9 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
       }
 
       // 读取文件内容并根据扩展名处理
-      final fileContent = await file.readAsString();
+      //final fileContent = await file.readAsString();
+      final fileBytes = await file.readAsBytes();
+      final fileContent = utf8.decode(fileBytes);
       final fileName = file.name.toLowerCase();
       Map<String, dynamic> jsonData;
       

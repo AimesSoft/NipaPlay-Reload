@@ -706,12 +706,12 @@ class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
                   ),
                 ),
                 SizedBox(
-                  width: 42,
-                  height: 42,
+                  width: 36,
+                  height: 36,
                   child: IOS26Button.child(
                     onPressed: () => Navigator.of(context).pop(),
                     style: IOS26ButtonStyle.glass,
-                    size: IOS26ButtonSize.medium,
+                    size: IOS26ButtonSize.large,
                     child: Icon(
                       CupertinoIcons.xmark,
                       size: 24,
