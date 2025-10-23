@@ -39,26 +39,29 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
             avatarUrl: avatarUrl,
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: CupertinoAccountActionButton(
-                  label: '退出登录',
-                  iosIcon: CupertinoIcons.square_arrow_left,
-                  onPressed: onLogout,
+          AdaptiveCard(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: CupertinoAccountActionButton(
+                    label: '退出登录',
+                    iosIcon: CupertinoIcons.square_arrow_left,
+                    onPressed: onLogout,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: CupertinoAccountActionButton(
-                  label: isLoading ? '处理中...' : '注销账号',
-                  iosIcon: CupertinoIcons.delete,
-                  destructive: true,
-                  isLoading: isLoading,
-                  onPressed: isLoading ? null : onDeleteAccount,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: CupertinoAccountActionButton(
+                    label: isLoading ? '处理中...' : '注销账号',
+                    iosIcon: CupertinoIcons.delete,
+                    destructive: true,
+                    isLoading: isLoading,
+                    onPressed: isLoading ? null : onDeleteAccount,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           userActivity,
@@ -93,23 +96,24 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        AdaptiveFormSection.insetGrouped(
-          children: [
-            AdaptiveListTile(
-              leading: const Icon(CupertinoIcons.person_crop_circle),
-              title: const Text('立即登录'),
-              subtitle: const Text('使用已有账号同步数据'),
-              trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
-              onTap: onLogin,
-            ),
-            AdaptiveListTile(
-              leading: const Icon(CupertinoIcons.person_badge_plus),
-              title: const Text('注册新账号'),
-              subtitle: const Text('创建弹弹play账号，解锁更多功能'),
-              trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
-              onTap: onRegister,
-            ),
-          ],
+        AdaptiveCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CupertinoAccountActionButton(
+                label: '立即登录',
+                iosIcon: CupertinoIcons.person_crop_circle,
+                onPressed: onLogin,
+              ),
+              const SizedBox(height: 12),
+              CupertinoAccountActionButton(
+                label: '注册新账号',
+                iosIcon: CupertinoIcons.person_badge_plus,
+                onPressed: onRegister,
+              ),
+            ],
+          ),
         ),
       ],
     );

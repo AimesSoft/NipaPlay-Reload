@@ -157,6 +157,7 @@ class CupertinoBottomSheet extends StatelessWidget {
       width: _closeButtonSize,
       height: _closeButtonSize,
       child: AdaptiveButton.child(
+        useSmoothRectangleBorder: false,
         onPressed: onClose ?? () => Navigator.of(context).pop(),
         style: AdaptiveButtonStyle.glass,
         size: AdaptiveButtonSize.large,
@@ -173,7 +174,7 @@ class CupertinoBottomSheet extends StatelessWidget {
   }
 
   static const double _closeButtonPadding = 12;
-  static const double _closeButtonSize = 36;
+  static const double _closeButtonSize = 40;
   static const double _floatingContentTopInsetWithClose = 44;
   static const double _floatingContentTopInset = 28;
   static const double _contentTopInsetWithClose = 28;
