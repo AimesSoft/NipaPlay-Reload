@@ -438,8 +438,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       );
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = screenWidth * _pageController.viewportFraction;
+    final cardHeight = cardWidth * 9 / 16;
+
     return SizedBox(
-      height: 360,
+      height: cardHeight,
       child: PageView.builder(
         controller: _pageController,
         itemCount: _recommendedItems.length,
@@ -460,9 +464,6 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Widget _buildPosterCard(_CupertinoRecommendedItem item) {
-    final resolvedBackground = CupertinoDynamicColor.resolve(CupertinoColors.secondarySystemBackground, context);
-    final resolvedFill = CupertinoDynamicColor.resolve(CupertinoColors.systemFill, context);
-
     final cardColor = CupertinoDynamicColor.resolve(
       CupertinoDynamicColor.withBrightness(
         color: CupertinoColors.white,
@@ -485,66 +486,80 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           ),
         ],
       ),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: item.imageUrl != null
-                  ? _buildPosterBackground(item.imageUrl!)
-                  : Container(color: cardColor),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                _buildCardMetaRow(item),
-                const SizedBox(height: 10),
-                Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: labelColor,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  item.subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: secondaryLabelColor,
-                    fontSize: 14,
-                  ),
-                ),
-                if (item.rating != null) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(CupertinoIcons.star_fill, color: Color(0xFFFFD166), size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        item.rating!.toStringAsFixed(1),
-                        style: TextStyle(color: secondaryLabelColor),
-                      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (item.imageUrl != null)
+              _buildPosterBackground(item.imageUrl!)
+            else
+              Container(color: cardColor),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withOpacity(0.0),
+                      Colors.white.withOpacity(0.4),
+                      Colors.white,
                     ],
                   ),
-                ],
-                const SizedBox(height: 14),
-                _buildPageIndicator(item),
-              ],
+                ),
+              ),
             ),
-          ),
-        ],
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 20,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildCardMetaRow(item),
+                  const SizedBox(height: 10),
+                  Text(
+                    item.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: labelColor,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: secondaryLabelColor,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (item.rating != null) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const Icon(CupertinoIcons.star_fill, color: Color(0xFFFFD166), size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          item.rating!.toStringAsFixed(1),
+                          style: TextStyle(color: secondaryLabelColor),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  _buildPageIndicator(item),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
