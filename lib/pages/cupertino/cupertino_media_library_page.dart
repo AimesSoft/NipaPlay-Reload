@@ -602,28 +602,28 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   }
 
   Future<void> _openAddHostDialog(SharedRemoteLibraryProvider provider) async {
-    final result = await AdaptiveAlertDialog.show(
+    final result = await showCupertinoDialog<String>(
       context: context,
-      title: '添加NipaPlay共享客户端',
-      message: '请输入共享客户端的访问地址',
-      icon: 'network',
-      input: AdaptiveAlertDialogInput(
-        placeholder: '例如：http://192.168.1.100:8080',
-        initialValue: '',
-        keyboardType: TextInputType.url,
+      builder: (context) => IOS26AlertDialog(
+        title: '添加NipaPlay共享客户端',
+        input: const AdaptiveAlertDialogInput(
+          placeholder: '例如：http://192.168.1.100:8080',
+          initialValue: '',
+          keyboardType: TextInputType.url,
+        ),
+        actions: [
+          AlertAction(
+            title: '取消',
+            style: AlertActionStyle.cancel,
+            onPressed: () {},
+          ),
+          AlertAction(
+            title: '添加',
+            style: AlertActionStyle.primary,
+            onPressed: () {},
+          ),
+        ],
       ),
-      actions: [
-        AlertAction(
-          title: '取消',
-          style: AlertActionStyle.cancel,
-          onPressed: () {},
-        ),
-        AlertAction(
-          title: '添加',
-          style: AlertActionStyle.primary,
-          onPressed: () {},
-        ),
-      ],
     );
 
     if (result != null && result.isNotEmpty) {
