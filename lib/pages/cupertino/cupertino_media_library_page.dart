@@ -555,13 +555,15 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
 
     // 如果有活跃主机，显示提示用户点击"查看媒体库"按钮
     return [
-      SliverFillRemaining(
-        hasScrollBody: false,
-        child: _buildEmptyPlaceholder(
-          context,
-          icon: CupertinoIcons.collections,
-          title: '媒体库已连接',
-          subtitle: '点击上方的"查看媒体库"按钮来浏览内容。',
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 32),
+          child: _buildEmptyPlaceholder(
+            context,
+            icon: CupertinoIcons.collections,
+            title: '媒体库已连接',
+            subtitle: '点击上方的"查看媒体库"按钮来浏览内容。',
+          ),
         ),
       ),
     ];
