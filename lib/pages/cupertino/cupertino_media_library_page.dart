@@ -678,7 +678,7 @@ class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = screenHeight * 0.9;
+    final maxHeight = screenHeight * 0.95;
 
     return Container(
       height: maxHeight,
@@ -694,39 +694,28 @@ class _MediaLibraryBottomSheetState extends State<_MediaLibraryBottomSheet> {
       ),
       child: Column(
         children: [
-          // 顶部拖拽指示器和标题
+          // 顶部标题栏
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            child: Row(
               children: [
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey3,
-                    borderRadius: BorderRadius.circular(2),
+                Expanded(
+                  child: Text(
+                    '共享媒体库',
+                    style: CupertinoTheme.of(context).textTheme.navTitleTextStyle?.copyWith(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '共享媒体库',
-                          style: CupertinoTheme.of(context).textTheme.navTitleTextStyle?.copyWith(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Icon(CupertinoIcons.xmark_circle_fill, size: 28),
-                      ),
-                    ],
+                SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: IOS26Button.sfSymbol(
+                    sfSymbol: SFSymbol('xmark.circle.fill'),
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: IOS26ButtonStyle.glass,
+                    size: IOS26ButtonSize.medium,
                   ),
                 ),
               ],
