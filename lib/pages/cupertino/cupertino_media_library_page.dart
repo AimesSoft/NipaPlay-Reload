@@ -15,7 +15,8 @@ class CupertinoMediaLibraryPage extends StatefulWidget {
   const CupertinoMediaLibraryPage({super.key});
 
   @override
-  State<CupertinoMediaLibraryPage> createState() => _CupertinoMediaLibraryPageState();
+  State<CupertinoMediaLibraryPage> createState() =>
+      _CupertinoMediaLibraryPageState();
 }
 
 class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
@@ -61,7 +62,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
             builder: (context, provider, _) {
               return CustomScrollView(
                 controller: _scrollController,
-                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics()),
                 slivers: [
                   SliverPadding(
                     padding: EdgeInsets.only(top: statusBarHeight + 52),
@@ -123,7 +125,9 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
                   child: Text(
                     '媒体库',
-                    style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .navLargeTitleTextStyle,
                   ),
                 ),
               ),
@@ -151,8 +155,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   ) {
     final hasHosts = provider.hosts.isNotEmpty;
     final activeHost = provider.activeHost;
-    final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final secondaryLabelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final secondaryLabelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -182,24 +188,31 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
               children: [
                 Text(
                   '尚未添加任何共享客户端',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: labelColor),
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: labelColor),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   '点击下方按钮添加一台已开启远程访问的 NipaPlay 客户端。',
-                  style: TextStyle(fontSize: 14, color: secondaryLabelColor, height: 1.3),
+                  style: TextStyle(
+                      fontSize: 14, color: secondaryLabelColor, height: 1.3),
                 ),
                 const SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: CupertinoButton(
                     onPressed: () => _openAddHostDialog(provider),
-                    color: CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.activeBlue, context),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
                     borderRadius: BorderRadius.circular(14),
                     child: const Text(
                       '添加共享客户端',
-                      style: TextStyle(fontSize: 15, color: CupertinoColors.white),
+                      style:
+                          TextStyle(fontSize: 15, color: CupertinoColors.white),
                     ),
                   ),
                 ),
@@ -211,12 +224,16 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
               children: [
                 Text(
                   '请先选择一个共享客户端',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: labelColor),
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: labelColor),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   '当前未选定共享客户端，请点击下方按钮从已保存的列表中选择。',
-                  style: TextStyle(fontSize: 14, color: secondaryLabelColor, height: 1.3),
+                  style: TextStyle(
+                      fontSize: 14, color: secondaryLabelColor, height: 1.3),
                 ),
                 const SizedBox(height: 16),
                 Align(
@@ -312,8 +329,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     required String value,
     bool allowWrap = false,
   }) {
-    final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-    final valueColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final valueColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
 
     final valueWidget = allowWrap
         ? Text(
@@ -327,7 +346,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
           );
 
     return Row(
-      crossAxisAlignment: allowWrap ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment:
+          allowWrap ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
         SizedBox(
           width: 72,
@@ -346,7 +366,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     final statusColor = host.isOnline
         ? CupertinoDynamicColor.resolve(CupertinoColors.activeGreen, context)
         : CupertinoDynamicColor.resolve(CupertinoColors.systemOrange, context);
-    final labelColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -380,7 +401,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
             child: Text(
               host.lastError!,
               style: TextStyle(
-                color: CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context),
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.systemRed, context),
                 fontSize: 12,
                 height: 1.3,
               ),
@@ -399,8 +421,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     bool primary = false,
   }) {
     final bool enabled = onPressed != null;
-    final Color primaryColor = CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
-    final Color secondaryBackground = CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
+    final Color primaryColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final Color secondaryBackground =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
         ? CupertinoColors.white
         : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
@@ -440,7 +464,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     Color cardColor,
   ) {
     final resolvedCardColor = CupertinoDynamicColor.resolve(cardColor, context);
-    final errorColor = CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context);
+    final errorColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -452,7 +477,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(CupertinoIcons.exclamationmark_triangle_fill, color: errorColor, size: 18),
+          Icon(CupertinoIcons.exclamationmark_triangle_fill,
+              color: errorColor, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -540,9 +566,12 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     required String title,
     required String subtitle,
   }) {
-    final iconColor = CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
-    final titleColor = CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-    final subtitleColor = CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final iconColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
+    final titleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
     return Center(
       child: Padding(
@@ -591,7 +620,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     return _timeFormatter.format(time.toLocal());
   }
 
-  Future<void> _showMediaLibraryBottomSheet(SharedRemoteLibraryProvider provider) async {
+  Future<void> _showMediaLibraryBottomSheet(
+      SharedRemoteLibraryProvider provider) async {
     await CupertinoBottomSheet.show(
       context: context,
       title: '共享媒体库',
@@ -715,7 +745,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
           children: [
             CupertinoActivityIndicator(),
             SizedBox(height: 16),
-            Text('正在加载媒体库...', style: TextStyle(color: CupertinoColors.secondaryLabel)),
+            Text('正在加载媒体库...',
+                style: TextStyle(color: CupertinoColors.secondaryLabel)),
           ],
         ),
       );
@@ -734,7 +765,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
               Icon(
                 CupertinoIcons.folder,
                 size: 52,
-                color: CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context),
+                color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.inactiveGray, context),
               ),
               const SizedBox(height: 16),
               Text(
@@ -743,7 +775,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.label, context),
                 ),
               ),
               const SizedBox(height: 8),
@@ -753,7 +786,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.4,
-                  color: CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context),
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.secondaryLabel, context),
                 ),
               ),
               const SizedBox(height: 24),
@@ -767,6 +801,10 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       );
     }
 
+    final sheetScope = CupertinoBottomSheetScope.maybeOf(context);
+    final double sheetTopInset = sheetScope?.contentTopInset ?? 0;
+    final double sheetTopSpacing = sheetScope?.contentTopSpacing ?? 8;
+
     // 完全照搬主页面的 Stack 结构
     return ColoredBox(
       color: backgroundColor,
@@ -774,12 +812,13 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
         children: [
           CustomScrollView(
             controller: _scrollController,
-            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics()),
             slivers: [
-              // 顶部 padding,让标题有空间显示
-              const SliverPadding(
-                padding: EdgeInsets.only(top: 35),
-              ),
+              if (sheetTopInset > 0)
+                SliverToBoxAdapter(
+                  child: SizedBox(height: sheetTopInset/1.3),
+                ),
               // 加载指示器
               if (provider.isLoading)
                 SliverToBoxAdapter(
@@ -797,7 +836,7 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
                 ),
               // 番剧列表
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                padding: EdgeInsets.fromLTRB(20, sheetTopSpacing, 20, 20),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
@@ -821,7 +860,7 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
             right: 0,
             child: IgnorePointer(
               child: Container(
-                height: 200,
+                height: sheetTopInset,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -862,7 +901,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
     );
   }
 
-  Widget _buildAnimeListItem(SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) {
+  Widget _buildAnimeListItem(
+      SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) {
     final imageUrl = _resolveImageUrl(provider, anime.imageUrl);
     final title = anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name;
     final episodeLabel = _buildEpisodeLabel(anime);
@@ -888,7 +928,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
     return buffer.toString();
   }
 
-  String? _resolveImageUrl(SharedRemoteLibraryProvider provider, String? imageUrl) {
+  String? _resolveImageUrl(
+      SharedRemoteLibraryProvider provider, String? imageUrl) {
     if (imageUrl == null || imageUrl.isEmpty) {
       return null;
     }
@@ -905,7 +946,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
     return '$baseUrl/$imageUrl';
   }
 
-  Future<void> _openAnimeDetailFromBottomSheet(SharedRemoteAnimeSummary anime, SharedRemoteLibraryProvider provider) async {
+  Future<void> _openAnimeDetailFromBottomSheet(SharedRemoteAnimeSummary anime,
+      SharedRemoteLibraryProvider provider) async {
     // 关闭底部弹出菜单
     Navigator.of(context).pop();
 
@@ -915,7 +957,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
         context,
         anime.animeId,
         sharedSummary: anime,
-        sharedEpisodeLoader: () => provider.loadAnimeEpisodes(anime.animeId, force: true),
+        sharedEpisodeLoader: () =>
+            provider.loadAnimeEpisodes(anime.animeId, force: true),
         sharedEpisodeBuilder: (episode) => provider.buildPlayableItem(
           anime: anime,
           episode: episode,

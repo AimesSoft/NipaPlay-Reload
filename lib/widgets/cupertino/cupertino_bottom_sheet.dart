@@ -10,7 +10,7 @@ class CupertinoBottomSheet extends StatelessWidget {
   /// 菜单内容，完全可自定义
   final Widget child;
 
-  /// 菜单高度占屏幕的比例，默认 0.88
+  /// 菜单高度占屏幕的比例，默认 0.94
   final double heightRatio;
 
   /// 是否显示关闭按钮，默认 true
@@ -26,7 +26,7 @@ class CupertinoBottomSheet extends StatelessWidget {
     super.key,
     this.title,
     required this.child,
-    this.heightRatio = 0.92,
+    this.heightRatio = 0.94,
     this.showCloseButton = true,
     this.onClose,
     this.floatingTitle = false,
@@ -37,7 +37,7 @@ class CupertinoBottomSheet extends StatelessWidget {
     required BuildContext context,
     String? title,
     required Widget child,
-    double heightRatio = 0.92,
+    double heightRatio = 0.94,
     bool showCloseButton = true,
     VoidCallback? onClose,
     bool floatingTitle = false,
@@ -76,28 +76,42 @@ class CupertinoBottomSheet extends StatelessWidget {
       content = child;
     }
 
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        child: Container(
-          height: maxHeight,
-          color: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGroupedBackground,
-            context,
-          ),
-          child: SafeArea(
-            top: false,
-            child: Stack(
-              children: [
-                Positioned.fill(child: content),
-                if (showCloseButton)
-                  Positioned(
-                    top: _closeButtonPadding,
-                    right: _closeButtonPadding,
-                    child: _buildCloseButton(context),
-                  ),
-              ],
+    final double contentTopInset = displayHeader
+        ? 0
+        : floatingTitle
+            ? (showCloseButton
+                ? _floatingContentTopInsetWithClose
+                : _floatingContentTopInset)
+            : (showCloseButton ? _contentTopInsetWithClose : 0);
+    final double contentTopSpacing =
+        !displayHeader && floatingTitle ? _floatingContentTopSpacing : 0;
+
+    return CupertinoBottomSheetScope(
+      contentTopInset: contentTopInset,
+      contentTopSpacing: contentTopSpacing,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: Container(
+            height: maxHeight,
+            color: CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGroupedBackground,
+              context,
+            ),
+            child: SafeArea(
+              top: false,
+              child: Stack(
+                children: [
+                  Positioned.fill(child: content),
+                  if (showCloseButton)
+                    Positioned(
+                      top: _closeButtonPadding,
+                      right: _closeButtonPadding,
+                      child: _buildCloseButton(context),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -116,7 +130,7 @@ class CupertinoBottomSheet extends StatelessWidget {
       child: Text(
         title!,
         style: CupertinoTheme.of(context).textTheme.navTitleTextStyle.copyWith(
-              fontSize: 10,
+              fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
       ),
@@ -145,4 +159,31 @@ class CupertinoBottomSheet extends StatelessWidget {
 
   static const double _closeButtonPadding = 12;
   static const double _closeButtonSize = 36;
+  static const double _floatingContentTopInsetWithClose = 44;
+  static const double _floatingContentTopInset = 28;
+  static const double _contentTopInsetWithClose = 28;
+  static const double _floatingContentTopSpacing = 8;
+}
+
+class CupertinoBottomSheetScope extends InheritedWidget {
+  final double contentTopInset;
+  final double contentTopSpacing;
+
+  const CupertinoBottomSheetScope({
+    required this.contentTopInset,
+    required this.contentTopSpacing,
+    required super.child,
+    super.key,
+  });
+
+  static CupertinoBottomSheetScope? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<CupertinoBottomSheetScope>();
+  }
+
+  @override
+  bool updateShouldNotify(covariant CupertinoBottomSheetScope oldWidget) {
+    return contentTopInset != oldWidget.contentTopInset ||
+        contentTopSpacing != oldWidget.contentTopSpacing;
+  }
 }
