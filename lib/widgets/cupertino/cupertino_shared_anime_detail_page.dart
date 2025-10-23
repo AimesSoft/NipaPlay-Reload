@@ -99,7 +99,8 @@ class _CupertinoSharedAnimeDetailPageState
                 child: _buildSegmentedControl(context),
               ),
               if (_currentSegment == _infoSegment)
-                SliverToBoxAdapter(
+                SliverFillRemaining(
+                  hasScrollBody: false,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                     child: _buildInfoSection(context, hostName),
@@ -196,110 +197,127 @@ class _CupertinoSharedAnimeDetailPageState
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final imageUrl =
         _resolveImageUrl(context.read<SharedRemoteLibraryProvider>());
-    final summary = widget.anime.summary?.trim();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: resolvedCardColor,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: SizedBox(
-                    width: 120,
-                    height: 168,
-                    child: _buildPoster(imageUrl),
+    // 获取完整的简介信息
+    final summary = widget.anime.summary?.trim();
+    final cleanSummary = summary
+        ?.replaceAll('<br>', '\n')
+        .replaceAll('<br/>', '\n')
+        .replaceAll('<br />', '\n')
+        .replaceAll('```', '');
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: resolvedCardColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: SizedBox(
+                      width: 120,
+                      height: 168,
+                      child: _buildPoster(imageUrl),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.anime.name,
-                        style: TextStyle(
-                          color: secondaryColor,
-                          fontSize: 14,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.anime.name,
+                          style: TextStyle(
+                            color: secondaryColor,
+                            fontSize: 14,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildInfoRow(
-                        context,
-                        icon: CupertinoIcons.play_rectangle,
-                        label: '剧集数量',
-                        value: '${widget.anime.episodeCount}',
-                      ),
-                      const SizedBox(height: 8),
-                      _buildInfoRow(
-                        context,
-                        icon: CupertinoIcons.time,
-                        label: '最近观看',
-                        value: _timeFormatter
-                            .format(widget.anime.lastWatchTime.toLocal()),
-                      ),
-                      if (hostName != null) ...[
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          context,
+                          icon: CupertinoIcons.play_rectangle,
+                          label: '剧集数量',
+                          value: '${widget.anime.episodeCount}',
+                        ),
                         const SizedBox(height: 8),
                         _buildInfoRow(
                           context,
-                          icon: CupertinoIcons.share,
-                          label: '客户端',
-                          value: hostName,
+                          icon: CupertinoIcons.time,
+                          label: '最近观看',
+                          value: _timeFormatter
+                              .format(widget.anime.lastWatchTime.toLocal()),
                         ),
+                        if (hostName != null) ...[
+                          const SizedBox(height: 8),
+                          _buildInfoRow(
+                            context,
+                            icon: CupertinoIcons.share,
+                            label: '客户端',
+                            value: hostName,
+                          ),
+                        ],
+                        if (widget.anime.hasMissingFiles) ...[
+                          const SizedBox(height: 12),
+                          _buildInfoBadge(
+                            context,
+                            icon: CupertinoIcons.exclamationmark_triangle_fill,
+                            text: '该番剧存在缺失文件',
+                          ),
+                        ],
                       ],
-                      if (widget.anime.hasMissingFiles) ...[
-                        const SizedBox(height: 12),
-                        _buildInfoBadge(
-                          context,
-                          icon: CupertinoIcons.exclamationmark_triangle_fill,
-                          text: '该番剧存在缺失文件',
-                        ),
-                      ],
-                    ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '简介',
+                  style: TextStyle(
+                    color: primaryColor,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 8),
+                if (cleanSummary != null && cleanSummary.isNotEmpty)
+                  Text(
+                    cleanSummary,
+                    style: TextStyle(
+                      color: secondaryColor,
+                      fontSize: 14,
+                      height: 1.45,
+                    ),
+                  )
+                else
+                  Text(
+                    '暂无简介。',
+                    style: TextStyle(
+                      color: secondaryColor,
+                      fontSize: 14,
+                    ),
+                  ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 20),
-        Text(
-          '简介',
-          style: TextStyle(
-            color: primaryColor,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (summary != null && summary.isNotEmpty)
-          Text(
-            summary,
-            style: TextStyle(
-              color: secondaryColor,
-              fontSize: 14,
-              height: 1.4,
-            ),
-          )
-        else
-          Text(
-            '暂无简介。',
-            style: TextStyle(
-              color: secondaryColor,
-              fontSize: 14,
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -557,15 +575,19 @@ class _CupertinoSharedAnimeDetailPageState
               height: 32,
               decoration: BoxDecoration(
                 color: CupertinoDynamicColor.resolve(
-                  CupertinoColors.activeBlue.withOpacity(0.12),
+                  CupertinoColors.activeBlue,
                   context,
                 ),
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: CupertinoColors.white,
+                  width: 1.5,
+                ),
               ),
               child: const Icon(
                 CupertinoIcons.play_fill,
                 size: 16,
-                color: CupertinoColors.activeBlue,
+                color: CupertinoColors.white,
               ),
             ),
             const SizedBox(width: 12),
