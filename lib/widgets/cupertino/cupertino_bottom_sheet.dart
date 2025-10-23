@@ -153,21 +153,39 @@ class CupertinoBottomSheet extends StatelessWidget {
   }
 
   Widget _buildCloseButton(BuildContext context) {
+    final Color resolvedIconColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+
+    final onPressedCallback = onClose ?? () => Navigator.of(context).pop();
+
+    if (PlatformInfo.isIOS26OrHigher()) {
+      return SizedBox(
+        width: _closeButtonSize,
+        height: _closeButtonSize,
+        child: AdaptiveButton.sfSymbol(
+          useSmoothRectangleBorder: false,
+          onPressed: onPressedCallback,
+          style: AdaptiveButtonStyle.glass,
+          size: AdaptiveButtonSize.large,
+          sfSymbol: SFSymbol('xmark', size: 16, color: resolvedIconColor),
+        ),
+      );
+    }
+
     return SizedBox(
       width: _closeButtonSize,
       height: _closeButtonSize,
       child: AdaptiveButton.child(
         useSmoothRectangleBorder: false,
-        onPressed: onClose ?? () => Navigator.of(context).pop(),
+        onPressed: onPressedCallback,
         style: AdaptiveButtonStyle.glass,
         size: AdaptiveButtonSize.large,
         child: Icon(
           CupertinoIcons.xmark,
           size: 24,
-          color: CupertinoDynamicColor.resolve(
-            CupertinoColors.label,
-            context,
-          ),
+          color: resolvedIconColor,
         ),
       ),
     );
