@@ -439,7 +439,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     }
 
     return SizedBox(
-      height: 320,
+      height: 360,
       child: PageView.builder(
         controller: _pageController,
         itemCount: _recommendedItems.length,
@@ -495,67 +495,84 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               aspectRatio: 16 / 9,
               child: item.imageUrl != null
                   ? _buildPosterBackground(item.imageUrl!)
-                  : Container(color: resolvedBackground),
+                  : Container(color: cardColor),
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _sourceIcon(item.source),
-                size: 16,
-                color: CupertinoColors.activeBlue,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                _sourceLabel(item.source),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: CupertinoColors.activeBlue,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            item.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: labelColor,
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            item.subtitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: secondaryLabelColor,
-              fontSize: 14,
-            ),
-          ),
-          if (item.rating != null) ...[
-            const SizedBox(height: 10),
-            Row(
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Icon(CupertinoIcons.star_fill, color: Color(0xFFFFD166), size: 16),
-                const SizedBox(width: 4),
+                _buildCardMetaRow(item),
+                const SizedBox(height: 10),
                 Text(
-                  item.rating!.toStringAsFixed(1),
-                  style: TextStyle(color: secondaryLabelColor),
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  item.subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: secondaryLabelColor,
+                    fontSize: 14,
+                  ),
+                ),
+                if (item.rating != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(CupertinoIcons.star_fill, color: Color(0xFFFFD166), size: 16),
+                      const SizedBox(width: 4),
+                      Text(
+                        item.rating!.toStringAsFixed(1),
+                        style: TextStyle(color: secondaryLabelColor),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 14),
+                _buildPageIndicator(item),
               ],
             ),
-          ],
-          const SizedBox(height: 16),
-          _buildPageIndicator(item),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCardMetaRow(_CupertinoRecommendedItem item) {
+    final label = _sourceLabel(item.source);
+    if (label.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          _sourceIcon(item.source),
+          size: 16,
+          color: CupertinoColors.activeBlue,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: CupertinoColors.activeBlue,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 
@@ -750,7 +767,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       case _CupertinoRecommendedSource.local:
         return '本地媒体';
       case _CupertinoRecommendedSource.placeholder:
-        return '提示';
+        return '';
     }
   }
 
@@ -763,7 +780,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       case _CupertinoRecommendedSource.local:
         return CupertinoIcons.tray_full;
       case _CupertinoRecommendedSource.placeholder:
-        return CupertinoIcons.info_circle;
+        return CupertinoIcons.sparkles;
     }
   }
 
