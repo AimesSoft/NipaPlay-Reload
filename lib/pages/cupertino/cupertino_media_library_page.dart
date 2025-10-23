@@ -200,7 +200,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                     borderRadius: BorderRadius.circular(14),
                     child: const Text(
                       '添加共享客户端',
-                      style: TextStyle(fontSize: 15),
+                      style: TextStyle(fontSize: 15, color: CupertinoColors.white),
                     ),
                   ),
                 ),
