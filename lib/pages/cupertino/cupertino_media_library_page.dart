@@ -48,10 +48,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       CupertinoColors.systemGroupedBackground,
       context,
     );
-    final cardColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.secondarySystemBackground,
-      context,
-    );
+    final cardColor = CupertinoColors.secondarySystemBackground;
 
     final titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
     final statusBarHeight = MediaQuery.of(context).padding.top;
@@ -67,10 +64,13 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 slivers: [
                   SliverPadding(
-                    padding: EdgeInsets.only(top: statusBarHeight + 52 + 12),
+                    padding: EdgeInsets.only(top: statusBarHeight + 52),
                     sliver: CupertinoSliverRefreshControl(
                       onRefresh: () => _refreshActiveHost(provider),
                     ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _buildSectionTitle('NipaPlay 共享媒体库'),
                   ),
                   SliverToBoxAdapter(
                     child: Padding(
@@ -158,38 +158,25 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: resolvedCardColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: CupertinoColors.black.withOpacity(0.12),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
+        color: CupertinoDynamicColor.resolve(
+          CupertinoDynamicColor.withBrightness(
+            color: CupertinoColors.white,
+            darkColor: CupertinoColors.darkBackgroundGray,
           ),
-        ],
+          context,
+        ),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(CupertinoIcons.square_stack_3d_down_right, color: CupertinoColors.activeBlue),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'NipaPlay 共享媒体库',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: labelColor,
-                  ),
-                ),
-              ),
-              if (provider.isLoading)
+          if (provider.isLoading)
+            Row(
+              children: [
+                const Expanded(child: SizedBox()),
                 const CupertinoActivityIndicator(radius: 10),
-            ],
-          ),
-          const SizedBox(height: 14),
+              ],
+            ),
           if (!hasHosts)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,13 +642,6 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
         decoration: BoxDecoration(
           color: resolvedCardColor,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: CupertinoColors.black.withOpacity(0.08),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -771,6 +751,18 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       return '$baseUrl$imageUrl';
     }
     return '$baseUrl/$imageUrl';
+  }
+
+  Widget _buildSectionTitle(String title) {
+    final textStyle = CupertinoTheme.of(context).textTheme.navTitleTextStyle;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      child: Text(
+        title,
+        style: textStyle?.copyWith(fontSize: 22, fontWeight: FontWeight.w600) ??
+            const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+      ),
+    );
   }
 
   Future<void> _openAddHostDialog(SharedRemoteLibraryProvider provider) async {
