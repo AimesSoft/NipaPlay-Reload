@@ -44,17 +44,18 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     return AdaptiveScaffold(
       minimizeBehavior: TabBarMinimizeBehavior.never,
       enableBlur: true,
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages.asMap().entries.map((entry) {
-          final index = entry.key;
-          final page = entry.value;
-          return CupertinoBounceWrapper(
-            key: _bounceKeys[index],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 50),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: KeyedSubtree(
+          key: ValueKey<int>(_selectedIndex),
+          child: CupertinoBounceWrapper(
+            key: _bounceKeys[_selectedIndex],
             autoPlay: false, // 禁用自动播放，手动控制
-            child: page,
-          );
-        }).toList(),
+            child: _pages[_selectedIndex],
+          ),
+        ),
       ),
       bottomNavigationBar: AdaptiveBottomNavigationBar(
         useNativeBottomBar: true,
@@ -80,8 +81,12 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
           setState(() {
             _selectedIndex = index;
           });
-          // 切换页面时触发bounce动画
-          CupertinoBounceWrapper.playAnimation(_bounceKeys[index]);
+          // 等待页面切换动画完成后再触发bounce动画
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted) {
+              CupertinoBounceWrapper.playAnimation(_bounceKeys[index]);
+            }
+          });
         },
       ),
     );
