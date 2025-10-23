@@ -54,6 +54,14 @@ class CupertinoAnimeCard extends StatelessWidget {
       CupertinoColors.secondaryLabel,
       context,
     );
+    // 封面占位符背景色
+    final posterBackgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
+      context,
+    );
 
     return GestureDetector(
       onTap: isLoading ? null : onTap,
@@ -69,6 +77,7 @@ class CupertinoAnimeCard extends StatelessWidget {
             // 左侧：封面图片
             Container(
               decoration: BoxDecoration(
+                color: posterBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
@@ -205,8 +214,12 @@ class CupertinoAnimeCard extends StatelessWidget {
 
   /// 构建封面图片
   Widget _buildPosterImage(BuildContext context) {
+    // 使用纯白色作为占位符背景（亮色模式）或深色背景（深色模式）
     final placeholderColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.systemFill,
+      CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
       context,
     );
 
