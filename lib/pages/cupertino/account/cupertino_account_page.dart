@@ -20,6 +20,28 @@ class CupertinoAccountPage extends StatefulWidget {
 class _CupertinoAccountPageState extends State<CupertinoAccountPage>
     with AccountPageController {
   bool _showDandanplayPage = true;
+  final ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  void _handleScroll() {
+    if (!mounted) return;
+    setState(() {
+      _scrollOffset = _scrollController.offset;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   void showMessage(String message) {
@@ -170,47 +192,90 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final double headerHeight = statusBarHeight + 52;
+    final double titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
 
     return ColoredBox(
       color: backgroundColor,
-      child: CustomScrollView(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        slivers: [
-          const CupertinoSliverNavigationBar(
-            largeTitle: Text('账户'),
-            stretch: true,
-            backgroundColor: Color(0x00000000),
-            border: null,
+      child: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            slivers: [
+              SliverToBoxAdapter(
+                child: SizedBox(height: headerHeight),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AdaptiveSegmentedControl(
+                        labels: const ['弹弹play', 'Bangumi'],
+                        selectedIndex: _showDandanplayPage ? 0 : 1,
+                        onValueChanged: (index) {
+                          setState(() {
+                            _showDandanplayPage = index == 0;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        child: _showDandanplayPage
+                            ? _buildDandanplaySection()
+                            : _buildBangumiSection(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+            ],
           ),
-          SliverSafeArea(
-            top: false,
-            sliver: SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AdaptiveSegmentedControl(
-                      labels: const ['弹弹play', 'Bangumi'],
-                      selectedIndex: _showDandanplayPage ? 0 : 1,
-                      onValueChanged: (index) {
-                        setState(() {
-                          _showDandanplayPage = index == 0;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      child: _showDandanplayPage
-                          ? _buildDandanplaySection()
-                          : _buildBangumiSection(),
-                    ),
-                  ],
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      backgroundColor,
+                      backgroundColor.withOpacity(0.0),
+                    ],
+                    stops: const [0.0, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: statusBarHeight,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: titleOpacity,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    '账户',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .navLargeTitleTextStyle,
+                  ),
                 ),
               ),
             ),
