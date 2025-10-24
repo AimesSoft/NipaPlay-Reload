@@ -7,6 +7,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/brightness_gesture_area.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/volume_gesture_area.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/video_settings_menu.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -20,6 +21,7 @@ class CupertinoPlayVideoPage extends StatefulWidget {
 class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   double? _dragProgress;
   bool _isDragging = false;
+  OverlayEntry? _settingsOverlay;
 
   @override
   void initState() {
@@ -30,6 +32,13 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           Provider.of<VideoPlayerState>(context, listen: false);
       videoState.setContext(context);
     });
+  }
+
+  @override
+  void dispose() {
+    _settingsOverlay?.remove();
+    _settingsOverlay = null;
+    super.dispose();
   }
 
   @override
@@ -325,6 +334,16 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                               : null,
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      AdaptiveButton.sfSymbol(
+                        onPressed: () {
+                          videoState.resetHideControlsTimer();
+                          _showSettingsMenu(context);
+                        },
+                        sfSymbol: const SFSymbol('gearshape.fill'),
+                        style: AdaptiveButtonStyle.glass,
+                        size: AdaptiveButtonSize.large,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -437,3 +456,15 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     return title ?? episode ?? '';
   }
 }
+  void _showSettingsMenu(BuildContext context) {
+    _settingsOverlay?.remove();
+    _settingsOverlay = OverlayEntry(
+      builder: (context) => VideoSettingsMenu(
+        onClose: () {
+          _settingsOverlay?.remove();
+          _settingsOverlay = null;
+        },
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_settingsOverlay!);
+  }

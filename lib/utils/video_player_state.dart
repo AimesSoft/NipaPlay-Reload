@@ -45,6 +45,10 @@ import 'package:nipaplay/widgets/nipaplay_theme/speed_boost_indicator.dart'; // 
 import 'subtitle_manager.dart'; // 导入字幕管理器
 import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/widgets/cupertino/player/cupertino_brightness_indicator.dart';
+import 'package:nipaplay/widgets/cupertino/player/cupertino_volume_indicator.dart';
+import 'package:nipaplay/widgets/cupertino/player/cupertino_seek_indicator.dart';
 import 'decoder_manager.dart'; // 导入解码器管理器
 import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧集导航服务
 import 'package:nipaplay/services/auto_next_episode_service.dart';
@@ -662,19 +666,27 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // _initialDragBrightness is already updated at the start of the next drag.
     // The indicator will hide via its own timer.
     // No specific action needed here unless we want to immediately save or something.
-    debugPrint(
-        "Brightness drag ended. Current brightness: $_currentBrightness");
+    // debugPrint("Brightness drag ended. Current brightness: $_currentBrightness");
   }
 
   void _showBrightnessIndicator() {
     if (!globals.isPhone || _context == null) return;
+
+    final uiThemeProvider =
+        Provider.of<UIThemeProvider>(_context!, listen: false);
+    final bool useCupertinoStyle =
+        uiThemeProvider.isCupertinoTheme && globals.isPhone;
 
     _isBrightnessIndicatorVisible = true;
 
     if (_brightnessOverlayEntry == null) {
       _brightnessOverlayEntry = OverlayEntry(
         builder: (context) {
-          return ChangeNotifierProvider<VideoPlayerState>.value(
+          final indicatorWidget =
+              useCupertinoStyle
+                  ? const CupertinoBrightnessIndicator()
+                  : const BrightnessIndicator();
+          Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
             child: Consumer<VideoPlayerState>(
               builder: (context, videoState, _) {
@@ -688,17 +700,24 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                       transform: Matrix4.translationValues(
                         videoState.isBrightnessIndicatorVisible
                             ? -35.0
-                            : 70.0, // Slide from right
+                            : 70.0,
                         0.0,
                         0.0,
                       ),
-                      child: const BrightnessIndicator(),
+                      child: indicatorWidget,
                     ),
                   ),
                 );
               },
             ),
           );
+          if (useCupertinoStyle) {
+            overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
+              value: uiThemeProvider,
+              child: overlayChild,
+            );
+          }
+          return overlayChild;
         },
       );
       Overlay.of(_context!).insert(_brightnessOverlayEntry!);
@@ -737,17 +756,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // Volume Indicator Overlay Methods
   void _showVolumeIndicator() {
-    // if (!globals.isPhone || _context == null) return; // 原始判断可能阻止PC
-    debugPrint(
-        "[VideoPlayerState] _showVolumeIndicator: _context is ${_context == null ? 'null' : 'valid'}, globals.isPhone is ${globals.isPhone}");
-    if (_context == null) return; // Context 是必须的
+    if (_context == null) return;
+
+    final uiThemeProvider =
+        Provider.of<UIThemeProvider>(_context!, listen: false);
+    final bool useCupertinoStyle =
+        uiThemeProvider.isCupertinoTheme && globals.isPhone;
 
     _isVolumeIndicatorVisible = true;
 
     if (_volumeOverlayEntry == null) {
       _volumeOverlayEntry = OverlayEntry(
         builder: (context) {
-          return ChangeNotifierProvider<VideoPlayerState>.value(
+          final indicatorWidget =
+              useCupertinoStyle
+                  ? const CupertinoVolumeIndicator()
+                  : const VolumeIndicator();
+          Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
             child: Consumer<VideoPlayerState>(
               builder: (context, videoState, _) {
@@ -759,19 +784,24 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       transform: Matrix4.translationValues(
-                        videoState.isVolumeUIVisible
-                            ? 35.0
-                            : -70.0, // Slide from left
+                        videoState.isVolumeUIVisible ? 35.0 : -70.0,
                         0.0,
                         0.0,
                       ),
-                      child: const VolumeIndicator(),
+                      child: indicatorWidget,
                     ),
                   ),
                 );
               },
             ),
           );
+          if (useCupertinoStyle) {
+            overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
+              value: uiThemeProvider,
+              child: overlayChild,
+            );
+          }
+          return overlayChild;
         },
       );
       Overlay.of(_context!).insert(_volumeOverlayEntry!);
@@ -786,9 +816,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   void _hideVolumeIndicator() {
     // if (!globals.isPhone) return; // 原始判断可能阻止PC
-    debugPrint(
-        "[VideoPlayerState] _hideVolumeIndicator: globals.isPhone is ${globals.isPhone}");
-
     _volumeIndicatorTimer?.cancel();
 
     if (_isVolumeIndicatorVisible) {
@@ -4000,21 +4027,33 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // Seek Indicator Overlay Methods
   void _showSeekIndicator() {
-    if (!globals.isPhone || _context == null)
-      return; // Ensure context is available
+    if (!globals.isPhone || _context == null) return;
+
+    final uiThemeProvider =
+        Provider.of<UIThemeProvider>(_context!, listen: false);
+    final bool useCupertinoStyle =
+        uiThemeProvider.isCupertinoTheme && globals.isPhone;
+
     _isSeekIndicatorVisible = true;
 
     if (_seekOverlayEntry == null) {
       _seekOverlayEntry = OverlayEntry(
         builder: (context) {
-          // SeekIndicator uses Consumer<VideoPlayerState> internally
-          // It needs to be wrapped in a provider if this OverlayEntry's context
-          // is different or doesn't have VideoPlayerState high up.
-          // Providing it directly here is safest.
-          return ChangeNotifierProvider<VideoPlayerState>.value(
+          final seekWidget = useCupertinoStyle
+              ? const CupertinoSeekIndicator()
+              : const SeekIndicator();
+          Widget overlayChild =
+              ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
-            child: const SeekIndicator(),
+            child: seekWidget,
           );
+          if (useCupertinoStyle) {
+            overlayChild = ChangeNotifierProvider<UIThemeProvider>.value(
+              value: uiThemeProvider,
+              child: overlayChild,
+            );
+          }
+          return overlayChild;
         },
       );
       Overlay.of(_context!).insert(_seekOverlayEntry!);

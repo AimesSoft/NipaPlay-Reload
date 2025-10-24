@@ -18,6 +18,11 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay/utils/theme_notifier.dart';
 
 class CupertinoHomePage extends StatefulWidget {
   const CupertinoHomePage({super.key});
@@ -250,6 +255,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             rating: candidate.communityRating != null
                 ? double.tryParse(candidate.communityRating!)
                 : null,
+            animeId: null,
+            episodeCount: null,
           );
         } else if (candidate is EmbyMediaItem) {
           final embyService = EmbyService.instance;
@@ -273,6 +280,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             rating: candidate.communityRating != null
                 ? double.tryParse(candidate.communityRating!)
                 : null,
+            animeId: null,
+            episodeCount: null,
           );
         } else if (candidate is WatchHistoryItem) {
           String? imagePath;
@@ -294,6 +303,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             imageUrl: imagePath,
             source: _CupertinoRecommendedSource.local,
             rating: null,
+            animeId: candidate.animeId,
+            episodeCount: null,
           );
         }
 
@@ -316,6 +327,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             imageUrl: null,
             source: _CupertinoRecommendedSource.placeholder,
             rating: null,
+            animeId: null,
+            episodeCount: null,
           ),
         );
       }
@@ -940,6 +953,59 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         .replaceAll('<br />', ' ')
         .trim();
   }
+
+  Future<void> _openHeroDetail(_CupertinoRecommendedItem item) async {
+    if (item.animeId == null) {
+      return;
+    }
+
+    final provider = context.read<SharedRemoteLibraryProvider>();
+    final detailMode = context.read<ThemeNotifier>().animeDetailDisplayMode;
+
+    SharedRemoteAnimeSummary? summary;
+    for (final entry in provider.animeSummaries) {
+      if (entry.animeId == item.animeId) {
+        summary = entry;
+        break;
+      }
+    }
+
+    summary = summary != null
+        ? SharedRemoteAnimeSummary(
+            animeId: summary.animeId,
+            name: summary.name,
+            nameCn: summary.nameCn ?? summary.name,
+            summary: summary.summary ?? item.subtitle,
+            imageUrl: summary.imageUrl ?? item.imageUrl,
+            lastWatchTime: summary.lastWatchTime,
+            episodeCount: summary.episodeCount,
+            hasMissingFiles: summary.hasMissingFiles,
+          )
+        : SharedRemoteAnimeSummary(
+            animeId: item.animeId!,
+            name: item.title,
+            nameCn: item.title,
+            summary: item.subtitle,
+            imageUrl: item.imageUrl,
+            lastWatchTime: DateTime.now(),
+            episodeCount: item.episodeCount ?? 0,
+            hasMissingFiles: false,
+          );
+
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: null,
+      showCloseButton: false,
+      child: ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+        value: provider,
+        child: CupertinoSharedAnimeDetailPage(
+          anime: summary,
+          displayModeOverride: detailMode,
+          showCloseButton: true,
+        ),
+      ),
+    );
+  }
 }
 
 class _CupertinoRecommendedItem {
@@ -949,6 +1015,8 @@ class _CupertinoRecommendedItem {
   final String? imageUrl;
   final _CupertinoRecommendedSource source;
   final double? rating;
+  final int? animeId;
+  final int? episodeCount;
 
   _CupertinoRecommendedItem({
     required this.id,
@@ -957,6 +1025,8 @@ class _CupertinoRecommendedItem {
     this.imageUrl,
     required this.source,
     this.rating,
+    this.animeId,
+    this.episodeCount,
   });
 }
 
