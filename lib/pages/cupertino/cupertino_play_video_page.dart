@@ -48,11 +48,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
         : videoState.progress;
 
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+      behavior: HitTestBehavior.deferToChild,
       onTap: () {
         videoState.toggleControls();
       },
-      onPanDown: (_) => videoState.resetHideControlsTimer(),
+      onTapDown: (_) => videoState.resetHideControlsTimer(),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -118,21 +118,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
               child: Row(
                 children: [
                   _buildBackButton(videoState),
-                  const Spacer(),
-                  if (_composeTitle(videoState).isNotEmpty)
-                    Flexible(
-                      child: Text(
-                        _composeTitle(videoState),
-                        style: const TextStyle(
-                          color: CupertinoColors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildTitleButton(videoState)),
                 ],
               ),
             ),
@@ -180,6 +167,23 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
   }
 
+  Widget _buildTitleButton(VideoPlayerState videoState) {
+    final title = _composeTitle(videoState);
+    if (title.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return AdaptiveButton(
+      onPressed: () {},
+      label: title,
+      style: AdaptiveButtonStyle.glass,
+      size: AdaptiveButtonSize.large,
+      enabled: false,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      useSmoothRectangleBorder: true,
+    );
+  }
+
   Widget _buildBottomControls(VideoPlayerState videoState, double progressValue) {
     final duration = videoState.videoDuration;
     final position = videoState.position;
@@ -221,6 +225,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           activeColor: CupertinoColors.activeBlue,
                           onChangeStart: totalMillis > 0
                               ? (_) {
+                                  videoState.resetHideControlsTimer();
                                   setState(() {
                                     _isDragging = true;
                                   });
@@ -240,6 +245,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                                         (value * totalMillis).round(),
                                   );
                                   videoState.seekTo(target);
+                                  videoState.resetHideControlsTimer();
                                   setState(() {
                                     _isDragging = false;
                                     _dragProgress = null;
