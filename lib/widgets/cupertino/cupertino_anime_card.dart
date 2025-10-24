@@ -162,10 +162,10 @@ class CupertinoAnimeCard extends StatelessWidget {
                       ],
                     ),
                     // 下部分：剧集信息、观看时间和简介
+                    const SizedBox(height: 8),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.end, // 将内容推到底部
                         children: [
                           // 剧集信息
                           Row(
@@ -208,19 +208,26 @@ class CupertinoAnimeCard extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            // 简介预览 - 填充剩余空间
+                            // 简介预览 - 占用剩余空间
                             if (summary != null && summary!.trim().isNotEmpty) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 4),
                               Expanded(
-                                child: Text(
-                                  _cleanSummary(summary!),
-                                  maxLines: 10, // 允许更多行数,但会被容器限制
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: secondaryLabelColor.withOpacity(0.9),
-                                    height: 1.4,
-                                  ),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    // 根据可用高度计算最大行数
+                                    const lineHeight = 12; // fontSize * height
+                                    final maxLines = (constraints.maxHeight / lineHeight).floor();
+                                    return Text(
+                                      _cleanSummary(summary!),
+                                      maxLines: maxLines > 0 ? maxLines : 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: secondaryLabelColor.withOpacity(0.9),
+                                        height: 1.4,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ],
