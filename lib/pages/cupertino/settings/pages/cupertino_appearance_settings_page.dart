@@ -39,6 +39,7 @@ class _CupertinoAppearanceSettingsPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final double topPadding = MediaQuery.of(context).padding.top + 48;
 
     return AdaptiveScaffold(
       appBar: const AdaptiveAppBar(
@@ -49,8 +50,9 @@ class _CupertinoAppearanceSettingsPageState
         color: backgroundColor,
         child: SafeArea(
           top: false,
+          bottom: false,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+            padding: EdgeInsets.fromLTRB(20, topPadding, 20, 32),
             physics: const BouncingScrollPhysics(
               parent: AlwaysScrollableScrollPhysics(),
             ),
