@@ -6,7 +6,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:nipaplay/pages/account/account_controller.dart';
 import 'package:nipaplay/widgets/user_activity/cupertino_user_activity.dart';
 
-import 'pages/cupertino_account_credentials_page.dart';
 import 'sections/bangumi_section.dart';
 import 'sections/dandanplay_account_section.dart';
 
@@ -75,16 +74,12 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
         AlertAction(
           title: '取消',
           style: AlertActionStyle.cancel,
-          onPressed: () {
-            debugPrint('[登录弹窗] 用户点击取消按钮 ($placeholder)');
-          },
+          onPressed: () {},
         ),
         AlertAction(
           title: confirmLabel,
           style: AlertActionStyle.primary,
-          onPressed: () {
-            debugPrint('[登录弹窗] 用户点击确认按钮 ($placeholder)');
-          },
+          onPressed: () {},
         ),
       ],
     );
@@ -156,46 +151,66 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
   }
 
   @override
-  void showRegisterDialog() {
-    Navigator.of(context).push(
-      CupertinoPageRoute(
-        builder: (_) => CupertinoAccountCredentialsPage(
-          title: '注册弹弹play账号',
-          actionLabel: '注册',
-          fields: [
-            CupertinoCredentialField(
-              label: '用户名',
-              controller: registerUsernameController,
-              placeholder: '5-20位英文或数字，首位不能为数字',
-            ),
-            CupertinoCredentialField(
-              label: '密码',
-              controller: registerPasswordController,
-              placeholder: '请输入密码',
-              obscureText: true,
-            ),
-            CupertinoCredentialField(
-              label: '邮箱',
-              controller: registerEmailController,
-              placeholder: '用于找回密码',
-            ),
-            CupertinoCredentialField(
-              label: '昵称',
-              controller: registerScreenNameController,
-              placeholder: '显示名称，不超过50个字符',
-            ),
-          ],
-          onSubmit: () async {
-            try {
-              await performRegister();
-            } catch (_) {
-              // 错误信息已经通过 showMessage 提示
-            }
-            return isLoggedIn;
-          },
-        ),
-      ),
+  void showRegisterDialog() async {
+    final usernameResult = await _showAdaptiveInputDialog(
+      title: '注册弹弹play账号',
+      message: '请输入用户名（5-20位英文或数字，首位不能为数字）',
+      placeholder: '用户名',
+      confirmLabel: '下一步',
+      initialValue: registerUsernameController.text,
     );
+
+    if (usernameResult == null) {
+      return;
+    }
+    registerUsernameController.text = usernameResult;
+
+    final passwordResult = await _showAdaptiveInputDialog(
+      title: '注册弹弹play账号',
+      message: '请输入密码',
+      placeholder: '密码',
+      confirmLabel: '下一步',
+      obscureText: true,
+      initialValue: registerPasswordController.text,
+    );
+
+    if (passwordResult == null) {
+      return;
+    }
+    registerPasswordController.text = passwordResult;
+
+    final emailResult = await _showAdaptiveInputDialog(
+      title: '注册弹弹play账号',
+      message: '请输入邮箱（用于找回密码）',
+      placeholder: '邮箱',
+      confirmLabel: '下一步',
+      initialValue: registerEmailController.text,
+      keyboardType: TextInputType.emailAddress,
+    );
+
+    if (emailResult == null) {
+      return;
+    }
+    registerEmailController.text = emailResult;
+
+    final screenNameResult = await _showAdaptiveInputDialog(
+      title: '注册弹弹play账号',
+      message: '请输入昵称（不超过50个字符）',
+      placeholder: '昵称',
+      confirmLabel: '注册',
+      initialValue: registerScreenNameController.text,
+    );
+
+    if (screenNameResult == null) {
+      return;
+    }
+    registerScreenNameController.text = screenNameResult;
+
+    try {
+      await performRegister();
+    } catch (_) {
+      // 错误信息已经通过 showMessage 提示
+    }
   }
 
   @override
@@ -212,24 +227,20 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
         AlertAction(
           title: '取消',
           style: AlertActionStyle.cancel,
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
+          onPressed: () {},
         ),
         AlertAction(
           title: '继续注销',
           style: AlertActionStyle.destructive,
-          onPressed: () async {
-            Navigator.of(context).pop();
-            await _openExternalUrl(deleteAccountUrl);
+          onPressed: () {
+            Future.microtask(() => _openExternalUrl(deleteAccountUrl));
           },
         ),
         AlertAction(
           title: '已完成注销',
           style: AlertActionStyle.primary,
-          onPressed: () async {
-            Navigator.of(context).pop();
-            await completeAccountDeletion();
+          onPressed: () {
+            Future.microtask(() => completeAccountDeletion());
           },
         ),
       ],

@@ -81,12 +81,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     logService.addLog('[账号控制器] 开始登录流程', level: 'INFO', tag: 'AccountController');
 
     debugPrint('[账号控制器-DEBUG] 检查登录信息是否完整');
-    final trimmedUsername = usernameController.text.trim();
-    final trimmedPassword = passwordController.text.trim();
-
-    debugPrint('[账号控制器-DEBUG] 用户名: $trimmedUsername');
-    debugPrint('[账号控制器-DEBUG] 密码长度: ${trimmedPassword.length}');
-    debugPrint('[账号控制器-DEBUG] 密码内容(明文): $trimmedPassword');
+    debugPrint('[账号控制器-DEBUG] 用户名: ${usernameController.text.trim()}');
+    debugPrint('[账号控制器-DEBUG] 密码长度: ${passwordController.text.trim().length}');
 
     if (usernameController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
       debugPrint('[账号控制器-DEBUG] 登录信息不完整');
