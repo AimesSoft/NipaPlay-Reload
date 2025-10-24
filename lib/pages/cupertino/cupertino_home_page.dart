@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +15,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
+import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 
@@ -166,7 +166,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         final futures = <Future<List<JellyfinMediaItem>>>[];
         for (final library in jellyfinService.availableLibraries) {
           if (jellyfinService.selectedLibraryIds.contains(library.id)) {
-            futures.add(jellyfinService.getRandomMediaItemsByLibrary(library.id, limit: 30));
+            futures.add(jellyfinService.getRandomMediaItemsByLibrary(library.id,
+                limit: 30));
           }
         }
         if (futures.isNotEmpty) {
@@ -183,7 +184,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         final futures = <Future<List<EmbyMediaItem>>>[];
         for (final library in embyService.availableLibraries) {
           if (embyService.selectedLibraryIds.contains(library.id)) {
-            futures.add(embyService.getRandomMediaItemsByLibrary(library.id, limit: 30));
+            futures.add(embyService.getRandomMediaItemsByLibrary(library.id,
+                limit: 30));
           }
         }
         if (futures.isNotEmpty) {
@@ -205,7 +207,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         for (final item in localHistory) {
           if (item.animeId == null) continue;
           final existing = latestLocalItems[item.animeId!];
-          if (existing == null || item.lastWatchTime.isAfter(existing.lastWatchTime)) {
+          if (existing == null ||
+              item.lastWatchTime.isAfter(existing.lastWatchTime)) {
             latestLocalItems[item.animeId!] = item;
           }
         }
@@ -229,9 +232,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           final jellyfinService = JellyfinService.instance;
           String? backdropUrl;
           try {
-            backdropUrl = jellyfinService.getImageUrl(candidate.id, type: 'Backdrop');
-            backdropUrl ??= jellyfinService.getImageUrl(candidate.id, type: 'Primary');
-          } catch (_) {}
+            backdropUrl =
+                jellyfinService.getImageUrl(candidate.id, type: 'Backdrop');
+          } catch (_) {
+            try {
+              backdropUrl =
+                  jellyfinService.getImageUrl(candidate.id, type: 'Primary');
+            } catch (_) {}
+          }
 
           built = _CupertinoRecommendedItem(
             id: 'jellyfin_${candidate.id}',
@@ -239,15 +247,22 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             subtitle: _sanitizeOverview(candidate.overview),
             imageUrl: backdropUrl,
             source: _CupertinoRecommendedSource.jellyfin,
-            rating: candidate.communityRating != null ? double.tryParse(candidate.communityRating!) : null,
+            rating: candidate.communityRating != null
+                ? double.tryParse(candidate.communityRating!)
+                : null,
           );
         } else if (candidate is EmbyMediaItem) {
           final embyService = EmbyService.instance;
           String? backdropUrl;
           try {
-            backdropUrl = embyService.getImageUrl(candidate.id, type: 'Backdrop');
-            backdropUrl ??= embyService.getImageUrl(candidate.id, type: 'Primary');
-          } catch (_) {}
+            backdropUrl =
+                embyService.getImageUrl(candidate.id, type: 'Backdrop');
+          } catch (_) {
+            try {
+              backdropUrl =
+                  embyService.getImageUrl(candidate.id, type: 'Primary');
+            } catch (_) {}
+          }
 
           built = _CupertinoRecommendedItem(
             id: 'emby_${candidate.id}',
@@ -255,7 +270,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             subtitle: _sanitizeOverview(candidate.overview),
             imageUrl: backdropUrl,
             source: _CupertinoRecommendedSource.emby,
-            rating: candidate.communityRating != null ? double.tryParse(candidate.communityRating!) : null,
+            rating: candidate.communityRating != null
+                ? double.tryParse(candidate.communityRating!)
+                : null,
           );
         } else if (candidate is WatchHistoryItem) {
           String? imagePath = candidate.thumbnailPath;
@@ -265,7 +282,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
           built = _CupertinoRecommendedItem(
             id: 'local_${candidate.animeId ?? candidate.filePath}',
-            title: candidate.animeName.isNotEmpty ? candidate.animeName : (candidate.episodeTitle ?? '本地媒体'),
+            title: candidate.animeName.isNotEmpty
+                ? candidate.animeName
+                : (candidate.episodeTitle ?? '本地媒体'),
             subtitle: candidate.episodeTitle ?? '继续观看',
             imageUrl: imagePath,
             source: _CupertinoRecommendedSource.local,
@@ -323,12 +342,13 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Future<String?> _loadPersistedImage(int animeId) async {
     final cached = _localImageCache[animeId];
-    if (cached != null) {
+    if (cached != null && cached.isNotEmpty) {
       return cached;
     }
 
+    SharedPreferences? prefs;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      prefs = await SharedPreferences.getInstance();
       final persisted = prefs.getString('$_localPrefsKeyPrefix$animeId');
       if (persisted != null && persisted.isNotEmpty) {
         _localImageCache[animeId] = persisted;
@@ -343,10 +363,27 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         final imageUrl = detail?['imageUrl'] as String?;
         if (imageUrl != null && imageUrl.isNotEmpty) {
           _localImageCache[animeId] = imageUrl;
+          await prefs.setString('$_localPrefsKeyPrefix$animeId', imageUrl);
           return imageUrl;
         }
       }
     } catch (_) {}
+
+    try {
+      final bangumiDetail =
+          await BangumiService.instance.getAnimeDetails(animeId);
+      final imageUrl = bangumiDetail.imageUrl;
+      if (imageUrl.isNotEmpty) {
+        _localImageCache[animeId] = imageUrl;
+        try {
+          prefs ??= await SharedPreferences.getInstance();
+          await prefs.setString('$_localPrefsKeyPrefix$animeId', imageUrl);
+        } catch (_) {}
+        return imageUrl;
+      }
+    } catch (e) {
+      debugPrint('CupertinoHomePage: 获取番剧封面失败: $e');
+    }
 
     return null;
   }
@@ -413,12 +450,15 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         children: [
           CustomScrollView(
             controller: _scrollController,
-            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics()),
             slivers: [
               // 顶部留空，为大标题和状态栏预留空间
               SliverPadding(
-                padding: EdgeInsets.only(top: statusBarHeight + 52), // 状态栏 + 大标题高度 + 间距
-                sliver: CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
+                padding: EdgeInsets.only(
+                    top: statusBarHeight + 52), // 状态栏 + 大标题高度 + 间距
+                sliver:
+                    CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
               ),
               SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
               SliverToBoxAdapter(child: _buildHeroSection()),
@@ -428,13 +468,15 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                   builder: (context, provider, _) {
                     final recentItems = _buildRecentItems(provider.history);
                     return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
                       child: recentItems.isEmpty
                           ? _buildEmptyRecentPlaceholder()
                           : Column(
                               children: recentItems
                                   .map((item) => Padding(
-                                        padding: const EdgeInsets.only(bottom: 12),
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
                                         child: _buildRecentCard(item),
                                       ))
                                   .toList(),
@@ -460,7 +502,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                     end: Alignment.bottomCenter,
                     colors: [
                       backgroundColor,
-                      backgroundColor.withOpacity(0.0),
+                      backgroundColor.withValues(alpha: 0.0),
                     ],
                     stops: const [0.0, 1.0],
                   ),
@@ -480,7 +522,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
                   child: Text(
                     '主页',
-                    style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle,
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .navLargeTitleTextStyle,
                   ),
                 ),
               ),
@@ -532,7 +576,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     double cardHeight,
   ) {
     final cardColor = CupertinoDynamicColor.resolve(
-      CupertinoDynamicColor.withBrightness(
+      const CupertinoDynamicColor.withBrightness(
         color: CupertinoColors.white,
         darkColor: CupertinoColors.darkBackgroundGray,
       ),
@@ -541,6 +585,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
+    // ignore: prefer_const_constructors
     return Container(
       height: cardHeight,
       decoration: BoxDecoration(
@@ -565,13 +610,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             height: cardHeight * 0.5, // 遮罩覆盖卡片底部60%高度
             child: Container(
               decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                borderRadius:
+                    const BorderRadius.vertical(bottom: Radius.circular(24)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.0),
-                    Colors.black.withOpacity(0.5),
+                    Colors.black.withValues(alpha: 0.0),
+                    Colors.black.withValues(alpha: 0.5),
                   ],
                 ),
               ),
@@ -612,7 +658,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 14,
                     ),
                   ),
@@ -620,7 +666,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        const Icon(CupertinoIcons.star_fill, color: Color(0xFFFFD166), size: 16),
+                        const Icon(CupertinoIcons.star_fill,
+                            color: Color(0xFFFFD166), size: 16),
                         const SizedBox(width: 4),
                         Text(
                           item.rating!.toStringAsFixed(1),
@@ -672,7 +719,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       return Image.network(
         path,
         fit: BoxFit.cover,
-        errorBuilder: (context, _, __) => Container(color: CupertinoColors.systemGrey),
+        errorBuilder: (context, _, __) =>
+            Container(color: CupertinoColors.systemGrey),
       );
     }
 
@@ -681,7 +729,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       return Image.file(
         file,
         fit: BoxFit.cover,
-        errorBuilder: (context, _, __) => Container(color: CupertinoColors.systemGrey),
+        errorBuilder: (context, _, __) =>
+            Container(color: CupertinoColors.systemGrey),
       );
     }
 
@@ -715,20 +764,20 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
       child: Text(
         title,
-        style: textStyle?.copyWith(fontSize: 22, fontWeight: FontWeight.w600) ??
-            const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+        style: textStyle.copyWith(fontSize: 22, fontWeight: FontWeight.w600),
       ),
     );
   }
 
   Widget _buildEmptyRecentPlaceholder() {
     final resolvedBackground = CupertinoDynamicColor.resolve(
-      CupertinoDynamicColor.withBrightness(
+      const CupertinoDynamicColor.withBrightness(
         color: CupertinoColors.white,
         darkColor: CupertinoColors.darkBackgroundGray,
       ),
       context,
     );
+    // ignore: prefer_const_constructors
     return Container(
       height: 140,
       decoration: BoxDecoration(
@@ -746,21 +795,23 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Widget _buildRecentCard(WatchHistoryItem item) {
     final resolvedBackground = CupertinoDynamicColor.resolve(
-      CupertinoDynamicColor.withBrightness(
+      const CupertinoDynamicColor.withBrightness(
         color: CupertinoColors.white,
         darkColor: CupertinoColors.darkBackgroundGray,
       ),
       context,
     );
-    final progress = item.duration > 0 ? item.watchProgress.clamp(0.0, 1.0) : 0.0;
+    final progress =
+        item.duration > 0 ? item.watchProgress.clamp(0.0, 1.0) : 0.0;
 
+    // ignore: prefer_const_constructors
     return Container(
       decoration: BoxDecoration(
         color: resolvedBackground,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: CupertinoColors.black.withOpacity(0.08),
+            color: CupertinoColors.black.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -785,7 +836,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               item.episodeTitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, color: CupertinoColors.systemGrey),
+              style: const TextStyle(
+                  fontSize: 14, color: CupertinoColors.systemGrey),
             ),
           ],
           const SizedBox(height: 12),
@@ -793,7 +845,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           const SizedBox(height: 8),
           Text(
             '${(progress * 100).round()}% • ${_dateFormat.format(item.lastWatchTime)}',
-            style: const TextStyle(fontSize: 13, color: CupertinoColors.systemGrey2),
+            style: const TextStyle(
+                fontSize: 13, color: CupertinoColors.systemGrey2),
           ),
         ],
       ),
@@ -801,14 +854,15 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Widget _buildProgressBar(double progress) {
-    final resolvedTrack = CupertinoDynamicColor.resolve(CupertinoColors.systemGrey4, context);
+    final resolvedTrack =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemGrey4, context);
     return SizedBox(
       height: 6,
       child: Stack(
         children: [
           Container(
             decoration: BoxDecoration(
-              color: resolvedTrack.withOpacity(0.4),
+              color: resolvedTrack.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(3),
             ),
           ),
@@ -833,7 +887,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     final List<WatchHistoryItem> result = [];
     final Set<String> keys = {};
     for (final item in sorted) {
-      final key = item.animeId != null ? 'anime_${item.animeId}' : item.filePath;
+      final key =
+          item.animeId != null ? 'anime_${item.animeId}' : item.filePath;
       if (keys.add(key)) {
         result.add(item);
       }
