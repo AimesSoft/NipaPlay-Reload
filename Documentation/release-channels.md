@@ -75,6 +75,15 @@ yay -S nipaplay-reload-bin
 
 **更新方式**：
 
+### App Store 版本
+- **自动更新**：在 App Store 设置中开启自动更新
+- **手动更新**：打开 App Store → 点击头像 → 查看待更新应用
+
+### TestFlight 版本
+- **自动通知**：TestFlight 会在有新版本时发送推送通知
+- **手动检查**：打开 TestFlight 应用查看更新
+
+### 侧载版本
 - 重新下载最新的 `.ipa` 文件
 - 使用相同的侧载工具重新安装
 - AltStore 用户可以在应用内直接更新
