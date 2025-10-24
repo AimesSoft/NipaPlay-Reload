@@ -21,11 +21,13 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
     required this.anime,
     this.hideBackButton = false,
     this.displayModeOverride,
+    this.showCloseButton = true,
   });
 
   final SharedRemoteAnimeSummary anime;
   final bool hideBackButton;
   final AnimeDetailDisplayMode? displayModeOverride;
+  final bool showCloseButton;
 
   @override
   State<CupertinoSharedAnimeDetailPage> createState() =>
@@ -222,6 +224,15 @@ class _CupertinoSharedAnimeDetailPageState
               child: _buildBackButton(context),
             ),
           ),
+        if (widget.showCloseButton)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Padding(
+              padding: EdgeInsets.all(_toolbarPadding),
+              child: _buildCloseButton(context),
+            ),
+          ),
       ],
     );
   }
@@ -268,6 +279,15 @@ class _CupertinoSharedAnimeDetailPageState
               child: _buildBackButton(context),
             ),
           ),
+        if (widget.showCloseButton)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Padding(
+              padding: EdgeInsets.all(_toolbarPadding),
+              child: _buildCloseButton(context),
+            ),
+          ),
       ],
     );
   }
@@ -297,7 +317,16 @@ class _CupertinoSharedAnimeDetailPageState
 
   Widget _buildVividHeader(BuildContext context, String? hostName) {
     final surfaceColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.systemBackground,
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
+    final maskColor = surfaceColor;
+    final highlightColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    final detailColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
       context,
     );
     final imageUrl =
@@ -312,8 +341,8 @@ class _CupertinoSharedAnimeDetailPageState
       if (hostName != null && hostName.isNotEmpty) hostName,
     ];
 
-    return SizedBox(
-      height: 250,
+    return AspectRatio(
+      aspectRatio: 5 / 7,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -334,10 +363,10 @@ class _CupertinoSharedAnimeDetailPageState
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
+                  end: Alignment.center,
                   colors: [
-                    surfaceColor,
-                    surfaceColor.withOpacity(0.0),
+                    maskColor,
+                    maskColor.withOpacity(0.0),
                   ],
                 ),
               ),
@@ -346,7 +375,7 @@ class _CupertinoSharedAnimeDetailPageState
           Positioned(
             left: 20,
             right: 20,
-            bottom: 28,
+            bottom: 24,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -356,8 +385,9 @@ class _CupertinoSharedAnimeDetailPageState
                       .textTheme
                       .navLargeTitleTextStyle
                       .copyWith(
-                        fontSize: 26,
+                        fontSize: 24,
                         fontWeight: FontWeight.w700,
+                        color: highlightColor,
                       ),
                 ),
                 const SizedBox(height: 6),
@@ -368,7 +398,7 @@ class _CupertinoSharedAnimeDetailPageState
                       .textStyle
                       .copyWith(
                         fontSize: 13,
-                        color: CupertinoColors.secondaryLabel,
+                        color: detailColor,
                       ),
                 ),
               ],
@@ -1450,6 +1480,41 @@ class _CupertinoSharedAnimeDetailPageState
         size: AdaptiveButtonSize.large,
         child: Icon(
           CupertinoIcons.chevron_left,
+          size: 16,
+          color: iconColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCloseButton(BuildContext context) {
+    final iconColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+
+    if (PlatformInfo.isIOS26OrHigher()) {
+      return SizedBox(
+        width: _toolbarButtonSize,
+        height: _toolbarButtonSize,
+        child: AdaptiveButton.sfSymbol(
+          useSmoothRectangleBorder: false,
+          onPressed: () => Navigator.of(context).maybePop(),
+          style: AdaptiveButtonStyle.glass,
+          size: AdaptiveButtonSize.large,
+          sfSymbol: SFSymbol('xmark', size: 16, color: iconColor),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: _toolbarButtonSize,
+      height: _toolbarButtonSize,
+      child: AdaptiveButton.child(
+        useSmoothRectangleBorder: false,
+        onPressed: () => Navigator.of(context).maybePop(),
+        style: AdaptiveButtonStyle.glass,
+        size: AdaptiveButtonSize.large,
+        child: Icon(
+          CupertinoIcons.xmark,
           size: 16,
           color: iconColor,
         ),

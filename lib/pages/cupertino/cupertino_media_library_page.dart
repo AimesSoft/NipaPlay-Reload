@@ -10,6 +10,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_she
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_anime_card.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/utils/theme_notifier.dart';
 
 class CupertinoMediaLibraryPage extends StatefulWidget {
   const CupertinoMediaLibraryPage({super.key});
@@ -762,10 +763,21 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
     );
   }
 
-  void _handleAnimeTap(SharedRemoteAnimeSummary anime) {
-    _navigatorKey.currentState?.pushNamed(
-      _CupertinoMediaLibraryRoutes.detail,
-      arguments: anime,
+  Future<void> _handleAnimeTap(SharedRemoteAnimeSummary anime) async {
+    final detailMode = context.read<ThemeNotifier>().animeDetailDisplayMode;
+
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: null,
+      showCloseButton: false,
+      child: ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+        value: widget.provider,
+        child: CupertinoSharedAnimeDetailPage(
+          anime: anime,
+          displayModeOverride: detailMode,
+          showCloseButton: true,
+        ),
+      ),
     );
   }
 }

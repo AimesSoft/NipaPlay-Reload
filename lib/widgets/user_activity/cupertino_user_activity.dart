@@ -248,12 +248,14 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
     await CupertinoBottomSheet.show(
       context: context,
       title: null,
+      showCloseButton: false,
       child: ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
         value: sharedProvider,
         child: CupertinoSharedAnimeDetailPage(
           anime: summary,
           hideBackButton: true,
           displayModeOverride: detailMode,
+          showCloseButton: true,
         ),
       ),
     );
