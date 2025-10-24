@@ -50,9 +50,18 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     return GestureDetector(
       behavior: HitTestBehavior.deferToChild,
       onTap: () {
-        videoState.toggleControls();
+        if (!videoState.showControls) {
+          videoState.setShowControls(true);
+          videoState.resetHideControlsTimer();
+        } else {
+          videoState.toggleControls();
+        }
       },
-      onTapDown: (_) => videoState.resetHideControlsTimer(),
+      onTapDown: (_) {
+        if (videoState.showControls) {
+          videoState.resetHideControlsTimer();
+        }
+      },
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -119,7 +128,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 children: [
                   _buildBackButton(videoState),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildTitleButton(videoState)),
+                  Expanded(child: _buildTitleButton(context, videoState)),
                 ],
               ),
             ),
@@ -167,25 +176,33 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
   }
 
-  Widget _buildTitleButton(VideoPlayerState videoState) {
+  Widget _buildTitleButton(BuildContext context, VideoPlayerState videoState) {
     final title = _composeTitle(videoState);
     if (title.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return AdaptiveButton(
-      onPressed: () {},
-      label: title,
-      style: AdaptiveButtonStyle.glass,
-      size: AdaptiveButtonSize.large,
-      enabled: false,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      useSmoothRectangleBorder: true,
+    final maxWidth = MediaQuery.of(context).size.width * 0.5;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: AdaptiveButton(
+          onPressed: null,
+          label: title,
+          style: AdaptiveButtonStyle.glass,
+          size: AdaptiveButtonSize.large,
+          enabled: false,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          useSmoothRectangleBorder: true,
+        ),
+      ),
     );
   }
 
   Widget _buildBottomControls(VideoPlayerState videoState, double progressValue) {
-    final duration = videoState.videoDuration;
+    final duration = videoState.duration;
     final position = videoState.position;
     final totalMillis = duration.inMilliseconds;
 

@@ -275,10 +275,15 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 : null,
           );
         } else if (candidate is WatchHistoryItem) {
-          String? imagePath = candidate.thumbnailPath;
-          if (imagePath == null && candidate.animeId != null) {
+          String? imagePath;
+          if (candidate.animeId != null) {
             imagePath = await _loadPersistedImage(candidate.animeId!);
           }
+
+          imagePath ??= candidate.thumbnailPath;
+          debugPrint(
+            '[CupertinoHome] 推荐封面选择: animeId=${candidate.animeId} path=$imagePath',
+          );
 
           built = _CupertinoRecommendedItem(
             id: 'local_${candidate.animeId ?? candidate.filePath}',
