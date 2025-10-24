@@ -218,19 +218,18 @@ class _CupertinoSharedAnimeDetailPageState
 
     String? coverUrl;
     try {
-      final details = await DandanplayService.getBangumiDetails(
-        widget.anime.animeId,
-      );
+      BangumiAnime? animeDetail = _bangumiAnime;
+      animeDetail ??= await BangumiService.instance
+          .getAnimeDetails(widget.anime.animeId);
 
-      if (details['success'] == true) {
-        final bangumiId = _extractBangumiId(details);
-        if (bangumiId != null) {
-          coverUrl = await _requestBangumiHighQualityImage(bangumiId);
-          debugPrint('[共享番剧详情] Bangumi高清封面: $coverUrl');
-        }
-        coverUrl ??= _extractFallbackImage(details);
-        debugPrint('[共享番剧详情] 回落封面: $coverUrl');
+      final bangumiId = _parseBangumiIdFromUrl(animeDetail?.bangumiUrl);
+      if (bangumiId != null) {
+        coverUrl = await _requestBangumiHighQualityImage(bangumiId);
+        debugPrint('[共享番剧详情] Bangumi高清封面: $coverUrl');
       }
+
+      coverUrl ??= animeDetail?.imageUrl;
+      debugPrint('[共享番剧详情] 回落封面: $coverUrl');
     } catch (e) {
       debugPrint('[共享番剧详情] 获取高清封面失败: $e');
     }
@@ -782,41 +781,10 @@ class _CupertinoSharedAnimeDetailPageState
     );
   }
 
-  String? _extractBangumiId(Map<String, dynamic> details) {
-    final bangumi = details['bangumi'] as Map<String, dynamic>?;
-    if (bangumi != null) {
-      final dynamic rawId = bangumi['bangumiId'] ?? bangumi['id'];
-      if (rawId != null) {
-        return rawId.toString();
-      }
-      final url = bangumi['bangumiUrl'] as String?;
-      final parsed = _parseBangumiIdFromUrl(url);
-      if (parsed != null) {
-        return parsed;
-      }
-    }
-    final anime = details['anime'] as Map<String, dynamic>?;
-    return _parseBangumiIdFromUrl(anime?['bangumiUrl'] as String?);
-  }
-
   String? _parseBangumiIdFromUrl(String? url) {
     if (url == null || url.isEmpty) return null;
     final match = RegExp(r'bangumi\.tv/subject/(\d+)').firstMatch(url);
     return match?.group(1);
-  }
-
-  String? _extractFallbackImage(Map<String, dynamic> details) {
-    final bangumi = details['bangumi'] as Map<String, dynamic>?;
-    final anime = details['anime'] as Map<String, dynamic>?;
-    final bangumiImage = bangumi?['imageUrl'] as String?;
-    if (bangumiImage != null && bangumiImage.isNotEmpty) {
-      return bangumiImage;
-    }
-    final animeImage = anime?['imageUrl'] as String?;
-    if (animeImage != null && animeImage.isNotEmpty) {
-      return animeImage;
-    }
-    return null;
   }
 
   Future<String?> _requestBangumiHighQualityImage(String bangumiId) async {

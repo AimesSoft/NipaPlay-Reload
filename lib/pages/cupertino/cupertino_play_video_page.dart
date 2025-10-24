@@ -24,19 +24,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       builder: (context, videoState, _) {
         return WillPopScope(
           onWillPop: () => _handleSystemBack(videoState),
-          child: AnnotatedRegion<SystemUiOverlayStyle>(
-            value: SystemUiOverlayStyle.light,
-            child: AdaptiveScaffold(
-              appBar: videoState.showControls
-                  ? AdaptiveAppBar(
-                      title: _composeTitle(videoState).isNotEmpty
-                          ? _composeTitle(videoState)
-                          : null,
-                      leading: _buildAppBarLeading(videoState),
-                      useNativeToolbar: true,
-                    )
-                  : null,
-              body: SafeArea(
+          child: CupertinoPageScaffold(
+            backgroundColor: CupertinoColors.black,
+            child: AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle.light,
+              child: SafeArea(
                 top: false,
                 bottom: false,
                 child: _buildBody(videoState),
@@ -79,6 +71,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                   : _buildPlaceholder(videoState),
             ),
           ),
+          _buildTopBar(videoState),
           if (hasVideo) _buildBottomControls(videoState, progressValue),
         ],
       ),
@@ -108,7 +101,48 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
   }
 
-  Widget _buildAppBarLeading(VideoPlayerState videoState) {
+  Widget _buildTopBar(VideoPlayerState videoState) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        bottom: false,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 180),
+          opacity: videoState.showControls ? 1.0 : 0.0,
+          child: IgnorePointer(
+            ignoring: !videoState.showControls,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(
+                children: [
+                  _buildBackButton(videoState),
+                  const Spacer(),
+                  if (_composeTitle(videoState).isNotEmpty)
+                    Flexible(
+                      child: Text(
+                        _composeTitle(videoState),
+                        style: const TextStyle(
+                          color: CupertinoColors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackButton(VideoPlayerState videoState) {
     Future<void> handlePress() async {
       final shouldPop = await _requestExit(videoState);
       if (shouldPop && mounted) {
@@ -116,26 +150,33 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       }
     }
 
+    Widget button;
     if (PlatformInfo.isIOS26OrHigher()) {
-      return AdaptiveButton.sfSymbol(
+      button = AdaptiveButton.sfSymbol(
         onPressed: handlePress,
         sfSymbol: const SFSymbol('chevron.backward', size: 18, color: CupertinoColors.white),
         style: AdaptiveButtonStyle.glass,
         size: AdaptiveButtonSize.large,
         useSmoothRectangleBorder: false,
       );
+    } else {
+      button = AdaptiveButton.child(
+        onPressed: handlePress,
+        style: AdaptiveButtonStyle.glass,
+        size: AdaptiveButtonSize.large,
+        useSmoothRectangleBorder: false,
+        child: const Icon(
+          CupertinoIcons.back,
+          color: CupertinoColors.white,
+          size: 22,
+        ),
+      );
     }
 
-    return AdaptiveButton.child(
-      onPressed: handlePress,
-      style: AdaptiveButtonStyle.glass,
-      size: AdaptiveButtonSize.large,
-      useSmoothRectangleBorder: false,
-      child: const Icon(
-        CupertinoIcons.back,
-        color: CupertinoColors.white,
-        size: 22,
-      ),
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: button,
     );
   }
 
@@ -249,8 +290,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       }
     }
 
+    Widget button;
     if (PlatformInfo.isIOS26OrHigher()) {
-      return AdaptiveButton.sfSymbol(
+      button = AdaptiveButton.sfSymbol(
         onPressed: handlePress,
         sfSymbol: SFSymbol(
           isPaused ? 'play.fill' : 'pause.fill',
@@ -261,18 +303,24 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
         size: AdaptiveButtonSize.large,
         useSmoothRectangleBorder: true,
       );
+    } else {
+      button = AdaptiveButton.child(
+        onPressed: handlePress,
+        style: AdaptiveButtonStyle.filled,
+        size: AdaptiveButtonSize.large,
+        useSmoothRectangleBorder: true,
+        child: Icon(
+          isPaused ? CupertinoIcons.play_fill : CupertinoIcons.pause_fill,
+          color: CupertinoColors.white,
+          size: 22,
+        ),
+      );
     }
 
-    return AdaptiveButton.child(
-      onPressed: handlePress,
-      style: AdaptiveButtonStyle.filled,
-      size: AdaptiveButtonSize.large,
-      useSmoothRectangleBorder: true,
-      child: Icon(
-        isPaused ? CupertinoIcons.play_fill : CupertinoIcons.pause_fill,
-        color: CupertinoColors.white,
-        size: 22,
-      ),
+    return SizedBox(
+      width: 52,
+      height: 52,
+      child: button,
     );
   }
 
