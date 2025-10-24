@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Icons;
 
 import 'package:nipaplay/controllers/user_activity_controller.dart';
 
@@ -15,6 +14,8 @@ class CupertinoUserActivity extends StatefulWidget {
 
 class _CupertinoUserActivityState extends State<CupertinoUserActivity>
     with SingleTickerProviderStateMixin, UserActivityController {
+  static const double _thumbnailWidth = 60;
+  static const double _thumbnailHeight = 84;
   int _selectedIndex = 0;
 
   @override
@@ -61,11 +62,29 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
                   .copyWith(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const Spacer(),
-            AdaptiveButton.icon(
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minSize: 0,
               onPressed: isLoading ? null : loadUserActivity,
-              icon: PlatformInfo.isIOS ? CupertinoIcons.refresh : Icons.refresh,
-              size: AdaptiveButtonSize.small,
-              style: AdaptiveButtonStyle.bordered,
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.systemGrey5,
+                    context,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  CupertinoIcons.refresh,
+                  size: 16,
+                  color: isLoading
+                      ? CupertinoColors.systemGrey
+                      : CupertinoTheme.of(context).primaryColor,
+                ),
+              ),
             ),
           ],
         ),
@@ -205,14 +224,16 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
   Widget _buildThumbnail(String? url) {
     if (url == null || url.isEmpty) {
       return Container(
-        width: 44,
-        height: 44,
+        width: _thumbnailWidth,
+        height: _thumbnailHeight,
         decoration: BoxDecoration(
           color: CupertinoColors.systemGrey5,
           borderRadius: BorderRadius.circular(10),
         ),
+        alignment: Alignment.center,
         child: const Icon(
           CupertinoIcons.film,
+          size: 24,
           color: CupertinoColors.systemGrey2,
         ),
       );
@@ -222,19 +243,21 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       borderRadius: BorderRadius.circular(10),
       child: Image.network(
         url,
-        width: 44,
-        height: 44,
+        width: _thumbnailWidth,
+        height: _thumbnailHeight,
         fit: BoxFit.cover,
         errorBuilder: (context, _, __) {
           return Container(
-            width: 44,
-            height: 44,
+            width: _thumbnailWidth,
+            height: _thumbnailHeight,
             decoration: BoxDecoration(
               color: CupertinoColors.systemGrey5,
               borderRadius: BorderRadius.circular(10),
             ),
+            alignment: Alignment.center,
             child: const Icon(
               CupertinoIcons.photo,
+              size: 24,
               color: CupertinoColors.systemGrey2,
             ),
           );
