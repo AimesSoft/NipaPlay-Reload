@@ -9,6 +9,7 @@ import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 
@@ -40,6 +41,10 @@ class _CupertinoSharedAnimeDetailPageState
   BangumiAnime? _bangumiAnime;
   bool _isLoadingBangumiAnime = false;
   String? _bangumiAnimeError;
+
+  // 云端观看状态
+  Map<int, bool> _episodeWatchStatus = {};
+  bool _isLoadingWatchStatus = false;
 
   @override
   void initState() {
@@ -90,6 +95,9 @@ class _CupertinoSharedAnimeDetailPageState
       setState(() {
         _bangumiAnime = anime;
       });
+
+      // 加载完Bangumi信息后，加载观看状态
+      _loadWatchStatus();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -99,6 +107,44 @@ class _CupertinoSharedAnimeDetailPageState
       if (!mounted) return;
       setState(() {
         _isLoadingBangumiAnime = false;
+      });
+    }
+  }
+
+  Future<void> _loadWatchStatus() async {
+    final bangumiAnime = _bangumiAnime;
+    if (bangumiAnime?.episodeList == null || bangumiAnime!.episodeList!.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingWatchStatus = true;
+    });
+
+    try {
+      // 获取所有剧集的ID
+      final episodeIds = bangumiAnime.episodeList!
+          .map((episode) => episode.id)
+          .toList();
+
+      // 查询观看状态
+      final watchStatus = await DandanplayService.getEpisodesWatchStatus(episodeIds);
+
+      if (!mounted) return;
+      setState(() {
+        _episodeWatchStatus = watchStatus;
+      });
+    } catch (e) {
+      debugPrint('[共享番剧详情] 加载观看状态失败: $e');
+      // 出错时设置为空状态，不阻塞UI显示
+      if (!mounted) return;
+      setState(() {
+        _episodeWatchStatus = {};
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingWatchStatus = false;
       });
     }
   }
@@ -710,6 +756,7 @@ class _CupertinoSharedAnimeDetailPageState
                 bangumiEpisode,
                 sharedEpisode: sharedEpisode,
                 hasSharedFile: hasSharedFile,
+                isWatched: _episodeWatchStatus[bangumiEpisode.id] ?? false,
               );
             },
             childCount: bangumiAnime.episodeList!.length * 2 - 1,
@@ -724,6 +771,7 @@ class _CupertinoSharedAnimeDetailPageState
     EpisodeData bangumiEpisode, {
     SharedRemoteEpisode? sharedEpisode,
     bool hasSharedFile = false,
+    bool isWatched = false,
   }) {
     final backgroundColor = CupertinoDynamicColor.resolve(
       CupertinoColors.secondarySystemBackground,
@@ -822,28 +870,63 @@ class _CupertinoSharedAnimeDetailPageState
               ),
             ),
             const SizedBox(width: 12),
-            if (hasSharedFile)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.activeBlue.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '可观看',
-                  style: TextStyle(
-                    color: CupertinoColors.activeBlue,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+            // 云端已观看标记和可观看标记
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isWatched && hasSharedFile) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemGreen.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          CupertinoIcons.cloud_fill,
+                          size: 10,
+                          color: CupertinoColors.systemGreen,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '已观看',
+                          style: TextStyle(
+                            color: CupertinoColors.systemGreen,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              )
-            else
-              Icon(
-                CupertinoIcons.xmark,
-                size: 16,
-                color: subtitleColor,
-              ),
+                  const SizedBox(width: 6),
+                ],
+                if (hasSharedFile)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.activeBlue.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '可观看',
+                      style: TextStyle(
+                        color: CupertinoColors.activeBlue,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                else
+                  Icon(
+                    CupertinoIcons.xmark,
+                    size: 16,
+                    color: subtitleColor,
+                  ),
+              ],
+            ),
           ],
         ),
       ),

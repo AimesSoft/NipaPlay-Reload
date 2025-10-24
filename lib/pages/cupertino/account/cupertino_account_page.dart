@@ -53,32 +53,78 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
   }
 
   @override
-  void showLoginDialog() {
-    Navigator.of(context).push(
-      CupertinoPageRoute(
-        builder: (_) => CupertinoAccountCredentialsPage(
-          title: '登录弹弹play账号',
-          actionLabel: '登录',
-          fields: [
-            CupertinoCredentialField(
-              label: '用户名/邮箱',
-              controller: usernameController,
-              placeholder: '请输入用户名或邮箱',
-            ),
-            CupertinoCredentialField(
-              label: '密码',
-              controller: passwordController,
-              placeholder: '请输入密码',
-              obscureText: true,
-            ),
-          ],
-          onSubmit: () async {
-            await performLogin();
-            return isLoggedIn;
-          },
+  void showLoginDialog() async {
+    // 第一步：输入用户名/邮箱
+    final usernameResult = await showCupertinoDialog<String>(
+      context: context,
+      builder: (context) => IOS26AlertDialog(
+        title: '登录弹弹play账号',
+        message: '请输入用户名或邮箱',
+        icon: 'person.crop.circle',
+        input: AdaptiveAlertDialogInput(
+          placeholder: '用户名/邮箱',
+          initialValue: usernameController.text,
+          keyboardType: TextInputType.emailAddress,
         ),
+        actions: [
+          AlertAction(
+            title: '取消',
+            style: AlertActionStyle.cancel,
+            onPressed: () {},
+          ),
+          AlertAction(
+            title: '下一步',
+            style: AlertActionStyle.primary,
+            onPressed: () {},
+          ),
+        ],
       ),
     );
+
+    // 如果用户取消或没有输入，直接返回
+    if (usernameResult == null || usernameResult.trim().isEmpty) {
+      return;
+    }
+
+    // 保存用户名
+    usernameController.text = usernameResult;
+
+    // 第二步：输入密码
+    if (!mounted) return;
+    final passwordResult = await showCupertinoDialog<String>(
+      context: context,
+      builder: (context) => IOS26AlertDialog(
+        title: '登录弹弹play账号',
+        message: '请输入密码',
+        icon: 'lock.fill',
+        input: const AdaptiveAlertDialogInput(
+          placeholder: '密码',
+          initialValue: '',
+          obscureText: true,
+        ),
+        actions: [
+          AlertAction(
+            title: '取消',
+            style: AlertActionStyle.cancel,
+            onPressed: () {},
+          ),
+          AlertAction(
+            title: '登录',
+            style: AlertActionStyle.primary,
+            onPressed: () {},
+          ),
+        ],
+      ),
+    );
+
+    // 如果用户取消或没有输入密码，直接返回
+    if (passwordResult == null || passwordResult.trim().isEmpty) {
+      return;
+    }
+
+    // 保存密码并执行登录
+    passwordController.text = passwordResult;
+    await performLogin();
   }
 
   @override
