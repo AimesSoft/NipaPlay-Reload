@@ -68,6 +68,7 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
+import 'package:nipaplay/models/anime_detail_display_mode.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -396,14 +397,21 @@ void main(List<String> args) async {
       SettingsStorage.loadString('themeMode', defaultValue: 'system'),
       SettingsStorage.loadString('backgroundImageMode'),
       SettingsStorage.loadString('customBackgroundPath'),
+      SettingsStorage.loadString('anime_detail_display_mode', defaultValue: 'simple'),
     ]).then((results) {
-      globals.backgroundImageMode = results[1] as String;
-      globals.customBackgroundPath = results[2] as String;
+      globals.backgroundImageMode = (results[1] as String?) ?? globals.backgroundImageMode;
+      globals.customBackgroundPath = (results[2] as String?) ?? globals.customBackgroundPath;
 
       // 检查自定义背景路径有效性，发现无效则恢复为默认图片
       _validateCustomBackgroundPath();
 
-      return results[0] as String;
+      final themeMode = (results[0] as String?) ?? 'system';
+      final animeDetailMode = (results[3] as String?) ?? 'simple';
+
+      return <String, String>{
+        'themeMode': themeMode,
+        'animeDetailMode': animeDetailMode,
+      };
     }),
 
     
@@ -432,7 +440,11 @@ void main(List<String> args) async {
     });
     
     // 处理主题模式设置
-    String savedThemeMode = results[2] as String;
+    final settingsMap = results[2] as Map<String, String>;
+    final savedThemeMode = settingsMap['themeMode'] ?? 'system';
+    final savedDetailModeString = settingsMap['animeDetailMode'] ?? 'simple';
+    final savedDetailMode =
+        AnimeDetailDisplayModeStorage.fromString(savedDetailModeString);
     ThemeMode initialThemeMode;
     switch (savedThemeMode) {
       case 'light':
@@ -474,6 +486,7 @@ void main(List<String> args) async {
               initialThemeMode: initialThemeMode,
               initialBackgroundImageMode: globals.backgroundImageMode,
               initialCustomBackgroundPath: globals.customBackgroundPath,
+              initialAnimeDetailDisplayMode: savedDetailMode,
             ),
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),

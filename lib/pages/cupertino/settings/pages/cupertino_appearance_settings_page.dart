@@ -4,7 +4,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/utils/theme_notifier.dart';
-import '../widgets/appearance_preview_card.dart';
+import 'package:nipaplay/models/anime_detail_display_mode.dart';
 
 class CupertinoAppearanceSettingsPage extends StatefulWidget {
   const CupertinoAppearanceSettingsPage({super.key});
@@ -17,12 +17,14 @@ class CupertinoAppearanceSettingsPage extends StatefulWidget {
 class _CupertinoAppearanceSettingsPageState
     extends State<CupertinoAppearanceSettingsPage> {
   late ThemeMode _currentMode;
+  late AnimeDetailDisplayMode _detailMode;
 
   @override
   void initState() {
     super.initState();
     final notifier = Provider.of<ThemeNotifier>(context, listen: false);
     _currentMode = notifier.themeMode;
+    _detailMode = notifier.animeDetailDisplayMode;
   }
 
   void _updateThemeMode(ThemeMode mode) {
@@ -31,6 +33,15 @@ class _CupertinoAppearanceSettingsPageState
       _currentMode = mode;
     });
     Provider.of<ThemeNotifier>(context, listen: false).themeMode = mode;
+  }
+
+  void _updateDetailMode(AnimeDetailDisplayMode mode) {
+    if (_detailMode == mode) return;
+    setState(() {
+      _detailMode = mode;
+    });
+    Provider.of<ThemeNotifier>(context, listen: false)
+        .animeDetailDisplayMode = mode;
   }
 
   @override
@@ -76,6 +87,39 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '番剧详情样式',
+                  style: CupertinoTheme.of(context)
+                      .textTheme
+                      .textStyle
+                      .copyWith(
+                        fontSize: 13,
+                        color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.systemGrey,
+                          context,
+                        ),
+                        letterSpacing: 0.2,
+                      ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              AdaptiveFormSection.insetGrouped(
+                children: [
+                  _buildDetailModeTile(
+                    mode: AnimeDetailDisplayMode.simple,
+                    title: '简洁模式',
+                    subtitle: '经典布局，信息分栏展示。',
+                  ),
+                  _buildDetailModeTile(
+                    mode: AnimeDetailDisplayMode.vivid,
+                    title: '绚丽模式',
+                    subtitle: '海报主视觉、横向剧集卡片。',
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -108,6 +152,27 @@ class _CupertinoAppearanceSettingsPageState
         },
       ),
       onTap: () => _updateThemeMode(mode),
+    );
+  }
+
+  Widget _buildDetailModeTile({
+    required AnimeDetailDisplayMode mode,
+    required String title,
+    required String subtitle,
+  }) {
+    return AdaptiveListTile(
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: AdaptiveRadio<AnimeDetailDisplayMode>(
+        value: mode,
+        groupValue: _detailMode,
+        onChanged: (value) {
+          if (value != null) {
+            _updateDetailMode(value);
+          }
+        },
+      ),
+      onTap: () => _updateDetailMode(mode),
     );
   }
 }
