@@ -14,6 +14,8 @@ import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:http/http.dart' as http;
+import 'package:nipaplay/widgets/nipaplay_theme/cached_network_image_widget.dart';
 
 class CupertinoSharedAnimeDetailPage extends StatefulWidget {
   const CupertinoSharedAnimeDetailPage({
@@ -54,6 +56,8 @@ class _CupertinoSharedAnimeDetailPageState
   Map<int, bool> _episodeWatchStatus = {};
   bool _isLoadingWatchStatus = false;
   bool _isSynopsisExpanded = false;
+  String? _vividCoverUrl;
+  bool _isLoadingCover = false;
 
   @override
   void initState() {
@@ -62,7 +66,19 @@ class _CupertinoSharedAnimeDetailPageState
       if (!mounted) return;
       _loadEpisodes();
       _loadBangumiAnime();
+      _maybeLoadVividCover();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant CupertinoSharedAnimeDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.anime.animeId != widget.anime.animeId ||
+        oldWidget.displayModeOverride != widget.displayModeOverride) {
+      _vividCoverUrl = null;
+      _isLoadingCover = false;
+      _maybeLoadVividCover(force: true);
+    }
   }
 
   Future<void> _loadEpisodes({bool force = false}) async {
@@ -173,9 +189,60 @@ class _CupertinoSharedAnimeDetailPageState
         AnimeDetailDisplayMode.simple;
 
     if (displayMode == AnimeDetailDisplayMode.vivid) {
+      _maybeLoadVividCover();
       return _buildVividLayout(context);
     }
     return _buildSimpleLayout(context);
+  }
+
+  void _maybeLoadVividCover({bool force = false}) {
+    final themeNotifier = context.read<ThemeNotifier?>();
+    final mode = widget.displayModeOverride ??
+        themeNotifier?.animeDetailDisplayMode ??
+        AnimeDetailDisplayMode.simple;
+    if (mode != AnimeDetailDisplayMode.vivid) {
+      return;
+    }
+    if (!force && (_vividCoverUrl != null || _isLoadingCover)) {
+      return;
+    }
+    _fetchHighQualityCover();
+  }
+
+  Future<void> _fetchHighQualityCover() async {
+    if (_isLoadingCover) return;
+    debugPrint('[共享番剧详情] 开始获取高清封面 animeId=${widget.anime.animeId}');
+    setState(() {
+      _isLoadingCover = true;
+    });
+
+    String? coverUrl;
+    try {
+      final details = await DandanplayService.getBangumiDetails(
+        widget.anime.animeId,
+      );
+
+      if (details['success'] == true) {
+        final bangumiId = _extractBangumiId(details);
+        if (bangumiId != null) {
+          coverUrl = await _requestBangumiHighQualityImage(bangumiId);
+          debugPrint('[共享番剧详情] Bangumi高清封面: $coverUrl');
+        }
+        coverUrl ??= _extractFallbackImage(details);
+        debugPrint('[共享番剧详情] 回落封面: $coverUrl');
+      }
+    } catch (e) {
+      debugPrint('[共享番剧详情] 获取高清封面失败: $e');
+    }
+
+    coverUrl ??=
+        _resolveImageUrl(context.read<SharedRemoteLibraryProvider>());
+
+    if (!mounted) return;
+    setState(() {
+      _vividCoverUrl = coverUrl;
+      _isLoadingCover = false;
+    });
   }
 
   Widget _buildSimpleLayout(BuildContext context) {
@@ -329,8 +396,9 @@ class _CupertinoSharedAnimeDetailPageState
       CupertinoColors.secondaryLabel,
       context,
     );
-    final imageUrl =
+    final fallbackCover =
         _resolveImageUrl(context.read<SharedRemoteLibraryProvider>());
+    final imageUrl = _vividCoverUrl ?? fallbackCover;
     final title = widget.anime.nameCn?.isNotEmpty == true
         ? widget.anime.nameCn!
         : widget.anime.name;
@@ -351,10 +419,13 @@ class _CupertinoSharedAnimeDetailPageState
             Positioned.fill(
               child: Opacity(
                 opacity: 0.5,
-                child: Image.network(
-                  imageUrl,
+                child: CachedNetworkImageWidget(
+                  imageUrl: imageUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(color: surfaceColor),
+                  shouldCompress: false,
+                  delayLoad: true,
+                  loadMode: CachedImageLoadMode.hybrid,
+                  errorBuilder: (_, __) => Container(color: surfaceColor),
                 ),
               ),
             ),
@@ -709,6 +780,70 @@ class _CupertinoSharedAnimeDetailPageState
         ),
       ),
     );
+  }
+
+  String? _extractBangumiId(Map<String, dynamic> details) {
+    final bangumi = details['bangumi'] as Map<String, dynamic>?;
+    if (bangumi != null) {
+      final dynamic rawId = bangumi['bangumiId'] ?? bangumi['id'];
+      if (rawId != null) {
+        return rawId.toString();
+      }
+      final url = bangumi['bangumiUrl'] as String?;
+      final parsed = _parseBangumiIdFromUrl(url);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+    final anime = details['anime'] as Map<String, dynamic>?;
+    return _parseBangumiIdFromUrl(anime?['bangumiUrl'] as String?);
+  }
+
+  String? _parseBangumiIdFromUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    final match = RegExp(r'bangumi\.tv/subject/(\d+)').firstMatch(url);
+    return match?.group(1);
+  }
+
+  String? _extractFallbackImage(Map<String, dynamic> details) {
+    final bangumi = details['bangumi'] as Map<String, dynamic>?;
+    final anime = details['anime'] as Map<String, dynamic>?;
+    final bangumiImage = bangumi?['imageUrl'] as String?;
+    if (bangumiImage != null && bangumiImage.isNotEmpty) {
+      return bangumiImage;
+    }
+    final animeImage = anime?['imageUrl'] as String?;
+    if (animeImage != null && animeImage.isNotEmpty) {
+      return animeImage;
+    }
+    return null;
+  }
+
+  Future<String?> _requestBangumiHighQualityImage(String bangumiId) async {
+    try {
+      final uri = Uri.parse(
+        'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large',
+      );
+      debugPrint('[共享番剧详情] 请求Bangumi高清封面: $uri');
+      final response = await http.head(
+        uri,
+        headers: const {'User-Agent': 'NipaPlay/1.0'},
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 302) {
+        final location = response.headers['location'];
+        if (location != null && location.isNotEmpty) {
+          debugPrint('[共享番剧详情] Bangumi封面重定向: $location');
+          return location;
+        }
+      } else if (response.statusCode == 200) {
+        debugPrint('[共享番剧详情] Bangumi封面直接返回200');
+        return uri.toString();
+      }
+    } catch (e) {
+      debugPrint('[共享番剧详情] Bangumi 图片接口失败: $e');
+    }
+    return null;
   }
 
   Widget _buildHeader(
@@ -1443,11 +1578,11 @@ class _CupertinoSharedAnimeDetailPageState
     try {
       final playableItem =
           provider.buildPlayableItem(anime: widget.anime, episode: episode);
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      // 先关闭详情弹窗，避免横屏时页面残留导致的画面撕裂
+      await rootNavigator.maybePop();
       await PlaybackService().play(playableItem);
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
     } catch (e) {
-      if (!mounted) return;
       BlurSnackBar.show(context, '播放失败：$e');
     }
   }

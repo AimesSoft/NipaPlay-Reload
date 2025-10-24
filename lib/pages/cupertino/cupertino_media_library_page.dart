@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -11,6 +16,15 @@ import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_anime_card.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/pages/anime_detail_page.dart';
+import 'package:nipaplay/providers/watch_history_provider.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/local_media_share_service.dart';
+import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/utils/android_storage_helper.dart';
+import 'package:nipaplay/utils/storage_service.dart';
+
+// ignore_for_file: prefer_const_constructors
 
 class CupertinoMediaLibraryPage extends StatefulWidget {
   const CupertinoMediaLibraryPage({super.key});
@@ -50,7 +64,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       CupertinoColors.systemGroupedBackground,
       context,
     );
-    final cardColor = CupertinoColors.secondarySystemBackground;
+    const cardColor = CupertinoColors.secondarySystemBackground;
 
     final titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
     final statusBarHeight = MediaQuery.of(context).padding.top;
@@ -71,6 +85,21 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                     sliver: CupertinoSliverRefreshControl(
                       onRefresh: () => _refreshActiveHost(provider),
                     ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _buildSectionTitle('本地媒体库'),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: CupertinoLocalMediaLibraryCard(
+                        onViewLibrary: _showLocalMediaLibraryBottomSheet,
+                        onManageLibrary: _showLibraryManagementBottomSheet,
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: 12),
                   ),
                   SliverToBoxAdapter(
                     child: _buildSectionTitle('NipaPlay 共享媒体库'),
@@ -107,7 +136,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                     end: Alignment.bottomCenter,
                     colors: [
                       backgroundColor,
-                      backgroundColor.withOpacity(0.0),
+                      backgroundColor.withValues(alpha: 0.0),
                     ],
                     stops: const [0.0, 1.0],
                   ),
@@ -160,34 +189,18 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final secondaryLabelColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-
     return Container(
+      key: ValueKey<bool>(hasHosts),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: CupertinoDynamicColor.resolve(
-          CupertinoDynamicColor.withBrightness(
-            color: CupertinoColors.white,
-            darkColor: CupertinoColors.darkBackgroundGray,
-          ),
-          context,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: CupertinoColors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: _hostCardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (provider.isLoading)
-            Row(
+            const Row(
               children: [
-                const Expanded(child: SizedBox()),
-                const CupertinoActivityIndicator(radius: 10),
+                Expanded(child: SizedBox()),
+                CupertinoActivityIndicator(radius: 10),
               ],
             ),
           if (!hasHosts)
@@ -331,6 +344,26 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     );
   }
 
+  BoxDecoration _hostCardDecoration(BuildContext context) {
+    return BoxDecoration(
+      color: CupertinoDynamicColor.resolve(
+        CupertinoDynamicColor.withBrightness(
+          color: CupertinoColors.white,
+          darkColor: CupertinoColors.darkBackgroundGray,
+        ),
+        context,
+      ),
+      borderRadius: BorderRadius.circular(24),
+      boxShadow: [
+        BoxShadow(
+          color: CupertinoColors.black.withValues(alpha: 0.08),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+
   Widget _buildInfoRow(
     BuildContext context, {
     required String label,
@@ -391,7 +424,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.18),
+            color: statusColor.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
@@ -442,15 +475,15 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       onPressed: onPressed,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       borderRadius: BorderRadius.circular(12),
-      minSize: 36,
-      color: enabled ? backgroundColor : backgroundColor.withOpacity(0.4),
+      minimumSize: const Size.square(36),
+      color: enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             icon,
             size: 16,
-            color: enabled ? textColor : textColor.withOpacity(0.5),
+            color: enabled ? textColor : textColor.withValues(alpha: 0.5),
           ),
           const SizedBox(width: 6),
           Text(
@@ -458,7 +491,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: enabled ? textColor : textColor.withOpacity(0.5),
+              color: enabled ? textColor : textColor.withValues(alpha: 0.5),
             ),
           ),
         ],
@@ -478,9 +511,9 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: resolvedCardColor.withOpacity(0.8),
+        color: resolvedCardColor.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: errorColor.withOpacity(0.22)),
+        border: Border.all(color: errorColor.withValues(alpha: 0.22)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,10 +530,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
           CupertinoButton(
             onPressed: provider.clearError,
             padding: EdgeInsets.zero,
-            minSize: 28,
+            minimumSize: const Size.square(28),
             child: Icon(
               CupertinoIcons.clear_circled_solid,
-              color: errorColor.withOpacity(0.9),
+              color: errorColor.withValues(alpha: 0.9),
               size: 18,
             ),
           ),
@@ -518,10 +551,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     final hasActiveHost = provider.hasActiveHost;
 
     if (provider.isInitializing) {
-      return [
+      return const [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: const Center(child: CupertinoActivityIndicator()),
+          child: Center(child: CupertinoActivityIndicator()),
         ),
       ];
     }
@@ -630,6 +663,24 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     return _timeFormatter.format(time.toLocal());
   }
 
+  Future<void> _showLocalMediaLibraryBottomSheet() async {
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '本地媒体库',
+      floatingTitle: true,
+      child: const _LocalMediaLibrarySheet(),
+    );
+  }
+
+  Future<void> _showLibraryManagementBottomSheet() async {
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '库管理',
+      floatingTitle: true,
+      child: const _CupertinoLibraryManagementSheet(),
+    );
+  }
+
   Future<void> _showMediaLibraryBottomSheet(
       SharedRemoteLibraryProvider provider) async {
     await CupertinoBottomSheet.show(
@@ -691,6 +742,1307 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   }
 }
 
+class _LocalMediaSummary {
+  const _LocalMediaSummary({
+    required this.animeId,
+    required this.name,
+    required this.nameCn,
+    required this.summary,
+    required this.imageUrl,
+    required this.episodeCount,
+    required this.totalEpisodes,
+    required this.lastWatchTime,
+    required this.source,
+    required this.hasMissingFiles,
+  });
+
+  final int animeId;
+  final String name;
+  final String? nameCn;
+  final String? summary;
+  final String? imageUrl;
+  final int episodeCount;
+  final int? totalEpisodes;
+  final DateTime? lastWatchTime;
+  final String? source;
+  final bool hasMissingFiles;
+
+  String get displayTitle =>
+      (nameCn != null && nameCn!.isNotEmpty) ? nameCn! : name;
+
+  static DateTime? _parseDateTime(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    return DateTime.tryParse(raw);
+  }
+
+  factory _LocalMediaSummary.fromJson(Map<String, dynamic> json) {
+    return _LocalMediaSummary(
+      animeId: (json['animeId'] ?? 0) as int,
+      name: (json['name'] ?? '') as String,
+      nameCn: (json['nameCn'] as String?)?.trim(),
+      summary: (json['summary'] as String?)?.trim(),
+      imageUrl: (json['imageUrl'] as String?)?.trim(),
+      episodeCount: (json['episodeCount'] ?? 0) as int,
+      totalEpisodes: json['totalEpisodes'] == null
+          ? null
+          : (json['totalEpisodes'] as num).toInt(),
+      lastWatchTime: _parseDateTime(json['lastWatchTime'] as String?),
+      source: json['source'] as String?,
+      hasMissingFiles: json['hasMissingFiles'] == true,
+    );
+  }
+}
+
+class CupertinoLocalMediaLibraryCard extends StatefulWidget {
+  const CupertinoLocalMediaLibraryCard({
+    super.key,
+    required this.onViewLibrary,
+    required this.onManageLibrary,
+  });
+
+  final VoidCallback onViewLibrary;
+  final VoidCallback onManageLibrary;
+
+  @override
+  State<CupertinoLocalMediaLibraryCard> createState() =>
+      _CupertinoLocalMediaLibraryCardState();
+}
+
+class _CupertinoLocalMediaLibraryCardState
+    extends State<CupertinoLocalMediaLibraryCard> {
+  final LocalMediaShareService _localShareService =
+      LocalMediaShareService.instance;
+  final DateFormat _timeFormatter = DateFormat('MM-dd HH:mm');
+
+  bool _isLoading = true;
+  String? _error;
+  List<_LocalMediaSummary> _summaries = <_LocalMediaSummary>[];
+  WatchHistoryProvider? _watchHistoryProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final watchHistory = context.read<WatchHistoryProvider>();
+      _watchHistoryProvider = watchHistory;
+      watchHistory.addListener(_handleHistoryChanged);
+      _ensureInitialized(watchHistory);
+    });
+  }
+
+  Future<void> _ensureInitialized(WatchHistoryProvider provider) async {
+    if (!provider.isLoaded && !provider.isLoading) {
+      await provider.loadHistory();
+    }
+    await _loadSummaries();
+  }
+
+  Future<void> _loadSummaries() async {
+    if (kIsWeb) {
+      if (!mounted) return;
+      setState(() {
+        _summaries = const [];
+        _isLoading = false;
+        _error = null;
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final data = await _localShareService.getAnimeSummaries();
+      final summaries =
+          data.map((entry) => _LocalMediaSummary.fromJson(entry)).toList()
+            ..sort((a, b) {
+              final aTime =
+                  a.lastWatchTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final bTime =
+                  b.lastWatchTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return bTime.compareTo(aTime);
+            });
+
+      if (!mounted) return;
+      setState(() {
+        _summaries = summaries;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _handleHistoryChanged() {
+    _loadSummaries();
+  }
+
+  @override
+  void dispose() {
+    _watchHistoryProvider?.removeListener(_handleHistoryChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final containerColor = CupertinoDynamicColor.resolve(
+      CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
+      context,
+    );
+
+    return Consumer<ScanService>(
+      builder: (context, scanService, _) {
+        final bool hasItems = _summaries.isNotEmpty;
+        final DateTime? lastWatchTime =
+            hasItems ? _summaries.first.lastWatchTime : null;
+        final String? latestTitle =
+            hasItems ? _summaries.first.displayTitle : null;
+
+        return Container(
+          key: ValueKey<bool>(_isLoading),
+          padding: const EdgeInsets.all(20),
+          decoration: _localCardDecoration(context, containerColor),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_isLoading)
+                const Row(
+                  children: [
+                    CupertinoActivityIndicator(radius: 10),
+                    SizedBox(width: 8),
+                    Text(
+                      '正在准备媒体库...',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ],
+                )
+              else if (_error != null)
+                _buildErrorBanner(context, _error!)
+              else ...[
+                _buildInfoRow(
+                  context,
+                  label: '番剧数量',
+                  value: hasItems ? '${_summaries.length}' : '暂无记录',
+                ),
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  context,
+                  label: '扫描文件夹',
+                  value: scanService.scannedFolders.isNotEmpty
+                      ? '${scanService.scannedFolders.length}'
+                      : '未配置',
+                ),
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  context,
+                  label: '最近观看',
+                  value: lastWatchTime != null
+                      ? _timeFormatter.format(lastWatchTime.toLocal())
+                      : '尚无观看记录',
+                ),
+                if (latestTitle != null && latestTitle.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _buildInfoRow(
+                    context,
+                    label: '最新番剧',
+                    value: latestTitle,
+                    allowWrap: true,
+                  ),
+                ],
+                if (scanService.scanMessage.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _buildScanStatus(
+                    context,
+                    scanService.scanMessage,
+                    scanService.isScanning,
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: [
+                    _buildActionButton(
+                      context,
+                      label: '查看媒体库',
+                      icon: CupertinoIcons.collections,
+                      primary: true,
+                      onPressed: widget.onViewLibrary,
+                    ),
+                    _buildActionButton(
+                      context,
+                      label: '库管理',
+                      icon: CupertinoIcons.slider_horizontal_3,
+                      onPressed: widget.onManageLibrary,
+                    ),
+                    _buildActionButton(
+                      context,
+                      label: scanService.isScanning ? '扫描中…' : '智能刷新',
+                      icon: CupertinoIcons.refresh,
+                      onPressed: scanService.isScanning
+                          ? null
+                          : () => _handleSmartRefresh(scanService),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  BoxDecoration _localCardDecoration(
+    BuildContext context,
+    Color containerColor,
+  ) {
+    return BoxDecoration(
+      color: containerColor,
+      borderRadius: BorderRadius.circular(24),
+      boxShadow: [
+        BoxShadow(
+          color: CupertinoColors.black.withValues(alpha: 0.08),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+
+  void _handleSmartRefresh(ScanService scanService) {
+    if (scanService.scannedFolders.isEmpty) {
+      if (mounted) {
+        BlurSnackBar.show(context, '请先在库管理中添加媒体文件夹');
+      }
+      return;
+    }
+    scanService.rescanAllFolders();
+  }
+
+  Widget _buildErrorBanner(BuildContext context, String message) {
+    final errorColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context);
+    final cardColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: errorColor.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(CupertinoIcons.exclamationmark_triangle_fill,
+              color: errorColor, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: errorColor,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScanStatus(
+    BuildContext context,
+    String message,
+    bool isProcessing,
+  ) {
+    final infoColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemBlue, context);
+    final background = infoColor.withValues(alpha: 0.12);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isProcessing)
+            const CupertinoActivityIndicator(radius: 8)
+          else
+            Icon(CupertinoIcons.info, color: infoColor, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: infoColor,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+    bool allowWrap = false,
+  }) {
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final valueColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+
+    return Row(
+      crossAxisAlignment:
+          allowWrap ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 72,
+          child: Text(
+            label,
+            style: TextStyle(color: labelColor, fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: allowWrap
+              ? Text(
+                  value,
+                  style:
+                      TextStyle(color: valueColor, fontSize: 14, height: 1.3),
+                )
+              : Text(
+                  value,
+                  style: TextStyle(color: valueColor, fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool primary = false,
+  }) {
+    final bool enabled = onPressed != null;
+    final Color primaryColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final Color secondaryBackground =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
+    final Color textColor = primary
+        ? CupertinoColors.white
+        : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final Color backgroundColor = primary ? primaryColor : secondaryBackground;
+
+    return CupertinoButton(
+      onPressed: onPressed,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      borderRadius: BorderRadius.circular(12),
+      minimumSize: const Size.square(36),
+      color: enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 16,
+            color: enabled ? textColor : textColor.withValues(alpha: 0.5),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: enabled ? textColor : textColor.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LocalMediaLibrarySheet extends StatefulWidget {
+  const _LocalMediaLibrarySheet();
+
+  @override
+  State<_LocalMediaLibrarySheet> createState() =>
+      _LocalMediaLibrarySheetState();
+}
+
+class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
+  final LocalMediaShareService _localShareService =
+      LocalMediaShareService.instance;
+  final ScrollController _scrollController = ScrollController();
+
+  bool _isLoading = true;
+  String? _error;
+  double _scrollOffset = 0.0;
+  List<_LocalMediaSummary> _summaries = <_LocalMediaSummary>[];
+  WatchHistoryProvider? _watchHistoryProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final watchHistory = context.read<WatchHistoryProvider>();
+      _watchHistoryProvider = watchHistory;
+      watchHistory.addListener(_handleHistoryChanged);
+      _initialize(watchHistory);
+    });
+  }
+
+  Future<void> _initialize(WatchHistoryProvider provider) async {
+    if (!provider.isLoaded && !provider.isLoading) {
+      await provider.loadHistory();
+    }
+    await _loadSummaries();
+  }
+
+  void _handleScroll() {
+    if (!mounted) return;
+    setState(() {
+      _scrollOffset = _scrollController.offset;
+    });
+  }
+
+  void _handleHistoryChanged() {
+    _loadSummaries();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    _watchHistoryProvider?.removeListener(_handleHistoryChanged);
+    super.dispose();
+  }
+
+  Future<void> _loadSummaries() async {
+    if (kIsWeb) {
+      if (!mounted) return;
+      setState(() {
+        _summaries = const [];
+        _isLoading = false;
+        _error = 'Web 端暂不支持本地媒体库';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final data = await _localShareService.getAnimeSummaries();
+      final summaries =
+          data.map((entry) => _LocalMediaSummary.fromJson(entry)).toList()
+            ..sort((a, b) {
+              final aTime =
+                  a.lastWatchTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final bTime =
+                  b.lastWatchTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return bTime.compareTo(aTime);
+            });
+
+      if (!mounted) return;
+      setState(() {
+        _summaries = summaries;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    final watchHistory = context.read<WatchHistoryProvider>();
+    await watchHistory.refresh();
+    await _loadSummaries();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
+    final titleOpacity = (1.0 - (_scrollOffset / 12.0)).clamp(0.0, 1.0);
+
+    if (_isLoading) {
+      return CupertinoBottomSheetContentLayout(
+        controller: _scrollController,
+        backgroundColor: backgroundColor,
+        floatingTitleOpacity: titleOpacity,
+        sliversBuilder: (context, topSpacing) => const [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CupertinoActivityIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  '正在加载本地媒体库...',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_error != null) {
+      return CupertinoBottomSheetContentLayout(
+        controller: _scrollController,
+        backgroundColor: backgroundColor,
+        floatingTitleOpacity: titleOpacity,
+        sliversBuilder: (context, topSpacing) => [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    CupertinoIcons.exclamationmark_triangle,
+                    size: 44,
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemOrange,
+                      context,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 14, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  CupertinoButton(
+                    onPressed: _loadSummaries,
+                    child: const Text('重新尝试'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_summaries.isEmpty) {
+      return CupertinoBottomSheetContentLayout(
+        controller: _scrollController,
+        backgroundColor: backgroundColor,
+        floatingTitleOpacity: titleOpacity,
+        sliversBuilder: (context, topSpacing) => [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  CupertinoIcons.tray,
+                  size: 52,
+                  color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.inactiveGray,
+                    context,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '尚未找到本地番剧',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    '请在“库管理”中添加媒体文件夹并执行扫描。',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, height: 1.4),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                CupertinoButton(
+                  onPressed: _handleRefresh,
+                  child: const Text('重新加载'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return CupertinoBottomSheetContentLayout(
+      controller: _scrollController,
+      backgroundColor: backgroundColor,
+      floatingTitleOpacity: titleOpacity,
+      sliversBuilder: (context, topSpacing) => [
+        CupertinoSliverRefreshControl(onRefresh: _handleRefresh),
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 20),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final summary = _summaries[index];
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: index == _summaries.length - 1 ? 0 : 12,
+                  ),
+                  child: CupertinoAnimeCard(
+                    title: summary.displayTitle,
+                    imageUrl: summary.imageUrl,
+                    episodeLabel: _buildEpisodeLabel(summary),
+                    lastWatchTime: summary.lastWatchTime,
+                    onTap: () => _openAnimeDetail(summary),
+                    sourceLabel: '本地媒体库',
+                    summary: summary.summary,
+                    rating: null,
+                  ),
+                );
+              },
+              childCount: _summaries.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _buildEpisodeLabel(_LocalMediaSummary summary) {
+    final buffer = StringBuffer('共${summary.episodeCount}集');
+    if (summary.totalEpisodes != null && summary.totalEpisodes! > 0) {
+      buffer.write(' · 预计${summary.totalEpisodes}集');
+    }
+    if (summary.hasMissingFiles) {
+      buffer.write(' · 存在缺失');
+    }
+    return buffer.toString();
+  }
+
+  Future<void> _openAnimeDetail(_LocalMediaSummary summary) async {
+    if (!mounted) return;
+    await AnimeDetailPage.show(context, summary.animeId);
+  }
+}
+
+class _CupertinoLibraryManagementSheet extends StatefulWidget {
+  const _CupertinoLibraryManagementSheet();
+
+  @override
+  State<_CupertinoLibraryManagementSheet> createState() =>
+      _CupertinoLibraryManagementSheetState();
+}
+
+class _CupertinoLibraryManagementSheetState
+    extends State<_CupertinoLibraryManagementSheet> {
+  final ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  void _handleScroll() {
+    if (!mounted) return;
+    setState(() {
+      _scrollOffset = _scrollController.offset;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
+    final titleOpacity = (1.0 - (_scrollOffset / 12.0)).clamp(0.0, 1.0);
+
+    return Consumer2<ScanService, WatchHistoryProvider>(
+      builder: (context, scanService, watchHistory, _) {
+        final sections = <Widget>[
+          _buildStatusCard(context, scanService, watchHistory),
+          const SizedBox(height: 20),
+          _buildActionButtons(context, scanService),
+          const SizedBox(height: 24),
+          _buildFolderSection(context, scanService),
+        ];
+
+        if (scanService.detectedChanges.isNotEmpty) {
+          sections.addAll([
+            const SizedBox(height: 20),
+            _buildDetectedChangesInfo(context, scanService),
+          ]);
+        }
+
+        sections.add(const SizedBox(height: 32));
+
+        return CupertinoBottomSheetContentLayout(
+          controller: _scrollController,
+          backgroundColor: backgroundColor,
+          floatingTitleOpacity: titleOpacity,
+          sliversBuilder: (context, topSpacing) => [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 0),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate(sections),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusCard(
+    BuildContext context,
+    ScanService scanService,
+    WatchHistoryProvider watchHistory,
+  ) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final secondaryLabelColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                scanService.isScanning
+                    ? CupertinoIcons.arrow_2_circlepath
+                    : CupertinoIcons.archivebox,
+                size: 20,
+                color: labelColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                scanService.isScanning ? '正在扫描媒体库' : '本地媒体库就绪',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: labelColor,
+                ),
+              ),
+              const Spacer(),
+              if (scanService.isScanning)
+                const CupertinoActivityIndicator(radius: 10),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildStatusRow(
+            context,
+            label: '番剧记录',
+            value: '${watchHistory.history.length}',
+          ),
+          const SizedBox(height: 6),
+          _buildStatusRow(
+            context,
+            label: '扫描文件夹',
+            value: '${scanService.scannedFolders.length}',
+          ),
+          if (scanService.scanMessage.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              scanService.scanMessage,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: secondaryLabelColor,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+  }) {
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final valueColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            style: TextStyle(color: labelColor, fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(color: valueColor, fontSize: 14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context, ScanService scanService) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _buildActionButton(
+          context,
+          label: '添加媒体文件夹',
+          icon: CupertinoIcons.add_circled,
+          primary: true,
+          onPressed: scanService.isScanning
+              ? null
+              : () => _handleAddFolder(scanService),
+        ),
+        _buildActionButton(
+          context,
+          label: '智能刷新',
+          icon: CupertinoIcons.refresh,
+          onPressed: scanService.isScanning
+              ? null
+              : () => _handleSmartRefresh(scanService),
+        ),
+        _buildActionButton(
+          context,
+          label: '重新加载媒体库',
+          icon: CupertinoIcons.arrow_down_doc,
+          onPressed: () => _handleReloadHistory(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool primary = false,
+  }) {
+    final bool enabled = onPressed != null;
+    final Color primaryColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final Color secondaryBackground =
+        CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
+    final Color textColor = primary
+        ? CupertinoColors.white
+        : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final Color backgroundColor = primary ? primaryColor : secondaryBackground;
+
+    return CupertinoButton(
+      onPressed: onPressed,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      minimumSize: const Size.square(40),
+      borderRadius: BorderRadius.circular(14),
+      color: enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: enabled ? textColor : textColor.withValues(alpha: 0.5),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: enabled ? textColor : textColor.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFolderSection(BuildContext context, ScanService scanService) {
+    final folders = scanService.scannedFolders;
+    if (folders.isEmpty) {
+      final secondaryLabel = CupertinoDynamicColor.resolve(
+        CupertinoColors.secondaryLabel,
+        context,
+      );
+      final cardColor = CupertinoDynamicColor.resolve(
+        CupertinoColors.secondarySystemBackground,
+        context,
+      );
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '尚未添加媒体文件夹',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '点击上方“添加媒体文件夹”按钮开始扫描本地番剧。',
+              style:
+                  TextStyle(fontSize: 13, color: secondaryLabel, height: 1.4),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return CupertinoListSection.insetGrouped(
+      backgroundColor: CupertinoDynamicColor.resolve(
+        CupertinoColors.systemGroupedBackground,
+        context,
+      ),
+      header: const Text('已添加的媒体文件夹'),
+      children: folders
+          .map((folder) => _buildFolderTile(context, scanService, folder))
+          .toList(),
+    );
+  }
+
+  Widget _buildFolderTile(
+    BuildContext context,
+    ScanService scanService,
+    String folderPath,
+  ) {
+    final subtitleColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final accentColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.activeBlue,
+      context,
+    );
+    final destructiveColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.destructiveRed,
+      context,
+    );
+
+    return CupertinoListTile(
+      title: Text(p.basename(folderPath)),
+      subtitle: Text(
+        folderPath,
+        style: TextStyle(color: subtitleColor, fontSize: 12),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size.square(32),
+            onPressed: scanService.isScanning
+                ? null
+                : () => _handleRescanFolder(scanService, folderPath),
+            child: Icon(
+              CupertinoIcons.refresh_thin,
+              size: 20,
+              color: scanService.isScanning
+                  ? accentColor.withValues(alpha: 0.4)
+                  : accentColor,
+            ),
+          ),
+          const SizedBox(width: 4),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size.square(32),
+            onPressed: scanService.isScanning
+                ? null
+                : () => _handleRemoveFolder(scanService, folderPath),
+            child: Icon(
+              CupertinoIcons.delete,
+              size: 20,
+              color: scanService.isScanning
+                  ? destructiveColor.withValues(alpha: 0.4)
+                  : destructiveColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetectedChangesInfo(
+    BuildContext context,
+    ScanService scanService,
+  ) {
+    final highlightColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemYellow,
+      context,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: highlightColor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '检测到文件夹变化',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: highlightColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...scanService.detectedChanges.take(3).map(
+                (change) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    '${change.displayName}: ${change.changeDescription}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.3,
+                      color: highlightColor.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ),
+          if (scanService.detectedChanges.length > 3)
+            Text(
+              '还有 ${scanService.detectedChanges.length - 3} 个文件夹有变化…',
+              style: TextStyle(
+                fontSize: 12,
+                color: highlightColor.withValues(alpha: 0.8),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleAddFolder(ScanService scanService) async {
+    if (kIsWeb) {
+      _showSnack('Web 端暂不支持扫描本地媒体库');
+      return;
+    }
+    if (scanService.isScanning) {
+      _showSnack('已有扫描任务在进行中，请稍后再试。');
+      return;
+    }
+
+    try {
+      if (Platform.isIOS) {
+        final directory = await StorageService.getAppStorageDirectory();
+        await scanService.startDirectoryScan(
+          directory.path,
+          skipPreviouslyMatchedUnwatched: false,
+        );
+        _showSnack('已提交扫描任务：${p.basename(directory.path)}');
+        return;
+      }
+
+      if (Platform.isAndroid) {
+        final sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
+        if (sdkVersion >= 33) {
+          await _handleScanAndroidMediaFolders(scanService);
+          return;
+        }
+      }
+
+      final filePicker = FilePickerService();
+      final selectedDirectory = await filePicker.pickDirectory();
+      if (selectedDirectory == null) {
+        _showSnack('未选择文件夹');
+        return;
+      }
+
+      await StorageService.saveCustomStoragePath(selectedDirectory);
+      await scanService.startDirectoryScan(
+        selectedDirectory,
+        skipPreviouslyMatchedUnwatched: false,
+      );
+      _showSnack('已提交扫描任务：${p.basename(selectedDirectory)}');
+    } catch (e) {
+      _showSnack('添加媒体文件夹失败：$e');
+    }
+  }
+
+  Future<void> _handleScanAndroidMediaFolders(ScanService scanService) async {
+    try {
+      final directories =
+          await getExternalStorageDirectories(type: StorageDirectory.movies);
+      if (directories == null || directories.isEmpty) {
+        _showSnack('未找到系统的影片文件夹');
+        return;
+      }
+
+      for (final dir in directories) {
+        await scanService.startDirectoryScan(
+          dir.path,
+          skipPreviouslyMatchedUnwatched: false,
+        );
+      }
+      _showSnack('已提交系统视频文件夹扫描任务');
+    } catch (e) {
+      _showSnack('扫描系统视频文件夹失败：$e');
+    }
+  }
+
+  Future<void> _handleRescanFolder(
+    ScanService scanService,
+    String folderPath,
+  ) async {
+    if (kIsWeb) {
+      _showSnack('Web 端暂不支持扫描本地媒体库');
+      return;
+    }
+    if (scanService.isScanning) {
+      _showSnack('已有扫描任务在进行中，请稍后再试。');
+      return;
+    }
+
+    await scanService.startDirectoryScan(
+      folderPath,
+      skipPreviouslyMatchedUnwatched: false,
+    );
+    _showSnack('已提交刷新：${p.basename(folderPath)}');
+  }
+
+  Future<void> _handleRemoveFolder(
+    ScanService scanService,
+    String folderPath,
+  ) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('移除媒体文件夹'),
+        content: Text('确定要移除\n$folderPath\n吗？相关的缓存与记录也会被清理。'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    await scanService.removeScannedFolder(folderPath);
+    if (!mounted) return;
+    _showSnack('已提交移除：${p.basename(folderPath)}');
+  }
+
+  Future<void> _handleSmartRefresh(ScanService scanService) async {
+    if (kIsWeb) {
+      _showSnack('Web 端暂不支持扫描本地媒体库');
+      return;
+    }
+
+    if (scanService.scannedFolders.isEmpty) {
+      _showSnack('请先添加媒体文件夹后再刷新');
+      return;
+    }
+    if (scanService.isScanning) {
+      _showSnack('已有扫描任务在进行中，请稍后再试。');
+      return;
+    }
+
+    await scanService.rescanAllFolders();
+  }
+
+  Future<void> _handleReloadHistory() async {
+    final watchHistory = context.read<WatchHistoryProvider>();
+    await watchHistory.refresh();
+    _showSnack('已请求刷新本地媒体库数据');
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    BlurSnackBar.show(context, message);
+  }
+}
+
 /// 媒体库内容组件
 /// 只负责显示媒体库的内容，不包含上拉菜单容器
 class _MediaLibraryContent extends StatefulWidget {
@@ -703,9 +2055,6 @@ class _MediaLibraryContent extends StatefulWidget {
 }
 
 class _MediaLibraryContentState extends State<_MediaLibraryContent> {
-  final GlobalKey<NavigatorState> _navigatorKey =
-      GlobalKey(debugLabel: 'cupertinoMediaSheetNavigator');
-
   @override
   void initState() {
     super.initState();
@@ -721,44 +2070,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
       value: widget.provider,
-      child: WillPopScope(
-        onWillPop: () async {
-          final navigator = _navigatorKey.currentState;
-          if (navigator != null && navigator.canPop()) {
-            navigator.pop();
-            return false;
-          }
-          return true;
-        },
-        child: Navigator(
-          key: _navigatorKey,
-          initialRoute: _CupertinoMediaLibraryRoutes.list,
-          onGenerateRoute: (settings) {
-            switch (settings.name) {
-              case _CupertinoMediaLibraryRoutes.list:
-                return CupertinoPageRoute(
-                  builder: (_) => _CupertinoMediaLibraryListPage(
-                    onAnimeTap: _handleAnimeTap,
-                  ),
-                  settings: const RouteSettings(
-                    name: _CupertinoMediaLibraryRoutes.list,
-                  ),
-                );
-              case _CupertinoMediaLibraryRoutes.detail:
-                final anime = settings.arguments as SharedRemoteAnimeSummary;
-                return CupertinoPageRoute(
-                  builder: (_) => CupertinoSharedAnimeDetailPage(anime: anime),
-                  settings: const RouteSettings(
-                    name: _CupertinoMediaLibraryRoutes.detail,
-                  ),
-                );
-              default:
-                return CupertinoPageRoute(
-                  builder: (_) => const SizedBox.shrink(),
-                );
-            }
-          },
-        ),
+      child: _CupertinoMediaLibraryListPage(
+        onAnimeTap: _handleAnimeTap,
       ),
     );
   }
@@ -780,11 +2093,6 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       ),
     );
   }
-}
-
-class _CupertinoMediaLibraryRoutes {
-  static const String list = 'list';
-  static const String detail = 'detail';
 }
 
 class _CupertinoMediaLibraryListPage extends StatefulWidget {

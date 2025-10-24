@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/pages/cupertino/account/cupertino_account_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_home_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_media_library_page.dart';
+import 'package:nipaplay/pages/cupertino/cupertino_play_video_page.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_settings_page.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bounce_wrapper.dart';
 
 class CupertinoMainPage extends StatefulWidget {
@@ -20,6 +22,8 @@ class CupertinoMainPage extends StatefulWidget {
 
 class _CupertinoMainPageState extends State<CupertinoMainPage> {
   int _selectedIndex = 0;
+  TabChangeNotifier? _tabChangeNotifier;
+  bool _isVideoPagePresented = false;
 
   final List<GlobalKey<CupertinoBounceWrapperState>> _bounceKeys = [
     GlobalKey<CupertinoBounceWrapperState>(),
@@ -39,8 +43,17 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       CupertinoBounceWrapper.playAnimation(_bounceKeys[_selectedIndex]);
+      _tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+      _tabChangeNotifier?.addListener(_handleTabChange);
     });
+  }
+
+  @override
+  void dispose() {
+    _tabChangeNotifier?.removeListener(_handleTabChange);
+    super.dispose();
   }
 
   @override
@@ -84,22 +97,67 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
               ),
             ],
             selectedIndex: _selectedIndex,
-            onTap: (index) {
-              if (_selectedIndex == index) {
-                return;
-              }
-              setState(() {
-                _selectedIndex = index;
-              });
-              Future.delayed(const Duration(milliseconds: 50), () {
-                if (mounted) {
-                  CupertinoBounceWrapper.playAnimation(_bounceKeys[index]);
-                }
-              });
-            },
+            onTap: _selectTab,
           ),
         );
       },
     );
+  }
+
+  void _selectTab(int index) {
+    if (_selectedIndex == index) {
+      return;
+    }
+    setState(() {
+      _selectedIndex = index;
+    });
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        CupertinoBounceWrapper.playAnimation(_bounceKeys[index]);
+      }
+    });
+  }
+
+  void _handleTabChange() {
+    final notifier = _tabChangeNotifier;
+    if (notifier == null) return;
+
+    final targetIndex = notifier.targetTabIndex;
+    if (targetIndex == null) {
+      return;
+    }
+
+    if (targetIndex == 1) {
+      _presentVideoPage();
+      notifier.clearMainTabIndex();
+      return;
+    }
+
+    final int clampedIndex = targetIndex.clamp(0, _pages.length - 1).toInt();
+    _selectTab(clampedIndex);
+    notifier.clearMainTabIndex();
+  }
+
+  Future<void> _presentVideoPage() async {
+    if (_isVideoPagePresented || !mounted) {
+      return;
+    }
+
+    _isVideoPagePresented = true;
+    final bottomBarProvider = context.read<BottomBarProvider>();
+    bottomBarProvider.hideBottomBar();
+    try {
+      await Navigator.of(context, rootNavigator: true).push(
+        CupertinoPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => const CupertinoPlayVideoPage(),
+        ),
+      );
+    } finally {
+      bottomBarProvider.showBottomBar();
+      if (mounted) {
+        _isVideoPagePresented = false;
+      }
+    }
   }
 }
