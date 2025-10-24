@@ -39,6 +39,7 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
 class _CupertinoSharedAnimeDetailPageState
     extends State<CupertinoSharedAnimeDetailPage> {
   static const int _infoSegment = 0;
+  static final Map<int, String> _coverCache = {};
 
   final ScrollController _scrollController = ScrollController();
   final DateFormat _timeFormatter = DateFormat('MM-dd HH:mm');
@@ -203,6 +204,12 @@ class _CupertinoSharedAnimeDetailPageState
     if (mode != AnimeDetailDisplayMode.vivid) {
       return;
     }
+
+    if (!force && _coverCache.containsKey(widget.anime.animeId)) {
+      _vividCoverUrl = _coverCache[widget.anime.animeId];
+      return;
+    }
+
     if (!force && (_vividCoverUrl != null || _isLoadingCover)) {
       return;
     }
@@ -242,6 +249,10 @@ class _CupertinoSharedAnimeDetailPageState
       _vividCoverUrl = coverUrl;
       _isLoadingCover = false;
     });
+
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      _coverCache[widget.anime.animeId] = coverUrl;
+    }
   }
 
   Widget _buildSimpleLayout(BuildContext context) {
