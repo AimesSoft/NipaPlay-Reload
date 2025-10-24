@@ -335,14 +335,18 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      AdaptiveButton.sfSymbol(
-                        onPressed: () {
-                          videoState.resetHideControlsTimer();
-                          _showSettingsMenu(context);
-                        },
-                        sfSymbol: const SFSymbol('gearshape.fill'),
-                        style: AdaptiveButtonStyle.glass,
-                        size: AdaptiveButtonSize.large,
+                      SizedBox(
+                        width: kMinInteractiveDimensionCupertino,
+                        height: kMinInteractiveDimensionCupertino,
+                        child: AdaptiveButton.sfSymbol(
+                          onPressed: () {
+                            videoState.resetHideControlsTimer();
+                            _showSettingsMenu(context);
+                          },
+                          sfSymbol: const SFSymbol('gearshape.fill'),
+                          style: AdaptiveButtonStyle.glass,
+                          size: AdaptiveButtonSize.large,
+                        ),
                       ),
                     ],
                   ),
@@ -455,7 +459,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
     return title ?? episode ?? '';
   }
-}
+
   void _showSettingsMenu(BuildContext context) {
     _settingsOverlay?.remove();
     _settingsOverlay = OverlayEntry(
@@ -468,3 +472,4 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
     Overlay.of(context, rootOverlay: true).insert(_settingsOverlay!);
   }
+}

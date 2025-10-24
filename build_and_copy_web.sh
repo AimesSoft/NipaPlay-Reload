@@ -17,4 +17,4 @@ fi
 echo "Copying new build to assets/web..."
 cp -r build/web assets/web
 
-echo "Build and copy complete!" 
+echo "Build and copy complete!"
