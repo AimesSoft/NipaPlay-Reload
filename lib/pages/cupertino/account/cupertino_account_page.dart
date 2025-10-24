@@ -52,79 +52,107 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
     );
   }
 
+  Future<String?> _showAdaptiveInputDialog({
+    required String title,
+    String? message,
+    required String placeholder,
+    required String confirmLabel,
+    String initialValue = '',
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) async {
+    final result = await AdaptiveAlertDialog.inputShow(
+      context: context,
+      title: title,
+      message: message,
+      input: AdaptiveAlertDialogInput(
+        placeholder: placeholder,
+        initialValue: initialValue,
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+      ),
+      actions: [
+        AlertAction(
+          title: '取消',
+          style: AlertActionStyle.cancel,
+          onPressed: () {
+            debugPrint('[登录弹窗] 用户点击取消按钮 ($placeholder)');
+          },
+        ),
+        AlertAction(
+          title: confirmLabel,
+          style: AlertActionStyle.primary,
+          onPressed: () {
+            debugPrint('[登录弹窗] 用户点击确认按钮 ($placeholder)');
+          },
+        ),
+      ],
+    );
+
+    if (result == null) {
+      return null;
+    }
+
+    final trimmed = result.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   @override
   void showLoginDialog() async {
-    // 第一步：输入用户名/邮箱
-    final usernameResult = await showCupertinoDialog<String>(
-      context: context,
-      builder: (context) => IOS26AlertDialog(
-        title: '登录弹弹play账号',
-        message: '请输入用户名或邮箱',
-        icon: 'person.crop.circle',
-        input: AdaptiveAlertDialogInput(
-          placeholder: '用户名/邮箱',
-          initialValue: usernameController.text,
-          keyboardType: TextInputType.emailAddress,
-        ),
-        actions: [
-          AlertAction(
-            title: '取消',
-            style: AlertActionStyle.cancel,
-            onPressed: () {},
-          ),
-          AlertAction(
-            title: '下一步',
-            style: AlertActionStyle.primary,
-            onPressed: () {},
-          ),
-        ],
-      ),
+    debugPrint('[登录弹窗] 开始显示登录对话框');
+
+    final usernameResult = await _showAdaptiveInputDialog(
+      title: '登录弹弹play账号',
+      message: '请输入用户名或邮箱',
+      placeholder: '用户名/邮箱',
+      confirmLabel: '下一步',
+      initialValue: usernameController.text,
+      keyboardType: TextInputType.emailAddress,
     );
 
-    // 如果用户取消或没有输入，直接返回
-    if (usernameResult == null || usernameResult.trim().isEmpty) {
+    debugPrint('[登录弹窗] 用户名输入结果: ${usernameResult ?? 'null'}');
+
+    if (usernameResult == null || usernameResult.isEmpty) {
+      debugPrint('[登录弹窗] 用户名为空或用户取消，终止登录流程');
       return;
     }
 
-    // 保存用户名
     usernameController.text = usernameResult;
+    debugPrint('[登录弹窗] 已保存用户名: ${usernameController.text}');
 
-    // 第二步：输入密码
-    if (!mounted) return;
-    final passwordResult = await showCupertinoDialog<String>(
-      context: context,
-      builder: (context) => IOS26AlertDialog(
-        title: '登录弹弹play账号',
-        message: '请输入密码',
-        icon: 'lock.fill',
-        input: const AdaptiveAlertDialogInput(
-          placeholder: '密码',
-          initialValue: '',
-          obscureText: true,
-        ),
-        actions: [
-          AlertAction(
-            title: '取消',
-            style: AlertActionStyle.cancel,
-            onPressed: () {},
-          ),
-          AlertAction(
-            title: '登录',
-            style: AlertActionStyle.primary,
-            onPressed: () {},
-          ),
-        ],
-      ),
-    );
-
-    // 如果用户取消或没有输入密码，直接返回
-    if (passwordResult == null || passwordResult.trim().isEmpty) {
+    if (!mounted) {
+      debugPrint('[登录弹窗] Widget已卸载，终止登录流程');
       return;
     }
 
-    // 保存密码并执行登录
+    final passwordResult = await _showAdaptiveInputDialog(
+      title: '登录弹弹play账号',
+      message: '请输入密码',
+      placeholder: '密码',
+      confirmLabel: '登录',
+      obscureText: true,
+    );
+
+    debugPrint('[登录弹窗] 密码输入结果: ${passwordResult != null ? "***已输入***" : "null"}');
+
+    if (passwordResult == null || passwordResult.isEmpty) {
+      debugPrint('[登录弹窗] 密码为空或用户取消，终止登录流程');
+      return;
+    }
+
     passwordController.text = passwordResult;
-    await performLogin();
+    debugPrint('[登录弹窗] 已保存密码，开始调用登录方法');
+    debugPrint('[登录弹窗] 用户名: ${usernameController.text}, 密码长度: ${passwordController.text.length}');
+
+    try {
+      await performLogin();
+      debugPrint('[登录弹窗] performLogin() 调用完成');
+    } catch (e, stackTrace) {
+      debugPrint('[登录弹窗] performLogin() 调用异常: $e');
+      debugPrint('[登录弹窗] 异常堆栈: $stackTrace');
+    }
+
+    debugPrint('[登录弹窗] 登录流程完成');
   }
 
   @override

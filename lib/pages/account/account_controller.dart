@@ -73,16 +73,29 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
 
   /// 执行登录
   Future<void> performLogin() async {
+    debugPrint('[账号控制器-DEBUG] performLogin() 方法开始执行');
+
     final logService = DebugLogService();
-    
+
+    debugPrint('[账号控制器-DEBUG] DebugLogService 实例创建完成');
     logService.addLog('[账号控制器] 开始登录流程', level: 'INFO', tag: 'AccountController');
-    
+
+    debugPrint('[账号控制器-DEBUG] 检查登录信息是否完整');
+    final trimmedUsername = usernameController.text.trim();
+    final trimmedPassword = passwordController.text.trim();
+
+    debugPrint('[账号控制器-DEBUG] 用户名: $trimmedUsername');
+    debugPrint('[账号控制器-DEBUG] 密码长度: ${trimmedPassword.length}');
+    debugPrint('[账号控制器-DEBUG] 密码内容(明文): $trimmedPassword');
+
     if (usernameController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
+      debugPrint('[账号控制器-DEBUG] 登录信息不完整');
       logService.addWarning('[账号控制器] 登录信息不完整', tag: 'AccountController');
       showMessage('请输入用户名和密码');
       return;
     }
 
+    debugPrint('[账号控制器-DEBUG] 登录信息验证通过');
     logService.addLog('[账号控制器] 登录信息验证通过，开始登录', level: 'INFO', tag: 'AccountController');
 
     if (mounted) {
@@ -92,16 +105,19 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     }
 
     try {
+      debugPrint('[账号控制器-DEBUG] 准备调用 DandanplayService.login');
       logService.addLog('[账号控制器] 调用登录服务', level: 'INFO', tag: 'AccountController');
-      
+
       final result = await DandanplayService.login(
         usernameController.text.trim(),
         passwordController.text.trim(),
       );
 
+      debugPrint('[账号控制器-DEBUG] DandanplayService.login 返回结果: $result');
       logService.addLog('[账号控制器] 登录服务返回结果: ${result.toString()}', level: 'INFO', tag: 'AccountController');
 
       if (result['success'] == true) {
+        debugPrint('[账号控制器-DEBUG] 登录成功，重新加载登录状态');
         logService.addLog('[账号控制器] 登录成功，重新加载登录状态', level: 'INFO', tag: 'AccountController');
         await loadLoginStatus();
         usernameController.clear();
@@ -110,24 +126,30 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
           showMessage(result['message'] ?? '登录成功');
         }
       } else {
+        debugPrint('[账号控制器-DEBUG] 登录失败: ${result['message']}');
         logService.addError('[账号控制器] 登录失败: ${result['message']}', tag: 'AccountController');
         if (mounted) {
           showMessage(result['message'] ?? '登录失败');
         }
       }
     } catch (e, stackTrace) {
+      debugPrint('[账号控制器-DEBUG] 登录时发生异常: $e');
+      debugPrint('[账号控制器-DEBUG] 异常堆栈: $stackTrace');
       logService.addError('[账号控制器] 登录时发生异常: $e', tag: 'AccountController');
       logService.addError('[账号控制器] 异常堆栈: $stackTrace', tag: 'AccountController');
       if (mounted) {
         showMessage('登录失败: $e');
       }
     } finally {
+      debugPrint('[账号控制器-DEBUG] 登录流程进入 finally 块');
       if (mounted) {
         setState(() {
           isLoading = false;
         });
       }
     }
+
+    debugPrint('[账号控制器-DEBUG] performLogin() 方法执行完成');
   }
 
   /// 执行注册
