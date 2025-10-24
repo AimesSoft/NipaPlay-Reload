@@ -17,9 +17,11 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
   const CupertinoSharedAnimeDetailPage({
     super.key,
     required this.anime,
+    this.hideBackButton = false,
   });
 
   final SharedRemoteAnimeSummary anime;
+  final bool hideBackButton;
 
   @override
   State<CupertinoSharedAnimeDetailPage> createState() =>
@@ -187,14 +189,15 @@ class _CupertinoSharedAnimeDetailPageState
             ];
           },
         ),
-        Positioned(
-          top: 0,
-          left: 0,
-          child: Padding(
-            padding: EdgeInsets.all(_toolbarPadding),
-            child: _buildBackButton(context),
+        if (!widget.hideBackButton)
+          Positioned(
+            top: 0,
+            left: 0,
+            child: Padding(
+              padding: EdgeInsets.all(_toolbarPadding),
+              child: _buildBackButton(context),
+            ),
           ),
-        ),
       ],
     );
   }

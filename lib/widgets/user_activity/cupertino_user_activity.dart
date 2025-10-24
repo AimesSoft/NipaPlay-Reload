@@ -248,6 +248,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
         value: sharedProvider,
         child: CupertinoSharedAnimeDetailPage(
           anime: summary,
+          hideBackButton: true,
         ),
       ),
     );
