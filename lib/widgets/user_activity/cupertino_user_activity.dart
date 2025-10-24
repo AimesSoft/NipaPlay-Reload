@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -160,20 +158,24 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       );
     }
 
-    final displayCount = math.min(items.length, 5);
-
     return AdaptiveCard(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        children: [
-          for (int i = 0; i < displayCount; i++)
-            _buildActivityTile(items[i], isLast: i == displayCount - 1),
-        ],
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        itemCount: items.length,
+        itemBuilder: (context, index) => _buildActivityTile(items[index]),
+        separatorBuilder: (context, index) => Container(
+          height: 0.5,
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          color: CupertinoColors.systemGrey5,
+        ),
       ),
     );
   }
 
-  Widget _buildActivityTile(Map<String, dynamic> item, {required bool isLast}) {
+  Widget _buildActivityTile(Map<String, dynamic> item) {
     final int? animeId = item['animeId'] as int?;
     final String title = (item['animeTitle'] ?? '未知作品').toString();
 
@@ -192,32 +194,27 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       subtitle = [
         if (status != null && status.isNotEmpty) '状态：$status',
         if (rating > 0) '评分：$rating',
-      ].join(' · ');
+      ].join('\n');
     } else {
       final int rating = item['rating'] as int? ?? 0;
       subtitle = '评分：$rating';
     }
 
-    return Column(
-      children: [
-        AdaptiveListTile(
-          leading: _buildThumbnail(item['imageUrl'] as String?),
-          title: Text(title),
-          subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
-          trailing: const Icon(
-            CupertinoIcons.chevron_forward,
-            size: 16,
-            color: CupertinoColors.systemGrey2,
-          ),
-          onTap: animeId == null ? null : () => openAnimeDetail(animeId),
-        ),
-        if (!isLast)
-          Container(
-            height: 0.5,
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            color: CupertinoColors.systemGrey5,
-          ),
-      ],
+    return AdaptiveListTile(
+      leading: _buildThumbnail(item['imageUrl'] as String?),
+      title: Text(title),
+      subtitle: subtitle.isNotEmpty
+          ? Text(
+              subtitle,
+              style: const TextStyle(height: 1.35),
+            )
+          : null,
+      trailing: const Icon(
+        CupertinoIcons.chevron_forward,
+        size: 16,
+        color: CupertinoColors.systemGrey2,
+      ),
+      onTap: animeId == null ? null : () => openAnimeDetail(animeId),
     );
   }
 
