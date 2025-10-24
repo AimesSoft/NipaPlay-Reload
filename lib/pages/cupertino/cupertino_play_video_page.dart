@@ -22,6 +22,17 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   bool _isDragging = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final videoState =
+          Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.setContext(context);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, _) {
