@@ -185,7 +185,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
         if (episodeTitle != null && episodeTitle.isNotEmpty)
           '看到：$episodeTitle',
         if (watched.isNotEmpty) '更新时间：$watched',
-      ].join(' · ');
+      ].join('\n');
     } else if (_selectedIndex == 1) {
       final String? status = item['favoriteStatus'] as String?;
       final int rating = item['rating'] as int? ?? 0;
