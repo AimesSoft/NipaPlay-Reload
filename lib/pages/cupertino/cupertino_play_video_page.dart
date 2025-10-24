@@ -4,6 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/widgets/danmaku_overlay.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/brightness_gesture_area.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/volume_gesture_area.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -62,6 +65,21 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           videoState.resetHideControlsTimer();
         }
       },
+      onHorizontalDragStart: globals.isPhone && videoState.hasVideo
+          ? (_) {
+              videoState.startSeekDrag(context);
+            }
+          : null,
+      onHorizontalDragUpdate: globals.isPhone && videoState.hasVideo
+          ? (details) {
+              videoState.updateSeekDrag(details.delta.dx, context);
+            }
+          : null,
+      onHorizontalDragEnd: globals.isPhone && videoState.hasVideo
+          ? (_) {
+              videoState.endSeekDrag();
+            }
+          : null,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -80,8 +98,33 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                   : _buildPlaceholder(videoState),
             ),
           ),
+          if (videoState.hasVideo && videoState.danmakuVisible)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: true,
+                child: ValueListenableBuilder<double>(
+                  valueListenable: videoState.playbackTimeMs,
+                  builder: (context, posMs, __) {
+                    return DanmakuOverlay(
+                      key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
+                      currentPosition: posMs,
+                      videoDuration:
+                          videoState.duration.inMilliseconds.toDouble(),
+                      isPlaying: videoState.status == PlayerStatus.playing,
+                      fontSize: videoState.actualDanmakuFontSize,
+                      isVisible: videoState.danmakuVisible,
+                      opacity: videoState.mappedDanmakuOpacity,
+                    );
+                  },
+                ),
+              ),
+            ),
           _buildTopBar(videoState),
           if (hasVideo) _buildBottomControls(videoState, progressValue),
+          if (globals.isPhone && videoState.hasVideo)
+            const BrightnessGestureArea(),
+          if (globals.isPhone && videoState.hasVideo)
+            const VolumeGestureArea(),
         ],
       ),
     );
@@ -274,24 +317,23 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _formatDuration(position),
-                        style: const TextStyle(
-                          color: CupertinoColors.systemGrey,
-                          fontSize: 12,
-                        ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${_formatDuration(position)} / ${_formatDuration(duration)}',
+                      style: TextStyle(
+                        color: CupertinoColors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        shadows: const [
+                          Shadow(
+                            color: Color.fromARGB(140, 0, 0, 0),
+                            offset: Offset(0, 1),
+                            blurRadius: 3,
+                          ),
+                        ],
                       ),
-                      Text(
-                        _formatDuration(duration),
-                        style: const TextStyle(
-                          color: CupertinoColors.systemGrey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
