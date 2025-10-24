@@ -184,7 +184,7 @@ class CupertinoBottomSheet extends StatelessWidget {
         size: AdaptiveButtonSize.large,
         child: Icon(
           CupertinoIcons.xmark,
-          size: 24,
+          size: 16,
           color: resolvedIconColor,
         ),
       ),

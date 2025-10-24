@@ -839,16 +839,31 @@ class _CupertinoSharedAnimeDetailPageState
     final iconColor =
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
 
+    if (PlatformInfo.isIOS26OrHigher()) {
+      return SizedBox(
+        width: _toolbarButtonSize,
+        height: _toolbarButtonSize,
+        child: AdaptiveButton.sfSymbol(
+          useSmoothRectangleBorder: false,
+          onPressed: () => Navigator.of(context).maybePop(),
+          style: AdaptiveButtonStyle.glass,
+          size: AdaptiveButtonSize.large,
+          sfSymbol: SFSymbol('chevron.left', size: 16, color: iconColor),
+        ),
+      );
+    }
+
     return SizedBox(
       width: _toolbarButtonSize,
       height: _toolbarButtonSize,
-      child: IOS26Button.child(
+      child: AdaptiveButton.child(
+        useSmoothRectangleBorder: false,
         onPressed: () => Navigator.of(context).maybePop(),
-        style: IOS26ButtonStyle.glass,
-        size: IOS26ButtonSize.large,
+        style: AdaptiveButtonStyle.glass,
+        size: AdaptiveButtonSize.large,
         child: Icon(
           CupertinoIcons.chevron_left,
-          size: 24,
+          size: 16,
           color: iconColor,
         ),
       ),
