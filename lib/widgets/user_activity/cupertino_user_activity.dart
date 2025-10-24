@@ -1,7 +1,12 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:provider/provider.dart';
 
 import 'package:nipaplay/controllers/user_activity_controller.dart';
+import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
 
 class CupertinoUserActivity extends StatefulWidget {
   const CupertinoUserActivity({super.key});
@@ -214,7 +219,67 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
         size: 16,
         color: CupertinoColors.systemGrey2,
       ),
-      onTap: animeId == null ? null : () => openAnimeDetail(animeId),
+      onTap: animeId == null ? null : () => _openDetailBottomSheet(item),
+    );
+  }
+
+  Future<void> _openDetailBottomSheet(Map<String, dynamic> item) async {
+    final int? animeId = item['animeId'] as int?;
+    if (animeId == null) return;
+
+    SharedRemoteLibraryProvider? sharedProvider;
+    try {
+      sharedProvider = context.read<SharedRemoteLibraryProvider>();
+    } catch (_) {
+      sharedProvider = null;
+    }
+
+    if (sharedProvider == null) {
+      openAnimeDetail(animeId);
+      return;
+    }
+
+    final summary = _buildSharedSummary(sharedProvider, item, animeId);
+
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: null,
+      child: ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+        value: sharedProvider,
+        child: CupertinoSharedAnimeDetailPage(
+          anime: summary,
+        ),
+      ),
+    );
+  }
+
+  SharedRemoteAnimeSummary _buildSharedSummary(
+    SharedRemoteLibraryProvider provider,
+    Map<String, dynamic> item,
+    int animeId,
+  ) {
+    for (final candidate in provider.animeSummaries) {
+      if (candidate.animeId == animeId) {
+        return candidate;
+      }
+    }
+
+    final title = (item['animeTitle'] ?? '未知作品').toString();
+    final imageUrl = item['imageUrl'] as String?;
+    final rawTime = item['lastWatchedTime'] as String?;
+    final parsed = rawTime != null
+        ? DateTime.tryParse(rawTime)?.toLocal()
+        : null;
+
+    return SharedRemoteAnimeSummary(
+      animeId: animeId,
+      name: title,
+      nameCn: title,
+      summary: null,
+      imageUrl: imageUrl,
+      lastWatchTime: parsed ?? DateTime.now(),
+      episodeCount: 0,
+      hasMissingFiles: true,
     );
   }
 
