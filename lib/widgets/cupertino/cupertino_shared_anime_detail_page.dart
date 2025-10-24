@@ -244,6 +244,13 @@ class _CupertinoSharedAnimeDetailPageState
             decoration: BoxDecoration(
               color: resolvedCardColor,
               borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: CupertinoColors.black.withOpacity(0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -476,16 +483,28 @@ class _CupertinoSharedAnimeDetailPageState
       );
     }
 
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => DecoratedBox(
-        decoration: BoxDecoration(color: placeholderColor),
-        child: const Center(
-          child: Icon(
-            CupertinoIcons.tv,
-            size: 32,
-            color: CupertinoColors.systemGrey,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: placeholderColor,
+        boxShadow: [
+          BoxShadow(
+            color: CupertinoColors.black.withOpacity(0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => DecoratedBox(
+          decoration: BoxDecoration(color: placeholderColor),
+          child: const Center(
+            child: Icon(
+              CupertinoIcons.tv,
+              size: 32,
+              color: CupertinoColors.systemGrey,
+            ),
           ),
         ),
       ),
@@ -728,8 +747,18 @@ class _CupertinoSharedAnimeDetailPageState
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: backgroundColor,
+          color: CupertinoDynamicColor.resolve(
+            CupertinoColors.white,
+            context,
+          ),
           borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: CupertinoColors.black.withOpacity(0.07),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Row(
           children: [
