@@ -52,7 +52,7 @@ class _CupertinoAppearanceSettingsPageState
           top: false,
           bottom: false,
           child: ListView(
-            padding: EdgeInsets.fromLTRB(20, topPadding, 20, 32),
+            padding: EdgeInsets.fromLTRB(16, topPadding, 16, 32),
             physics: const BouncingScrollPhysics(
               parent: AlwaysScrollableScrollPhysics(),
             ),
@@ -76,8 +76,6 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
-              const SizedBox(height: 28),
-              CupertinoAppearancePreviewCard(mode: _currentMode),
             ],
           ),
         ),
