@@ -2055,6 +2055,8 @@ class _MediaLibraryContent extends StatefulWidget {
 }
 
 class _MediaLibraryContentState extends State<_MediaLibraryContent> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   void initState() {
     super.initState();
@@ -2068,27 +2070,37 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
-      value: widget.provider,
-      child: _CupertinoMediaLibraryListPage(
-        onAnimeTap: _handleAnimeTap,
-      ),
+    return Navigator(
+      key: _navigatorKey,
+      onGenerateInitialRoutes: (_, __) {
+        return [
+          CupertinoPageRoute<void>(
+            builder: (routeContext) => ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+              value: widget.provider,
+              child: _CupertinoMediaLibraryListPage(
+                onAnimeTap: _handleAnimeTap,
+              ),
+            ),
+          ),
+        ];
+      },
+      onGenerateRoute: (_) => null,
     );
   }
 
   Future<void> _handleAnimeTap(SharedRemoteAnimeSummary anime) async {
     final detailMode = context.read<ThemeNotifier>().animeDetailDisplayMode;
 
-    await CupertinoBottomSheet.show(
-      context: context,
-      title: null,
-      showCloseButton: false,
-      child: ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
-        value: widget.provider,
-        child: CupertinoSharedAnimeDetailPage(
-          anime: anime,
-          displayModeOverride: detailMode,
-          showCloseButton: true,
+    await _navigatorKey.currentState?.push(
+      CupertinoPageRoute<void>(
+        builder: (routeContext) => ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+          value: widget.provider,
+          child: CupertinoSharedAnimeDetailPage(
+            anime: anime,
+            hideBackButton: false,
+            displayModeOverride: detailMode,
+            showCloseButton: true,
+          ),
         ),
       ),
     );
