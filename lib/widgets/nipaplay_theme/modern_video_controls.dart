@@ -37,7 +37,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   OverlayEntry? _settingsOverlay;
   Timer? _doubleTapTimer;
   int _tapCount = 0;
-  static const _doubleTapTimeout = Duration(milliseconds: 300);
+  static const _doubleTapTimeout = Duration(milliseconds: 360);
   bool _isProcessingTap = false;
   
   // 快捷键提示管理器
