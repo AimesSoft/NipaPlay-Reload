@@ -18,7 +18,9 @@
 
 > **⚠️ 重要提醒：** 选择了媒体库后，**一定要滑动到页面底部点击"保存"按钮**，否则设置不会生效！
 >
-> <img src="../others/保存设置.jpg" alt="保存设置" width="300">
+> <img src="> **⚠️ 重要提醒：** 选择了媒体库后，**一定要滑动到页面底部点击"保存"按钮**，否则设置不会生效！
+>
+> <img src="https://github.com/MCDFsteve/NipaPlay-Reload/blob/main/others/%E4%BF%9D%E5%AD%98%E8%AE%BE%E7%BD%AE.jpg" alt="保存设置" width="300">" alt="保存设置" width="300">
 
 ## 字幕与弹幕
 
