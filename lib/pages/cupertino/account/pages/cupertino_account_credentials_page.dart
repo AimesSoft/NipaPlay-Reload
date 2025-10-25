@@ -1,6 +1,8 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+
 class CupertinoCredentialField {
   final String label;
   final TextEditingController controller;
@@ -66,6 +68,7 @@ class _CupertinoAccountCredentialsPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final sectionBackground = resolveSettingsSectionBackground(context);
 
     return AdaptiveScaffold(
       appBar: AdaptiveAppBar(
@@ -79,6 +82,7 @@ class _CupertinoAccountCredentialsPageState
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
             children: [
               AdaptiveFormSection.insetGrouped(
+                backgroundColor: sectionBackground,
                 children: [
                   for (final field in widget.fields)
                     CupertinoFormRow(

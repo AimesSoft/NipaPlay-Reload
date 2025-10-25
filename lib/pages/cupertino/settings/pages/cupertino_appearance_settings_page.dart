@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+
 class CupertinoAppearanceSettingsPage extends StatefulWidget {
   const CupertinoAppearanceSettingsPage({super.key});
 
@@ -50,6 +52,7 @@ class _CupertinoAppearanceSettingsPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final sectionBackground = resolveSettingsSectionBackground(context);
     final double topPadding = MediaQuery.of(context).padding.top + 48;
 
     return AdaptiveScaffold(
@@ -69,6 +72,7 @@ class _CupertinoAppearanceSettingsPageState
             ),
             children: [
               AdaptiveFormSection.insetGrouped(
+                backgroundColor: sectionBackground,
                 children: [
                   _buildThemeOptionTile(
                     mode: ThemeMode.light,
@@ -107,6 +111,7 @@ class _CupertinoAppearanceSettingsPageState
               ),
               const SizedBox(height: 8),
               AdaptiveFormSection.insetGrouped(
+                backgroundColor: sectionBackground,
                 children: [
                   _buildDetailModeTile(
                     mode: AnimeDetailDisplayMode.simple,
@@ -132,6 +137,10 @@ class _CupertinoAppearanceSettingsPageState
     required String title,
     required String subtitle,
   }) {
+    final tileColor = resolveSettingsTileBackground(context);
+    final primaryColor = resolveSettingsPrimaryTextColor(context);
+    final secondaryColor = resolveSettingsSecondaryTextColor(context);
+
     return AdaptiveListTile(
       leading: Icon(
         mode == ThemeMode.dark
@@ -139,9 +148,10 @@ class _CupertinoAppearanceSettingsPageState
             : (mode == ThemeMode.light
                 ? CupertinoIcons.sun_max_fill
                 : CupertinoIcons.circle_lefthalf_fill),
+        color: resolveSettingsIconColor(context),
       ),
-      title: Text(title),
-      subtitle: Text(subtitle),
+      title: Text(title, style: TextStyle(color: primaryColor)),
+      subtitle: Text(subtitle, style: TextStyle(color: secondaryColor)),
       trailing: AdaptiveRadio<ThemeMode>(
         value: mode,
         groupValue: _currentMode,
@@ -151,6 +161,7 @@ class _CupertinoAppearanceSettingsPageState
           }
         },
       ),
+      backgroundColor: tileColor,
       onTap: () => _updateThemeMode(mode),
     );
   }
@@ -160,9 +171,19 @@ class _CupertinoAppearanceSettingsPageState
     required String title,
     required String subtitle,
   }) {
+    final tileColor = resolveSettingsTileBackground(context);
+    final primaryColor = resolveSettingsPrimaryTextColor(context);
+    final secondaryColor = resolveSettingsSecondaryTextColor(context);
+
     return AdaptiveListTile(
-      title: Text(title),
-      subtitle: Text(subtitle),
+      leading: Icon(
+        mode == AnimeDetailDisplayMode.simple
+            ? CupertinoIcons.list_bullet
+            : CupertinoIcons.rectangle_on_rectangle_angled,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(title, style: TextStyle(color: primaryColor)),
+      subtitle: Text(subtitle, style: TextStyle(color: secondaryColor)),
       trailing: AdaptiveRadio<AnimeDetailDisplayMode>(
         value: mode,
         groupValue: _detailMode,
@@ -172,6 +193,7 @@ class _CupertinoAppearanceSettingsPageState
           }
         },
       ),
+      backgroundColor: tileColor,
       onTap: () => _updateDetailMode(mode),
     );
   }

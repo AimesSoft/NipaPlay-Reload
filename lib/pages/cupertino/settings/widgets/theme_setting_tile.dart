@@ -6,6 +6,7 @@ import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../pages/cupertino_ui_theme_settings_page.dart';
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
 class CupertinoThemeSettingTile extends StatelessWidget {
   const CupertinoThemeSettingTile({super.key});
@@ -22,10 +23,22 @@ class CupertinoThemeSettingTile extends StatelessWidget {
         final String subtitle =
             '当前：${provider.getThemeName(displayTheme)}';
 
+        final tileColor = resolveSettingsTileBackground(context);
+
         return AdaptiveListTile(
-          leading: const Icon(CupertinoIcons.sparkles),
-          title: const Text('主题（实验性）'),
-          subtitle: Text(subtitle),
+          leading: Icon(
+            CupertinoIcons.sparkles,
+            color: resolveSettingsIconColor(context),
+          ),
+          title: Text(
+            '主题（实验性）',
+            style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(color: resolveSettingsSecondaryTextColor(context)),
+          ),
+          backgroundColor: tileColor,
           trailing: Icon(
             PlatformInfo.isIOS
                 ? CupertinoIcons.chevron_forward

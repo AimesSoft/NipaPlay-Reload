@@ -9,6 +9,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
 class CupertinoUserActivity extends StatefulWidget {
   const CupertinoUserActivity({super.key});
@@ -86,8 +87,11 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
                   CupertinoIcons.refresh,
                   size: 16,
                   color: isLoading
-                      ? CupertinoColors.systemGrey
-                      : CupertinoTheme.of(context).primaryColor,
+                      ? CupertinoDynamicColor.resolve(
+                          CupertinoColors.systemGrey2,
+                          context,
+                        )
+                      : resolveSettingsIconColor(context),
                 ),
               ),
             ),
@@ -155,6 +159,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
 
     if (error != null) {
       return AdaptiveCard(
+        color: resolveSettingsCardBackground(context),
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,7 +170,10 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
                   .textTheme
                   .textStyle
                   .copyWith(
-                    color: CupertinoColors.destructiveRed,
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemRed,
+                      context,
+                    ),
                     fontWeight: FontWeight.w600,
                   ),
             ),
@@ -190,6 +198,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
           : (_selectedIndex == 1 ? '暂无收藏内容' : '尚未对作品评分');
 
       return AdaptiveCard(
+        color: resolveSettingsCardBackground(context),
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Center(
           child: Text(
@@ -197,13 +206,16 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
             style: CupertinoTheme.of(context)
                 .textTheme
                 .textStyle
-                .copyWith(color: CupertinoColors.systemGrey),
+                .copyWith(
+                  color: resolveSettingsSecondaryTextColor(context),
+                ),
           ),
         ),
       );
     }
 
     return AdaptiveCard(
+      color: resolveSettingsCardBackground(context),
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: ListView.separated(
         shrinkWrap: true,
@@ -214,7 +226,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
         separatorBuilder: (context, index) => Container(
           height: 0.5,
           margin: const EdgeInsets.symmetric(horizontal: 20),
-          color: CupertinoColors.systemGrey5,
+          color: resolveSettingsSeparatorColor(context),
         ),
       ),
     );
@@ -245,20 +257,32 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       subtitle = '评分：$rating';
     }
 
+    final tileColor = resolveSettingsTileBackground(context);
+
     return AdaptiveListTile(
       leading: _buildThumbnail(item['imageUrl'] as String?),
-      title: Text(title),
+      title: Text(
+        title,
+        style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
+      ),
       subtitle: subtitle.isNotEmpty
           ? Text(
               subtitle,
-              style: const TextStyle(height: 1.35),
+              style: TextStyle(
+                height: 1.35,
+                color: resolveSettingsSecondaryTextColor(context),
+              ),
             )
           : null,
-      trailing: const Icon(
+      trailing: Icon(
         CupertinoIcons.chevron_forward,
         size: 16,
-        color: CupertinoColors.systemGrey2,
+        color: CupertinoDynamicColor.resolve(
+          CupertinoColors.systemGrey2,
+          context,
+        ),
       ),
+      backgroundColor: tileColor,
       onTap: animeId == null ? null : () => _openDetailBottomSheet(item),
     );
   }
@@ -335,14 +359,14 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
         width: _thumbnailWidth,
         height: _thumbnailHeight,
         decoration: BoxDecoration(
-          color: CupertinoColors.systemGrey5,
+          color: resolveSettingsTileBackground(context),
           borderRadius: BorderRadius.circular(10),
         ),
         alignment: Alignment.center,
-        child: const Icon(
+        child: Icon(
           CupertinoIcons.film,
           size: 24,
-          color: CupertinoColors.systemGrey2,
+          color: resolveSettingsSecondaryTextColor(context),
         ),
       );
     }
@@ -359,14 +383,14 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
             width: _thumbnailWidth,
             height: _thumbnailHeight,
             decoration: BoxDecoration(
-              color: CupertinoColors.systemGrey5,
+              color: resolveSettingsTileBackground(context),
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: const Icon(
+            child: Icon(
               CupertinoIcons.photo,
               size: 24,
-              color: CupertinoColors.systemGrey2,
+              color: resolveSettingsSecondaryTextColor(context),
             ),
           );
         },

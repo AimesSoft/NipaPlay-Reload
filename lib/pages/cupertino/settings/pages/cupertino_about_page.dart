@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nipaplay/services/update_service.dart';
 
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+
 class CupertinoAboutPage extends StatefulWidget {
   const CupertinoAboutPage({super.key});
 
@@ -257,6 +259,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         .copyWith(height: 1.6);
 
     return AdaptiveFormSection.insetGrouped(
+      backgroundColor: resolveSettingsSectionBackground(context),
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
@@ -312,6 +315,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     ];
 
     return AdaptiveFormSection.insetGrouped(
+      backgroundColor: resolveSettingsSectionBackground(context),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -332,8 +336,15 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
               item.icon,
               color: labelColor,
             ),
-            title: Text(item.label),
-            trailing: const Icon(CupertinoIcons.arrow_up_right),
+            title: Text(
+              item.label,
+              style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
+            ),
+            trailing: Icon(
+              CupertinoIcons.arrow_up_right,
+              color: resolveSettingsIconColor(context),
+            ),
+            backgroundColor: resolveSettingsTileBackground(context),
             onTap: () => _launchURL(item.url),
           ),
         ),

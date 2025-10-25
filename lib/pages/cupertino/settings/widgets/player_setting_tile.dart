@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 
 import '../pages/cupertino_player_settings_page.dart';
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
 class CupertinoPlayerSettingTile extends StatefulWidget {
   const CupertinoPlayerSettingTile({super.key});
@@ -42,10 +43,22 @@ class _CupertinoPlayerSettingTileState
 
   @override
   Widget build(BuildContext context) {
+    final tileColor = resolveSettingsTileBackground(context);
+
     return AdaptiveListTile(
-      leading: const Icon(CupertinoIcons.play_circle),
-      title: const Text('播放器'),
-      subtitle: Text(_kernelName),
+      leading: Icon(
+        CupertinoIcons.play_circle,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(
+        '播放器',
+        style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
+      ),
+      subtitle: Text(
+        _kernelName,
+        style: TextStyle(color: resolveSettingsSecondaryTextColor(context)),
+      ),
+      backgroundColor: tileColor,
       trailing: Icon(
         PlatformInfo.isIOS
             ? CupertinoIcons.chevron_forward

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../pages/cupertino_about_page.dart';
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
 class CupertinoAboutSettingTile extends StatefulWidget {
   const CupertinoAboutSettingTile({super.key});
@@ -39,10 +40,22 @@ class _CupertinoAboutSettingTileState
 
   @override
   Widget build(BuildContext context) {
+    final tileColor = resolveSettingsTileBackground(context);
+
     return AdaptiveListTile(
-      leading: const Icon(CupertinoIcons.info_circle),
-      title: const Text('关于'),
-      subtitle: Text(_versionLabel),
+      leading: Icon(
+        CupertinoIcons.info_circle,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(
+        '关于',
+        style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
+      ),
+      subtitle: Text(
+        _versionLabel,
+        style: TextStyle(color: resolveSettingsSecondaryTextColor(context)),
+      ),
+      backgroundColor: tileColor,
       trailing: Icon(
         PlatformInfo.isIOS
             ? CupertinoIcons.chevron_forward

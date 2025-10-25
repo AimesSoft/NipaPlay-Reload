@@ -9,6 +9,8 @@ import 'package:window_manager/window_manager.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+
 class CupertinoUIThemeSettingsPage extends StatefulWidget {
   const CupertinoUIThemeSettingsPage({super.key});
 
@@ -37,6 +39,7 @@ class _CupertinoUIThemeSettingsPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final sectionBackground = resolveSettingsSectionBackground(context);
     final provider = context.watch<UIThemeProvider>();
 
     final double topPadding = MediaQuery.of(context).padding.top + 48;
@@ -73,11 +76,26 @@ class _CupertinoUIThemeSettingsPageState
             padding: EdgeInsets.fromLTRB(16, topPadding, 16, 32),
             children: [
               AdaptiveFormSection.insetGrouped(
+                backgroundColor: sectionBackground,
                 children: availableThemes.map((theme) {
+                  final tileColor = resolveSettingsTileBackground(context);
                   return AdaptiveListTile(
-                    leading: Icon(_leadingIcon(theme)),
-                    title: Text(_themeTitle(theme)),
-                    subtitle: Text(_themeSubtitle(theme)),
+                    leading: Icon(
+                      _leadingIcon(theme),
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: Text(
+                      _themeTitle(theme),
+                      style: TextStyle(
+                        color: resolveSettingsPrimaryTextColor(context),
+                      ),
+                    ),
+                    subtitle: Text(
+                      _themeSubtitle(theme),
+                      style: TextStyle(
+                        color: resolveSettingsSecondaryTextColor(context),
+                      ),
+                    ),
                     trailing: AdaptiveRadio<UIThemeType>(
                       value: theme,
                       groupValue: _selectedTheme,
@@ -87,6 +105,7 @@ class _CupertinoUIThemeSettingsPageState
                         }
                       },
                     ),
+                    backgroundColor: tileColor,
                     onTap: () => _handleThemeSelection(theme, provider),
                   );
                 }).toList(),

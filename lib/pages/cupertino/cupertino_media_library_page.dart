@@ -508,53 +508,6 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     );
   }
 
-  Widget _buildImportButton(BuildContext context) {
-    final bool enabled = !_isImporting;
-    final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
-    final Color textColor = CupertinoColors.white;
-
-    final child = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: enabled
-            ? primaryColor
-            : primaryColor.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            CupertinoIcons.add_circled,
-            size: 18,
-            color: textColor.withValues(alpha: enabled ? 1.0 : 0.5),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            _isImporting ? '导入中…' : '导入视频',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: textColor.withValues(alpha: enabled ? 1.0 : 0.5),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (!enabled) return child;
-
-    return AdaptivePopupMenuButton.widget(
-      items: _buildImportMenuItems(),
-      child: child,
-      onSelected: (index, entry) {
-        final value = entry is AdaptivePopupMenuItem ? entry.value : null;
-        _handleImportSelection(value);
-      },
-    );
-  }
-
   Widget _buildErrorBanner(
     BuildContext context,
     SharedRemoteLibraryProvider provider,
@@ -1114,6 +1067,53 @@ class _CupertinoLocalMediaLibraryCardState
     } else if (value == 'file') {
       _startImport(_pickVideoFromFileManager);
     }
+  }
+
+  Widget _buildImportButton(BuildContext context) {
+    final bool enabled = !_isImporting;
+    final Color primaryColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final Color textColor = CupertinoColors.white;
+
+    final child = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: enabled
+            ? primaryColor
+            : primaryColor.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            CupertinoIcons.add_circled,
+            size: 18,
+            color: textColor.withValues(alpha: enabled ? 1.0 : 0.5),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            _isImporting ? '导入中…' : '导入视频',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: textColor.withValues(alpha: enabled ? 1.0 : 0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!enabled) return child;
+
+    return AdaptivePopupMenuButton.widget(
+      items: _buildImportMenuItems(),
+      child: child,
+      onSelected: (index, entry) {
+        final value = entry is AdaptivePopupMenuItem ? entry.value : null;
+        _handleImportSelection(value);
+      },
+    );
   }
 
   Widget _buildErrorBanner(BuildContext context, String message) {

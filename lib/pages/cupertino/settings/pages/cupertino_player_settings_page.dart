@@ -13,6 +13,8 @@ import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+
 class CupertinoPlayerSettingsPage extends StatefulWidget {
   const CupertinoPlayerSettingsPage({super.key});
 
@@ -301,16 +303,31 @@ class _CupertinoPlayerSettingsPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final sectionBackground = resolveSettingsSectionBackground(context);
 
     final double topPadding = MediaQuery.of(context).padding.top + 48;
 
+    final Color tileBackground = resolveSettingsTileBackground(context);
+    final Color primaryText = resolveSettingsPrimaryTextColor(context);
+    final Color secondaryText = resolveSettingsSecondaryTextColor(context);
+
     final List<Widget> sections = [
       AdaptiveFormSection.insetGrouped(
+        backgroundColor: sectionBackground,
         children: [
           AdaptiveListTile(
-            leading: const Icon(CupertinoIcons.play_rectangle),
-            title: const Text('播放器内核'),
-            subtitle: Text(_getPlayerKernelDescription(_selectedKernelType)),
+            leading: Icon(
+              CupertinoIcons.play_rectangle,
+              color: resolveSettingsIconColor(context),
+            ),
+            title: Text(
+              '播放器内核',
+              style: TextStyle(color: primaryText),
+            ),
+            subtitle: Text(
+              _getPlayerKernelDescription(_selectedKernelType),
+              style: TextStyle(color: secondaryText),
+            ),
             trailing: AdaptivePopupMenuButton.widget<PlayerKernelType>(
               items: _kernelMenuItems(),
               buttonStyle: PopupButtonStyle.gray,
@@ -323,6 +340,7 @@ class _CupertinoPlayerSettingsPageState
                 }
               },
             ),
+            backgroundColor: tileBackground,
           ),
         ],
       ),
@@ -338,15 +356,23 @@ class _CupertinoPlayerSettingsPageState
               children: [
                 const SizedBox(height: 16),
                 AdaptiveFormSection.insetGrouped(
+                  backgroundColor: sectionBackground,
                   children: [
                     AdaptiveListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         CupertinoIcons.sparkles,
-                        color: CupertinoColors.systemYellow,
+                        color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.systemYellow,
+                          context,
+                        ),
                       ),
-                      title: const Text('Anime4K 超分辨率（实验性）'),
+                      title: Text(
+                        'Anime4K 超分辨率（实验性）',
+                        style: TextStyle(color: primaryText),
+                      ),
                       subtitle: Text(
                         _getAnime4KProfileDescription(currentProfile),
+                        style: TextStyle(color: secondaryText),
                       ),
                       trailing: AdaptivePopupMenuButton.widget<Anime4KProfile>(
                         items: _anime4kMenuItems(),
@@ -373,6 +399,7 @@ class _CupertinoPlayerSettingsPageState
                           });
                         },
                       ),
+                      backgroundColor: tileBackground,
                     ),
                   ],
                 ),
@@ -382,12 +409,20 @@ class _CupertinoPlayerSettingsPageState
         ),
       const SizedBox(height: 16),
       AdaptiveFormSection.insetGrouped(
+        backgroundColor: sectionBackground,
         children: [
           AdaptiveListTile(
-            leading: const Icon(CupertinoIcons.bubble_left_bubble_right),
-            title: const Text('弹幕渲染引擎'),
+            leading: Icon(
+              CupertinoIcons.bubble_left_bubble_right,
+              color: resolveSettingsIconColor(context),
+            ),
+            title: Text(
+              '弹幕渲染引擎',
+              style: TextStyle(color: primaryText),
+            ),
             subtitle: Text(
               _getDanmakuRenderEngineDescription(_selectedDanmakuRenderEngine),
+              style: TextStyle(color: secondaryText),
             ),
             trailing: AdaptivePopupMenuButton.widget<DanmakuRenderEngine>(
               items: _danmakuMenuItems(),
@@ -404,6 +439,7 @@ class _CupertinoPlayerSettingsPageState
                 }
               },
             ),
+            backgroundColor: tileBackground,
           ),
         ],
       ),
@@ -411,11 +447,21 @@ class _CupertinoPlayerSettingsPageState
       Consumer<SettingsProvider>(
         builder: (context, settingsProvider, child) {
           return AdaptiveFormSection.insetGrouped(
+            backgroundColor: sectionBackground,
             children: [
               AdaptiveListTile(
-                leading: const Icon(CupertinoIcons.textformat_abc),
-                title: const Text('弹幕转换简体中文'),
-                subtitle: const Text('开启后，将繁体中文弹幕转换为简体显示。'),
+                leading: Icon(
+                  CupertinoIcons.textformat_abc,
+                  color: resolveSettingsIconColor(context),
+                ),
+                title: Text(
+                  '弹幕转换简体中文',
+                  style: TextStyle(color: primaryText),
+                ),
+                subtitle: Text(
+                  '开启后，将繁体中文弹幕转换为简体显示。',
+                  style: TextStyle(color: secondaryText),
+                ),
                 trailing: AdaptiveSwitch(
                   value: settingsProvider.danmakuConvertToSimplified,
                   onChanged: (value) {
@@ -445,6 +491,7 @@ class _CupertinoPlayerSettingsPageState
                     );
                   }
                 },
+                backgroundColor: tileBackground,
               ),
             ],
           );

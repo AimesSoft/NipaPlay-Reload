@@ -1,6 +1,8 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+
 import '../widgets/appearance_setting_tile.dart';
 import '../widgets/theme_setting_tile.dart';
 import '../widgets/player_setting_tile.dart';
@@ -31,13 +33,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         AdaptiveFormSection.insetGrouped(
-          backgroundColor: CupertinoDynamicColor.resolve(
-            const CupertinoDynamicColor.withBrightness(
-              color: CupertinoColors.white,
-              darkColor: CupertinoColors.darkBackgroundGray,
-            ),
-            context,
-          ),
+          backgroundColor: resolveSettingsSectionBackground(context),
           children: [
             CupertinoAppearanceSettingTile(),
             CupertinoThemeSettingTile(),

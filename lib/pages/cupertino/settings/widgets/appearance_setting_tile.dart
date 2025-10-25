@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/utils/theme_notifier.dart';
 import '../pages/cupertino_appearance_settings_page.dart';
+import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
 class CupertinoAppearanceSettingTile extends StatelessWidget {
   const CupertinoAppearanceSettingTile({super.key});
@@ -25,10 +26,22 @@ class CupertinoAppearanceSettingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeNotifier>().themeMode;
 
+    final tileColor = resolveSettingsTileBackground(context);
+
     return AdaptiveListTile(
-      leading: const Icon(CupertinoIcons.paintbrush),
-      title: const Text('外观'),
-      subtitle: Text(_modeLabel(themeMode)),
+      leading: Icon(
+        CupertinoIcons.paintbrush,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(
+        '外观',
+        style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
+      ),
+      subtitle: Text(
+        _modeLabel(themeMode),
+        style: TextStyle(color: resolveSettingsSecondaryTextColor(context)),
+      ),
+      backgroundColor: tileColor,
       trailing: Icon(
         PlatformInfo.isIOS ? CupertinoIcons.chevron_forward : Icons.chevron_right,
         color: CupertinoDynamicColor.resolve(
