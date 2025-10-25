@@ -2099,7 +2099,7 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
             anime: anime,
             hideBackButton: false,
             displayModeOverride: detailMode,
-            showCloseButton: true,
+            showCloseButton: false,
           ),
         ),
       ),
