@@ -11,104 +11,41 @@ class CupertinoSettingsPage extends StatefulWidget {
 }
 
 class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
-  final ScrollController _scrollController = ScrollController();
-  double _scrollOffset = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_handleScroll);
-  }
-
-  void _handleScroll() {
-    if (!mounted) return;
-    setState(() {
-      _scrollOffset = _scrollController.offset;
-    });
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_handleScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.systemGroupedBackground,
+    final Color backgroundColor =
+        CupertinoColors.systemGroupedBackground.resolveFrom(context);
+
+    final Color navBackgroundColor = CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: Color(0xCCF2F2F7),
+        darkColor: Color(0xCC1C1C1E),
+      ),
       context,
     );
 
-    final statusBarHeight = MediaQuery.of(context).padding.top;
-    final double headerHeight = statusBarHeight + 52;
-    final double titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
-
-    return ColoredBox(
-      color: backgroundColor,
-      child: Stack(
-        children: [
-          CustomScrollView(
-            controller: _scrollController,
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            slivers: [
-              SliverToBoxAdapter(
-                child: SizedBox(height: headerHeight),
-              ),
-              SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: const [
-                    SizedBox(height: 12),
-                    CupertinoSettingsGeneralSection(),
-                    SizedBox(height: 24),
-                    CupertinoSettingsAboutSection(),
-                  ],
-                ),
-              ),
-              const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
-            ],
+    return CupertinoPageScaffold(
+      backgroundColor: backgroundColor,
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        slivers: [
+          CupertinoSliverNavigationBar(
+            largeTitle: const Text('设置'),
+            border: null,
+            backgroundColor: navBackgroundColor,
           ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      backgroundColor,
-                      backgroundColor.withOpacity(0.0),
-                    ],
-                    stops: const [0.0, 1.0],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: statusBarHeight,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: titleOpacity,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    '设置',
-                    style: CupertinoTheme.of(context)
-                        .textTheme
-                        .navLargeTitleTextStyle,
-                  ),
-                ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(0, 12, 0, 32),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: const [
+                  CupertinoSettingsGeneralSection(),
+                  SizedBox(height: 24),
+                  CupertinoSettingsAboutSection(),
+                ],
               ),
             ),
           ),

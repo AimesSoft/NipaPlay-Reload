@@ -300,15 +300,7 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      AdaptiveSegmentedControl(
-                        labels: const ['弹弹play', 'Bangumi'],
-                        selectedIndex: _showDandanplayPage ? 0 : 1,
-                        onValueChanged: (index) {
-                          setState(() {
-                            _showDandanplayPage = index == 0;
-                          });
-                        },
-                      ),
+                      _buildSegmentedControl(context),
                       const SizedBox(height: 24),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 250),
@@ -366,6 +358,52 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentedControl(BuildContext context) {
+    final Color textColor =
+        CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.black,
+        darkColor: CupertinoColors.white,
+      ),
+      context,
+    );
+    final Color segmentColor = CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.inactiveGray,
+      ),
+      context,
+    );
+
+    final baseTheme = CupertinoTheme.of(context);
+    final segmentedTheme = baseTheme.copyWith(
+      primaryColor: textColor,
+      textTheme: baseTheme.textTheme.copyWith(
+        textStyle: baseTheme.textTheme.textStyle.copyWith(color: textColor),
+      ),
+    );
+
+    return CupertinoTheme(
+      data: segmentedTheme,
+      child: DefaultTextStyle.merge(
+        style: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w500,
+        ),
+        child: AdaptiveSegmentedControl(
+          labels: const ['弹弹play', 'Bangumi'],
+          selectedIndex: _showDandanplayPage ? 0 : 1,
+          color: segmentColor,
+          onValueChanged: (index) {
+            setState(() {
+              _showDandanplayPage = index == 0;
+            });
+          },
+        ),
       ),
     );
   }

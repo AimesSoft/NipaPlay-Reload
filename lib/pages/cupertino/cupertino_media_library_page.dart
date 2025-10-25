@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -22,6 +24,10 @@ import 'package:nipaplay/services/local_media_share_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 
 // ignore_for_file: prefer_const_constructors
 
@@ -502,6 +508,53 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     );
   }
 
+  Widget _buildImportButton(BuildContext context) {
+    final bool enabled = !_isImporting;
+    final Color primaryColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final Color textColor = CupertinoColors.white;
+
+    final child = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: enabled
+            ? primaryColor
+            : primaryColor.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            CupertinoIcons.add_circled,
+            size: 18,
+            color: textColor.withValues(alpha: enabled ? 1.0 : 0.5),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            _isImporting ? '导入中…' : '导入视频',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: textColor.withValues(alpha: enabled ? 1.0 : 0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!enabled) return child;
+
+    return AdaptivePopupMenuButton.widget(
+      items: _buildImportMenuItems(),
+      child: child,
+      onSelected: (index, entry) {
+        final value = entry is AdaptivePopupMenuItem ? entry.value : null;
+        _handleImportSelection(value);
+      },
+    );
+  }
+
   Widget _buildErrorBanner(
     BuildContext context,
     SharedRemoteLibraryProvider provider,
@@ -835,6 +888,7 @@ class _CupertinoLocalMediaLibraryCardState
   String? _error;
   List<_LocalMediaSummary> _summaries = <_LocalMediaSummary>[];
   WatchHistoryProvider? _watchHistoryProvider;
+  bool _isImporting = false;
 
   @override
   void initState() {
@@ -1011,6 +1065,7 @@ class _CupertinoLocalMediaLibraryCardState
                           ? null
                           : () => _handleSmartRefresh(scanService),
                     ),
+                    _buildImportButton(context),
                   ],
                 ),
               ],
@@ -1050,6 +1105,15 @@ class _CupertinoLocalMediaLibraryCardState
       return;
     }
     scanService.rescanAllFolders();
+  }
+
+  void _handleImportSelection(dynamic value) {
+    if (_isImporting) return;
+    if (value == 'album') {
+      _startImport(_pickVideoFromAlbum);
+    } else if (value == 'file') {
+      _startImport(_pickVideoFromFileManager);
+    }
   }
 
   Widget _buildErrorBanner(BuildContext context, String message) {
@@ -1179,12 +1243,12 @@ class _CupertinoLocalMediaLibraryCardState
         : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final Color backgroundColor = primary ? primaryColor : secondaryBackground;
 
-    return CupertinoButton(
-      onPressed: onPressed,
+    final buttonChild = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      borderRadius: BorderRadius.circular(12),
-      minimumSize: const Size.square(36),
-      color: enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
+      decoration: BoxDecoration(
+        color: enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1205,6 +1269,123 @@ class _CupertinoLocalMediaLibraryCardState
         ],
       ),
     );
+
+    return CupertinoButton(
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      borderRadius: BorderRadius.circular(12),
+      child: buttonChild,
+    );
+  }
+
+  Future<void> _startImport(Future<void> Function() task) async {
+    if (_isImporting) return;
+    if (mounted) {
+      setState(() {
+        _isImporting = true;
+      });
+    } else {
+      _isImporting = true;
+    }
+    try {
+      await task();
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '导入视频失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isImporting = false;
+        });
+      } else {
+        _isImporting = false;
+      }
+    }
+  }
+
+  Future<void> _pickVideoFromAlbum() async {
+    try {
+      if (!kIsWeb && Platform.isAndroid) {
+        final photos = await Permission.photos.request();
+        final videos = await Permission.videos.request();
+        if (!photos.isGranted || !videos.isGranted) {
+          if (mounted) {
+            BlurSnackBar.show(context, '需要授予相册与视频权限');
+          }
+          return;
+        }
+      }
+
+      final picker = ImagePicker();
+      final XFile? picked = await picker.pickVideo(source: ImageSource.gallery);
+      if (picked == null) {
+        return;
+      }
+      await _playSelectedFile(picked.path);
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '选择相册视频失败: $e');
+      }
+    }
+  }
+
+  Future<void> _pickVideoFromFileManager() async {
+    final filePickerService = FilePickerService();
+    final filePath = await filePickerService.pickVideoFile();
+    if (filePath == null) {
+      return;
+    }
+    await _playSelectedFile(filePath);
+  }
+
+  Future<void> _playSelectedFile(String path) async {
+    try {
+      await WatchHistoryManager.initialize();
+    } catch (_) {
+      // ignore initialization errors
+    }
+
+    WatchHistoryItem? historyItem =
+        await WatchHistoryManager.getHistoryItem(path);
+    historyItem ??= WatchHistoryItem(
+      filePath: path,
+      animeName: p.basenameWithoutExtension(path),
+      watchProgress: 0,
+      lastPosition: 0,
+      duration: 0,
+      lastWatchTime: DateTime.now(),
+    );
+
+    final playable = PlayableItem(
+      videoPath: path,
+      title: historyItem.animeName,
+      historyItem: historyItem,
+    );
+
+    await PlaybackService().play(playable);
+
+    await _watchHistoryProvider?.loadHistory();
+  }
+
+  List<AdaptivePopupMenuEntry> _buildImportMenuItems() {
+    return [
+      AdaptivePopupMenuItem(
+        label: '从相册导入',
+        value: 'album',
+        icon: PlatformInfo.isIOS26OrHigher()
+            ? 'photo.on.rectangle'
+            : CupertinoIcons.photo,
+      ),
+      const AdaptivePopupMenuDivider(),
+      AdaptivePopupMenuItem(
+        label: '从文件管理器导入',
+        value: 'file',
+        icon: PlatformInfo.isIOS26OrHigher()
+            ? 'folder'
+            : CupertinoIcons.folder,
+      ),
+    ];
   }
 }
 

@@ -94,14 +94,52 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
           ],
         ),
         const SizedBox(height: 12),
-        AdaptiveSegmentedControl(
-          labels: const ['观看', '收藏', '评分'],
-          selectedIndex: _selectedIndex,
-          onValueChanged: _onSegmentChanged,
-        ),
+        _buildSegmentedControl(context),
         const SizedBox(height: 16),
         _buildContent(),
       ],
+    );
+  }
+
+  Widget _buildSegmentedControl(BuildContext context) {
+    final Color textColor =
+        CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.black,
+        darkColor: CupertinoColors.white,
+      ),
+      context,
+    );
+    final Color segmentColor = CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.inactiveGray,
+      ),
+      context,
+    );
+
+    final baseTheme = CupertinoTheme.of(context);
+    final segmentedTheme = baseTheme.copyWith(
+      primaryColor: textColor,
+      textTheme: baseTheme.textTheme.copyWith(
+        textStyle: baseTheme.textTheme.textStyle.copyWith(color: textColor),
+      ),
+    );
+
+    return CupertinoTheme(
+      data: segmentedTheme,
+      child: DefaultTextStyle.merge(
+        style: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w500,
+        ),
+        child: AdaptiveSegmentedControl(
+          labels: const ['观看', '收藏', '评分'],
+          selectedIndex: _selectedIndex,
+          color: segmentColor,
+          onValueChanged: _onSegmentChanged,
+        ),
+      ),
     );
   }
 

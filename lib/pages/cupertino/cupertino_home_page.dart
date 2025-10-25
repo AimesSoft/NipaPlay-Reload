@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
+import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
@@ -19,6 +20,7 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
@@ -376,7 +378,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   Future<String?> _loadPersistedImage(int animeId) async {
     final cached = _localImageCache[animeId];
     if (cached != null && cached.isNotEmpty) {
-      return cached;
+      if (_looksHighQualityUrl(cached)) {
+        return cached;
+      }
     }
 
     SharedPreferences? prefs;
@@ -384,8 +388,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       prefs = await SharedPreferences.getInstance();
       final persisted = prefs.getString('$_localPrefsKeyPrefix$animeId');
       if (persisted != null && persisted.isNotEmpty) {
-        _localImageCache[animeId] = persisted;
-        return persisted;
+          if (_looksHighQualityUrl(persisted)) {
+            _localImageCache[animeId] = persisted;
+            return persisted;
+          }
       }
 
       final key = 'bangumi_detail_$animeId';
@@ -395,9 +401,13 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         final detail = decoded['animeDetail'] as Map<String, dynamic>?;
         final imageUrl = detail?['imageUrl'] as String?;
         if (imageUrl != null && imageUrl.isNotEmpty) {
-          _localImageCache[animeId] = imageUrl;
-          await prefs.setString('$_localPrefsKeyPrefix$animeId', imageUrl);
-          return imageUrl;
+          final resolvedUrl = await _maybeUpgradeBangumiImage(
+            imageUrl,
+            bangumiId: _extractBangumiIdFromDetailMap(detail),
+          );
+          _localImageCache[animeId] = resolvedUrl;
+          await prefs.setString('$_localPrefsKeyPrefix$animeId', resolvedUrl);
+          return resolvedUrl;
         }
       }
     } catch (_) {}
@@ -405,8 +415,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     try {
       final bangumiDetail =
           await BangumiService.instance.getAnimeDetails(animeId);
-      final imageUrl = bangumiDetail.imageUrl;
+      var imageUrl = bangumiDetail.imageUrl;
       if (imageUrl.isNotEmpty) {
+        imageUrl = await _maybeUpgradeBangumiImage(
+          imageUrl,
+          bangumiId: _extractBangumiIdFromAnime(bangumiDetail),
+        );
         _localImageCache[animeId] = imageUrl;
         try {
           prefs ??= await SharedPreferences.getInstance();
@@ -418,6 +432,108 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       debugPrint('CupertinoHomePage: 获取番剧封面失败: $e');
     }
 
+    return null;
+  }
+
+  bool _looksHighQualityUrl(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('bgm.tv') || lower.contains('type=large') ||
+        lower.contains('original')) {
+      return true;
+    }
+    if (lower.contains('medium') || lower.contains('small')) {
+      return false;
+    }
+    final widthMatch = RegExp(r'[?&]width=(\d+)').firstMatch(lower);
+    if (widthMatch != null) {
+      final width = int.tryParse(widthMatch.group(1)!);
+      if (width != null && width >= 1000) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<String> _maybeUpgradeBangumiImage(String imageUrl,
+      {String? bangumiId}) async {
+    if (_looksHighQualityUrl(imageUrl)) {
+      return imageUrl;
+    }
+    if (bangumiId == null || bangumiId.isEmpty) {
+      return imageUrl;
+    }
+    final hqUrl = await _fetchBangumiHighQualityCover(bangumiId);
+    if (hqUrl != null && hqUrl.isNotEmpty) {
+      return hqUrl;
+    }
+    return imageUrl;
+  }
+
+  String? _extractBangumiIdFromDetailMap(Map<String, dynamic>? detail) {
+    if (detail == null) return null;
+    final bangumiUrl = detail['bangumiUrl'] as String?;
+    final fromUrl = _extractBangumiIdFromUrl(bangumiUrl);
+    if (fromUrl != null) {
+      return fromUrl;
+    }
+    final metadata = detail['metadata'];
+    if (metadata is List) {
+      for (final entry in metadata) {
+        final fromMeta = _extractBangumiIdFromUrl(entry?.toString());
+        if (fromMeta != null) {
+          return fromMeta;
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _extractBangumiIdFromAnime(BangumiAnime anime) {
+    final fromUrl = _extractBangumiIdFromUrl(anime.bangumiUrl);
+    if (fromUrl != null) {
+      return fromUrl;
+    }
+    final metadata = anime.metadata;
+    if (metadata != null) {
+      for (final entry in metadata) {
+        final id = _extractBangumiIdFromUrl(entry);
+        if (id != null) {
+          return id;
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _extractBangumiIdFromUrl(String? url) {
+    if (url == null || url.isEmpty) {
+      return null;
+    }
+    final match = RegExp(r'(?:bangumi|bgm)\.tv/subject/(\d+)').firstMatch(url);
+    return match?.group(1);
+  }
+
+  Future<String?> _fetchBangumiHighQualityCover(String bangumiId) async {
+    try {
+      final uri =
+          Uri.parse('https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large');
+      final response = await http
+          .head(
+            uri,
+            headers: const {'User-Agent': 'NipaPlay/1.0'},
+          )
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 302) {
+        final redirected = response.headers['location'];
+        if (redirected != null && redirected.isNotEmpty) {
+          return redirected;
+        }
+      } else if (response.statusCode == 200) {
+        return uri.toString();
+      }
+    } catch (e) {
+      debugPrint('CupertinoHomePage: 获取Bangumi高清封面失败: $e');
+    }
     return null;
   }
 

@@ -31,6 +31,13 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         AdaptiveFormSection.insetGrouped(
+          backgroundColor: CupertinoDynamicColor.resolve(
+            const CupertinoDynamicColor.withBrightness(
+              color: CupertinoColors.white,
+              darkColor: CupertinoColors.darkBackgroundGray,
+            ),
+            context,
+          ),
           children: [
             CupertinoAppearanceSettingTile(),
             CupertinoThemeSettingTile(),

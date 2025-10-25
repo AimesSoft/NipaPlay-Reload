@@ -19,6 +19,13 @@ class CupertinoAccountProfileCard extends StatelessWidget {
     );
 
     return AdaptiveCard(
+      color: CupertinoDynamicColor.resolve(
+        const CupertinoDynamicColor.withBrightness(
+          color: CupertinoColors.white,
+          darkColor: CupertinoColors.darkBackgroundGray,
+        ),
+        context,
+      ),
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [

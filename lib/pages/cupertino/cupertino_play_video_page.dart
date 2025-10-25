@@ -80,6 +80,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           videoState.toggleControls();
         }
       },
+      onDoubleTap: () {
+        if (videoState.hasVideo) {
+          videoState.togglePlayPause();
+        }
+      },
       onTapDown: (_) {
         if (videoState.showControls) {
           videoState.resetHideControlsTimer();

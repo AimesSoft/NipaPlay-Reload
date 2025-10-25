@@ -76,6 +76,7 @@ class CupertinoBangumiSection extends StatelessWidget {
     }
 
     return AdaptiveCard(
+      color: _cardBackgroundColor(context),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,6 +157,7 @@ class CupertinoBangumiSection extends StatelessWidget {
 
   Widget _buildTokenCard(BuildContext context) {
     return AdaptiveCard(
+      color: _cardBackgroundColor(context),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,6 +227,7 @@ class CupertinoBangumiSection extends StatelessWidget {
 
   Widget _buildActionsCard(BuildContext context) {
     return AdaptiveCard(
+      color: _cardBackgroundColor(context),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,5 +271,15 @@ class CupertinoBangumiSection extends StatelessWidget {
   String _formatTime(DateTime time) {
     final formatter = DateFormat('yyyy-MM-dd HH:mm');
     return formatter.format(time);
+  }
+
+  Color _cardBackgroundColor(BuildContext context) {
+    return CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
+      context,
+    );
   }
 }

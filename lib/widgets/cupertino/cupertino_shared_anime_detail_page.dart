@@ -11,7 +11,6 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:http/http.dart' as http;
@@ -736,7 +735,13 @@ class _CupertinoSharedAnimeDetailPageState
                               CupertinoColors.systemGrey5,
                               context,
                             )
-                          : CupertinoColors.white,
+                          : CupertinoDynamicColor.resolve(
+                              const CupertinoDynamicColor.withBrightness(
+                                color: CupertinoColors.white,
+                                darkColor: CupertinoColors.darkBackgroundGray,
+                              ),
+                              context,
+                            ),
                     ),
                     if (hasSharedFile)
                       Positioned(
@@ -872,18 +877,53 @@ class _CupertinoSharedAnimeDetailPageState
   Widget _buildSegmentedControl(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      child: AdaptiveSegmentedControl(
-        labels: const ['详情', '剧集'],
-        selectedIndex: _currentSegment,
-        color: CupertinoDynamicColor.resolve(
-          CupertinoColors.white,
-          context,
+      child: _buildAdaptiveSegmentedControl(context),
+    );
+  }
+
+  Widget _buildAdaptiveSegmentedControl(BuildContext context) {
+    final Color resolvedTextColor =
+        CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.black,
+        darkColor: CupertinoColors.white,
+      ),
+      context,
+    );
+    final Color resolvedSegmentColor = CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.inactiveGray,
+      ),
+      context,
+    );
+
+    final baseTheme = CupertinoTheme.of(context);
+    final segmentTheme = baseTheme.copyWith(
+      primaryColor: resolvedTextColor,
+      textTheme: baseTheme.textTheme.copyWith(
+        textStyle:
+            baseTheme.textTheme.textStyle.copyWith(color: resolvedTextColor),
+      ),
+    );
+
+    return CupertinoTheme(
+      data: segmentTheme,
+      child: DefaultTextStyle.merge(
+        style: TextStyle(
+          color: resolvedTextColor,
+          fontWeight: FontWeight.w500,
         ),
-        onValueChanged: (index) {
-          setState(() {
-            _currentSegment = index;
-          });
-        },
+        child: AdaptiveSegmentedControl(
+          labels: const ['详情', '剧集'],
+          selectedIndex: _currentSegment,
+          color: resolvedSegmentColor,
+          onValueChanged: (index) {
+            setState(() {
+              _currentSegment = index;
+            });
+          },
+        ),
       ),
     );
   }
@@ -1415,7 +1455,10 @@ class _CupertinoSharedAnimeDetailPageState
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: CupertinoDynamicColor.resolve(
-            CupertinoColors.white,
+            const CupertinoDynamicColor.withBrightness(
+              color: CupertinoColors.white,
+              darkColor: CupertinoColors.darkBackgroundGray,
+            ),
             context,
           ),
           borderRadius: BorderRadius.circular(16),
@@ -1562,7 +1605,11 @@ class _CupertinoSharedAnimeDetailPageState
       await rootNavigator.maybePop();
       await PlaybackService().play(playableItem);
     } catch (e) {
-      BlurSnackBar.show(context, '播放失败：$e');
+      AdaptiveSnackBar.show(
+        context,
+        message: '播放失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
     }
   }
 

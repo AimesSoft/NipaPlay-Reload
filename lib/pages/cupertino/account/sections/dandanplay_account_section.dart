@@ -30,6 +30,14 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
+      context,
+    );
+
     if (isLoggedIn) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -40,6 +48,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           AdaptiveCard(
+            color: cardColor,
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
@@ -73,6 +82,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AdaptiveCard(
+          color: cardColor,
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -97,6 +107,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         AdaptiveCard(
+          color: cardColor,
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
