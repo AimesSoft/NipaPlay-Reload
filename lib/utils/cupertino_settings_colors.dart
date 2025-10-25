@@ -5,8 +5,8 @@ import 'package:flutter/cupertino.dart';
 Color resolveSettingsSectionBackground(BuildContext context) {
   return CupertinoDynamicColor.resolve(
     const CupertinoDynamicColor.withBrightness(
-      color: Color(0xFFF2F2F7),
-      darkColor: Color(0xFF1C1C1E),
+      color: CupertinoColors.white,
+      darkColor: CupertinoColors.darkBackgroundGray,
     ),
     context,
   );

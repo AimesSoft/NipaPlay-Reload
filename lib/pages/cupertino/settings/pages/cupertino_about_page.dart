@@ -86,7 +86,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     return AdaptiveScaffold(
       appBar: const AdaptiveAppBar(
         title: '关于',
-        useNativeToolbar: true,
+        useNativeToolbar: false,
       ),
       body: ColoredBox(
         color: backgroundColor,
