@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../pages/cupertino_ui_theme_settings_page.dart';
 
@@ -13,8 +14,13 @@ class CupertinoThemeSettingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<UIThemeProvider>(
       builder: (context, provider, child) {
+        final UIThemeType currentTheme = provider.currentTheme;
+        final UIThemeType displayTheme = (PlatformInfo.isIOS &&
+                currentTheme == UIThemeType.fluentUI)
+            ? (globals.isPhone ? UIThemeType.cupertino : UIThemeType.nipaplay)
+            : currentTheme;
         final String subtitle =
-            '当前：${provider.getThemeName(provider.currentTheme)}';
+            '当前：${provider.getThemeName(displayTheme)}';
 
         return AdaptiveListTile(
           leading: const Icon(CupertinoIcons.sparkles),

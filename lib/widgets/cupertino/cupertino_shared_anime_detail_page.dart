@@ -1661,5 +1661,5 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   static const double _toolbarPadding = 12;
-  static const double _toolbarButtonSize = 36;
+  static const double _toolbarButtonSize = 40;
 }

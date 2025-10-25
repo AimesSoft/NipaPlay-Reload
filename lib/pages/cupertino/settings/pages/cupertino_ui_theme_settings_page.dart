@@ -27,6 +27,9 @@ class _CupertinoUIThemeSettingsPageState
     super.initState();
     final provider = Provider.of<UIThemeProvider>(context, listen: false);
     _selectedTheme = provider.currentTheme;
+    if (PlatformInfo.isIOS && _selectedTheme == UIThemeType.fluentUI) {
+      _selectedTheme = globals.isPhone ? UIThemeType.cupertino : UIThemeType.nipaplay;
+    }
   }
 
   @override
@@ -43,12 +46,15 @@ class _CupertinoUIThemeSettingsPageState
       if (theme == UIThemeType.cupertino) {
         return globals.isPhone;
       }
+      if (PlatformInfo.isIOS && theme == UIThemeType.fluentUI) {
+        return false;
+      }
       return true;
     }).toList()
       ..sort((a, b) => a.index.compareTo(b.index));
 
-    if (!availableThemes.contains(_selectedTheme)) {
-      availableThemes.add(_selectedTheme);
+    if (!availableThemes.contains(_selectedTheme) && availableThemes.isNotEmpty) {
+      _selectedTheme = availableThemes.first;
     }
 
     return AdaptiveScaffold(
@@ -153,28 +159,29 @@ class _CupertinoUIThemeSettingsPageState
       _selectedTheme = theme;
     });
 
-    final bool? confirmed = await showCupertinoDialog<bool>(
+    bool confirmed = false;
+    await AdaptiveAlertDialog.show(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('主题切换提示'),
-        content: Text(
+      title: '主题切换提示',
+      message:
           '切换到 ${provider.getThemeName(theme)} 主题需要重启应用才能完全生效。\n\n是否要立即重启应用？',
+      actions: [
+        AlertAction(
+          title: '取消',
+          style: AlertActionStyle.cancel,
+          onPressed: () {},
         ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('重启应用'),
-          ),
-        ],
-      ),
+        AlertAction(
+          title: '重启应用',
+          style: AlertActionStyle.primary,
+          onPressed: () {
+            confirmed = true;
+          },
+        ),
+      ],
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       await provider.setTheme(theme);
       if (!mounted) return;
       _exitApplication();

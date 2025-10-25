@@ -203,84 +203,6 @@ class _CupertinoPlayerSettingsPageState
     }
   }
 
-  Future<void> _showKernelPicker() async {
-    final PlayerKernelType? result = await showCupertinoModalPopup(
-      context: context,
-      builder: (_) => CupertinoActionSheet(
-        title: const Text('选择播放器内核'),
-        actions: PlayerKernelType.values.map((kernel) {
-          return CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop(kernel),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _kernelDisplayName(kernel),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _getPlayerKernelDescription(kernel),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: CupertinoColors.systemGrey,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-
-    if (result != null && result != _selectedKernelType) {
-      await _savePlayerKernelSettings(result);
-    }
-  }
-
-  Future<void> _showDanmakuPicker() async {
-    final DanmakuRenderEngine? result = await showCupertinoModalPopup(
-      context: context,
-      builder: (_) => CupertinoActionSheet(
-        title: const Text('选择弹幕渲染方式'),
-        actions: DanmakuRenderEngine.values.map((engine) {
-          return CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop(engine),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _danmakuTitle(engine),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _getDanmakuRenderEngineDescription(engine),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: CupertinoColors.systemGrey,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-
-    if (result != null && result != _selectedDanmakuRenderEngine) {
-      await _saveDanmakuRenderEngineSettings(result);
-    }
-  }
-
   String _danmakuTitle(DanmakuRenderEngine engine) {
     switch (engine) {
       case DanmakuRenderEngine.cpu:
@@ -292,49 +214,37 @@ class _CupertinoPlayerSettingsPageState
     }
   }
 
-  Future<void> _showAnime4KPicker(VideoPlayerState videoState) async {
-    final Anime4KProfile? result = await showCupertinoModalPopup(
-      context: context,
-      builder: (_) => CupertinoActionSheet(
-        title: const Text('选择 Anime4K 档位'),
-        actions: Anime4KProfile.values.map((profile) {
-          return CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop(profile),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _getAnime4KProfileTitle(profile),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _getAnime4KProfileDescription(profile),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: CupertinoColors.systemGrey,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-      ),
-    );
+  List<AdaptivePopupMenuEntry> _kernelMenuItems() {
+    return PlayerKernelType.values
+        .map(
+          (kernel) => AdaptivePopupMenuItem<PlayerKernelType>(
+            label: _kernelDisplayName(kernel),
+            value: kernel,
+          ),
+        )
+        .toList();
+  }
 
-    if (result != null) {
-      await videoState.setAnime4KProfile(result);
-      if (!mounted) return;
-      final String option = _getAnime4KProfileTitle(result);
-      final String message = result == Anime4KProfile.off
-          ? '已关闭 Anime4K'
-          : 'Anime4K 已切换为$option';
-      BlurSnackBar.show(context, message);
-    }
+  List<AdaptivePopupMenuEntry> _danmakuMenuItems() {
+    return DanmakuRenderEngine.values
+        .map(
+          (engine) => AdaptivePopupMenuItem<DanmakuRenderEngine>(
+            label: _danmakuTitle(engine),
+            value: engine,
+          ),
+        )
+        .toList();
+  }
+
+  List<AdaptivePopupMenuEntry> _anime4kMenuItems() {
+    return Anime4KProfile.values
+        .map(
+          (profile) => AdaptivePopupMenuItem<Anime4KProfile>(
+            label: _getAnime4KProfileTitle(profile),
+            value: profile,
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -365,26 +275,17 @@ class _CupertinoPlayerSettingsPageState
             leading: const Icon(CupertinoIcons.play_rectangle),
             title: const Text('播放器内核'),
             subtitle: Text(_getPlayerKernelDescription(_selectedKernelType)),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _kernelDisplayName(_selectedKernelType),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: 6),
-                Icon(
-                  PlatformInfo.isIOS
-                      ? CupertinoIcons.chevron_forward
-                      : CupertinoIcons.forward,
-                  color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.systemGrey2,
-                    context,
-                  ),
-                ),
-              ],
+            trailing: AdaptivePopupMenuButton.text<PlayerKernelType>(
+              label: _kernelDisplayName(_selectedKernelType),
+              items: _kernelMenuItems(),
+              buttonStyle: PopupButtonStyle.gray,
+              onSelected: (index, entry) {
+                final kernel = entry.value ?? PlayerKernelType.values[index];
+                if (kernel != _selectedKernelType) {
+                  _savePlayerKernelSettings(kernel);
+                }
+              },
             ),
-            onTap: _showKernelPicker,
           ),
         ],
       ),
@@ -402,32 +303,32 @@ class _CupertinoPlayerSettingsPageState
                 AdaptiveFormSection.insetGrouped(
                   children: [
                     AdaptiveListTile(
-                      leading: const Icon(CupertinoIcons.sparkles,
-                          color: CupertinoColors.systemYellow),
+                      leading: const Icon(
+                        CupertinoIcons.sparkles,
+                        color: CupertinoColors.systemYellow,
+                      ),
                       title: const Text('Anime4K 超分辨率（实验性）'),
                       subtitle: Text(
                         _getAnime4KProfileDescription(currentProfile),
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _getAnime4KProfileTitle(currentProfile),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(
-                            PlatformInfo.isIOS
-                                ? CupertinoIcons.chevron_forward
-                                : CupertinoIcons.forward,
-                            color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.systemGrey2,
-                              context,
-                            ),
-                          ),
-                        ],
+                      trailing: AdaptivePopupMenuButton.text<Anime4KProfile>(
+                        label: _getAnime4KProfileTitle(currentProfile),
+                        items: _anime4kMenuItems(),
+                        buttonStyle: PopupButtonStyle.gray,
+                        onSelected: (index, entry) {
+                          final profile =
+                              entry.value ?? Anime4KProfile.values[index];
+                          if (profile == currentProfile) return;
+                          videoState.setAnime4KProfile(profile).then((_) {
+                            if (!mounted) return;
+                            final option = _getAnime4KProfileTitle(profile);
+                            final message = profile == Anime4KProfile.off
+                                ? '已关闭 Anime4K'
+                                : 'Anime4K 已切换为$option';
+                            BlurSnackBar.show(context, message);
+                          });
+                        },
                       ),
-                      onTap: () => _showAnime4KPicker(videoState),
                     ),
                   ],
                 ),
@@ -444,26 +345,18 @@ class _CupertinoPlayerSettingsPageState
             subtitle: Text(
               _getDanmakuRenderEngineDescription(_selectedDanmakuRenderEngine),
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _danmakuTitle(_selectedDanmakuRenderEngine),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: 6),
-                Icon(
-                  PlatformInfo.isIOS
-                      ? CupertinoIcons.chevron_forward
-                      : CupertinoIcons.forward,
-                  color: CupertinoDynamicColor.resolve(
-                    CupertinoColors.systemGrey2,
-                    context,
-                  ),
-                ),
-              ],
+            trailing: AdaptivePopupMenuButton.text<DanmakuRenderEngine>(
+              label: _danmakuTitle(_selectedDanmakuRenderEngine),
+              items: _danmakuMenuItems(),
+              buttonStyle: PopupButtonStyle.gray,
+              onSelected: (index, entry) {
+                final engine = entry.value ??
+                    DanmakuRenderEngine.values[index];
+                if (engine != _selectedDanmakuRenderEngine) {
+                  _saveDanmakuRenderEngineSettings(engine);
+                }
+              },
             ),
-            onTap: _showDanmakuPicker,
           ),
         ],
       ),

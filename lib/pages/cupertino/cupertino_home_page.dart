@@ -1056,6 +1056,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         value: sharedProvider,
         child: CupertinoSharedAnimeDetailPage(
           anime: summary,
+          hideBackButton: true,
           displayModeOverride: detailMode,
           showCloseButton: true,
         ),
