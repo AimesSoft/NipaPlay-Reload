@@ -2,6 +2,8 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../widgets/appearance_setting_tile.dart';
+import '../widgets/theme_setting_tile.dart';
+import '../widgets/player_setting_tile.dart';
 
 class CupertinoSettingsGeneralSection extends StatelessWidget {
   const CupertinoSettingsGeneralSection({super.key});
@@ -31,6 +33,8 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
         AdaptiveFormSection.insetGrouped(
           children: [
             CupertinoAppearanceSettingTile(),
+            CupertinoThemeSettingTile(),
+            CupertinoPlayerSettingTile(),
           ],
         ),
       ],

@@ -21,6 +21,9 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
+import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 
@@ -257,6 +260,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 : null,
             animeId: null,
             episodeCount: null,
+            mediaServerItemId: candidate.id,
+            mediaServerType: MediaServerType.jellyfin,
           );
         } else if (candidate is EmbyMediaItem) {
           final embyService = EmbyService.instance;
@@ -282,6 +287,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 : null,
             animeId: null,
             episodeCount: null,
+            mediaServerItemId: candidate.id,
+            mediaServerType: MediaServerType.emby,
           );
         } else if (candidate is WatchHistoryItem) {
           String? imagePath;
@@ -305,6 +312,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             rating: null,
             animeId: candidate.animeId,
             episodeCount: null,
+            mediaServerItemId: null,
+            mediaServerType: null,
           );
         }
 
@@ -329,6 +338,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             rating: null,
             animeId: null,
             episodeCount: null,
+            mediaServerItemId: null,
+            mediaServerType: null,
           ),
         );
       }
@@ -603,104 +614,120 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
+    final bool hasAnimeId = item.animeId != null;
+    final bool hasRemoteMedia =
+        item.mediaServerItemId != null && item.mediaServerType != null;
+    final bool canOpenDetail =
+        (hasAnimeId || hasRemoteMedia) &&
+        item.source != _CupertinoRecommendedSource.placeholder;
+
     // ignore: prefer_const_constructors
-    return Container(
-      height: cardHeight,
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Stack(
-        children: [
-          // 背景图片铺满整个卡片
-          if (item.imageUrl != null)
-            Positioned.fill(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: _buildPosterBackground(item.imageUrl!),
-              ),
-            ),
-          // 底部渐变遮罩覆盖整个卡片底部
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: cardHeight * 0.5, // 遮罩覆盖卡片底部60%高度
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius:
-                    const BorderRadius.vertical(bottom: Radius.circular(24)),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.0),
-                    Colors.black.withValues(alpha: 0.5),
-                  ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: canOpenDetail ? () => _openHeroDetail(item) : null,
+      child: Semantics(
+        button: canOpenDetail,
+        enabled: canOpenDetail,
+        label: item.title,
+        child: Container(
+          height: cardHeight,
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Stack(
+            children: [
+              // 背景图片铺满整个卡片
+              if (item.imageUrl != null)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: _buildPosterBackground(item.imageUrl!),
+                  ),
+                ),
+              // 底部渐变遮罩覆盖整个卡片底部
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: cardHeight * 0.5, // 遮罩覆盖卡片底部60%高度
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius:
+                        const BorderRadius.vertical(bottom: Radius.circular(24)),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.5),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          // 文字信息叠加在最上层
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildCardMetaRow(item),
-                  const SizedBox(height: 10),
-                  Text(
-                    item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black45,
-                          blurRadius: 8,
+              // 文字信息叠加在最上层
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildCardMetaRow(item),
+                      const SizedBox(height: 10),
+                      Text(
+                        item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black45,
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        item.subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (item.rating != null) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            const Icon(CupertinoIcons.star_fill,
+                                color: Color(0xFFFFD166), size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              item.rating!.toStringAsFixed(1),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 16),
+                      _buildPageIndicator(item),
+                    ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 14,
-                    ),
-                  ),
-                  if (item.rating != null) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Icon(CupertinoIcons.star_fill,
-                            color: Color(0xFFFFD166), size: 16),
-                        const SizedBox(width: 4),
-                        Text(
-                          item.rating!.toStringAsFixed(1),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  _buildPageIndicator(item),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -955,15 +982,44 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Future<void> _openHeroDetail(_CupertinoRecommendedItem item) async {
+    if (!mounted) return;
+
+    if (item.mediaServerItemId != null && item.mediaServerType != null) {
+      await _openMediaServerDetail(item);
+      return;
+    }
+
     if (item.animeId == null) {
       return;
     }
 
-    final provider = context.read<SharedRemoteLibraryProvider>();
-    final detailMode = context.read<ThemeNotifier>().animeDetailDisplayMode;
+    SharedRemoteLibraryProvider? sharedProvider;
+    try {
+      sharedProvider = context.read<SharedRemoteLibraryProvider>();
+    } on ProviderNotFoundException {
+      sharedProvider = null;
+    } catch (_) {
+      sharedProvider = null;
+    }
+
+    ThemeNotifier? themeNotifier;
+    try {
+      themeNotifier = context.read<ThemeNotifier>();
+    } on ProviderNotFoundException {
+      themeNotifier = null;
+    } catch (_) {
+      themeNotifier = null;
+    }
+
+    final detailMode = themeNotifier?.animeDetailDisplayMode;
+
+    if (sharedProvider == null) {
+      ThemedAnimeDetail.show(context, item.animeId!);
+      return;
+    }
 
     SharedRemoteAnimeSummary? summary;
-    for (final entry in provider.animeSummaries) {
+    for (final entry in sharedProvider.animeSummaries) {
       if (entry.animeId == item.animeId) {
         summary = entry;
         break;
@@ -997,7 +1053,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       title: null,
       showCloseButton: false,
       child: ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
-        value: provider,
+        value: sharedProvider,
         child: CupertinoSharedAnimeDetailPage(
           anime: summary,
           displayModeOverride: detailMode,
@@ -1005,6 +1061,40 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         ),
       ),
     );
+  }
+
+  Future<void> _openMediaServerDetail(_CupertinoRecommendedItem item) async {
+    if (!mounted || item.mediaServerItemId == null || item.mediaServerType == null) {
+      return;
+    }
+
+    final serverType = item.mediaServerType!;
+    final mediaId = item.mediaServerItemId!;
+
+    switch (serverType) {
+      case MediaServerType.jellyfin:
+        var provider = _jellyfinProvider;
+        if (provider == null || !provider.isConnected) {
+          await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
+          provider = _jellyfinProvider;
+          if (provider == null || !provider.isConnected) {
+            return;
+          }
+        }
+        await MediaServerDetailPage.showJellyfin(context, mediaId);
+        return;
+      case MediaServerType.emby:
+        var provider = _embyProvider;
+        if (provider == null || !provider.isConnected) {
+          await NetworkMediaServerDialog.show(context, MediaServerType.emby);
+          provider = _embyProvider;
+          if (provider == null || !provider.isConnected) {
+            return;
+          }
+        }
+        await MediaServerDetailPage.showEmby(context, mediaId);
+        return;
+    }
   }
 }
 
@@ -1017,6 +1107,8 @@ class _CupertinoRecommendedItem {
   final double? rating;
   final int? animeId;
   final int? episodeCount;
+  final String? mediaServerItemId;
+  final MediaServerType? mediaServerType;
 
   _CupertinoRecommendedItem({
     required this.id,
@@ -1027,6 +1119,8 @@ class _CupertinoRecommendedItem {
     this.rating,
     this.animeId,
     this.episodeCount,
+    this.mediaServerItemId,
+    this.mediaServerType,
   });
 }
 

@@ -398,16 +398,16 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           size: 20,
           color: CupertinoColors.white,
         ),
-        style: AdaptiveButtonStyle.filled,
-        size: AdaptiveButtonSize.large,
-        useSmoothRectangleBorder: true,
+        style: AdaptiveButtonStyle.plain,
+        size: AdaptiveButtonSize.medium,
+        useSmoothRectangleBorder: false,
       );
     } else {
       button = AdaptiveButton.child(
         onPressed: handlePress,
-        style: AdaptiveButtonStyle.filled,
-        size: AdaptiveButtonSize.large,
-        useSmoothRectangleBorder: true,
+        style: AdaptiveButtonStyle.plain,
+        size: AdaptiveButtonSize.medium,
+        useSmoothRectangleBorder: false,
         child: Icon(
           isPaused ? CupertinoIcons.play_fill : CupertinoIcons.pause_fill,
           color: CupertinoColors.white,
@@ -417,8 +417,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
 
     return SizedBox(
-      width: 52,
-      height: 52,
+      width: 40,
+      height: 40,
       child: button,
     );
   }
