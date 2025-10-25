@@ -247,6 +247,35 @@ class _CupertinoPlayerSettingsPageState
         .toList();
   }
 
+  Widget _buildMenuChip(BuildContext context, String label) {
+    final Color background = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGrey5,
+      context,
+    );
+
+    final Color textColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 30),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
@@ -275,10 +304,11 @@ class _CupertinoPlayerSettingsPageState
             leading: const Icon(CupertinoIcons.play_rectangle),
             title: const Text('播放器内核'),
             subtitle: Text(_getPlayerKernelDescription(_selectedKernelType)),
-            trailing: AdaptivePopupMenuButton.text<PlayerKernelType>(
-              label: _kernelDisplayName(_selectedKernelType),
+            trailing: AdaptivePopupMenuButton.widget<PlayerKernelType>(
               items: _kernelMenuItems(),
               buttonStyle: PopupButtonStyle.gray,
+              child:
+                  _buildMenuChip(context, _kernelDisplayName(_selectedKernelType)),
               onSelected: (index, entry) {
                 final kernel = entry.value ?? PlayerKernelType.values[index];
                 if (kernel != _selectedKernelType) {
@@ -311,10 +341,13 @@ class _CupertinoPlayerSettingsPageState
                       subtitle: Text(
                         _getAnime4KProfileDescription(currentProfile),
                       ),
-                      trailing: AdaptivePopupMenuButton.text<Anime4KProfile>(
-                        label: _getAnime4KProfileTitle(currentProfile),
+                      trailing: AdaptivePopupMenuButton.widget<Anime4KProfile>(
                         items: _anime4kMenuItems(),
                         buttonStyle: PopupButtonStyle.gray,
+                        child: _buildMenuChip(
+                          context,
+                          _getAnime4KProfileTitle(currentProfile),
+                        ),
                         onSelected: (index, entry) {
                           final profile =
                               entry.value ?? Anime4KProfile.values[index];
@@ -345,10 +378,13 @@ class _CupertinoPlayerSettingsPageState
             subtitle: Text(
               _getDanmakuRenderEngineDescription(_selectedDanmakuRenderEngine),
             ),
-            trailing: AdaptivePopupMenuButton.text<DanmakuRenderEngine>(
-              label: _danmakuTitle(_selectedDanmakuRenderEngine),
+            trailing: AdaptivePopupMenuButton.widget<DanmakuRenderEngine>(
               items: _danmakuMenuItems(),
               buttonStyle: PopupButtonStyle.gray,
+              child: _buildMenuChip(
+                context,
+                _danmakuTitle(_selectedDanmakuRenderEngine),
+              ),
               onSelected: (index, entry) {
                 final engine = entry.value ??
                     DanmakuRenderEngine.values[index];

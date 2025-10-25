@@ -213,14 +213,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     if (_isProcessingTap) return;
     _tapCount = 0;
     _doubleTapTimer?.cancel();
-    
+
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.hasVideo) {
-      if (globals.isPhone) {
-        videoState.togglePlayPause();
-      } else {
-        videoState.toggleFullscreen();
-      }
+      videoState.togglePlayPause();
     }
   }
   

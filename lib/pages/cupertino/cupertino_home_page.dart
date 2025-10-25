@@ -26,6 +26,10 @@ import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:path/path.dart' as p;
 
 class CupertinoHomePage extends StatefulWidget {
   const CupertinoHomePage({super.key});
@@ -849,8 +853,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     final progress =
         item.duration > 0 ? item.watchProgress.clamp(0.0, 1.0) : 0.0;
 
-    // ignore: prefer_const_constructors
-    return Container(
+    final cardContent = Container(
       decoration: BoxDecoration(
         color: resolvedBackground,
         borderRadius: BorderRadius.circular(20),
@@ -895,6 +898,105 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           ),
         ],
       ),
+    );
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _handleRecentTap(item),
+      child: cardContent,
+    );
+  }
+
+  Future<void> _handleRecentTap(WatchHistoryItem item) async {
+    if (item.filePath.isEmpty) {
+      BlurSnackBar.show(context, '无法播放：缺少文件路径');
+      return;
+    }
+
+    try {
+      final playable = await _buildPlayableItem(item);
+      if (playable == null) {
+        return;
+      }
+      await PlaybackService().play(playable);
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '播放失败：$e');
+    }
+  }
+
+  Future<PlayableItem?> _buildPlayableItem(WatchHistoryItem item) async {
+    String filePath = item.filePath;
+    String? actualPlayUrl;
+    bool fileExists = false;
+
+    final bool isNetworkUrl = filePath.startsWith('http');
+    final bool isJellyfinProtocol = filePath.startsWith('jellyfin://');
+    final bool isEmbyProtocol = filePath.startsWith('emby://');
+
+    if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol) {
+      fileExists = true;
+
+      if (isJellyfinProtocol) {
+        try {
+          final jellyfinId = filePath.replaceFirst('jellyfin://', '');
+          final jellyfinService = JellyfinService.instance;
+          if (jellyfinService.isConnected) {
+            actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+          } else {
+            BlurSnackBar.show(context, '未连接到Jellyfin服务器');
+            return null;
+          }
+        } catch (e) {
+          BlurSnackBar.show(context, '获取Jellyfin流地址失败：$e');
+          return null;
+        }
+      }
+
+      if (isEmbyProtocol) {
+        try {
+          final embyId = filePath.replaceFirst('emby://', '');
+          final embyService = EmbyService.instance;
+          if (embyService.isConnected) {
+            actualPlayUrl = await embyService.getStreamUrl(embyId);
+          } else {
+            BlurSnackBar.show(context, '未连接到Emby服务器');
+            return null;
+          }
+        } catch (e) {
+          BlurSnackBar.show(context, '获取Emby流地址失败：$e');
+          return null;
+        }
+      }
+    } else {
+      final file = File(filePath);
+      fileExists = file.existsSync();
+
+      if (!fileExists && Platform.isIOS) {
+        final altPath = filePath.startsWith('/private')
+            ? filePath.replaceFirst('/private', '')
+            : '/private$filePath';
+        final altFile = File(altPath);
+        if (altFile.existsSync()) {
+          filePath = altPath;
+          fileExists = true;
+        }
+      }
+    }
+
+    if (!fileExists) {
+      BlurSnackBar.show(context, '文件不存在或无法访问：${p.basename(item.filePath)}');
+      return null;
+    }
+
+    return PlayableItem(
+      videoPath: filePath,
+      title: item.animeName,
+      subtitle: item.episodeTitle,
+      animeId: item.animeId,
+      episodeId: item.episodeId,
+      historyItem: item,
+      actualPlayUrl: actualPlayUrl,
     );
   }
 

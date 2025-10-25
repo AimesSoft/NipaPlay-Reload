@@ -185,7 +185,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   void _handleDoubleTap() {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.hasVideo) {
-      videoState.toggleFullscreen();
+      videoState.togglePlayPause();
     }
   }
 

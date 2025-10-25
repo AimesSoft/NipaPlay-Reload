@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import 'settings/sections/cupertino_settings_general_section.dart';
+import 'settings/sections/cupertino_settings_about_section.dart';
 
 class CupertinoSettingsPage extends StatefulWidget {
   const CupertinoSettingsPage({super.key});
@@ -63,6 +64,8 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
                   children: const [
                     SizedBox(height: 12),
                     CupertinoSettingsGeneralSection(),
+                    SizedBox(height: 24),
+                    CupertinoSettingsAboutSection(),
                   ],
                 ),
               ),
