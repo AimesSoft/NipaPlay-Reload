@@ -11,7 +11,6 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 
 class CupertinoPlayerSettingsPage extends StatefulWidget {
@@ -69,7 +68,11 @@ class _CupertinoPlayerSettingsPageState
   Future<void> _savePlayerKernelSettings(PlayerKernelType kernelType) async {
     await PlayerFactory.saveKernelType(kernelType);
     if (!mounted) return;
-    BlurSnackBar.show(context, '播放器内核已切换');
+    AdaptiveSnackBar.show(
+      context,
+      message: '播放器内核已切换',
+      type: AdaptiveSnackBarType.success,
+    );
     setState(() {
       _selectedKernelType = kernelType;
     });
@@ -138,7 +141,11 @@ class _CupertinoPlayerSettingsPageState
       DanmakuRenderEngine engine) async {
     await DanmakuKernelFactory.saveKernelType(engine);
     if (!mounted) return;
-    BlurSnackBar.show(context, '弹幕渲染引擎已切换');
+    AdaptiveSnackBar.show(
+      context,
+      message: '弹幕渲染引擎已切换',
+      type: AdaptiveSnackBarType.success,
+    );
     setState(() {
       _selectedDanmakuRenderEngine = engine;
     });
@@ -358,7 +365,11 @@ class _CupertinoPlayerSettingsPageState
                             final message = profile == Anime4KProfile.off
                                 ? '已关闭 Anime4K'
                                 : 'Anime4K 已切换为$option';
-                            BlurSnackBar.show(context, message);
+                            AdaptiveSnackBar.show(
+                              context,
+                              message: message,
+                              type: AdaptiveSnackBarType.success,
+                            );
                           });
                         },
                       ),
@@ -410,9 +421,12 @@ class _CupertinoPlayerSettingsPageState
                   onChanged: (value) {
                     settingsProvider.setDanmakuConvertToSimplified(value);
                     if (mounted) {
-                      BlurSnackBar.show(
+                      AdaptiveSnackBar.show(
                         context,
-                        value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文',
+                        message: value
+                            ? '已开启弹幕转换简体中文'
+                            : '已关闭弹幕转换简体中文',
+                        type: AdaptiveSnackBarType.success,
                       );
                     }
                   },
@@ -422,9 +436,12 @@ class _CupertinoPlayerSettingsPageState
                       !settingsProvider.danmakuConvertToSimplified;
                   settingsProvider.setDanmakuConvertToSimplified(newValue);
                   if (mounted) {
-                    BlurSnackBar.show(
+                    AdaptiveSnackBar.show(
                       context,
-                      newValue ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文',
+                      message: newValue
+                          ? '已开启弹幕转换简体中文'
+                          : '已关闭弹幕转换简体中文',
+                      type: AdaptiveSnackBarType.success,
                     );
                   }
                 },

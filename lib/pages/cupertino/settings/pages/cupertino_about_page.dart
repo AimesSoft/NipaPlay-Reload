@@ -8,7 +8,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nipaplay/services/update_service.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 
 class CupertinoAboutPage extends StatefulWidget {
   const CupertinoAboutPage({super.key});
@@ -59,7 +58,11 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     final uri = Uri.parse(urlString);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (!mounted) return;
-      BlurSnackBar.show(context, '无法打开链接: $urlString');
+      AdaptiveSnackBar.show(
+        context,
+        message: '无法打开链接: $urlString',
+        type: AdaptiveSnackBarType.error,
+      );
     }
   }
 

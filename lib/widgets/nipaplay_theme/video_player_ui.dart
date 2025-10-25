@@ -177,12 +177,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   void _handleTap() {
     if (_isProcessingTap) return;
     if (_isHorizontalDragging) return;
-    
+
     _tapCount++;
     if (_tapCount == 1) {
       _doubleTapTimer?.cancel();
       _doubleTapTimer = Timer(_doubleTapTimeout, () {
-        if (_tapCount == 1) {
+        if (!mounted) return;
+        if (_tapCount == 1 && !_isProcessingTap) {
           _handleSingleTap();
         }
         _tapCount = 0;

@@ -8,7 +8,6 @@ import 'package:window_manager/window_manager.dart';
 
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 
 class CupertinoUIThemeSettingsPage extends StatefulWidget {
   const CupertinoUIThemeSettingsPage({super.key});
@@ -195,7 +194,11 @@ class _CupertinoUIThemeSettingsPageState
 
   void _exitApplication() {
     if (kIsWeb) {
-      BlurSnackBar.show(context, '请手动刷新页面以应用新主题');
+      AdaptiveSnackBar.show(
+        context,
+        message: '请手动刷新页面以应用新主题',
+        type: AdaptiveSnackBarType.info,
+      );
       return;
     }
 

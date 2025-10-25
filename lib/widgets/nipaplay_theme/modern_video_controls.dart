@@ -153,14 +153,15 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
   void _handleTap() {
     if (_isProcessingTap) return;
-    
+
     _tapCount++;
     if (_tapCount == 1) {
-      // 立即处理单次点击
-      _handleSingleTap();
-      // 启动双击检测定时器
       _doubleTapTimer?.cancel();
       _doubleTapTimer = Timer(_doubleTapTimeout, () {
+        if (!mounted) return;
+        if (_tapCount == 1 && !_isProcessingTap) {
+          _handleSingleTap();
+        }
         _tapCount = 0;
       });
     } else if (_tapCount == 2) {

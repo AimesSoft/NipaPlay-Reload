@@ -10,7 +10,6 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_anime_card.dart';
@@ -171,7 +170,11 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   Future<void> _refreshActiveHost(SharedRemoteLibraryProvider provider) async {
     if (!provider.hasActiveHost) {
       if (mounted) {
-        BlurSnackBar.show(context, '请先添加共享客户端');
+        AdaptiveSnackBar.show(
+          context,
+          message: '请先添加共享客户端',
+          type: AdaptiveSnackBarType.warning,
+        );
       }
       return;
     }
@@ -720,7 +723,11 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       final baseUrl = result.trim();
       if (baseUrl.isEmpty) {
         if (mounted) {
-          BlurSnackBar.show(context, '请输入访问地址');
+          AdaptiveSnackBar.show(
+            context,
+            message: '请输入访问地址',
+            type: AdaptiveSnackBarType.warning,
+          );
         }
         return;
       }
@@ -731,11 +738,19 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
           baseUrl: baseUrl,
         );
         if (mounted) {
-          BlurSnackBar.show(context, '已添加共享客户端');
+          AdaptiveSnackBar.show(
+            context,
+            message: '已添加共享客户端',
+            type: AdaptiveSnackBarType.success,
+          );
         }
       } catch (e) {
         if (mounted) {
-          BlurSnackBar.show(context, '添加失败：$e');
+          AdaptiveSnackBar.show(
+            context,
+            message: '添加失败：$e',
+            type: AdaptiveSnackBarType.error,
+          );
         }
       }
     }
@@ -1026,7 +1041,11 @@ class _CupertinoLocalMediaLibraryCardState
   void _handleSmartRefresh(ScanService scanService) {
     if (scanService.scannedFolders.isEmpty) {
       if (mounted) {
-        BlurSnackBar.show(context, '请先在库管理中添加媒体文件夹');
+        AdaptiveSnackBar.show(
+          context,
+          message: '请先在库管理中添加媒体文件夹',
+          type: AdaptiveSnackBarType.info,
+        );
       }
       return;
     }
@@ -2039,7 +2058,11 @@ class _CupertinoLibraryManagementSheetState
 
   void _showSnack(String message) {
     if (!mounted) return;
-    BlurSnackBar.show(context, message);
+    AdaptiveSnackBar.show(
+      context,
+      message: message,
+      type: AdaptiveSnackBarType.info,
+    );
   }
 }
 

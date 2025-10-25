@@ -58,6 +58,11 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final cupertinoTheme = CupertinoTheme.of(context);
+    final Color activeColor = cupertinoTheme.primaryColor;
+    final Color inactiveColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
+
     return Consumer<BottomBarProvider>(
       builder: (context, bottomBarProvider, _) {
         return AdaptiveScaffold(
@@ -78,6 +83,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
           ),
           bottomNavigationBar: AdaptiveBottomNavigationBar(
             useNativeBottomBar: bottomBarProvider.useNativeBottomBar,
+            selectedItemColor: activeColor,
+            unselectedItemColor: inactiveColor,
             items: const [
               AdaptiveNavigationDestination(
                 icon: 'house.fill',

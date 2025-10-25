@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -26,7 +27,6 @@ import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:path/path.dart' as p;
@@ -909,7 +909,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Future<void> _handleRecentTap(WatchHistoryItem item) async {
     if (item.filePath.isEmpty) {
-      BlurSnackBar.show(context, '无法播放：缺少文件路径');
+      AdaptiveSnackBar.show(
+        context,
+        message: '无法播放：缺少文件路径',
+        type: AdaptiveSnackBarType.error,
+      );
       return;
     }
 
@@ -921,7 +925,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       await PlaybackService().play(playable);
     } catch (e) {
       if (!mounted) return;
-      BlurSnackBar.show(context, '播放失败：$e');
+      AdaptiveSnackBar.show(
+        context,
+        message: '播放失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
     }
   }
 
@@ -944,11 +952,19 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           if (jellyfinService.isConnected) {
             actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
           } else {
-            BlurSnackBar.show(context, '未连接到Jellyfin服务器');
+          AdaptiveSnackBar.show(
+            context,
+            message: '未连接到Jellyfin服务器',
+            type: AdaptiveSnackBarType.error,
+          );
             return null;
           }
         } catch (e) {
-          BlurSnackBar.show(context, '获取Jellyfin流地址失败：$e');
+          AdaptiveSnackBar.show(
+            context,
+            message: '获取Jellyfin流地址失败：$e',
+            type: AdaptiveSnackBarType.error,
+          );
           return null;
         }
       }
@@ -960,11 +976,19 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           if (embyService.isConnected) {
             actualPlayUrl = await embyService.getStreamUrl(embyId);
           } else {
-            BlurSnackBar.show(context, '未连接到Emby服务器');
+            AdaptiveSnackBar.show(
+              context,
+              message: '未连接到Emby服务器',
+              type: AdaptiveSnackBarType.error,
+            );
             return null;
           }
         } catch (e) {
-          BlurSnackBar.show(context, '获取Emby流地址失败：$e');
+          AdaptiveSnackBar.show(
+            context,
+            message: '获取Emby流地址失败：$e',
+            type: AdaptiveSnackBarType.error,
+          );
           return null;
         }
       }
@@ -985,7 +1009,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     }
 
     if (!fileExists) {
-      BlurSnackBar.show(context, '文件不存在或无法访问：${p.basename(item.filePath)}');
+      AdaptiveSnackBar.show(
+        context,
+        message: '文件不存在或无法访问：${p.basename(item.filePath)}',
+        type: AdaptiveSnackBarType.error,
+      );
       return null;
     }
 
