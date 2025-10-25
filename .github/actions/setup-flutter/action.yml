@@ -4,7 +4,7 @@ inputs:
   flutter-version:
     description: 'Flutter 版本'
     required: true
-    default: '3.35.1'
+    default: '3.35.6'
   java-version:
     description: 'Java 版本'
     required: false
