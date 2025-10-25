@@ -37,7 +37,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   OverlayEntry? _settingsOverlay;
   Timer? _doubleTapTimer;
   int _tapCount = 0;
-  static const _doubleTapTimeout = Duration(milliseconds: 300);
+  static const _doubleTapTimeout = Duration(milliseconds: 360);
   bool _isProcessingTap = false;
   
   // 快捷键提示管理器
@@ -153,14 +153,15 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
   void _handleTap() {
     if (_isProcessingTap) return;
-    
+
     _tapCount++;
     if (_tapCount == 1) {
-      // 立即处理单次点击
-      _handleSingleTap();
-      // 启动双击检测定时器
       _doubleTapTimer?.cancel();
       _doubleTapTimer = Timer(_doubleTapTimeout, () {
+        if (!mounted) return;
+        if (_tapCount == 1 && !_isProcessingTap) {
+          _handleSingleTap();
+        }
         _tapCount = 0;
       });
     } else if (_tapCount == 2) {
@@ -185,7 +186,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   void _handleDoubleTap() {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.hasVideo) {
-      videoState.toggleFullscreen();
+      videoState.togglePlayPause();
     }
   }
 

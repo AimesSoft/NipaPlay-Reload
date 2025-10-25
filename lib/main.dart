@@ -1,5 +1,8 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -16,6 +19,7 @@ import 'pages/settings_page.dart';
 import 'pages/play_video_page.dart';
 import 'pages/new_series_page.dart';
 import 'pages/dashboard_home_page.dart';
+import 'pages/cupertino/cupertino_main_page.dart';
 import 'utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
@@ -63,6 +67,8 @@ import 'utils/hotkey_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
+import 'package:nipaplay/providers/bottom_bar_provider.dart';
+import 'package:nipaplay/models/anime_detail_display_mode.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -391,14 +397,21 @@ void main(List<String> args) async {
       SettingsStorage.loadString('themeMode', defaultValue: 'system'),
       SettingsStorage.loadString('backgroundImageMode'),
       SettingsStorage.loadString('customBackgroundPath'),
+      SettingsStorage.loadString('anime_detail_display_mode', defaultValue: 'simple'),
     ]).then((results) {
-      globals.backgroundImageMode = results[1] as String;
-      globals.customBackgroundPath = results[2] as String;
+      globals.backgroundImageMode = (results[1] as String?) ?? globals.backgroundImageMode;
+      globals.customBackgroundPath = (results[2] as String?) ?? globals.customBackgroundPath;
 
       // 检查自定义背景路径有效性，发现无效则恢复为默认图片
       _validateCustomBackgroundPath();
 
-      return results[0] as String;
+      final themeMode = (results[0] as String?) ?? 'system';
+      final animeDetailMode = (results[3] as String?) ?? 'simple';
+
+      return <String, String>{
+        'themeMode': themeMode,
+        'animeDetailMode': animeDetailMode,
+      };
     }),
 
     
@@ -427,7 +440,11 @@ void main(List<String> args) async {
     });
     
     // 处理主题模式设置
-    String savedThemeMode = results[2] as String;
+    final settingsMap = results[2] as Map<String, String>;
+    final savedThemeMode = settingsMap['themeMode'] ?? 'system';
+    final savedDetailModeString = settingsMap['animeDetailMode'] ?? 'simple';
+    final savedDetailMode =
+        AnimeDetailDisplayModeStorage.fromString(savedDetailModeString);
     ThemeMode initialThemeMode;
     switch (savedThemeMode) {
       case 'light':
@@ -461,6 +478,7 @@ void main(List<String> args) async {
     runApp(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider(create: (_) => BottomBarProvider()),
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
           ChangeNotifierProvider(create: (_) => VideoPlayerState()),
           ChangeNotifierProvider(
@@ -468,6 +486,7 @@ void main(List<String> args) async {
               initialThemeMode: initialThemeMode,
               initialBackgroundImageMode: globals.backgroundImageMode,
               initialCustomBackgroundPath: globals.customBackgroundPath,
+              initialAnimeDetailDisplayMode: savedDetailMode,
             ),
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
@@ -737,6 +756,34 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
                   children: [
                     appChild!, // The app's content
                     if (_isDragging) const DragDropOverlay(),
+                  ],
+                );
+              },
+            );
+          } else if (uiThemeProvider.isCupertinoTheme && globals.isPhone) {
+            return AdaptiveApp(
+              title: 'NipaPlay',
+              navigatorKey: navigatorKey,
+              themeMode: themeNotifier.themeMode,
+              materialLightTheme: AppTheme.lightTheme,
+              materialDarkTheme: AppTheme.darkTheme,
+              cupertinoLightTheme: const CupertinoThemeData(brightness: Brightness.light),
+              cupertinoDarkTheme: const CupertinoThemeData(brightness: Brightness.dark),
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('zh', 'CN'),
+                Locale('en', ''),
+              ],
+              home: CupertinoMainPage(launchFilePath: widget.launchFilePath),
+              builder: (context, appChild) {
+                return Stack(
+                  children: [
+                    appChild ?? const SizedBox.shrink(),
+                    if (_isDragging && globals.isDesktop) const DragDropOverlay(),
                   ],
                 );
               },

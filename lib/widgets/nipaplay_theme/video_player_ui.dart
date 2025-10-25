@@ -33,7 +33,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   Timer? _doubleTapTimer;
   Timer? _mouseMoveTimer;
   int _tapCount = 0;
-  static const _doubleTapTimeout = Duration(milliseconds: 200);
+  static const _phoneDoubleTapTimeout = Duration(milliseconds: 360);
+  static const _desktopDoubleTapTimeout = Duration(milliseconds: 220);
+  Duration get _doubleTapTimeout =>
+      globals.isPhone ? _phoneDoubleTapTimeout : _desktopDoubleTapTimeout;
   static const _mouseHideDelay = Duration(seconds: 3);
   bool _isProcessingTap = false;
   bool _isMouseVisible = true;
@@ -177,12 +180,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
   void _handleTap() {
     if (_isProcessingTap) return;
     if (_isHorizontalDragging) return;
-    
+
     _tapCount++;
     if (_tapCount == 1) {
       _doubleTapTimer?.cancel();
       _doubleTapTimer = Timer(_doubleTapTimeout, () {
-        if (_tapCount == 1) {
+        if (!mounted) return;
+        if (_tapCount == 1 && !_isProcessingTap) {
           _handleSingleTap();
         }
         _tapCount = 0;
@@ -213,14 +217,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     if (_isProcessingTap) return;
     _tapCount = 0;
     _doubleTapTimer?.cancel();
-    
+
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.hasVideo) {
-      if (globals.isPhone) {
-        videoState.togglePlayPause();
-      } else {
-        videoState.toggleFullscreen();
-      }
+      videoState.togglePlayPause();
     }
   }
   

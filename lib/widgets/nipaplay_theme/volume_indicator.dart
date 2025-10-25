@@ -25,4 +25,4 @@ class VolumeIndicator extends StatelessWidget {
       },
     );
   }
-} 
+}

@@ -183,7 +183,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         BlurDialog.show<void>(
           context: context,
           title: "文件夹访问受限",
-          content: "无法访问您选择的文件夹，可能是权限问题。\n\n如果您使用的是Android 11或更高版本，请考虑在设置中开启「管理所有文件」权限。",
+          content: io.Platform.isAndroid ?"无法访问您选择的文件夹，可能是权限问题。\n\n如果您使用的是Android 11或更高版本，请考虑在设置中开启「管理所有文件」权限。" : "无法访问您选择的文件夹，可能是权限问题。",
           actions: <Widget>[
             TextButton(
               child: const Text("知道了", locale:Locale("zh-Hans","zh"),
