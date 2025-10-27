@@ -2129,7 +2129,8 @@ class _CupertinoLibraryManagementSheetState
         return;
       }
 
-      await StorageService.saveCustomStoragePath(selectedDirectory);
+      // [修改] 自定义目录会影响安卓缓存，先注释
+      //await StorageService.saveCustomStoragePath(selectedDirectory);
       await scanService.startDirectoryScan(
         selectedDirectory,
         skipPreviouslyMatchedUnwatched: false,
