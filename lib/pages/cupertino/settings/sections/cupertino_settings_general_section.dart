@@ -6,6 +6,7 @@ import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import '../widgets/appearance_setting_tile.dart';
 import '../widgets/theme_setting_tile.dart';
 import '../widgets/player_setting_tile.dart';
+import '../widgets/media_server_setting_tile.dart';
 
 class CupertinoSettingsGeneralSection extends StatelessWidget {
   const CupertinoSettingsGeneralSection({super.key});
@@ -38,6 +39,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
             CupertinoAppearanceSettingTile(),
             CupertinoThemeSettingTile(),
             CupertinoPlayerSettingTile(),
+            CupertinoMediaServerSettingTile(),
           ],
         ),
       ],

@@ -1,0 +1,316 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:provider/provider.dart';
+
+import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/jellyfin_model.dart';
+import 'package:nipaplay/pages/media_server_detail_page.dart';
+import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_media_server_card.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_network_media_library_sheet.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
+
+class CupertinoMediaServerSettingsPage extends StatefulWidget {
+  const CupertinoMediaServerSettingsPage({super.key});
+
+  static const String routeName = 'cupertino-network-media-settings';
+
+  @override
+  State<CupertinoMediaServerSettingsPage> createState() =>
+      _CupertinoMediaServerSettingsPageState();
+}
+
+class _CupertinoMediaServerSettingsPageState
+    extends State<CupertinoMediaServerSettingsPage> {
+  Future<void> _showNetworkServerDialog(MediaServerType type) async {
+    final result = await NetworkMediaServerDialog.show(context, type);
+    if (!mounted || result != true) return;
+
+    final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
+    AdaptiveSnackBar.show(
+      context,
+      message: '$label 服务器设置已更新',
+      type: AdaptiveSnackBarType.success,
+    );
+  }
+
+  List<String> _resolveSelectedLibraryNames<T>(
+    List<T> libraries,
+    Iterable<String> selectedIds,
+    String Function(T library) idSelector,
+    String Function(T library) nameSelector,
+  ) {
+    if (selectedIds.isEmpty) {
+      return const <String>[];
+    }
+
+    final Map<String, String> nameMap = {
+      for (final library in libraries) idSelector(library): nameSelector(library),
+    };
+
+    final List<String> resolved = [];
+    for (final id in selectedIds) {
+      final name = nameMap[id];
+      if (name != null && name.isNotEmpty) {
+        resolved.add(name);
+      }
+    }
+    return resolved;
+  }
+
+  Future<void> _disconnectNetworkServer(MediaServerType type) async {
+    final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('断开连接'),
+        content: Text('确定要断开与 $label 服务器的连接吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('断开连接'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      if (type == MediaServerType.jellyfin) {
+        await context.read<JellyfinProvider>().disconnectFromServer();
+      } else {
+        await context.read<EmbyProvider>().disconnectFromServer();
+      }
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '$label 已断开连接',
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '断开 $label 失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
+    }
+  }
+
+  Future<void> _refreshNetworkMedia(MediaServerType type) async {
+    final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
+    if (type == MediaServerType.jellyfin) {
+      final provider = context.read<JellyfinProvider>();
+      if (!provider.isConnected) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '尚未连接到 $label 服务器',
+          type: AdaptiveSnackBarType.warning,
+        );
+        return;
+      }
+      await provider.loadMediaItems();
+      await provider.loadMovieItems();
+    } else {
+      final provider = context.read<EmbyProvider>();
+      if (!provider.isConnected) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '尚未连接到 $label 服务器',
+          type: AdaptiveSnackBarType.warning,
+        );
+        return;
+      }
+      await provider.loadMediaItems();
+      await provider.loadMovieItems();
+    }
+
+    if (!mounted) return;
+    AdaptiveSnackBar.show(
+      context,
+      message: '$label 媒体库已刷新',
+      type: AdaptiveSnackBarType.success,
+    );
+  }
+
+  Future<void> _showNetworkMediaLibraryBottomSheet({
+    MediaServerType? initialServer,
+  }) async {
+    final jellyfinProvider = context.read<JellyfinProvider>();
+    final embyProvider = context.read<EmbyProvider>();
+
+    if (!jellyfinProvider.isConnected && !embyProvider.isConnected) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '请先连接 Jellyfin 或 Emby 服务器',
+        type: AdaptiveSnackBarType.warning,
+      );
+      return;
+    }
+
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '网络媒体库',
+      floatingTitle: true,
+      child: CupertinoNetworkMediaLibrarySheet(
+        jellyfinProvider: jellyfinProvider,
+        embyProvider: embyProvider,
+        initialServer: initialServer,
+        onOpenDetail: (type, id) async {
+          await Navigator.of(context).maybePop();
+          if (!mounted) return;
+          await _openMediaDetail(type, id);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openMediaDetail(MediaServerType type, String mediaId) async {
+    if (type == MediaServerType.jellyfin) {
+      await MediaServerDetailPage.showJellyfin(context, mediaId);
+    } else {
+      await MediaServerDetailPage.showEmby(context, mediaId);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
+
+    return CupertinoPageScaffold(
+      backgroundColor: backgroundColor,
+      child: SafeArea( 
+        bottom: false,
+        child: Consumer2<JellyfinProvider, EmbyProvider>(
+          builder: (context, jellyfinProvider, embyProvider, _) {
+            return CustomScrollView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              slivers: [
+                const CupertinoSliverNavigationBar(
+                  largeTitle: Text('网络媒体库设置'),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Text(
+                      '在此管理 Jellyfin/Emby 服务器连接，调整媒体库同步配置。',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.secondaryLabel,
+                          context,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: Column(
+                      children: [
+                        CupertinoMediaServerCard(
+                          title: 'Jellyfin 媒体服务器',
+                          icon: CupertinoIcons.tv,
+                          accentColor: CupertinoColors.systemBlue,
+                          isConnected: jellyfinProvider.isConnected,
+                          isLoading: !jellyfinProvider.isInitialized ||
+                              jellyfinProvider.isLoading,
+                          hasError: jellyfinProvider.hasError,
+                          errorMessage: jellyfinProvider.errorMessage,
+                          serverUrl: jellyfinProvider.serverUrl,
+                          username: jellyfinProvider.username,
+                          mediaItemCount:
+                              jellyfinProvider.mediaItems.length +
+                                  jellyfinProvider.movieItems.length,
+                          selectedLibraries:
+                              _resolveSelectedLibraryNames<JellyfinLibrary>(
+                            jellyfinProvider.availableLibraries,
+                            jellyfinProvider.selectedLibraryIds,
+                            (library) => library.id,
+                            (library) => library.name,
+                          ),
+                          onManage: () =>
+                              _showNetworkServerDialog(MediaServerType.jellyfin),
+                          onViewLibrary: jellyfinProvider.isConnected
+                              ? () => _showNetworkMediaLibraryBottomSheet(
+                                    initialServer: MediaServerType.jellyfin,
+                                  )
+                              : null,
+                          onDisconnect: jellyfinProvider.isConnected
+                              ? () => _disconnectNetworkServer(
+                                    MediaServerType.jellyfin,
+                                  )
+                              : null,
+                          onRefresh: jellyfinProvider.isConnected
+                              ? () => _refreshNetworkMedia(
+                                    MediaServerType.jellyfin,
+                                  )
+                              : null,
+                          disconnectedDescription:
+                              '连接 Jellyfin 服务器以同步远程媒体库与播放记录。',
+                        ),
+                        const SizedBox(height: 16),
+                        CupertinoMediaServerCard(
+                          title: 'Emby 媒体服务器',
+                          icon: CupertinoIcons.play_rectangle,
+                          accentColor: const Color(0xFF52B54B),
+                          isConnected: embyProvider.isConnected,
+                          isLoading:
+                              !embyProvider.isInitialized || embyProvider.isLoading,
+                          hasError: embyProvider.hasError,
+                          errorMessage: embyProvider.errorMessage,
+                          serverUrl: embyProvider.serverUrl,
+                          username: embyProvider.username,
+                          mediaItemCount: embyProvider.mediaItems.length +
+                              embyProvider.movieItems.length,
+                          selectedLibraries:
+                              _resolveSelectedLibraryNames<EmbyLibrary>(
+                            embyProvider.availableLibraries,
+                            embyProvider.selectedLibraryIds,
+                            (library) => library.id,
+                            (library) => library.name,
+                          ),
+                          onManage: () =>
+                              _showNetworkServerDialog(MediaServerType.emby),
+                          onViewLibrary: embyProvider.isConnected
+                              ? () => _showNetworkMediaLibraryBottomSheet(
+                                    initialServer: MediaServerType.emby,
+                                  )
+                              : null,
+                          onDisconnect: embyProvider.isConnected
+                              ? () =>
+                                  _disconnectNetworkServer(MediaServerType.emby)
+                              : null,
+                          onRefresh: embyProvider.isConnected
+                              ? () => _refreshNetworkMedia(MediaServerType.emby)
+                              : null,
+                          disconnectedDescription:
+                              '连接 Emby 服务器后可浏览个人媒体库并远程播放。',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
