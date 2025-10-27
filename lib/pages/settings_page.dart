@@ -1,4 +1,5 @@
 // settings_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/pages/settings/theme_mode_page.dart'; // 导入 ThemeModePage
@@ -124,17 +125,19 @@ style: TextStyle(
                   );
             },
           ),
-          ListTile(
-            title: const Text("主题（实验性）",
-                locale:Locale("zh-Hans","zh"),
+          // 在Android平台隐藏主题设置
+          if (!Platform.isAndroid)
+            ListTile(
+              title: const Text("主题（实验性）",
+                  locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const UIThemePage(), "主题设置");
-            },
-          ),
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+              trailing: const Icon(Ionicons.chevron_forward_outline,
+                  color: Colors.white),
+              onTap: () {
+                _handleItemTap(const UIThemePage(), "主题设置");
+              },
+            ),
           ListTile(
             title: const Text("通用",
                 locale:Locale("zh-Hans","zh"),
