@@ -35,8 +35,9 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
-import 'package:nipaplay/pages/media_server_detail_page.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart' show MediaServerType;
+import 'package:nipaplay/pages/cupertino/cupertino_media_server_detail_page.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart'
+    show MediaServerType;
 
 // ignore_for_file: prefer_const_constructors
 
@@ -886,9 +887,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   ) async {
     WatchHistoryItem? result;
     if (type == MediaServerType.jellyfin) {
-      result = await MediaServerDetailPage.showJellyfin(context, mediaId);
+      result =
+          await CupertinoMediaServerDetailPage.showJellyfin(context, mediaId);
     } else {
-      result = await MediaServerDetailPage.showEmby(context, mediaId);
+      result = await CupertinoMediaServerDetailPage.showEmby(context, mediaId);
     }
 
     if (result == null || !mounted) {

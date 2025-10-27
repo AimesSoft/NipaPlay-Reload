@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
-import 'package:nipaplay/pages/media_server_detail_page.dart';
+import 'package:nipaplay/pages/cupertino/cupertino_media_server_detail_page.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
@@ -12,7 +12,8 @@ import 'package:nipaplay/widgets/cupertino/cupertino_media_server_card.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_network_media_library_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_network_media_management_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_network_server_connection_dialog.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart' show MediaServerType;
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart'
+    show MediaServerType;
 
 class CupertinoMediaServerSettingsPage extends StatefulWidget {
   const CupertinoMediaServerSettingsPage({super.key});
@@ -37,7 +38,8 @@ class _CupertinoMediaServerSettingsPageState
 
     if (!isConnected) {
       // 未连接，显示连接弹窗
-      final result = await CupertinoNetworkServerConnectionDialog.show(context, type);
+      final result =
+          await CupertinoNetworkServerConnectionDialog.show(context, type);
       if (result == true && mounted) {
         final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
         AdaptiveSnackBar.show(
@@ -78,7 +80,8 @@ class _CupertinoMediaServerSettingsPageState
     }
 
     final Map<String, String> nameMap = {
-      for (final library in libraries) idSelector(library): nameSelector(library),
+      for (final library in libraries)
+        idSelector(library): nameSelector(library),
     };
 
     final List<String> resolved = [];
@@ -206,9 +209,9 @@ class _CupertinoMediaServerSettingsPageState
 
   Future<void> _openMediaDetail(MediaServerType type, String mediaId) async {
     if (type == MediaServerType.jellyfin) {
-      await MediaServerDetailPage.showJellyfin(context, mediaId);
+      await CupertinoMediaServerDetailPage.showJellyfin(context, mediaId);
     } else {
-      await MediaServerDetailPage.showEmby(context, mediaId);
+      await CupertinoMediaServerDetailPage.showEmby(context, mediaId);
     }
   }
 
@@ -232,17 +235,15 @@ class _CupertinoMediaServerSettingsPageState
           bottom: false,
           child: Consumer2<JellyfinProvider, EmbyProvider>(
             builder: (context, jellyfinProvider, embyProvider, _) {
-              final TextStyle descriptionStyle = CupertinoTheme.of(context)
-                  .textTheme
-                  .textStyle
-                  .copyWith(
-                    fontSize: 14,
-                    color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.secondaryLabel,
-                      context,
-                    ),
-                    height: 1.4,
-                  );
+              final TextStyle descriptionStyle =
+                  CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                        fontSize: 14,
+                        color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.secondaryLabel,
+                          context,
+                        ),
+                        height: 1.4,
+                      );
 
               return ListView(
                 physics: const BouncingScrollPhysics(
@@ -292,8 +293,7 @@ class _CupertinoMediaServerSettingsPageState
                               MediaServerType.jellyfin,
                             )
                         : null,
-                    disconnectedDescription:
-                        '连接 Jellyfin 服务器以同步远程媒体库与播放记录。',
+                    disconnectedDescription: '连接 Jellyfin 服务器以同步远程媒体库与播放记录。',
                     serverBrand: ServerBrand.jellyfin,
                   ),
                   const SizedBox(height: 16),
@@ -302,8 +302,8 @@ class _CupertinoMediaServerSettingsPageState
                     icon: CupertinoIcons.play_rectangle,
                     accentColor: const Color(0xFF52B54B),
                     isConnected: embyProvider.isConnected,
-                    isLoading: !embyProvider.isInitialized ||
-                        embyProvider.isLoading,
+                    isLoading:
+                        !embyProvider.isInitialized || embyProvider.isLoading,
                     hasError: embyProvider.hasError,
                     errorMessage: embyProvider.errorMessage,
                     serverUrl: embyProvider.serverUrl,
@@ -325,14 +325,12 @@ class _CupertinoMediaServerSettingsPageState
                             )
                         : null,
                     onDisconnect: embyProvider.isConnected
-                        ? () =>
-                            _disconnectNetworkServer(MediaServerType.emby)
+                        ? () => _disconnectNetworkServer(MediaServerType.emby)
                         : null,
                     onRefresh: embyProvider.isConnected
                         ? () => _refreshNetworkMedia(MediaServerType.emby)
                         : null,
-                    disconnectedDescription:
-                        '连接 Emby 服务器后可浏览个人媒体库并远程播放。',
+                    disconnectedDescription: '连接 Emby 服务器后可浏览个人媒体库并远程播放。',
                     serverBrand: ServerBrand.emby,
                   ),
                 ],
