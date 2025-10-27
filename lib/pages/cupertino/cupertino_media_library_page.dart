@@ -17,9 +17,9 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_anime_card.dart';
-import 'package:nipaplay/widgets/cupertino/cupertino_media_server_card.dart';
-import 'package:nipaplay/widgets/cupertino/cupertino_network_media_library_sheet.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_glass_media_server_card.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/pages/cupertino/network_media/cupertino_network_server_libraries_page.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
@@ -88,8 +88,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
         children: [
           Consumer3<SharedRemoteLibraryProvider, JellyfinProvider,
               EmbyProvider>(
-            builder: (context, sharedProvider, jellyfinProvider,
-                embyProvider, _) {
+            builder:
+                (context, sharedProvider, jellyfinProvider, embyProvider, _) {
               return CustomScrollView(
                 controller: _scrollController,
                 physics: const BouncingScrollPhysics(
@@ -116,100 +116,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                   const SliverToBoxAdapter(
                     child: SizedBox(height: 12),
                   ),
-                  SliverToBoxAdapter(
-                    child: _buildSectionTitle('网络媒体库'),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Column(
-                        children: [
-                          CupertinoMediaServerCard(
-                            title: 'Jellyfin 媒体服务器',
-                            icon: CupertinoIcons.tv,
-                            accentColor: CupertinoColors.systemBlue,
-                            isConnected: jellyfinProvider.isConnected,
-                            isLoading: !jellyfinProvider.isInitialized ||
-                                jellyfinProvider.isLoading,
-                            hasError: jellyfinProvider.hasError,
-                            errorMessage: jellyfinProvider.errorMessage,
-                            serverUrl: jellyfinProvider.serverUrl,
-                            username: jellyfinProvider.username,
-                            mediaItemCount: jellyfinProvider.mediaItems.length +
-                                jellyfinProvider.movieItems.length,
-                            selectedLibraries:
-                                _resolveSelectedLibraryNames<JellyfinLibrary>(
-                              jellyfinProvider.availableLibraries,
-                              jellyfinProvider.selectedLibraryIds,
-                              (library) => library.id,
-                              (library) => library.name,
-                            ),
-                            onManage: () =>
-                                _showNetworkServerDialog(MediaServerType.jellyfin),
-                            onViewLibrary: jellyfinProvider.isConnected
-                                ? () => _showNetworkMediaLibraryBottomSheet(
-                                      initialServer: MediaServerType.jellyfin,
-                                    )
-                                : null,
-                            onDisconnect: jellyfinProvider.isConnected
-                                ? () => _disconnectNetworkServer(
-                                      MediaServerType.jellyfin,
-                                    )
-                                : null,
-                            onRefresh: jellyfinProvider.isConnected
-                                ? () => _refreshNetworkMedia(
-                                      MediaServerType.jellyfin,
-                                    )
-                                : null,
-                            disconnectedDescription:
-                                '连接 Jellyfin 服务器以同步远程媒体库与播放记录。',
-                          ),
-                          const SizedBox(height: 16),
-                          CupertinoMediaServerCard(
-                            title: 'Emby 媒体服务器',
-                            icon: CupertinoIcons.play_rectangle,
-                            accentColor: const Color(0xFF52B54B),
-                            isConnected: embyProvider.isConnected,
-                            isLoading: !embyProvider.isInitialized ||
-                                embyProvider.isLoading,
-                            hasError: embyProvider.hasError,
-                            errorMessage: embyProvider.errorMessage,
-                            serverUrl: embyProvider.serverUrl,
-                            username: embyProvider.username,
-                            mediaItemCount: embyProvider.mediaItems.length +
-                                embyProvider.movieItems.length,
-                            selectedLibraries:
-                                _resolveSelectedLibraryNames<EmbyLibrary>(
-                              embyProvider.availableLibraries,
-                              embyProvider.selectedLibraryIds,
-                              (library) => library.id,
-                              (library) => library.name,
-                            ),
-                            onManage: () =>
-                                _showNetworkServerDialog(MediaServerType.emby),
-                            onViewLibrary: embyProvider.isConnected
-                                ? () => _showNetworkMediaLibraryBottomSheet(
-                                      initialServer: MediaServerType.emby,
-                                    )
-                                : null,
-                            onDisconnect: embyProvider.isConnected
-                                ? () =>
-                                    _disconnectNetworkServer(MediaServerType.emby)
-                                : null,
-                            onRefresh: embyProvider.isConnected
-                                ? () => _refreshNetworkMedia(
-                                      MediaServerType.emby,
-                                    )
-                                : null,
-                            disconnectedDescription:
-                                '连接 Emby 服务器后可浏览个人媒体库并远程播放。',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: 12),
+                  ..._buildNetworkMediaSection(
+                    context,
+                    jellyfinProvider,
+                    embyProvider,
                   ),
                   SliverToBoxAdapter(
                     child: _buildSectionTitle('NipaPlay 共享媒体库'),
@@ -224,8 +134,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                        child:
-                            _buildErrorBanner(context, sharedProvider, cardColor),
+                        child: _buildErrorBanner(
+                            context, sharedProvider, cardColor),
                       ),
                     ),
                   ..._buildLibrarySlivers(context, sharedProvider, cardColor),
@@ -275,6 +185,160 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  List<Widget> _buildNetworkMediaSection(
+    BuildContext context,
+    JellyfinProvider jellyfinProvider,
+    EmbyProvider embyProvider,
+  ) {
+    final bool jellyfinConnected = jellyfinProvider.isConnected;
+    final bool embyConnected = embyProvider.isConnected;
+    final List<Widget> slivers = [];
+
+    final List<Widget> cards = [];
+
+    if (jellyfinConnected) {
+      final List<String> selected =
+          _resolveSelectedLibraryNames<JellyfinLibrary>(
+        jellyfinProvider.availableLibraries,
+        jellyfinProvider.selectedLibraryIds,
+        (library) => library.id,
+        (library) => library.name,
+      );
+      cards.add(
+        CupertinoGlassMediaServerCard(
+          title: 'Jellyfin 媒体库',
+          subtitle: _formatServerSubtitle(
+            jellyfinProvider.username,
+            jellyfinProvider.serverUrl,
+          ),
+          icon: CupertinoIcons.tv,
+          accentColor: CupertinoColors.systemBlue,
+          libraryNames: selected,
+          isLoading: jellyfinProvider.isLoading,
+          onTap: () => _openNetworkServerLibrariesPage(
+            MediaServerType.jellyfin,
+          ),
+          onManage: () => _showNetworkServerDialog(MediaServerType.jellyfin),
+        ),
+      );
+    }
+
+    if (embyConnected) {
+      final List<String> selected = _resolveSelectedLibraryNames<EmbyLibrary>(
+        embyProvider.availableLibraries,
+        embyProvider.selectedLibraryIds,
+        (library) => library.id,
+        (library) => library.name,
+      );
+      cards.add(
+        CupertinoGlassMediaServerCard(
+          title: 'Emby 媒体库',
+          subtitle: _formatServerSubtitle(
+            embyProvider.username,
+            embyProvider.serverUrl,
+          ),
+          icon: CupertinoIcons.play_rectangle,
+          accentColor: const Color(0xFF52B54B),
+          libraryNames: selected,
+          isLoading: embyProvider.isLoading,
+          onTap: () => _openNetworkServerLibrariesPage(
+            MediaServerType.emby,
+          ),
+          onManage: () => _showNetworkServerDialog(MediaServerType.emby),
+        ),
+      );
+    }
+
+    if (cards.isEmpty) {
+      return slivers;
+    }
+
+    slivers.add(
+      SliverToBoxAdapter(
+        child: _buildSectionTitle('网络媒体库'),
+      ),
+    );
+
+    slivers.add(
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            children: _withSpacing(cards),
+          ),
+        ),
+      ),
+    );
+
+    slivers.add(
+      const SliverToBoxAdapter(
+        child: SizedBox(height: 12),
+      ),
+    );
+
+    return slivers;
+  }
+
+  List<Widget> _withSpacing(List<Widget> items) {
+    if (items.length <= 1) {
+      return List<Widget>.from(items);
+    }
+    final List<Widget> spaced = [];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) {
+        spaced.add(const SizedBox(height: 16));
+      }
+      spaced.add(items[i]);
+    }
+    return spaced;
+  }
+
+  String? _formatServerSubtitle(String? username, String? serverUrl) {
+    final List<String> segments = [];
+    if (username != null && username.isNotEmpty) {
+      segments.add(username);
+    }
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      segments.add(_trimUrlScheme(serverUrl));
+    }
+    if (segments.isEmpty) {
+      return null;
+    }
+    return segments.join(' · ');
+  }
+
+  String _trimUrlScheme(String url) {
+    return url.replaceFirst(RegExp(r'^https?://'), '');
+  }
+
+  Future<void> _openNetworkServerLibrariesPage(MediaServerType type) async {
+    final bool connected = switch (type) {
+      MediaServerType.jellyfin => context.read<JellyfinProvider>().isConnected,
+      MediaServerType.emby => context.read<EmbyProvider>().isConnected,
+    };
+
+    if (!connected) {
+      AdaptiveSnackBar.show(
+        context,
+        message: type == MediaServerType.jellyfin
+            ? '请先连接 Jellyfin 服务器'
+            : '请先连接 Emby 服务器',
+        type: AdaptiveSnackBarType.warning,
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => CupertinoNetworkServerLibrariesPage(
+          serverType: type,
+          onOpenDetail: _openNetworkMediaDetail,
+          onManageServer: _showNetworkServerDialog,
+        ),
       ),
     );
   }
@@ -782,7 +846,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     }
 
     final Map<String, String> nameMap = {
-      for (final library in libraries) idSelector(library): nameSelector(library),
+      for (final library in libraries)
+        idSelector(library): nameSelector(library),
     };
 
     final List<String> resolved = [];
@@ -805,117 +870,6 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
         type: AdaptiveSnackBarType.success,
       );
     }
-  }
-
-  Future<void> _disconnectNetworkServer(MediaServerType type) async {
-    final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
-    final confirm = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('断开连接'),
-        content: Text('确定要断开与 $label 服务器的连接吗？'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('断开连接'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) {
-      return;
-    }
-
-    try {
-      if (type == MediaServerType.jellyfin) {
-        await context.read<JellyfinProvider>().disconnectFromServer();
-      } else {
-        await context.read<EmbyProvider>().disconnectFromServer();
-      }
-      if (!mounted) return;
-      AdaptiveSnackBar.show(
-        context,
-        message: '$label 已断开连接',
-        type: AdaptiveSnackBarType.success,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      AdaptiveSnackBar.show(
-        context,
-        message: '断开 $label 失败：$e',
-        type: AdaptiveSnackBarType.error,
-      );
-    }
-  }
-
-  Future<void> _refreshNetworkMedia(MediaServerType type) async {
-    final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
-    if (type == MediaServerType.jellyfin) {
-      final provider = context.read<JellyfinProvider>();
-      if (!provider.isConnected) {
-        AdaptiveSnackBar.show(
-          context,
-          message: '尚未连接到 $label 服务器',
-          type: AdaptiveSnackBarType.warning,
-        );
-        return;
-      }
-      await provider.loadMediaItems();
-      await provider.loadMovieItems();
-    } else {
-      final provider = context.read<EmbyProvider>();
-      if (!provider.isConnected) {
-        AdaptiveSnackBar.show(
-          context,
-          message: '尚未连接到 $label 服务器',
-          type: AdaptiveSnackBarType.warning,
-        );
-        return;
-      }
-      await provider.loadMediaItems();
-      await provider.loadMovieItems();
-    }
-
-    if (!mounted) return;
-    AdaptiveSnackBar.show(
-      context,
-      message: '$label 媒体库已刷新',
-      type: AdaptiveSnackBarType.success,
-    );
-  }
-
-  Future<void> _showNetworkMediaLibraryBottomSheet({
-    MediaServerType? initialServer,
-  }) async {
-    final jellyfinProvider = context.read<JellyfinProvider>();
-    final embyProvider = context.read<EmbyProvider>();
-
-    if (!jellyfinProvider.isConnected && !embyProvider.isConnected) {
-      AdaptiveSnackBar.show(
-        context,
-        message: '请先连接 Jellyfin 或 Emby 服务器',
-        type: AdaptiveSnackBarType.warning,
-      );
-      return;
-    }
-
-    await CupertinoBottomSheet.show(
-      context: context,
-      title: '网络媒体库',
-      floatingTitle: true,
-      child: CupertinoNetworkMediaLibrarySheet(
-        jellyfinProvider: jellyfinProvider,
-        embyProvider: embyProvider,
-        initialServer: initialServer,
-        onOpenDetail: _openNetworkMediaDetail,
-      ),
-    );
   }
 
   Future<void> _openNetworkMediaDetail(
@@ -1396,9 +1350,7 @@ class _CupertinoLocalMediaLibraryCardState
     final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: enabled
-            ? primaryColor
-            : primaryColor.withValues(alpha: 0.4),
+        color: enabled ? primaryColor : primaryColor.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1564,7 +1516,8 @@ class _CupertinoLocalMediaLibraryCardState
     final buttonChild = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
+        color:
+            enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1699,9 +1652,7 @@ class _CupertinoLocalMediaLibraryCardState
       AdaptivePopupMenuItem(
         label: '从文件管理器导入',
         value: 'file',
-        icon: PlatformInfo.isIOS26OrHigher()
-            ? 'folder'
-            : CupertinoIcons.folder,
+        icon: PlatformInfo.isIOS26OrHigher() ? 'folder' : CupertinoIcons.folder,
       ),
     ];
   }
@@ -2598,7 +2549,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       onGenerateInitialRoutes: (_, __) {
         return [
           CupertinoPageRoute<void>(
-            builder: (routeContext) => ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+            builder: (routeContext) =>
+                ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
               value: widget.provider,
               child: _CupertinoMediaLibraryListPage(
                 onAnimeTap: _handleAnimeTap,
@@ -2616,7 +2568,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
 
     await _navigatorKey.currentState?.push(
       CupertinoPageRoute<void>(
-        builder: (routeContext) => ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+        builder: (routeContext) =>
+            ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
           value: widget.provider,
           child: CupertinoSharedAnimeDetailPage(
             anime: anime,

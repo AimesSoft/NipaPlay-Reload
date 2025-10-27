@@ -184,3 +184,5 @@ See `CONTRIBUTING_GUIDE/` for comprehensive developer docs:
 - Service pattern: `lib/services/jellyfin_service.dart` (singleton + multi-address)
 - Provider setup: `lib/providers/service_provider.dart`
 - Build scripts: `build-arm64.sh`, `build_and_copy_web.sh`
+
+检查就用analyze但是记得只输出error信息，不用写测试我们快速推进进度不用你编译我自行处理热重载观察情况
