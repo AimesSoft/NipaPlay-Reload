@@ -156,6 +156,8 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                         ],
                       ),
                       const SizedBox(height: 20),
+                      _buildSponsorshipSection(context, labelColor),
+                      const SizedBox(height: 20),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 20),
                         child: _buildCommunitySection(context, labelColor),
@@ -365,6 +367,78 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                 ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildSponsorshipSection(BuildContext context, Color labelColor) {
+    return AdaptiveFormSection.insetGrouped(
+      backgroundColor: resolveSettingsSectionBackground(context),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            '赞助支持',
+            style: CupertinoTheme.of(context)
+                .textTheme
+                .textStyle
+                .copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Text(
+            '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。',
+            style: CupertinoTheme.of(context)
+                .textTheme
+                .textStyle
+                .copyWith(
+                  fontSize: 14,
+                  color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.label,
+                    context,
+                  ),
+                  height: 1.5,
+                ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Text(
+            '赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。',
+            style: CupertinoTheme.of(context)
+                .textTheme
+                .textStyle
+                .copyWith(
+                  fontSize: 14,
+                  color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.label,
+                    context,
+                  ),
+                  height: 1.5,
+                ),
+          ),
+        ),
+        AdaptiveListTile(
+          leading: Icon(
+            Ionicons.heart,
+            color: CupertinoColors.systemPink,
+          ),
+          title: Text(
+            '爱发电赞助页面',
+            style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
+          ),
+          trailing: Icon(
+            CupertinoIcons.arrow_up_right,
+            color: resolveSettingsIconColor(context),
+          ),
+          backgroundColor: resolveSettingsTileBackground(context),
+          onTap: () => _launchURL('https://afdian.com/a/irigas'),
+        ),
+        const SizedBox(height: 4),
       ],
     );
   }

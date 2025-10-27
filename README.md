@@ -16,7 +16,7 @@
   <img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart">
 </div>
 
-> 一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。
+> 一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。支持自动匹配网络弹幕。支持观看进度同步bangumi，对动画进行打分和写评论。支持查看新番更新。支持链接emby，jellyfin。支持挂载webdav。支持把你的电脑搭建成本地媒体中心，局域网内其他设备可以快速访问并播放。
 
 ## 下载
 
@@ -26,7 +26,7 @@
 - **iOS (App Store)**
   
   - <a href="https://apps.apple.com/cn/app/nipaplay/id6751284970" target="_blank">
-    <img src="others/download.png" alt="下载">
+    <img src="others/download.png" width="30%" alt="下载">
 
 </a>
 
@@ -86,6 +86,15 @@
 * 即使不会编程，也能为项目做出贡献的方法。
 * 如何搭建开发环境，并借助 AI 工具编写代码。
 * 如何为应用开发新的主题、添加新的播放器或弹幕内核。
+
+## 赞助项目运行
+
+- <a href="https://afdian.com/a/irigas" target="_blank">
+    <img src="others/爱发电.jpg" width="100%" alt="下载">
+
+</a>
+
+
 
 ## 应用截图
 

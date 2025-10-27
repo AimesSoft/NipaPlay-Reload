@@ -222,9 +222,47 @@ style: TextStyle(
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
+                // 赞助支持
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '赞助支持',
+                          style: FluentTheme.of(context).typography.subtitle,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。',
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          '赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。',
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: () => _launchURL('https://afdian.com/a/irigas'),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(FluentIcons.heart_fill, color: material.Colors.pink),
+                              SizedBox(width: 8),
+                              Text('爱发电赞助页面'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
                 // 开源与社区
                 Card(
                   child: Padding(
