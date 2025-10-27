@@ -1,4 +1,3 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 
@@ -37,9 +36,12 @@ class CupertinoAppearancePreviewCard extends StatelessWidget {
       description = '使用明亮的配色方案，适合日间或高亮环境。';
     }
 
-    return AdaptiveCard(
+    return Container(
+      decoration: BoxDecoration(
+        color: resolvedBackground,
+        borderRadius: BorderRadius.circular(24),
+      ),
       padding: const EdgeInsets.all(16),
-      color: resolvedBackground,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

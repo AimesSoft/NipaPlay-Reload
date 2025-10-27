@@ -1,4 +1,3 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
@@ -7,6 +6,7 @@ import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_tile.dart';
 
 import '../cupertino_media_server_settings_page.dart';
 
@@ -15,10 +15,8 @@ class CupertinoMediaServerSettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color iconColor = resolveSettingsIconColor(context);
-    final Color primaryTextColor = resolveSettingsPrimaryTextColor(context);
-    final Color secondaryTextColor = resolveSettingsSecondaryTextColor(context);
-    final Color backgroundColor = resolveSettingsTileBackground(context);
+  final Color iconColor = resolveSettingsIconColor(context);
+  final Color backgroundColor = resolveSettingsTileBackground(context);
 
     return Consumer2<JellyfinProvider, EmbyProvider>(
       builder: (context, jellyfinProvider, embyProvider, _) {
@@ -27,20 +25,12 @@ class CupertinoMediaServerSettingTile extends StatelessWidget {
           embyProvider,
         );
 
-        return AdaptiveListTile(
+        return CupertinoSettingsTile(
           leading: Icon(CupertinoIcons.cloud, color: iconColor),
-          title: Text('网络媒体库', style: TextStyle(color: primaryTextColor)),
-          subtitle: Text(subtitle, style: TextStyle(color: secondaryTextColor)),
+          title: const Text('网络媒体库'),
+          subtitle: Text(subtitle),
           backgroundColor: backgroundColor,
-          trailing: Icon(
-            PlatformInfo.isIOS
-                ? CupertinoIcons.chevron_forward
-                : CupertinoIcons.forward,
-            color: CupertinoDynamicColor.resolve(
-              CupertinoColors.systemGrey2,
-              context,
-            ),
-          ),
+          showChevron: true,
           onTap: () {
             Navigator.of(context).push(
               CupertinoPageRoute(

@@ -75,8 +75,8 @@ class CupertinoBangumiSection extends StatelessWidget {
       syncInfo = null;
     }
 
-    return AdaptiveCard(
-      color: _cardBackgroundColor(context),
+    return _buildRoundedCard(
+      context,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,8 +156,8 @@ class CupertinoBangumiSection extends StatelessWidget {
   }
 
   Widget _buildTokenCard(BuildContext context) {
-    return AdaptiveCard(
-      color: _cardBackgroundColor(context),
+    return _buildRoundedCard(
+      context,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,8 +226,8 @@ class CupertinoBangumiSection extends StatelessWidget {
   }
 
   Widget _buildActionsCard(BuildContext context) {
-    return AdaptiveCard(
-      color: _cardBackgroundColor(context),
+    return _buildRoundedCard(
+      context,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,6 +265,21 @@ class CupertinoBangumiSection extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRoundedCard(
+    BuildContext context, {
+    required EdgeInsets padding,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _cardBackgroundColor(context),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      padding: padding,
+      child: child,
     );
   }
 

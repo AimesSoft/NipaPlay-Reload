@@ -1,8 +1,8 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../widgets/about_setting_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_group_card.dart';
 
 class CupertinoSettingsAboutSection extends StatelessWidget {
   const CupertinoSettingsAboutSection({super.key});
@@ -29,7 +29,8 @@ class CupertinoSettingsAboutSection extends StatelessWidget {
           child: Text('关于', style: textStyle),
         ),
         const SizedBox(height: 8),
-        AdaptiveFormSection.insetGrouped(
+        CupertinoSettingsGroupCard(
+          addDividers: true,
           backgroundColor: resolveSettingsSectionBackground(context),
           children: const [
             CupertinoAboutSettingTile(),

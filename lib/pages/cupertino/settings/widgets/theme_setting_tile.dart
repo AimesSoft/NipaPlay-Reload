@@ -1,5 +1,5 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/providers/ui_theme_provider.dart';
@@ -7,6 +7,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../pages/cupertino_ui_theme_settings_page.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_tile.dart';
 
 class CupertinoThemeSettingTile extends StatelessWidget {
   const CupertinoThemeSettingTile({super.key});
@@ -16,7 +17,8 @@ class CupertinoThemeSettingTile extends StatelessWidget {
     return Consumer<UIThemeProvider>(
       builder: (context, provider, child) {
         final UIThemeType currentTheme = provider.currentTheme;
-        final UIThemeType displayTheme = (PlatformInfo.isIOS &&
+  final bool isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+  final UIThemeType displayTheme = (isIOS &&
                 currentTheme == UIThemeType.fluentUI)
             ? (globals.isPhone ? UIThemeType.cupertino : UIThemeType.nipaplay)
             : currentTheme;
@@ -25,29 +27,15 @@ class CupertinoThemeSettingTile extends StatelessWidget {
 
         final tileColor = resolveSettingsTileBackground(context);
 
-        return AdaptiveListTile(
+        return CupertinoSettingsTile(
           leading: Icon(
             CupertinoIcons.sparkles,
             color: resolveSettingsIconColor(context),
           ),
-          title: Text(
-            '主题（实验性）',
-            style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
-          ),
-          subtitle: Text(
-            subtitle,
-            style: TextStyle(color: resolveSettingsSecondaryTextColor(context)),
-          ),
+          title: const Text('主题（实验性）'),
+          subtitle: Text(subtitle),
           backgroundColor: tileColor,
-          trailing: Icon(
-            PlatformInfo.isIOS
-                ? CupertinoIcons.chevron_forward
-                : CupertinoIcons.forward,
-            color: CupertinoDynamicColor.resolve(
-              CupertinoColors.systemGrey2,
-              context,
-            ),
-          ),
+          showChevron: true,
           onTap: () {
             Navigator.of(context).push(
               CupertinoPageRoute(

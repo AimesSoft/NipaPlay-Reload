@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/controllers/user_activity_controller.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
-import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
@@ -158,8 +157,11 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
     }
 
     if (error != null) {
-      return AdaptiveCard(
-        color: resolveSettingsCardBackground(context),
+      return Container(
+        decoration: BoxDecoration(
+          color: resolveSettingsCardBackground(context),
+          borderRadius: BorderRadius.circular(24),
+        ),
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,8 +199,11 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
           ? '暂无观看记录'
           : (_selectedIndex == 1 ? '暂无收藏内容' : '尚未对作品评分');
 
-      return AdaptiveCard(
-        color: resolveSettingsCardBackground(context),
+      return Container(
+        decoration: BoxDecoration(
+          color: resolveSettingsCardBackground(context),
+          borderRadius: BorderRadius.circular(24),
+        ),
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Center(
           child: Text(
@@ -214,10 +219,18 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       );
     }
 
-    return AdaptiveCard(
-      color: resolveSettingsCardBackground(context),
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: ListView.separated(
+    final BorderRadius radius = BorderRadius.circular(24);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: resolveSettingsCardBackground(context),
+        borderRadius: radius,
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         padding: EdgeInsets.zero,
@@ -227,6 +240,8 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
           height: 0.5,
           margin: const EdgeInsets.symmetric(horizontal: 20),
           color: resolveSettingsSeparatorColor(context),
+        ),
+      ),
         ),
       ),
     );

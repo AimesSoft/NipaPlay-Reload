@@ -1,4 +1,3 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../widgets/account_action_button.dart';
@@ -38,6 +37,20 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
       context,
     );
 
+    Widget buildCard({
+      required EdgeInsets padding,
+      required Widget child,
+    }) {
+      return Container(
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        padding: padding,
+        child: child,
+      );
+    }
+
     if (isLoggedIn) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -47,8 +60,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
             avatarUrl: avatarUrl,
           ),
           const SizedBox(height: 16),
-          AdaptiveCard(
-            color: cardColor,
+          buildCard(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
@@ -81,8 +93,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AdaptiveCard(
-          color: cardColor,
+        buildCard(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,8 +117,7 @@ class CupertinoDandanplayAccountSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        AdaptiveCard(
-          color: cardColor,
+        buildCard(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -14,6 +14,8 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_group_card.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_tile.dart';
 
 class CupertinoPlayerSettingsPage extends StatefulWidget {
   const CupertinoPlayerSettingsPage({super.key});
@@ -305,29 +307,25 @@ class _CupertinoPlayerSettingsPageState
     );
     final sectionBackground = resolveSettingsSectionBackground(context);
 
-    final double topPadding = MediaQuery.of(context).padding.top + 48;
+  final double topPadding = MediaQuery.of(context).padding.top + 64;
 
-    final Color tileBackground = resolveSettingsTileBackground(context);
-    final Color primaryText = resolveSettingsPrimaryTextColor(context);
-    final Color secondaryText = resolveSettingsSecondaryTextColor(context);
+  final Color tileBackground = resolveSettingsTileBackground(context);
 
     final List<Widget> sections = [
-      AdaptiveFormSection.insetGrouped(
+      CupertinoSettingsGroupCard(
+        margin: EdgeInsets.zero,
         backgroundColor: sectionBackground,
+        addDividers: true,
+        dividerIndent: 16,
         children: [
-          AdaptiveListTile(
+          CupertinoSettingsTile(
             leading: Icon(
               CupertinoIcons.play_rectangle,
               color: resolveSettingsIconColor(context),
             ),
-            title: Text(
-              '播放器内核',
-              style: TextStyle(color: primaryText),
-            ),
-            subtitle: Text(
-              _getPlayerKernelDescription(_selectedKernelType),
-              style: TextStyle(color: secondaryText),
-            ),
+            title: const Text('播放器内核'),
+            subtitle:
+                Text(_getPlayerKernelDescription(_selectedKernelType)),
             trailing: AdaptivePopupMenuButton.widget<PlayerKernelType>(
               items: _kernelMenuItems(),
               buttonStyle: PopupButtonStyle.gray,
@@ -355,10 +353,13 @@ class _CupertinoPlayerSettingsPageState
             return Column(
               children: [
                 const SizedBox(height: 16),
-                AdaptiveFormSection.insetGrouped(
+                CupertinoSettingsGroupCard(
+                  margin: EdgeInsets.zero,
                   backgroundColor: sectionBackground,
+                  addDividers: true,
+                  dividerIndent: 16,
                   children: [
-                    AdaptiveListTile(
+                    CupertinoSettingsTile(
                       leading: Icon(
                         CupertinoIcons.sparkles,
                         color: CupertinoDynamicColor.resolve(
@@ -366,13 +367,9 @@ class _CupertinoPlayerSettingsPageState
                           context,
                         ),
                       ),
-                      title: Text(
-                        'Anime4K 超分辨率（实验性）',
-                        style: TextStyle(color: primaryText),
-                      ),
+                      title: const Text('Anime4K 超分辨率（实验性）'),
                       subtitle: Text(
                         _getAnime4KProfileDescription(currentProfile),
-                        style: TextStyle(color: secondaryText),
                       ),
                       trailing: AdaptivePopupMenuButton.widget<Anime4KProfile>(
                         items: _anime4kMenuItems(),
@@ -408,21 +405,20 @@ class _CupertinoPlayerSettingsPageState
           },
         ),
       const SizedBox(height: 16),
-      AdaptiveFormSection.insetGrouped(
+      CupertinoSettingsGroupCard(
+        margin: EdgeInsets.zero,
         backgroundColor: sectionBackground,
+        addDividers: true,
+        dividerIndent: 16,
         children: [
-          AdaptiveListTile(
+          CupertinoSettingsTile(
             leading: Icon(
               CupertinoIcons.bubble_left_bubble_right,
               color: resolveSettingsIconColor(context),
             ),
-            title: Text(
-              '弹幕渲染引擎',
-              style: TextStyle(color: primaryText),
-            ),
+            title: const Text('弹幕渲染引擎'),
             subtitle: Text(
               _getDanmakuRenderEngineDescription(_selectedDanmakuRenderEngine),
-              style: TextStyle(color: secondaryText),
             ),
             trailing: AdaptivePopupMenuButton.widget<DanmakuRenderEngine>(
               items: _danmakuMenuItems(),
@@ -446,22 +442,19 @@ class _CupertinoPlayerSettingsPageState
       const SizedBox(height: 16),
       Consumer<SettingsProvider>(
         builder: (context, settingsProvider, child) {
-          return AdaptiveFormSection.insetGrouped(
+          return CupertinoSettingsGroupCard(
+            margin: EdgeInsets.zero,
             backgroundColor: sectionBackground,
+            addDividers: true,
+            dividerIndent: 16,
             children: [
-              AdaptiveListTile(
+              CupertinoSettingsTile(
                 leading: Icon(
                   CupertinoIcons.textformat_abc,
                   color: resolveSettingsIconColor(context),
                 ),
-                title: Text(
-                  '弹幕转换简体中文',
-                  style: TextStyle(color: primaryText),
-                ),
-                subtitle: Text(
-                  '开启后，将繁体中文弹幕转换为简体显示。',
-                  style: TextStyle(color: secondaryText),
-                ),
+                title: const Text('弹幕转换简体中文'),
+                subtitle: const Text('开启后，将繁体中文弹幕转换为简体显示。'),
                 trailing: AdaptiveSwitch(
                   value: settingsProvider.danmakuConvertToSimplified,
                   onChanged: (value) {

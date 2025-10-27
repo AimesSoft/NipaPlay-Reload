@@ -187,128 +187,125 @@ class _CupertinoMediaServerSettingsPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final double topPadding = MediaQuery.of(context).padding.top + 64;
 
-    return CupertinoPageScaffold(
-      backgroundColor: backgroundColor,
-      child: SafeArea( 
-        bottom: false,
-        child: Consumer2<JellyfinProvider, EmbyProvider>(
-          builder: (context, jellyfinProvider, embyProvider, _) {
-            return CustomScrollView(
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              slivers: [
-                const CupertinoSliverNavigationBar(
-                  largeTitle: Text('网络媒体库设置'),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Text(
-                      '在此管理 Jellyfin/Emby 服务器连接，调整媒体库同步配置。',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.secondaryLabel,
-                          context,
-                        ),
-                      ),
+    return AdaptiveScaffold(
+      appBar: const AdaptiveAppBar(
+        title: '网络媒体库',
+        useNativeToolbar: true,
+      ),
+      body: ColoredBox(
+        color: backgroundColor,
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: Consumer2<JellyfinProvider, EmbyProvider>(
+            builder: (context, jellyfinProvider, embyProvider, _) {
+              final TextStyle descriptionStyle = CupertinoTheme.of(context)
+                  .textTheme
+                  .textStyle
+                  .copyWith(
+                    fontSize: 14,
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.secondaryLabel,
+                      context,
                     ),
-                  ),
+                    height: 1.4,
+                  );
+
+              return ListView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: Column(
-                      children: [
-                        CupertinoMediaServerCard(
-                          title: 'Jellyfin 媒体服务器',
-                          icon: CupertinoIcons.tv,
-                          accentColor: CupertinoColors.systemBlue,
-                          isConnected: jellyfinProvider.isConnected,
-                          isLoading: !jellyfinProvider.isInitialized ||
-                              jellyfinProvider.isLoading,
-                          hasError: jellyfinProvider.hasError,
-                          errorMessage: jellyfinProvider.errorMessage,
-                          serverUrl: jellyfinProvider.serverUrl,
-                          username: jellyfinProvider.username,
-                          mediaItemCount:
-                              jellyfinProvider.mediaItems.length +
-                                  jellyfinProvider.movieItems.length,
-                          selectedLibraries:
-                              _resolveSelectedLibraryNames<JellyfinLibrary>(
-                            jellyfinProvider.availableLibraries,
-                            jellyfinProvider.selectedLibraryIds,
-                            (library) => library.id,
-                            (library) => library.name,
-                          ),
-                          onManage: () =>
-                              _showNetworkServerDialog(MediaServerType.jellyfin),
-                          onViewLibrary: jellyfinProvider.isConnected
-                              ? () => _showNetworkMediaLibraryBottomSheet(
-                                    initialServer: MediaServerType.jellyfin,
-                                  )
-                              : null,
-                          onDisconnect: jellyfinProvider.isConnected
-                              ? () => _disconnectNetworkServer(
-                                    MediaServerType.jellyfin,
-                                  )
-                              : null,
-                          onRefresh: jellyfinProvider.isConnected
-                              ? () => _refreshNetworkMedia(
-                                    MediaServerType.jellyfin,
-                                  )
-                              : null,
-                          disconnectedDescription:
-                              '连接 Jellyfin 服务器以同步远程媒体库与播放记录。',
-                        ),
-                        const SizedBox(height: 16),
-                        CupertinoMediaServerCard(
-                          title: 'Emby 媒体服务器',
-                          icon: CupertinoIcons.play_rectangle,
-                          accentColor: const Color(0xFF52B54B),
-                          isConnected: embyProvider.isConnected,
-                          isLoading:
-                              !embyProvider.isInitialized || embyProvider.isLoading,
-                          hasError: embyProvider.hasError,
-                          errorMessage: embyProvider.errorMessage,
-                          serverUrl: embyProvider.serverUrl,
-                          username: embyProvider.username,
-                          mediaItemCount: embyProvider.mediaItems.length +
-                              embyProvider.movieItems.length,
-                          selectedLibraries:
-                              _resolveSelectedLibraryNames<EmbyLibrary>(
-                            embyProvider.availableLibraries,
-                            embyProvider.selectedLibraryIds,
-                            (library) => library.id,
-                            (library) => library.name,
-                          ),
-                          onManage: () =>
-                              _showNetworkServerDialog(MediaServerType.emby),
-                          onViewLibrary: embyProvider.isConnected
-                              ? () => _showNetworkMediaLibraryBottomSheet(
-                                    initialServer: MediaServerType.emby,
-                                  )
-                              : null,
-                          onDisconnect: embyProvider.isConnected
-                              ? () =>
-                                  _disconnectNetworkServer(MediaServerType.emby)
-                              : null,
-                          onRefresh: embyProvider.isConnected
-                              ? () => _refreshNetworkMedia(MediaServerType.emby)
-                              : null,
-                          disconnectedDescription:
-                              '连接 Emby 服务器后可浏览个人媒体库并远程播放。',
-                        ),
-                      ],
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 32),
+                children: [
+                  Text(
+                    '在此管理 Jellyfin/Emby 服务器连接，调整媒体库同步配置。',
+                    style: descriptionStyle,
+                  ),
+                  const SizedBox(height: 16),
+                  CupertinoMediaServerCard(
+                    title: 'Jellyfin 媒体服务器',
+                    icon: CupertinoIcons.tv,
+                    accentColor: CupertinoColors.systemBlue,
+                    isConnected: jellyfinProvider.isConnected,
+                    isLoading: !jellyfinProvider.isInitialized ||
+                        jellyfinProvider.isLoading,
+                    hasError: jellyfinProvider.hasError,
+                    errorMessage: jellyfinProvider.errorMessage,
+                    serverUrl: jellyfinProvider.serverUrl,
+                    username: jellyfinProvider.username,
+                    mediaItemCount: jellyfinProvider.mediaItems.length +
+                        jellyfinProvider.movieItems.length,
+                    selectedLibraries:
+                        _resolveSelectedLibraryNames<JellyfinLibrary>(
+                      jellyfinProvider.availableLibraries,
+                      jellyfinProvider.selectedLibraryIds,
+                      (library) => library.id,
+                      (library) => library.name,
                     ),
+                    onManage: () =>
+                        _showNetworkServerDialog(MediaServerType.jellyfin),
+                    onViewLibrary: jellyfinProvider.isConnected
+                        ? () => _showNetworkMediaLibraryBottomSheet(
+                              initialServer: MediaServerType.jellyfin,
+                            )
+                        : null,
+                    onDisconnect: jellyfinProvider.isConnected
+                        ? () => _disconnectNetworkServer(
+                              MediaServerType.jellyfin,
+                            )
+                        : null,
+                    onRefresh: jellyfinProvider.isConnected
+                        ? () => _refreshNetworkMedia(
+                              MediaServerType.jellyfin,
+                            )
+                        : null,
+                    disconnectedDescription:
+                        '连接 Jellyfin 服务器以同步远程媒体库与播放记录。',
                   ),
-                ),
-                const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
-              ],
-            );
-          },
+                  const SizedBox(height: 16),
+                  CupertinoMediaServerCard(
+                    title: 'Emby 媒体服务器',
+                    icon: CupertinoIcons.play_rectangle,
+                    accentColor: const Color(0xFF52B54B),
+                    isConnected: embyProvider.isConnected,
+                    isLoading: !embyProvider.isInitialized ||
+                        embyProvider.isLoading,
+                    hasError: embyProvider.hasError,
+                    errorMessage: embyProvider.errorMessage,
+                    serverUrl: embyProvider.serverUrl,
+                    username: embyProvider.username,
+                    mediaItemCount: embyProvider.mediaItems.length +
+                        embyProvider.movieItems.length,
+                    selectedLibraries:
+                        _resolveSelectedLibraryNames<EmbyLibrary>(
+                      embyProvider.availableLibraries,
+                      embyProvider.selectedLibraryIds,
+                      (library) => library.id,
+                      (library) => library.name,
+                    ),
+                    onManage: () =>
+                        _showNetworkServerDialog(MediaServerType.emby),
+                    onViewLibrary: embyProvider.isConnected
+                        ? () => _showNetworkMediaLibraryBottomSheet(
+                              initialServer: MediaServerType.emby,
+                            )
+                        : null,
+                    onDisconnect: embyProvider.isConnected
+                        ? () =>
+                            _disconnectNetworkServer(MediaServerType.emby)
+                        : null,
+                    onRefresh: embyProvider.isConnected
+                        ? () => _refreshNetworkMedia(MediaServerType.emby)
+                        : null,
+                    disconnectedDescription:
+                        '连接 Emby 服务器后可浏览个人媒体库并远程播放。',
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
