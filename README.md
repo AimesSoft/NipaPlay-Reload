@@ -16,7 +16,7 @@
   <img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart">
 </div>
 
-> 一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。支持自动匹配网络弹幕。支持观看进度同步bangumi，对动画进行打分和写评论。支持查看新番更新。支持链接emby，jellyfin。支持挂载webdav。支持把你的电脑搭建成本地媒体中心，局域网内其他设备可以快速访问并播放。
+### 一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。支持自动匹配网络弹幕。支持观看进度同步bangumi，对动画进行打分和写评论。支持查看新番更新。支持链接emby，jellyfin。支持挂载webdav。支持把你的电脑搭建成本地媒体中心，局域网内其他设备可以快速访问并播放。
 
 ## 下载
 
