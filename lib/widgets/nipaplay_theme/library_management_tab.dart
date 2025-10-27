@@ -286,7 +286,8 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     }
 
     // 保存用户选择的自定义路径
-    await StorageService.saveCustomStoragePath(selectedDirectory);
+    // [修改] 自定义目录会影响安卓缓存，先注释
+    //await StorageService.saveCustomStoragePath(selectedDirectory);
     // 开始扫描目录
     await scanService.startDirectoryScan(selectedDirectory, skipPreviouslyMatchedUnwatched: false); // Ensure full scan for new folder
   }
