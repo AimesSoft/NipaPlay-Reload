@@ -90,7 +90,7 @@
 ## 赞助项目运行
 
 - <a href="https://afdian.com/a/irigas" target="_blank">
-    <img src="others/爱发电.jpg" width="100%" alt="下载">
+    <img src="others/爱发电.jpg" width="30%" alt="下载">
 
 </a>
 
