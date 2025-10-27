@@ -10,7 +10,9 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_media_server_card.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_network_media_library_sheet.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_network_media_management_sheet.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_network_server_connection_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart' show MediaServerType;
 
 class CupertinoMediaServerSettingsPage extends StatefulWidget {
   const CupertinoMediaServerSettingsPage({super.key});
@@ -25,15 +27,44 @@ class CupertinoMediaServerSettingsPage extends StatefulWidget {
 class _CupertinoMediaServerSettingsPageState
     extends State<CupertinoMediaServerSettingsPage> {
   Future<void> _showNetworkServerDialog(MediaServerType type) async {
-    final result = await NetworkMediaServerDialog.show(context, type);
-    if (!mounted || result != true) return;
+    // 检查是否已连接
+    bool isConnected;
+    if (type == MediaServerType.jellyfin) {
+      isConnected = context.read<JellyfinProvider>().isConnected;
+    } else {
+      isConnected = context.read<EmbyProvider>().isConnected;
+    }
 
-    final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
-    AdaptiveSnackBar.show(
-      context,
-      message: '$label 服务器设置已更新',
-      type: AdaptiveSnackBarType.success,
-    );
+    if (!isConnected) {
+      // 未连接，显示连接弹窗
+      final result = await CupertinoNetworkServerConnectionDialog.show(context, type);
+      if (result == true && mounted) {
+        final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
+        AdaptiveSnackBar.show(
+          context,
+          message: '$label 服务器已连接',
+          type: AdaptiveSnackBarType.success,
+        );
+      }
+    } else {
+      // 已连接，显示管理界面
+      await Navigator.of(context).push(
+        CupertinoPageRoute(
+          fullscreenDialog: true,
+          builder: (context) => CupertinoNetworkMediaManagementSheet(
+            serverType: type,
+          ),
+        ),
+      );
+      if (!mounted) return;
+
+      final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
+      AdaptiveSnackBar.show(
+        context,
+        message: '$label 服务器设置已更新',
+        type: AdaptiveSnackBarType.success,
+      );
+    }
   }
 
   List<String> _resolveSelectedLibraryNames<T>(
@@ -263,6 +294,7 @@ class _CupertinoMediaServerSettingsPageState
                         : null,
                     disconnectedDescription:
                         '连接 Jellyfin 服务器以同步远程媒体库与播放记录。',
+                    serverBrand: ServerBrand.jellyfin,
                   ),
                   const SizedBox(height: 16),
                   CupertinoMediaServerCard(
@@ -301,6 +333,7 @@ class _CupertinoMediaServerSettingsPageState
                         : null,
                     disconnectedDescription:
                         '连接 Emby 服务器后可浏览个人媒体库并远程播放。',
+                    serverBrand: ServerBrand.emby,
                   ),
                 ],
               );

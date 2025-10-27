@@ -2,12 +2,11 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nipaplay/models/emby_model.dart';
-import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_glass_library_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_network_media_management_sheet.dart';
 
 import 'cupertino_network_library_items_page.dart';
 
@@ -65,6 +64,17 @@ class _CupertinoNetworkServerLibrariesPageState
   String get _serverLabel =>
       widget.serverType == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
 
+  Future<void> _showManagementSheet() async {
+    await Navigator.of(context).push(
+      CupertinoPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => CupertinoNetworkMediaManagementSheet(
+          serverType: widget.serverType,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final backgroundColor = CupertinoDynamicColor.resolve(
@@ -109,16 +119,17 @@ class _CupertinoNetworkServerLibrariesPageState
   ) {
     final libraries = provider.availableLibraries;
     final selectedIds = provider.selectedLibraryIds;
-    Iterable<JellyfinLibrary> result = libraries;
-    if (selectedIds.isNotEmpty) {
-      final filtered = libraries
-          .where((library) => selectedIds.contains(library.id))
-          .toList();
-      if (filtered.isNotEmpty) {
-        result = filtered;
-      }
+    
+    // 只显示已选中的库，未选中时返回空列表
+    if (selectedIds.isEmpty) {
+      return [];
     }
-    return result
+    
+    final filtered = libraries
+        .where((library) => selectedIds.contains(library.id))
+        .toList();
+    
+    return filtered
         .map(
           (library) => _NetworkLibraryCardData(
             id: library.id,
@@ -136,16 +147,17 @@ class _CupertinoNetworkServerLibrariesPageState
   ) {
     final libraries = provider.availableLibraries;
     final selectedIds = provider.selectedLibraryIds;
-    Iterable<EmbyLibrary> result = libraries;
-    if (selectedIds.isNotEmpty) {
-      final filtered = libraries
-          .where((library) => selectedIds.contains(library.id))
-          .toList();
-      if (filtered.isNotEmpty) {
-        result = filtered;
-      }
+    
+    // 只显示已选中的库，未选中时返回空列表
+    if (selectedIds.isEmpty) {
+      return [];
     }
-    return result
+    
+    final filtered = libraries
+        .where((library) => selectedIds.contains(library.id))
+        .toList();
+    
+    return filtered
         .map(
           (library) => _NetworkLibraryCardData(
             id: library.id,
@@ -173,7 +185,7 @@ class _CupertinoNetworkServerLibrariesPageState
       CupertinoSliverRefreshControl(onRefresh: onRefresh),
       // 顶部空间
       const SliverToBoxAdapter(
-        child: SizedBox(height: 160),
+        child: SizedBox(height: 150),
       ),
     ];
 
@@ -225,7 +237,7 @@ class _CupertinoNetworkServerLibrariesPageState
                 AdaptiveAppBarAction(
                   iosSymbol: 'slider.horizontal.3',
                   icon: CupertinoIcons.slider_horizontal_3,
-                  onPressed: () => widget.onManageServer!(widget.serverType),
+                  onPressed: _showManagementSheet,
                 ),
               ],
       ),
@@ -250,24 +262,28 @@ class _CupertinoNetworkServerLibrariesPageState
     List<_NetworkLibraryCardData> libraries,
   ) {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 18,
-          mainAxisSpacing: 18,
-          childAspectRatio: 16 / 11,
-        ),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final library = libraries[index];
-            return CupertinoGlassLibraryCard(
-              title: library.name,
-              subtitle: library.subtitle,
-              imageUrl: library.imageUrl,
-              itemCount: library.itemCount,
-              accentColor: _accentColor,
-              onTap: () => _openLibrary(library),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: SizedBox(
+                height: 200,
+                child: CupertinoGlassLibraryCard(
+                  title: library.name,
+                  subtitle: library.subtitle,
+                  imageUrl: library.imageUrl,
+                  itemCount: library.itemCount,
+                  accentColor: _accentColor,
+                  onTap: () => _openLibrary(library),
+                  showOverlay: false,
+                  serverBrand: widget.serverType == MediaServerType.jellyfin
+                      ? MediaServerBrand.jellyfin
+                      : MediaServerBrand.emby,
+                ),
+              ),
             );
           },
           childCount: libraries.length,

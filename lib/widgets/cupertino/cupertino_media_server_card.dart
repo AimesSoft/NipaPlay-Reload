@@ -1,6 +1,9 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// Cupertino 风格的网络媒体服务器状态卡片。
+enum ServerBrand { jellyfin, emby }
+
 class CupertinoMediaServerCard extends StatelessWidget {
   const CupertinoMediaServerCard({
     super.key,
@@ -20,6 +23,7 @@ class CupertinoMediaServerCard extends StatelessWidget {
     this.onDisconnect,
     this.onRefresh,
     this.disconnectedDescription,
+    this.serverBrand,
   });
 
   final String title;
@@ -38,6 +42,7 @@ class CupertinoMediaServerCard extends StatelessWidget {
   final VoidCallback? onDisconnect;
   final VoidCallback? onRefresh;
   final String? disconnectedDescription;
+  final ServerBrand? serverBrand;
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +88,16 @@ class CupertinoMediaServerCard extends StatelessWidget {
                   color: accentColor.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: accentColor, size: 20),
+                child: serverBrand != null
+                    ? SvgPicture.asset(
+                        serverBrand == ServerBrand.jellyfin
+                            ? 'assets/jellyfin.svg'
+                            : 'assets/emby.svg',
+                        width: 20,
+                        height: 20,
+                        colorFilter: ColorFilter.mode(accentColor, BlendMode.srcIn),
+                      )
+                    : Icon(icon, color: accentColor, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(

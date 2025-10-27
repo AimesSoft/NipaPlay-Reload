@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/media_library_sort_dialog.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_media_library_sort_sheet.dart';
 
 class CupertinoNetworkLibraryItemsPage extends StatefulWidget {
   const CupertinoNetworkLibraryItemsPage({
@@ -202,31 +202,26 @@ class _CupertinoNetworkLibraryItemsPageState
   Future<void> _handleRefresh() => _loadItems();
 
   Future<void> _showSortDialog() async {
-    final libraryType = widget.serverType == MediaServerType.jellyfin
-        ? MediaLibraryType.jellyfin
-        : MediaLibraryType.emby;
-    
-    final sortOption = _resolveSortOption(_currentSort);
-    
-    final result = await MediaLibrarySortDialog.show(
-      context,
-      currentSortBy: sortOption.sortBy,
-      currentSortOrder: sortOption.sortOrder,
-      libraryType: libraryType,
+    await Navigator.of(context).push(
+      CupertinoPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => CupertinoMediaLibrarySortSheet(
+          currentSortBy: _resolveSortOption(_currentSort).sortBy,
+          currentSortOrder: _resolveSortOption(_currentSort).sortOrder,
+          serverType: widget.serverType == MediaServerType.jellyfin
+              ? 'jellyfin'
+              : 'emby',
+          onSortChanged: (sortBy, sortOrder) {
+            // 根据选择更新排序
+            if (sortBy == 'SortName' && sortOrder == 'Ascending') {
+              _loadItems(nextSort: _LibrarySort.nameAsc);
+            } else {
+              _loadItems(nextSort: _LibrarySort.recentlyAdded);
+            }
+          },
+        ),
+      ),
     );
-    
-    if (result != null) {
-      // Parse the result and update sort if needed
-      final newSortBy = result['sortBy'] ?? sortOption.sortBy;
-      final newSortOrder = result['sortOrder'] ?? sortOption.sortOrder;
-      
-      // Determine which sort to use based on the selection
-      if (newSortBy == 'SortName' && newSortOrder == 'Ascending') {
-        await _loadItems(nextSort: _LibrarySort.nameAsc);
-      } else {
-        await _loadItems(nextSort: _LibrarySort.recentlyAdded);
-      }
-    }
   }
 
   @override

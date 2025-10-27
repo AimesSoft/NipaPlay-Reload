@@ -19,6 +19,7 @@ import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_anime_card.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_glass_media_server_card.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_network_media_management_sheet.dart';
 import 'package:nipaplay/pages/cupertino/network_media/cupertino_network_server_libraries_page.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
@@ -35,7 +36,7 @@ import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart' show MediaServerType;
 
 // ignore_for_file: prefer_const_constructors
 
@@ -861,8 +862,15 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   }
 
   Future<void> _showNetworkServerDialog(MediaServerType type) async {
-    final result = await NetworkMediaServerDialog.show(context, type);
-    if (result == true && mounted) {
+    await Navigator.of(context).push(
+      CupertinoPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => CupertinoNetworkMediaManagementSheet(
+          serverType: type,
+        ),
+      ),
+    );
+    if (mounted) {
       final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
       AdaptiveSnackBar.show(
         context,

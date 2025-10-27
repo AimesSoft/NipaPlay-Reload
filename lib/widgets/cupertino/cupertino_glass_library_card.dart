@@ -1,6 +1,9 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// 液态玻璃风格的媒体库卡片，用于展示远程服务器中的分类库。
+enum MediaServerBrand { jellyfin, emby }
+
 class CupertinoGlassLibraryCard extends StatelessWidget {
   const CupertinoGlassLibraryCard({
     super.key,
@@ -10,6 +13,8 @@ class CupertinoGlassLibraryCard extends StatelessWidget {
     this.itemCount,
     required this.accentColor,
     required this.onTap,
+    this.showOverlay = true,
+    this.serverBrand = MediaServerBrand.jellyfin,
   });
 
   final String title;
@@ -18,6 +23,8 @@ class CupertinoGlassLibraryCard extends StatelessWidget {
   final int? itemCount;
   final Color accentColor;
   final VoidCallback onTap;
+  final bool showOverlay;
+  final MediaServerBrand serverBrand;
 
   @override
   Widget build(BuildContext context) {
@@ -49,19 +56,29 @@ class CupertinoGlassLibraryCard extends StatelessWidget {
           child: Stack(
             children: [
               Positioned.fill(child: _buildBackground()),
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: overlayColors,
+              if (showOverlay)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: overlayColors,
+                      ),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: borderColor, width: 0.6),
                     ),
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: borderColor, width: 0.6),
+                  ),
+                )
+              else
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: borderColor, width: 0.6),
+                    ),
                   ),
                 ),
-              ),
               Positioned(
                 top: 16,
                 left: 16,
@@ -128,10 +145,13 @@ class CupertinoGlassLibraryCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            CupertinoIcons.collections,
-            size: 14,
-            color: accentColor,
+          SvgPicture.asset(
+            serverBrand == MediaServerBrand.jellyfin
+                ? 'assets/jellyfin.svg'
+                : 'assets/emby.svg',
+            width: 14,
+            height: 14,
+            colorFilter: const ColorFilter.mode(CupertinoColors.white, BlendMode.srcIn),
           ),
           if (itemCount != null) ...[
             const SizedBox(width: 6),
