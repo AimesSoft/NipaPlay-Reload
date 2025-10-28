@@ -1,9 +1,9 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../pages/cupertino_about_page.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_tile.dart';
 
 class CupertinoAboutSettingTile extends StatefulWidget {
   const CupertinoAboutSettingTile({super.key});
@@ -42,29 +42,15 @@ class _CupertinoAboutSettingTileState
   Widget build(BuildContext context) {
     final tileColor = resolveSettingsTileBackground(context);
 
-    return AdaptiveListTile(
+    return CupertinoSettingsTile(
       leading: Icon(
         CupertinoIcons.info_circle,
         color: resolveSettingsIconColor(context),
       ),
-      title: Text(
-        '关于',
-        style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
-      ),
-      subtitle: Text(
-        _versionLabel,
-        style: TextStyle(color: resolveSettingsSecondaryTextColor(context)),
-      ),
+      title: const Text('关于'),
+      subtitle: Text(_versionLabel),
       backgroundColor: tileColor,
-      trailing: Icon(
-        PlatformInfo.isIOS
-            ? CupertinoIcons.chevron_forward
-            : CupertinoIcons.forward,
-        color: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGrey2,
-          context,
-        ),
-      ),
+      showChevron: true,
       onTap: () {
         Navigator.of(context).push(
           CupertinoPageRoute(

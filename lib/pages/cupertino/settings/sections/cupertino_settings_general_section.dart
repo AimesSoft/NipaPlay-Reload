@@ -1,11 +1,12 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_group_card.dart';
 
 import '../widgets/appearance_setting_tile.dart';
 import '../widgets/theme_setting_tile.dart';
 import '../widgets/player_setting_tile.dart';
+import '../widgets/media_server_setting_tile.dart';
 
 class CupertinoSettingsGeneralSection extends StatelessWidget {
   const CupertinoSettingsGeneralSection({super.key});
@@ -32,12 +33,14 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
           child: Text('基础设置', style: textStyle),
         ),
         const SizedBox(height: 8),
-        AdaptiveFormSection.insetGrouped(
+        CupertinoSettingsGroupCard(
+          addDividers: true,
           backgroundColor: resolveSettingsSectionBackground(context),
           children: [
             CupertinoAppearanceSettingTile(),
             CupertinoThemeSettingTile(),
             CupertinoPlayerSettingTile(),
+            CupertinoMediaServerSettingTile(),
           ],
         ),
       ],

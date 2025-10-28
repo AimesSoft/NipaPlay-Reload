@@ -10,6 +10,8 @@ import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_group_card.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_tile.dart';
 
 class CupertinoUIThemeSettingsPage extends StatefulWidget {
   const CupertinoUIThemeSettingsPage({super.key});
@@ -42,7 +44,7 @@ class _CupertinoUIThemeSettingsPageState
     final sectionBackground = resolveSettingsSectionBackground(context);
     final provider = context.watch<UIThemeProvider>();
 
-    final double topPadding = MediaQuery.of(context).padding.top + 48;
+  final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     final List<UIThemeType> availableThemes = UIThemeType.values.where((theme) {
       if (theme == UIThemeType.cupertino) {
@@ -75,37 +77,22 @@ class _CupertinoUIThemeSettingsPageState
             ),
             padding: EdgeInsets.fromLTRB(16, topPadding, 16, 32),
             children: [
-              AdaptiveFormSection.insetGrouped(
+              CupertinoSettingsGroupCard(
+                margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
+                addDividers: true,
+                dividerIndent: 16,
                 children: availableThemes.map((theme) {
                   final tileColor = resolveSettingsTileBackground(context);
-                  return AdaptiveListTile(
+                  return CupertinoSettingsTile(
                     leading: Icon(
                       _leadingIcon(theme),
                       color: resolveSettingsIconColor(context),
                     ),
-                    title: Text(
-                      _themeTitle(theme),
-                      style: TextStyle(
-                        color: resolveSettingsPrimaryTextColor(context),
-                      ),
-                    ),
-                    subtitle: Text(
-                      _themeSubtitle(theme),
-                      style: TextStyle(
-                        color: resolveSettingsSecondaryTextColor(context),
-                      ),
-                    ),
-                    trailing: AdaptiveRadio<UIThemeType>(
-                      value: theme,
-                      groupValue: _selectedTheme,
-                      onChanged: (value) {
-                        if (value != null) {
-                          _handleThemeSelection(value, provider);
-                        }
-                      },
-                    ),
+                    title: Text(_themeTitle(theme)),
+                    subtitle: Text(_themeSubtitle(theme)),
                     backgroundColor: tileColor,
+                    selected: _selectedTheme == theme,
                     onTap: () => _handleThemeSelection(theme, provider),
                   );
                 }).toList(),

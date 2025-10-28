@@ -26,7 +26,7 @@ import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
-import 'package:nipaplay/pages/media_server_detail_page.dart';
+import 'package:nipaplay/pages/cupertino/cupertino_media_server_detail_page.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/services/playback_service.dart';
@@ -388,10 +388,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       prefs = await SharedPreferences.getInstance();
       final persisted = prefs.getString('$_localPrefsKeyPrefix$animeId');
       if (persisted != null && persisted.isNotEmpty) {
-          if (_looksHighQualityUrl(persisted)) {
-            _localImageCache[animeId] = persisted;
-            return persisted;
-          }
+        if (_looksHighQualityUrl(persisted)) {
+          _localImageCache[animeId] = persisted;
+          return persisted;
+        }
       }
 
       final key = 'bangumi_detail_$animeId';
@@ -437,7 +437,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   bool _looksHighQualityUrl(String url) {
     final lower = url.toLowerCase();
-    if (lower.contains('bgm.tv') || lower.contains('type=large') ||
+    if (lower.contains('bgm.tv') ||
+        lower.contains('type=large') ||
         lower.contains('original')) {
       return true;
     }
@@ -515,14 +516,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Future<String?> _fetchBangumiHighQualityCover(String bangumiId) async {
     try {
-      final uri =
-          Uri.parse('https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large');
-      final response = await http
-          .head(
-            uri,
-            headers: const {'User-Agent': 'NipaPlay/1.0'},
-          )
-          .timeout(const Duration(seconds: 5));
+      final uri = Uri.parse(
+          'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large');
+      final response = await http.head(
+        uri,
+        headers: const {'User-Agent': 'NipaPlay/1.0'},
+      ).timeout(const Duration(seconds: 5));
       if (response.statusCode == 302) {
         final redirected = response.headers['location'];
         if (redirected != null && redirected.isNotEmpty) {
@@ -737,8 +736,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     final bool hasAnimeId = item.animeId != null;
     final bool hasRemoteMedia =
         item.mediaServerItemId != null && item.mediaServerType != null;
-    final bool canOpenDetail =
-        (hasAnimeId || hasRemoteMedia) &&
+    final bool canOpenDetail = (hasAnimeId || hasRemoteMedia) &&
         item.source != _CupertinoRecommendedSource.placeholder;
 
     // ignore: prefer_const_constructors
@@ -773,8 +771,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 height: cardHeight * 0.5, // 遮罩覆盖卡片底部60%高度
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius:
-                        const BorderRadius.vertical(bottom: Radius.circular(24)),
+                    borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(24)),
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
@@ -1068,11 +1066,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           if (jellyfinService.isConnected) {
             actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
           } else {
-          AdaptiveSnackBar.show(
-            context,
-            message: '未连接到Jellyfin服务器',
-            type: AdaptiveSnackBarType.error,
-          );
+            AdaptiveSnackBar.show(
+              context,
+              message: '未连接到Jellyfin服务器',
+              type: AdaptiveSnackBarType.error,
+            );
             return null;
           }
         } catch (e) {
@@ -1311,7 +1309,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Future<void> _openMediaServerDetail(_CupertinoRecommendedItem item) async {
-    if (!mounted || item.mediaServerItemId == null || item.mediaServerType == null) {
+    if (!mounted ||
+        item.mediaServerItemId == null ||
+        item.mediaServerType == null) {
       return;
     }
 
@@ -1322,13 +1322,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       case MediaServerType.jellyfin:
         var provider = _jellyfinProvider;
         if (provider == null || !provider.isConnected) {
-          await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
+          await NetworkMediaServerDialog.show(
+              context, MediaServerType.jellyfin);
           provider = _jellyfinProvider;
           if (provider == null || !provider.isConnected) {
             return;
           }
         }
-        await MediaServerDetailPage.showJellyfin(context, mediaId);
+        await CupertinoMediaServerDetailPage.showJellyfin(context, mediaId);
         return;
       case MediaServerType.emby:
         var provider = _embyProvider;
@@ -1339,7 +1340,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             return;
           }
         }
-        await MediaServerDetailPage.showEmby(context, mediaId);
+        await CupertinoMediaServerDetailPage.showEmby(context, mediaId);
         return;
     }
   }

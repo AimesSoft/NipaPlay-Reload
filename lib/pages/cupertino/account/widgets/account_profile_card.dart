@@ -1,4 +1,3 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
 class CupertinoAccountProfileCard extends StatelessWidget {
@@ -17,14 +16,18 @@ class CupertinoAccountProfileCard extends StatelessWidget {
       CupertinoColors.systemGreen.withOpacity(0.2),
       context,
     );
+    final Color backgroundColor = CupertinoDynamicColor.resolve(
+      const CupertinoDynamicColor.withBrightness(
+        color: CupertinoColors.white,
+        darkColor: CupertinoColors.darkBackgroundGray,
+      ),
+      context,
+    );
 
-    return AdaptiveCard(
-      color: CupertinoDynamicColor.resolve(
-        const CupertinoDynamicColor.withBrightness(
-          color: CupertinoColors.white,
-          darkColor: CupertinoColors.darkBackgroundGray,
-        ),
-        context,
+    return Container(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(24),
       ),
       padding: const EdgeInsets.all(20),
       child: Row(

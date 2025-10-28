@@ -10,12 +10,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_anime_card.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_glass_media_server_card.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_network_media_management_sheet.dart';
+import 'package:nipaplay/pages/cupertino/network_media/cupertino_network_server_libraries_page.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
@@ -28,6 +33,11 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/pages/cupertino/cupertino_media_server_detail_page.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart'
+    show MediaServerType;
 
 // ignore_for_file: prefer_const_constructors
 
@@ -78,8 +88,10 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       color: backgroundColor,
       child: Stack(
         children: [
-          Consumer<SharedRemoteLibraryProvider>(
-            builder: (context, provider, _) {
+          Consumer3<SharedRemoteLibraryProvider, JellyfinProvider,
+              EmbyProvider>(
+            builder:
+                (context, sharedProvider, jellyfinProvider, embyProvider, _) {
               return CustomScrollView(
                 controller: _scrollController,
                 physics: const BouncingScrollPhysics(
@@ -88,7 +100,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                   SliverPadding(
                     padding: EdgeInsets.only(top: statusBarHeight + 52),
                     sliver: CupertinoSliverRefreshControl(
-                      onRefresh: () => _refreshActiveHost(provider),
+                      onRefresh: () => _refreshActiveHost(sharedProvider),
                     ),
                   ),
                   SliverToBoxAdapter(
@@ -106,23 +118,29 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                   const SliverToBoxAdapter(
                     child: SizedBox(height: 12),
                   ),
+                  ..._buildNetworkMediaSection(
+                    context,
+                    jellyfinProvider,
+                    embyProvider,
+                  ),
                   SliverToBoxAdapter(
                     child: _buildSectionTitle('NipaPlay 共享媒体库'),
                   ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _buildHostCard(context, provider, cardColor),
+                      child: _buildHostCard(context, sharedProvider, cardColor),
                     ),
                   ),
-                  if (provider.errorMessage != null)
+                  if (sharedProvider.errorMessage != null)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                        child: _buildErrorBanner(context, provider, cardColor),
+                        child: _buildErrorBanner(
+                            context, sharedProvider, cardColor),
                       ),
                     ),
-                  ..._buildLibrarySlivers(context, provider, cardColor),
+                  ..._buildLibrarySlivers(context, sharedProvider, cardColor),
                   const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
                 ],
               );
@@ -169,6 +187,160 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  List<Widget> _buildNetworkMediaSection(
+    BuildContext context,
+    JellyfinProvider jellyfinProvider,
+    EmbyProvider embyProvider,
+  ) {
+    final bool jellyfinConnected = jellyfinProvider.isConnected;
+    final bool embyConnected = embyProvider.isConnected;
+    final List<Widget> slivers = [];
+
+    final List<Widget> cards = [];
+
+    if (jellyfinConnected) {
+      final List<String> selected =
+          _resolveSelectedLibraryNames<JellyfinLibrary>(
+        jellyfinProvider.availableLibraries,
+        jellyfinProvider.selectedLibraryIds,
+        (library) => library.id,
+        (library) => library.name,
+      );
+      cards.add(
+        CupertinoGlassMediaServerCard(
+          title: 'Jellyfin 媒体库',
+          subtitle: _formatServerSubtitle(
+            jellyfinProvider.username,
+            jellyfinProvider.serverUrl,
+          ),
+          icon: CupertinoIcons.tv,
+          accentColor: CupertinoColors.systemBlue,
+          libraryNames: selected,
+          isLoading: jellyfinProvider.isLoading,
+          onTap: () => _openNetworkServerLibrariesPage(
+            MediaServerType.jellyfin,
+          ),
+          onManage: () => _showNetworkServerDialog(MediaServerType.jellyfin),
+        ),
+      );
+    }
+
+    if (embyConnected) {
+      final List<String> selected = _resolveSelectedLibraryNames<EmbyLibrary>(
+        embyProvider.availableLibraries,
+        embyProvider.selectedLibraryIds,
+        (library) => library.id,
+        (library) => library.name,
+      );
+      cards.add(
+        CupertinoGlassMediaServerCard(
+          title: 'Emby 媒体库',
+          subtitle: _formatServerSubtitle(
+            embyProvider.username,
+            embyProvider.serverUrl,
+          ),
+          icon: CupertinoIcons.play_rectangle,
+          accentColor: const Color(0xFF52B54B),
+          libraryNames: selected,
+          isLoading: embyProvider.isLoading,
+          onTap: () => _openNetworkServerLibrariesPage(
+            MediaServerType.emby,
+          ),
+          onManage: () => _showNetworkServerDialog(MediaServerType.emby),
+        ),
+      );
+    }
+
+    if (cards.isEmpty) {
+      return slivers;
+    }
+
+    slivers.add(
+      SliverToBoxAdapter(
+        child: _buildSectionTitle('网络媒体库'),
+      ),
+    );
+
+    slivers.add(
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            children: _withSpacing(cards),
+          ),
+        ),
+      ),
+    );
+
+    slivers.add(
+      const SliverToBoxAdapter(
+        child: SizedBox(height: 12),
+      ),
+    );
+
+    return slivers;
+  }
+
+  List<Widget> _withSpacing(List<Widget> items) {
+    if (items.length <= 1) {
+      return List<Widget>.from(items);
+    }
+    final List<Widget> spaced = [];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) {
+        spaced.add(const SizedBox(height: 16));
+      }
+      spaced.add(items[i]);
+    }
+    return spaced;
+  }
+
+  String? _formatServerSubtitle(String? username, String? serverUrl) {
+    final List<String> segments = [];
+    if (username != null && username.isNotEmpty) {
+      segments.add(username);
+    }
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      segments.add(_trimUrlScheme(serverUrl));
+    }
+    if (segments.isEmpty) {
+      return null;
+    }
+    return segments.join(' · ');
+  }
+
+  String _trimUrlScheme(String url) {
+    return url.replaceFirst(RegExp(r'^https?://'), '');
+  }
+
+  Future<void> _openNetworkServerLibrariesPage(MediaServerType type) async {
+    final bool connected = switch (type) {
+      MediaServerType.jellyfin => context.read<JellyfinProvider>().isConnected,
+      MediaServerType.emby => context.read<EmbyProvider>().isConnected,
+    };
+
+    if (!connected) {
+      AdaptiveSnackBar.show(
+        context,
+        message: type == MediaServerType.jellyfin
+            ? '请先连接 Jellyfin 服务器'
+            : '请先连接 Emby 服务器',
+        type: AdaptiveSnackBarType.warning,
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => CupertinoNetworkServerLibrariesPage(
+          serverType: type,
+          onOpenDetail: _openNetworkMediaDetail,
+          onManageServer: _showNetworkServerDialog,
+        ),
       ),
     );
   }
@@ -665,6 +837,116 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     );
   }
 
+  List<String> _resolveSelectedLibraryNames<T>(
+    List<T> libraries,
+    Iterable<String> selectedIds,
+    String Function(T library) idSelector,
+    String Function(T library) nameSelector,
+  ) {
+    if (selectedIds.isEmpty) {
+      return const <String>[];
+    }
+
+    final Map<String, String> nameMap = {
+      for (final library in libraries)
+        idSelector(library): nameSelector(library),
+    };
+
+    final List<String> resolved = [];
+    for (final id in selectedIds) {
+      final name = nameMap[id];
+      if (name != null && name.isNotEmpty) {
+        resolved.add(name);
+      }
+    }
+    return resolved;
+  }
+
+  Future<void> _showNetworkServerDialog(MediaServerType type) async {
+    await Navigator.of(context).push(
+      CupertinoPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => CupertinoNetworkMediaManagementSheet(
+          serverType: type,
+        ),
+      ),
+    );
+    if (mounted) {
+      final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
+      AdaptiveSnackBar.show(
+        context,
+        message: '$label 服务器设置已更新',
+        type: AdaptiveSnackBarType.success,
+      );
+    }
+  }
+
+  Future<void> _openNetworkMediaDetail(
+    MediaServerType type,
+    String mediaId,
+  ) async {
+    WatchHistoryItem? result;
+    if (type == MediaServerType.jellyfin) {
+      result =
+          await CupertinoMediaServerDetailPage.showJellyfin(context, mediaId);
+    } else {
+      result = await CupertinoMediaServerDetailPage.showEmby(context, mediaId);
+    }
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    String? actualPlayUrl;
+    try {
+      if (result.filePath.startsWith('jellyfin://')) {
+        final jellyfinId = result.filePath.replaceFirst('jellyfin://', '');
+        final provider = context.read<JellyfinProvider>();
+        if (!provider.isConnected) {
+          AdaptiveSnackBar.show(
+            context,
+            message: '未连接到 Jellyfin 服务器',
+            type: AdaptiveSnackBarType.warning,
+          );
+          return;
+        }
+        actualPlayUrl = provider.getStreamUrl(jellyfinId);
+      } else if (result.filePath.startsWith('emby://')) {
+        final embyId = result.filePath.replaceFirst('emby://', '');
+        final provider = context.read<EmbyProvider>();
+        if (!provider.isConnected) {
+          AdaptiveSnackBar.show(
+            context,
+            message: '未连接到 Emby 服务器',
+            type: AdaptiveSnackBarType.warning,
+          );
+          return;
+        }
+        actualPlayUrl = await provider.getStreamUrl(embyId);
+      }
+    } catch (e) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '获取播放地址失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+
+    final playable = PlayableItem(
+      videoPath: result.filePath,
+      title: result.animeName,
+      subtitle: result.episodeTitle,
+      animeId: result.animeId,
+      episodeId: result.episodeId,
+      historyItem: result,
+      actualPlayUrl: actualPlayUrl,
+    );
+
+    await PlaybackService().play(playable);
+    await context.read<WatchHistoryProvider>().refresh();
+  }
+
   String _formatDateTime(DateTime? time) {
     if (time == null) {
       return '尚未同步';
@@ -1078,9 +1360,7 @@ class _CupertinoLocalMediaLibraryCardState
     final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: enabled
-            ? primaryColor
-            : primaryColor.withValues(alpha: 0.4),
+        color: enabled ? primaryColor : primaryColor.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1110,7 +1390,7 @@ class _CupertinoLocalMediaLibraryCardState
       items: _buildImportMenuItems(),
       child: child,
       onSelected: (index, entry) {
-        final value = entry is AdaptivePopupMenuItem ? entry.value : null;
+        final value = (entry as AdaptivePopupMenuItem).value;
         _handleImportSelection(value);
       },
     );
@@ -1246,7 +1526,8 @@ class _CupertinoLocalMediaLibraryCardState
     final buttonChild = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
+        color:
+            enabled ? backgroundColor : backgroundColor.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1381,9 +1662,7 @@ class _CupertinoLocalMediaLibraryCardState
       AdaptivePopupMenuItem(
         label: '从文件管理器导入',
         value: 'file',
-        icon: PlatformInfo.isIOS26OrHigher()
-            ? 'folder'
-            : CupertinoIcons.folder,
+        icon: PlatformInfo.isIOS26OrHigher() ? 'folder' : CupertinoIcons.folder,
       ),
     ];
   }
@@ -2280,7 +2559,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
       onGenerateInitialRoutes: (_, __) {
         return [
           CupertinoPageRoute<void>(
-            builder: (routeContext) => ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+            builder: (routeContext) =>
+                ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
               value: widget.provider,
               child: _CupertinoMediaLibraryListPage(
                 onAnimeTap: _handleAnimeTap,
@@ -2298,7 +2578,8 @@ class _MediaLibraryContentState extends State<_MediaLibraryContent> {
 
     await _navigatorKey.currentState?.push(
       CupertinoPageRoute<void>(
-        builder: (routeContext) => ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+        builder: (routeContext) =>
+            ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
           value: widget.provider,
           child: CupertinoSharedAnimeDetailPage(
             anime: anime,

@@ -1,11 +1,11 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Icons, ThemeMode;
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/utils/theme_notifier.dart';
 import '../pages/cupertino_appearance_settings_page.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_tile.dart';
 
 class CupertinoAppearanceSettingTile extends StatelessWidget {
   const CupertinoAppearanceSettingTile({super.key});
@@ -28,27 +28,15 @@ class CupertinoAppearanceSettingTile extends StatelessWidget {
 
     final tileColor = resolveSettingsTileBackground(context);
 
-    return AdaptiveListTile(
+    return CupertinoSettingsTile(
       leading: Icon(
         CupertinoIcons.paintbrush,
         color: resolveSettingsIconColor(context),
       ),
-      title: Text(
-        '外观',
-        style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
-      ),
-      subtitle: Text(
-        _modeLabel(themeMode),
-        style: TextStyle(color: resolveSettingsSecondaryTextColor(context)),
-      ),
+      title: const Text('外观'),
+      subtitle: Text(_modeLabel(themeMode)),
       backgroundColor: tileColor,
-      trailing: Icon(
-        PlatformInfo.isIOS ? CupertinoIcons.chevron_forward : Icons.chevron_right,
-        color: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGrey2,
-          context,
-        ),
-      ),
+      showChevron: true,
       onTap: () {
         Navigator.of(context).push(
           CupertinoPageRoute(

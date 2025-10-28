@@ -1,10 +1,10 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 
 import '../pages/cupertino_player_settings_page.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_tile.dart';
 
 class CupertinoPlayerSettingTile extends StatefulWidget {
   const CupertinoPlayerSettingTile({super.key});
@@ -45,29 +45,15 @@ class _CupertinoPlayerSettingTileState
   Widget build(BuildContext context) {
     final tileColor = resolveSettingsTileBackground(context);
 
-    return AdaptiveListTile(
+    return CupertinoSettingsTile(
       leading: Icon(
         CupertinoIcons.play_circle,
         color: resolveSettingsIconColor(context),
       ),
-      title: Text(
-        '播放器',
-        style: TextStyle(color: resolveSettingsPrimaryTextColor(context)),
-      ),
-      subtitle: Text(
-        _kernelName,
-        style: TextStyle(color: resolveSettingsSecondaryTextColor(context)),
-      ),
+      title: const Text('播放器'),
+      subtitle: Text(_kernelName),
       backgroundColor: tileColor,
-      trailing: Icon(
-        PlatformInfo.isIOS
-            ? CupertinoIcons.chevron_forward
-            : CupertinoIcons.forward,
-        color: CupertinoDynamicColor.resolve(
-          CupertinoColors.systemGrey2,
-          context,
-        ),
-      ),
+      showChevron: true,
       onTap: () async {
         await Navigator.of(context).push(
           CupertinoPageRoute(

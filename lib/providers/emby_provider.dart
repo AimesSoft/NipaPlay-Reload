@@ -341,6 +341,66 @@ class EmbyProvider extends ChangeNotifier {
     );
   }
 
+  /// 获取指定媒体库的最新条目列表。
+  Future<List<EmbyMediaItem>> fetchMediaItemsForLibrary(
+    String libraryId, {
+    int limit = 60,
+    String? sortBy,
+    String? sortOrder,
+  }) async {
+    final settings = getLibrarySortSettings(libraryId);
+    final resolvedSortBy = sortBy ?? settings['sortBy'] ?? _currentSortBy;
+    final resolvedSortOrder = sortOrder ?? settings['sortOrder'] ?? _currentSortOrder;
+    return await _embyService.getLatestMediaItemsByLibrary(
+      libraryId,
+      limit: limit,
+      sortBy: resolvedSortBy,
+      sortOrder: resolvedSortOrder,
+    );
+  }
+
+  /// 查找媒体库信息。
+  EmbyLibrary? findLibrary(String libraryId) {
+    for (final library in availableLibraries) {
+      if (library.id == libraryId) {
+        return library;
+      }
+    }
+    return null;
+  }
+
+  /// 获取媒体库封面图。
+  String? getLibraryImageUrl(
+    String libraryId, {
+    int width = 720,
+    int? height,
+  }) {
+    if (!_embyService.isConnected) {
+      return null;
+    }
+    final library = findLibrary(libraryId);
+    if (library == null || (library.imageTagsPrimary?.isEmpty ?? true)) {
+      return null;
+    }
+    try {
+      return _embyService.getImageUrl(
+        libraryId,
+        type: 'Primary',
+        width: width,
+        height: height,
+        quality: 90,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 刷新可用媒体库列表。
+  Future<void> refreshAvailableLibraries() async {
+    await _embyService.loadAvailableLibraries();
+    _notifyCoalesced(delay: const Duration(milliseconds: 16));
+  }
+
   // 保存排序设置到SharedPreferences
   Future<void> _saveSortSettings() async {
     if (kIsWeb) return;

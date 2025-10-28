@@ -1,4 +1,3 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:provider/provider.dart';
@@ -7,6 +6,9 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_group_card.dart';
+import 'package:nipaplay/widgets/cupertino/cupertino_settings_tile.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
 class CupertinoAppearanceSettingsPage extends StatefulWidget {
   const CupertinoAppearanceSettingsPage({super.key});
@@ -53,7 +55,7 @@ class _CupertinoAppearanceSettingsPageState
       context,
     );
     final sectionBackground = resolveSettingsSectionBackground(context);
-    final double topPadding = MediaQuery.of(context).padding.top + 48;
+  final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     return AdaptiveScaffold(
       appBar: const AdaptiveAppBar(
@@ -71,8 +73,11 @@ class _CupertinoAppearanceSettingsPageState
               parent: AlwaysScrollableScrollPhysics(),
             ),
             children: [
-              AdaptiveFormSection.insetGrouped(
+              CupertinoSettingsGroupCard(
+                margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
+                addDividers: true,
+                dividerIndent: 16,
                 children: [
                   _buildThemeOptionTile(
                     mode: ThemeMode.light,
@@ -110,8 +115,11 @@ class _CupertinoAppearanceSettingsPageState
                 ),
               ),
               const SizedBox(height: 8),
-              AdaptiveFormSection.insetGrouped(
+              CupertinoSettingsGroupCard(
+                margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
+                addDividers: true,
+                dividerIndent: 16,
                 children: [
                   _buildDetailModeTile(
                     mode: AnimeDetailDisplayMode.simple,
@@ -138,10 +146,8 @@ class _CupertinoAppearanceSettingsPageState
     required String subtitle,
   }) {
     final tileColor = resolveSettingsTileBackground(context);
-    final primaryColor = resolveSettingsPrimaryTextColor(context);
-    final secondaryColor = resolveSettingsSecondaryTextColor(context);
 
-    return AdaptiveListTile(
+    return CupertinoSettingsTile(
       leading: Icon(
         mode == ThemeMode.dark
             ? CupertinoIcons.moon_fill
@@ -150,18 +156,10 @@ class _CupertinoAppearanceSettingsPageState
                 : CupertinoIcons.circle_lefthalf_fill),
         color: resolveSettingsIconColor(context),
       ),
-      title: Text(title, style: TextStyle(color: primaryColor)),
-      subtitle: Text(subtitle, style: TextStyle(color: secondaryColor)),
-      trailing: AdaptiveRadio<ThemeMode>(
-        value: mode,
-        groupValue: _currentMode,
-        onChanged: (ThemeMode? value) {
-          if (value != null) {
-            _updateThemeMode(value);
-          }
-        },
-      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
       backgroundColor: tileColor,
+      selected: _currentMode == mode,
       onTap: () => _updateThemeMode(mode),
     );
   }
@@ -172,28 +170,18 @@ class _CupertinoAppearanceSettingsPageState
     required String subtitle,
   }) {
     final tileColor = resolveSettingsTileBackground(context);
-    final primaryColor = resolveSettingsPrimaryTextColor(context);
-    final secondaryColor = resolveSettingsSecondaryTextColor(context);
 
-    return AdaptiveListTile(
+    return CupertinoSettingsTile(
       leading: Icon(
         mode == AnimeDetailDisplayMode.simple
             ? CupertinoIcons.list_bullet
             : CupertinoIcons.rectangle_on_rectangle_angled,
         color: resolveSettingsIconColor(context),
       ),
-      title: Text(title, style: TextStyle(color: primaryColor)),
-      subtitle: Text(subtitle, style: TextStyle(color: secondaryColor)),
-      trailing: AdaptiveRadio<AnimeDetailDisplayMode>(
-        value: mode,
-        groupValue: _detailMode,
-        onChanged: (value) {
-          if (value != null) {
-            _updateDetailMode(value);
-          }
-        },
-      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
       backgroundColor: tileColor,
+      selected: _detailMode == mode,
       onTap: () => _updateDetailMode(mode),
     );
   }
