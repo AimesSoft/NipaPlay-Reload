@@ -156,16 +156,37 @@ class MainActivity: FlutterActivity() {
             }
         }
         
-        // 文件选择器通道 - 专用于优化视频文件选择，避免OOM
+        // 文件选择器通道 - 专用于优化视频文件选择，避免OOM - 现支持选择其他类型
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILE_SELECTOR_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "pickFilePathOnly" -> {
+                    val params = call.arguments as? Map<*, *>
+                    var fileType = "video/*"
+                    var mimeTypes = mutableListOf<String>()
+                    if (params != null) {
+                        fileType = params["type"] as? String ?: "video/*"
+                        params["extra_mime_types"]?.let { types ->
+                            val typeList = types as List<*>
+                            typeList.forEach { item ->
+                                if (item is String) {
+                                    mimeTypes.add(item)
+                                }
+                            }
+                        }
+                    }
+
                     try {
                         // 使用系统文件选择器，但只返回文件路径而不是内容
                         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                            type = "video/*"
+                            type = fileType
                             addCategory(Intent.CATEGORY_OPENABLE)
                             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+                        }
+                        if(mimeTypes.isNotEmpty()) {
+                            intent.putExtra(
+                                Intent.EXTRA_MIME_TYPES,
+                                mimeTypes.toTypedArray()
+                            )
                         }
                         
                         // 启动文件选择器活动

@@ -561,6 +561,51 @@ class FilePickerService {
   // Android平台特定的字幕文件选择方法
   Future<String?> _pickSubtitleFileAndroid() async {
     try {
+      // 使用Intent获取文件路径而不是内容
+      final result =
+          await const MethodChannel('plugins.flutter.io/file_selector')
+              .invokeMethod<String>('pickFilePathOnly', {
+        'acceptedTypeGroups': [
+          {
+            'label': '字幕文件',
+            'extensions': ['srt', 'ass', 'ssa', 'sub'],
+          }
+        ],
+        'confirmButtonText': '选择字幕文件',
+        'type': "*/*",
+        'extra_mime_types': ['text/*', 'application/*']
+      });
+
+      if (result == null || result.isEmpty) {
+        return null;
+      }
+
+      // 存储目录信息
+      _saveLastDirectory(result, _lastSubtitleDirKey, _lastDirKey);
+
+      return _normalizePath(result);
+    } catch (e) {
+      print('Android选择字幕文件时出错: $e');
+
+      // 如果自定义方法失败，回退到默认方法
+      final intent = await const MethodChannel('android/intent')
+          .invokeMethod<Map<dynamic, dynamic>>('createChooser', {
+        'action': 'android.intent.action.GET_CONTENT',
+        'type': 'text/*',
+        'title': '选择字幕文件',
+      });
+
+      if (intent == null || intent['data'] == null) {
+        return null;
+      }
+
+      return intent['data'].toString();
+    }
+  }
+
+  // Android平台特定的字幕文件选择方法
+  Future<String?> _pickSubtitleFileAndroidBak() async {
+    try {
       // 使用通用文件选择Intent，支持所有文本文件
       final result = await const MethodChannel('android/intent')
           .invokeMethod<Map<dynamic, dynamic>>('createChooser', {
