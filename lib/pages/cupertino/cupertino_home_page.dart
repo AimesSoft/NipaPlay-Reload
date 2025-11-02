@@ -52,10 +52,16 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   int _currentIndex = 0;
   bool _isLoadingRecommended = false;
+  bool _isLoadingLatest = false;
   bool _didScheduleInitialLoad = false;
   double _scrollOffset = 0.0;
 
   List<_CupertinoRecommendedItem> _recommendedItems = [];
+  
+  // 最近添加数据
+  Map<String, List<dynamic>> _recentJellyfinItemsByLibrary = {};
+  Map<String, List<dynamic>> _recentEmbyItemsByLibrary = {};
+  List<WatchHistoryItem> _recentLocalItems = [];
 
   JellyfinProvider? _jellyfinProvider;
   EmbyProvider? _embyProvider;
@@ -67,6 +73,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   static List<_CupertinoRecommendedItem> _cachedRecommendedItems = [];
   static DateTime? _lastRecommendedLoadTime;
+  
+  // 最近添加缓存（static以跨页面保持）
+  static Map<String, List<dynamic>> _cachedJellyfinItemsByLibrary = {};
+  static Map<String, List<dynamic>> _cachedEmbyItemsByLibrary = {};
+  static List<WatchHistoryItem> _cachedLocalItems = [];
+  static DateTime? _lastLatestLoadTime;
 
   @override
   void initState() {
@@ -115,6 +127,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _loadRecommendedContent();
+          _loadLatestContent();
         }
       });
     }
@@ -136,12 +149,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   void _onSourceChanged() {
     _scheduleRecommendedReload(force: true);
+    _loadLatestContent(forceRefresh: true); // 媒体源改变时也刷新最近添加
   }
 
   void _onHistoryChanged() {
     if (!mounted) return;
     if (_watchHistoryProvider?.isLoaded == true) {
       _scheduleRecommendedReload();
+      _loadLatestContent(forceRefresh: true); // 历史记录改变时也刷新最近添加
     }
   }
 
@@ -378,6 +393,143 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     }
   }
 
+  // 加载最近添加的媒体内容（Jellyfin/Emby/本地/NipaPlay共享）
+  Future<void> _loadLatestContent({bool forceRefresh = false}) async {
+    if (!mounted || _isLoadingLatest) return;
+
+    // 使用缓存避免频繁加载（缓存12小时）
+    final cacheValid = (_cachedJellyfinItemsByLibrary.isNotEmpty ||
+            _cachedEmbyItemsByLibrary.isNotEmpty ||
+            _cachedLocalItems.isNotEmpty) &&
+        _lastLatestLoadTime != null &&
+        DateTime.now().difference(_lastLatestLoadTime!).inHours < 12;
+
+    if (!forceRefresh && cacheValid) {
+      setState(() {
+        _recentJellyfinItemsByLibrary = _cachedJellyfinItemsByLibrary;
+        _recentEmbyItemsByLibrary = _cachedEmbyItemsByLibrary;
+        _recentLocalItems = _cachedLocalItems;
+        _isLoadingLatest = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoadingLatest = true;
+    });
+
+    try {
+      // 从Jellyfin按媒体库获取最近添加
+      final jellyfinProvider = _jellyfinProvider;
+      if (jellyfinProvider != null && jellyfinProvider.isConnected) {
+        final jellyfinService = JellyfinService.instance;
+        _recentJellyfinItemsByLibrary.clear();
+        final jfFutures = <Future<void>>[];
+        for (final library in jellyfinService.availableLibraries) {
+          if (jellyfinService.selectedLibraryIds.contains(library.id)) {
+            jfFutures.add(() async {
+              try {
+                final libraryItems = await jellyfinService
+                    .getLatestMediaItemsByLibrary(library.id, limit: 20);
+                if (libraryItems.isNotEmpty) {
+                  _recentJellyfinItemsByLibrary[library.name] = libraryItems;
+                }
+              } catch (e) {
+                debugPrint('获取Jellyfin媒体库 ${library.name} 最近内容失败: $e');
+              }
+            }());
+          }
+        }
+        if (jfFutures.isNotEmpty) {
+          await Future.wait(jfFutures, eagerError: false);
+        }
+      } else {
+        _recentJellyfinItemsByLibrary.clear();
+      }
+
+      // 从Emby按媒体库获取最近添加
+      final embyProvider = _embyProvider;
+      if (embyProvider != null && embyProvider.isConnected) {
+        final embyService = EmbyService.instance;
+        _recentEmbyItemsByLibrary.clear();
+        final emFutures = <Future<void>>[];
+        for (final library in embyService.availableLibraries) {
+          if (embyService.selectedLibraryIds.contains(library.id)) {
+            emFutures.add(() async {
+              try {
+                final libraryItems = await embyService
+                    .getLatestMediaItemsByLibrary(library.id, limit: 20);
+                if (libraryItems.isNotEmpty) {
+                  _recentEmbyItemsByLibrary[library.name] = libraryItems;
+                }
+              } catch (e) {
+                debugPrint('获取Emby媒体库 ${library.name} 最近内容失败: $e');
+              }
+            }());
+          }
+        }
+        if (emFutures.isNotEmpty) {
+          await Future.wait(emFutures, eagerError: false);
+        }
+      } else {
+        _recentEmbyItemsByLibrary.clear();
+      }
+
+      // 从本地历史记录获取最近添加
+      final historyProvider = _watchHistoryProvider;
+      if (historyProvider != null && historyProvider.isLoaded) {
+        try {
+          final localHistory = historyProvider.history.where((item) {
+            return !item.filePath.startsWith('jellyfin://') &&
+                !item.filePath.startsWith('emby://');
+          }).toList();
+
+          final Map<int, WatchHistoryItem> latestByAnimeId = {};
+          for (final item in localHistory) {
+            final animeId = item.animeId;
+            if (animeId == null) continue;
+
+            final existing = latestByAnimeId[animeId];
+            if (existing == null ||
+                item.lastWatchTime.isAfter(existing.lastWatchTime)) {
+              latestByAnimeId[animeId] = item;
+            }
+          }
+
+          _recentLocalItems = latestByAnimeId.values.toList()
+            ..sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+          if (_recentLocalItems.length > 20) {
+            _recentLocalItems = _recentLocalItems.take(20).toList();
+          }
+        } catch (e) {
+          debugPrint('获取本地最近内容失败: $e');
+          _recentLocalItems = [];
+        }
+      } else {
+        _recentLocalItems = [];
+      }
+
+      // 保存到缓存
+      _cachedJellyfinItemsByLibrary = _recentJellyfinItemsByLibrary;
+      _cachedEmbyItemsByLibrary = _recentEmbyItemsByLibrary;
+      _cachedLocalItems = _recentLocalItems;
+      _lastLatestLoadTime = DateTime.now();
+
+      if (mounted) {
+        setState(() {
+          _isLoadingLatest = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('加载最近添加内容失败: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingLatest = false;
+        });
+      }
+    }
+  }
+
   Future<String?> _loadPersistedImage(int animeId) async {
     final cached = _localImageCache[animeId];
     if (cached != null && cached.isNotEmpty) {
@@ -579,7 +731,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Future<void> _handleRefresh() async {
-    await _loadRecommendedContent(forceRefresh: true);
+    await Future.wait([
+      _loadRecommendedContent(forceRefresh: true),
+      _loadLatestContent(),
+    ]);
   }
 
   @override
@@ -663,7 +818,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                   },
                 ),
               ),
-              const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+              // 最近添加部分（无标题，直接显示媒体库内容）
+              SliverToBoxAdapter(child: _buildLatestSection()),
+              const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
             ],
           ),
           // 顶部白色渐变遮罩
@@ -726,7 +883,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     const horizontalMargin = 20.0;
     final screenWidth = MediaQuery.of(context).size.width;
     final cardWidth = screenWidth - horizontalMargin * 2;
-    final cardHeight = cardWidth / (3 / 2); // 整个卡片 3:2 横图比例
+    final cardHeight = cardWidth / (16 / 10); // 整个卡片 16:10 横图比例
 
     return SizedBox(
       height: cardHeight,
@@ -745,6 +902,331 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             child: _buildPosterCard(item, cardHeight),
           );
         },
+      ),
+    );
+  }
+
+  // 构建最近添加部分（包含Jellyfin/Emby/本地媒体库）
+  Widget _buildLatestSection() {
+    if (_isLoadingLatest) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+        child: Center(child: CupertinoActivityIndicator()),
+      );
+    }
+
+    final hasJellyfin = _recentJellyfinItemsByLibrary.isNotEmpty;
+    final hasEmby = _recentEmbyItemsByLibrary.isNotEmpty;
+    final hasLocal = _recentLocalItems.isNotEmpty;
+
+    if (!hasJellyfin && !hasEmby && !hasLocal) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+        child: Center(
+          child: Text(
+            '暂无最近添加的内容',
+            style: TextStyle(
+              color: CupertinoDynamicColor.resolve(
+                CupertinoColors.secondaryLabel,
+                context,
+              ),
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Jellyfin媒体库
+        if (hasJellyfin) ..._buildJellyfinLatestSections(),
+        // Emby媒体库
+        if (hasEmby) ..._buildEmbyLatestSections(),
+        // 本地媒体库
+        if (hasLocal) _buildLocalLatestSection(),
+      ],
+    );
+  }
+
+  List<Widget> _buildJellyfinLatestSections() {
+    final List<Widget> sections = [];
+    _recentJellyfinItemsByLibrary.forEach((libraryName, items) {
+      sections.add(
+        Padding(
+          padding: const EdgeInsets.only(left: 20, top: 12, bottom: 8),
+          child: Text(
+            'Jellyfin - 新增$libraryName',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+      sections.add(
+        SizedBox(
+          height: 210, // 增加高度以容纳封面和文字
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _buildLatestMediaCard(
+                  item,
+                  MediaServerType.jellyfin,
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    });
+    return sections;
+  }
+
+  List<Widget> _buildEmbyLatestSections() {
+    final List<Widget> sections = [];
+    _recentEmbyItemsByLibrary.forEach((libraryName, items) {
+      sections.add(
+        Padding(
+          padding: const EdgeInsets.only(left: 20, top: 12, bottom: 8),
+          child: Text(
+            'Emby - 新增$libraryName',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+      sections.add(
+        SizedBox(
+          height: 210, // 增加高度以容纳封面和文字
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _buildLatestMediaCard(
+                  item,
+                  MediaServerType.emby,
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    });
+    return sections;
+  }
+
+  Widget _buildLocalLatestSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 20, top: 12, bottom: 8),
+          child: Text(
+            '本地媒体库 - 最近添加',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 210, // 增加高度以容纳封面和文字
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: _recentLocalItems.length,
+            itemBuilder: (context, index) {
+              final item = _recentLocalItems[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _buildLocalLatestCard(item),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLatestMediaCard(dynamic item, MediaServerType serverType) {
+    String? imageUrl;
+    String title = '';
+
+    if (serverType == MediaServerType.jellyfin && item is JellyfinMediaItem) {
+      final jellyfinService = JellyfinService.instance;
+      try {
+        imageUrl = jellyfinService.getImageUrl(item.id, type: 'Primary');
+      } catch (_) {}
+      title = item.name;
+    } else if (serverType == MediaServerType.emby && item is EmbyMediaItem) {
+      final embyService = EmbyService.instance;
+      try {
+        imageUrl = embyService.getImageUrl(item.id, type: 'Primary');
+      } catch (_) {}
+      title = item.name;
+    }
+
+    return GestureDetector(
+      onTap: () => _openMediaServerDetailFromItem(item, serverType),
+      child: SizedBox(
+        width: 120,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 120,
+                height: 180, // 固定封面高度
+                child: imageUrl != null
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey5,
+                              context,
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                CupertinoIcons.photo,
+                                size: 32,
+                                color: CupertinoColors.systemGrey,
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : Container(
+                        color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.systemGrey5,
+                          context,
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            CupertinoIcons.photo,
+                            size: 32,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocalLatestCard(WatchHistoryItem item) {
+    return GestureDetector(
+      onTap: () => _handleRecentTap(item),
+      child: SizedBox(
+        width: 120,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 120,
+                height: 180, // 固定封面高度
+                child: item.thumbnailPath != null
+                    ? Image.network(
+                        item.thumbnailPath!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey5,
+                              context,
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                CupertinoIcons.play_rectangle,
+                                size: 32,
+                                color: CupertinoColors.systemGrey,
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : Container(
+                        color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.systemGrey5,
+                          context,
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            CupertinoIcons.play_rectangle,
+                            size: 32,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              item.animeName.isNotEmpty ? item.animeName : '本地媒体',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMediaServerDetailFromItem(
+      dynamic item, MediaServerType serverType) async {
+    if (!mounted) return;
+
+    String itemId = '';
+    if (item is JellyfinMediaItem) {
+      itemId = item.id;
+    } else if (item is EmbyMediaItem) {
+      itemId = item.id;
+    }
+
+    if (itemId.isEmpty) return;
+
+    await Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (context) => CupertinoMediaServerDetailPage(
+          mediaId: itemId,
+          serverType: serverType,
+        ),
       ),
     );
   }
@@ -846,7 +1328,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                       const SizedBox(height: 6),
                       Text(
                         item.subtitle,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.9),
