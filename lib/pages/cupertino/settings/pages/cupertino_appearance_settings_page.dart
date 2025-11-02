@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_settings_group_card.dart';
@@ -22,13 +23,17 @@ class _CupertinoAppearanceSettingsPageState
     extends State<CupertinoAppearanceSettingsPage> {
   late ThemeMode _currentMode;
   late AnimeDetailDisplayMode _detailMode;
+  late RecentWatchingStyle _recentStyle;
 
   @override
   void initState() {
     super.initState();
     final notifier = Provider.of<ThemeNotifier>(context, listen: false);
+    final appearanceSettings =
+        Provider.of<AppearanceSettingsProvider>(context, listen: false);
     _currentMode = notifier.themeMode;
     _detailMode = notifier.animeDetailDisplayMode;
+    _recentStyle = appearanceSettings.recentWatchingStyle;
   }
 
   void _updateThemeMode(ThemeMode mode) {
@@ -44,8 +49,17 @@ class _CupertinoAppearanceSettingsPageState
     setState(() {
       _detailMode = mode;
     });
-    Provider.of<ThemeNotifier>(context, listen: false)
-        .animeDetailDisplayMode = mode;
+    Provider.of<ThemeNotifier>(context, listen: false).animeDetailDisplayMode =
+        mode;
+  }
+
+  void _updateRecentStyle(RecentWatchingStyle style) {
+    if (_recentStyle == style) return;
+    setState(() {
+      _recentStyle = style;
+    });
+    Provider.of<AppearanceSettingsProvider>(context, listen: false)
+        .setRecentWatchingStyle(style);
   }
 
   @override
@@ -55,7 +69,7 @@ class _CupertinoAppearanceSettingsPageState
       context,
     );
     final sectionBackground = resolveSettingsSectionBackground(context);
-  final double topPadding = MediaQuery.of(context).padding.top + 64;
+    final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     return AdaptiveScaffold(
       appBar: const AdaptiveAppBar(
@@ -101,17 +115,15 @@ class _CupertinoAppearanceSettingsPageState
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   '番剧详情样式',
-                  style: CupertinoTheme.of(context)
-                      .textTheme
-                      .textStyle
-                      .copyWith(
-                        fontSize: 13,
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.systemGrey,
-                          context,
-                        ),
-                        letterSpacing: 0.2,
-                      ),
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 13,
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey,
+                              context,
+                            ),
+                            letterSpacing: 0.2,
+                          ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -130,6 +142,41 @@ class _CupertinoAppearanceSettingsPageState
                     mode: AnimeDetailDisplayMode.vivid,
                     title: '绚丽模式',
                     subtitle: '海报主视觉、横向剧集卡片。',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '最近观看样式',
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 13,
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey,
+                              context,
+                            ),
+                            letterSpacing: 0.2,
+                          ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              CupertinoSettingsGroupCard(
+                margin: EdgeInsets.zero,
+                backgroundColor: sectionBackground,
+                addDividers: true,
+                dividerIndent: 16,
+                children: [
+                  _buildRecentStyleTile(
+                    style: RecentWatchingStyle.simple,
+                    title: '简洁版',
+                    subtitle: '纯文本列表，节省空间。',
+                  ),
+                  _buildRecentStyleTile(
+                    style: RecentWatchingStyle.detailed,
+                    title: '详细版',
+                    subtitle: '带截图的横向滚动卡片。',
                   ),
                 ],
               ),
@@ -183,6 +230,28 @@ class _CupertinoAppearanceSettingsPageState
       backgroundColor: tileColor,
       selected: _detailMode == mode,
       onTap: () => _updateDetailMode(mode),
+    );
+  }
+
+  Widget _buildRecentStyleTile({
+    required RecentWatchingStyle style,
+    required String title,
+    required String subtitle,
+  }) {
+    final tileColor = resolveSettingsTileBackground(context);
+
+    return CupertinoSettingsTile(
+      leading: Icon(
+        style == RecentWatchingStyle.simple
+            ? CupertinoIcons.textformat
+            : CupertinoIcons.photo_on_rectangle,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      backgroundColor: tileColor,
+      selected: _recentStyle == style,
+      onTap: () => _updateRecentStyle(style),
     );
   }
 }

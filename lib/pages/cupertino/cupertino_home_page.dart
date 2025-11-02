@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
@@ -14,6 +15,7 @@ import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
@@ -60,6 +62,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   WatchHistoryProvider? _watchHistoryProvider;
 
   final Map<int, String> _localImageCache = {};
+  final Map<String, Map<String, dynamic>> _thumbnailCache = {};
   static const String _localPrefsKeyPrefix = 'media_library_image_url_';
 
   static List<_CupertinoRecommendedItem> _cachedRecommendedItems = [];
@@ -612,24 +615,51 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               SliverToBoxAdapter(child: _buildHeroSection()),
               SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
               SliverToBoxAdapter(
-                child: Consumer<WatchHistoryProvider>(
-                  builder: (context, provider, _) {
-                    final recentItems = _buildRecentItems(provider.history);
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      child: recentItems.isEmpty
-                          ? _buildEmptyRecentPlaceholder()
-                          : Column(
-                              children: recentItems
-                                  .map((item) => Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 12),
-                                        child: _buildRecentCard(item),
-                                      ))
-                                  .toList(),
-                            ),
-                    );
+                child:
+                    Consumer2<WatchHistoryProvider, AppearanceSettingsProvider>(
+                  builder: (context, historyProvider, appearanceProvider, _) {
+                    final recentItems =
+                        _buildRecentItems(historyProvider.history);
+                    final style = appearanceProvider.recentWatchingStyle;
+
+                    if (recentItems.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        child: _buildEmptyRecentPlaceholder(),
+                      );
+                    }
+
+                    if (style == RecentWatchingStyle.detailed) {
+                      return SizedBox(
+                        height: 200,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: recentItems.length,
+                          itemBuilder: (context, index) {
+                            final item = recentItems[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: _buildDetailedRecentCard(item),
+                            );
+                          },
+                        ),
+                      );
+                    } else {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        child: Column(
+                          children: recentItems
+                              .map((item) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _buildRecentCard(item),
+                                  ))
+                              .toList(),
+                        ),
+                      );
+                    }
                   },
                 ),
               ),
@@ -1018,6 +1048,218 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       behavior: HitTestBehavior.opaque,
       onTap: () => _handleRecentTap(item),
       child: cardContent,
+    );
+  }
+
+  Widget _buildDetailedRecentCard(WatchHistoryItem item) {
+    final progress =
+        item.duration > 0 ? item.watchProgress.clamp(0.0, 1.0) : 0.0;
+
+    return GestureDetector(
+      onTap: () => _handleRecentTap(item),
+      child: SizedBox(
+        key: ValueKey(
+            'detailed_recent_${item.animeId ?? 0}_${item.filePath.hashCode}'),
+        width: 240,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 135,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: CupertinoColors.black.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _getVideoThumbnail(item),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 4,
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: CupertinoColors.systemGrey4,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          CupertinoColors.activeBlue,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              item.animeName.isNotEmpty
+                  ? item.animeName
+                  : p.basename(item.filePath),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (item.episodeTitle != null && item.episodeTitle!.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                item.episodeTitle!,
+                style: const TextStyle(
+                  color: CupertinoColors.secondaryLabel,
+                  fontSize: 13,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _getVideoThumbnail(WatchHistoryItem item) {
+    final now = DateTime.now();
+
+    // iOS平台特殊处理：检查截图文件的修改时间
+    if (Platform.isIOS && item.thumbnailPath != null) {
+      final thumbnailFile = File(item.thumbnailPath!);
+      if (thumbnailFile.existsSync()) {
+        try {
+          final fileModified = thumbnailFile.lastModifiedSync();
+          final cacheKey =
+              '${item.filePath}_${fileModified.millisecondsSinceEpoch}';
+
+          if (_thumbnailCache.containsKey(cacheKey)) {
+            final cachedData = _thumbnailCache[cacheKey]!;
+            final lastRenderTime = cachedData['time'] as DateTime;
+
+            if (now.difference(lastRenderTime).inSeconds < 60) {
+              return cachedData['widget'] as Widget;
+            }
+          }
+
+          _thumbnailCache
+              .removeWhere((key, value) => key.startsWith('${item.filePath}_'));
+
+          final thumbnailWidget = FutureBuilder<Uint8List>(
+            future: thumbnailFile.readAsBytes(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Container(
+                  color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.systemGrey6,
+                    context,
+                  ),
+                );
+              }
+              if (snapshot.hasError || !snapshot.hasData) {
+                return _buildDefaultThumbnail();
+              }
+              try {
+                return Image.memory(
+                  snapshot.data!,
+                  key: ValueKey(
+                      '${item.filePath}_${fileModified.millisecondsSinceEpoch}'),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                );
+              } catch (e) {
+                return _buildDefaultThumbnail();
+              }
+            },
+          );
+
+          _thumbnailCache[cacheKey] = {'widget': thumbnailWidget, 'time': now};
+
+          return thumbnailWidget;
+        } catch (e) {
+          debugPrint('获取截图文件修改时间失败: $e');
+        }
+      }
+    }
+
+    // 非iOS平台或获取修改时间失败时的逻辑
+    if (_thumbnailCache.containsKey(item.filePath)) {
+      final cachedData = _thumbnailCache[item.filePath]!;
+      final lastRenderTime = cachedData['time'] as DateTime;
+
+      if (now.difference(lastRenderTime).inSeconds < 60) {
+        return cachedData['widget'] as Widget;
+      }
+    }
+
+    if (item.thumbnailPath != null) {
+      final thumbnailFile = File(item.thumbnailPath!);
+      if (thumbnailFile.existsSync()) {
+        final thumbnailWidget = FutureBuilder<Uint8List>(
+          future: thumbnailFile.readAsBytes(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Container(
+                color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.systemGrey6,
+                  context,
+                ),
+              );
+            }
+            if (snapshot.hasError || !snapshot.hasData) {
+              return _buildDefaultThumbnail();
+            }
+            try {
+              return Image.memory(
+                snapshot.data!,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+              );
+            } catch (e) {
+              return _buildDefaultThumbnail();
+            }
+          },
+        );
+
+        _thumbnailCache[item.filePath] = {
+          'widget': thumbnailWidget,
+          'time': now
+        };
+
+        return thumbnailWidget;
+      }
+    }
+
+    final defaultThumbnail = _buildDefaultThumbnail();
+
+    _thumbnailCache[item.filePath] = {'widget': defaultThumbnail, 'time': now};
+
+    return defaultThumbnail;
+  }
+
+  Widget _buildDefaultThumbnail() {
+    return Container(
+      color: CupertinoDynamicColor.resolve(
+        CupertinoColors.systemGrey6,
+        context,
+      ),
+      child: const Center(
+        child: Icon(
+          CupertinoIcons.video_camera,
+          color: CupertinoColors.systemGrey3,
+          size: 32,
+        ),
+      ),
     );
   }
 
