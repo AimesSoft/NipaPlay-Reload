@@ -798,7 +798,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: cardHeight * 0.5, // 遮罩覆盖卡片底部60%高度
+                height: cardHeight * 1, // 遮罩覆盖卡片底部60%高度
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: const BorderRadius.vertical(
@@ -808,7 +808,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.black.withValues(alpha: 0.0),
-                        Colors.black.withValues(alpha: 0.5),
+                        Colors.black.withValues(alpha: 0.75),
                       ],
                     ),
                   ),
