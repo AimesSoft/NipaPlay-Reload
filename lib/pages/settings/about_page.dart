@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_card.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 import 'package:nipaplay/services/update_service.dart';
 
 class AboutPage extends StatefulWidget {
@@ -76,6 +77,62 @@ class _AboutPageState extends State<AboutPage> {
         BlurSnackBar.show(context, '无法打开链接: $urlString');
       }
     }
+  }
+
+  void _showAppreciationQR() {
+    BlurDialog.show(
+      context: context,
+      title: '赞赏码',
+      contentWidget: Container(
+        constraints: const BoxConstraints(
+          maxWidth: 300,
+          maxHeight: 400,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.asset(
+            'others/赞赏码.jpg',
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Ionicons.image_outline,
+                      size: 60,
+                      color: Colors.white70,
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      '赞赏码图片加载失败',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text(
+            '关闭',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -317,6 +374,28 @@ style: TextStyle(
                             color: Colors.pinkAccent[100],
                             decoration: TextDecoration.underline,
                             decorationColor: Colors.pinkAccent[100]?.withOpacity(0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: _showAppreciationQR,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Ionicons.qr_code, color: Colors.orangeAccent[100], size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '赞赏码',
+                          style: TextStyle(
+                            color: Colors.orangeAccent[100],
+                            decoration: TextDecoration.underline,
+                            decorationColor: Colors.orangeAccent[100]?.withOpacity(0.7),
                           ),
                         ),
                       ],

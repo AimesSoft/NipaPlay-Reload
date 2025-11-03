@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nipaplay/services/update_service.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_settings_group_card.dart';
@@ -68,6 +69,59 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         type: AdaptiveSnackBarType.error,
       );
     }
+  }
+
+  void _showAppreciationQR() {
+    BlurDialog.show(
+      context: context,
+      title: '赞赏码',
+      contentWidget: Container(
+        constraints: const BoxConstraints(
+          maxWidth: 300,
+          maxHeight: 400,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.asset(
+            'others/赞赏码.jpg',
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Ionicons.image_outline,
+                      size: 60,
+                      color: Colors.white70,
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      '赞赏码图片加载失败',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+      actions: [
+        CupertinoDialogAction(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
   }
 
   @override
@@ -457,6 +511,20 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
           ),
           backgroundColor: tileColor,
           onTap: () => _launchURL('https://afdian.com/a/irigas'),
+        ),
+        _buildSettingsDivider(context),
+        CupertinoSettingsTile(
+          leading: const Icon(
+            Ionicons.qr_code,
+            color: CupertinoColors.systemOrange,
+          ),
+          title: const Text('赞赏码'),
+          trailing: Icon(
+            CupertinoIcons.chevron_forward,
+            color: resolveSettingsIconColor(context),
+          ),
+          backgroundColor: tileColor,
+          onTap: _showAppreciationQR,
         ),
         const SizedBox(height: 4),
       ],

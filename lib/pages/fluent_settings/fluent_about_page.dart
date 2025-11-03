@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_info_bar.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 
 class FluentAboutPage extends StatefulWidget {
   const FluentAboutPage({super.key});
@@ -50,6 +52,59 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
         );
       }
     }
+  }
+
+  void _showAppreciationQR() {
+    BlurDialog.show(
+      context: context,
+      title: '赞赏码',
+      contentWidget: Container(
+        constraints: const BoxConstraints(
+          maxWidth: 300,
+          maxHeight: 400,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.asset(
+            'others/赞赏码.jpg',
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: material.Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Ionicons.image_outline,
+                      size: 60,
+                      color: material.Colors.white70,
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      '赞赏码图片加载失败',
+                      style: TextStyle(
+                        color: material.Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+      actions: [
+        Button(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
   }
 
   @override
@@ -253,6 +308,18 @@ style: TextStyle(
                               Icon(FluentIcons.heart_fill, color: material.Colors.pink),
                               SizedBox(width: 8),
                               Text('爱发电赞助页面'),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton(
+                          onPressed: _showAppreciationQR,
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Ionicons.qr_code, color: material.Colors.orange),
+                              SizedBox(width: 8),
+                              Text('赞赏码'),
                             ],
                           ),
                         ),
