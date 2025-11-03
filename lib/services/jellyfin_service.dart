@@ -723,9 +723,9 @@ class JellyfinService {
       // 根据媒体库类型选择不同的IncludeItemTypes
       String includeItemTypes = collectionType == 'tvshows' ? 'Series' : 'Movie';
       
-      // 使用Jellyfin的随机排序获取随机内容
+      // 使用Jellyfin的随机排序获取随机内容，并请求Overview字段
       final response = await _makeAuthenticatedRequest(
-        '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=Random&Limit=$limit&userId=$_userId'
+        '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=Random&Limit=$limit&userId=$_userId&Fields=Overview,CommunityRating'
       );
       
       if (response.statusCode == 200) {
