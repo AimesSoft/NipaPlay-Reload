@@ -755,8 +755,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         return;
       }
 
-      final bangumiEpisodes = List<Map<String, dynamic>>.from(
-          episodesResult['data']['data'] ?? []);
+      final bangumiEpisodes =
+          List<Map<String, dynamic>>.from(episodesResult['data']['data'] ?? []);
 
       if (bangumiEpisodes.isEmpty) {
         debugPrint('[番剧详情] Bangumi episodes为空');
@@ -765,7 +765,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
       // 建立episode映射（基于集数序号）
       final List<Map<String, dynamic>> payload = [];
-      for (int index = 0; index < clampedTarget && index < bangumiEpisodes.length; index++) {
+      for (int index = 0;
+          index < clampedTarget && index < bangumiEpisodes.length;
+          index++) {
         final bangumiEpisode = bangumiEpisodes[index];
         final bangumiEpisodeId = bangumiEpisode['id'] as int?;
 
@@ -801,6 +803,65 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       }
     } catch (e) {
       debugPrint('[番剧详情] Bangumi进度同步异常: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateEpisodeWatchStatus(int episodeId, bool isWatched) async {
+    if (_detailedAnime == null) return;
+
+    // 检查登录状态
+    if (!DandanplayService.isLoggedIn) {
+      throw Exception('请先登录弹弹play账号');
+    }
+
+    try {
+      // 1. 同步到弹弹play
+      await DandanplayService.updateEpisodeWatchStatus(episodeId, isWatched);
+
+      // 2. 同步到Bangumi（如果已登录）
+      bool bangumiSuccess = true;
+      String? bangumiError;
+      if (BangumiApiService.isLoggedIn && _bangumiSubjectId != null) {
+        try {
+          // 确保番剧已被收藏
+          if (!_hasBangumiCollection) {
+            await _syncBangumiCollection(
+              collectionType: 3, // "在看"状态
+            );
+          }
+
+          // 计算新的观看进度
+          final newProgress = isWatched
+              ? (_bangumiEpisodeStatus + 1)
+                  .clamp(0, _getTotalEpisodeCount(_detailedAnime!))
+              : _bangumiEpisodeStatus;
+
+          // 更新Bangumi进度
+          await _syncBangumiEpisodeProgress(_bangumiSubjectId!, newProgress);
+        } catch (e) {
+          bangumiSuccess = false;
+          bangumiError = e.toString();
+          debugPrint('[番剧详情] Bangumi进度同步失败: $e');
+        }
+      }
+
+      // 3. 更新本地状态
+      setState(() {
+        _dandanplayWatchStatus[episodeId] = isWatched;
+      });
+
+      // 4. 显示同步结果
+      if (mounted) {
+        if (bangumiSuccess) {
+          _showBlurSnackBar(context, '观看状态已同步到弹弹play和Bangumi');
+        } else {
+          _showBlurSnackBar(
+              context, '观看状态已同步到弹弹play，Bangumi同步失败: $bangumiError');
+        }
+      }
+    } catch (e) {
+      debugPrint('[番剧详情] 更新观看状态失败: $e');
       rethrow;
     }
   }
@@ -962,7 +1023,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           width: 130,
                           height: 195,
                           fit: BoxFit.cover,
-                          loadMode: CachedImageLoadMode.legacy))), // 番剧详情页面统一使用legacy模式，避免海报突然切换
+                          loadMode: CachedImageLoadMode
+                              .legacy))), // 番剧详情页面统一使用legacy模式，避免海报突然切换
             Expanded(
               child: SizedBox(
                 height: 195,
@@ -1475,8 +1537,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       ),
                   ],
                 ),
-                trailing: progressText != null
-                    ? Text(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (progressText != null)
+                      Text(
                         progressText,
                         locale: const Locale('zh-Hans', 'zh'),
                         style: TextStyle(
@@ -1493,8 +1558,40 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                           : Colors.white54))),
                           fontSize: 11,
                         ),
-                      )
-                    : null,
+                      ),
+                    if (DandanplayService.isLoggedIn)
+                      IconButton(
+                        icon: Icon(
+                          _dandanplayWatchStatus[episode.id] == true
+                              ? Ionicons.checkmark_circle
+                              : Ionicons.checkmark_circle_outline,
+                          color: _dandanplayWatchStatus[episode.id] == true
+                              ? Colors.green
+                              : Colors.white54,
+                        ),
+                        onPressed: _dandanplayWatchStatus[episode.id] == true
+                            ? null
+                            : () async {
+                                try {
+                                  final newStatus =
+                                      !(_dandanplayWatchStatus[episode.id] ??
+                                          false);
+                                  await updateEpisodeWatchStatus(
+                                    episode.id,
+                                    newStatus,
+                                  );
+                                  setState(() {
+                                    _dandanplayWatchStatus[episode.id] =
+                                        newStatus;
+                                  });
+                                } catch (e) {
+                                  _showBlurSnackBar(
+                                      context, '更新观看状态失败: ${e.toString()}');
+                                }
+                              },
+                      ),
+                  ],
+                ),
                 onTap: () async {
                   if (sharedPlayableAvailable) {
                     await PlaybackService().play(sharedPlayable!);
