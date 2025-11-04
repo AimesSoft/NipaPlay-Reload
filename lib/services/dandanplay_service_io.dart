@@ -489,6 +489,53 @@ class DandanplayService {
     }
   }
 
+  static Future<void> updateEpisodeWatchStatus(int episodeId, bool isWatched) async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能更新观看状态');
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/playhistory';
+      
+      final response = await http.post(
+        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+        body: json.encode({
+          "episodeIdList": [
+            episodeId,
+          ],
+        }),
+      );
+
+      debugPrint('[弹弹play服务] 更新观看状态响应: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          debugPrint('[弹弹play服务] 观看状态更新成功');
+        } else {
+          throw Exception(data['errorMessage'] ?? '更新观看状态失败');
+        }
+      } else {
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        throw Exception('更新观看状态失败: $errorMessage');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务] 更新观看状态时出错: $e');
+      rethrow;
+    }
+  }
+
   static Future<Map<String, dynamic>> getVideoInfo(String videoPath) async {
     if (kIsWeb) {
       throw Exception('Web版不支持从本地文件获取视频信息。');
