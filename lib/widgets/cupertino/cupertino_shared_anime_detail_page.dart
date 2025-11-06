@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
@@ -23,12 +24,20 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
     this.hideBackButton = false,
     this.displayModeOverride,
     this.showCloseButton = true,
+    this.customEpisodeLoader,
+    this.customPlayableBuilder,
+    this.sourceLabelOverride,
   });
 
   final SharedRemoteAnimeSummary anime;
   final bool hideBackButton;
   final AnimeDetailDisplayMode? displayModeOverride;
   final bool showCloseButton;
+  final Future<List<SharedRemoteEpisode>> Function({bool force})?
+      customEpisodeLoader;
+  final Future<PlayableItem> Function(
+      BuildContext context, SharedRemoteEpisode episode)? customPlayableBuilder;
+  final String? sourceLabelOverride;
 
   @override
   State<CupertinoSharedAnimeDetailPage> createState() =>
@@ -59,6 +68,22 @@ class _CupertinoSharedAnimeDetailPageState
   String? _vividCoverUrl;
   bool _isLoadingCover = false;
 
+  SharedRemoteLibraryProvider? _maybeReadProvider() {
+    try {
+      return context.read<SharedRemoteLibraryProvider>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  SharedRemoteLibraryProvider? _maybeWatchProvider(BuildContext watchContext) {
+    try {
+      return watchContext.watch<SharedRemoteLibraryProvider>();
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -82,16 +107,25 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   Future<void> _loadEpisodes({bool force = false}) async {
-    final provider = context.read<SharedRemoteLibraryProvider>();
     setState(() {
       _isLoadingEpisodes = true;
     });
 
     try {
-      final episodes = await provider.loadAnimeEpisodes(
-        widget.anime.animeId,
-        force: force,
-      );
+      List<SharedRemoteEpisode> episodes;
+      final customLoader = widget.customEpisodeLoader;
+      if (customLoader != null) {
+        episodes = await customLoader(force: force);
+      } else {
+        final provider = _maybeReadProvider();
+        if (provider == null) {
+          throw '未找到媒体库数据源';
+        }
+        episodes = await provider.loadAnimeEpisodes(
+          widget.anime.animeId,
+          force: force,
+        );
+      }
       if (!mounted) return;
       setState(() {
         _episodes = episodes;
@@ -240,8 +274,7 @@ class _CupertinoSharedAnimeDetailPageState
       debugPrint('[共享番剧详情] 获取高清封面失败: $e');
     }
 
-    coverUrl ??=
-        _resolveImageUrl(context.read<SharedRemoteLibraryProvider>());
+    coverUrl ??= _resolveImageUrl(_maybeReadProvider());
 
     if (!mounted) return;
     setState(() {
@@ -267,10 +300,9 @@ class _CupertinoSharedAnimeDetailPageState
           backgroundColor: backgroundColor,
           floatingTitleOpacity: 0,
           sliversBuilder: (context, topSpacing) {
-            final hostName = context
-                .watch<SharedRemoteLibraryProvider>()
-                .activeHost
-                ?.displayName;
+            final provider = _maybeWatchProvider(context);
+            final hostName =
+                widget.sourceLabelOverride ?? provider?.activeHost?.displayName;
             return [
               SliverToBoxAdapter(
                 child: _buildHeader(context, topSpacing, hostName),
@@ -319,10 +351,9 @@ class _CupertinoSharedAnimeDetailPageState
       context,
     );
 
-    final hostName = context
-        .watch<SharedRemoteLibraryProvider>()
-        .activeHost
-        ?.displayName;
+    final provider = _maybeWatchProvider(context);
+    final hostName =
+        widget.sourceLabelOverride ?? provider?.activeHost?.displayName;
 
     return Stack(
       children: [
@@ -405,8 +436,7 @@ class _CupertinoSharedAnimeDetailPageState
       CupertinoColors.secondaryLabel,
       context,
     );
-    final fallbackCover =
-        _resolveImageUrl(context.read<SharedRemoteLibraryProvider>());
+    final fallbackCover = _resolveImageUrl(_maybeReadProvider());
     final imageUrl = _vividCoverUrl ?? fallbackCover;
     final title = widget.anime.nameCn?.isNotEmpty == true
         ? widget.anime.nameCn!
@@ -938,7 +968,7 @@ class _CupertinoSharedAnimeDetailPageState
     final secondaryColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final imageUrl =
-        _resolveImageUrl(context.read<SharedRemoteLibraryProvider>());
+        _resolveImageUrl(_maybeReadProvider());
     final cleanSummary = _cleanSummary;
 
     return SingleChildScrollView(
@@ -1596,10 +1626,21 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   Future<void> _playEpisode(SharedRemoteEpisode episode) async {
-    final provider = context.read<SharedRemoteLibraryProvider>();
     try {
-      final playableItem =
-          provider.buildPlayableItem(anime: widget.anime, episode: episode);
+      PlayableItem playableItem;
+      final customBuilder = widget.customPlayableBuilder;
+      if (customBuilder != null) {
+        playableItem = await customBuilder(context, episode);
+      } else {
+        final provider = _maybeReadProvider();
+        if (provider == null) {
+          throw '未找到媒体库数据源';
+        }
+        playableItem = provider.buildPlayableItem(
+          anime: widget.anime,
+          episode: episode,
+        );
+      }
       final rootNavigator = Navigator.of(context, rootNavigator: true);
       // 先关闭详情弹窗，避免横屏时页面残留导致的画面撕裂
       await rootNavigator.maybePop();
@@ -1683,12 +1724,12 @@ class _CupertinoSharedAnimeDetailPageState
     );
   }
 
-  String? _resolveImageUrl(SharedRemoteLibraryProvider provider) {
+  String? _resolveImageUrl([SharedRemoteLibraryProvider? provider]) {
     final imageUrl = widget.anime.imageUrl;
     if (imageUrl == null || imageUrl.isEmpty) {
       return null;
     }
-    if (imageUrl.startsWith('http')) {
+    if (imageUrl.startsWith('http') || provider == null) {
       return imageUrl;
     }
     final baseUrl = provider.activeHost?.baseUrl;
