@@ -76,6 +76,59 @@ enum PlayerStatus {
   disposed // 已释放
 }
 
+enum PlaybackEndAction {
+  autoNext,
+  pause,
+  exitPlayer,
+}
+
+extension PlaybackEndActionDisplay on PlaybackEndAction {
+  static PlaybackEndAction fromPrefs(String? value) {
+    switch (value) {
+      case 'pause':
+        return PlaybackEndAction.pause;
+      case 'exitPlayer':
+        return PlaybackEndAction.exitPlayer;
+      case 'autoNext':
+      default:
+        return PlaybackEndAction.autoNext;
+    }
+  }
+
+  String get prefsValue {
+    switch (this) {
+      case PlaybackEndAction.autoNext:
+        return 'autoNext';
+      case PlaybackEndAction.pause:
+        return 'pause';
+      case PlaybackEndAction.exitPlayer:
+        return 'exitPlayer';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case PlaybackEndAction.autoNext:
+        return '自动播放下一话';
+      case PlaybackEndAction.pause:
+        return '播放完停留在本集';
+      case PlaybackEndAction.exitPlayer:
+        return '播放结束返回上一页';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case PlaybackEndAction.autoNext:
+        return '播放结束后自动倒计时并播放下一话';
+      case PlaybackEndAction.pause:
+        return '播放结束后保持在当前页面，不再自动跳转';
+      case PlaybackEndAction.exitPlayer:
+        return '播放结束后自动返回到视频列表或上一页';
+    }
+  }
+}
+
 class _VideoDimensionSnapshot {
   final int? srcWidth;
   final int? srcHeight;
@@ -146,8 +199,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const String _lastVideoKey = 'last_video_path';
   static const String _lastPositionKey = 'last_video_position';
   static const String _videoPositionsKey = 'video_positions';
+  static const String _playbackEndActionKey = 'playback_end_action';
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
+  PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
   List<Map<String, dynamic>> _danmakuList = [];
 
   // 多轨道弹幕系统
@@ -359,6 +414,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _status == PlayerStatus.paused;
   bool get isPaused => _status == PlayerStatus.paused;
   FocusNode get focusNode => _focusNode;
+  PlaybackEndAction get playbackEndAction => _playbackEndAction;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
@@ -562,6 +618,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     // 加载 Anime4K 设置并尝试立即应用
     await _loadAnime4KProfile();
+
+    // 加载播放结束行为设置
+    await _loadPlaybackEndAction();
 
     // 订阅内核切换事件
     _subscribeToKernelChanges();
@@ -1989,6 +2048,36 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     AutoNextEpisodeService.instance.cancelAutoNext();
   }
 
+  Future<void> _handlePlaybackEndAction() async {
+    if (_currentVideoPath == null) {
+      return;
+    }
+
+    switch (_playbackEndAction) {
+      case PlaybackEndAction.autoNext:
+        if (_context != null && _context!.mounted) {
+          AutoNextEpisodeService.instance
+              .startAutoNextEpisode(_context!, _currentVideoPath!);
+        }
+        break;
+      case PlaybackEndAction.pause:
+        AutoNextEpisodeService.instance.cancelAutoNext();
+        break;
+      case PlaybackEndAction.exitPlayer:
+        AutoNextEpisodeService.instance.cancelAutoNext();
+        if (_context != null && _context!.mounted) {
+          final currentContext = _context!;
+          Future.microtask(() {
+            if (_context != null && _context!.mounted &&
+                identical(currentContext, _context)) {
+              Navigator.of(currentContext).maybePop();
+            }
+          });
+        }
+        break;
+    }
+  }
+
   void pause() {
     if (_status == PlayerStatus.playing) {
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
@@ -3154,6 +3243,34 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         prefs.getInt(_minimalProgressBarColorKey) ?? 0xFFFF7274;
     _showDanmakuDensityChart =
         prefs.getBool(_showDanmakuDensityChartKey) ?? false;
+    notifyListeners();
+  }
+
+  Future<void> _loadPlaybackEndAction() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedValue = prefs.getString(_playbackEndActionKey);
+    final action = PlaybackEndActionDisplay.fromPrefs(storedValue);
+    final bool changed = action != _playbackEndAction;
+    _playbackEndAction = action;
+    AutoNextEpisodeService.instance
+        .updateAutoPlayEnabled(action == PlaybackEndAction.autoNext);
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> setPlaybackEndAction(PlaybackEndAction action) async {
+    if (_playbackEndAction == action) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playbackEndActionKey, action.prefsValue);
+    _playbackEndAction = action;
+    AutoNextEpisodeService.instance
+        .updateAutoPlayEnabled(action == PlaybackEndAction.autoNext);
+    if (action != PlaybackEndAction.autoNext) {
+      AutoNextEpisodeService.instance.cancelAutoNext();
+    }
     notifyListeners();
   }
 
@@ -5716,11 +5833,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                   debugPrint('播放结束时云同步失败: $e');
                 }
 
-                // 触发自动播放下一话
-                if (_context != null && _context!.mounted) {
-                  AutoNextEpisodeService.instance
-                      .startAutoNextEpisode(_context!, _currentVideoPath!);
-                }
+                // 根据用户设置处理播放结束行为
+                await _handlePlaybackEndAction();
               }
             }
 

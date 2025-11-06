@@ -14,6 +14,8 @@ class WatchHistoryProvider extends ChangeNotifier {
   bool _isLoaded = false;
   final FilePickerService _filePickerService = FilePickerService();
   final WatchHistoryDatabase _database = WatchHistoryDatabase.instance;
+  static const double _completionProgressThreshold = 0.97;
+  static const int _completionTailToleranceMs = 15000;
   
   // 缓存已知无效的文件路径，避免重复检查
   final Set<String> _knownInvalidPaths = {};
@@ -22,6 +24,9 @@ class WatchHistoryProvider extends ChangeNotifier {
   ScanService? _scanService;
 
   List<WatchHistoryItem> get history => _history;
+  List<WatchHistoryItem> get continueWatchingItems => _history
+      .where(_shouldDisplayInContinueWatching)
+      .toList(growable: false);
   bool get isLoading => _isLoading;
   bool get isLoaded => _isLoaded;
   
@@ -223,7 +228,7 @@ class WatchHistoryProvider extends ChangeNotifier {
   Future<void> addOrUpdateHistory(WatchHistoryItem item) async {
     // 添加到数据库
     await _database.insertOrUpdateWatchHistory(item);
-    
+
     // 更新内存中的列表
     final index = _history.indexWhere((element) => element.filePath == item.filePath);
     if (index != -1) {
@@ -231,10 +236,10 @@ class WatchHistoryProvider extends ChangeNotifier {
     } else {
       _history.add(item);
     }
-    
+
     // 重新排序
     _history.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
-    
+
     notifyListeners();
   }
   
@@ -265,4 +270,31 @@ class WatchHistoryProvider extends ChangeNotifier {
     _history.clear();
     notifyListeners();
   }
-} 
+
+  bool _shouldDisplayInContinueWatching(WatchHistoryItem item) {
+    if (item.duration <= 0) {
+      return false;
+    }
+    if (item.lastPosition <= 0) {
+      return false;
+    }
+    return !_isCompleted(item);
+  }
+
+  bool _isCompleted(WatchHistoryItem item) {
+    if (item.duration <= 0) {
+      return false;
+    }
+
+    final double progress = item.watchProgress.clamp(0.0, 1.0);
+    if (progress >= _completionProgressThreshold) {
+      return true;
+    }
+
+    if (item.lastPosition >= item.duration - _completionTailToleranceMs) {
+      return true;
+    }
+
+    return false;
+  }
+}

@@ -18,6 +18,7 @@ class AutoNextEpisodeService {
   String? _nextEpisodePath;
   BuildContext? _context;
   bool _isCancelled = false;
+  bool _autoPlayEnabled = true;
   
   // 设置上下文
   void setContext(BuildContext context) {
@@ -26,6 +27,10 @@ class AutoNextEpisodeService {
   
   // 开始自动播放下一话的倒计时
   void startAutoNextEpisode(BuildContext context, String currentVideoPath) {
+    if (!_autoPlayEnabled) {
+      debugPrint('[AutoNext] 自动连播已禁用，跳过startAutoNextEpisode调用');
+      return;
+    }
     debugPrint('[AutoNext] startAutoNextEpisode called, _isCountingDown=$_isCountingDown, context=${context != null}, mounted=${(context is Element) ? (context).mounted : 'unknown'}');
     if (_isCountingDown) {
       debugPrint('[AutoNext] _isCountingDown为true，直接return，不触发自动连播');
@@ -71,6 +76,15 @@ class AutoNextEpisodeService {
     
     debugPrint('[自动播放] 已取消自动播放下一话');
   }
+
+  void updateAutoPlayEnabled(bool enabled) {
+    _autoPlayEnabled = enabled;
+    if (!_autoPlayEnabled && _isCountingDown) {
+      cancelAutoNext();
+    }
+  }
+
+  bool get autoPlayEnabled => _autoPlayEnabled;
   
   // 查找下一话
   String? _findNextEpisode(String currentVideoPath) {

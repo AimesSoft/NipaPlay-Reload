@@ -421,6 +421,44 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         const Divider(color: Colors.white12, height: 1),
 
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final currentAction = videoState.playbackEndAction;
+            final items = PlaybackEndAction.values
+                .map(
+                  (action) => DropdownMenuItemData(
+                    title: action.label,
+                    value: action,
+                    isSelected: action == currentAction,
+                    description: action.description,
+                  ),
+                )
+                .toList();
+
+            return SettingsItem.dropdown(
+              title: '播放结束操作',
+              subtitle: '控制本集播放完毕后的默认行为',
+              icon: Ionicons.stop_circle_outline,
+              items: items,
+              onChanged: (dynamic value) async {
+                if (value is! PlaybackEndAction) return;
+                await videoState.setPlaybackEndAction(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value == PlaybackEndAction.autoNext
+                      ? '播放结束后将自动进入下一话'
+                      : value == PlaybackEndAction.pause
+                          ? '播放结束后将停留在当前页面'
+                          : '播放结束后将返回上一页',
+                );
+              },
+            );
+          },
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
         SettingsItem.dropdown(
           title: "弹幕渲染引擎",
           subtitle: "选择弹幕的渲染方式",

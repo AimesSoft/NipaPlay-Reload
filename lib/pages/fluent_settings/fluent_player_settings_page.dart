@@ -335,6 +335,67 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
 
               const SizedBox(height: 16),
 
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '播放结束操作',
+                        style: FluentTheme.of(context).typography.subtitle,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '控制本集播放完毕后的默认行为',
+                        style: FluentTheme.of(context).typography.caption,
+                      ),
+                      const SizedBox(height: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('当前选项'),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: ComboBox<PlaybackEndAction>(
+                              value: videoState.playbackEndAction,
+                              items: PlaybackEndAction.values
+                                  .map(
+                                    (action) => ComboBoxItem<PlaybackEndAction>(
+                                      value: action,
+                                      child: Text(action.label),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) async {
+                                if (value == null) return;
+                                await videoState.setPlaybackEndAction(value);
+                                if (!mounted) return;
+                                final message = value == PlaybackEndAction.autoNext
+                                    ? '播放结束后将自动进入下一话'
+                                    : value == PlaybackEndAction.pause
+                                        ? '播放结束后将停留在当前页面'
+                                        : '播放结束后将返回上一页';
+                                _showSuccessInfoBar(message);
+                                setState(() {});
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        videoState.playbackEndAction.description,
+                        style: FluentTheme.of(context).typography.caption,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
               if (supportsAnime4K &&
                   _selectedKernelType == PlayerKernelType.mediaKit)
                 Card(

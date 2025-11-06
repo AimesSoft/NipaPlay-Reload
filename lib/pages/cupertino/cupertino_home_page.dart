@@ -773,8 +773,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 child:
                     Consumer2<WatchHistoryProvider, AppearanceSettingsProvider>(
                   builder: (context, historyProvider, appearanceProvider, _) {
-                    final recentItems =
-                        _buildRecentItems(historyProvider.history);
+                    final recentItems = _buildRecentItems(
+                        historyProvider.continueWatchingItems);
                     final style = appearanceProvider.recentWatchingStyle;
 
                     if (recentItems.isEmpty) {

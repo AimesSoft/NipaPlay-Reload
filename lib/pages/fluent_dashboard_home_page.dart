@@ -1155,8 +1155,7 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
   Widget _buildContinueWatchingSection() {
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {
-        final history = historyProvider.history;
-        final validHistory = history.where((item) => item.duration > 0).toList();
+        final validHistory = historyProvider.continueWatchingItems;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

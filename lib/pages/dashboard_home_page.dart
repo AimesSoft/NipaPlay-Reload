@@ -2134,8 +2134,7 @@ style: TextStyle(
   Widget _buildContinueWatching({required bool isPhone}) {
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {
-        final history = historyProvider.history;
-        final validHistory = history.where((item) => item.duration > 0).toList();
+        final validHistory = historyProvider.continueWatchingItems;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
