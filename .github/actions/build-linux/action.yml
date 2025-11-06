@@ -178,10 +178,24 @@ runs:
         # Run linuxdeployqt
         echo "Running linuxdeployqt..."
         export LD_LIBRARY_PATH="${APPDIR}/lib:${LD_LIBRARY_PATH}"
+        # Newer glib-based desktops will load their own gio/rsvg modules, so exclude bundled copies
+        export LINUXDEPLOYQT_EXCLUDE_LIBS="libgio-2.0.so*;libglib-2.0.so*;libgobject-2.0.so*;libgmodule-2.0.so*;libgthread-2.0.so*;libgdk_pixbuf-2.0.so*;librsvg-2.so*"
         chmod +x "${APPDIR}/${APP_NAME}"
         
         ./linuxdeployqt "${APPDIR}/${APP_NAME}" -unsupported-allow-new-glibc -appimage -bundle-non-qt-libs
-        
+
+        echo "Removing bundled GNOME/GTK libraries that break on newer distros..."
+        find "${APPDIR}" -maxdepth 2 -type f \( \
+          -name "libgio-2.0.so*" -o \
+          -name "libglib-2.0.so*" -o \
+          -name "libgobject-2.0.so*" -o \
+          -name "libgmodule-2.0.so*" -o \
+          -name "libgthread-2.0.so*" -o \
+          -name "libgdk_pixbuf-2.0.so*" -o \
+          -name "librsvg-2.so*" \
+        \) -print -delete
+        rm -rf "${APPDIR}/usr/lib/gio" "${APPDIR}/lib/gio" "${APPDIR}/usr/lib/gdk-pixbuf-2.0" "${APPDIR}/lib/gdk-pixbuf-2.0" || true
+
         echo "Listing *.AppImage files in current directory after linuxdeployqt:"
         ls -la *.AppImage || echo "No AppImage found in current directory."
         
