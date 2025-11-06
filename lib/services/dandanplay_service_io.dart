@@ -680,7 +680,7 @@ class DandanplayService {
   static Future<Map<String, dynamic>> getDanmaku(String episodeId, int animeId) async {
     try {
       debugPrint('开始获取弹幕: episodeId=$episodeId, animeId=$animeId');
-      
+
       // 先检查缓存
       final cachedDanmaku = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
       if (cachedDanmaku != null) {
@@ -691,88 +691,117 @@ class DandanplayService {
           'count': cachedDanmaku.length
         };
       }
-      
+
       ////debugPrint('缓存未命中，从网络加载弹幕');
-      final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      final apiPath = '/api/v2/comment/$episodeId';
-      
-      // 从设置中读取弹幕转换选项
-      final prefs = await SharedPreferences.getInstance();
-      final chConvert = prefs.getBool('danmaku_convert_to_simplified') ?? true ? 1 : 0;
-      
-      final baseUrl = await _getApiBaseUrl();
-      final apiUrl = '$baseUrl$apiPath?withRelated=true&chConvert=$chConvert';
-      
-      ////debugPrint('发送弹幕请求: $apiUrl');
-      ////debugPrint('请求头: X-AppId: $appId, X-Timestamp: $timestamp, 是否包含token: ${_token != null}');
-      
-      final response = await http.get(
-        Uri.parse(apiUrl),
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': userAgent,
-          'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
-          'X-Timestamp': '$timestamp',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
 
-      ////debugPrint('弹幕API响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['comments'] != null) {
-          final comments = data['comments'] as List;
-          ////debugPrint('获取到原始弹幕数: ${comments.length}');
-          
-          final formattedComments = comments.map((comment) {
-            // 解析 p 字段，格式为 "时间,模式,颜色,用户ID"
-            final pParts = (comment['p'] as String).split(',');
-            final time = double.tryParse(pParts[0]) ?? 0.0;
-            final mode = int.tryParse(pParts[1]) ?? 1;
-            final color = int.tryParse(pParts[2]) ?? 16777215; // 默认白色
-            final content = comment['m'] as String;
-            
-            // 转换颜色格式
-            final r = (color >> 16) & 0xFF;
-            final g = (color >> 8) & 0xFF;
-            final b = color & 0xFF;
-            final colorValue = 'rgb($r,$g,$b)';
-            
-            return {
-              'time': time,
-              'content': content,
-              'type': mode == 1 ? 'scroll' : mode == 5 ? 'top' : 'bottom',
-              'color': colorValue,
-              'isMe': false,
-            };
-          }).toList();
+      // 获取当前配置的服务器
+      final currentServer = await _getApiBaseUrl();
+      final isBackupServer = currentServer == NetworkSettings.backupServer;
 
-          ////debugPrint('从网络加载弹幕成功: $episodeId, 格式化后数量: ${formattedComments.length}');
-          
-          // 异步保存到缓存
-          DanmakuCacheManager.saveDanmakuToCache(episodeId, animeId, formattedComments)
-              .then((_) => debugPrint('弹幕已保存到缓存: $episodeId'));
-          
-          return {
-            'comments': formattedComments,
-            'fromCache': false,
-            'count': formattedComments.length
-          };
+      // 首先尝试使用当前配置的服务器
+      try {
+        return await _fetchDanmakuFromServer(episodeId, animeId, currentServer);
+      } catch (e) {
+        debugPrint('从当前服务器获取弹幕失败: $e');
+
+        // 如果当前使用的是备用服务器，则回退到主服务器
+        if (isBackupServer) {
+          debugPrint('尝试回退到主服务器获取弹幕...');
+          try {
+            return await _fetchDanmakuFromServer(episodeId, animeId, NetworkSettings.primaryServer);
+          } catch (fallbackError) {
+            debugPrint('从主服务器获取弹幕也失败: $fallbackError');
+            throw Exception('从备用服务器和主服务器获取弹幕均失败');
+          }
         } else {
-          ////debugPrint('API响应中没有comments字段: ${data.keys.toList()}');
-          throw Exception('该视频暂无弹幕');
+          // 如果使用的是主服务器失败，直接抛出异常
+          rethrow;
         }
-      } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
-        ////debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
-        throw Exception('获取弹幕失败: $errorMessage');
       }
     } catch (e) {
       ////debugPrint('获取弹幕时出错: $e');
       rethrow;
+    }
+  }
+
+  /// 从指定服务器获取弹幕
+  static Future<Map<String, dynamic>> _fetchDanmakuFromServer(
+      String episodeId, int animeId, String serverUrl) async {
+    final appSecret = await getAppSecret();
+    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    final apiPath = '/api/v2/comment/$episodeId';
+
+    // 从设置中读取弹幕转换选项
+    final prefs = await SharedPreferences.getInstance();
+    final chConvert = prefs.getBool('danmaku_convert_to_simplified') ?? true ? 1 : 0;
+
+    final apiUrl = '$serverUrl$apiPath?withRelated=true&chConvert=$chConvert';
+
+    debugPrint('发送弹幕请求到: $apiUrl');
+    ////debugPrint('请求头: X-AppId: $appId, X-Timestamp: $timestamp, 是否包含token: ${_token != null}');
+
+    final response = await http.get(
+      Uri.parse(apiUrl),
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': userAgent,
+        'X-AppId': appId,
+        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+        'X-Timestamp': '$timestamp',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+    ).timeout(const Duration(seconds: 10)); // 添加超时限制
+
+    ////debugPrint('弹幕API响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['comments'] != null) {
+        final comments = data['comments'] as List;
+        ////debugPrint('获取到原始弹幕数: ${comments.length}');
+
+        final formattedComments = comments.map((comment) {
+          // 解析 p 字段，格式为 "时间,模式,颜色,用户ID"
+          final pParts = (comment['p'] as String).split(',');
+          final time = double.tryParse(pParts[0]) ?? 0.0;
+          final mode = int.tryParse(pParts[1]) ?? 1;
+          final color = int.tryParse(pParts[2]) ?? 16777215; // 默认白色
+          final content = comment['m'] as String;
+
+          // 转换颜色格式
+          final r = (color >> 16) & 0xFF;
+          final g = (color >> 8) & 0xFF;
+          final b = color & 0xFF;
+          final colorValue = 'rgb($r,$g,$b)';
+
+          return {
+            'time': time,
+            'content': content,
+            'type': mode == 1 ? 'scroll' : mode == 5 ? 'top' : 'bottom',
+            'color': colorValue,
+            'isMe': false,
+          };
+        }).toList();
+
+        debugPrint('从网络加载弹幕成功: $episodeId, 格式化后数量: ${formattedComments.length}');
+
+        // 异步保存到缓存
+        DanmakuCacheManager.saveDanmakuToCache(episodeId, animeId, formattedComments)
+            .then((_) => debugPrint('弹幕已保存到缓存: $episodeId'));
+
+        return {
+          'comments': formattedComments,
+          'fromCache': false,
+          'count': formattedComments.length
+        };
+      } else {
+        ////debugPrint('API响应中没有comments字段: ${data.keys.toList()}');
+        throw Exception('该视频暂无弹幕');
+      }
+    } else {
+      final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+      ////debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
+      throw Exception('获取弹幕失败: $errorMessage');
     }
   }
 
