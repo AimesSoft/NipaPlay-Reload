@@ -211,6 +211,35 @@ class DandanplayService {
       return {'success': false, 'message': '注册失败: ${e.toString()}'};
     }
   }
+
+  static Future<void> updateEpisodeWatchStatus(int episodeId, bool isWatched) async {
+    try {
+      if (_baseUrl.isEmpty) {
+        final currentUrl = Uri.base;
+        _baseUrl = '${currentUrl.scheme}://${currentUrl.host}';
+        if (currentUrl.hasPort && currentUrl.port != 80 && currentUrl.port != 443) {
+          _baseUrl += ':${currentUrl.port}';
+        }
+      }
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/dandanplay/episodes/watch_status'),
+        headers: const {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'episodeId': episodeId,
+          'isWatched': isWatched,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        debugPrint('[弹弹play服务-Web] 更新观看状态失败: HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[弹弹play服务-Web] 更新观看状态异常: $e');
+    }
+  }
   
   static Future<Map<String, dynamic>> getVideoInfo(String videoPath) async {
     try {
