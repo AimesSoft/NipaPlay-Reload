@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/settings_card.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
@@ -261,6 +262,21 @@ style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold
                     const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
                   ]
                 ),
+                const SizedBox(height: 12),
+                _buildRichText(
+                  context,
+                  const [
+                    TextSpan(text: '感谢下列用户的赞助支持：'),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: kAcknowledgementNames
+                      .map((name) => _buildAcknowledgementBadge(context, name))
+                      .toList(),
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -408,6 +424,36 @@ style: TextStyle(
 
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAcknowledgementBadge(BuildContext context, String name) {
+    final accentColor = Colors.amberAccent[100] ?? Colors.amberAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Ionicons.ribbon_outline,
+            size: 16,
+            color: accentColor,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            name,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
       ),
     );
   }

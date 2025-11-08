@@ -4,6 +4,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/widgets/fluent_ui/fluent_info_bar.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
 
@@ -273,6 +274,19 @@ style: TextStyle(
                             ],
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '感谢下列用户的赞助支持：',
+                          style: FluentTheme.of(context).typography.body,
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: kAcknowledgementNames
+                              .map((name) => _buildAcknowledgementBadge(context, name))
+                              .toList(),
+                        ),
                       ],
                     ),
                   ),
@@ -394,12 +408,40 @@ style: TextStyle(
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 40),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAcknowledgementBadge(BuildContext context, String name) {
+    final textStyle = FluentTheme.of(context).typography.bodyStrong?.copyWith(
+          color: FluentTheme.of(context).resources.textFillColorPrimary,
+          fontWeight: FontWeight.w600,
+        );
+    final borderColor = FluentTheme.of(context).resources.dividerStrokeColorDefault;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: material.Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Ionicons.ribbon_outline,
+            size: 16,
+            color:
+                material.Colors.amberAccent[100] ?? material.Colors.amberAccent,
+          ),
+          const SizedBox(width: 8),
+          Text(name, style: textStyle),
+        ],
       ),
     );
   }

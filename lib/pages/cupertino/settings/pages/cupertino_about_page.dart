@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nipaplay/services/update_service.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
+import 'package:nipaplay/constants/acknowledgements.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/widgets/cupertino/cupertino_settings_group_card.dart';
@@ -210,6 +211,33 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                           ),
                           TextSpan(text: ' 帮助实现 Emby 与 Jellyfin 媒体库支持。'),
                         ],
+                        trailing: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '感谢下列用户的赞助支持：',
+                              style: CupertinoTheme.of(context)
+                                  .textTheme
+                                  .textStyle
+                                  .copyWith(
+                                    fontSize: 14,
+                                    height: 1.5,
+                                    color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.label,
+                                      context,
+                                    ),
+                                  ),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: kAcknowledgementNames
+                                  .map((name) => _buildAcknowledgementPill(context, name))
+                                  .toList(),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 20),
                       _buildSponsorshipSection(context),
@@ -310,6 +338,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     BuildContext context, {
     required String? title,
     required List<TextSpan> content,
+    Widget? trailing,
   }) {
     final base = CupertinoTheme.of(context)
         .textTheme
@@ -347,6 +376,10 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                   children: content,
                 ),
               ),
+              if (trailing != null) ...[
+                const SizedBox(height: 12),
+                trailing,
+              ],
             ],
           ),
         ),
@@ -528,6 +561,49 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         ),
         const SizedBox(height: 4),
       ],
+    );
+  }
+
+  Widget _buildAcknowledgementPill(BuildContext context, String name) {
+    final baseStyle = CupertinoTheme.of(context).textTheme.textStyle;
+    final labelColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    final fillColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemFill,
+      context,
+    );
+    final iconColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.activeOrange,
+      context,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: fillColor.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: labelColor.withOpacity(0.15)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            CupertinoIcons.sparkles,
+            size: 16,
+            color: iconColor,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            name,
+            style: baseStyle.copyWith(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: labelColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
