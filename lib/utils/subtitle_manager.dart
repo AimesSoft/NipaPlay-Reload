@@ -208,11 +208,53 @@ class SubtitleManager extends ChangeNotifier {
     debugPrint('SubtitleManager: 设置当前外部字幕路径: $path');
   }
 
+  // 清空外部字幕状态，同时通知播放器关闭外挂轨道
+  void _clearExternalSubtitleState({bool resetManualFlag = true}) {
+    try {
+      if (_player.supportsExternalSubtitles) {
+        _player.setMedia("", MediaType.subtitle);
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 清除播放器外部字幕失败: $e');
+    }
+
+    try {
+      if (_player.activeSubtitleTracks.isNotEmpty) {
+        _player.activeSubtitleTracks = [];
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 重置字幕轨道选择失败: $e');
+    }
+
+    _currentExternalSubtitlePath = null;
+
+    final existing = _subtitleTrackInfo['external_subtitle'];
+    if (existing is Map<String, dynamic>) {
+      final updated = Map<String, dynamic>.from(existing);
+      updated['isActive'] = false;
+      updated['path'] = null;
+      if (resetManualFlag) {
+        updated['isManualSet'] = false;
+      }
+      _subtitleTrackInfo['external_subtitle'] = updated;
+    }
+  }
+
+  /// 对外暴露的清理接口，供播放器切集或重置时调用
+  void clearExternalSubtitle({bool notifyListenersToo = true}) {
+    _clearExternalSubtitleState();
+    if (notifyListenersToo) {
+      onSubtitleTrackChanged();
+      notifyListeners();
+    }
+    debugPrint('SubtitleManager: 外部字幕状态已重置');
+  }
+
   // 设置外部字幕并更新路径
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     try {
       // NEW: Check if player supports external subtitles
-      if (!_player.supportsExternalSubtitles) {
+      if (!_player.supportsExternalSubtitles && path.isNotEmpty) {
         debugPrint('SubtitleManager: 当前播放器内核不支持加载外部字幕');
         // TODO: Call your blur_snackbar here
         // For example: globals.showBlurSnackbar('当前播放器内核不支持加载外部字幕');
@@ -253,19 +295,7 @@ class SubtitleManager extends ChangeNotifier {
 
         debugPrint('SubtitleManager: 外部字幕设置成功');
       } else if (path.isEmpty) {
-        // 清除外部字幕
-        _player.setMedia("", MediaType.subtitle);
-        _currentExternalSubtitlePath = null;
-
-        // 更新轨道信息，明确清除所有相关标记
-        if (_subtitleTrackInfo.containsKey('external_subtitle')) {
-          updateSubtitleTrackInfo('external_subtitle', {
-            'isActive': false,
-            'isManualSet': false, // 明确清除手动设置标记
-            'path': null
-          });
-        }
-
+        _clearExternalSubtitleState();
         debugPrint('SubtitleManager: 外部字幕已清除');
       } else {
         debugPrint('SubtitleManager: 字幕文件不存在: $path');
