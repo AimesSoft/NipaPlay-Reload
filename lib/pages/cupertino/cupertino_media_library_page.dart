@@ -1676,6 +1676,189 @@ class _LocalMediaLibrarySheet extends StatefulWidget {
 }
 
 class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final LocalMediaShareService _localShareService =
+      LocalMediaShareService.instance;
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      key: _navigatorKey,
+      onGenerateInitialRoutes: (_, __) => [
+        CupertinoPageRoute<void>(
+          builder: (routeContext) => _LocalMediaLibraryListPage(
+            onAnimeTap: _openAnimeDetail,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openAnimeDetail(_LocalMediaSummary summary) async {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) {
+      return;
+    }
+
+    ThemeNotifier? themeNotifier;
+    try {
+      themeNotifier = context.read<ThemeNotifier>();
+    } catch (_) {
+      themeNotifier = null;
+    }
+
+    final sharedSummary = _toSharedSummary(summary);
+    final displayMode = themeNotifier?.animeDetailDisplayMode;
+
+    await navigator.push(
+      CupertinoPageRoute<void>(
+        builder: (routeContext) => CupertinoSharedAnimeDetailPage(
+          anime: sharedSummary,
+          hideBackButton: false,
+          displayModeOverride: displayMode,
+          showCloseButton: false,
+          customEpisodeLoader: ({bool force = false}) =>
+              _loadLocalEpisodes(summary.animeId, force: force),
+          customPlayableBuilder: (routeContext, episode) =>
+              _buildLocalPlayableItem(routeContext, summary, episode),
+          sourceLabelOverride: '本地媒体库',
+        ),
+      ),
+    );
+  }
+
+  SharedRemoteAnimeSummary _toSharedSummary(_LocalMediaSummary summary) {
+    return SharedRemoteAnimeSummary(
+      animeId: summary.animeId,
+      name: summary.name,
+      nameCn: summary.nameCn,
+      summary: summary.summary,
+      imageUrl: summary.imageUrl,
+      lastWatchTime:
+          summary.lastWatchTime ?? DateTime.fromMillisecondsSinceEpoch(0),
+      episodeCount: summary.episodeCount,
+      hasMissingFiles: summary.hasMissingFiles,
+    );
+  }
+
+  Future<List<SharedRemoteEpisode>> _loadLocalEpisodes(
+    int animeId, {
+    bool force = false,
+  }) async {
+    if (force) {
+      // 预留参数：本地数据目前不区分强制刷新与否
+    }
+    final detail = await _localShareService.getAnimeDetail(animeId);
+    if (detail == null) {
+      return const [];
+    }
+
+    final rawEpisodes = detail['episodes'];
+    if (rawEpisodes is! List) {
+      return const [];
+    }
+
+    return rawEpisodes
+        .whereType<Map<String, dynamic>>()
+        .map(SharedRemoteEpisode.fromJson)
+        .toList();
+  }
+
+  Future<PlayableItem> _buildLocalPlayableItem(
+    BuildContext routeContext,
+    _LocalMediaSummary summary,
+    SharedRemoteEpisode episode,
+  ) async {
+    final sharedEpisode =
+        _localShareService.getEpisodeByShareId(episode.shareId);
+    if (sharedEpisode == null) {
+      throw '找不到对应的本地媒体文件';
+    }
+
+    final historyItem = sharedEpisode.historyItem;
+    var filePath = historyItem.filePath;
+    String? actualPlayUrl;
+
+    bool fileExists = false;
+
+    if (filePath.startsWith('jellyfin://')) {
+      final jellyfinId = filePath.replaceFirst('jellyfin://', '');
+      try {
+        final jellyfinProvider = routeContext.read<JellyfinProvider>();
+        if (!jellyfinProvider.isConnected) {
+          throw '未连接到 Jellyfin 服务器';
+        }
+        actualPlayUrl = jellyfinProvider.getStreamUrl(jellyfinId);
+        fileExists = true;
+      } catch (e) {
+        throw '获取 Jellyfin 播放地址失败：$e';
+      }
+    } else if (filePath.startsWith('emby://')) {
+      final embyId = filePath.replaceFirst('emby://', '');
+      try {
+        final embyProvider = routeContext.read<EmbyProvider>();
+        if (!embyProvider.isConnected) {
+          throw '未连接到 Emby 服务器';
+        }
+        actualPlayUrl = await embyProvider.getStreamUrl(embyId);
+        fileExists = true;
+      } catch (e) {
+        throw '获取 Emby 播放地址失败：$e';
+      }
+    } else {
+      final file = File(filePath);
+      fileExists = file.existsSync();
+
+      if (!fileExists && Platform.isIOS) {
+        final altPath = filePath.startsWith('/private')
+            ? filePath.replaceFirst('/private', '')
+            : '/private$filePath';
+        final altFile = File(altPath);
+        if (altFile.existsSync()) {
+          filePath = altPath;
+          historyItem.filePath = altPath;
+          fileExists = true;
+        }
+      }
+
+      if (!fileExists) {
+        throw '文件不存在或无法访问：${p.basename(filePath)}';
+      }
+    }
+
+    if (!fileExists) {
+      throw '无法读取媒体文件：${p.basename(filePath)}';
+    }
+
+    return PlayableItem(
+      videoPath: filePath,
+      title: historyItem.animeName.isNotEmpty
+          ? historyItem.animeName
+          : summary.displayTitle,
+      subtitle: historyItem.episodeTitle ?? episode.title,
+      animeId: historyItem.animeId ?? summary.animeId,
+      episodeId:
+          historyItem.episodeId ?? episode.episodeId ?? episode.shareId.hashCode,
+      historyItem: historyItem,
+      actualPlayUrl: actualPlayUrl,
+    );
+  }
+}
+
+class _LocalMediaLibraryListPage extends StatefulWidget {
+  const _LocalMediaLibraryListPage({
+    required this.onAnimeTap,
+  });
+
+  final Future<void> Function(_LocalMediaSummary) onAnimeTap;
+
+  @override
+  State<_LocalMediaLibraryListPage> createState() =>
+      _LocalMediaLibraryListPageState();
+}
+
+class _LocalMediaLibraryListPageState
+    extends State<_LocalMediaLibraryListPage> {
   final LocalMediaShareService _localShareService =
       LocalMediaShareService.instance;
   final ScrollController _scrollController = ScrollController();
@@ -1944,151 +2127,11 @@ class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
     return buffer.toString();
   }
 
-  Future<void> _openAnimeDetail(_LocalMediaSummary summary) async {
-    if (!mounted) return;
-
-    ThemeNotifier? themeNotifier;
-    try {
-      themeNotifier = context.read<ThemeNotifier>();
-    } catch (_) {
-      themeNotifier = null;
+  Future<void> _openAnimeDetail(_LocalMediaSummary summary) {
+    if (!mounted) {
+      return Future.value();
     }
-
-    final sharedSummary = _toSharedSummary(summary);
-    final displayMode = themeNotifier?.animeDetailDisplayMode;
-
-    await Navigator.of(context).push(
-      CupertinoPageRoute<void>(
-        builder: (routeContext) => CupertinoSharedAnimeDetailPage(
-          anime: sharedSummary,
-          hideBackButton: false,
-          displayModeOverride: displayMode,
-          showCloseButton: false,
-          customEpisodeLoader: ({bool force = false}) =>
-              _loadLocalEpisodes(summary.animeId, force: force),
-          customPlayableBuilder: (routeContext, episode) =>
-              _buildLocalPlayableItem(routeContext, summary, episode),
-          sourceLabelOverride: '本地媒体库',
-        ),
-      ),
-    );
-  }
-
-  SharedRemoteAnimeSummary _toSharedSummary(_LocalMediaSummary summary) {
-    return SharedRemoteAnimeSummary(
-      animeId: summary.animeId,
-      name: summary.name,
-      nameCn: summary.nameCn,
-      summary: summary.summary,
-      imageUrl: summary.imageUrl,
-      lastWatchTime:
-          summary.lastWatchTime ?? DateTime.fromMillisecondsSinceEpoch(0),
-      episodeCount: summary.episodeCount,
-      hasMissingFiles: summary.hasMissingFiles,
-    );
-  }
-
-  Future<List<SharedRemoteEpisode>> _loadLocalEpisodes(
-    int animeId, {
-    bool force = false,
-  }) async {
-    if (force) {
-      // 预留参数：本地数据目前不区分强制刷新与否
-    }
-    final detail = await _localShareService.getAnimeDetail(animeId);
-    if (detail == null) {
-      return const [];
-    }
-
-    final rawEpisodes = detail['episodes'];
-    if (rawEpisodes is! List) {
-      return const [];
-    }
-
-    return rawEpisodes
-        .whereType<Map<String, dynamic>>()
-        .map(SharedRemoteEpisode.fromJson)
-        .toList();
-  }
-
-  Future<PlayableItem> _buildLocalPlayableItem(
-    BuildContext routeContext,
-    _LocalMediaSummary summary,
-    SharedRemoteEpisode episode,
-  ) async {
-    final sharedEpisode =
-        _localShareService.getEpisodeByShareId(episode.shareId);
-    if (sharedEpisode == null) {
-      throw '找不到对应的本地媒体文件';
-    }
-
-    final historyItem = sharedEpisode.historyItem;
-    var filePath = historyItem.filePath;
-    String? actualPlayUrl;
-
-    bool fileExists = false;
-
-    if (filePath.startsWith('jellyfin://')) {
-      final jellyfinId = filePath.replaceFirst('jellyfin://', '');
-      try {
-        final jellyfinProvider = routeContext.read<JellyfinProvider>();
-        if (!jellyfinProvider.isConnected) {
-          throw '未连接到 Jellyfin 服务器';
-        }
-        actualPlayUrl = jellyfinProvider.getStreamUrl(jellyfinId);
-        fileExists = true;
-      } catch (e) {
-        throw '获取 Jellyfin 播放地址失败：$e';
-      }
-    } else if (filePath.startsWith('emby://')) {
-      final embyId = filePath.replaceFirst('emby://', '');
-      try {
-        final embyProvider = routeContext.read<EmbyProvider>();
-        if (!embyProvider.isConnected) {
-          throw '未连接到 Emby 服务器';
-        }
-        actualPlayUrl = await embyProvider.getStreamUrl(embyId);
-        fileExists = true;
-      } catch (e) {
-        throw '获取 Emby 播放地址失败：$e';
-      }
-    } else {
-      final file = File(filePath);
-      fileExists = file.existsSync();
-
-      if (!fileExists && Platform.isIOS) {
-        final altPath = filePath.startsWith('/private')
-            ? filePath.replaceFirst('/private', '')
-            : '/private$filePath';
-        final altFile = File(altPath);
-        if (altFile.existsSync()) {
-          filePath = altPath;
-          historyItem.filePath = altPath;
-          fileExists = true;
-        }
-      }
-
-      if (!fileExists) {
-        throw '文件不存在或无法访问：${p.basename(filePath)}';
-      }
-    }
-
-    if (!fileExists) {
-      throw '无法读取媒体文件：${p.basename(filePath)}';
-    }
-
-    return PlayableItem(
-      videoPath: filePath,
-      title: historyItem.animeName.isNotEmpty
-          ? historyItem.animeName
-          : summary.displayTitle,
-      subtitle: historyItem.episodeTitle ?? episode.title,
-      animeId: historyItem.animeId ?? summary.animeId,
-      episodeId:
-          historyItem.episodeId ?? episode.episodeId ?? episode.shareId.hashCode,
-      historyItem: historyItem,
-      actualPlayUrl: actualPlayUrl,
-    );
+    return widget.onAnimeTap(summary);
   }
 }
 
