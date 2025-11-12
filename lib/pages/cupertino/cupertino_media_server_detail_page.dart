@@ -716,55 +716,146 @@ class _CupertinoMediaServerDetailPageState
             ],
           ],
         ),
-        if (_isMovie)
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: AdaptiveButton.child(
-              onPressed: _playMovie,
-              style: AdaptiveButtonStyle.filled,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(CupertinoIcons.play_fill),
-                  SizedBox(width: 6),
-                  Text('播放'),
-                ],
-              ),
-            ),
-          ),
       ],
     );
   }
 
   Widget _buildSegmentControl() {
+    final Color segmentLabelColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    final Color segmentBackgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.tertiarySystemFill,
+      context,
+    );
+    final Color segmentThumbColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemBackground,
+      context,
+    );
+    final CupertinoThemeData baseTheme = CupertinoTheme.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: CupertinoSlidingSegmentedControl<int>(
-        groupValue: _currentSegment,
-        onValueChanged: (int? value) {
-          if (value == null) {
-            return;
-          }
-          setState(() {
-            _currentSegment = value;
-          });
-        },
-        children: const <int, Widget>{
-          0: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            child: Text('简介'),
+      child: CupertinoTheme(
+        data: baseTheme.copyWith(
+          textTheme: baseTheme.textTheme.copyWith(
+            textStyle: baseTheme.textTheme.textStyle.copyWith(
+              color: segmentLabelColor,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          1: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            child: Text('剧集'),
-          ),
-        },
+        ),
+        child: CupertinoSlidingSegmentedControl<int>(
+          backgroundColor: segmentBackgroundColor,
+          thumbColor: segmentThumbColor,
+          groupValue: _currentSegment,
+          onValueChanged: (int? value) {
+            if (value == null) {
+              return;
+            }
+            setState(() {
+              _currentSegment = value;
+            });
+          },
+          children: <int, Widget>{
+            0: Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: Text(
+                '简介',
+                style: TextStyle(color: segmentLabelColor),
+              ),
+            ),
+            1: Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: Text(
+                '剧集',
+                style: TextStyle(color: segmentLabelColor),
+              ),
+            ),
+          },
+        ),
       ),
     );
   }
 
   List<Widget> _buildInfoSlivers() {
+    final Color labelColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    final Color secondaryColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final Color iconAccentColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.activeBlue,
+      context,
+    );
+    final Color actorPlaceholderColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGrey5,
+      context,
+    );
+    final Color actorIconColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGrey,
+      context,
+    );
+
     final List<Widget> slivers = <Widget>[];
+
+    if (_isMovie) {
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final double buttonWidth = constraints.maxWidth * 0.8;
+                return Align(
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    width: buttonWidth,
+                    height: 56,
+                    child: AdaptiveButton.child(
+                      onPressed: _playMovie,
+                      style: AdaptiveButtonStyle.filled,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            CupertinoIcons.play_fill,
+                            size: 22,
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.black,
+                              context,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Play',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.black,
+                                context,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    }
 
     if (_mediaDetail!.overview != null &&
         _mediaDetail!.overview!.trim().isNotEmpty) {
@@ -777,10 +868,10 @@ class _CupertinoMediaServerDetailPageState
                   .replaceAll('<br>', ' ')
                   .replaceAll('<br/>', ' ')
                   .replaceAll('<br />', ' '),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 height: 1.5,
-                color: CupertinoColors.label,
+                color: labelColor,
               ),
             ),
           ),
@@ -799,6 +890,9 @@ class _CupertinoMediaServerDetailPageState
                 icon: CupertinoIcons.time,
                 label: '时长',
                 value: _formatRuntime(_mediaDetail!.runTimeTicks),
+                labelColor: secondaryColor,
+                valueColor: labelColor,
+                iconColor: iconAccentColor,
               ),
               if (_mediaDetail!.seriesStudio != null &&
                   _mediaDetail!.seriesStudio!.isNotEmpty)
@@ -806,6 +900,9 @@ class _CupertinoMediaServerDetailPageState
                   icon: CupertinoIcons.house_fill,
                   label: '工作室',
                   value: _mediaDetail!.seriesStudio!,
+                  labelColor: secondaryColor,
+                  valueColor: labelColor,
+                  iconColor: iconAccentColor,
                 ),
             ],
           ),
@@ -823,7 +920,7 @@ class _CupertinoMediaServerDetailPageState
               style: CupertinoTheme.of(context)
                   .textTheme
                   .navTitleTextStyle
-                  .copyWith(fontSize: 18),
+                  .copyWith(fontSize: 18, color: labelColor),
             ),
           ),
         ),
@@ -845,13 +942,13 @@ class _CupertinoMediaServerDetailPageState
                     children: [
                       CircleAvatar(
                         radius: 32,
-                        backgroundColor: CupertinoColors.systemGrey5,
+                        backgroundColor: actorPlaceholderColor,
                         backgroundImage:
                             imageUrl != null ? NetworkImage(imageUrl) : null,
                         child: imageUrl == null
-                            ? const Icon(
+                            ? Icon(
                                 CupertinoIcons.person_fill,
-                                color: CupertinoColors.systemGrey,
+                                color: actorIconColor,
                               )
                             : null,
                       ),
@@ -863,35 +960,16 @@ class _CupertinoMediaServerDetailPageState
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 12),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: labelColor,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 );
               },
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_isMovie) {
-      slivers.add(
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-            child: AdaptiveButton.child(
-              onPressed: _playMovie,
-              style: AdaptiveButtonStyle.filled,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(CupertinoIcons.play_fill),
-                  SizedBox(width: 6),
-                  Text('播放电影'),
-                ],
-              ),
             ),
           ),
         ),
@@ -905,27 +983,39 @@ class _CupertinoMediaServerDetailPageState
     required IconData icon,
     required String label,
     required String value,
+    Color? labelColor,
+    Color? valueColor,
+    Color? iconColor,
   }) {
     if (value.isEmpty) {
       return const SizedBox.shrink();
     }
+    final Color resolvedLabelColor = labelColor ??
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final Color resolvedValueColor = valueColor ??
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final Color resolvedIconColor = iconColor ??
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: CupertinoColors.activeBlue),
+          Icon(icon, size: 18, color: resolvedIconColor),
           const SizedBox(width: 12),
           Text(
             '$label：',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
-              color: CupertinoColors.secondaryLabel,
+              color: resolvedLabelColor,
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 15),
+              style: TextStyle(
+                fontSize: 15,
+                color: resolvedValueColor,
+              ),
             ),
           ),
         ],
@@ -934,6 +1024,31 @@ class _CupertinoMediaServerDetailPageState
   }
 
   List<Widget> _buildEpisodeSlivers() {
+    final Color labelColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    final Color secondaryColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final Color activeColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.activeBlue,
+      context,
+    );
+    final Color chipBackgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGrey5,
+      context,
+    );
+    final Color episodeTileBackground = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final Color episodePlaceholderBackground = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGrey4,
+      context,
+    );
+
     if (_seasons.isEmpty) {
       return <Widget>[
         SliverPadding(
@@ -972,8 +1087,8 @@ class _CupertinoMediaServerDetailPageState
                     ),
                     decoration: BoxDecoration(
                       color: selected
-                          ? CupertinoColors.activeBlue
-                          : CupertinoColors.systemGrey5,
+                          ? activeColor
+                          : chipBackgroundColor,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -981,7 +1096,7 @@ class _CupertinoMediaServerDetailPageState
                       style: TextStyle(
                         color: selected
                             ? CupertinoColors.white
-                            : CupertinoColors.label,
+                            : labelColor,
                         fontSize: 14,
                       ),
                     ),
@@ -1069,7 +1184,16 @@ class _CupertinoMediaServerDetailPageState
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: _buildEpisodeTile(episode, imageUrl),
+                child: _buildEpisodeTile(
+                  episode,
+                  imageUrl,
+                  backgroundColor: episodeTileBackground,
+                  titleColor: labelColor,
+                  subtitleColor: secondaryColor,
+                  runtimeColor: secondaryColor,
+                  placeholderColor: episodePlaceholderBackground,
+                  iconColor: activeColor,
+                ),
               );
             },
             childCount: episodes.length,
@@ -1081,7 +1205,16 @@ class _CupertinoMediaServerDetailPageState
     return slivers;
   }
 
-  Widget _buildEpisodeTile(dynamic episode, String imageUrl) {
+  Widget _buildEpisodeTile(
+    dynamic episode,
+    String imageUrl, {
+    required Color backgroundColor,
+    required Color titleColor,
+    required Color subtitleColor,
+    required Color runtimeColor,
+    required Color placeholderColor,
+    required Color iconColor,
+  }) {
     final title = episode.indexNumber != null
         ? '${episode.indexNumber}. ${episode.name}'
         : episode.name;
@@ -1097,7 +1230,7 @@ class _CupertinoMediaServerDetailPageState
       onTap: () => _playEpisode(episode),
       child: Container(
         decoration: BoxDecoration(
-          color: CupertinoColors.systemGrey6,
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(18),
         ),
         padding: const EdgeInsets.all(12),
@@ -1115,7 +1248,7 @@ class _CupertinoMediaServerDetailPageState
                         fit: BoxFit.cover,
                       )
                     : Container(
-                        color: CupertinoColors.systemGrey4,
+                        color: placeholderColor,
                         child: const Icon(
                           Ionicons.film_outline,
                           color: CupertinoColors.white,
@@ -1132,9 +1265,10 @@ class _CupertinoMediaServerDetailPageState
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
+                      color: titleColor,
                     ),
                   ),
                   if (episode.runTimeTicks != null)
@@ -1142,9 +1276,9 @@ class _CupertinoMediaServerDetailPageState
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
                         _formatRuntime(episode.runTimeTicks),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: CupertinoColors.systemGrey,
+                          color: runtimeColor,
                         ),
                       ),
                     ),
@@ -1155,9 +1289,9 @@ class _CupertinoMediaServerDetailPageState
                         subtitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: CupertinoColors.secondaryLabel,
+                          color: subtitleColor,
                         ),
                       ),
                     ),
@@ -1165,9 +1299,9 @@ class _CupertinoMediaServerDetailPageState
               ),
             ),
             const SizedBox(width: 12),
-            const Icon(
+            Icon(
               CupertinoIcons.play_circle,
-              color: CupertinoColors.activeBlue,
+              color: iconColor,
             ),
           ],
         ),
