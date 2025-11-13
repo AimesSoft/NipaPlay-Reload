@@ -220,7 +220,11 @@ class _VideoPlayerUIState extends State<VideoPlayerUI> {
     _doubleTapTimer?.cancel();
 
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    if (videoState.hasVideo) {
+    if (!videoState.hasVideo) return;
+
+    if (globals.isDesktop) {
+      unawaited(videoState.toggleFullscreen());
+    } else {
       videoState.togglePlayPause();
     }
   }
