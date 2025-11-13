@@ -37,6 +37,8 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/pages/cupertino/cupertino_media_server_detail_page.dart';
 import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart'
     show MediaServerType;
+import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/widgets/nipaplay_theme/webdav_connection_dialog.dart';
 
 // ignore_for_file: prefer_const_constructors
 
@@ -1097,6 +1099,11 @@ class _LocalMediaSummary {
   }
 }
 
+enum _LibrarySource {
+  local,
+  webdav,
+}
+
 class CupertinoLocalMediaLibraryCard extends StatefulWidget {
   const CupertinoLocalMediaLibraryCard({
     super.key,
@@ -2147,11 +2154,21 @@ class _CupertinoLibraryManagementSheetState
     extends State<_CupertinoLibraryManagementSheet> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
+  _LibrarySource _selectedSource = _LibrarySource.local;
+  List<WebDAVConnection> _webdavConnections = [];
+  final Map<String, List<WebDAVFile>> _webdavFolderContents = {};
+  final Set<String> _expandedWebDAVConnections = {};
+  final Set<String> _expandedWebDAVFolders = {};
+  final Set<String> _loadingWebDAVFolders = {};
+  bool _isLoadingWebDAV = false;
+  bool _webdavInitialized = false;
+  String? _webdavErrorMessage;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_handleScroll);
+    _initWebDAVService();
   }
 
   void _handleScroll() {
@@ -2182,14 +2199,26 @@ class _CupertinoLibraryManagementSheetState
           _buildStatusCard(context, scanService, watchHistory),
           const SizedBox(height: 20),
           _buildActionButtons(context, scanService),
-          const SizedBox(height: 24),
-          _buildFolderSection(context, scanService),
+          const SizedBox(height: 20),
+          _buildLibrarySourceToggle(context),
         ];
 
-        if (scanService.detectedChanges.isNotEmpty) {
+        if (_selectedSource == _LibrarySource.local) {
           sections.addAll([
-            const SizedBox(height: 20),
-            _buildDetectedChangesInfo(context, scanService),
+            const SizedBox(height: 16),
+            _buildFolderSection(context, scanService),
+          ]);
+
+          if (scanService.detectedChanges.isNotEmpty) {
+            sections.addAll([
+              const SizedBox(height: 20),
+              _buildDetectedChangesInfo(context, scanService),
+            ]);
+          }
+        } else {
+          sections.addAll([
+            const SizedBox(height: 16),
+            _buildWebDAVSection(context),
           ]);
         }
 
@@ -2346,6 +2375,68 @@ class _CupertinoLibraryManagementSheetState
           icon: CupertinoIcons.arrow_down_doc,
           onPressed: () => _handleReloadHistory(),
         ),
+        _buildActionButton(
+          context,
+          label: '添加 WebDAV 服务器',
+          icon: CupertinoIcons.cloud_upload,
+          onPressed: _showWebDAVConnectionDialog,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLibrarySourceToggle(BuildContext context) {
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '查看内容',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: labelColor,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '在本地文件夹与 WebDAV 服务器之间切换。',
+          style: TextStyle(fontSize: 13, color: subtitleColor),
+        ),
+        const SizedBox(height: 12),
+        CupertinoSlidingSegmentedControl<_LibrarySource>(
+          backgroundColor: CupertinoDynamicColor.resolve(
+            CupertinoColors.systemGrey5,
+            context,
+          ),
+          thumbColor: CupertinoDynamicColor.resolve(
+            CupertinoColors.systemGrey3,
+            context,
+          ),
+          groupValue: _selectedSource,
+          children: const {
+            _LibrarySource.local: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text('本地媒体'),
+            ),
+            _LibrarySource.webdav: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text('WebDAV'),
+            ),
+          },
+          onValueChanged: (value) {
+            if (value == null || value == _selectedSource) {
+              return;
+            }
+            setState(() {
+              _selectedSource = value;
+            });
+          },
+        ),
       ],
     );
   }
@@ -2501,6 +2592,713 @@ class _CupertinoLibraryManagementSheetState
         ],
       ),
     );
+  }
+
+  Widget _buildWebDAVSection(BuildContext context) {
+    final children = <Widget>[
+      _buildWebDAVHeader(context),
+      const SizedBox(height: 12),
+    ];
+
+    if (_isLoadingWebDAV && !_webdavInitialized) {
+      children.add(_buildWebDAVPlaceholder(
+        context,
+        title: '正在加载连接',
+        subtitle: '正在读取已保存的 WebDAV 服务器配置…',
+      ));
+    } else if (_webdavErrorMessage != null) {
+      children.add(_buildWebDAVPlaceholder(
+        context,
+        title: '加载失败',
+        subtitle: _webdavErrorMessage!,
+        isError: true,
+      ));
+    } else if (_webdavConnections.isEmpty) {
+      children.add(_buildWebDAVPlaceholder(
+        context,
+        title: '尚未添加 WebDAV 服务器',
+        subtitle: '点击上方按钮添加服务器，即可浏览远程媒体并挂载到本地媒体库。',
+      ));
+    } else {
+      children.addAll(
+        _webdavConnections
+            .map((connection) =>
+                _buildWebDAVConnectionCard(context, connection))
+            .toList(),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  Widget _buildWebDAVHeader(BuildContext context) {
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'WebDAV 服务器',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: labelColor,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '连接远程 WebDAV 服务器，浏览目录并选择需要挂载的媒体文件夹。',
+          style: TextStyle(fontSize: 13, color: subtitleColor, height: 1.4),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWebDAVPlaceholder(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    bool isError = false,
+  }) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor = isError
+        ? CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context)
+        : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor = isError
+        ? CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context)
+            .withValues(alpha: 0.8)
+        : CupertinoDynamicColor.resolve(
+            CupertinoColors.secondaryLabel,
+            context,
+          );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: labelColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            style: TextStyle(fontSize: 13, color: subtitleColor, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebDAVConnectionCard(
+    BuildContext context,
+    WebDAVConnection connection,
+  ) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final urlColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final statusColor = connection.isConnected
+        ? CupertinoColors.activeGreen
+        : CupertinoColors.systemRed;
+    final isExpanded =
+        _expandedWebDAVConnections.contains(connection.name);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color:
+              CupertinoDynamicColor.resolve(statusColor, context).withValues(
+            alpha: 0.25,
+          ),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 12, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  CupertinoIcons.cloud,
+                  color:
+                      CupertinoDynamicColor.resolve(statusColor, context),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: connection.isConnected
+                        ? () => _toggleWebDAVConnection(connection)
+                        : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          connection.name,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: labelColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          connection.url,
+                          style: TextStyle(fontSize: 12, color: urlColor),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: CupertinoDynamicColor.resolve(
+                                  statusColor,
+                                  context,
+                                ).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                connection.isConnected ? '已连接' : '未连接',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: CupertinoDynamicColor.resolve(
+                                    statusColor,
+                                    context,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (connection.isConnected)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: Icon(
+                                  isExpanded
+                                      ? CupertinoIcons.chevron_down
+                                      : CupertinoIcons.chevron_right,
+                                  size: 14,
+                                  color: urlColor,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildWebDAVIconButton(
+                      icon: CupertinoIcons.pencil,
+                      onPressed: () =>
+                          _showWebDAVConnectionDialog(editConnection: connection),
+                    ),
+                    _buildWebDAVIconButton(
+                      icon: CupertinoIcons.delete,
+                      onPressed: () => _removeWebDAVConnection(connection),
+                    ),
+                    _buildWebDAVIconButton(
+                      icon: CupertinoIcons.refresh_thin,
+                      onPressed: () => _testWebDAVConnection(connection),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (!connection.isConnected)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '点击右上角刷新图标测试连接，成功后即可展开并浏览目录。',
+                  style:
+                      TextStyle(fontSize: 12, color: urlColor, height: 1.4),
+                ),
+              ),
+            ),
+          if (connection.isConnected && isExpanded)
+            const Divider(height: 1, thickness: 1),
+          if (connection.isConnected && isExpanded)
+            _buildWebDAVFileList(connection, '/', depth: 0),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebDAVFileList(
+    WebDAVConnection connection,
+    String path, {
+    required int depth,
+  }) {
+    final key = _webdavKey(connection, path);
+    final files = _webdavFolderContents[key];
+    final isLoading = _loadingWebDAVFolders.contains(key);
+
+    final indentation = 16.0 + depth * 14;
+
+    if (isLoading) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 16, 16, 16),
+        child: const CupertinoActivityIndicator(radius: 10),
+      );
+    }
+
+    if (files == null) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 16, 16, 16),
+        child: Text(
+          '尚未加载内容',
+          style: TextStyle(
+            fontSize: 13,
+            color: CupertinoDynamicColor.resolve(
+              CupertinoColors.secondaryLabel,
+              context,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (files.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 16, 16, 16),
+        child: Text(
+          '文件夹为空',
+          style: TextStyle(
+            fontSize: 13,
+            color: CupertinoDynamicColor.resolve(
+              CupertinoColors.secondaryLabel,
+              context,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: files
+          .map((file) => _buildWebDAVNode(connection, file, depth))
+          .toList(),
+    );
+  }
+
+  Widget _buildWebDAVNode(
+    WebDAVConnection connection,
+    WebDAVFile file,
+    int depth,
+  ) {
+    final key = _webdavKey(connection, file.path);
+    final isExpanded = _expandedWebDAVFolders.contains(key);
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(16.0 + depth * 14, 10, 12, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                file.isDirectory
+                    ? CupertinoIcons.folder
+                    : CupertinoIcons.play_arrow_solid,
+                size: 18,
+                color: file.isDirectory
+                    ? CupertinoDynamicColor.resolve(
+                        CupertinoColors.activeBlue,
+                        context,
+                      )
+                    : CupertinoDynamicColor.resolve(
+                        CupertinoColors.systemGrey,
+                        context,
+                      ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      file.name,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: labelColor,
+                        fontWeight:
+                            file.isDirectory ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                    if (file.size != null)
+                      Text(
+                        '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
+                        style: TextStyle(fontSize: 12, color: subtitleColor),
+                      ),
+                  ],
+                ),
+              ),
+              if (file.isDirectory)
+                Row(
+                  children: [
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minSize: 30,
+                      onPressed: () =>
+                          _scanWebDAVFolder(connection, file.path, file.name),
+                      child: const Text('扫描'),
+                    ),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minSize: 30,
+                      onPressed: () => _toggleWebDAVFolder(connection, file.path),
+                      child: Icon(
+                        isExpanded
+                            ? CupertinoIcons.chevron_down
+                            : CupertinoIcons.chevron_right,
+                        size: 16,
+                        color: subtitleColor,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minSize: 28,
+                  onPressed: () => _playWebDAVFile(connection, file),
+                  child: const Text('播放'),
+                ),
+            ],
+          ),
+        ),
+        if (file.isDirectory && isExpanded)
+          _buildWebDAVFileList(connection, file.path, depth: depth + 1),
+      ],
+    );
+  }
+
+  CupertinoButton _buildWebDAVIconButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minSize: 30,
+      onPressed: onPressed,
+      child: Icon(icon, size: 18),
+    );
+  }
+
+  Future<void> _initWebDAVService() async {
+    setState(() {
+      _isLoadingWebDAV = true;
+      _webdavErrorMessage = null;
+    });
+
+    try {
+      await WebDAVService.instance.initialize();
+      if (!mounted) return;
+      setState(() {
+        _webdavConnections = WebDAVService.instance.connections;
+        _webdavInitialized = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _webdavErrorMessage = e.toString();
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingWebDAV = false;
+      });
+    }
+  }
+
+  void _refreshWebDAVConnections() {
+    if (!mounted) return;
+    setState(() {
+      _webdavConnections = WebDAVService.instance.connections;
+    });
+  }
+
+  Future<void> _showWebDAVConnectionDialog({
+    WebDAVConnection? editConnection,
+  }) async {
+    final result = await WebDAVConnectionDialog.show(
+      context,
+      editConnection: editConnection,
+    );
+
+    if (result == true) {
+      _refreshWebDAVConnections();
+      _showSnack(editConnection == null ? '已添加 WebDAV 连接' : 'WebDAV 连接已更新');
+    }
+  }
+
+  Future<void> _removeWebDAVConnection(WebDAVConnection connection) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('删除 WebDAV 连接'),
+        content: Text('确定要删除“${connection.name}”吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await WebDAVService.instance.removeConnection(connection.name);
+      if (!mounted) return;
+      setState(() {
+        _webdavConnections = WebDAVService.instance.connections;
+        _expandedWebDAVConnections.remove(connection.name);
+        _webdavFolderContents
+            .removeWhere((key, value) => key.startsWith('${connection.name}:'));
+        _expandedWebDAVFolders
+            .removeWhere((key) => key.startsWith('${connection.name}:'));
+      });
+      _showSnack('已删除 ${connection.name}');
+    }
+  }
+
+  Future<void> _testWebDAVConnection(WebDAVConnection connection) async {
+    _showSnack('正在测试连接…');
+    await WebDAVService.instance.updateConnectionStatus(connection.name);
+    if (!mounted) return;
+    _refreshWebDAVConnections();
+    final updated = WebDAVService.instance.getConnection(connection.name);
+    if (updated?.isConnected == true) {
+      _showSnack('连接成功，可以展开浏览目录');
+    } else {
+      _showSnack('连接失败，请检查配置');
+    }
+  }
+
+  void _toggleWebDAVConnection(WebDAVConnection connection) {
+    if (!connection.isConnected) {
+      _showSnack('请先测试并建立连接');
+      return;
+    }
+
+    final alreadyExpanded =
+        _expandedWebDAVConnections.contains(connection.name);
+    setState(() {
+      if (alreadyExpanded) {
+        _expandedWebDAVConnections.remove(connection.name);
+      } else {
+        _expandedWebDAVConnections.add(connection.name);
+      }
+    });
+
+    if (!alreadyExpanded) {
+      _loadWebDAVFolderChildren(connection, '/');
+    }
+  }
+
+  void _toggleWebDAVFolder(WebDAVConnection connection, String path) {
+    final key = _webdavKey(connection, path);
+    final alreadyExpanded = _expandedWebDAVFolders.contains(key);
+    setState(() {
+      if (alreadyExpanded) {
+        _expandedWebDAVFolders.remove(key);
+      } else {
+        _expandedWebDAVFolders.add(key);
+      }
+    });
+
+    if (!alreadyExpanded) {
+      _loadWebDAVFolderChildren(connection, path);
+    }
+  }
+
+  Future<void> _loadWebDAVFolderChildren(
+    WebDAVConnection connection,
+    String path,
+  ) async {
+    final normalizedPath = path.isEmpty ? '/' : path;
+    final key = _webdavKey(connection, normalizedPath);
+
+    if (_loadingWebDAVFolders.contains(key)) {
+      return;
+    }
+
+    setState(() {
+      _loadingWebDAVFolders.add(key);
+    });
+
+    try {
+      final files =
+          await WebDAVService.instance.listDirectory(connection, normalizedPath);
+      if (!mounted) return;
+      setState(() {
+        _webdavFolderContents[key] = files;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('加载目录失败：$e');
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _loadingWebDAVFolders.remove(key);
+      });
+    }
+  }
+
+  Future<void> _scanWebDAVFolder(
+    WebDAVConnection connection,
+    String folderPath,
+    String folderName,
+  ) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('扫描 WebDAV 文件夹'),
+        content: Text('确定要扫描“$folderName”吗？\n扫描后将把其中的视频文件添加到本地媒体库。'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('扫描'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    try {
+      _showSnack('正在扫描 $folderName…');
+      final files = await _getWebDAVVideoFiles(connection, folderPath);
+      if (files.isEmpty) {
+        _showSnack('未找到可导入的视频文件');
+        return;
+      }
+
+      for (final file in files) {
+        final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
+        final historyItem = WatchHistoryItem(
+          filePath: fileUrl,
+          animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+          episodeTitle: '',
+          duration: 0,
+          lastPosition: 0,
+          watchProgress: 0.0,
+          lastWatchTime: DateTime.now(),
+          isFromScan: true,
+        );
+        await WatchHistoryManager.addOrUpdateHistory(historyItem);
+      }
+
+      await context.read<WatchHistoryProvider>().refresh();
+      _showSnack('已添加 ${files.length} 个视频文件');
+    } catch (e) {
+      _showSnack('扫描失败：$e');
+    }
+  }
+
+  Future<List<WebDAVFile>> _getWebDAVVideoFiles(
+    WebDAVConnection connection,
+    String folderPath,
+  ) async {
+    final List<WebDAVFile> videoFiles = [];
+    try {
+      final files = await WebDAVService.instance.listDirectory(
+        connection,
+        folderPath,
+      );
+      for (final file in files) {
+        if (file.isDirectory) {
+          final subFiles = await _getWebDAVVideoFiles(connection, file.path);
+          videoFiles.addAll(subFiles);
+        } else if (WebDAVService.instance.isVideoFile(file.name)) {
+          videoFiles.add(file);
+        }
+      }
+    } catch (e) {
+      debugPrint('获取WebDAV视频文件失败: $e');
+    }
+    return videoFiles;
+  }
+
+  Future<void> _playWebDAVFile(
+    WebDAVConnection connection,
+    WebDAVFile file,
+  ) async {
+    try {
+      final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
+      final historyItem = WatchHistoryItem(
+        filePath: fileUrl,
+        animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+        episodeTitle: '',
+        duration: 0,
+        lastPosition: 0,
+        watchProgress: 0.0,
+        lastWatchTime: DateTime.now(),
+      );
+      await WatchHistoryManager.addOrUpdateHistory(historyItem);
+
+      final playable = PlayableItem(
+        videoPath: fileUrl,
+        title: historyItem.animeName,
+        historyItem: historyItem,
+      );
+      await PlaybackService().play(playable);
+    } catch (e) {
+      _showSnack('播放失败：$e');
+    }
+  }
+
+  String _webdavKey(WebDAVConnection connection, String path) {
+    return '${connection.name}:$path';
   }
 
   Widget _buildDetectedChangesInfo(
