@@ -29,6 +29,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   bool _isDisposed = false;
   bool _currentMediaHasNoInitiallyEmbeddedSubtitles = false;
   String _mediaPathForSubtitleStatusCheck = "";
+  final Set<String> _knownEmbeddedSubtitleTrackIds = <String>{};
+  bool _isExternalSubtitleLoaded = false;
 
   // Jellyfin流媒体重试
   int _jellyfinRetryCount = 0;
@@ -310,6 +312,29 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }).toList();
   }
 
+  void _maybeRefreshKnownEmbeddedSubtitleTrackIds(
+      List<SubtitleTrack> subtitleTracks) {
+    if (_isExternalSubtitleLoaded || subtitleTracks.isEmpty) {
+      return;
+    }
+    _knownEmbeddedSubtitleTrackIds
+      ..clear()
+      ..addAll(subtitleTracks.map((track) => track.id));
+  }
+
+  List<SubtitleTrack> _selectEmbeddedSubtitleTracks(
+      List<SubtitleTrack> subtitleTracks) {
+    if (_knownEmbeddedSubtitleTrackIds.isNotEmpty) {
+      return subtitleTracks
+          .where((track) => _knownEmbeddedSubtitleTrackIds.contains(track.id))
+          .toList();
+    }
+    if (_currentMediaHasNoInitiallyEmbeddedSubtitles) {
+      return const <SubtitleTrack>[];
+    }
+    return subtitleTracks;
+  }
+
   int _mapRealIndexToOriginal<T>(
       List<T> originalTracks, List<T> realTracks, int realIndex) {
     if (realIndex < 0 || realIndex >= realTracks.length) {
@@ -353,6 +378,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           tracks, realVideoTracks, realAudioTracks, realIncomingSubtitleTracks);
       return;
     }
+
+    _maybeRefreshKnownEmbeddedSubtitleTrackIds(realIncomingSubtitleTracks);
+    final filteredEmbeddedSubtitleTracks =
+        _selectEmbeddedSubtitleTracks(realIncomingSubtitleTracks);
 
     // Initial assessment for embedded subtitles when a new main media's tracks are first processed.
     if (_mediaPathForSubtitleStatusCheck == _currentMedia &&
@@ -438,9 +467,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
 
     List<PlayerSubtitleStreamInfo>? resolvedSubtitleStreams;
-    if (realIncomingSubtitleTracks.isNotEmpty) {
+    if (filteredEmbeddedSubtitleTracks.isNotEmpty) {
       if (_currentMediaHasNoInitiallyEmbeddedSubtitles &&
-          realIncomingSubtitleTracks.every((track) {
+          filteredEmbeddedSubtitleTracks.every((track) {
             final String id = (track as dynamic).id as String;
             // Heuristic: external subtitles added by media_kit often get numeric IDs like "1", "2", etc.
             // and might all have a similar title like "external" or the filename.
@@ -450,7 +479,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         // Current media has no initially embedded subtitles, AND all incoming "real" subtitle tracks have numeric IDs.
         // This suggests they might be multiple representations of the same loaded external subtitle.
         // Consolidate to the one with the smallest numeric ID.
-        SubtitleTrack trackToKeep = realIncomingSubtitleTracks.reduce((a, b) {
+        SubtitleTrack trackToKeep =
+            filteredEmbeddedSubtitleTracks.reduce((a, b) {
           int idA = int.parse(
               (a as dynamic).id as String); // Safe due to .every() check
           int idB = int.parse(
@@ -478,13 +508,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
             rawRepresentation: 'Subtitle: $title (ID: $trackIdStr)',
           )
         ];
-        //debugPrint('MediaKitAdapter: _updateMediaInfo - Current media determined to have NO embedded subs. Consolidating ${realIncomingSubtitleTracks.length} incoming external-like tracks (numeric IDs) to 1 (Kept ID: $trackIdStr).');
+        //debugPrint('MediaKitAdapter: _updateMediaInfo - Current media determined to have NO embedded subs. Consolidating ${filteredEmbeddedSubtitleTracks.length} incoming external-like tracks (numeric IDs) to 1 (Kept ID: $trackIdStr).');
       } else {
         // Media either has initially embedded subtitles, or incoming tracks don't all fit the "duplicate external" heuristic.
         // Process all incoming real subtitle tracks.
         resolvedSubtitleStreams = [];
-        for (int i = 0; i < realIncomingSubtitleTracks.length; i++) {
-          final track = realIncomingSubtitleTracks[
+        for (int i = 0; i < filteredEmbeddedSubtitleTracks.length; i++) {
+          final track = filteredEmbeddedSubtitleTracks[
               i]; // This is media_kit's SubtitleTrack
           final trackIdStr = (track as dynamic).id as String;
 
@@ -509,10 +539,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
                 'Subtitle: ${normInfo.title} (ID: $trackIdStr) Language: ${normInfo.language}',
           ));
         }
-        //debugPrint('MediaKitAdapter: _updateMediaInfo - Populating subtitles from ${realIncomingSubtitleTracks.length} incoming tracks (media may have embedded subs or tracks are diverse). Resulting count: ${resolvedSubtitleStreams.length}');
+        //debugPrint('MediaKitAdapter: _updateMediaInfo - Populating subtitles from ${filteredEmbeddedSubtitleTracks.length} incoming tracks (media may have embedded subs or tracks are diverse). Resulting count: ${resolvedSubtitleStreams.length}');
       }
     } else {
-      // realIncomingSubtitleTracks is empty
+      // filteredEmbeddedSubtitleTracks is empty (either truly none or filtered out external-only entries)
       // If incoming tracks are empty (e.g. subtitles turned off)
       if (!_currentMediaHasNoInitiallyEmbeddedSubtitles &&
           _mediaInfo.subtitle != null &&
@@ -1197,6 +1227,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   void setMedia(String path, PlayerMediaType type) {
     //debugPrint('[MediaKit] setMedia: path=$path, type=$type');
     if (type == PlayerMediaType.subtitle) {
+      _isExternalSubtitleLoaded = path.isNotEmpty;
       //debugPrint('MediaKitAdapter: setMedia called for SUBTITLE. Path: "$path"');
       if (path.isEmpty) {
         //debugPrint('MediaKitAdapter: setMedia (for subtitle) - Path is empty. Calling player.setSubtitleTrack(SubtitleTrack.no()). Main media and info remain UNCHANGED.');
@@ -1217,6 +1248,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _lastKnownActiveSubtitleId = null;
     _mediaInfo = PlayerMediaInfo(duration: 0);
     _isDisposed = false;
+    _knownEmbeddedSubtitleTrackIds.clear();
+    _isExternalSubtitleLoaded = false;
 
     _currentMediaHasNoInitiallyEmbeddedSubtitles =
         false; // Reset for new main media. Will be determined by first _updateMediaInfo.
