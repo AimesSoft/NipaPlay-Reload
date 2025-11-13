@@ -194,9 +194,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _lastUiNotifyMs = 0; // 上次UI刷新时间
   int _lastSaveTimeMs = 0; // 上次保存时间
   int _lastSavedPositionMs = -1; // 上次已持久化的位置
-  static const int _uiUpdateIntervalMs = 120; // UI刷新最小间隔（约8.3fps）
-  static const int _positionSaveIntervalMs = 3000; // 位置保存最小间隔
-  static const int _positionSaveDeltaThresholdMs = 2000; // 位置保存位移阈值
+  final int _uiUpdateIntervalMs = 120; // UI刷新最小间隔（约8.3fps）
+  final int _positionSaveIntervalMs = 3000; // 位置保存最小间隔
+  final int _positionSaveDeltaThresholdMs = 2000; // 位置保存位移阈值
   // 高频时间轴：提供给弹幕的独立时间源（毫秒）
   final ValueNotifier<double> _playbackTimeMs = ValueNotifier<double>(0);
   Timer? _hideControlsTimer;
@@ -209,10 +209,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
-  static const String _lastVideoKey = 'last_video_path';
-  static const String _lastPositionKey = 'last_video_position';
-  static const String _videoPositionsKey = 'video_positions';
-  static const String _playbackEndActionKey = 'playback_end_action';
+  final String _lastVideoKey = 'last_video_path';
+  final String _lastPositionKey = 'last_video_position';
+  final String _videoPositionsKey = 'video_positions';
+  final String _playbackEndActionKey = 'playback_end_action';
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -221,30 +221,30 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 多轨道弹幕系统
   final Map<String, Map<String, dynamic>> _danmakuTracks = {};
   final Map<String, bool> _danmakuTrackEnabled = {};
-  static const String _controlBarHeightKey = 'control_bar_height';
+  final String _controlBarHeightKey = 'control_bar_height';
   double _controlBarHeight = 20.0; // 默认高度
-  static const String _minimalProgressBarEnabledKey =
+  final String _minimalProgressBarEnabledKey =
       'minimal_progress_bar_enabled';
   bool _minimalProgressBarEnabled = false; // 默认关闭
-  static const String _minimalProgressBarColorKey =
+  final String _minimalProgressBarColorKey =
       'minimal_progress_bar_color';
   int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
-  static const String _showDanmakuDensityChartKey =
+  final String _showDanmakuDensityChartKey =
       'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
-  static const String _danmakuOpacityKey = 'danmaku_opacity';
+  final String _danmakuOpacityKey = 'danmaku_opacity';
   double _danmakuOpacity = 1.0; // 默认透明度
-  static const String _danmakuVisibleKey = 'danmaku_visible';
+  final String _danmakuVisibleKey = 'danmaku_visible';
   bool _danmakuVisible = true; // 默认显示弹幕
-  static const String _mergeDanmakuKey = 'merge_danmaku';
+  final String _mergeDanmakuKey = 'merge_danmaku';
   bool _mergeDanmaku = false; // 默认不合并弹幕
-  static const String _danmakuStackingKey = 'danmaku_stacking';
+  final String _danmakuStackingKey = 'danmaku_stacking';
   bool _danmakuStacking = false; // 默认不启用弹幕堆叠
 
-  static const String _anime4kProfileKey = 'anime4k_profile';
+  final String _anime4kProfileKey = 'anime4k_profile';
   Anime4KProfile _anime4kProfile = Anime4KProfile.off;
   List<String> _anime4kShaderPaths = const <String>[];
-  static const Map<String, String> _anime4kRecommendedMpvOptions = {
+  final Map<String, String> _anime4kRecommendedMpvOptions = const {
     'scale': 'ewa_lanczossharp',
     'cscale': 'ewa_lanczossoft',
     'dscale': 'mitchell',
@@ -252,7 +252,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     'deband': 'yes',
     'scale-antiring': '0.7',
   };
-  static const Map<String, String> _anime4kDefaultMpvOptions = {
+  final Map<String, String> _anime4kDefaultMpvOptions = const {
     'scale': 'bilinear',
     'cscale': 'bilinear',
     'dscale': 'mitchell',
@@ -262,9 +262,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   };
 
   // 弹幕类型屏蔽
-  static const String _blockTopDanmakuKey = 'block_top_danmaku';
-  static const String _blockBottomDanmakuKey = 'block_bottom_danmaku';
-  static const String _blockScrollDanmakuKey = 'block_scroll_danmaku';
+  final String _blockTopDanmakuKey = 'block_top_danmaku';
+  final String _blockBottomDanmakuKey = 'block_bottom_danmaku';
+  final String _blockScrollDanmakuKey = 'block_scroll_danmaku';
   bool _blockTopDanmaku = false; // 默认不屏蔽顶部弹幕
   bool _blockBottomDanmaku = false; // 默认不屏蔽底部弹幕
   bool _blockScrollDanmaku = false; // 默认不屏蔽滚动弹幕
@@ -273,39 +273,39 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isTimelineDanmakuEnabled = true;
 
   // 弹幕屏蔽词
-  static const String _danmakuBlockWordsKey = 'danmaku_block_words';
+  final String _danmakuBlockWordsKey = 'danmaku_block_words';
   List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
   int _totalDanmakuCount = 0; // 添加一个字段来存储总弹幕数
 
   // 弹幕字体大小设置
-  static const String _danmakuFontSizeKey = 'danmaku_font_size';
+  final String _danmakuFontSizeKey = 'danmaku_font_size';
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
 
   // 弹幕轨道显示区域设置
-  static const String _danmakuDisplayAreaKey = 'danmaku_display_area';
+  final String _danmakuDisplayAreaKey = 'danmaku_display_area';
   double _danmakuDisplayArea = 1.0; // 默认全屏显示（1.0=全部，0.67=2/3，0.33=1/3）
 
   // 弹幕速度设置
-  static const String _danmakuSpeedMultiplierKey = 'danmaku_speed_multiplier';
-  static const double _minDanmakuSpeedMultiplier = 0.5;
-  static const double _maxDanmakuSpeedMultiplier = 2.0;
-  static const double _baseDanmakuScrollDurationSeconds = 10.0;
+  final String _danmakuSpeedMultiplierKey = 'danmaku_speed_multiplier';
+  final double _minDanmakuSpeedMultiplier = 0.5;
+  final double _maxDanmakuSpeedMultiplier = 2.0;
+  final double _baseDanmakuScrollDurationSeconds = 10.0;
   double _danmakuSpeedMultiplier = 1.0; // 默认标准速度
 
   // 添加播放速度相关状态
-  static const String _playbackRateKey = 'playback_rate';
+  final String _playbackRateKey = 'playback_rate';
   double _playbackRate = 1.0; // 默认1倍速
   bool _isSpeedBoostActive = false; // 是否正在倍速播放（长按状态）
   double _normalPlaybackRate = 1.0; // 正常播放速度
-  static const String _speedBoostRateKey = 'speed_boost_rate';
+  final String _speedBoostRateKey = 'speed_boost_rate';
   double _speedBoostRate = 2.0; // 长按倍速播放的倍率，默认2倍速
 
   // 快进快退时间设置
-  static const String _seekStepSecondsKey = 'seek_step_seconds';
+  final String _seekStepSecondsKey = 'seek_step_seconds';
   int _seekStepSeconds = 10; // 默认10秒
 
   // 跳过时间设置
-  static const String _skipSecondsKey = 'skip_seconds';
+  final String _skipSecondsKey = 'skip_seconds';
   int _skipSeconds = 90; // 默认90秒
 
   dynamic danmakuController; // 添加弹幕控制器属性
