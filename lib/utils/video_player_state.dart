@@ -40,7 +40,6 @@ import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brigh
 import 'package:nipaplay/widgets/nipaplay_theme/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
 import 'package:nipaplay/widgets/nipaplay_theme/volume_indicator.dart'; // Added import for VolumeIndicator widget
 import 'package:nipaplay/widgets/nipaplay_theme/seek_indicator.dart'; // Added import for SeekIndicator widget
-import 'package:nipaplay/widgets/nipaplay_theme/speed_boost_indicator.dart'; // Added import for SpeedBoostIndicator widget
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
 import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
@@ -332,9 +331,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _dragSeekTargetPosition =
       Duration.zero; // To show target position during drag
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
-
-  // 倍速指示器状态
-  OverlayEntry? _speedBoostOverlayEntry;
 
   // 右边缘悬浮菜单状态
   bool _isRightEdgeHovered = false;
@@ -2529,11 +2525,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _seekOverlayEntry!.remove();
       _seekOverlayEntry = null;
     }
-    if (_speedBoostOverlayEntry != null) {
-      // 清理倍速指示器
-      _speedBoostOverlayEntry!.remove();
-      _speedBoostOverlayEntry = null;
-    }
     _rightEdgeHoverTimer?.cancel(); // 清理右边缘悬浮定时器
     if (_hoverSettingsMenuOverlay != null) {
       // 清理悬浮设置菜单
@@ -4210,34 +4201,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
   }
 
-  // 显示倍速指示器
-  void _showSpeedBoostIndicator() {
-    if (_context == null) return;
-
-    if (_speedBoostOverlayEntry == null) {
-      _speedBoostOverlayEntry = OverlayEntry(
-        builder: (context) {
-          return ChangeNotifierProvider<VideoPlayerState>.value(
-            value: this,
-            child: const SpeedBoostIndicator(),
-          );
-        },
-      );
-      Overlay.of(_context!).insert(_speedBoostOverlayEntry!);
-    }
-  }
-
-  // 隐藏倍速指示器
-  void _hideSpeedBoostIndicator() {
-    // Wait for fade-out animation to complete before removing
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (_speedBoostOverlayEntry != null) {
-        _speedBoostOverlayEntry!.remove();
-        _speedBoostOverlayEntry = null;
-      }
-    });
-  }
-
   // 获取字幕轨道的语言名称
   String _getLanguageName(String language) {
     // 语言代码映射
@@ -4618,9 +4581,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     player.setPlaybackRate(_speedBoostRate);
     debugPrint('开始长按倍速播放: ${_speedBoostRate}x (之前: ${_normalPlaybackRate}x)');
 
-    // 显示倍速指示器
-    _showSpeedBoostIndicator();
-
     notifyListeners();
   }
 
@@ -4632,9 +4592,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 恢复到长按前的播放速度
     player.setPlaybackRate(_normalPlaybackRate);
     debugPrint('结束长按倍速播放，恢复到: ${_normalPlaybackRate}x');
-
-    // 隐藏倍速指示器
-    _hideSpeedBoostIndicator();
 
     notifyListeners();
   }
