@@ -12,7 +12,8 @@ class FluentDanmakuSettingsMenu extends StatefulWidget {
   });
 
   @override
-  State<FluentDanmakuSettingsMenu> createState() => _FluentDanmakuSettingsMenuState();
+  State<FluentDanmakuSettingsMenu> createState() =>
+      _FluentDanmakuSettingsMenuState();
 }
 
 class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
@@ -28,7 +29,7 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
 
   void _addBlockWord() {
     final word = _blockWordController.text.trim();
-    
+
     if (word.isEmpty) {
       setState(() {
         _hasBlockWordError = true;
@@ -36,7 +37,7 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
       });
       return;
     }
-    
+
     if (widget.videoState.danmakuBlockWords.contains(word)) {
       setState(() {
         _hasBlockWordError = true;
@@ -44,9 +45,9 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
       });
       return;
     }
-    
+
     widget.videoState.addDanmakuBlockWord(word);
-    
+
     _blockWordController.clear();
     setState(() {
       _hasBlockWordError = false;
@@ -62,12 +63,12 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
         child: Text(
           '暂无屏蔽词',
           style: FluentTheme.of(context).typography.body?.copyWith(
-            color: FluentTheme.of(context).resources.textFillColorSecondary,
-          ),
+                color: FluentTheme.of(context).resources.textFillColorSecondary,
+              ),
         ),
       );
     }
-    
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -77,7 +78,8 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
             color: FluentTheme.of(context).resources.controlFillColorDefault,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: FluentTheme.of(context).resources.controlStrokeColorDefault,
+              color:
+                  FluentTheme.of(context).resources.controlStrokeColorDefault,
             ),
           ),
           child: Padding(
@@ -88,8 +90,10 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                 Text(
                   word,
                   style: FluentTheme.of(context).typography.caption?.copyWith(
-                    color: FluentTheme.of(context).resources.textFillColorPrimary,
-                  ),
+                        color: FluentTheme.of(context)
+                            .resources
+                            .textFillColorPrimary,
+                      ),
                 ),
                 const SizedBox(width: 4),
                 GestureDetector(
@@ -97,7 +101,9 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                   child: Icon(
                     FluentIcons.chrome_close,
                     size: 12,
-                    color: FluentTheme.of(context).resources.textFillColorSecondary,
+                    color: FluentTheme.of(context)
+                        .resources
+                        .textFillColorSecondary,
                   ),
                 ),
               ],
@@ -127,20 +133,22 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
               Text(
                 '调整弹幕显示效果和过滤设置',
                 style: FluentTheme.of(context).typography.caption?.copyWith(
-                  color: FluentTheme.of(context).resources.textFillColorTertiary,
-                ),
+                      color: FluentTheme.of(context)
+                          .resources
+                          .textFillColorTertiary,
+                    ),
               ),
             ],
           ),
         ),
-        
+
         // 分隔线
         Container(
           height: 1,
           margin: const EdgeInsets.symmetric(horizontal: 16),
           color: FluentTheme.of(context).resources.controlStrokeColorDefault,
         ),
-        
+
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -162,9 +170,14 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                           const SizedBox(height: 4),
                           Text(
                             '开启后在视频上显示弹幕内容',
-                            style: FluentTheme.of(context).typography.caption?.copyWith(
-                              color: FluentTheme.of(context).resources.textFillColorSecondary,
-                            ),
+                            style: FluentTheme.of(context)
+                                .typography
+                                .caption
+                                ?.copyWith(
+                                  color: FluentTheme.of(context)
+                                      .resources
+                                      .textFillColorSecondary,
+                                ),
                           ),
                         ],
                       ),
@@ -178,9 +191,9 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // 手动匹配弹幕
               Card(
                 child: Padding(
@@ -195,41 +208,56 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                       const SizedBox(height: 8),
                       Text(
                         '手动搜索并选择匹配的弹幕文件',
-                        style: FluentTheme.of(context).typography.caption?.copyWith(
-                          color: FluentTheme.of(context).resources.textFillColorSecondary,
-                        ),
+                        style: FluentTheme.of(context)
+                            .typography
+                            .caption
+                            ?.copyWith(
+                              color: FluentTheme.of(context)
+                                  .resources
+                                  .textFillColorSecondary,
+                            ),
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
                           onPressed: () async {
-                            final result = await ManualDanmakuMatcher.instance.showManualMatchDialog(context);
-                              
+                            final result = await ManualDanmakuMatcher.instance
+                                .showManualMatchDialog(context);
+
                             if (result != null) {
-                              final episodeId = result['episodeId']?.toString() ?? '';
-                              final animeId = result['animeId']?.toString() ?? '';
-                              
+                              final episodeId =
+                                  result['episodeId']?.toString() ?? '';
+                              final animeId =
+                                  result['animeId']?.toString() ?? '';
+
                               if (episodeId.isNotEmpty && animeId.isNotEmpty) {
                                 try {
-                                  final currentVideoPath = widget.videoState.currentVideoPath;
+                                  final currentVideoPath =
+                                      widget.videoState.currentVideoPath;
                                   if (currentVideoPath != null) {
-                                    await DanmakuHistorySync.updateHistoryWithDanmakuInfo(
+                                    await DanmakuHistorySync
+                                        .updateHistoryWithDanmakuInfo(
                                       videoPath: currentVideoPath,
                                       episodeId: episodeId,
                                       animeId: animeId,
-                                      animeTitle: result['animeTitle']?.toString(),
-                                      episodeTitle: result['episodeTitle']?.toString(),
+                                      animeTitle:
+                                          result['animeTitle']?.toString(),
+                                      episodeTitle:
+                                          result['episodeTitle']?.toString(),
                                     );
-                                    
-                                    widget.videoState.setAnimeTitle(result['animeTitle']?.toString());
-                                    widget.videoState.setEpisodeTitle(result['episodeTitle']?.toString());
+
+                                    widget.videoState.setAnimeTitle(
+                                        result['animeTitle']?.toString());
+                                    widget.videoState.setEpisodeTitle(
+                                        result['episodeTitle']?.toString());
                                   }
                                 } catch (e) {
                                   // 继续加载弹幕
                                 }
-                                
-                                widget.videoState.loadDanmaku(episodeId, animeId);
+
+                                widget.videoState
+                                    .loadDanmaku(episodeId, animeId);
                               }
                             }
                           },
@@ -247,9 +275,9 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // 弹幕透明度
               Card(
                 child: Padding(
@@ -266,9 +294,14 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                           ),
                           Text(
                             '${(widget.videoState.danmakuOpacity * 100).round()}%',
-                            style: FluentTheme.of(context).typography.caption?.copyWith(
-                              color: FluentTheme.of(context).resources.textFillColorSecondary,
-                            ),
+                            style: FluentTheme.of(context)
+                                .typography
+                                .caption
+                                ?.copyWith(
+                                  color: FluentTheme.of(context)
+                                      .resources
+                                      .textFillColorSecondary,
+                                ),
                           ),
                         ],
                       ),
@@ -286,9 +319,9 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // 弹幕字体大小
               Card(
                 child: Padding(
@@ -305,9 +338,14 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                           ),
                           Text(
                             '${widget.videoState.danmakuFontSize.round()}px',
-                            style: FluentTheme.of(context).typography.caption?.copyWith(
-                              color: FluentTheme.of(context).resources.textFillColorSecondary,
-                            ),
+                            style: FluentTheme.of(context)
+                                .typography
+                                .caption
+                                ?.copyWith(
+                                  color: FluentTheme.of(context)
+                                      .resources
+                                      .textFillColorSecondary,
+                                ),
                           ),
                         ],
                       ),
@@ -325,9 +363,65 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
+              // 滚动弹幕速度
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '滚动弹幕速度',
+                            style: FluentTheme.of(context).typography.body,
+                          ),
+                          Text(
+                            '${widget.videoState.danmakuSpeedMultiplier.toStringAsFixed(2)}x',
+                            style: FluentTheme.of(context)
+                                .typography
+                                .caption
+                                ?.copyWith(
+                                  color: FluentTheme.of(context)
+                                      .resources
+                                      .textFillColorSecondary,
+                                ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Slider(
+                        value: widget.videoState.danmakuSpeedMultiplier,
+                        min: 0.5,
+                        max: 2.0,
+                        divisions: 15,
+                        onChanged: (value) {
+                          widget.videoState.setDanmakuSpeedMultiplier(value);
+                        },
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '向左减慢弹幕速度，向右加快（默认1.00x）',
+                        style: FluentTheme.of(context)
+                            .typography
+                            .caption
+                            ?.copyWith(
+                              color: FluentTheme.of(context)
+                                  .resources
+                                  .textFillColorSecondary,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
               // 弹幕屏蔽词管理
               Card(
                 child: Padding(
@@ -342,12 +436,17 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                       const SizedBox(height: 8),
                       Text(
                         '添加需要屏蔽的关键词，包含这些词的弹幕将不会显示',
-                        style: FluentTheme.of(context).typography.caption?.copyWith(
-                          color: FluentTheme.of(context).resources.textFillColorSecondary,
-                        ),
+                        style: FluentTheme.of(context)
+                            .typography
+                            .caption
+                            ?.copyWith(
+                              color: FluentTheme.of(context)
+                                  .resources
+                                  .textFillColorSecondary,
+                            ),
                       ),
                       const SizedBox(height: 12),
-                      
+
                       // 添加屏蔽词输入框
                       Row(
                         children: [
@@ -365,19 +464,22 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                           ),
                         ],
                       ),
-                      
+
                       if (_hasBlockWordError) ...[
                         const SizedBox(height: 8),
                         Text(
                           _blockWordErrorMessage,
-                          style: FluentTheme.of(context).typography.caption?.copyWith(
-                            color: Colors.red,
-                          ),
+                          style: FluentTheme.of(context)
+                              .typography
+                              .caption
+                              ?.copyWith(
+                                color: Colors.red,
+                              ),
                         ),
                       ],
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // 屏蔽词列表
                       _buildBlockWordsList(),
                     ],

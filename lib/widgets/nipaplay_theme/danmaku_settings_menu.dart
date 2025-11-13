@@ -41,7 +41,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   // 添加屏蔽词
   void _addBlockWord() {
     final word = _blockWordController.text.trim();
-    
+
     // 验证输入
     if (word.isEmpty) {
       setState(() {
@@ -50,7 +50,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
       });
       return;
     }
-    
+
     if (widget.videoState.danmakuBlockWords.contains(word)) {
       setState(() {
         _hasBlockWordError = true;
@@ -58,10 +58,10 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
       });
       return;
     }
-    
+
     // 添加屏蔽词
     widget.videoState.addDanmakuBlockWord(word);
-    
+
     // 清空输入框和错误状态
     _blockWordController.clear();
     setState(() {
@@ -80,11 +80,12 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
             alignment: Alignment.center,
             child: Text(
               '暂无屏蔽词',
-              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+              style:
+                  TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
             ),
           );
         }
-        
+
         return Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -103,18 +104,21 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           word,
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
                         ),
                         const SizedBox(width: 4),
                         InkWell(
                           onTap: () => videoState.removeDanmakuBlockWord(word),
-                          child: const Icon(Icons.close, size: 14, color: Colors.white70),
+                          child: const Icon(Icons.close,
+                              size: 14, color: Colors.white70),
                         ),
                       ],
                     ),
@@ -178,36 +182,41 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       onTap: () async {
                         debugPrint('=== 弹幕设置菜单：点击手动匹配弹幕按钮 ===');
                         print('=== 强制输出：手动匹配弹幕按钮被点击！ ===');
-                        final result = await ManualDanmakuMatcher.instance.showManualMatchDialog(context);
-                          
+                        final result = await ManualDanmakuMatcher.instance
+                            .showManualMatchDialog(context);
+
                         if (result != null) {
-                          
                           // 如果用户选择了弹幕，重新加载弹幕
-                          final episodeId = result['episodeId']?.toString() ?? '';
+                          final episodeId =
+                              result['episodeId']?.toString() ?? '';
                           final animeId = result['animeId']?.toString() ?? '';
-                          
+
                           if (episodeId.isNotEmpty && animeId.isNotEmpty) {
-                            
                             // 调用新的弹幕历史同步方法来更新历史记录
                             try {
-                              final currentVideoPath = widget.videoState.currentVideoPath;
+                              final currentVideoPath =
+                                  widget.videoState.currentVideoPath;
                               if (currentVideoPath != null) {
-                                await DanmakuHistorySync.updateHistoryWithDanmakuInfo(
+                                await DanmakuHistorySync
+                                    .updateHistoryWithDanmakuInfo(
                                   videoPath: currentVideoPath,
                                   episodeId: episodeId,
                                   animeId: animeId,
                                   animeTitle: result['animeTitle']?.toString(),
-                                  episodeTitle: result['episodeTitle']?.toString(),
+                                  episodeTitle:
+                                      result['episodeTitle']?.toString(),
                                 );
-                                
+
                                 // 立即更新视频播放器状态中的动漫和剧集标题
-                                widget.videoState.setAnimeTitle(result['animeTitle']?.toString());
-                                widget.videoState.setEpisodeTitle(result['episodeTitle']?.toString());
+                                widget.videoState.setAnimeTitle(
+                                    result['animeTitle']?.toString());
+                                widget.videoState.setEpisodeTitle(
+                                    result['episodeTitle']?.toString());
                               }
                             } catch (e) {
                               // 即使历史记录同步失败，也要继续加载弹幕
                             }
-                            
+
                             // 直接调用 loadDanmaku，不检查 mounted 状态
                             // 因为 videoState 是独立的状态管理对象，不依赖于当前组件的生命周期
                             widget.videoState.loadDanmaku(episodeId, animeId);
@@ -246,7 +255,9 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SettingsSlider(
-                      value: videoState.danmakuFontSize <= 0 ? videoState.actualDanmakuFontSize : videoState.danmakuFontSize,
+                      value: videoState.danmakuFontSize <= 0
+                          ? videoState.actualDanmakuFontSize
+                          : videoState.danmakuFontSize,
                       onChanged: (v) => videoState.setDanmakuFontSize(v),
                       label: '弹幕字体大小',
                       displayTextBuilder: (v) => '${v.toStringAsFixed(1)}px',
@@ -256,6 +267,26 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     ),
                     const SizedBox(height: 4),
                     const SettingsHintText('调整弹幕文字的大小，轨道间距会自动适配'),
+                  ],
+                ),
+              ),
+              // 滚动弹幕速度
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SettingsSlider(
+                      value: videoState.danmakuSpeedMultiplier,
+                      onChanged: (v) => videoState.setDanmakuSpeedMultiplier(v),
+                      label: '滚动弹幕速度',
+                      displayTextBuilder: (v) => '${v.toStringAsFixed(2)}x',
+                      min: 0.5,
+                      max: 2.0,
+                      step: 0.05,
+                    ),
+                    const SizedBox(height: 4),
+                    const SettingsHintText('向左减慢滚动弹幕速度，向右加快（默认1.00x）'),
                   ],
                 ),
               ),
@@ -297,92 +328,101 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
                 child: Consumer<VideoPlayerState>(
-                  builder: (context, videoState, child) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              '弹幕屏蔽词',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
+                    builder: (context, videoState, child) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '弹幕屏蔽词',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
                             ),
-                            // 毛玻璃效果的白色添加按钮
-                            BlurButton(
-                              icon: Icons.add,
-                              text: '添加',
-                              onTap: () => _addBlockWord(),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // 添加输入框
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                            child: Container(
-                              height: 40, // 设置固定高度
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: _hasBlockWordError 
-                                    ? Colors.redAccent.withOpacity(0.8) 
+                          ),
+                          // 毛玻璃效果的白色添加按钮
+                          BlurButton(
+                            icon: Icons.add,
+                            text: '添加',
+                            onTap: () => _addBlockWord(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // 添加输入框
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                          child: Container(
+                            height: 40, // 设置固定高度
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _hasBlockWordError
+                                    ? Colors.redAccent.withOpacity(0.8)
                                     : Colors.white.withOpacity(0.3),
-                                  width: 1,
-                                ),
+                                width: 1,
                               ),
-                              child: Center( // 使用Center包装确保垂直居中
-                                child: TextField(
-                                  controller: _blockWordController,
-                                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                                  textAlignVertical: TextAlignVertical.center,
-                                  decoration: InputDecoration(
-                                    hintText: '输入要屏蔽的关键词',
-                                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0), // 垂直padding设为0
-                                    isDense: true,
-                                    suffixIcon: IconButton(
-                                      icon: const Icon(Icons.clear, color: Colors.white70, size: 18),
-                                      onPressed: () => _blockWordController.clear(),
-                                      tooltip: '',
-                                      padding: EdgeInsets.zero,
-                                      visualDensity: VisualDensity.compact,
-                                      constraints: const BoxConstraints(),
-                                    ),
+                            ),
+                            child: Center(
+                              // 使用Center包装确保垂直居中
+                              child: TextField(
+                                controller: _blockWordController,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 13),
+                                textAlignVertical: TextAlignVertical.center,
+                                decoration: InputDecoration(
+                                  hintText: '输入要屏蔽的关键词',
+                                  hintStyle: TextStyle(
+                                      color: Colors.white.withOpacity(0.5),
+                                      fontSize: 13),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 0), // 垂直padding设为0
+                                  isDense: true,
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.clear,
+                                        color: Colors.white70, size: 18),
+                                    onPressed: () =>
+                                        _blockWordController.clear(),
+                                    tooltip: '',
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                    constraints: const BoxConstraints(),
                                   ),
-                                  onSubmitted: (_) => _addBlockWord(),
                                 ),
+                                onSubmitted: (_) => _addBlockWord(),
                               ),
                             ),
                           ),
                         ),
-                        // 错误信息
-                        if (_hasBlockWordError)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4, left: 12),
-                            child: Text(
-                              _blockWordErrorMessage,
-                              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                            ),
+                      ),
+                      // 错误信息
+                      if (_hasBlockWordError)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 12),
+                          child: Text(
+                            _blockWordErrorMessage,
+                            style: const TextStyle(
+                                color: Colors.redAccent, fontSize: 12),
                           ),
-                        const SizedBox(height: 8),
-                        _buildBlockWordsList(),
-                        const SettingsHintText('包含屏蔽词的弹幕将被过滤不显示'),
-                      ],
-                    );
-                  }
-                ),
+                        ),
+                      const SizedBox(height: 8),
+                      _buildBlockWordsList(),
+                      const SettingsHintText('包含屏蔽词的弹幕将被过滤不显示'),
+                    ],
+                  );
+                }),
               ),
               // 弹幕堆叠开关（Canvas模式下隐藏）
-              if (DanmakuKernelFactory.getKernelType() != DanmakuRenderEngine.canvas)
+              if (DanmakuKernelFactory.getKernelType() !=
+                  DanmakuRenderEngine.canvas)
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
                   child: Column(
@@ -411,7 +451,8 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ),
                 ),
               // 合并相同弹幕开关（Canvas模式下隐藏）
-              if (DanmakuKernelFactory.getKernelType() != DanmakuRenderEngine.canvas)
+              if (DanmakuKernelFactory.getKernelType() !=
+                  DanmakuRenderEngine.canvas)
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
                   child: Column(
@@ -444,72 +485,71 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
                 child: Consumer<VideoPlayerState>(
-                  builder: (context, videoState, child) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 顶部弹幕屏蔽
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              '屏蔽顶部弹幕',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                              ),
+                    builder: (context, videoState, child) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 顶部弹幕屏蔽
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '屏蔽顶部弹幕',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
                             ),
-                            Switch(
-                              value: videoState.blockTopDanmaku,
-                              onChanged: (value) {
-                                videoState.setBlockTopDanmaku(value);
-                              },
+                          ),
+                          Switch(
+                            value: videoState.blockTopDanmaku,
+                            onChanged: (value) {
+                              videoState.setBlockTopDanmaku(value);
+                            },
+                          ),
+                        ],
+                      ),
+                      // 底部弹幕屏蔽
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '屏蔽底部弹幕',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
                             ),
-                          ],
-                        ),
-                        // 底部弹幕屏蔽
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              '屏蔽底部弹幕',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                              ),
+                          ),
+                          Switch(
+                            value: videoState.blockBottomDanmaku,
+                            onChanged: (value) {
+                              videoState.setBlockBottomDanmaku(value);
+                            },
+                          ),
+                        ],
+                      ),
+                      // 滚动弹幕屏蔽
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '屏蔽滚动弹幕',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
                             ),
-                            Switch(
-                              value: videoState.blockBottomDanmaku,
-                              onChanged: (value) {
-                                videoState.setBlockBottomDanmaku(value);
-                              },
-                            ),
-                          ],
-                        ),
-                        // 滚动弹幕屏蔽
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              '屏蔽滚动弹幕',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                              ),
-                            ),
-                            Switch(
-                              value: videoState.blockScrollDanmaku,
-                              onChanged: (value) {
-                                videoState.setBlockScrollDanmaku(value);
-                              },
-                            ),
-                          ],
-                        ),
-                        const SettingsHintText('选择屏蔽特定类型的弹幕，对应类型的弹幕将不会显示'),
-                      ],
-                    );
-                  }
-                ),
+                          ),
+                          Switch(
+                            value: videoState.blockScrollDanmaku,
+                            onChanged: (value) {
+                              videoState.setBlockScrollDanmaku(value);
+                            },
+                          ),
+                        ],
+                      ),
+                      const SettingsHintText('选择屏蔽特定类型的弹幕，对应类型的弹幕将不会显示'),
+                    ],
+                  );
+                }),
               ),
               // 时间轴告知开关（移到最底部）
               Padding(
@@ -576,7 +616,8 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
 
   void _showOverlay(BuildContext context, double progress) {
     _removeOverlay();
-    final RenderBox? sliderBox = _sliderKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? sliderBox =
+        _sliderKey.currentContext?.findRenderObject() as RenderBox?;
     if (sliderBox == null) return;
     final position = sliderBox.localToGlobal(Offset.zero);
     final size = sliderBox.size;
@@ -595,7 +636,8 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
@@ -631,7 +673,8 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
   }
 
   void _updateOpacityFromPosition(Offset localPosition) {
-    final RenderBox? sliderBox = _sliderKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? sliderBox =
+        _sliderKey.currentContext?.findRenderObject() as RenderBox?;
     if (sliderBox != null) {
       final width = sliderBox.size.width;
       final progress = (localPosition.dx / width).clamp(0.0, 1.0);
@@ -666,17 +709,14 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
           },
           onHover: (event) {
             if (!_isHovering || _isDragging) return;
-            final RenderBox? sliderBox = _sliderKey.currentContext?.findRenderObject() as RenderBox?;
+            final RenderBox? sliderBox =
+                _sliderKey.currentContext?.findRenderObject() as RenderBox?;
             if (sliderBox != null) {
               final localPosition = sliderBox.globalToLocal(event.position);
               final width = sliderBox.size.width;
               final progress = (localPosition.dx / width).clamp(0.0, 1.0);
               final thumbRect = Rect.fromLTWH(
-                (widget.videoState.danmakuOpacity * width) - 8,
-                16,
-                16,
-                16
-              );
+                  (widget.videoState.danmakuOpacity * width) - 8, 16, 16, 16);
               setState(() {
                 _isThumbHovered = thumbRect.contains(localPosition);
               });
@@ -748,7 +788,9 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
                     ),
                     // 滑块
                     Positioned(
-                      left: (widget.videoState.danmakuOpacity * constraints.maxWidth) - (_isThumbHovered || _isDragging ? 8 : 6),
+                      left: (widget.videoState.danmakuOpacity *
+                              constraints.maxWidth) -
+                          (_isThumbHovered || _isDragging ? 8 : 6),
                       top: 22 - (_isThumbHovered || _isDragging ? 8 : 6),
                       child: MouseRegion(
                         cursor: SystemMouseCursors.click,
@@ -763,7 +805,8 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.2),
-                                blurRadius: _isThumbHovered || _isDragging ? 6 : 4,
+                                blurRadius:
+                                    _isThumbHovered || _isDragging ? 6 : 4,
                                 offset: const Offset(0, 2),
                               ),
                             ],
@@ -782,4 +825,4 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
       ],
     );
   }
-} 
+}

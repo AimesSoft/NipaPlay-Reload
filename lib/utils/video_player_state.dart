@@ -144,7 +144,8 @@ class _VideoDimensionSnapshot {
   bool get hasSource =>
       srcWidth != null && srcWidth! > 0 && srcHeight != null && srcHeight! > 0;
 
-  bool get hasDisplay => displayWidth != null &&
+  bool get hasDisplay =>
+      displayWidth != null &&
       displayWidth! > 0 &&
       displayHeight != null &&
       displayHeight! > 0;
@@ -270,6 +271,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕轨道显示区域设置
   static const String _danmakuDisplayAreaKey = 'danmaku_display_area';
   double _danmakuDisplayArea = 1.0; // 默认全屏显示（1.0=全部，0.67=2/3，0.33=1/3）
+
+  // 弹幕速度设置
+  static const String _danmakuSpeedMultiplierKey = 'danmaku_speed_multiplier';
+  static const double _minDanmakuSpeedMultiplier = 0.5;
+  static const double _maxDanmakuSpeedMultiplier = 2.0;
+  static const double _baseDanmakuScrollDurationSeconds = 10.0;
+  double _danmakuSpeedMultiplier = 1.0; // 默认标准速度
 
   // 添加播放速度相关状态
   static const String _playbackRateKey = 'playback_rate';
@@ -423,6 +431,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get mergeDanmaku => _mergeDanmaku;
   double get danmakuFontSize => _danmakuFontSize;
   double get danmakuDisplayArea => _danmakuDisplayArea;
+  double get danmakuSpeedMultiplier => _danmakuSpeedMultiplier;
+  double get danmakuScrollDurationSeconds =>
+      _baseDanmakuScrollDurationSeconds / _danmakuSpeedMultiplier;
   bool get danmakuStacking => _danmakuStacking;
   Anime4KProfile get anime4kProfile => _anime4kProfile;
   bool get isAnime4KEnabled => _anime4kProfile != Anime4KProfile.off;
@@ -602,6 +613,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     // 加载弹幕字体大小和显示区域
     await _loadDanmakuFontSize();
     await _loadDanmakuDisplayArea();
+    await _loadDanmakuSpeedMultiplier();
 
     // 加载播放速度设置
     await _loadPlaybackRate();
@@ -737,10 +749,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_brightnessOverlayEntry == null) {
       _brightnessOverlayEntry = OverlayEntry(
         builder: (context) {
-          final indicatorWidget =
-              useCupertinoStyle
-                  ? const CupertinoBrightnessIndicator()
-                  : const BrightnessIndicator();
+          final indicatorWidget = useCupertinoStyle
+              ? const CupertinoBrightnessIndicator()
+              : const BrightnessIndicator();
           Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
             child: Consumer<VideoPlayerState>(
@@ -753,9 +764,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       transform: Matrix4.translationValues(
-                        videoState.isBrightnessIndicatorVisible
-                            ? -35.0
-                            : 70.0,
+                        videoState.isBrightnessIndicatorVisible ? -35.0 : 70.0,
                         0.0,
                         0.0,
                       ),
@@ -823,10 +832,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_volumeOverlayEntry == null) {
       _volumeOverlayEntry = OverlayEntry(
         builder: (context) {
-          final indicatorWidget =
-              useCupertinoStyle
-                  ? const CupertinoVolumeIndicator()
-                  : const VolumeIndicator();
+          final indicatorWidget = useCupertinoStyle
+              ? const CupertinoVolumeIndicator()
+              : const VolumeIndicator();
           Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
             child: Consumer<VideoPlayerState>(
@@ -2063,7 +2071,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         if (_context != null && _context!.mounted) {
           final currentContext = _context!;
           Future.microtask(() {
-            if (_context != null && _context!.mounted &&
+            if (_context != null &&
+                _context!.mounted &&
                 identical(currentContext, _context)) {
               Navigator.of(currentContext).maybePop();
             }
@@ -4151,8 +4160,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           final seekWidget = useCupertinoStyle
               ? const CupertinoSeekIndicator()
               : const SeekIndicator();
-          Widget overlayChild =
-              ChangeNotifierProvider<VideoPlayerState>.value(
+          Widget overlayChild = ChangeNotifierProvider<VideoPlayerState>.value(
             value: this,
             child: seekWidget,
           );
@@ -4746,9 +4754,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   void _applyAnime4KMpvTuning({required bool enable}) {
-    final Map<String, String> options = enable
-        ? _anime4kRecommendedMpvOptions
-        : _anime4kDefaultMpvOptions;
+    final Map<String, String> options =
+        enable ? _anime4kRecommendedMpvOptions : _anime4kDefaultMpvOptions;
     options.forEach((String key, String value) {
       try {
         player.setProperty(key, value);
@@ -4761,8 +4768,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   Future<void> _logCurrentVideoDimensions({String context = ''}) async {
     try {
-      final _VideoDimensionSnapshot snapshot =
-          await _collectVideoDimensions();
+      final _VideoDimensionSnapshot snapshot = await _collectVideoDimensions();
 
       final String contextLabel = context.isEmpty ? '' : ' [$context]';
       final String srcLabel = snapshot.hasSource
@@ -4799,8 +4805,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         return;
       }
 
-      final _VideoDimensionSnapshot snapshot =
-          await _collectVideoDimensions();
+      final _VideoDimensionSnapshot snapshot = await _collectVideoDimensions();
       if (!snapshot.hasSource) {
         if (retry < maxRetry) {
           await Future.delayed(const Duration(milliseconds: 200));
@@ -4849,8 +4854,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     Map<String, dynamic> _toStringKeyedMap(dynamic raw) {
       if (raw is Map) {
-        return raw.map((dynamic key, dynamic value) =>
-            MapEntry(key.toString(), value));
+        return raw.map(
+            (dynamic key, dynamic value) => MapEntry(key.toString(), value));
       }
       return <String, dynamic>{};
     }
@@ -4869,8 +4874,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         if (parsedDouble != null) {
           return parsedDouble.round();
         }
-        final String digitsOnly =
-            trimmed.replaceAll(RegExp(r'[^0-9.-]'), '');
+        final String digitsOnly = trimmed.replaceAll(RegExp(r'[^0-9.-]'), '');
         final int? fallbackInt = int.tryParse(digitsOnly);
         if (fallbackInt != null) {
           return fallbackInt;
@@ -4997,6 +5001,34 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       await prefs.setDouble(_danmakuDisplayAreaKey, area);
       notifyListeners();
     }
+  }
+
+  double _normalizeDanmakuSpeed(double value) {
+    if (value < _minDanmakuSpeedMultiplier) {
+      return _minDanmakuSpeedMultiplier;
+    }
+    if (value > _maxDanmakuSpeedMultiplier) {
+      return _maxDanmakuSpeedMultiplier;
+    }
+    return value;
+  }
+
+  Future<void> _loadDanmakuSpeedMultiplier() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getDouble(_danmakuSpeedMultiplierKey);
+    _danmakuSpeedMultiplier = _normalizeDanmakuSpeed(stored ?? 1.0);
+    notifyListeners();
+  }
+
+  Future<void> setDanmakuSpeedMultiplier(double multiplier) async {
+    final normalized = _normalizeDanmakuSpeed(multiplier);
+    if ((_danmakuSpeedMultiplier - normalized).abs() < 0.0001) {
+      return;
+    }
+    _danmakuSpeedMultiplier = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_danmakuSpeedMultiplierKey, normalized);
+    notifyListeners();
   }
 
   // 获取弹幕轨道间距倍数（基于字体大小计算）

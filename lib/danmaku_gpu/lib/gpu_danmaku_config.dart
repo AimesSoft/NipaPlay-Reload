@@ -7,13 +7,13 @@ import 'package:nipaplay/utils/video_player_state.dart';
 class GPUDanmakuConfig {
   /// 字体大小
   final double fontSize;
-  
+
   /// 弹幕持续时间倍数（默认1.0，表示5秒显示时间）
   final double durationMultiplier;
-  
+
   /// 轨道高度倍数（相对于字体大小）
   final double trackHeightMultiplier;
-  
+
   /// 弹幕底部外边距
   final double danmakuBottomMargin;
 
@@ -30,22 +30,27 @@ class GPUDanmakuConfig {
     double? danmakuBottomMargin,
     this.screenUsageRatio = 1.0,
     this.scrollScreensPerSecond = 0.1,
-  }) : fontSize = fontSize ?? (globals.isPhone ? 20.0 : 30.0),
-       trackHeightMultiplier = trackHeightMultiplier ?? (globals.isPhone ? 0.8 : 1.5),
-       danmakuBottomMargin = danmakuBottomMargin ?? (globals.isPhone ? 6.0 : 10.0);
+  })  : fontSize = fontSize ?? (globals.isPhone ? 20.0 : 30.0),
+        trackHeightMultiplier =
+            trackHeightMultiplier ?? (globals.isPhone ? 0.8 : 1.5),
+        danmakuBottomMargin =
+            danmakuBottomMargin ?? (globals.isPhone ? 6.0 : 10.0);
 
   /// 从VideoPlayerState创建配置
   factory GPUDanmakuConfig.fromVideoPlayerState(VideoPlayerState videoState) {
+    final durationSeconds = videoState.danmakuScrollDurationSeconds;
+    final scrollSpeed = durationSeconds <= 0 ? 0.1 : (1.0 / durationSeconds);
     return GPUDanmakuConfig(
       fontSize: videoState.actualDanmakuFontSize,
       trackHeightMultiplier: videoState.danmakuTrackHeightMultiplier,
       screenUsageRatio: videoState.danmakuDisplayArea,
+      scrollScreensPerSecond: scrollSpeed,
     );
   }
 
   /// 计算轨道高度
   double get trackHeight => fontSize * trackHeightMultiplier;
-  
+
   /// 计算弹幕持续时间（毫秒）
   int get duration => (5000 * durationMultiplier).round();
 
@@ -61,10 +66,12 @@ class GPUDanmakuConfig {
     return GPUDanmakuConfig(
       fontSize: fontSize ?? this.fontSize,
       durationMultiplier: durationMultiplier ?? this.durationMultiplier,
-      trackHeightMultiplier: trackHeightMultiplier ?? this.trackHeightMultiplier,
+      trackHeightMultiplier:
+          trackHeightMultiplier ?? this.trackHeightMultiplier,
       danmakuBottomMargin: danmakuBottomMargin ?? this.danmakuBottomMargin,
       screenUsageRatio: screenUsageRatio ?? this.screenUsageRatio,
-      scrollScreensPerSecond: scrollScreensPerSecond ?? this.scrollScreensPerSecond,
+      scrollScreensPerSecond:
+          scrollScreensPerSecond ?? this.scrollScreensPerSecond,
     );
   }
 
@@ -90,4 +97,4 @@ class GPUDanmakuConfig {
         screenUsageRatio.hashCode ^
         scrollScreensPerSecond.hashCode;
   }
-} 
+}

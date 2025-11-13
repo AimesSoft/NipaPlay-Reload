@@ -2720,6 +2720,8 @@ class _CupertinoLibraryManagementSheetState
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final urlColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final dividerColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.separator, context);
     final statusColor = connection.isConnected
         ? CupertinoColors.activeGreen
         : CupertinoColors.systemRed;
@@ -2850,7 +2852,7 @@ class _CupertinoLibraryManagementSheetState
               ),
             ),
           if (connection.isConnected && isExpanded)
-            const Divider(height: 1, thickness: 1),
+            Container(height: 1, color: dividerColor),
           if (connection.isConnected && isExpanded)
             _buildWebDAVFileList(connection, '/', depth: 0),
         ],

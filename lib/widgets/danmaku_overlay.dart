@@ -46,6 +46,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
 
         // 直接从videoState获取已处理好的弹幕列表
         final activeDanmakuList = videoState.danmakuList;
+        final scrollDuration = videoState.danmakuScrollDurationSeconds;
 
         if (kernelType == DanmakuRenderEngine.gpu) {
           return Stack(
@@ -64,13 +65,14 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
                   playbackRate: videoState.playbackRate,
                   displayArea: videoState.danmakuDisplayArea,
                   timeOffset: settingsProvider.danmakuTimeOffset,
+                  scrollDurationSeconds: scrollDuration,
                   onLayoutCalculated: (danmaku) {
                     // Update state with the calculated positions
                     // a little hacky to avoid setState() called during build
                     Future.microtask(() {
                       if (mounted) {
                         setState(() {
-                           _positionedDanmaku = danmaku;
+                          _positionedDanmaku = danmaku;
                         });
                       }
                     });
@@ -110,6 +112,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
                 settingsProvider.danmakuTimeOffset,
             isPlaying: widget.isPlaying,
             playbackRate: videoState.playbackRate,
+            scrollDurationSeconds: scrollDuration,
           );
         }
 
@@ -125,8 +128,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           playbackRate: videoState.playbackRate,
           displayArea: videoState.danmakuDisplayArea,
           timeOffset: settingsProvider.danmakuTimeOffset,
+          scrollDurationSeconds: scrollDuration,
         );
       },
     );
   }
-} 
+}
