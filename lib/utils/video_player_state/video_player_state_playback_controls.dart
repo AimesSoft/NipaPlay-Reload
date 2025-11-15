@@ -723,9 +723,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // Set system volume using MDK player.volume (0.0-1.0 range)
       // Check if volume property is available
       player.volume = newVolume;
+      await _setSystemVolume(newVolume);
       _currentVolume = newVolume;
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
+      _scheduleVolumePersistence();
       notifyListeners();
     } catch (e) {
       //debugPrint("Failed to set system volume via player: $e");
@@ -735,6 +737,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   void endVolumeDrag() {
     if (!globals.isPhone) return;
     debugPrint("Volume drag ended. Current volume: $_currentVolume");
+    _scheduleVolumePersistence(immediate: true);
   }
 
   static const int _textureIdCounter = 0;
@@ -750,10 +753,12 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           (currentVolume + (step ?? _volumeStep)).clamp(0.0, 1.0);
 
       player.volume = newVolume;
+      unawaited(_setSystemVolume(newVolume));
       _currentVolume = newVolume;
       // Keep _initialDragVolume in sync in case a touch/mouse drag starts later
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
+      _scheduleVolumePersistence(immediate: true);
       notifyListeners();
       //debugPrint("Volume increased to: $_currentVolume via keyboard");
     } catch (e) {
@@ -771,10 +776,12 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           (currentVolume - (step ?? _volumeStep)).clamp(0.0, 1.0);
 
       player.volume = newVolume;
+      unawaited(_setSystemVolume(newVolume));
       _currentVolume = newVolume;
       // Keep _initialDragVolume in sync in case a touch/mouse drag starts later
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
+      _scheduleVolumePersistence(immediate: true);
       notifyListeners();
       //debugPrint("Volume decreased to: $_currentVolume via keyboard");
     } catch (e) {

@@ -42,6 +42,7 @@ import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brigh
 import 'package:nipaplay/widgets/nipaplay_theme/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
 import 'package:nipaplay/widgets/nipaplay_theme/volume_indicator.dart'; // Added import for VolumeIndicator widget
 import 'package:nipaplay/widgets/nipaplay_theme/seek_indicator.dart'; // Added import for SeekIndicator widget
+import 'package:volume_controller/volume_controller.dart';
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
 import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
@@ -335,11 +336,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   OverlayEntry? _brightnessOverlayEntry; // <<< ADDED THIS LINE
 
   // Volume Control State
+  static const Duration _volumeSaveDebounceDuration =
+      Duration(milliseconds: 400);
+  final String _playerVolumeKey = 'player_volume';
   double _currentVolume = 0.5; // Default volume
   double _initialDragVolume = 0.5;
   bool _isVolumeIndicatorVisible = false;
   Timer? _volumeIndicatorTimer;
   OverlayEntry? _volumeOverlayEntry;
+  Timer? _volumePersistenceTimer;
+  VolumeController? _systemVolumeController;
+  StreamSubscription<double>? _systemVolumeSubscription;
+  bool _isSystemVolumeUpdating = false;
 
   // Horizontal Seek Drag State
   bool _isSeekingViaDrag = false;
@@ -386,6 +394,81 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
     _initialize();
+  }
+
+  void _scheduleVolumePersistence({bool immediate = false}) {
+    if (!globals.isPhone) return;
+    _volumePersistenceTimer?.cancel();
+    if (immediate) {
+      _volumePersistenceTimer = null;
+      unawaited(_savePlayerVolumePreference(_currentVolume));
+      return;
+    }
+    _volumePersistenceTimer =
+        Timer(_volumeSaveDebounceDuration, () {
+      _volumePersistenceTimer = null;
+      unawaited(_savePlayerVolumePreference(_currentVolume));
+    });
+  }
+
+  Future<void> _savePlayerVolumePreference(double volume) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(
+          _playerVolumeKey, volume.clamp(0.0, 1.0));
+    } catch (e) {
+      debugPrint('保存播放器音量失败: $e');
+    }
+  }
+
+  Future<void> _initializeSystemVolumeController() async {
+    if (!globals.isPhone) return;
+    try {
+      _systemVolumeController ??= VolumeController.instance;
+      _systemVolumeController!.showSystemUI = false;
+      _systemVolumeSubscription?.cancel();
+      _systemVolumeSubscription = _systemVolumeController!.addListener(
+        _handleExternalSystemVolumeChange,
+        fetchInitialVolume: true,
+      );
+    } catch (e) {
+      debugPrint('初始化系统音量控制失败: $e');
+    }
+  }
+
+  void _handleExternalSystemVolumeChange(double volume) {
+    if (!globals.isPhone) return;
+    if (_isSystemVolumeUpdating) return;
+    final double normalized = volume.clamp(0.0, 1.0);
+    if ((_currentVolume - normalized).abs() < 0.001) {
+      return;
+    }
+    _currentVolume = normalized;
+    _initialDragVolume = normalized;
+    try {
+      player.volume = normalized;
+    } catch (e) {
+      debugPrint('同步系统音量到播放器失败: $e');
+    }
+    _showVolumeIndicator();
+    _scheduleVolumePersistence();
+    notifyListeners();
+  }
+
+  Future<void> _setSystemVolume(double volume) async {
+    if (!globals.isPhone) return;
+    if (_systemVolumeController == null) return;
+    _isSystemVolumeUpdating = true;
+    try {
+      await _systemVolumeController!
+          .setVolume(volume.clamp(0.0, 1.0));
+    } catch (e) {
+      debugPrint('设置系统音量失败: $e');
+    } finally {
+      Future.microtask(() {
+        _isSystemVolumeUpdating = false;
+      });
+    }
   }
 
   // Getters
@@ -543,6 +626,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       }
     }
 
+    _scheduleVolumePersistence(immediate: true);
+    _volumePersistenceTimer?.cancel();
+    _systemVolumeSubscription?.cancel();
+    _systemVolumeSubscription = null;
+    _systemVolumeController?.removeListener();
+    _systemVolumeController = null;
     player.dispose();
     _focusNode.dispose();
     _uiUpdateTimer?.cancel(); // 清理UI更新定时器

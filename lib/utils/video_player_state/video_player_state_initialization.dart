@@ -5,6 +5,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     if (globals.isPhone) {
       // 使用新的屏幕方向管理器设置初始方向
       await ScreenOrientationManager.instance.setInitialOrientation();
+      await _initializeSystemVolumeController();
       await _loadInitialBrightness(); // Load initial brightness for phone
       await _loadInitialVolume(); // <<< CALL ADDED
     }
@@ -94,13 +95,15 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   Future<void> _loadInitialVolume() async {
     if (!globals.isPhone) return;
     try {
-      // Get initial volume from the MDK player (0.0 - 1.0 range)
-
-      _currentVolume = player.volume;
+      final prefs = await SharedPreferences.getInstance();
+      final savedVolume = prefs.getDouble(_playerVolumeKey);
+      double initialVolume = savedVolume ?? player.volume;
       _currentVolume =
-          _currentVolume.clamp(0.0, 1.0); // Ensure it's within 0-1 range
+          initialVolume.clamp(0.0, 1.0); // Ensure it's within 0-1 range
       _initialDragVolume = _currentVolume;
-      //debugPrint("Initial system volume loaded from player (0-1 range): $_currentVolume");
+      player.volume = _currentVolume;
+      await _setSystemVolume(_currentVolume);
+      //debugPrint("Initial volume loaded: $_currentVolume (saved: ${savedVolume != null})");
     } catch (e) {
       //debugPrint("Failed to get initial system volume from player: $e");
       _currentVolume = 0.5; // Fallback
