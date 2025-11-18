@@ -8,16 +8,15 @@ import './dandanplay_service.dart';
 
 class BangumiService {
   static final BangumiService instance = BangumiService._();
-  static const String _dandanplayBaseUrl = 'https://api.dandanplay.net/api/v2';
-  static const String _shinBangumiUrl = '$_dandanplayBaseUrl/bangumi/shin';
-  static const String _bangumiDetailUrl = '$_dandanplayBaseUrl/bangumi/';
+  static const String _basePath = '/api/v2';
 
   static const String _cacheKey = 'dandanplay_shin_cache';
   static const String _detailsCacheKeyPrefix = 'bangumi_detail_';
   static const Duration _defaultCacheDuration = Duration(hours: 3);
   static const int _oldAnimeThreshold = 18343; // 和弹幕缓存使用相同的判断标准
   static const Duration _oldAnimeCacheDuration = Duration(days: 7);
-  static const Duration _newAnimeCacheDuration = Duration(hours: 6); // 新番缓存时间可以比弹幕长一些
+  static const Duration _newAnimeCacheDuration =
+      Duration(hours: 6); // 新番缓存时间可以比弹幕长一些
   static const int _maxConcurrentRequests = 3;
 
   final Map<String, BangumiAnime> _listCache = {};
@@ -59,10 +58,11 @@ class BangumiService {
       //debugPrint('[番剧服务] 正在预加载缓存的番剧详情到内存');
       final prefs = await SharedPreferences.getInstance();
       final keys = prefs.getKeys();
-      
-      final detailsKeys = keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
+
+      final detailsKeys =
+          keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
       int loadedCount = 0;
-      
+
       for (var key in detailsKeys) {
         try {
           final String? cachedString = prefs.getString(key);
@@ -70,18 +70,20 @@ class BangumiService {
             final data = json.decode(cachedString);
             final timestamp = data['timestamp'] as int;
             final now = DateTime.now().millisecondsSinceEpoch;
-            final animeId = int.parse(key.substring(_detailsCacheKeyPrefix.length));
-            
+            final animeId =
+                int.parse(key.substring(_detailsCacheKeyPrefix.length));
+
             // 使用动态缓存时间检查是否过期
             final cacheDuration = _getCacheDurationForAnime(animeId);
-            
+
             // 检查是否过期
             if (now - timestamp <= cacheDuration.inMilliseconds) {
               final Map<String, dynamic> animeData = data['animeDetail'];
-              
+
               final animeDetail = BangumiAnime.fromDandanplayDetail(animeData);
               _detailsCache[animeId] = animeDetail;
-              _detailsCacheTime[animeId] = DateTime.fromMillisecondsSinceEpoch(timestamp);
+              _detailsCacheTime[animeId] =
+                  DateTime.fromMillisecondsSinceEpoch(timestamp);
               loadedCount++;
             } else {
               // 过期的缓存自动删除
@@ -93,7 +95,7 @@ class BangumiService {
           continue;
         }
       }
-      
+
       //debugPrint('[番剧服务] 预加载了 $loadedCount 条番剧详情到内存缓存');
     } catch (e) {
       //debugPrint('[番剧服务] 预加载番剧详情缓存失败: $e');
@@ -112,7 +114,8 @@ class BangumiService {
     }
   }
 
-  Future<http.Response> _makeRequest(String url, {int maxRetries = 3, int priority = 0}) async {
+  Future<http.Response> _makeRequest(String url,
+      {int maxRetries = 3, int priority = 0}) async {
     final completer = Completer<http.Response>();
     _requestQueue.add(_RequestItem(url, maxRetries, priority, completer));
     _processQueue();
@@ -125,17 +128,19 @@ class BangumiService {
 
     try {
       _requestQueue.sort((a, b) => b.priority.compareTo(a.priority));
-      
+
       while (_requestQueue.isNotEmpty) {
         final activeRequests = <Future>[];
         final itemsToRemove = <_RequestItem>[];
-        
-        for (var i = 0; i < _maxConcurrentRequests && _requestQueue.isNotEmpty; i++) {
+
+        for (var i = 0;
+            i < _maxConcurrentRequests && _requestQueue.isNotEmpty;
+            i++) {
           final item = _requestQueue.removeAt(0);
           itemsToRemove.add(item);
           activeRequests.add(_executeRequest(item));
         }
-        
+
         await Future.wait(activeRequests);
       }
     } finally {
@@ -149,12 +154,14 @@ class BangumiService {
       try {
         const String appId = DandanplayService.appId;
         final String appSecret = await DandanplayService.getAppSecret();
-        final int timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-        
+        final int timestamp =
+            (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+
         final Uri parsedUri = Uri.parse(item.url);
         final String apiPath = parsedUri.path;
-        
-        final String signature = DandanplayService.generateSignature(appId, timestamp, apiPath, appSecret);
+
+        final String signature = DandanplayService.generateSignature(
+            appId, timestamp, apiPath, appSecret);
 
         final response = await _client.get(
           Uri.parse(item.url),
@@ -165,19 +172,15 @@ class BangumiService {
             'X-Timestamp': timestamp.toString(),
             'X-Signature': signature,
           },
-        ).timeout(
-          Duration(seconds: 15 + retryCount * 5),
-          onTimeout: () {
-            throw TimeoutException('请求超时');
-          }
-        );
-        
+        ).timeout(Duration(seconds: 15 + retryCount * 5), onTimeout: () {
+          throw TimeoutException('请求超时');
+        });
+
         if (response.statusCode == 200) {
           item.completer.complete(response);
           return;
         } else {
-          if (response.bodyBytes.length < 1000) {
-          }
+          if (response.bodyBytes.length < 1000) {}
           throw Exception('HTTP请求失败: ${response.statusCode}');
         }
       } catch (e) {
@@ -192,22 +195,28 @@ class BangumiService {
     }
   }
 
-  Future<List<BangumiAnime>> getCalendar({bool forceRefresh = false, bool filterAdultContent = true}) async {
+  Future<List<BangumiAnime>> getCalendar(
+      {bool forceRefresh = false, bool filterAdultContent = true}) async {
     //debugPrint('[新番-弹弹play] getCalendar - Strategy: Network first, then cache. forceRefresh: $forceRefresh, filterAdultContent: $filterAdultContent');
 
     // If forceRefresh is true, we definitely skip trying memory cache first before network.
     // However, the new strategy is always network first unless network fails.
 
-    final apiUrl = '$_shinBangumiUrl?filterAdultContent=$filterAdultContent';
+    final baseUrl = await DandanplayService.getApiBaseUrl();
+    final apiUrl =
+        '$baseUrl$_basePath/bangumi/shin?filterAdultContent=$filterAdultContent';
     //debugPrint('[新番-弹弹play] Attempting to fetch from API: $apiUrl');
 
     try {
-      final response = await _makeRequest(apiUrl, priority: 1); // Higher priority for user-facing calendar
+      final response = await _makeRequest(apiUrl,
+          priority: 1); // Higher priority for user-facing calendar
       //debugPrint('[新番-弹弹play] API response: Status=${response.statusCode}, Length=${response.bodyBytes.length}');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> decodedResponse = json.decode(utf8.decode(response.bodyBytes));
-        if (decodedResponse['success'] == true && decodedResponse['bangumiList'] != null) {
+        final Map<String, dynamic> decodedResponse =
+            json.decode(utf8.decode(response.bodyBytes));
+        if (decodedResponse['success'] == true &&
+            decodedResponse['bangumiList'] != null) {
           final List<dynamic> data = decodedResponse['bangumiList'];
           //debugPrint('[新番-弹弹play] Parsed ${data.length} animes from API.');
 
@@ -221,10 +230,12 @@ class BangumiService {
           }
 
           final List<BangumiAnime> animes = [];
-          _listCache.clear(); // Clear old memory list cache before populating with new data
+          _listCache
+              .clear(); // Clear old memory list cache before populating with new data
           for (var animeData in data) {
             try {
-              final anime = BangumiAnime.fromDandanplayIntro(animeData as Map<String, dynamic>);
+              final anime = BangumiAnime.fromDandanplayIntro(
+                  animeData as Map<String, dynamic>);
               _listCache[anime.id.toString()] = anime; // Update memory cache
               animes.add(anime);
             } catch (e) {
@@ -232,11 +243,11 @@ class BangumiService {
               continue;
             }
           }
-          
+
           // Update preloaded animes as well, as this is the latest data now.
-          _preloadedAnimes = List.from(animes); 
+          _preloadedAnimes = List.from(animes);
           //debugPrint('[新番-弹弹play] Successfully fetched and cached ${animes.length} animes from API.');
-          
+
           // Asynchronously save to disk cache. No need to await this for returning data to UI.
           _saveToCache(animes).then((_) {
             //debugPrint('[新番-弹弹play] Disk cache updated in background after API fetch.');
@@ -247,16 +258,17 @@ class BangumiService {
           return animes;
         } else {
           //debugPrint('[新番-弹弹play] API request successful but response format invalid or success is false: ${decodedResponse['errorMessage']}');
-          throw Exception('Failed to load shin bangumi from API: ${decodedResponse['errorMessage'] ?? 'Unknown API error'}');
+          throw Exception(
+              'Failed to load shin bangumi from API: ${decodedResponse['errorMessage'] ?? 'Unknown API error'}');
         }
       } else {
         //debugPrint('[新番-弹弹play] API request failed with HTTP ${response.statusCode}. Will try cache.');
         // Throw an exception to be caught by the outer try-catch, which will then try cache.
-        throw Exception('API request failed: ${response.statusCode}'); 
+        throw Exception('API request failed: ${response.statusCode}');
       }
     } catch (e) {
       //debugPrint('[新番-弹弹play] Error fetching from API: ${e.toString()}. Attempting to load from cache...');
-      
+
       // API fetch failed, try to load from SharedPreferences cache
       // We don't need to check _preloadedAnimes or _listCache here because if API failed,
       // we want to provide at least some data if available in disk cache.
@@ -265,8 +277,8 @@ class BangumiService {
         //debugPrint('[新番-弹弹play] Successfully loaded ${cachedData.length} animes from disk cache as fallback.');
         // Populate memory caches if we are returning disk-cached data
         _listCache.clear();
-        for(var anime in cachedData) {
-            _listCache[anime.id.toString()] = anime;
+        for (var anime in cachedData) {
+          _listCache[anime.id.toString()] = anime;
         }
         _preloadedAnimes = List.from(cachedData);
         return cachedData;
@@ -283,7 +295,7 @@ class BangumiService {
       final prefs = await SharedPreferences.getInstance();
       final data = {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'animes': animes.map((a) => a.toJson()).toList(), 
+        'animes': animes.map((a) => a.toJson()).toList(),
       };
       await prefs.setString(_cacheKey, json.encode(data));
       //debugPrint('[新番-弹弹play] 数据已保存到本地存储 (key: $_cacheKey)');
@@ -305,7 +317,8 @@ class BangumiService {
         if (now - timestamp <= _defaultCacheDuration.inMilliseconds) {
           final List<dynamic> animesData = data['animes'];
           final animes = animesData
-              .map((d) => BangumiAnime.fromDandanplayIntro(d as Map<String, dynamic>))
+              .map((d) =>
+                  BangumiAnime.fromDandanplayIntro(d as Map<String, dynamic>))
               .toList();
           for (var anime in animes) {
             _listCache[anime.id.toString()] = anime;
@@ -346,7 +359,7 @@ class BangumiService {
         //debugPrint('[番剧服务] 番剧 $animeId 的内存缓存已过期');
       }
     }
-    
+
     // 检查磁盘缓存
     final diskCachedDetail = await _loadDetailFromCache(animeId);
     if (diskCachedDetail != null) {
@@ -364,38 +377,43 @@ class BangumiService {
     }
 
     // 从API获取
-    final detailUrl = '$_bangumiDetailUrl$animeId';
+    final baseUrl = await DandanplayService.getApiBaseUrl();
+    final detailUrl = '$baseUrl$_basePath/bangumi/$animeId';
     //debugPrint('[番剧服务] 从API获取番剧 $animeId 的详情: $detailUrl');
     try {
       final response = await _makeRequest(detailUrl);
-      
+
       if (response.statusCode == 200) {
-        final Map<String, dynamic> decodedResponse = json.decode(utf8.decode(response.bodyBytes));
-        if (decodedResponse['success'] == true && decodedResponse['bangumi'] != null) {
-          final anime = BangumiAnime.fromDandanplayDetail(decodedResponse['bangumi'] as Map<String, dynamic>);
-          
+        final Map<String, dynamic> decodedResponse =
+            json.decode(utf8.decode(response.bodyBytes));
+        if (decodedResponse['success'] == true &&
+            decodedResponse['bangumi'] != null) {
+          final anime = BangumiAnime.fromDandanplayDetail(
+              decodedResponse['bangumi'] as Map<String, dynamic>);
+
           // 验证获取的数据是否包含标签
           if (anime.tags != null && anime.tags!.isNotEmpty) {
             //debugPrint('[番剧服务] API获取的番剧 $animeId 包含 ${anime.tags!.length} 个标签');
           } else {
             //debugPrint('[番剧服务] 警告：API获取的番剧 $animeId 没有标签信息');
           }
-          
+
           // 更新内存缓存
           _detailsCache[animeId] = anime;
           _detailsCacheTime[animeId] = DateTime.now();
           final cacheDuration = _getCacheDurationForAnime(animeId);
           //debugPrint('[番剧服务] 成功从API获取番剧 $animeId 的详情并缓存到内存 (缓存时间: ${cacheDuration.inHours}小时)');
-          
+
           // 异步保存到磁盘缓存
           _saveDetailToCache(animeId, anime).then((_) {
             //debugPrint('[番剧服务] 番剧 $animeId 详情已异步保存到磁盘缓存');
           });
-          
+
           return anime;
         } else {
           //debugPrint('[番剧服务] 详情API请求成功但响应格式无效: ${decodedResponse['errorMessage']}');
-          throw Exception('获取番剧详情失败: ${decodedResponse['errorMessage'] ?? '未知API错误'}');
+          throw Exception(
+              '获取番剧详情失败: ${decodedResponse['errorMessage'] ?? '未知API错误'}');
         }
       } else if (response.statusCode == 404) {
         //debugPrint('[番剧服务] 番剧 $animeId 未找到 (404)');
@@ -409,26 +427,28 @@ class BangumiService {
       rethrow;
     }
   }
-  
+
   // 清理过期的番剧详情缓存
   Future<void> cleanExpiredDetailCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final keys = prefs.getKeys();
-      final detailsKeys = keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
+      final detailsKeys =
+          keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
       final now = DateTime.now().millisecondsSinceEpoch;
       int removedCount = 0;
-      
+
       for (var key in detailsKeys) {
         try {
           final String? cachedString = prefs.getString(key);
           if (cachedString != null) {
             final data = json.decode(cachedString);
             final timestamp = data['timestamp'] as int;
-            final animeId = int.parse(key.substring(_detailsCacheKeyPrefix.length));
-            
+            final animeId =
+                int.parse(key.substring(_detailsCacheKeyPrefix.length));
+
             final cacheDuration = _getCacheDurationForAnime(animeId);
-            
+
             // 检查是否过期
             if (now - timestamp > cacheDuration.inMilliseconds) {
               await prefs.remove(key);
@@ -440,9 +460,9 @@ class BangumiService {
           continue;
         }
       }
-      
+
       //debugPrint('[番剧服务] 清理了 $removedCount 条过期的番剧详情缓存');
-      
+
       // 同时清理内存缓存
       final expiredIds = <int>[];
       _detailsCacheTime.forEach((id, time) {
@@ -450,12 +470,12 @@ class BangumiService {
           expiredIds.add(id);
         }
       });
-      
+
       for (var id in expiredIds) {
         _detailsCache.remove(id);
         _detailsCacheTime.remove(id);
       }
-      
+
       //debugPrint('[番剧服务] 清理了 ${expiredIds.length} 条过期的内存缓存');
     } catch (e) {
       //debugPrint('[番剧服务] 清理过期番剧详情缓存失败: $e');
@@ -470,7 +490,7 @@ class BangumiService {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'animeDetail': animeDetail.toJson(),
       };
-      
+
       final cacheKey = '$_detailsCacheKeyPrefix$animeId';
       await prefs.setString(cacheKey, json.encode(data));
       final cacheDuration = _getCacheDurationForAnime(animeId);
@@ -486,27 +506,28 @@ class BangumiService {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = '$_detailsCacheKeyPrefix$animeId';
       final String? cachedString = prefs.getString(cacheKey);
-      
+
       if (cachedString != null) {
         final data = json.decode(cachedString);
         final timestamp = data['timestamp'] as int;
         final now = DateTime.now().millisecondsSinceEpoch;
         final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-        
+
         //debugPrint('[番剧服务] 找到番剧 $animeId 的磁盘缓存，缓存时间: $cacheTime');
-        
+
         // 使用动态缓存时间
         final cacheDuration = _getCacheDurationForAnime(animeId);
-        
+
         // 检查是否过期
         if (now - timestamp <= cacheDuration.inMilliseconds) {
           final Map<String, dynamic> animeData = data['animeDetail'];
-          
+
           // 加载到内存缓存
           final animeDetail = BangumiAnime.fromDandanplayDetail(animeData);
           _detailsCache[animeId] = animeDetail;
-          _detailsCacheTime[animeId] = DateTime.fromMillisecondsSinceEpoch(timestamp);
-          
+          _detailsCacheTime[animeId] =
+              DateTime.fromMillisecondsSinceEpoch(timestamp);
+
           //debugPrint('[番剧服务] 从磁盘缓存成功加载番剧 $animeId 的详情 (缓存时间: ${cacheDuration.inHours}小时)');
           return animeDetail;
         } else {
@@ -525,21 +546,21 @@ class BangumiService {
   Future<void> preloadCommonData() async {
     try {
       //debugPrint('[番剧服务] 开始预加载常用番剧数据');
-      
+
       // 尝试加载番剧日历数据
       if (_preloadedAnimes == null) {
         await loadData();
       }
-      
+
       // 如果前两天查看过番剧详情，预加载它们
       await _preloadRecentPopularAnimes();
-      
+
       //debugPrint('[番剧服务] 常用番剧数据预加载完成');
     } catch (e) {
       //debugPrint('[番剧服务] 预加载常用番剧数据失败: $e');
     }
   }
-  
+
   // 预加载最近流行的动画
   Future<void> _preloadRecentPopularAnimes() async {
     try {
@@ -548,7 +569,7 @@ class BangumiService {
       // 为了演示，我们这里只预加载日历中的前5个番剧详情
       if (_preloadedAnimes != null && _preloadedAnimes!.isNotEmpty) {
         final animesToPreload = _preloadedAnimes!.take(5).toList();
-        
+
         for (final anime in animesToPreload) {
           if (!_detailsCache.containsKey(anime.id)) {
             // 异步加载，不等待完成
@@ -556,7 +577,7 @@ class BangumiService {
               // 忽略预加载错误
               //debugPrint('[番剧服务] 预加载番剧 ${anime.id} 详情失败: $e');
             });
-            
+
             // 短暂延迟以避免并发请求过多
             await Future.delayed(const Duration(milliseconds: 100));
           }
@@ -566,7 +587,7 @@ class BangumiService {
       //debugPrint('[番剧服务] 预加载热门番剧失败: $e');
     }
   }
-  
+
   // 检查是否已经缓存了番剧详情
   Future<bool> hasCachedAnimeDetails(int animeId) async {
     // 检查内存缓存
@@ -576,19 +597,19 @@ class BangumiService {
         return true;
       }
     }
-    
+
     // 检查磁盘缓存
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = '$_detailsCacheKeyPrefix$animeId';
       final String? cachedString = prefs.getString(cacheKey);
-      
+
       if (cachedString != null) {
         final data = json.decode(cachedString);
         final timestamp = data['timestamp'] as int;
         final now = DateTime.now().millisecondsSinceEpoch;
         final cacheDuration = _getCacheDurationForAnime(animeId);
-        
+
         // 检查是否过期
         if (now - timestamp <= cacheDuration.inMilliseconds) {
           return true;
@@ -598,7 +619,7 @@ class BangumiService {
       // 出错时假设没有缓存
       //debugPrint('[番剧服务] 检查番剧 $animeId 缓存状态时出错: $e');
     }
-    
+
     return false;
   }
 
@@ -608,29 +629,31 @@ class BangumiService {
       //debugPrint('[番剧服务] 开始检查缺少标签的缓存数据');
       final prefs = await SharedPreferences.getInstance();
       final keys = prefs.getKeys();
-      final detailsKeys = keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
+      final detailsKeys =
+          keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
       final keysToRefresh = <int>[];
-      
+
       // 检查内存缓存
       _detailsCache.forEach((animeId, anime) {
         if (anime.tags == null || anime.tags!.isEmpty) {
           keysToRefresh.add(animeId);
         }
       });
-      
+
       // 检查磁盘缓存
       for (var key in detailsKeys) {
         try {
           final String? cachedString = prefs.getString(key);
           if (cachedString != null) {
             final data = json.decode(cachedString);
-            final animeId = int.parse(key.substring(_detailsCacheKeyPrefix.length));
-            
+            final animeId =
+                int.parse(key.substring(_detailsCacheKeyPrefix.length));
+
             // 跳过已在内存中检查过的
             if (keysToRefresh.contains(animeId)) continue;
-            
+
             final Map<String, dynamic> animeData = data['animeDetail'];
-            
+
             // 检查是否缺少标签
             final tags = animeData['tags'] as List<dynamic>?;
             if (tags == null || tags.isEmpty) {
@@ -642,10 +665,10 @@ class BangumiService {
           continue;
         }
       }
-      
+
       if (keysToRefresh.isNotEmpty) {
         //debugPrint('[番剧服务] 发现 ${keysToRefresh.length} 个缺少标签的缓存，将在后台刷新');
-        
+
         // 后台刷新这些缓存（不阻塞UI）
         Future.microtask(() async {
           for (var animeId in keysToRefresh) {
@@ -655,11 +678,11 @@ class BangumiService {
               _detailsCacheTime.remove(animeId);
               final cacheKey = '$_detailsCacheKeyPrefix$animeId';
               await prefs.remove(cacheKey);
-              
+
               // 重新获取（这会触发网络请求并重新缓存）
               await getAnimeDetails(animeId);
               //debugPrint('[番剧服务] 已刷新番剧 $animeId 的缓存');
-              
+
               // 每次请求后稍微延迟，避免过于频繁的网络请求
               await Future.delayed(const Duration(milliseconds: 200));
             } catch (e) {
@@ -684,4 +707,4 @@ class _RequestItem {
   final Completer<http.Response> completer;
 
   _RequestItem(this.url, this.maxRetries, this.priority, this.completer);
-} 
+}

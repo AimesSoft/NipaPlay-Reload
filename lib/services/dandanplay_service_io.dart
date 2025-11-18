@@ -25,7 +25,8 @@ class DandanplayService {
     'https://nipaplay.aimes-soft.com',
     'https://kurisu.aimes-soft.com'
   ];
-  static const String _danmakuProxyEndpoint = 'https://nipaplay.aimes-soft.com/danmaku_proxy.php';
+  static const String _danmakuProxyEndpoint =
+      'https://nipaplay.aimes-soft.com/danmaku_proxy.php';
   static const Duration _danmakuRequestTimeout = Duration(seconds: 10);
   static bool get isLoggedIn => _isLoggedIn;
   static String? get userName => _userName;
@@ -37,14 +38,14 @@ class DandanplayService {
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
     await loadToken();
-    
+
     // 输出当前使用的弹弹play服务器
     final currentServer = await NetworkSettings.getDandanplayServer();
     print('[弹弹play服务] 当前使用的服务器: $currentServer');
   }
 
-  /// 获取当前弹弹play API基础URL
-  static Future<String> _getApiBaseUrl() async {
+  /// 获取当前弹弹play API 基础 URL（包含用户自定义设置）
+  static Future<String> getApiBaseUrl() async {
     return await NetworkSettings.getDandanplayServer();
   }
 
@@ -52,25 +53,27 @@ class DandanplayService {
   static Future<void> preloadRecentAnimes() async {
     try {
       debugPrint('[弹弹play服务] 开始预加载最近更新的番剧数据');
-      
+
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/bangumi/recent';
-      final baseUrl = await _getApiBaseUrl();
+      final baseUrl = await getApiBaseUrl();
       final apiUrl = '$baseUrl/api/v2/bangumi/recent?limit=20';
-      
+
       final response = await http.get(
         Uri.parse(apiUrl),
         headers: {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
       );
-      
+
       if (response.statusCode == 200) {
         // 数据已成功预加载，不需要进一步处理
         debugPrint('[弹弹play服务] 最近更新的番剧数据预加载成功');
@@ -85,12 +88,13 @@ class DandanplayService {
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('dandanplay_token');
-    
+
     // 检查是否需要刷新Token
     await _checkAndRenewToken();
   }
 
-  static Future<void> saveLoginInfo(String token, String username, String screenName) async {
+  static Future<void> saveLoginInfo(
+      String token, String username, String screenName) async {
     _token = token;
     _userName = username;
     _screenName = screenName;
@@ -101,7 +105,8 @@ class DandanplayService {
     await prefs.setString('dandanplay_username', username);
     await prefs.setString('dandanplay_screenname', screenName);
     await prefs.setBool('dandanplay_logged_in', true);
-    await prefs.setInt(_lastTokenRenewKey, DateTime.now().millisecondsSinceEpoch);
+    await prefs.setInt(
+        _lastTokenRenewKey, DateTime.now().millisecondsSinceEpoch);
   }
 
   static Future<void> clearLoginInfo() async {
@@ -130,16 +135,18 @@ class DandanplayService {
     if (currentTime - lastRenewTime >= _tokenRenewInterval) {
       try {
         final appSecret = await getAppSecret();
-        final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+        final timestamp =
+            (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
 
         final response = await http.post(
-          Uri.parse('${await _getApiBaseUrl()}/api/v2/login/renew'),
+          Uri.parse('${await getApiBaseUrl()}/api/v2/login/renew'),
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'User-Agent': userAgent,
             'X-AppId': appId,
-            'X-Signature': generateSignature(appId, timestamp, '/api/v2/login/renew', appSecret),
+            'X-Signature': generateSignature(
+                appId, timestamp, '/api/v2/login/renew', appSecret),
             'X-Timestamp': '$timestamp',
             'Authorization': 'Bearer $_token',
           },
@@ -170,7 +177,8 @@ class DandanplayService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('dandanplay_token', token);
     // 保存Token刷新时间
-    await prefs.setInt(_lastTokenRenewKey, DateTime.now().millisecondsSinceEpoch);
+    await prefs.setInt(
+        _lastTokenRenewKey, DateTime.now().millisecondsSinceEpoch);
   }
 
   static Future<void> clearToken() async {
@@ -181,7 +189,8 @@ class DandanplayService {
   }
 
   // 获取缓存的视频信息
-  static Future<Map<String, dynamic>?> getCachedVideoInfo(String fileHash) async {
+  static Future<Map<String, dynamic>?> getCachedVideoInfo(
+      String fileHash) async {
     final prefs = await SharedPreferences.getInstance();
     final cache = prefs.getString(_videoCacheKey);
     if (cache != null) {
@@ -199,15 +208,16 @@ class DandanplayService {
   }
 
   // 保存视频信息到缓存
-  static Future<void> saveVideoInfoToCache(String fileHash, Map<String, dynamic> videoInfo) async {
+  static Future<void> saveVideoInfoToCache(
+      String fileHash, Map<String, dynamic> videoInfo) async {
     final prefs = await SharedPreferences.getInstance();
     final cache = prefs.getString(_videoCacheKey);
     Map<String, dynamic> cacheMap = {};
-    
+
     if (cache != null) {
       cacheMap = Map<String, dynamic>.from(json.decode(cache));
     }
-    
+
     cacheMap[fileHash] = videoInfo;
     await prefs.setString(_videoCacheKey, json.encode(cacheMap));
   }
@@ -215,19 +225,19 @@ class DandanplayService {
   // 获取appSecret
   static Future<String> getAppSecret() async {
     // debugPrint('[DandanplayService] getAppSecret: Called.');
-     if (_appSecret != null) {
-       //debugPrint('[DandanplayService] getAppSecret: Returning cached _appSecret.');
-       return _appSecret!;
-     }
+    if (_appSecret != null) {
+      //debugPrint('[DandanplayService] getAppSecret: Returning cached _appSecret.');
+      return _appSecret!;
+    }
 
     // // 尝试从 SharedPreferences 获取 appSecret
-     final prefs = await SharedPreferences.getInstance();
-     final savedAppSecret = prefs.getString('dandanplay_app_secret');
-     if (savedAppSecret != null) {
-       _appSecret = savedAppSecret;
-       //debugPrint('[DandanplayService] getAppSecret: Returning appSecret from SharedPreferences.');
-       return _appSecret!;
-     }
+    final prefs = await SharedPreferences.getInstance();
+    final savedAppSecret = prefs.getString('dandanplay_app_secret');
+    if (savedAppSecret != null) {
+      _appSecret = savedAppSecret;
+      //debugPrint('[DandanplayService] getAppSecret: Returning appSecret from SharedPreferences.');
+      return _appSecret!;
+    }
     //debugPrint('[DandanplayService] getAppSecret: No cached appSecret. Fetching from servers...');
 
     // 从服务器列表获取 appSecret
@@ -246,10 +256,11 @@ class DandanplayService {
         ).timeout(const Duration(seconds: 5));
 
         // 强制打印服务器返回的原始内容以供调试
-        print('[NipaPlay AppSecret Response from $server] StatusCode: ${response.statusCode}, Body: ${response.body}');
+        print(
+            '[NipaPlay AppSecret Response from $server] StatusCode: ${response.statusCode}, Body: ${response.body}');
 
         ////debugPrint('服务器响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
-        
+
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
           ////debugPrint('解析的响应数据: $data');
@@ -268,11 +279,12 @@ class DandanplayService {
         lastException = TimeoutException('从 $server 获取appSecret超时');
       } catch (e) {
         // 打印其他所有网络错误
-        print('[NipaPlay AppSecret Error from $server] Exception: ${e.toString()}');
+        print(
+            '[NipaPlay AppSecret Error from $server] Exception: ${e.toString()}');
         lastException = e as Exception;
       }
     }
-    
+
     //debugPrint('[DandanplayService] getAppSecret: Finished attempting all servers.');
     ////debugPrint('所有服务器均不可用，最后的错误: ${lastException?.toString()}');
     throw lastException ?? Exception('获取应用密钥失败，请检查网络连接');
@@ -287,7 +299,7 @@ class DandanplayService {
       }
       return c;
     }).join('');
-    
+
     String f;
     if (b.length >= 5) {
       final g = b[0];
@@ -295,14 +307,15 @@ class DandanplayService {
     } else {
       f = b;
     }
-    
+
     String h = f.split('').map((i) {
-      if (i.codeUnitAt(0) >= '0'.codeUnitAt(0) && i.codeUnitAt(0) <= '9'.codeUnitAt(0)) {
+      if (i.codeUnitAt(0) >= '0'.codeUnitAt(0) &&
+          i.codeUnitAt(0) <= '9'.codeUnitAt(0)) {
         return String.fromCharCode('0'.codeUnitAt(0) + (10 - int.parse(i)));
       }
       return i;
     }).join('');
-    
+
     return h.split('').map((j) {
       if (j.toLowerCase() != j.toUpperCase()) {
         return j == j.toLowerCase() ? j.toUpperCase() : j.toLowerCase();
@@ -311,13 +324,15 @@ class DandanplayService {
     }).join('');
   }
 
-  static String generateSignature(String appId, int timestamp, String apiPath, String appSecret) {
+  static String generateSignature(
+      String appId, int timestamp, String apiPath, String appSecret) {
     final signatureString = '$appId$timestamp$apiPath$appSecret';
     final hash = sha256.convert(utf8.encode(signatureString));
     return base64.encode(hash.bytes);
   }
 
-  static Future<Map<String, dynamic>> login(String username, String password) async {
+  static Future<Map<String, dynamic>> login(
+      String username, String password) async {
     try {
       final appSecret = await getAppSecret();
       final now = DateTime.now();
@@ -327,13 +342,14 @@ class DandanplayService {
       final hash = md5.convert(utf8.encode(hashString)).toString();
 
       final response = await http.post(
-        Uri.parse('${await _getApiBaseUrl()}/api/v2/login'),
+        Uri.parse('${await getApiBaseUrl()}/api/v2/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, '/api/v2/login', appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, '/api/v2/login', appSecret),
           'X-Timestamp': '$timestamp',
         },
         body: json.encode({
@@ -353,11 +369,18 @@ class DandanplayService {
           await saveLoginInfo(data['token'], username, screenName);
           return {'success': true, 'message': '登录成功'};
         } else {
-          return {'success': false, 'message': data['errorMessage'] ?? '登录失败，请检查用户名和密码'};
+          return {
+            'success': false,
+            'message': data['errorMessage'] ?? '登录失败，请检查用户名和密码'
+          };
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? response.body;
-        return {'success': false, 'message': '网络请求失败 (${response.statusCode}): $errorMessage'};
+        final errorMessage =
+            response.headers['x-error-message'] ?? response.body;
+        return {
+          'success': false,
+          'message': '网络请求失败 (${response.statusCode}): $errorMessage'
+        };
       }
     } catch (e) {
       return {'success': false, 'message': '登录失败: ${e.toString()}'};
@@ -373,66 +396,72 @@ class DandanplayService {
   }) async {
     final logService = DebugLogService();
     logService.startCollecting();
-    
+
     try {
       print('[弹弹play服务] 注册参数详情:');
       print('用户名: $username');
       print('邮箱: $email');
       print('昵称: $screenName');
-      
+
       // 调试：打印当前的应用ID
       //print('[弹弹play服务] 当前应用ID: $appId');
-      
+
       //logService.addLog('[弹弹play服务] 开始注册流程', level: 'INFO', tag: 'Register');
       //logService.addLog('[弹弹play服务] 用户名: $username, 邮箱: $email, 昵称: $screenName', level: 'INFO', tag: 'Register');
-      
+
       // 验证参数（保持不变）
       if (username.length < 5 || username.length > 20) {
-        logService.addError('[弹弹play服务] 用户名长度不符合要求: ${username.length}', tag: 'Register');
+        logService.addError('[弹弹play服务] 用户名长度不符合要求: ${username.length}',
+            tag: 'Register');
         return {'success': false, 'message': '用户名长度必须在5-20位之间'};
       }
-      
+
       if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9]*$').hasMatch(username)) {
-        logService.addError('[弹弹play服务] 用户名格式不符合要求: $username', tag: 'Register');
+        logService.addError('[弹弹play服务] 用户名格式不符合要求: $username',
+            tag: 'Register');
         return {'success': false, 'message': '用户名只能包含英文或数字，且首位不能为数字'};
       }
-      
+
       if (password.length < 5 || password.length > 20) {
-        logService.addError('[弹弹play服务] 密码长度不符合要求: ${password.length}', tag: 'Register');
+        logService.addError('[弹弹play服务] 密码长度不符合要求: ${password.length}',
+            tag: 'Register');
         return {'success': false, 'message': '密码长度必须在5-20位之间'};
       }
-      
+
       if (email.isEmpty || email.length > 50) {
-        logService.addError('[弹弹play服务] 邮箱长度不符合要求: ${email.length}', tag: 'Register');
+        logService.addError('[弹弹play服务] 邮箱长度不符合要求: ${email.length}',
+            tag: 'Register');
         return {'success': false, 'message': '请输入有效的邮箱地址'};
       }
-      
+
       if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
         logService.addError('[弹弹play服务] 邮箱格式不正确: $email', tag: 'Register');
         return {'success': false, 'message': '请输入有效的邮箱格式'};
       }
-      
+
       if (screenName.isEmpty || screenName.length > 50) {
-        logService.addError('[弹弹play服务] 昵称长度不符合要求: ${screenName.length}', tag: 'Register');
+        logService.addError('[弹弹play服务] 昵称长度不符合要求: ${screenName.length}',
+            tag: 'Register');
         return {'success': false, 'message': '昵称不能为空且长度不能超过50个字符'};
       }
 
       //logService.addLog('[弹弹play服务] 参数验证通过，开始获取AppSecret', level: 'INFO', tag: 'Register');
-      
+
       final appSecret = await getAppSecret();
-      
+
       // 调试：打印获取的AppSecret
       //print('[弹弹play服务] 获取的AppSecret: ${appSecret.substring(0, 8)}...');
       //logService.addLog('[弹弹play服务] AppSecret获取成功', level: 'INFO', tag: 'Register');
-      
+
       final now = DateTime.now();
       final utcNow = now.toUtc();
       final timestamp = (utcNow.millisecondsSinceEpoch / 1000).round();
-      
+
       // 计算hash：appId + password + unixTimestamp + userName + email + screenName + AppSecret
-      final hashString = '$appId$email$password$screenName$timestamp$username$appSecret';
+      final hashString =
+          '$appId$email$password$screenName$timestamp$username$appSecret';
       final hash = md5.convert(utf8.encode(hashString)).toString();
-      
+
       //logService.addLog('[弹弹play服务] Hash计算完成: ${hash.substring(0, 8)}...', level: 'INFO', tag: 'Register');
       //ogService.addLog('[弹弹play服务] 时间戳: $timestamp', level: 'INFO', tag: 'Register');
 
@@ -446,9 +475,10 @@ class DandanplayService {
         'hash': hash,
       };
       // 调试：打印签名生成细节
-      final signature = generateSignature(appId, timestamp, '/api/v2/register', appSecret);
+      final signature =
+          generateSignature(appId, timestamp, '/api/v2/register', appSecret);
       final response = await http.post(
-        Uri.parse('${await _getApiBaseUrl()}/api/v2/register'),
+        Uri.parse('${await getApiBaseUrl()}/api/v2/register'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -462,7 +492,7 @@ class DandanplayService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         //logService.addLog('[弹弹play服务] 注册响应体: ${json.encode(data)}', level: 'INFO', tag: 'Register');
-        
+
         if (data['success'] == true) {
           //logService.addLog('[弹弹play服务] 注册成功', level: 'INFO', tag: 'Register');
           // 注册成功，如果响应中包含token，则自动登录
@@ -480,9 +510,15 @@ class DandanplayService {
           return {'success': false, 'message': errorMsg};
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? response.body;
-        logService.addError('[弹弹play服务] 注册请求失败: HTTP ${response.statusCode}, $errorMessage', tag: 'Register');
-        return {'success': false, 'message': '网络请求失败 (${response.statusCode}): $errorMessage'};
+        final errorMessage =
+            response.headers['x-error-message'] ?? response.body;
+        logService.addError(
+            '[弹弹play服务] 注册请求失败: HTTP ${response.statusCode}, $errorMessage',
+            tag: 'Register');
+        return {
+          'success': false,
+          'message': '网络请求失败 (${response.statusCode}): $errorMessage'
+        };
       }
     } catch (e, stackTrace) {
       logService.addError('[弹弹play服务] 注册时发生异常: $e', tag: 'Register');
@@ -491,24 +527,27 @@ class DandanplayService {
     }
   }
 
-  static Future<void> updateEpisodeWatchStatus(int episodeId, bool isWatched) async {
+  static Future<void> updateEpisodeWatchStatus(
+      int episodeId, bool isWatched) async {
     if (!_isLoggedIn || _token == null) {
       throw Exception('需要登录才能更新观看状态');
     }
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/playhistory';
-      
+
       final response = await http.post(
-        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -520,7 +559,7 @@ class DandanplayService {
       );
 
       debugPrint('[弹弹play服务] 更新观看状态响应: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
@@ -544,11 +583,13 @@ class DandanplayService {
     }
 
     try {
-      final bool isRemotePath = videoPath.startsWith('http://') || videoPath.startsWith('https://');
+      final bool isRemotePath =
+          videoPath.startsWith('http://') || videoPath.startsWith('https://');
 
       if (isRemotePath) {
         try {
-          final remoteHead = await RemoteMediaFetcher.fetchHead(Uri.parse(videoPath));
+          final remoteHead =
+              await RemoteMediaFetcher.fetchHead(Uri.parse(videoPath));
           return _getVideoInfoWithMetadata(
             fileName: remoteHead.fileName,
             fileHash: remoteHead.hash,
@@ -608,12 +649,13 @@ class DandanplayService {
     }
 
     final appSecret = await getAppSecret();
-    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
 
     final prefs = await SharedPreferences.getInstance();
     final isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
 
-    final baseUrl = await _getApiBaseUrl();
+    final baseUrl = await getApiBaseUrl();
     final apiUrl = '$baseUrl/api/v2/match';
 
     final headers = {
@@ -621,7 +663,8 @@ class DandanplayService {
       'Accept': 'application/json',
       'User-Agent': userAgent,
       'X-AppId': appId,
-      'X-Signature': generateSignature(appId, timestamp, '/api/v2/match', appSecret),
+      'X-Signature':
+          generateSignature(appId, timestamp, '/api/v2/match', appSecret),
       'X-Timestamp': '$timestamp',
       if (isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
     };
@@ -675,16 +718,19 @@ class DandanplayService {
   static Future<String> _d(File file) async {
     if (kIsWeb) return '';
     const int maxBytes = 16 * 1024 * 1024; // 16MB
-    final bytes = await file.openRead(0, maxBytes).expand((chunk) => chunk).toList();
+    final bytes =
+        await file.openRead(0, maxBytes).expand((chunk) => chunk).toList();
     return md5.convert(bytes).toString();
   }
 
-  static Future<Map<String, dynamic>> getDanmaku(String episodeId, int animeId) async {
+  static Future<Map<String, dynamic>> getDanmaku(
+      String episodeId, int animeId) async {
     try {
       debugPrint('开始获取弹幕: episodeId=$episodeId, animeId=$animeId');
 
       // 先检查缓存
-      final cachedDanmaku = await DanmakuCacheManager.getDanmakuFromCache(episodeId);
+      final cachedDanmaku =
+          await DanmakuCacheManager.getDanmakuFromCache(episodeId);
       if (cachedDanmaku != null) {
         ////debugPrint('从缓存加载弹幕成功: $episodeId, 数量: ${cachedDanmaku.length}');
         return {
@@ -697,7 +743,7 @@ class DandanplayService {
       ////debugPrint('缓存未命中，从网络加载弹幕');
 
       // 获取当前配置的服务器
-      final currentServer = await _getApiBaseUrl();
+      final currentServer = await getApiBaseUrl();
       final isPrimaryServer = currentServer == NetworkSettings.primaryServer;
       final isBackupServer = currentServer == NetworkSettings.backupServer;
 
@@ -719,7 +765,8 @@ class DandanplayService {
         if (isBackupServer) {
           debugPrint('尝试回退到主服务器获取弹幕...');
           try {
-            return await _fetchDanmakuFromServer(episodeId, animeId, NetworkSettings.primaryServer);
+            return await _fetchDanmakuFromServer(
+                episodeId, animeId, NetworkSettings.primaryServer);
           } catch (fallbackError) {
             debugPrint('从主服务器获取弹幕也失败: $fallbackError');
             debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
@@ -750,7 +797,8 @@ class DandanplayService {
   static Future<Map<String, dynamic>> _fetchDanmakuFromServer(
       String episodeId, int animeId, String serverUrl) async {
     final appSecret = await getAppSecret();
-    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
     final apiPath = '/api/v2/comment/$episodeId';
 
     final chConvert = await _getDanmakuChConvertFlag();
@@ -818,7 +866,11 @@ class DandanplayService {
         return {
           'time': time,
           'content': content,
-          'type': mode == 1 ? 'scroll' : mode == 5 ? 'top' : 'bottom',
+          'type': mode == 1
+              ? 'scroll'
+              : mode == 5
+                  ? 'top'
+                  : 'bottom',
           'color': colorValue,
           'isMe': false,
         };
@@ -827,7 +879,8 @@ class DandanplayService {
       debugPrint('从网络加载弹幕成功: $episodeId, 格式化后数量: ${formattedComments.length}');
 
       // 异步保存到缓存
-      DanmakuCacheManager.saveDanmakuToCache(episodeId, animeId, formattedComments)
+      DanmakuCacheManager.saveDanmakuToCache(
+              episodeId, animeId, formattedComments)
           .then((_) => debugPrint('弹幕已保存到缓存: $episodeId'));
 
       return {
@@ -847,11 +900,13 @@ class DandanplayService {
     int animeId,
   ) async {
     final appSecret = await getAppSecret();
-    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
     final apiPath = '/api/v2/comment/$episodeId';
     final chConvert = await _getDanmakuChConvertFlag();
     final proxyPath = '$apiPath?withRelated=true&chConvert=$chConvert';
-    final proxyUrl = '$_danmakuProxyEndpoint?path=${Uri.encodeComponent(proxyPath)}';
+    final proxyUrl =
+        '$_danmakuProxyEndpoint?path=${Uri.encodeComponent(proxyPath)}';
 
     debugPrint('发送弹幕代理请求到: $proxyUrl');
 
@@ -874,57 +929,61 @@ class DandanplayService {
   static void _ensureVideoInfoTitles(Map<String, dynamic> videoInfo) {
     if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
       final match = videoInfo['matches'][0];
-      
+
       // 确保animeTitle字段存在
-      if (videoInfo['animeTitle'] == null || videoInfo['animeTitle'].toString().isEmpty) {
+      if (videoInfo['animeTitle'] == null ||
+          videoInfo['animeTitle'].toString().isEmpty) {
         videoInfo['animeTitle'] = match['animeTitle'];
       }
-      
+
       // 确保episodeTitle字段存在
-      if (videoInfo['episodeTitle'] == null || videoInfo['episodeTitle'].toString().isEmpty) {
+      if (videoInfo['episodeTitle'] == null ||
+          videoInfo['episodeTitle'].toString().isEmpty) {
         // 尝试从match中获取
         String? episodeTitle = match['episodeTitle'] as String?;
-        
+
         // 如果仍然没有集数标题，尝试从episodeId生成
         if (episodeTitle == null || episodeTitle.isEmpty) {
           final episodeId = match['episodeId'];
           if (episodeId != null) {
             final episodeIdStr = episodeId.toString();
-            
+
             // 从episodeId中提取集数信息
             if (episodeIdStr.length >= 8) {
               final episodeNumber = int.tryParse(episodeIdStr.substring(6, 8));
               if (episodeNumber != null) {
                 episodeTitle = '第$episodeNumber话';
-                
+
                 // 如果match中有episodeTitle，添加到生成的标题中
-                if (match['episodeTitle'] != null && match['episodeTitle'].toString().isNotEmpty) {
+                if (match['episodeTitle'] != null &&
+                    match['episodeTitle'].toString().isNotEmpty) {
                   episodeTitle += ' ${match['episodeTitle']}';
                 }
               }
             }
           }
         }
-        
+
         videoInfo['episodeTitle'] = episodeTitle;
       }
-      
+
       ////debugPrint('确保标题完整性: 动画=${videoInfo['animeTitle']}, 集数=${videoInfo['episodeTitle']}');
     }
   }
 
-
   // 获取用户播放历史
-  static Future<Map<String, dynamic>> getUserPlayHistory({DateTime? fromDate, DateTime? toDate}) async {
+  static Future<Map<String, dynamic>> getUserPlayHistory(
+      {DateTime? fromDate, DateTime? toDate}) async {
     if (!_isLoggedIn || _token == null) {
       throw Exception('需要登录才能获取播放历史');
     }
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/playhistory';
-      
+
       // 构建查询参数
       final queryParams = <String, String>{};
       if (fromDate != null) {
@@ -933,26 +992,28 @@ class DandanplayService {
       if (toDate != null) {
         queryParams['toDate'] = toDate.toUtc().toIso8601String();
       }
-      
-      final baseUrl = await _getApiBaseUrl();
-      final uri = Uri.parse('$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}');
-      
+
+      final baseUrl = await getApiBaseUrl();
+      final uri = Uri.parse(
+          '$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}');
+
       debugPrint('[弹弹play服务] 获取播放历史: $uri');
-      
+
       final response = await http.get(
         uri,
         headers: {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
       );
 
       debugPrint('[弹弹play服务] 播放历史响应: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
@@ -990,25 +1051,27 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/playhistory';
-      
+
       final requestBody = {
         'episodeIdList': episodeIdList,
         'addToFavorite': addToFavorite,
         'rating': rating,
       };
-      
+
       debugPrint('[弹弹play服务] 提交播放历史: $episodeIdList');
-      
+
       final response = await http.post(
-        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1016,7 +1079,7 @@ class DandanplayService {
       );
 
       debugPrint('[弹弹play服务] 提交播放历史响应: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
@@ -1039,9 +1102,10 @@ class DandanplayService {
   static Future<Map<String, dynamic>> getBangumiDetails(int bangumiId) async {
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/bangumi/$bangumiId';
-      
+
       final headers = {
         'Accept': 'application/json',
         'User-Agent': userAgent,
@@ -1049,21 +1113,21 @@ class DandanplayService {
         'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
         'X-Timestamp': '$timestamp',
       };
-      
+
       // 如果已登录，添加认证头
       if (_isLoggedIn && _token != null) {
         headers['Authorization'] = 'Bearer $_token';
       }
-      
+
       debugPrint('[弹弹play服务] 获取番剧详情: $bangumiId');
-      
+
       final response = await http.get(
-        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getApiBaseUrl()}$apiPath'),
         headers: headers,
       );
 
       debugPrint('[弹弹play服务] 番剧详情响应: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return data;
@@ -1078,9 +1142,10 @@ class DandanplayService {
   }
 
   // 获取用户对特定剧集的观看状态
-  static Future<Map<int, bool>> getEpisodesWatchStatus(List<int> episodeIds) async {
+  static Future<Map<int, bool>> getEpisodesWatchStatus(
+      List<int> episodeIds) async {
     final Map<int, bool> watchStatus = {};
-    
+
     // 如果未登录，返回空状态
     if (!_isLoggedIn || _token == null) {
       debugPrint('[弹弹play服务] 未登录，无法获取观看状态');
@@ -1093,34 +1158,36 @@ class DandanplayService {
     try {
       // 获取用户播放历史
       final historyData = await getUserPlayHistory();
-      
-      if (historyData['success'] == true && historyData['playHistoryAnimes'] != null) {
+
+      if (historyData['success'] == true &&
+          historyData['playHistoryAnimes'] != null) {
         final List<dynamic> animes = historyData['playHistoryAnimes'];
-        
+
         // 遍历所有动画的观看历史
         for (final anime in animes) {
           if (anime['episodes'] != null) {
             final List<dynamic> episodes = anime['episodes'];
-            
+
             // 检查每个剧集的观看状态
             for (final episode in episodes) {
               final episodeId = episode['episodeId'] as int?;
               final lastWatched = episode['lastWatched'] as String?;
-              
+
               if (episodeId != null && episodeIds.contains(episodeId)) {
                 // 如果有lastWatched时间，说明已看过
-                watchStatus[episodeId] = lastWatched != null && lastWatched.isNotEmpty;
+                watchStatus[episodeId] =
+                    lastWatched != null && lastWatched.isNotEmpty;
               }
             }
           }
         }
       }
-      
+
       // 确保所有请求的episodeId都有状态
       for (final episodeId in episodeIds) {
         watchStatus.putIfAbsent(episodeId, () => false);
       }
-      
+
       debugPrint('[弹弹play服务] 获取观看状态完成: ${watchStatus.length}个剧集');
       return watchStatus;
     } catch (e) {
@@ -1134,40 +1201,44 @@ class DandanplayService {
   }
 
   // 获取用户收藏列表
-  static Future<Map<String, dynamic>> getUserFavorites({bool onlyOnAir = false}) async {
+  static Future<Map<String, dynamic>> getUserFavorites(
+      {bool onlyOnAir = false}) async {
     if (!_isLoggedIn || _token == null) {
       throw Exception('需要登录才能获取收藏列表');
     }
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/favorite';
-      
+
       final queryParams = <String, String>{};
       if (onlyOnAir) {
         queryParams['onlyOnAir'] = 'true';
       }
-      
-      final baseUrl = await _getApiBaseUrl();
-      final uri = Uri.parse('$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}');
-      
+
+      final baseUrl = await getApiBaseUrl();
+      final uri = Uri.parse(
+          '$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}');
+
       debugPrint('[弹弹play服务] 获取用户收藏列表: $uri');
-      
+
       final response = await http.get(
         uri,
         headers: {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
       );
 
       debugPrint('[弹弹play服务] 收藏列表响应: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
@@ -1198,26 +1269,28 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/favorite';
-      
+
       final requestBody = {
         'animeId': animeId,
         if (favoriteStatus != null) 'favoriteStatus': favoriteStatus,
         'rating': rating,
         if (comment != null) 'comment': comment,
       };
-      
+
       debugPrint('[弹弹play服务] 添加收藏: animeId=$animeId, status=$favoriteStatus');
-      
+
       final response = await http.post(
-        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1225,7 +1298,7 @@ class DandanplayService {
       );
 
       debugPrint('[弹弹play服务] 添加收藏响应: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
@@ -1252,25 +1325,27 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/favorite/$animeId';
-      
+
       debugPrint('[弹弹play服务] 取消收藏: animeId=$animeId');
-      
+
       final response = await http.delete(
-        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getApiBaseUrl()}$apiPath'),
         headers: {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
       );
 
       debugPrint('[弹弹play服务] 取消收藏响应: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
@@ -1297,10 +1372,11 @@ class DandanplayService {
 
     try {
       final favoritesData = await getUserFavorites();
-      
-      if (favoritesData['success'] == true && favoritesData['favorites'] != null) {
+
+      if (favoritesData['success'] == true &&
+          favoritesData['favorites'] != null) {
         final List<dynamic> favorites = favoritesData['favorites'];
-        
+
         // 检查列表中是否包含指定的animeId
         for (final favorite in favorites) {
           if (favorite['animeId'] == animeId) {
@@ -1308,7 +1384,7 @@ class DandanplayService {
           }
         }
       }
-      
+
       return false;
     } catch (e) {
       debugPrint('[弹弹play服务] 检查收藏状态失败: $e');
@@ -1324,12 +1400,13 @@ class DandanplayService {
 
     try {
       final bangumiDetails = await getBangumiDetails(animeId);
-      
-      if (bangumiDetails['success'] == true && bangumiDetails['bangumi'] != null) {
+
+      if (bangumiDetails['success'] == true &&
+          bangumiDetails['bangumi'] != null) {
         final bangumi = bangumiDetails['bangumi'];
         return bangumi['userRating'] as int? ?? 0;
       }
-      
+
       return 0;
     } catch (e) {
       debugPrint('[弹弹play服务] 获取用户评分失败: $e');
@@ -1377,26 +1454,28 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/comment/$episodeId';
-      
+
       final requestBody = {
         'time': time,
         'mode': mode,
         'color': color,
         'comment': comment,
       };
-      
+
       debugPrint('[弹弹play服务] 发送弹幕到: $episodeId, 内容: $comment');
-      
+
       final response = await http.post(
-        Uri.parse('${await _getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1404,26 +1483,30 @@ class DandanplayService {
       );
 
       debugPrint('[弹弹play服务] 发送弹幕响应: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           debugPrint('[弹弹play服务] 弹幕发送成功: cid=${data['cid']}');
-          
+
           // 将发送的弹幕格式化为与getDanmaku一致的格式
           final r = (color >> 16) & 0xFF;
           final g = (color >> 8) & 0xFF;
           final b = color & 0xFF;
           final colorValue = 'rgb($r,$g,$b)';
-          
+
           final formattedDanmaku = {
             'time': time,
             'content': comment,
-            'type': mode == 1 ? 'scroll' : mode == 5 ? 'top' : 'bottom',
+            'type': mode == 1
+                ? 'scroll'
+                : mode == 5
+                    ? 'top'
+                    : 'bottom',
             'color': colorValue,
             'isMe': true,
           };
-          
+
           return {'success': true, 'danmaku': formattedDanmaku};
         } else {
           throw Exception(data['errorMessage'] ?? '发送弹幕失败');
@@ -1450,16 +1533,18 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 获取WebToken: business=$business');
 
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/oauth/webToken';
 
       final response = await http.get(
-        Uri.parse('${await _getApiBaseUrl()}$apiPath?business=$business'),
+        Uri.parse('${await getApiBaseUrl()}$apiPath?business=$business'),
         headers: {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
@@ -1474,7 +1559,8 @@ class DandanplayService {
         debugPrint('[弹弹play服务] WebToken获取成功');
         return data;
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '获取WebToken失败';
+        final errorMessage =
+            response.headers['x-error-message'] ?? '获取WebToken失败';
         throw Exception('获取WebToken失败: $errorMessage');
       }
     } catch (e) {
@@ -1506,7 +1592,8 @@ class DandanplayService {
       }
 
       // 2. 构建注销页面URL
-      final deleteAccountUrl = '${await _getApiBaseUrl()}/api/v2/oauth/deleteAccount?webToken=$webToken';
+      final deleteAccountUrl =
+          '${await getApiBaseUrl()}/api/v2/oauth/deleteAccount?webToken=$webToken';
 
       debugPrint('[弹弹play服务] 账号注销URL: $deleteAccountUrl');
 

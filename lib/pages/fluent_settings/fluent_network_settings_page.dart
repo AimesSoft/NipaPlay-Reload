@@ -6,17 +6,27 @@ class FluentNetworkSettingsPage extends StatefulWidget {
   const FluentNetworkSettingsPage({super.key});
 
   @override
-  State<FluentNetworkSettingsPage> createState() => _FluentNetworkSettingsPageState();
+  State<FluentNetworkSettingsPage> createState() =>
+      _FluentNetworkSettingsPageState();
 }
 
 class _FluentNetworkSettingsPageState extends State<FluentNetworkSettingsPage> {
   String _currentServer = '';
   bool _isLoading = true;
+  late TextEditingController _customServerController;
+  bool _isSavingCustom = false;
 
   @override
   void initState() {
     super.initState();
+    _customServerController = TextEditingController();
     _loadCurrentServer();
+  }
+
+  @override
+  void dispose() {
+    _customServerController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCurrentServer() async {
@@ -25,6 +35,11 @@ class _FluentNetworkSettingsPageState extends State<FluentNetworkSettingsPage> {
     setState(() {
       _currentServer = server;
       _isLoading = false;
+      if (NetworkSettings.isCustomServer(server)) {
+        _customServerController.text = server;
+      } else {
+        _customServerController.clear();
+      }
     });
   }
 
@@ -33,6 +48,11 @@ class _FluentNetworkSettingsPageState extends State<FluentNetworkSettingsPage> {
     if (!mounted) return;
     setState(() {
       _currentServer = serverUrl;
+      if (NetworkSettings.isCustomServer(serverUrl)) {
+        _customServerController.text = serverUrl;
+      } else {
+        _customServerController.clear();
+      }
     });
 
     final displayName = _getServerDisplayName(serverUrl);
@@ -54,6 +74,36 @@ class _FluentNetworkSettingsPageState extends State<FluentNetworkSettingsPage> {
     }
   }
 
+  Future<void> _saveCustomServer() async {
+    final input = _customServerController.text.trim();
+    if (input.isEmpty) {
+      FluentInfoBar.show(context, '请输入服务器地址',
+          severity: InfoBarSeverity.warning);
+      return;
+    }
+    if (!NetworkSettings.isValidServerUrl(input)) {
+      FluentInfoBar.show(context, '服务器地址格式不正确，请以 http/https 开头',
+          severity: InfoBarSeverity.error);
+      return;
+    }
+
+    setState(() {
+      _isSavingCustom = true;
+    });
+
+    await NetworkSettings.setDandanplayServer(input);
+    final server = await NetworkSettings.getDandanplayServer();
+    if (!mounted) return;
+
+    setState(() {
+      _currentServer = server;
+      _isSavingCustom = false;
+    });
+
+    FluentInfoBar.show(context, '已切换到自定义服务器',
+        severity: InfoBarSeverity.success);
+  }
+
   List<ComboBoxItem<String>> _buildServerItems() {
     final items = [
       ComboBoxItem<String>(
@@ -72,7 +122,7 @@ class _FluentNetworkSettingsPageState extends State<FluentNetworkSettingsPage> {
       items.add(
         ComboBoxItem<String>(
           value: _currentServer,
-          child: Text(_currentServer),
+          child: Text('自定义：$_currentServer'),
         ),
       );
     }
@@ -125,6 +175,48 @@ class _FluentNetworkSettingsPageState extends State<FluentNetworkSettingsPage> {
                             _changeServer(value);
                           }
                         },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '自定义弹幕服务器',
+                      style: FluentTheme.of(context).typography.subtitle,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '输入兼容弹弹play API 的服务器地址，例如 https://example.com。',
+                      style: FluentTheme.of(context).typography.caption,
+                    ),
+                    const SizedBox(height: 12),
+                    InfoLabel(
+                      label: '服务器地址',
+                      child: TextBox(
+                        controller: _customServerController,
+                        placeholder: 'https://your-danmaku-server.com',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton(
+                        onPressed: _isSavingCustom ? null : _saveCustomServer,
+                        child: _isSavingCustom
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: ProgressRing(strokeWidth: 2),
+                              )
+                            : const Text('使用该服务器'),
                       ),
                     ),
                   ],

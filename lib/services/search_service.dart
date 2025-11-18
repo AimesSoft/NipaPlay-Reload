@@ -8,7 +8,6 @@ import './dandanplay_service.dart';
 
 class SearchService {
   static final SearchService instance = SearchService._();
-  static const String _baseUrl = 'https://api.dandanplay.net/api/v2';
   static const String _configCacheKey = 'search_config_cache';
   static const Duration _configCacheDuration = Duration(days: 1);
 
@@ -27,7 +26,8 @@ class SearchService {
           final data = json.decode(utf8.decode(response.bodyBytes));
           return SearchConfig.fromJson(data);
         } else {
-          throw Exception('Failed to load search config from API: ${response.statusCode}');
+          throw Exception(
+              'Failed to load search config from API: ${response.statusCode}');
         }
       } catch (e) {
         throw Exception('Failed to connect to the search config API: $e');
@@ -62,7 +62,8 @@ class SearchService {
 
       // 从网络获取
       try {
-        final url = '$_baseUrl/search/adv/config?source=$source';
+        final baseUrl = await DandanplayService.getApiBaseUrl();
+        final url = '$baseUrl/api/v2/search/adv/config?source=$source';
         final response = await _makeAuthenticatedRequest(url);
 
         if (response.statusCode == 200) {
@@ -107,7 +108,8 @@ class SearchService {
           final data = json.decode(utf8.decode(response.bodyBytes));
           return SearchResult.fromTagSearchJson(data);
         } else {
-          throw Exception('Failed to search by tags from API: ${response.statusCode}');
+          throw Exception(
+              'Failed to search by tags from API: ${response.statusCode}');
         }
       } catch (e) {
         throw Exception('Failed to connect to the search by tags API: $e');
@@ -129,7 +131,9 @@ class SearchService {
 
       try {
         final tagsString = tags.join(',');
-        final url = '$_baseUrl/search/tag?tags=${Uri.encodeComponent(tagsString)}';
+        final baseUrl = await DandanplayService.getApiBaseUrl();
+        final url =
+            '$baseUrl/api/v2/search/tag?tags=${Uri.encodeComponent(tagsString)}';
         final response = await _makeAuthenticatedRequest(url);
 
         if (response.statusCode == 200) {
@@ -185,7 +189,8 @@ class SearchService {
           final data = json.decode(utf8.decode(response.bodyBytes));
           return SearchResult.fromAdvancedSearchJson(data);
         } else {
-          throw Exception('Failed to perform advanced search from API: ${response.statusCode}');
+          throw Exception(
+              'Failed to perform advanced search from API: ${response.statusCode}');
         }
       } catch (e) {
         throw Exception('Failed to connect to the advanced search API: $e');
@@ -223,7 +228,9 @@ class SearchService {
           queryParams['restricted'] = restricted.toString();
         }
 
-        final uri = Uri.parse('$_baseUrl/search/adv').replace(queryParameters: queryParams);
+        final baseUrl = await DandanplayService.getApiBaseUrl();
+        final uri = Uri.parse('$baseUrl/api/v2/search/adv')
+            .replace(queryParameters: queryParams);
         final response = await _makeAuthenticatedRequest(uri.toString());
 
         if (response.statusCode == 200) {
@@ -250,11 +257,13 @@ class SearchService {
     try {
       const String appId = DandanplayService.appId;
       final String appSecret = await DandanplayService.getAppSecret();
-      final int timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final int timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
 
       final Uri parsedUri = Uri.parse(url);
       final String apiPath = parsedUri.path;
-      final String signature = DandanplayService.generateSignature(appId, timestamp, apiPath, appSecret);
+      final String signature = DandanplayService.generateSignature(
+          appId, timestamp, apiPath, appSecret);
 
       final headers = {
         'Accept': 'application/json',
@@ -277,10 +286,12 @@ class SearchService {
       debugPrint('[搜索服务] API路径: $apiPath');
       //debugPrint('[搜索服务] 请求头: $headers');
 
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse(url),
         headers: headers,
-      ).timeout(
+      )
+          .timeout(
         const Duration(seconds: 15),
         onTimeout: () {
           throw TimeoutException('请求超时');
@@ -308,4 +319,4 @@ class SearchService {
     await prefs.remove(_configCacheKey);
     debugPrint('[搜索服务] 缓存已清除');
   }
-} 
+}
