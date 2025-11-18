@@ -10,10 +10,12 @@ import 'package:file_selector/file_selector.dart';
 
 class DanmakuTracksMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const DanmakuTracksMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -220,6 +222,7 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
         return BaseSettingsMenu(
           title: '弹幕轨道',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

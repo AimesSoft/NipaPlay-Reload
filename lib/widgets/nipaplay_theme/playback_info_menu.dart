@@ -9,10 +9,12 @@ import 'package:nipaplay/services/emby_service.dart';
 
 class PlaybackInfoMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const PlaybackInfoMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -78,6 +80,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
         return BaseSettingsMenu(
           title: '播放信息',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Container(
             padding: const EdgeInsets.all(16),
             child: Column(

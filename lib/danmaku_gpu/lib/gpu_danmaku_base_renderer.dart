@@ -24,7 +24,7 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
   final List<GPUDanmakuItem> danmakuItems = [];
 
   /// 字体图集（使用全局管理器）
-  late final DynamicFontAtlas _fontAtlas;
+  late DynamicFontAtlas _fontAtlas;
 
   /// 文本渲染器
   late GpuDanmakuTextRenderer textRenderer;
@@ -115,11 +115,17 @@ abstract class GPUDanmakuBaseRenderer extends CustomPainter {
   /// 更新显示选项
   void updateOptions({GPUDanmakuConfig? newConfig, double? newOpacity}) {
     if (newConfig != null) {
+      final fontSizeChanged = _fontAtlas.fontSize != newConfig.fontSize;
       config = newConfig;
-      // Re-initialize if font size changes
-      if (_fontAtlas.fontSize != newConfig.fontSize) {
-        _initialize();
+
+      // 字号变更时重新获取对应的字体图集，避免旧图集尺寸不匹配
+      if (fontSizeChanged) {
+        _fontAtlas = FontAtlasManager.getInstance(
+          fontSize: newConfig.fontSize,
+          onAtlasUpdated: _onNeedRepaint,
+        );
       }
+
       textRenderer = GpuDanmakuTextRenderer(fontAtlas: _fontAtlas, config: newConfig);
     }
     if (newOpacity != null) {

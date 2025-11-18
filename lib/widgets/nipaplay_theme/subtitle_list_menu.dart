@@ -9,10 +9,12 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 
 class SubtitleListMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const SubtitleListMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -464,6 +466,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
           title:
               '字幕列表 ${_allSubtitleEntries.isNotEmpty ? "(${_allSubtitleEntries.length}条)" : ""}',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: _isLoading
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),

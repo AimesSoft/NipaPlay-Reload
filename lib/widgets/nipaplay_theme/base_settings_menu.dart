@@ -12,6 +12,7 @@ class BaseSettingsMenu extends StatelessWidget {
   final Widget? extraButton;
   final double width;
   final double rightOffset;
+  final ValueChanged<bool>? onHoverChanged;
 
   const BaseSettingsMenu({
     super.key,
@@ -21,6 +22,7 @@ class BaseSettingsMenu extends StatelessWidget {
     this.extraButton,
     this.width = 300,
     this.rightOffset = 240,
+    this.onHoverChanged,
   });
 
   @override
@@ -54,8 +56,14 @@ class BaseSettingsMenu extends StatelessWidget {
                           : MediaQuery.of(context).size.height - 200,
                     ),
                     child: MouseRegion(
-                      onEnter: (_) => videoState.setControlsHovered(true),
-                      onExit: (_) => videoState.setControlsHovered(false),
+                      onEnter: (_) {
+                        videoState.setControlsHovered(true);
+                        onHoverChanged?.call(true);
+                      },
+                      onExit: (_) {
+                        videoState.setControlsHovered(false);
+                        onHoverChanged?.call(false);
+                      },
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(15),
                         child: BackdropFilter(

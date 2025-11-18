@@ -9,11 +9,13 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 class DanmakuListMenu extends StatefulWidget {
   final VoidCallback onClose;
   final VideoPlayerState videoState;
+  final ValueChanged<bool>? onHoverChanged;
 
   const DanmakuListMenu({
     super.key,
     required this.onClose,
     required this.videoState,
+    this.onHoverChanged,
   });
 
   @override
@@ -363,6 +365,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
         return BaseSettingsMenu(
           title: '弹幕列表 ${_allSortedDanmakus.isNotEmpty ? "(${_allSortedDanmakus.length}条)" : ""}',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

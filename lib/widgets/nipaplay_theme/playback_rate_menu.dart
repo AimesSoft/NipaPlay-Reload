@@ -6,10 +6,12 @@ import 'base_settings_menu.dart';
 
 class PlaybackRateMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const PlaybackRateMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -29,6 +31,7 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
         return BaseSettingsMenu(
           title: '倍速设置',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

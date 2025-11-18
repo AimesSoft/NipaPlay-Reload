@@ -5,10 +5,12 @@ import 'base_settings_menu.dart';
 
 class AudioTracksMenu extends StatelessWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const AudioTracksMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   String _getLanguageName(String language) {
@@ -62,6 +64,7 @@ class AudioTracksMenu extends StatelessWidget {
         return BaseSettingsMenu(
           title: '音频轨道',
           onClose: onClose,
+          onHoverChanged: onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

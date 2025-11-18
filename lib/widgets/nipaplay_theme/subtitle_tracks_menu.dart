@@ -15,10 +15,12 @@ import 'package:flutter/foundation.dart';
 
 class SubtitleTracksMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const SubtitleTracksMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -497,6 +499,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         return BaseSettingsMenu(
           title: '字幕轨道',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

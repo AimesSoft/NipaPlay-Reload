@@ -5,10 +5,12 @@ import 'base_settings_menu.dart';
 
 class SeekStepMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const SeekStepMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -45,6 +47,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
         return BaseSettingsMenu(
           title: '播放设置',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

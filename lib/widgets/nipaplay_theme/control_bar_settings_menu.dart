@@ -10,11 +10,13 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 class ControlBarSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
   final VideoPlayerState videoState;
+  final ValueChanged<bool>? onHoverChanged;
 
   const ControlBarSettingsMenu({
     super.key,
     required this.onClose,
     required this.videoState,
+    this.onHoverChanged,
   });
 
   @override
@@ -159,6 +161,7 @@ class _ControlBarSettingsMenuState extends State<ControlBarSettingsMenu> {
         return BaseSettingsMenu(
           title: '控件设置',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
