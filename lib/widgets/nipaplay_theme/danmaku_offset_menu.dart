@@ -6,10 +6,12 @@ import 'settings_hint_text.dart';
 
 class DanmakuOffsetMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const DanmakuOffsetMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -72,6 +74,7 @@ style: TextStyle(
         return BaseSettingsMenu(
           title: '弹幕偏移',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

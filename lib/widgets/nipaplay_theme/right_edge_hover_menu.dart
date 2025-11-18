@@ -159,6 +159,8 @@ class HoverSettingsMenuWrapper extends StatefulWidget {
 
 class _HoverSettingsMenuWrapperState extends State<HoverSettingsMenuWrapper> {
   bool _isMenuHovered = false;
+  bool _isMainMenuHovered = false;
+  bool _isSubMenuHovered = false;
   Timer? _hideTimer;
 
   @override
@@ -176,24 +178,44 @@ class _HoverSettingsMenuWrapperState extends State<HoverSettingsMenuWrapper> {
     });
   }
 
+  void _updateHoverState() {
+    final bool isHovered = _isMainMenuHovered || _isSubMenuHovered;
+
+    if (_isMenuHovered != isHovered) {
+      setState(() {
+        _isMenuHovered = isHovered;
+      });
+    } else {
+      _isMenuHovered = isHovered;
+    }
+
+    widget.onHover(isHovered);
+
+    if (isHovered) {
+      _hideTimer?.cancel();
+    } else {
+      _startHideTimer();
+    }
+  }
+
+  void _handleMainMenuHover(bool isHovered) {
+    _isMainMenuHovered = isHovered;
+    _updateHoverState();
+  }
+
+  void _handleSubMenuHover(bool isHovered) {
+    _isSubMenuHovered = isHovered;
+    _updateHoverState();
+  }
+
   @override
   Widget build(BuildContext context) {
     // 使用自定义的鼠标检测包装VideoSettingsMenu
     return _HoverDetectionWrapper(
-      onHover: (isHovered) {
-        setState(() {
-          _isMenuHovered = isHovered;
-        });
-        widget.onHover(isHovered);
-        
-        if (isHovered) {
-          _hideTimer?.cancel(); // 取消隐藏定时器
-        } else {
-          _startHideTimer(); // 开始隐藏倒计时
-        }
-      },
+      onHover: _handleMainMenuHover,
       child: VideoSettingsMenu(
         onClose: widget.onClose,
+        onHoverChanged: _handleSubMenuHover,
       ),
     );
   }

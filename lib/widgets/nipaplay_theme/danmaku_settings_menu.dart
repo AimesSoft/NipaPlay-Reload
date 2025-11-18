@@ -13,11 +13,13 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 class DanmakuSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
   final VideoPlayerState videoState;
+  final ValueChanged<bool>? onHoverChanged;
 
   const DanmakuSettingsMenu({
     super.key,
     required this.onClose,
     required this.videoState,
+    this.onHoverChanged,
   });
 
   @override
@@ -139,6 +141,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
         return BaseSettingsMenu(
           title: '弹幕设置',
           onClose: widget.onClose,
+          onHoverChanged: widget.onHoverChanged,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

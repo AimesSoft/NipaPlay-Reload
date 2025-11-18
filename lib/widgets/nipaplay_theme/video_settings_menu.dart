@@ -21,10 +21,12 @@ import 'seek_step_menu.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const VideoSettingsMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -221,6 +223,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
               setState(() => _showSubtitleTracks = false);
             }
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -260,6 +263,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
               setState(() => _showAudioTracks = false);
             }
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -300,6 +304,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
             }
           },
           videoState: videoState,
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -340,6 +345,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
             }
           },
           videoState: videoState,
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -380,6 +386,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
               setState(() => _showDanmakuList = false);
             }
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -419,6 +426,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
               setState(() => _showDanmakuTracks = false);
             }
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -458,6 +466,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
               setState(() => _showSubtitleList = false);
             }
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -491,6 +500,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
             _playlistOverlay = null;
             setState(() => _showPlaylist = false);
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -774,6 +784,7 @@ style: TextStyle(
             _playbackRateOverlay = null;
             setState(() => _showPlaybackRate = false);
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -809,6 +820,7 @@ style: TextStyle(
             _danmakuOffsetOverlay = null;
             setState(() => _showDanmakuOffset = false);
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -851,6 +863,7 @@ style: TextStyle(
               setState(() => _showJellyfinQuality = false);
             }
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -891,6 +904,7 @@ style: TextStyle(
               setState(() => _showPlaybackInfo = false);
             }
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 
@@ -932,6 +946,7 @@ style: TextStyle(
               setState(() => _showSeekStep = false);
             }
           },
+          onHoverChanged: widget.onHoverChanged,
         ),
       );
 

@@ -12,10 +12,12 @@ import 'package:nipaplay/services/emby_service.dart';
 
 class JellyfinQualityMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const JellyfinQualityMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -231,6 +233,7 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
     return BaseSettingsMenu(
       title: '清晰度设置',
       onClose: widget.onClose,
+      onHoverChanged: widget.onHoverChanged,
       extraButton: TextButton(
         onPressed: _applySelection,
         child: const Text('应用', locale:Locale("zh-Hans","zh"),

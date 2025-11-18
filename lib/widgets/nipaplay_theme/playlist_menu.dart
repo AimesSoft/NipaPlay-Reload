@@ -15,10 +15,12 @@ import 'package:nipaplay/utils/message_helper.dart';
 
 class PlaylistMenu extends StatefulWidget {
   final VoidCallback onClose;
+  final ValueChanged<bool>? onHoverChanged;
 
   const PlaylistMenu({
     super.key,
     required this.onClose,
+    this.onHoverChanged,
   });
 
   @override
@@ -625,6 +627,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
     return BaseSettingsMenu(
       title: '播放列表',
       onClose: widget.onClose,
+      onHoverChanged: widget.onHoverChanged,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
