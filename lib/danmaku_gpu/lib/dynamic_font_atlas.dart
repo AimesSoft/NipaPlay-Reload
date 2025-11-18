@@ -8,6 +8,18 @@ class FontAtlasManager {
   static final Map<String, DynamicFontAtlas> _instances = {};
   static final Map<String, bool> _initialized = {};
 
+  /// 确保特定 key 的实例和初始化标记存在
+  static void _ensureKey({required String key, required double fontSize, required Color color, VoidCallback? onAtlasUpdated}) {
+    if (!_instances.containsKey(key)) {
+      _instances[key] = DynamicFontAtlas(
+        fontSize: fontSize,
+        color: color,
+        onAtlasUpdated: onAtlasUpdated,
+      );
+    }
+    _initialized.putIfAbsent(key, () => false);
+  }
+
   /// 获取或创建字体图集实例
   static DynamicFontAtlas getInstance({
     required double fontSize,
@@ -15,16 +27,7 @@ class FontAtlasManager {
     VoidCallback? onAtlasUpdated,
   }) {
     final key = '${fontSize}_${color.value}';
-    
-    if (!_instances.containsKey(key)) {
-      _instances[key] = DynamicFontAtlas(
-        fontSize: fontSize,
-        color: color,
-        onAtlasUpdated: onAtlasUpdated,
-      );
-      _initialized[key] = false;
-    }
-    
+    _ensureKey(key: key, fontSize: fontSize, color: color, onAtlasUpdated: onAtlasUpdated);
     return _instances[key]!;
   }
 
@@ -34,7 +37,7 @@ class FontAtlasManager {
     Color color = Colors.white,
   }) async {
     final key = '${fontSize}_${color.value}';
-    
+    _ensureKey(key: key, fontSize: fontSize, color: color);
     if (!_initialized[key]!) {
       final atlas = _instances[key]!;
       await atlas.generate();
@@ -50,11 +53,11 @@ class FontAtlasManager {
     Color color = Colors.white,
   }) async {
     final key = '${fontSize}_${color.value}';
-    
+    _ensureKey(key: key, fontSize: fontSize, color: color);
     if (!_initialized[key]!) {
       await preInitialize(fontSize: fontSize, color: color);
     }
-    
+
     final atlas = _instances[key]!;
     await atlas.prebuildFromTexts(texts);
     debugPrint('FontAtlasManager: 预构建字体图集完成 - 字体大小: $fontSize, 文本数量: ${texts.length}');
