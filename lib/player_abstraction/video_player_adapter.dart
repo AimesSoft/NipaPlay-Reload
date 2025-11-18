@@ -97,6 +97,12 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   set playbackRate(double value) {
+    // 速率变化时重置插值基准，避免把历史时间段都按新速率重新计算而导致时间跳变
+    final currentPosition = _interpolatedPosition;
+    _lastActualPosition = currentPosition;
+    _interpolatedPosition = currentPosition;
+    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+
     _playbackRate = value;
     try {
       _controller?.setPlaybackSpeed(value);

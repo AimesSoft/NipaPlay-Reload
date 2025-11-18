@@ -1010,6 +1010,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   set playbackRate(double value) {
+    // 速率调整前重置插值基准，避免时间轴瞬移
+    final currentPosition = _interpolatedPosition;
+    _lastActualPosition = currentPosition;
+    _interpolatedPosition = currentPosition;
+    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+
     _playbackRate = value;
     try {
       _player.setRate(value);
