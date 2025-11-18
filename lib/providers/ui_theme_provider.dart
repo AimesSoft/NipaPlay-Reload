@@ -25,9 +25,6 @@ class UIThemeProvider extends ChangeNotifier {
   bool get isMobilePlatform =>
       defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
-  bool get isMobilePlatform =>
-      defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS;
 
   UIThemeProvider() {
     _loadTheme();
