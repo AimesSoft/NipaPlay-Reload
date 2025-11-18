@@ -30,8 +30,8 @@ class _CupertinoUIThemeSettingsPageState
     super.initState();
     final provider = Provider.of<UIThemeProvider>(context, listen: false);
     _selectedTheme = provider.currentTheme;
-    if (PlatformInfo.isIOS && _selectedTheme == UIThemeType.fluentUI) {
-      _selectedTheme = globals.isPhone ? UIThemeType.cupertino : UIThemeType.nipaplay;
+    if (globals.isPhone && _selectedTheme == UIThemeType.fluentUI) {
+      _selectedTheme = UIThemeType.cupertino;
     }
   }
 
@@ -44,20 +44,21 @@ class _CupertinoUIThemeSettingsPageState
     final sectionBackground = resolveSettingsSectionBackground(context);
     final provider = context.watch<UIThemeProvider>();
 
-  final double topPadding = MediaQuery.of(context).padding.top + 64;
+    final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     final List<UIThemeType> availableThemes = UIThemeType.values.where((theme) {
       if (theme == UIThemeType.cupertino) {
         return globals.isPhone;
       }
-      if (PlatformInfo.isIOS && theme == UIThemeType.fluentUI) {
+      if (globals.isPhone && theme == UIThemeType.fluentUI) {
         return false;
       }
       return true;
     }).toList()
       ..sort((a, b) => a.index.compareTo(b.index));
 
-    if (!availableThemes.contains(_selectedTheme) && availableThemes.isNotEmpty) {
+    if (!availableThemes.contains(_selectedTheme) &&
+        availableThemes.isNotEmpty) {
       _selectedTheme = availableThemes.first;
     }
 
@@ -102,17 +103,15 @@ class _CupertinoUIThemeSettingsPageState
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   '提示：切换主题后需要重新启动应用才能完全生效。',
-                  style: CupertinoTheme.of(context)
-                      .textTheme
-                      .textStyle
-                      .copyWith(
-                        fontSize: 13,
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.systemGrey,
-                          context,
-                        ),
-                        letterSpacing: 0.2,
-                      ),
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 13,
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey,
+                              context,
+                            ),
+                            letterSpacing: 0.2,
+                          ),
                 ),
               ),
             ],

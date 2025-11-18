@@ -36,8 +36,8 @@ class _UIThemePageState extends State<UIThemePage> {
                 // 标题
                 const Text(
                   '控件主题',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -46,8 +46,8 @@ style: TextStyle(
                 const SizedBox(height: 8),
                 const Text(
                   '选择应用的控件主题风格',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
                   ),
@@ -56,9 +56,9 @@ style: TextStyle(
 
                 // 主题选择
                 _buildThemeSelector(uiThemeProvider),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // 主题预览区域
                 _buildThemePreview(uiThemeProvider),
               ],
@@ -74,6 +74,9 @@ style: TextStyle(
       if (theme == UIThemeType.cupertino) {
         return globals.isPhone;
       }
+      if (globals.isPhone && theme == UIThemeType.fluentUI) {
+        return false;
+      }
       return true;
     }).toList()
       ..sort((a, b) => a.index.compareTo(b.index));
@@ -86,8 +89,8 @@ style: TextStyle(
       children: [
         const Text(
           '主题风格',
-          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+          locale: Locale("zh-Hans", "zh"),
+          style: TextStyle(
             color: Colors.white,
             fontSize: 16,
             fontWeight: FontWeight.w500,
@@ -124,8 +127,8 @@ style: TextStyle(
         children: [
           const Text(
             '当前主题预览',
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+            locale: Locale("zh-Hans", "zh"),
+            style: TextStyle(
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w500,
@@ -146,8 +149,8 @@ style: TextStyle(
           children: [
             Text(
               'NipaPlay 主题',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -156,8 +159,8 @@ style: TextStyle(
             SizedBox(height: 8),
             Text(
               '• 磨砂玻璃效果\n• 渐变背景\n• 圆角设计\n• 适合多媒体应用',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
                 height: 1.5,
@@ -171,8 +174,8 @@ style: TextStyle(
           children: [
             Text(
               'Fluent UI 主题',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -181,8 +184,8 @@ style: TextStyle(
             SizedBox(height: 8),
             Text(
               '• Microsoft 设计语言\n• 亚克力材质\n• 现代化界面\n• 统一的交互体验',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
                 height: 1.5,
@@ -196,8 +199,8 @@ style: TextStyle(
           children: [
             Text(
               'Cupertino 主题',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -206,8 +209,8 @@ style: TextStyle(
             SizedBox(height: 8),
             Text(
               '• 贴近原生 iOS 体验\n• 自适应平台控件\n• 支持浅色/深色模式\n• 底部导航布局',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
                 height: 1.5,
@@ -219,19 +222,22 @@ style: TextStyle(
   }
 
   /// 显示主题切换确认弹窗
-  void _showThemeChangeConfirmDialog(UIThemeType newTheme, UIThemeProvider provider) {
+  void _showThemeChangeConfirmDialog(
+      UIThemeType newTheme, UIThemeProvider provider) {
     BlurDialog.show(
       context: context,
       title: '主题切换提示',
-      content: '切换到 ${provider.getThemeName(newTheme)} 主题需要重启应用才能完全生效。\n\n是否要立即重启应用？',
+      content:
+          '切换到 ${provider.getThemeName(newTheme)} 主题需要重启应用才能完全生效。\n\n是否要立即重启应用？',
       barrierDismissible: true,
       actions: [
         TextButton(
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.grey)),
+          child: const Text('取消',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.grey)),
         ),
         TextButton(
           onPressed: () async {
@@ -241,8 +247,9 @@ style: TextStyle(color: Colors.grey)),
             // 退出应用
             _exitApplication();
           },
-          child: const Text('重启应用', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white)),
+          child: const Text('重启应用',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white)),
         ),
       ],
     );
@@ -261,6 +268,4 @@ style: TextStyle(color: Colors.white)),
       BlurSnackBar.show(context, '请手动刷新页面以应用新主题');
     }
   }
-
-
 }

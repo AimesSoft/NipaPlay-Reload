@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -23,13 +24,19 @@ class DandanplayService {
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
     
-    // 设置基础URL为当前主机
-    final currentUrl = Uri.base.toString();
-    final uri = Uri.parse(currentUrl);
-    _baseUrl = '${uri.scheme}://${uri.host}';
+    // 优先使用网络设置中的服务器地址
+    _baseUrl = await NetworkSettings.getDandanplayServer();
     
-    if (uri.port != 80 && uri.port != 443) {
-      _baseUrl += ':${uri.port}';
+    // 如果尚未保存自定义服务器，则回退到当前主机
+    if (_baseUrl.isEmpty) {
+      final currentUrl = Uri.base.toString();
+      final uri = Uri.parse(currentUrl);
+      _baseUrl = '${uri.scheme}://${uri.host}';
+      
+      if (uri.port != 80 && uri.port != 443) {
+        _baseUrl += ':${uri.port}';
+      }
+      await NetworkSettings.setDandanplayServer(_baseUrl);
     }
     
     // 在初始化时获取最新的登录状态
@@ -87,6 +94,13 @@ class DandanplayService {
   static Future<void> preloadRecentAnimes() async {
     // Web版本不需要预加载，直接返回
     return;
+  }
+
+  /// 获取当前弹弹play API基础URL（Web版本使用网络设置）
+  static Future<String> getApiBaseUrl() async {
+    if (_baseUrl.isNotEmpty) return _baseUrl;
+    _baseUrl = await NetworkSettings.getDandanplayServer();
+    return _baseUrl;
   }
   
   static Future<void> loadToken() async {

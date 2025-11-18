@@ -22,6 +22,12 @@ class UIThemeProvider extends ChangeNotifier {
   bool get isNipaplayTheme => _currentTheme == UIThemeType.nipaplay;
   bool get isFluentUITheme => _currentTheme == UIThemeType.fluentUI;
   bool get isCupertinoTheme => _currentTheme == UIThemeType.cupertino;
+  bool get isMobilePlatform =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+  bool get isMobilePlatform =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
 
   UIThemeProvider() {
     _loadTheme();
@@ -33,6 +39,9 @@ class UIThemeProvider extends ChangeNotifier {
       final themeIndex = prefs.getInt(_key) ?? 0;
       if (themeIndex >= 0 && themeIndex < UIThemeType.values.length) {
         _currentTheme = UIThemeType.values[themeIndex];
+        if (isMobilePlatform && _currentTheme == UIThemeType.fluentUI) {
+          _currentTheme = UIThemeType.cupertino;
+        }
       }
 
       final storedMode = prefs.getString(_fluentThemeModeKey);
@@ -48,10 +57,14 @@ class UIThemeProvider extends ChangeNotifier {
   }
 
   Future<void> setTheme(UIThemeType theme) async {
+    if (isMobilePlatform && theme == UIThemeType.fluentUI) {
+      // 移动端不允许切换到 Fluent 主题，直接忽略请求
+      return;
+    }
     if (_currentTheme != theme) {
       _currentTheme = theme;
       notifyListeners();
-      
+
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt(_key, theme.index);

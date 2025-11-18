@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/providers/ui_theme_provider.dart';
@@ -17,13 +18,12 @@ class CupertinoThemeSettingTile extends StatelessWidget {
     return Consumer<UIThemeProvider>(
       builder: (context, provider, child) {
         final UIThemeType currentTheme = provider.currentTheme;
-  final bool isIOS = defaultTargetPlatform == TargetPlatform.iOS;
-  final UIThemeType displayTheme = (isIOS &&
-                currentTheme == UIThemeType.fluentUI)
-            ? (globals.isPhone ? UIThemeType.cupertino : UIThemeType.nipaplay)
-            : currentTheme;
-        final String subtitle =
-            '当前：${provider.getThemeName(displayTheme)}';
+        final bool isPhone = globals.isPhone;
+        final UIThemeType displayTheme =
+            (isPhone && currentTheme == UIThemeType.fluentUI)
+                ? UIThemeType.cupertino
+                : currentTheme;
+        final String subtitle = '当前：${provider.getThemeName(displayTheme)}';
 
         final tileColor = resolveSettingsTileBackground(context);
 
