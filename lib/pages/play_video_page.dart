@@ -1,24 +1,24 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/video_player_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/video_player_widget.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/widgets/fluent_ui/fluent_send_danmaku_dialog.dart';
-import 'package:nipaplay/widgets/fluent_ui/fluent_video_controls_overlay.dart';
+import 'package:nipaplay/themes/fluent/widgets/fluent_send_danmaku_dialog.dart';
+import 'package:nipaplay/themes/fluent/widgets/fluent_video_controls_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/vertical_indicator.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/vertical_indicator.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/widgets/nipaplay_theme/video_controls_overlay.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/back_button_widget.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/anime_info_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/video_controls_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_button.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/skip_button.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
 import '../player_abstraction/player_abstraction.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {

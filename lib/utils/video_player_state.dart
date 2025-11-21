@@ -28,7 +28,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 
 import 'package:path/path.dart' as p; // Added import for path package
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
@@ -39,18 +39,18 @@ import '../providers/watch_history_provider.dart';
 import 'danmaku_parser.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brightness
-import 'package:nipaplay/widgets/nipaplay_theme/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
-import 'package:nipaplay/widgets/nipaplay_theme/volume_indicator.dart'; // Added import for VolumeIndicator widget
-import 'package:nipaplay/widgets/nipaplay_theme/seek_indicator.dart'; // Added import for SeekIndicator widget
+import 'package:nipaplay/themes/nipaplay/widgets/brightness_indicator.dart'; // Added import for BrightnessIndicator widget
+import 'package:nipaplay/themes/nipaplay/widgets/volume_indicator.dart'; // Added import for VolumeIndicator widget
+import 'package:nipaplay/themes/nipaplay/widgets/seek_indicator.dart'; // Added import for SeekIndicator widget
 import 'package:volume_controller/volume_controller.dart';
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
 import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/widgets/cupertino/player/cupertino_brightness_indicator.dart';
-import 'package:nipaplay/widgets/cupertino/player/cupertino_volume_indicator.dart';
-import 'package:nipaplay/widgets/cupertino/player/cupertino_seek_indicator.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player/cupertino_brightness_indicator.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player/cupertino_volume_indicator.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player/cupertino_seek_indicator.dart';
 import 'decoder_manager.dart'; // 导入解码器管理器
 import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧集导航服务
 import 'package:nipaplay/services/auto_next_episode_service.dart';

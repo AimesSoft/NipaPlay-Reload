@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// 用户活动记录的业务逻辑控制器

@@ -84,7 +84,7 @@
 **问题描述**: 目前主题数量有限，希望有更多风格的主题选择。
 
 **技术领域**: UI/UX 设计、Flutter 主题系统
-**相关文件**: `lib/theme_abstraction/`, `lib/widgets/nipaplay_theme/`
+**相关文件**: `lib/theme_abstraction/`, `lib/themes/nipaplay/widgets/`
 **期望结果**: 新增多种风格的主题（如：极简、游戏风、复古等）
 
 ---
@@ -191,4 +191,3 @@
 **💡 提示**: 即使你无法完全解决某个问题，部分进展也是有价值的！不要害怕尝试。
 
 **⬅️ 上一篇: [11. 非代码贡献：同样重要！](11-Non-Coding-Contributions.md)**
-

@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/settings_item.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/utils/message_helper.dart';
 import 'dart:ui';
 

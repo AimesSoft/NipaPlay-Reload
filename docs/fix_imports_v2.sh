@@ -2,14 +2,14 @@
 
 # --- Step 1: Broadly replace all widget import paths ---
 # This will move all imports, including the ones we want to keep in the parent 'widgets' directory.
-echo "Step 1: Replacing all 'widgets/' paths with 'widgets/nipaplay_theme/'..."
+echo "Step 1: Replacing all 'widgets/' paths with 'themes/nipaplay/widgets/'..."
 find lib -name "*.dart" -print0 | while IFS= read -r -d $'\0' file; do
   # Handle 'package:nipaplay/widgets/...'
-  sed -i '' "s|'package:nipaplay/widgets/|'package:nipaplay/widgets/nipaplay_theme/|g" "$file"
+  sed -i '' "s|'package:nipaplay/widgets/|'package:nipaplay/themes/nipaplay/widgets/|g" "$file"
   # Handle 'package:nipaplay/widgets/...'
-  sed -i '' "s|'package:nipaplay/widgets/|'package:nipaplay/widgets/nipaplay_theme/|g" "$file"
+  sed -i '' "s|'package:nipaplay/widgets/|'package:nipaplay/themes/nipaplay/widgets/|g" "$file"
   # Handle 'widgets/...'
-  sed -i '' "s|'widgets/|'widgets/nipaplay_theme/|g" "$file"
+  sed -i '' "s|'widgets/|'themes/nipaplay/widgets/|g" "$file"
 done
 echo "Step 1 finished."
 echo ""
@@ -27,11 +27,11 @@ DANMAKU_WIDGETS=(
 find lib -name "*.dart" -print0 | while IFS= read -r -d $'\0' file; do
   for widget in "${DANMAKU_WIDGETS[@]}"; do
     # Revert package imports
-    sed -i '' "s|'package:nipaplay/widgets/nipaplay_theme/${widget}|'package:nipaplay/widgets/${widget}|g" "$file"
+    sed -i '' "s|'package:nipaplay/themes/nipaplay/widgets/${widget}|'package:nipaplay/widgets/${widget}|g" "$file"
     # Revert relative imports
-    sed -i '' "s|'package:nipaplay/widgets/nipaplay_theme/${widget}|'package:nipaplay/widgets/${widget}|g" "$file"
+    sed -i '' "s|'package:nipaplay/themes/nipaplay/widgets/${widget}|'package:nipaplay/widgets/${widget}|g" "$file"
     # Revert relative imports
-    sed -i '' "s|'widgets/nipaplay_theme/${widget}|'widgets/${widget}|g" "$file"
+    sed -i '' "s|'themes/nipaplay/widgets/${widget}|'widgets/${widget}|g" "$file"
   done
 done
 echo "Step 2 finished."

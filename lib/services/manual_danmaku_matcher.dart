@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/manual_danmaku_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/manual_danmaku_dialog.dart';
 
 /// 手动弹幕匹配器
 ///

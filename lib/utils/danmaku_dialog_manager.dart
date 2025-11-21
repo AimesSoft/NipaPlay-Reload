@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_dialog.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/send_danmaku_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
 import 'hotkey_service.dart';
 
 /// 弹幕对话框管理器，用于防止多个弹幕对话框堆叠

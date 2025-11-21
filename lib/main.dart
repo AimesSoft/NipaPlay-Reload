@@ -9,17 +9,17 @@ import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/custom_scaffold.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/menu_button.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/system_resource_display.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/menu_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
-import 'pages/settings_page.dart';
+import 'themes/nipaplay/pages/settings_page.dart';
 import 'pages/play_video_page.dart';
 import 'pages/new_series_page.dart';
 import 'pages/dashboard_home_page.dart';
-import 'pages/cupertino/cupertino_main_page.dart';
+import 'themes/cupertino/pages/cupertino_main_page.dart';
 import 'utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'services/bangumi_service.dart';
@@ -39,12 +39,12 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
-import 'package:nipaplay/pages/fluent_main_page.dart';
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:nipaplay/themes/fluent/pages/fluent_main_page.dart';
+import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'services/security_bookmark_service.dart';
-import 'widgets/nipaplay_theme/blur_snackbar.dart';
+import 'themes/nipaplay/widgets/blur_snackbar.dart';
 
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
@@ -52,12 +52,12 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/splash_screen.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/splash_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/drag_drop_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/drag_drop_overlay.dart';
 import 'providers/service_provider.dart';
 import 'utils/platform_utils.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -74,7 +74,8 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
 const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 
-final GlobalKey<State<DefaultTabController>> tabControllerKey = GlobalKey<State<DefaultTabController>>();
+final GlobalKey<State<DefaultTabController>> tabControllerKey =
+    GlobalKey<State<DefaultTabController>>();
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -93,22 +94,25 @@ void main(List<String> args) async {
 
   // 检查是否有文件路径参数传入
   String? launchFilePath;
-  
+
   // 桌面平台通过命令行参数传入
   if (!kIsWeb && args.isNotEmpty && globals.isDesktop) {
     final filePath = args.first;
     if (await File(filePath).exists()) {
       launchFilePath = filePath;
-      debugLogService.addLog('应用启动时收到命令行文件路径: $filePath', level: 'INFO', tag: 'FileAssociation');
+      debugLogService.addLog('应用启动时收到命令行文件路径: $filePath',
+          level: 'INFO', tag: 'FileAssociation');
     }
   }
-  
+
   // Android平台通过Intent传入
   if (!kIsWeb && Platform.isAndroid) {
     final intentFilePath = await FileAssociationService.getOpenFileUri();
-    if (intentFilePath != null && await FileAssociationService.validateFilePath(intentFilePath)) {
+    if (intentFilePath != null &&
+        await FileAssociationService.validateFilePath(intentFilePath)) {
       launchFilePath = intentFilePath;
-      debugLogService.addLog('应用启动时收到Intent文件路径: $intentFilePath', level: 'INFO', tag: 'FileAssociation');
+      debugLogService.addLog('应用启动时收到Intent文件路径: $intentFilePath',
+          level: 'INFO', tag: 'FileAssociation');
     }
   }
 
@@ -116,15 +120,16 @@ void main(List<String> args) async {
   Future.microtask(() async {
     try {
       final enableLogCollection = await SettingsStorage.loadBool(
-        'enable_debug_log_collection',
-        defaultValue: true
-      );
-      
+          'enable_debug_log_collection',
+          defaultValue: true);
+
       if (!enableLogCollection) {
         debugLogService.stopCollecting();
-        debugLogService.addLog('根据用户设置，日志收集已禁用', level: 'INFO', tag: 'LogService');
+        debugLogService.addLog('根据用户设置，日志收集已禁用',
+            level: 'INFO', tag: 'LogService');
       } else {
-        debugLogService.addLog('根据用户设置，日志收集已启用', level: 'INFO', tag: 'LogService');
+        debugLogService.addLog('根据用户设置，日志收集已启用',
+            level: 'INFO', tag: 'LogService');
       }
     } catch (e) {
       debugLogService.addError('加载日志收集设置失败: $e', tag: 'LogService');
@@ -187,45 +192,49 @@ void main(List<String> args) async {
   // 请求Android存储权限
   if (!kIsWeb && Platform.isAndroid) {
     debugPrint("正在请求Android存储权限...");
-    
+
     // 先检查当前权限状态
     var storageStatus = await Permission.storage.status;
     debugPrint("当前存储权限状态: $storageStatus");
-    
+
     // 如果权限被拒绝，请求权限
     if (storageStatus.isDenied) {
       storageStatus = await Permission.storage.request();
       debugPrint("请求后存储权限状态: $storageStatus");
     }
-    
+
     // 对于Android 10+，请求READ_EXTERNAL_STORAGE
-    if (await Permission.photos.isRestricted || await Permission.photos.isDenied) {
+    if (await Permission.photos.isRestricted ||
+        await Permission.photos.isDenied) {
       final photoStatus = await Permission.photos.request();
       debugPrint("媒体访问权限状态: $photoStatus");
     }
-    
+
     // 对于Android 11+，尝试请求管理外部存储权限
     try {
       bool needManageStorage = false;
-      
+
       try {
         // 检查是否需要特殊管理权限 - Android 11+
-        final sdkVersion = int.tryParse(Platform.operatingSystemVersion.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        final sdkVersion = int.tryParse(Platform.operatingSystemVersion
+                .replaceAll(RegExp(r'[^0-9]'), '')) ??
+            0;
         needManageStorage = sdkVersion >= 30; // Android 11 是 API 30
-        debugPrint("Android SDK版本: $sdkVersion, 需要请求管理存储权限: $needManageStorage");
+        debugPrint(
+            "Android SDK版本: $sdkVersion, 需要请求管理存储权限: $needManageStorage");
       } catch (e) {
         debugPrint("无法确定Android版本: $e, 将尝试请求管理存储权限");
         needManageStorage = true;
       }
-      
+
       if (needManageStorage) {
         final manageStatus = await Permission.manageExternalStorage.status;
         debugPrint("当前管理存储权限状态: $manageStatus");
-        
+
         if (manageStatus.isDenied) {
           final newStatus = await Permission.manageExternalStorage.request();
           debugPrint("请求后管理存储权限状态: $newStatus");
-          
+
           if (newStatus.isDenied || newStatus.isPermanentlyDenied) {
             debugPrint("警告: 未获得管理存储权限，某些功能可能受限");
           }
@@ -234,7 +243,7 @@ void main(List<String> args) async {
     } catch (e) {
       debugPrint("请求管理存储权限失败: $e");
     }
-    
+
     // 重新检查权限并打印最终状态
     final finalStatus = await Permission.storage.status;
     final manageStatus = await Permission.manageExternalStorage.status;
@@ -243,7 +252,7 @@ void main(List<String> args) async {
   // 设置方法通道处理器
   menuChannel.setMethodCallHandler((call) async {
     print('[Dart] 收到方法调用: ${call.method}');
-    
+
     if (call.method == 'uploadVideo') {
       try {
         // 获取UI上下文
@@ -252,13 +261,13 @@ void main(List<String> args) async {
           print('[Dart] 错误: 无法获取UI上下文');
           return '错误: 无法获取UI上下文';
         }
-        
+
         // 延迟确保UI准备好
         Future.microtask(() {
           print('[Dart] 启动文件选择器');
           _showGlobalUploadDialog(context);
         });
-        
+
         return '正在显示文件选择器';
       } catch (e) {
         print('[Dart] 错误: $e');
@@ -271,11 +280,11 @@ void main(List<String> args) async {
           print('[Dart] 错误: 无法获取UI上下文');
           return '错误: 无法获取UI上下文';
         }
-        
+
         Future.microtask(() {
           _navigateToPage(context, 1); // 切换到视频播放页面（索引1）
         });
-        
+
         return '正在切换到视频播放页面';
       } catch (e) {
         print('[Dart] 错误: $e');
@@ -288,11 +297,11 @@ void main(List<String> args) async {
           print('[Dart] 错误: 无法获取UI上下文');
           return '错误: 无法获取UI上下文';
         }
-        
+
         Future.microtask(() {
           _navigateToPage(context, 0); // 切换到主页（索引0）
         });
-        
+
         return '正在切换到主页';
       } catch (e) {
         print('[Dart] 错误: $e');
@@ -305,11 +314,11 @@ void main(List<String> args) async {
           print('[Dart] 错误: 无法获取UI上下文');
           return '错误: 无法获取UI上下文';
         }
-        
+
         Future.microtask(() {
           _navigateToPage(context, 2); // 切换到媒体库页面（索引2）
         });
-        
+
         return '正在切换到媒体库页面';
       } catch (e) {
         print('[Dart] 错误: $e');
@@ -358,7 +367,7 @@ void main(List<String> args) async {
         return '错误: $e';
       }
     }
-    
+
     // 默认返回空字符串
     return '';
   });
@@ -391,16 +400,19 @@ void main(List<String> args) async {
     DandanplayService.initialize(),
     // 初始化服务提供者
     ServiceProvider.initialize(),
-    
+
     // 加载设置
     Future.wait(<Future<dynamic>>[
       SettingsStorage.loadString('themeMode', defaultValue: 'system'),
       SettingsStorage.loadString('backgroundImageMode'),
       SettingsStorage.loadString('customBackgroundPath'),
-      SettingsStorage.loadString('anime_detail_display_mode', defaultValue: 'simple'),
+      SettingsStorage.loadString('anime_detail_display_mode',
+          defaultValue: 'simple'),
     ]).then((results) {
-      globals.backgroundImageMode = (results[1] as String?) ?? globals.backgroundImageMode;
-      globals.customBackgroundPath = (results[2] as String?) ?? globals.customBackgroundPath;
+      globals.backgroundImageMode =
+          (results[1] as String?) ?? globals.backgroundImageMode;
+      globals.customBackgroundPath =
+          (results[2] as String?) ?? globals.customBackgroundPath;
 
       // 检查自定义背景路径有效性，发现无效则恢复为默认图片
       _validateCustomBackgroundPath();
@@ -414,20 +426,19 @@ void main(List<String> args) async {
       };
     }),
 
-    
     // 清理过期的弹幕缓存
     DanmakuCacheManager.clearExpiredCache(),
-    
+
     // 初始化 BangumiService
     BangumiService.instance.initialize(),
-    
+
     // 初始化观看记录管理器
     WatchHistoryManager.initialize(),
-    
+
     // 初始化自动同步服务（仅桌面端）
-    if (globals.isDesktop) 
+    if (globals.isDesktop)
       AutoSyncService.instance.initialize()
-    else 
+    else
       Future.value(),
   ]).then((results) async {
     // BangumiService初始化完成后，检查并刷新缺少标签的缓存
@@ -438,7 +449,7 @@ void main(List<String> args) async {
         debugPrint('检查缓存标签失败: $e');
       }
     });
-    
+
     // 处理主题模式设置
     final settingsMap = results[2] as Map<String, String>;
     final savedThemeMode = settingsMap['themeMode'] ?? 'system';
@@ -491,7 +502,8 @@ void main(List<String> args) async {
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
           // 统一使用 ServiceProvider 中的全局实例，避免重复初始化与事件风暴
-          ChangeNotifierProvider.value(value: ServiceProvider.watchHistoryProvider),
+          ChangeNotifierProvider.value(
+              value: ServiceProvider.watchHistoryProvider),
           ChangeNotifierProvider(create: (_) => ScanService()),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
@@ -519,10 +531,10 @@ Future<void> _initializeAppDirectories() async {
     await StorageService.getCacheDirectory();
     await StorageService.getDownloadsDirectory();
     await StorageService.getVideosDirectory();
-    
+
     // 创建临时目录
     await _ensureTemporaryDirectoryExists();
-    
+
     debugPrint('应用目录结构初始化完成');
   } catch (e) {
     debugPrint('创建应用目录结构失败: $e');
@@ -533,12 +545,14 @@ Future<void> _initializeAppDirectories() async {
 Future<void> _checkNetworkConnection() async {
   debugPrint('==================== 网络连接诊断开始 ====================');
   if (!kIsWeb) {
-    debugPrint('设备系统: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
-    debugPrint('设备类型: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : Platform.isMacOS ? 'macOS' : '其他'}');
+    debugPrint(
+        '设备系统: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
+    debugPrint(
+        '设备类型: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : Platform.isMacOS ? 'macOS' : '其他'}');
   } else {
     debugPrint('设备系统: Web');
   }
-  
+
   // 检查代理设置
   if (!kIsWeb) {
     final proxySettings = NetworkChecker.checkProxySettings();
@@ -556,7 +570,7 @@ Future<void> _checkNetworkConnection() async {
       }
     }
   }
-  
+
   try {
     debugPrint('\n测试百度连接:');
     // 检查百度网络连接 (详细模式)
@@ -565,16 +579,16 @@ Future<void> _checkNetworkConnection() async {
       timeout: 5,
       verbose: true,
     );
-    
+
     debugPrint('\n百度连接状态: ${baiduResult['connected'] ? '成功' : '失败'}');
     if (baiduResult['connected']) {
       debugPrint('响应时间: ${baiduResult['duration']}ms');
       debugPrint('响应大小: ${baiduResult['responseSize']} 字节');
     }
-    
+
     // 等待一下再测试下一个地址
     await Future.delayed(const Duration(seconds: 1));
-    
+
     debugPrint('\n测试Google连接(对比测试):');
     // 检查谷歌网络连接（对比测试）
     final googleResult = await NetworkChecker.checkConnection(
@@ -582,13 +596,13 @@ Future<void> _checkNetworkConnection() async {
       timeout: 5,
       verbose: true,
     );
-    
+
     debugPrint('\nGoogle连接状态: ${googleResult['connected'] ? '成功' : '失败'}');
     if (googleResult['connected']) {
       debugPrint('响应时间: ${googleResult['duration']}ms');
       debugPrint('响应大小: ${googleResult['responseSize']} 字节');
     }
-    
+
     // 再测试一个国内的站点
     await Future.delayed(const Duration(seconds: 1));
     //debugPrint('\n测试腾讯连接:');
@@ -597,7 +611,7 @@ Future<void> _checkNetworkConnection() async {
       timeout: 5,
       verbose: true,
     );
-    
+
     // 诊断结果总结
     debugPrint('\n==================== 网络诊断结果总结 ====================');
     if (baiduResult['connected'] || tencentResult['connected']) {
@@ -605,14 +619,17 @@ Future<void> _checkNetworkConnection() async {
     } else {
       debugPrint('❌ 国内网络连接异常，请检查网络设置');
     }
-    
+
     if (googleResult['connected']) {
       debugPrint('✅ 国外网络连接正常');
     } else {
       debugPrint('❌ 国外网络连接异常，如果只有国外连接异常可能是正常的');
     }
-    
-    if (!kIsWeb && Platform.isIOS && !baiduResult['connected'] && !tencentResult['connected']) {
+
+    if (!kIsWeb &&
+        Platform.isIOS &&
+        !baiduResult['connected'] &&
+        !tencentResult['connected']) {
       debugPrint('\n⚠️ iOS设备网络问题排查建议:');
       debugPrint('1. 请确保应用有网络访问权限');
       debugPrint('2. 检查是否启用了VPN或代理');
@@ -622,7 +639,7 @@ Future<void> _checkNetworkConnection() async {
   } catch (e) {
     debugPrint('网络检查过程中发生异常: $e');
   }
-  
+
   debugPrint('==================== 网络连接诊断结束 ====================');
 }
 
@@ -631,16 +648,16 @@ Future<void> _ensureTemporaryDirectoryExists() async {
   try {
     // 使用StorageService获取应用目录
     final appDir = await StorageService.getAppStorageDirectory();
-    
+
     // 创建tmp目录路径
     final tmpDir = Directory(path.join(appDir.path, 'tmp'));
-    
+
     // 确保tmp目录存在
     if (!tmpDir.existsSync()) {
       debugPrint('创建应用临时目录: ${tmpDir.path}');
       tmpDir.createSync(recursive: true);
     }
-    
+
     // 输出目录信息用于调试
     debugPrint('应用文档目录: ${appDir.path}');
     debugPrint('应用临时目录: ${tmpDir.path}');
@@ -651,7 +668,7 @@ Future<void> _ensureTemporaryDirectoryExists() async {
 
 class NipaPlayApp extends StatefulWidget {
   final String? launchFilePath;
-  
+
   const NipaPlayApp({super.key, this.launchFilePath});
 
   @override
@@ -667,7 +684,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint('_NipaPlayAppState: 应用初始化完成，设置监听器');
-      
+
       // 调试：启动时打印数据库内容
       Future.delayed(const Duration(milliseconds: 1000), () async {
         try {
@@ -677,15 +694,16 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
           debugPrint('启动时调试打印数据库内容失败: $e');
         }
       });
-      
+
       try {
-        final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+        final watchHistoryProvider =
+            Provider.of<WatchHistoryProvider>(context, listen: false);
         final scanService = Provider.of<ScanService>(context, listen: false);
-        
+
         debugPrint('_NipaPlayAppState: 准备设置WatchHistoryProvider监听ScanService');
         watchHistoryProvider.setScanService(scanService);
         debugPrint('_NipaPlayAppState: WatchHistoryProvider监听器设置完成');
-        
+
         // 启动历史记录加载
         watchHistoryProvider.loadHistory();
         debugPrint('_NipaPlayAppState: 历史记录加载完成');
@@ -723,92 +741,51 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
       },
       child: Consumer2<ThemeNotifier, UIThemeProvider>(
         builder: (context, themeNotifier, uiThemeProvider, child) {
-          // 等待UI主题初始化完成，避免竞态条件
           if (!uiThemeProvider.isInitialized) {
             return MaterialApp(
               title: 'NipaPlay',
               debugShowCheckedModeBanner: false,
-              home: const SplashScreen(), // 显示启动屏幕
-              builder: (context, appChild) {
-                return Stack(
-                  children: [
-                    appChild!,
-                    if (_isDragging) const DragDropOverlay(),
-                  ],
-                );
-              },
-            );
-          }
-          
-          // 根据UI主题选择使用哪套应用框架
-          if (uiThemeProvider.isFluentUITheme) {
-            // 使用 Fluent UI
-            return fluent.FluentApp(
-              title: 'NipaPlay',
-              debugShowCheckedModeBanner: false,
-              theme: fluent.FluentThemeData.light(),
-              darkTheme: fluent.FluentThemeData.dark(),
-              themeMode: uiThemeProvider.fluentThemeMode,
-              navigatorKey: navigatorKey,
-              home: FluentMainPage(launchFilePath: widget.launchFilePath),
-              builder: (context, appChild) {
-                return Stack(
-                  children: [
-                    appChild!, // The app's content
-                    if (_isDragging) const DragDropOverlay(),
-                  ],
-                );
-              },
-            );
-          } else if (uiThemeProvider.isCupertinoTheme && globals.isPhone) {
-            return AdaptiveApp(
-              title: 'NipaPlay',
-              navigatorKey: navigatorKey,
-              themeMode: themeNotifier.themeMode,
-              materialLightTheme: AppTheme.lightTheme,
-              materialDarkTheme: AppTheme.darkTheme,
-              cupertinoLightTheme: const CupertinoThemeData(brightness: Brightness.light),
-              cupertinoDarkTheme: const CupertinoThemeData(brightness: Brightness.dark),
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-              ],
-              supportedLocales: const [
-                Locale('zh', 'CN'),
-                Locale('en', ''),
-              ],
-              home: CupertinoMainPage(launchFilePath: widget.launchFilePath),
+              home: const SplashScreen(),
               builder: (context, appChild) {
                 return Stack(
                   children: [
                     appChild ?? const SizedBox.shrink(),
-                    if (_isDragging && globals.isDesktop) const DragDropOverlay(),
-                  ],
-                );
-              },
-            );
-          } else {
-            // 默认使用 Material Design
-            return MaterialApp(
-              title: 'NipaPlay',
-              debugShowCheckedModeBanner: false,
-              color: Colors.transparent,
-              theme: AppTheme.lightTheme,
-              darkTheme: AppTheme.darkTheme,
-              themeMode: themeNotifier.themeMode,
-              navigatorKey: navigatorKey,
-              home: MainPage(launchFilePath: widget.launchFilePath),
-              builder: (context, appChild) {
-                return Stack(
-                  children: [
-                    appChild!, // The app's content
                     if (_isDragging) const DragDropOverlay(),
                   ],
                 );
               },
             );
           }
+
+          final descriptor = uiThemeProvider.currentThemeDescriptor;
+          final environment = ThemeEnvironment(
+            isDesktop: globals.isDesktop,
+            isPhone: globals.isPhone,
+            isWeb: kIsWeb,
+          );
+          final overlayBuilder = (Widget child) => Stack(
+                children: [
+                  child,
+                  if (_isDragging) const DragDropOverlay(),
+                ],
+              );
+
+          final themeContext = ThemeBuildContext(
+            themeNotifier: themeNotifier,
+            navigatorKey: navigatorKey,
+            launchFilePath: widget.launchFilePath,
+            environment: environment,
+            settings: uiThemeProvider.currentThemeSettings,
+            overlayBuilder: overlayBuilder,
+            materialHomeBuilder: () =>
+                MainPage(launchFilePath: widget.launchFilePath),
+            fluentHomeBuilder: () =>
+                FluentMainPage(launchFilePath: widget.launchFilePath),
+            cupertinoHomeBuilder: () =>
+                CupertinoMainPage(launchFilePath: widget.launchFilePath),
+          );
+
+          return descriptor.buildApp(themeContext);
         },
       ),
     );
@@ -817,18 +794,19 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
   void _handleDroppedFile(String filePath) async {
     try {
       debugPrint('[DragDrop] Handling dropped file: $filePath');
-      
+
       // 检查是否存在历史记录
-      WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
+      WatchHistoryItem? historyItem =
+          await WatchHistoryManager.getHistoryItem(filePath);
 
       historyItem ??= WatchHistoryItem(
-          filePath: filePath,
-          animeName: path.basenameWithoutExtension(filePath),
-          watchProgress: 0,
-          lastPosition: 0,
-          duration: 0,
-          lastWatchTime: DateTime.now(),
-        );
+        filePath: filePath,
+        animeName: path.basenameWithoutExtension(filePath),
+        watchProgress: 0,
+        lastPosition: 0,
+        duration: 0,
+        lastWatchTime: DateTime.now(),
+      );
 
       final playableItem = PlayableItem(
         videoPath: filePath,
@@ -838,7 +816,6 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
 
       await PlaybackService().play(playableItem);
       debugPrint('[DragDrop] PlaybackService called for dropped file');
-      
     } catch (e) {
       debugPrint('[DragDrop] Error handling dropped file: $e');
       // 可以考虑在这里显示一个错误提示
@@ -877,7 +854,8 @@ class MainPage extends StatefulWidget {
   MainPageState createState() => MainPageState();
 }
 
-class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, WindowListener {
+class MainPageState extends State<MainPage>
+    with SingleTickerProviderStateMixin, WindowListener {
   bool isMaximized = false;
   TabController? globalTabController;
   bool _showSplash = true;
@@ -890,22 +868,23 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   static MainPageState? of(BuildContext context) {
     return context.findAncestorStateOfType<MainPageState>();
   }
-  
+
   // TabChangeNotifier监听 - Temporarily remove or comment out for Scheme 1
   TabChangeNotifier? _tabChangeNotifier;
   void _onTabChangeRequested() {
     debugPrint('[MainPageState] _onTabChangeRequested triggered.');
     final index = _tabChangeNotifier?.targetTabIndex;
     debugPrint('[MainPageState] targetTabIndex: $index');
-    
+
     if (index != null) {
       // 对于FluentUI主题，需要在标签切换时管理热键
       debugPrint('[MainPageState] 准备调用_manageHotkeys()...');
       _manageHotkeys();
       debugPrint('[MainPageState] _manageHotkeys()调用完成');
-      
+
       if (globalTabController != null) {
-        debugPrint('[MainPageState] globalTabController可用，当前索引: ${globalTabController!.index}');
+        debugPrint(
+            '[MainPageState] globalTabController可用，当前索引: ${globalTabController!.index}');
         if (globalTabController!.index != index) {
           try {
             debugPrint('[MainPageState] 尝试切换到标签: $index');
@@ -920,7 +899,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       } else {
         debugPrint('[MainPageState] globalTabController为空，无法切换标签');
       }
-      
+
       // 清除标记，避免多次触发
       debugPrint('[MainPageState] 正在清除targetTabIndex');
       _tabChangeNotifier?.clearMainTabIndex();
@@ -937,12 +916,12 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     }
 
     final tabIndex = globalTabController?.index ?? -1;
-    
+
     // 检查是否应该注册热键：
     // 1. nipaplay主题：使用globalTabController，视频播放页面是索引1
     // 2. FluentUI主题：使用TabChangeNotifier，视频播放页面也是索引1
     bool shouldBeRegistered = false;
-    
+
     if (globalTabController != null) {
       // nipaplay主题：检查tabIndex == 1
       shouldBeRegistered = tabIndex == 1 && videoState.hasVideo;
@@ -954,7 +933,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       shouldBeRegistered = fluentTabIndex == 1 && videoState.hasVideo;
       //debugPrint('[HotkeyManager] FluentUI主题: fluentTabIndex=$fluentTabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
     }
-    
+
     //debugPrint('[HotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
 
     if (shouldBeRegistered && !_hotkeysAreRegistered) {
@@ -1023,13 +1002,15 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
         vsync: this,
         initialIndex: _defaultPageIndex,
       );
-      debugPrint('[MainPageState] TabController initialized with length: $tabLength, index: $_defaultPageIndex');
+      debugPrint(
+          '[MainPageState] TabController initialized with length: $tabLength, index: $_defaultPageIndex');
     }
   }
 
   void _initializeListeners() {
     globalTabController?.addListener(_onTabChange);
-    debugPrint('[MainPageState] initState: globalTabController listener ADDED.');
+    debugPrint(
+        '[MainPageState] initState: globalTabController listener ADDED.');
 
     if (globals.winLinDesktop) {
       windowManager.addListener(this);
@@ -1045,7 +1026,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       if (globals.winLinDesktop) {
         _checkWindowMaximizedState();
       }
-      
+
       _startSplashScreenSequence();
 
       if (globals.isDesktop) {
@@ -1053,7 +1034,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       }
     });
   }
-  
+
   void _initializeHotkeys() async {
     await HotkeyServiceInitializer().initialize(context);
     debugPrint('[MainPage] 初始化快捷键提示管理器');
@@ -1067,7 +1048,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
 
       // 直接使用已加载的 _defaultPageIndex, 不再需要动画切换
       // 如果需要启动动画，可以在这里实现
-      
+
       // 延迟一段时间后隐藏启动画面
       await Future.delayed(const Duration(milliseconds: 500));
 
@@ -1083,18 +1064,19 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   Future<void> _handleLaunchFile(String filePath) async {
     try {
       debugPrint('[FileAssociation] 处理启动文件: $filePath');
-      
+
       // 检查是否存在历史记录
-      WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
+      WatchHistoryItem? historyItem =
+          await WatchHistoryManager.getHistoryItem(filePath);
 
       historyItem ??= WatchHistoryItem(
-          filePath: filePath,
-          animeName: path.basenameWithoutExtension(filePath),
-          watchProgress: 0,
-          lastPosition: 0,
-          duration: 0,
-          lastWatchTime: DateTime.now(),
-        );
+        filePath: filePath,
+        animeName: path.basenameWithoutExtension(filePath),
+        watchProgress: 0,
+        lastPosition: 0,
+        duration: 0,
+        lastWatchTime: DateTime.now(),
+      );
 
       final playableItem = PlayableItem(
         videoPath: filePath,
@@ -1103,7 +1085,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
       );
 
       await PlaybackService().play(playableItem);
-      
+
       debugPrint('[FileAssociation] 启动文件已提交给PlaybackService');
     } catch (e) {
       debugPrint('[FileAssociation] 启动文件播放失败: $e');
@@ -1128,13 +1110,13 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
+
     // 初始化对话框尺寸管理器 - 只初始化一次
     if (!globals.DialogSizes.isInitialized) {
       final screenSize = MediaQuery.of(context).size;
       globals.DialogSizes.initialize(screenSize.width, screenSize.height);
     }
-    
+
     // 只添加一次监听 - Temporarily remove or comment out for Scheme 1
     _tabChangeNotifier ??= Provider.of<TabChangeNotifier>(context);
     _tabChangeNotifier?.removeListener(_onTabChangeRequested);
@@ -1143,23 +1125,24 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     // 添加VideoPlayerState监听
     final newVideoPlayerState = Provider.of<VideoPlayerState>(context);
     if (newVideoPlayerState != _videoPlayerState) {
-        _videoPlayerState?.removeListener(_manageHotkeys);
-        _videoPlayerState = newVideoPlayerState;
-        _videoPlayerState?.addListener(_manageHotkeys);
+      _videoPlayerState?.removeListener(_manageHotkeys);
+      _videoPlayerState = newVideoPlayerState;
+      _videoPlayerState?.addListener(_manageHotkeys);
     }
     _manageHotkeys(); // 初始状态检查
   }
 
   @override
   void dispose() {
-    _tabChangeNotifier?.removeListener(_onTabChangeRequested); // Temporarily remove
+    _tabChangeNotifier
+        ?.removeListener(_onTabChangeRequested); // Temporarily remove
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();
     if (globals.winLinDesktop) {
       windowManager.removeListener(this);
     }
-    
+
     // 清理安全书签资源 (仅限 macOS)
     if (!kIsWeb && Platform.isMacOS) {
       try {
@@ -1169,7 +1152,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
         debugPrint('SecurityBookmarkService 清理失败: $e');
       }
     }
-    
+
     // 释放系统资源监控，移除桌面平台限制
     SystemResourceMonitor.dispose();
 
@@ -1177,7 +1160,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
     if (globals.isDesktop) {
       HotkeyServiceInitializer().dispose();
     }
-    
+
     super.dispose();
   }
 
@@ -1292,7 +1275,7 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
             );
           },
         ),
-        
+
         // 系统资源监控显示
         Positioned(
           top: 4,
@@ -1307,7 +1290,9 @@ class MainPageState extends State<MainPage> with SingleTickerProviderStateMixin,
 // 检查自定义背景图片路径有效性
 Future<void> _validateCustomBackgroundPath() async {
   final customPath = globals.customBackgroundPath;
-  var defaultPath = (globals.isDesktop || globals.isTablet) ? 'assets/images/main_image.png' : 'assets/images/main_image_mobile.png';
+  var defaultPath = (globals.isDesktop || globals.isTablet)
+      ? 'assets/images/main_image.png'
+      : 'assets/images/main_image_mobile.png';
   bool needReset = false;
 
   if (customPath.isEmpty) {
@@ -1338,37 +1323,38 @@ Future<void> _validateCustomBackgroundPath() async {
 // 全局弹出上传视频逻辑
 Future<void> _showGlobalUploadDialog(BuildContext context) async {
   print('[Dart] 开始选择视频文件');
-  
+
   // 使用FilePickerService选择视频文件
   try {
     print('[Dart] 打开文件选择器');
     final filePickerService = FilePickerService();
     final filePath = await filePickerService.pickVideoFile();
-    
+
     if (filePath == null) {
       print('[Dart] 用户取消了选择或未选择文件');
       return;
     }
-    
+
     print('[Dart] 选择了文件: $filePath');
-    
+
     // 确保context还有效
     if (!context.mounted) {
       print('[Dart] 上下文已失效，无法初始化播放器');
       return;
     }
-    
+
     // 检查是否存在历史记录
-    WatchHistoryItem? historyItem = await WatchHistoryManager.getHistoryItem(filePath);
+    WatchHistoryItem? historyItem =
+        await WatchHistoryManager.getHistoryItem(filePath);
 
     historyItem ??= WatchHistoryItem(
-        filePath: filePath,
-        animeName: path.basenameWithoutExtension(filePath),
-        watchProgress: 0,
-        lastPosition: 0,
-        duration: 0,
-        lastWatchTime: DateTime.now(),
-      );
+      filePath: filePath,
+      animeName: path.basenameWithoutExtension(filePath),
+      watchProgress: 0,
+      lastPosition: 0,
+      duration: 0,
+      lastWatchTime: DateTime.now(),
+    );
 
     final playableItem = PlayableItem(
       videoPath: filePath,
@@ -1378,10 +1364,9 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
 
     await PlaybackService().play(playableItem);
     print('[Dart] PlaybackService 已调用');
-    
   } catch (e) {
     print('[Dart] 文件选择过程出错: $e');
-    
+
     if (context.mounted) {
       BlurSnackBar.show(context, '选择文件时出错: $e');
     }
@@ -1391,20 +1376,24 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
 // 导航到特定页面逻辑
 void _navigateToPage(BuildContext context, int pageIndex) {
   print('[Dart] 准备导航到页面索引: $pageIndex');
-  
+
   // 尝试获取MainPageState
   MainPageState? mainPageState = MainPageState.of(context);
   if (mainPageState != null && mainPageState.globalTabController != null) {
     if (mainPageState.globalTabController!.index != pageIndex) {
       mainPageState.globalTabController!.animateTo(pageIndex);
-      debugPrint('[Dart - _navigateToPage] 直接调用了globalTabController.animateTo($pageIndex)');
+      debugPrint(
+          '[Dart - _navigateToPage] 直接调用了globalTabController.animateTo($pageIndex)');
     } else {
-      debugPrint('[Dart - _navigateToPage] globalTabController已经在索引$pageIndex，无需切换');
+      debugPrint(
+          '[Dart - _navigateToPage] globalTabController已经在索引$pageIndex，无需切换');
     }
   } else {
-    debugPrint('[Dart - _navigateToPage] 无法找到MainPageState或globalTabController');
+    debugPrint(
+        '[Dart - _navigateToPage] 无法找到MainPageState或globalTabController');
     // 如果直接访问失败，使用TabChangeNotifier作为备选方案
     Provider.of<TabChangeNotifier>(context, listen: false).changeTab(pageIndex);
-    debugPrint('[Dart - _navigateToPage] 备选方案: 使用TabChangeNotifier请求切换到标签页$pageIndex');
+    debugPrint(
+        '[Dart - _navigateToPage] 备选方案: 使用TabChangeNotifier请求切换到标签页$pageIndex');
   }
 }

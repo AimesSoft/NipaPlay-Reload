@@ -83,7 +83,7 @@ find lib -name "*.dart" | while read -r file; do
   for widget in "${MOVED_WIDGETS[@]}"; do
     # 构造旧的和新的 import 路径
     OLD_IMPORT_PATH="package:nipaplay/widgets/$widget"
-    NEW_IMPORT_PATH="package:nipaplay/widgets/nipaplay_theme/$widget"
+    NEW_IMPORT_PATH="package:nipaplay/themes/nipaplay/widgets/$widget"
     
     # 使用 sed 进行替换
     # 注意：macOS 和 Linux 的 sed 命令有差异，这里使用兼容 macOS 的写法

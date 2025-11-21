@@ -6,8 +6,8 @@ import 'package:nipaplay/controllers/user_activity_controller.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
-import 'package:nipaplay/widgets/cupertino/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/widgets/cupertino/cupertino_shared_anime_detail_page.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_anime_detail_page.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 
 class CupertinoUserActivity extends StatefulWidget {

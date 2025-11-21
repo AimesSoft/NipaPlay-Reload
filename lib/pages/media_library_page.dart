@@ -2,29 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/models/bangumi_model.dart'; // Needed for _fetchedAnimeDetails
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/bangumi_service.dart'; // Needed for getAnimeDetails
-import 'package:nipaplay/widgets/nipaplay_theme/anime_card.dart';
-import 'package:nipaplay/widgets/fluent_ui/fluent_anime_card.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/themed_anime_detail.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
+import 'package:nipaplay/themes/fluent/widgets/fluent_anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/widgets/fluent_ui/fluent_media_library_view.dart';
+import 'package:nipaplay/themes/fluent/widgets/fluent_media_library_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
-import 'package:nipaplay/widgets/nipaplay_theme/blur_button.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_snackbar.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/network_media_server_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:nipaplay/providers/jellyfin_provider.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/floating_action_glass_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
-import 'package:nipaplay/widgets/nipaplay_theme/media_server_selection_sheet.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/shared_remote_host_selection_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/widgets/nipaplay_theme/blur_login_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
