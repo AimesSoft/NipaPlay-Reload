@@ -1,9 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' as material; // 用于跳转现有日志页面
-import 'package:nipaplay/themes/nipaplay/pages/settings/debug_log_viewer_page.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/themes/fluent/pages/fluent_settings/fluent_debug_log_viewer_page.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
 import 'package:nipaplay/utils/platform_utils.dart' as platform;
 import 'package:provider/provider.dart';
@@ -127,11 +126,7 @@ class FluentDeveloperOptionsPage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Button(
-              onPressed: () {
-                Navigator.of(context).push(
-                  material.MaterialPageRoute(builder: (_) => const DebugLogViewerPage()),
-                );
-              },
+              onPressed: () => _openDebugLogViewer(context),
               child: const Text('查看终端输出'),
             ),
           ],
@@ -281,6 +276,15 @@ class FluentDeveloperOptionsPage extends StatelessWidget {
         _showInfoBar(context, '查询目录失败: $e', severity: InfoBarSeverity.error);
       }
     }
+  }
+
+  void _openDebugLogViewer(BuildContext context) {
+    Navigator.of(context).push(
+      FluentPageRoute(
+        builder: (_) => const FluentDebugLogViewerPage(),
+        fullscreenDialog: true,
+      ),
+    );
   }
 
   void _showInfoBar(
