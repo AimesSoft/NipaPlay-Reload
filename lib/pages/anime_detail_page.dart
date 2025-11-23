@@ -19,6 +19,7 @@ import 'dart:io'; // Added for File operations
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart'; // 添加SwitchableView组件
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart'; // 添加标签搜索组件
 import 'package:nipaplay/themes/nipaplay/widgets/rating_dialog.dart'; // 添加评分对话框
+import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_collection_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
