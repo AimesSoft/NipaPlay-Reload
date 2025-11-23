@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -16,8 +17,8 @@ import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/bangumi_collection_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/rating_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_rating_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bangumi_collection_sheet.dart';
 
 class CupertinoSharedAnimeDetailPage extends StatefulWidget {
   const CupertinoSharedAnimeDetailPage({
@@ -45,6 +46,8 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
   State<CupertinoSharedAnimeDetailPage> createState() =>
       _CupertinoSharedAnimeDetailPageState();
 }
+
+enum _CupertinoDetailSubPage { detail, rating, bangumi }
 
 class _CupertinoSharedAnimeDetailPageState
     extends State<CupertinoSharedAnimeDetailPage> {
@@ -104,6 +107,7 @@ class _CupertinoSharedAnimeDetailPageState
   bool _isSynopsisExpanded = false;
   String? _vividCoverUrl;
   bool _isLoadingCover = false;
+  _CupertinoDetailSubPage _activeSubPage = _CupertinoDetailSubPage.detail;
 
   SharedRemoteLibraryProvider? _maybeReadProvider() {
     try {
@@ -455,6 +459,13 @@ class _CupertinoSharedAnimeDetailPageState
     return _collectionTypeLabels[type] ?? '未收藏';
   }
 
+  String _resolveAnimeTitle(BangumiAnime anime) {
+    if (anime.nameCn.isNotEmpty) {
+      return anime.nameCn;
+    }
+    return anime.name;
+  }
+
   int _getTotalEpisodeCount(BangumiAnime anime) {
     if (anime.totalEpisodes != null && anime.totalEpisodes! > 0) {
       return anime.totalEpisodes!;
@@ -648,44 +659,31 @@ class _CupertinoSharedAnimeDetailPageState
     }
   }
 
-  void _showRatingDialog() {
-    final bangumiAnime = _bangumiAnime;
-    if (bangumiAnime == null) {
+  void _openRatingEditor() {
+    if (_bangumiAnime == null) {
       return;
     }
+    setState(() {
+      _activeSubPage = BangumiApiService.isLoggedIn
+          ? _CupertinoDetailSubPage.bangumi
+          : _CupertinoDetailSubPage.rating;
+    });
+  }
 
-    final animeTitle = bangumiAnime.nameCn.isNotEmpty
-        ? bangumiAnime.nameCn
-        : bangumiAnime.name;
-
-    if (BangumiApiService.isLoggedIn) {
-      BangumiCollectionDialog.show(
-        context: context,
-        animeTitle: animeTitle,
-        initialRating: _bangumiUserRating > 0 ? _bangumiUserRating : _userRating,
-        initialCollectionType:
-            _bangumiCollectionType != 0 ? _bangumiCollectionType : 3,
-        initialComment: _bangumiComment,
-        initialEpisodeStatus: _bangumiEpisodeStatus,
-        totalEpisodes: _getTotalEpisodeCount(bangumiAnime),
-        onSubmit: _handleBangumiCollectionSubmitted,
-      );
-    } else {
-      RatingDialog.show(
-        context: context,
-        animeTitle: animeTitle,
-        initialRating: _userRating,
-        onRatingSubmitted: _handleRatingSubmitted,
-      );
+  void _closeSubPage() {
+    if (_activeSubPage != _CupertinoDetailSubPage.detail) {
+      setState(() {
+        _activeSubPage = _CupertinoDetailSubPage.detail;
+      });
     }
   }
 
-  Future<void> _handleBangumiCollectionSubmitted(
+  Future<bool> _handleBangumiCollectionSubmitted(
     BangumiCollectionSubmitResult result,
   ) async {
     final bangumiAnime = _bangumiAnime;
     if (bangumiAnime == null) {
-      return;
+      return false;
     }
 
     setState(() {
@@ -741,7 +739,7 @@ class _CupertinoSharedAnimeDetailPageState
     }
 
     if (!mounted) {
-      return;
+      return false;
     }
 
     setState(() {
@@ -753,6 +751,7 @@ class _CupertinoSharedAnimeDetailPageState
         shouldSyncDandan ? 'Bangumi收藏、评分与进度已同步' : 'Bangumi收藏已更新',
         type: AdaptiveSnackBarType.success,
       );
+      return true;
     } else {
       final parts = <String>[];
       if (!bangumiSuccess) {
@@ -762,13 +761,14 @@ class _CupertinoSharedAnimeDetailPageState
         parts.add('弹弹play: ${dandanError ?? '评分同步失败'}');
       }
       _showSnack(parts.join('；'), type: AdaptiveSnackBarType.error);
+      return false;
     }
   }
 
-  Future<void> _handleRatingSubmitted(int rating) async {
+  Future<bool> _handleRatingSubmitted(int rating) async {
     final bangumiAnime = _bangumiAnime;
     if (bangumiAnime == null) {
-      return;
+      return false;
     }
 
     setState(() {
@@ -784,7 +784,7 @@ class _CupertinoSharedAnimeDetailPageState
       final bool bangumiSynced = await _syncBangumiCollection(rating: rating);
 
       if (!mounted) {
-        return;
+        return false;
       }
 
       setState(() {
@@ -796,16 +796,18 @@ class _CupertinoSharedAnimeDetailPageState
         bangumiSynced ? '评分提交成功，已同步Bangumi' : '评分提交成功',
         type: AdaptiveSnackBarType.success,
       );
+      return true;
     } catch (e) {
       debugPrint('[共享番剧详情] 提交评分失败: $e');
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _isSubmittingRating = false;
       });
       _showSnack('评分提交失败: ${e.toString()}',
           type: AdaptiveSnackBarType.error);
+      return false;
     }
   }
 
@@ -825,11 +827,24 @@ class _CupertinoSharedAnimeDetailPageState
         themeNotifier?.animeDetailDisplayMode ??
         AnimeDetailDisplayMode.simple;
 
+    final Widget content;
     if (displayMode == AnimeDetailDisplayMode.vivid) {
       _maybeLoadVividCover();
-      return _buildVividLayout(context);
+      content = _buildVividLayout(context);
+    } else {
+      content = _buildSimpleLayout(context);
     }
-    return _buildSimpleLayout(context);
+
+    return WillPopScope(
+      onWillPop: () async {
+        if (_activeSubPage != _CupertinoDetailSubPage.detail) {
+          _closeSubPage();
+          return false;
+        }
+        return true;
+      },
+      child: content,
+    );
   }
 
   void _maybeLoadVividCover({bool force = false}) {
@@ -895,57 +910,66 @@ class _CupertinoSharedAnimeDetailPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final children = <Widget>[
+      CupertinoBottomSheetContentLayout(
+        controller: _scrollController,
+        backgroundColor: backgroundColor,
+        floatingTitleOpacity: 0,
+        sliversBuilder: (context, topSpacing) {
+          final provider = _maybeWatchProvider(context);
+          final hostName =
+              widget.sourceLabelOverride ?? provider?.activeHost?.displayName;
+          return [
+            SliverToBoxAdapter(
+              child: _buildHeader(context, topSpacing, hostName),
+            ),
+            SliverToBoxAdapter(
+              child: _buildSegmentedControl(context),
+            ),
+            if (_currentSegment == _infoSegment)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                  child: _buildInfoSection(context, hostName),
+                ),
+              )
+            else
+              ..._buildEpisodeSlivers(context),
+          ];
+        },
+      ),
+    ];
 
-    return Stack(
-      children: [
-        CupertinoBottomSheetContentLayout(
-          controller: _scrollController,
-          backgroundColor: backgroundColor,
-          floatingTitleOpacity: 0,
-          sliversBuilder: (context, topSpacing) {
-            final provider = _maybeWatchProvider(context);
-            final hostName =
-                widget.sourceLabelOverride ?? provider?.activeHost?.displayName;
-            return [
-              SliverToBoxAdapter(
-                child: _buildHeader(context, topSpacing, hostName),
-              ),
-              SliverToBoxAdapter(
-                child: _buildSegmentedControl(context),
-              ),
-              if (_currentSegment == _infoSegment)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                    child: _buildInfoSection(context, hostName),
-                  ),
-                )
-              else
-                ..._buildEpisodeSlivers(context),
-            ];
-          },
+    if (!widget.hideBackButton) {
+      children.add(
+        Positioned(
+          top: 0,
+          left: 0,
+          child: Padding(
+            padding: EdgeInsets.all(_toolbarPadding),
+            child: _buildBackButton(context),
+          ),
         ),
-        if (!widget.hideBackButton)
-          Positioned(
-            top: 0,
-            left: 0,
-            child: Padding(
-              padding: EdgeInsets.all(_toolbarPadding),
-              child: _buildBackButton(context),
-            ),
+      );
+    }
+
+    if (widget.showCloseButton) {
+      children.add(
+        Positioned(
+          top: 0,
+          right: 0,
+          child: Padding(
+            padding: EdgeInsets.all(_toolbarPadding),
+            child: _buildCloseButton(context),
           ),
-        if (widget.showCloseButton)
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Padding(
-              padding: EdgeInsets.all(_toolbarPadding),
-              child: _buildCloseButton(context),
-            ),
-          ),
-      ],
-    );
+        ),
+      );
+    }
+
+    children.add(_buildSubPageOverlay(context));
+
+    return Stack(children: children);
   }
 
   Widget _buildVividLayout(BuildContext context) {
@@ -958,56 +982,135 @@ class _CupertinoSharedAnimeDetailPageState
     final hostName =
         widget.sourceLabelOverride ?? provider?.activeHost?.displayName;
 
-    return Stack(
-      children: [
-        CupertinoBottomSheetContentLayout(
-          controller: _scrollController,
-          backgroundColor: backgroundColor,
-          floatingTitleOpacity: 0,
-          sliversBuilder: (context, topSpacing) {
-            final ratingSection = _buildRatingSection(context);
-            return [
+    final children = <Widget>[
+      CupertinoBottomSheetContentLayout(
+        controller: _scrollController,
+        backgroundColor: backgroundColor,
+        floatingTitleOpacity: 0,
+        sliversBuilder: (context, topSpacing) {
+          final ratingSection = _buildRatingSection(context);
+          return [
+            SliverToBoxAdapter(
+              child: _buildVividHeader(context, hostName),
+            ),
+            SliverToBoxAdapter(
+              child: _buildVividPlayButton(context),
+            ),
+            SliverToBoxAdapter(
+              child: _buildVividSynopsisSection(context),
+            ),
+            if (ratingSection != null)
               SliverToBoxAdapter(
-                child: _buildVividHeader(context, hostName),
-              ),
-              SliverToBoxAdapter(
-                child: _buildVividPlayButton(context),
-              ),
-              SliverToBoxAdapter(
-                child: _buildVividSynopsisSection(context),
-              ),
-              if (ratingSection != null)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                    child: ratingSection,
-                  ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  child: ratingSection,
                 ),
-              ..._buildVividEpisodeSlivers(context),
-              const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
-            ];
-          },
+              ),
+            ..._buildVividEpisodeSlivers(context),
+            const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+          ];
+        },
+      ),
+    ];
+
+    if (!widget.hideBackButton) {
+      children.add(
+        Positioned(
+          top: 0,
+          left: 0,
+          child: Padding(
+            padding: EdgeInsets.all(_toolbarPadding),
+            child: _buildBackButton(context),
+          ),
         ),
-        if (!widget.hideBackButton)
-          Positioned(
-            top: 0,
-            left: 0,
-            child: Padding(
-              padding: EdgeInsets.all(_toolbarPadding),
-              child: _buildBackButton(context),
-            ),
+      );
+    }
+
+    if (widget.showCloseButton) {
+      children.add(
+        Positioned(
+          top: 0,
+          right: 0,
+          child: Padding(
+            padding: EdgeInsets.all(_toolbarPadding),
+            child: _buildCloseButton(context),
           ),
-        if (widget.showCloseButton)
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Padding(
-              padding: EdgeInsets.all(_toolbarPadding),
-              child: _buildCloseButton(context),
-            ),
-          ),
-      ],
+        ),
+      );
+    }
+
+    children.add(_buildSubPageOverlay(context));
+
+    return Stack(children: children);
+  }
+
+  Widget _buildSubPageOverlay(BuildContext context) {
+    final bool showOverlay =
+        _activeSubPage != _CupertinoDetailSubPage.detail && _bangumiAnime != null;
+    final Widget child = showOverlay
+        ? _buildOverlayContent(context)
+        : const SizedBox.shrink(key: ValueKey('overlay-hidden'));
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !showOverlay,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 280),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (overlayChild, animation) {
+            final slideAnimation = Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(animation);
+            return SlideTransition(
+              position: slideAnimation,
+              child: FadeTransition(opacity: animation, child: overlayChild),
+            );
+          },
+          child: child,
+        ),
+      ),
     );
+  }
+
+  Widget _buildOverlayContent(BuildContext context) {
+    final bangumiAnime = _bangumiAnime;
+    if (bangumiAnime == null) {
+      return const SizedBox.shrink(key: ValueKey('overlay-hidden'));
+    }
+
+    final animeTitle = _resolveAnimeTitle(bangumiAnime);
+
+    switch (_activeSubPage) {
+      case _CupertinoDetailSubPage.rating:
+        return CupertinoRatingSheet(
+          key: const ValueKey('overlay-rating'),
+          animeTitle: animeTitle,
+          initialRating: _userRating,
+          isSubmitting: _isSubmittingRating,
+          onSubmit: _handleRatingSubmitted,
+          onCancel: _closeSubPage,
+        );
+      case _CupertinoDetailSubPage.bangumi:
+        return CupertinoBangumiCollectionSheet(
+          key: const ValueKey('overlay-bangumi'),
+          animeTitle: animeTitle,
+          initialRating:
+              _bangumiUserRating > 0 ? _bangumiUserRating : _userRating,
+          initialCollectionType:
+              _bangumiCollectionType != 0 ? _bangumiCollectionType : 3,
+          initialComment: _bangumiComment,
+          initialEpisodeStatus: _bangumiEpisodeStatus,
+          totalEpisodes: _getTotalEpisodeCount(bangumiAnime),
+          isSubmitting: _isSavingBangumiCollection,
+          onSubmit: _handleBangumiCollectionSubmitted,
+          onCancel: _closeSubPage,
+        );
+      case _CupertinoDetailSubPage.detail:
+      default:
+        return const SizedBox.shrink(key: ValueKey('overlay-hidden'));
+    }
   }
 
   String? get _cleanSummary {
@@ -1472,7 +1575,7 @@ class _CupertinoSharedAnimeDetailPageState
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       borderRadius: BorderRadius.circular(10),
       onPressed:
-          (bangumiAnime == null || isBusy) ? null : _showRatingDialog,
+          (bangumiAnime == null || isBusy) ? null : _openRatingEditor,
       child: isBusy
           ? const SizedBox(
               width: 16,

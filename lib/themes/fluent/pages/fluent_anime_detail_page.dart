@@ -10,6 +10,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'dart:io';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/rating_dialog.dart';
+import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_collection_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';

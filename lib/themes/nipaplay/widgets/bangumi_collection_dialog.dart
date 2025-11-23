@@ -3,21 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
 import 'package:provider/provider.dart';
-
-class BangumiCollectionSubmitResult {
-  final int rating;
-  final int collectionType;
-  final String comment;
-  final int episodeStatus;
-
-  const BangumiCollectionSubmitResult({
-    required this.rating,
-    required this.collectionType,
-    required this.comment,
-    required this.episodeStatus,
-  });
-}
 
 class BangumiCollectionDialog extends StatefulWidget {
   final String animeTitle;
