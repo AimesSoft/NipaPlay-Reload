@@ -87,18 +87,11 @@ class _CupertinoRatingSheetState extends State<CupertinoRatingSheet> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final Color iconColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
       child: Row(
         children: [
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: widget.isSubmitting ? null : widget.onCancel,
-            child: Icon(CupertinoIcons.chevron_left, color: iconColor),
-          ),
+          const SizedBox(width: 44),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
