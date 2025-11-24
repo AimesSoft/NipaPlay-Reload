@@ -8,6 +8,7 @@ import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/volume_gesture_area.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -21,7 +22,6 @@ class CupertinoPlayVideoPage extends StatefulWidget {
 class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   double? _dragProgress;
   bool _isDragging = false;
-  OverlayEntry? _settingsOverlay;
 
   @override
   void initState() {
@@ -36,8 +36,6 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
   @override
   void dispose() {
-    _settingsOverlay?.remove();
-    _settingsOverlay = null;
     super.dispose();
   }
 
@@ -466,15 +464,12 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   }
 
   void _showSettingsMenu(BuildContext context) {
-    _settingsOverlay?.remove();
-    _settingsOverlay = OverlayEntry(
-      builder: (context) => CupertinoPlayerMenu(
-        onClose: () {
-          _settingsOverlay?.remove();
-          _settingsOverlay = null;
-        },
-      ),
+    CupertinoBottomSheet.show(
+      context: context,
+      title: '播放设置',
+      floatingTitle: true,
+      heightRatio: 0.92,
+      child: const CupertinoPlayerMenu(),
     );
-    Overlay.of(context, rootOverlay: true).insert(_settingsOverlay!);
   }
 }
