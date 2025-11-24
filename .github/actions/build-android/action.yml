@@ -26,6 +26,11 @@ runs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
+    - name: Accept Android SDK licenses
+      shell: bash
+      run: |
+        yes | sdkmanager --licenses >/dev/null
+
     - name: Install 7zip dependency
       shell: bash
       run: |
@@ -50,7 +55,7 @@ runs:
     - name: Install Android build tools
       shell: bash
       run: |
-        sdkmanager "build-tools;29.0.3"
+        yes | sdkmanager "build-tools;29.0.3"
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
     
