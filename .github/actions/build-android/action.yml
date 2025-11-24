@@ -33,6 +33,20 @@ runs:
         yes | sdkmanager --licenses >/dev/null
         set -o pipefail
 
+    - name: Free workspace disk
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "=== Disk usage before cleanup ==="
+        df -h
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/lib/android/sdk/system-images
+        sudo rm -rf /usr/local/lib/android/sdk/emulator
+        sudo rm -rf /usr/local/lib/android/sdk/ndk/*
+        echo "=== Disk usage after cleanup ==="
+        df -h
+
     - name: Install 7zip dependency
       shell: bash
       run: |
@@ -103,7 +117,7 @@ runs:
       shell: bash
       run: |
         set +o pipefail
-        yes | sdkmanager "build-tools;29.0.3"
+        yes | sdkmanager "build-tools;29.0.3" "ndk;26.1.10909125" "cmake;3.22.1"
         set -o pipefail
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
