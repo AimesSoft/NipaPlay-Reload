@@ -6,9 +6,19 @@ import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_audio_tracks_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_control_bar_settings_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_list_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_offset_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_settings_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_tracks_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_jellyfin_quality_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playback_info_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playback_rate_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_seek_step_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playlist_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_list_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_tracks_pane.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
@@ -99,6 +109,22 @@ class _CupertinoPlayerMenuState extends State<CupertinoPlayerMenu> {
   Widget _buildPaneContent(
       PlayerMenuPaneId paneId, VideoPlayerState videoState) {
     switch (paneId) {
+      case PlayerMenuPaneId.subtitleTracks:
+        return CupertinoSubtitleTracksPane(videoState: videoState);
+      case PlayerMenuPaneId.subtitleList:
+        return CupertinoSubtitleListPane(videoState: videoState);
+      case PlayerMenuPaneId.audioTracks:
+        return CupertinoAudioTracksPane(videoState: videoState);
+      case PlayerMenuPaneId.danmakuSettings:
+        return CupertinoDanmakuSettingsPane(videoState: videoState);
+      case PlayerMenuPaneId.danmakuTracks:
+        return CupertinoDanmakuTracksPane(videoState: videoState);
+      case PlayerMenuPaneId.danmakuList:
+        return CupertinoDanmakuListPane(videoState: videoState);
+      case PlayerMenuPaneId.danmakuOffset:
+        return const CupertinoDanmakuOffsetPane();
+      case PlayerMenuPaneId.controlBarSettings:
+        return CupertinoControlBarSettingsPane(videoState: videoState);
       case PlayerMenuPaneId.playbackRate:
         return ChangeNotifierProvider(
           create: (_) => PlaybackRatePaneController(videoState: videoState),
@@ -111,6 +137,10 @@ class _CupertinoPlayerMenuState extends State<CupertinoPlayerMenu> {
         );
       case PlayerMenuPaneId.playbackInfo:
         return CupertinoPlaybackInfoPane(videoState: videoState);
+      case PlayerMenuPaneId.playlist:
+        return CupertinoPlaylistPane(videoState: videoState);
+      case PlayerMenuPaneId.jellyfinQuality:
+        return CupertinoJellyfinQualityPane(videoState: videoState);
       default:
         return _CupertinoPlayerMenuPlaceholder(
           message: '该功能的 Cupertino 样式正在适配中，请使用其他主题或稍后再试。',
@@ -155,26 +185,24 @@ class _CupertinoPlayerMenuHome extends StatelessWidget {
       grouped.putIfAbsent(item.category, () => []).add(item);
     }
 
-    final slivers = <Widget>[];
+    final sections = <Widget>[];
     grouped.forEach((category, defs) {
-      slivers.add(
-        SliverToBoxAdapter(
-          child: CupertinoListSection.insetGrouped(
-            header: Text(_categoryTitle(category)),
-            children: defs
-                .map(
-                  (item) => CupertinoListTile(
-                    leading: Icon(
-                      _iconFor(item.icon),
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                    ),
-                    title: Text(item.title),
-                    trailing: const Icon(CupertinoIcons.chevron_right),
-                    onTap: () => onSelect(item.paneId),
+      sections.add(
+        CupertinoListSection.insetGrouped(
+          header: Text(_categoryTitle(category)),
+          children: defs
+              .map(
+                (item) => CupertinoListTile(
+                  leading: Icon(
+                    _iconFor(item.icon),
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
-                )
-                .toList(),
-          ),
+                  title: Text(item.title),
+                  trailing: const Icon(CupertinoIcons.chevron_right),
+                  onTap: () => onSelect(item.paneId),
+                ),
+              )
+              .toList(),
         ),
       );
     });
@@ -184,7 +212,7 @@ class _CupertinoPlayerMenuHome extends StatelessWidget {
         SliverPadding(
           padding: EdgeInsets.only(top: topSpacing, bottom: 12),
           sliver: SliverList(
-            delegate: SliverChildListDelegate(slivers),
+            delegate: SliverChildListDelegate(sections),
           ),
         ),
       ],
