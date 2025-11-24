@@ -34,7 +34,7 @@ class PlayerMenuDefinitionBuilder {
         title: '音频轨道',
         visibilityPredicate: (ctx) =>
             ctx.supportsAdvancedTracks && ctx.hasVideo,
-      ),
+      ), 
       PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.danmakuSettings,
         category: PlayerMenuCategory.danmaku,
