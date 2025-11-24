@@ -90,6 +90,28 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadPauseOnBackgroundSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedValue = prefs.getBool(_pauseOnBackgroundKey);
+    final bool resolvedValue = storedValue ?? globals.isPhone;
+    if (_pauseOnBackground != resolvedValue) {
+      _pauseOnBackground = resolvedValue;
+      notifyListeners();
+    } else {
+      _pauseOnBackground = resolvedValue;
+    }
+  }
+
+  Future<void> setPauseOnBackground(bool enabled) async {
+    if (_pauseOnBackground == enabled) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pauseOnBackgroundKey, enabled);
+    _pauseOnBackground = enabled;
+    notifyListeners();
+  }
+
   // 保存控制栏高度
   Future<void> setControlBarHeight(double height) async {
     _controlBarHeight = height;

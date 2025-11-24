@@ -11,6 +11,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/fluent/widgets/fluent_info_bar.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class FluentPlayerSettingsPage extends StatefulWidget {
   const FluentPlayerSettingsPage({super.key});
@@ -335,6 +336,66 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
 
               const SizedBox(height: 16),
 
+              if (globals.isPhone) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '后台自动暂停',
+                          style: FluentTheme.of(context).typography.subtitle,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '切到后台或锁屏时自动暂停播放（仅移动端）',
+                          style: FluentTheme.of(context).typography.caption,
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    videoState.pauseOnBackground
+                                        ? '已开启'
+                                        : '已关闭',
+                                    style: FluentTheme.of(context)
+                                        .typography
+                                        .bodyStrong,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '关闭后，应用进入后台将继续播放',
+                                    style: FluentTheme.of(context)
+                                        .typography
+                                        .caption,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            ToggleSwitch(
+                              checked: videoState.pauseOnBackground,
+                              onChanged: (value) async {
+                                await videoState.setPauseOnBackground(value);
+                                if (!mounted) return;
+                                _showSuccessInfoBar(
+                                  value ? '后台自动暂停已开启' : '后台自动暂停已关闭',
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
@@ -372,11 +433,12 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                                 if (value == null) return;
                                 await videoState.setPlaybackEndAction(value);
                                 if (!mounted) return;
-                                final message = value == PlaybackEndAction.autoNext
-                                    ? '播放结束后将自动进入下一话'
-                                    : value == PlaybackEndAction.pause
-                                        ? '播放结束后将停留在当前页面'
-                                        : '播放结束后将返回上一页';
+                                final message =
+                                    value == PlaybackEndAction.autoNext
+                                        ? '播放结束后将自动进入下一话'
+                                        : value == PlaybackEndAction.pause
+                                            ? '播放结束后将停留在当前页面'
+                                            : '播放结束后将返回上一页';
                                 _showSuccessInfoBar(message);
                                 setState(() {});
                               },
