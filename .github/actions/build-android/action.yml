@@ -43,33 +43,27 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        FVP_VERSION=$(python3 - <<'PY'
-        from pathlib import Path
-        import sys
-
-        pubspec = Path("pubspec.lock")
-        if not pubspec.exists():
-            sys.exit("pubspec.lock 不存在，无法解析 fvp 版本。")
-        version = None
-        with pubspec.open() as f:
-            capturing = False
-            for raw in f:
-                line = raw.rstrip("\n")
-                if line.startswith("  fvp:"):
-                    capturing = True
-                    continue
-                if capturing:
-                    if not line.startswith("    "):
-                        break
-                    stripped = line.strip()
-                    if stripped.startswith("version:"):
-                        version = stripped.split(":", 1)[1].strip().strip('"')
-                        break
-        if not version:
-            sys.exit("未能在 pubspec.lock 中找到 fvp 依赖的版本号。")
-        print(version, end="")
-        PY
-        )
+        if [ ! -f "pubspec.lock" ]; then
+          echo "pubspec.lock 不存在，无法解析 fvp 版本。"
+          exit 1
+        fi
+        FVP_VERSION=$(awk '
+          /^  fvp:/ {flag=1; next}
+          flag {
+            if ($0 ~ /^    version:/) {
+              gsub(/"/, "", $2);
+              print $2;
+              exit
+            }
+            if ($0 !~ /^    /) {
+              exit
+            }
+          }
+        ' pubspec.lock)
+        if [ -z "$FVP_VERSION" ]; then
+          echo "未能在 pubspec.lock 中找到 fvp 依赖的版本号。"
+          exit 1
+        fi
         CACHE_BASE="$HOME/.pub-cache/hosted/pub.dev"
         FVP_DIR="$CACHE_BASE/fvp-$FVP_VERSION"
         ANDROID_DIR="$FVP_DIR/android"
