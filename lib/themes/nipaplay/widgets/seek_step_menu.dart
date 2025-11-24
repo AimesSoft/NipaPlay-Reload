@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
+import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 
 class SeekStepMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -18,8 +18,6 @@ class SeekStepMenu extends StatefulWidget {
 }
 
 class _SeekStepMenuState extends State<SeekStepMenu> {
-  final List<int> _seekStepOptions = [5, 10, 15, 30, 60];
-  final List<double> _speedBoostOptions = [1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0];
   final TextEditingController _skipSecondsController = TextEditingController();
 
   @override
@@ -34,16 +32,17 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
     // 延迟初始化输入框值，等待Consumer构建完成
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-        _skipSecondsController.text = videoState.skipSeconds.toString();
+        final controller =
+            Provider.of<SeekStepPaneController>(context, listen: false);
+        _skipSecondsController.text = controller.skipSeconds.toString();
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
+    return Consumer<SeekStepPaneController>(
+      builder: (context, controller, child) {
         return BaseSettingsMenu(
           title: '播放设置',
           onClose: widget.onClose,
@@ -69,7 +68,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           ),
                         ),
                         Text(
-                          '${videoState.seekStepSeconds}秒',
+                          '${controller.seekStepSeconds}秒',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -94,14 +93,14 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
               const Divider(color: Colors.white24, height: 1),
               
               // 快进快退时间选项列表
-              ..._seekStepOptions.map((seconds) {
-                final isSelected = videoState.seekStepSeconds == seconds;
+              ...controller.seekStepOptions.map((seconds) {
+                final isSelected = controller.seekStepSeconds == seconds;
                 
                 return Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () {
-                      videoState.setSeekStepSeconds(seconds);
+                      controller.setSeekStepSeconds(seconds);
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -148,7 +147,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           ),
                         ),
                         Text(
-                          '${videoState.speedBoostRate}x',
+                          '${controller.speedBoostRate}x',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -173,14 +172,14 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
               const Divider(color: Colors.white24, height: 1),
               
               // 倍速选项列表
-              ..._speedBoostOptions.map((speed) {
-                final isSelected = videoState.speedBoostRate == speed;
+              ...controller.speedBoostOptions.map((speed) {
+                final isSelected = controller.speedBoostRate == speed;
                 
                 return Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () {
-                      videoState.setSpeedBoostRate(speed);
+                      controller.setSpeedBoostRate(speed);
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -227,7 +226,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           ),
                         ),
                         Text(
-                          '${videoState.skipSeconds}秒',
+                          '${controller.skipSeconds}秒',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -254,9 +253,15 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
-                              final newValue = (videoState.skipSeconds - 10).clamp(10, 600);
-                              videoState.setSkipSeconds(newValue);
-                              _skipSecondsController.text = newValue.toString();
+                              final newValue = (controller.skipSeconds - 10)
+                                  .clamp(
+                                    SeekStepPaneController.minSkipSeconds,
+                                    SeekStepPaneController.maxSkipSeconds,
+                                  )
+                                  .toInt();
+                              controller.setSkipSeconds(newValue);
+                              _skipSecondsController.text =
+                                  newValue.toString();
                             },
                             borderRadius: BorderRadius.circular(20),
                             child: Container(
@@ -307,13 +312,16 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                             ),
                             onChanged: (value) {
                               final intValue = int.tryParse(value);
-                              if (intValue != null && intValue >= 10 && intValue <= 600) {
-                                videoState.setSkipSeconds(intValue);
+                              if (intValue != null &&
+                                  intValue >= SeekStepPaneController.minSkipSeconds &&
+                                  intValue <= SeekStepPaneController.maxSkipSeconds) {
+                                controller.setSkipSeconds(intValue);
                               }
                             },
                             onTap: () {
                               if (_skipSecondsController.text.isEmpty) {
-                                _skipSecondsController.text = videoState.skipSeconds.toString();
+                                _skipSecondsController.text =
+                                    controller.skipSeconds.toString();
                               }
                             },
                           ),
@@ -324,9 +332,15 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
-                              final newValue = (videoState.skipSeconds + 10).clamp(10, 600);
-                              videoState.setSkipSeconds(newValue);
-                              _skipSecondsController.text = newValue.toString();
+                              final newValue = (controller.skipSeconds + 10)
+                                  .clamp(
+                                    SeekStepPaneController.minSkipSeconds,
+                                    SeekStepPaneController.maxSkipSeconds,
+                                  )
+                                  .toInt();
+                              controller.setSkipSeconds(newValue);
+                              _skipSecondsController.text =
+                                  newValue.toString();
                             },
                             borderRadius: BorderRadius.circular(20),
                             child: Container(

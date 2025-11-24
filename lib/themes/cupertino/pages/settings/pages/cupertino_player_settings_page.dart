@@ -12,6 +12,7 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -307,9 +308,9 @@ class _CupertinoPlayerSettingsPageState
     );
     final sectionBackground = resolveSettingsSectionBackground(context);
 
-  final double topPadding = MediaQuery.of(context).padding.top + 64;
+    final double topPadding = MediaQuery.of(context).padding.top + 64;
 
-  final Color tileBackground = resolveSettingsTileBackground(context);
+    final Color tileBackground = resolveSettingsTileBackground(context);
 
     final List<Widget> sections = [
       CupertinoSettingsGroupCard(
@@ -324,13 +325,12 @@ class _CupertinoPlayerSettingsPageState
               color: resolveSettingsIconColor(context),
             ),
             title: const Text('播放器内核'),
-            subtitle:
-                Text(_getPlayerKernelDescription(_selectedKernelType)),
+            subtitle: Text(_getPlayerKernelDescription(_selectedKernelType)),
             trailing: AdaptivePopupMenuButton.widget<PlayerKernelType>(
               items: _kernelMenuItems(),
               buttonStyle: PopupButtonStyle.gray,
-              child:
-                  _buildMenuChip(context, _kernelDisplayName(_selectedKernelType)),
+              child: _buildMenuChip(
+                  context, _kernelDisplayName(_selectedKernelType)),
               onSelected: (index, entry) {
                 final kernel = entry.value ?? PlayerKernelType.values[index];
                 if (kernel != _selectedKernelType) {
@@ -342,6 +342,42 @@ class _CupertinoPlayerSettingsPageState
           ),
         ],
       ),
+      if (globals.isPhone) ...[
+        const SizedBox(height: 16),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return CupertinoSettingsGroupCard(
+              margin: EdgeInsets.zero,
+              backgroundColor: sectionBackground,
+              addDividers: true,
+              dividerIndent: 16,
+              children: [
+                CupertinoSettingsTile(
+                  leading: Icon(
+                    CupertinoIcons.pause_circle,
+                    color: resolveSettingsIconColor(context),
+                  ),
+                  title: const Text('后台自动暂停'),
+                  subtitle: const Text('切到后台或锁屏时自动暂停播放'),
+                  trailing: AdaptiveSwitch(
+                    value: videoState.pauseOnBackground,
+                    onChanged: (value) async {
+                      await videoState.setPauseOnBackground(value);
+                      if (!mounted) return;
+                      AdaptiveSnackBar.show(
+                        context,
+                        message: value ? '后台自动暂停已开启' : '后台自动暂停已关闭',
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                  ),
+                  backgroundColor: tileBackground,
+                ),
+              ],
+            );
+          },
+        ),
+      ],
       if (_selectedKernelType == PlayerKernelType.mediaKit)
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -428,8 +464,7 @@ class _CupertinoPlayerSettingsPageState
                 _danmakuTitle(_selectedDanmakuRenderEngine),
               ),
               onSelected: (index, entry) {
-                final engine = entry.value ??
-                    DanmakuRenderEngine.values[index];
+                final engine = entry.value ?? DanmakuRenderEngine.values[index];
                 if (engine != _selectedDanmakuRenderEngine) {
                   _saveDanmakuRenderEngineSettings(engine);
                 }
@@ -462,9 +497,7 @@ class _CupertinoPlayerSettingsPageState
                     if (mounted) {
                       AdaptiveSnackBar.show(
                         context,
-                        message: value
-                            ? '已开启弹幕转换简体中文'
-                            : '已关闭弹幕转换简体中文',
+                        message: value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文',
                         type: AdaptiveSnackBarType.success,
                       );
                     }
@@ -477,9 +510,7 @@ class _CupertinoPlayerSettingsPageState
                   if (mounted) {
                     AdaptiveSnackBar.show(
                       context,
-                      message: newValue
-                          ? '已开启弹幕转换简体中文'
-                          : '已关闭弹幕转换简体中文',
+                      message: newValue ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文',
                       type: AdaptiveSnackBarType.success,
                     );
                   }

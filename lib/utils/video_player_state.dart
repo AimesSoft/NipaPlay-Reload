@@ -77,6 +77,7 @@ part 'video_player_state/video_player_state_danmaku.dart';
 part 'video_player_state/video_player_state_subtitles.dart';
 part 'video_player_state/video_player_state_streaming.dart';
 part 'video_player_state/video_player_state_navigation.dart';
+part 'video_player_state/video_player_state_lifecycle.dart';
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -224,14 +225,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final Map<String, bool> _danmakuTrackEnabled = {};
   final String _controlBarHeightKey = 'control_bar_height';
   double _controlBarHeight = 20.0; // 默认高度
-  final String _minimalProgressBarEnabledKey =
-      'minimal_progress_bar_enabled';
+  final String _minimalProgressBarEnabledKey = 'minimal_progress_bar_enabled';
   bool _minimalProgressBarEnabled = false; // 默认关闭
-  final String _minimalProgressBarColorKey =
-      'minimal_progress_bar_color';
+  final String _minimalProgressBarColorKey = 'minimal_progress_bar_color';
   int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
-  final String _showDanmakuDensityChartKey =
-      'show_danmaku_density_chart';
+  final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
   final String _danmakuOpacityKey = 'danmaku_opacity';
   double _danmakuOpacity = 1.0; // 默认透明度
@@ -308,6 +306,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 跳过时间设置
   final String _skipSecondsKey = 'skip_seconds';
   int _skipSeconds = 90; // 默认90秒
+  final String _pauseOnBackgroundKey = 'pause_on_background';
+  bool _pauseOnBackground = globals.isPhone;
 
   dynamic danmakuController; // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
@@ -386,7 +386,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 检查是否为平板设备（使用globals中的判定逻辑）
   bool get isTablet => globals.isTablet;
 
-
   VideoPlayerState() {
     // 创建临时播放器实例，后续会被 _initialize 中的异步创建替换
     player = Player();
@@ -404,8 +403,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       unawaited(_savePlayerVolumePreference(_currentVolume));
       return;
     }
-    _volumePersistenceTimer =
-        Timer(_volumeSaveDebounceDuration, () {
+    _volumePersistenceTimer = Timer(_volumeSaveDebounceDuration, () {
       _volumePersistenceTimer = null;
       unawaited(_savePlayerVolumePreference(_currentVolume));
     });
@@ -414,8 +412,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<void> _savePlayerVolumePreference(double volume) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(
-          _playerVolumeKey, volume.clamp(0.0, 1.0));
+      await prefs.setDouble(_playerVolumeKey, volume.clamp(0.0, 1.0));
     } catch (e) {
       debugPrint('保存播放器音量失败: $e');
     }
@@ -460,8 +457,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (_systemVolumeController == null) return;
     _isSystemVolumeUpdating = true;
     try {
-      await _systemVolumeController!
-          .setVolume(volume.clamp(0.0, 1.0));
+      await _systemVolumeController!.setVolume(volume.clamp(0.0, 1.0));
     } catch (e) {
       debugPrint('设置系统音量失败: $e');
     } finally {
@@ -505,6 +501,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get danmakuScrollDurationSeconds =>
       _baseDanmakuScrollDurationSeconds / _danmakuSpeedMultiplier;
   bool get danmakuStacking => _danmakuStacking;
+  bool get pauseOnBackground => _pauseOnBackground;
   Anime4KProfile get anime4kProfile => _anime4kProfile;
   bool get isAnime4KEnabled => _anime4kProfile != Anime4KProfile.off;
   bool get isAnime4KSupported => _supportsAnime4KForCurrentPlayer();
@@ -520,7 +517,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 获取时间轴告知弹幕轨道状态
   bool get isTimelineDanmakuEnabled => _isTimelineDanmakuEnabled;
-
 
   // 字幕管理器相关的getter
   SubtitleManager get subtitleManager => _subtitleManager;
@@ -574,10 +570,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isRightEdgeHovered => _isRightEdgeHovered;
   // 对外暴露的高频播放时间
   ValueListenable<double> get playbackTimeMs => _playbackTimeMs;
-
-
-
-
 
   @override
   void dispose() {
@@ -768,12 +760,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void onWindowUnmaximize() {}
 
-
-
-
-
-
-
   /// 获取当前时间窗口内的弹幕（分批加载/懒加载）
   List<Map<String, dynamic>> getActiveDanmakuList(double currentTime,
       {double window = 15.0}) {
@@ -787,8 +773,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }).toList();
   }
 
-
-
   // 获取过滤后的弹幕列表
   List<Map<String, dynamic>> getFilteredDanmakuList() {
     return _danmakuList
@@ -800,9 +784,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   set onExternalSubtitleAutoLoaded(Function(String, String)? callback) {
     _subtitleManager.onExternalSubtitleAutoLoaded = callback;
   }
-
-
-
 
   // 检查是否可以播放上一话
   bool get canPlayPreviousEpisode {
@@ -851,7 +832,4 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     return false;
   }
-
-
-
 }

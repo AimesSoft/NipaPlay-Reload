@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
-import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+
+import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'base_settings_menu.dart';
 
 class PlaybackRateMenu extends StatefulWidget {
@@ -19,15 +19,10 @@ class PlaybackRateMenu extends StatefulWidget {
 }
 
 class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
-  // 预设的倍速选项
-  static const List<double> _speedOptions = [
-    0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 5.0
-  ];
-
   @override
   Widget build(BuildContext context) {
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
+    return Consumer<PlaybackRatePaneController>(
+      builder: (context, controller, child) {
         return BaseSettingsMenu(
           title: '倍速设置',
           onClose: widget.onClose,
@@ -53,7 +48,7 @@ style: TextStyle(
                           ),
                         ),
                         Text(
-                          '${videoState.playbackRate}x',
+                          '${controller.currentRate}x',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -64,7 +59,9 @@ style: TextStyle(
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      videoState.isSpeedBoostActive ? '正在倍速播放' : '点击下方选项或长按屏幕倍速播放',
+                      controller.isSpeedBoostActive
+                          ? '正在倍速播放'
+                          : '点击下方选项或长按屏幕倍速播放',
                       locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         fontSize: 12,
@@ -78,16 +75,15 @@ style: TextStyle(
               const Divider(color: Colors.white24, height: 1),
               
               // 倍速选项列表
-              ..._speedOptions.map((speed) {
-                final isSelected = videoState.playbackRate == speed;
+              ...controller.speedOptions.map((speed) {
+                final isSelected = controller.currentRate == speed;
                 final isNormalSpeed = speed == 1.0;
                 
                 return Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () {
-                      // 设置播放速度（会自动应用到播放器）
-                      videoState.setPlaybackRate(speed);
+                      controller.setPlaybackRate(speed);
                     },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(

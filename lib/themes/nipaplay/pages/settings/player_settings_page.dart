@@ -16,6 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -376,6 +377,28 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         const Divider(color: Colors.white12, height: 1),
 
+        if (globals.isPhone) ...[
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.toggle(
+                title: '后台自动暂停',
+                subtitle: '切到后台或锁屏时自动暂停播放（仅移动端）',
+                icon: Ionicons.pause_circle_outline,
+                value: videoState.pauseOnBackground,
+                onChanged: (bool value) async {
+                  await videoState.setPauseOnBackground(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '后台自动暂停已开启' : '后台自动暂停已关闭',
+                  );
+                },
+              );
+            },
+          ),
+          const Divider(color: Colors.white12, height: 1),
+        ],
+
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
             final Anime4KProfile currentProfile = videoState.anime4kProfile;
@@ -392,32 +415,32 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 )
                 .toList();
 
-        if (_selectedKernelType != PlayerKernelType.mediaKit) {
-          return const SizedBox.shrink();
-        }
+            if (_selectedKernelType != PlayerKernelType.mediaKit) {
+              return const SizedBox.shrink();
+            }
 
-        if (!supportsAnime4K) {
-          return const SizedBox.shrink();
-        }
+            if (!supportsAnime4K) {
+              return const SizedBox.shrink();
+            }
 
-        return SettingsItem.dropdown(
-          title: 'Anime4K 超分辨率（实验性）',
-          subtitle: '使用 Anime4K GLSL 着色器提升二次元画面清晰度',
-          icon: Ionicons.color_wand_outline,
-          items: items,
-          onChanged: (dynamic value) async {
-            if (value is! Anime4KProfile) return;
-            await videoState.setAnime4KProfile(value);
-            if (!context.mounted) return;
-            final String option = _getAnime4KProfileTitle(value);
-            final String message = value == Anime4KProfile.off
-                ? '已关闭 Anime4K'
-                : 'Anime4K 已切换为$option';
-            BlurSnackBar.show(context, message);
+            return SettingsItem.dropdown(
+              title: 'Anime4K 超分辨率（实验性）',
+              subtitle: '使用 Anime4K GLSL 着色器提升二次元画面清晰度',
+              icon: Ionicons.color_wand_outline,
+              items: items,
+              onChanged: (dynamic value) async {
+                if (value is! Anime4KProfile) return;
+                await videoState.setAnime4KProfile(value);
+                if (!context.mounted) return;
+                final String option = _getAnime4KProfileTitle(value);
+                final String message = value == Anime4KProfile.off
+                    ? '已关闭 Anime4K'
+                    : 'Anime4K 已切换为$option';
+                BlurSnackBar.show(context, message);
+              },
+            );
           },
-        );
-      },
-    ),
+        ),
 
         const Divider(color: Colors.white12, height: 1),
 
