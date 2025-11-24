@@ -12,6 +12,9 @@ import 'fluent_danmaku_tracks_menu.dart';
 import 'fluent_danmaku_list_menu.dart';
 import 'fluent_danmaku_offset_menu.dart';
 import 'fluent_playlist_menu.dart';
+import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
+import 'package:nipaplay/player_menu/player_menu_models.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 
 class FluentRightEdgeMenu extends StatefulWidget {
   const FluentRightEdgeMenu({super.key});
@@ -29,8 +32,21 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
   late Animation<double> _slideAnimation;
 
   // 导航系统状态
-  String _currentView = 'main'; // main, video, audio, subtitle, danmaku, playlist
-  final List<String> _navigationStack = ['main']; // 导航堆栈
+  PlayerMenuPaneId? _currentPane;
+  final List<PlayerMenuPaneId?> _navigationStack = [null];
+
+  static const Set<PlayerMenuPaneId> _supportedPaneIds = {
+    PlayerMenuPaneId.seekStep,
+    PlayerMenuPaneId.playbackRate,
+    PlayerMenuPaneId.audioTracks,
+    PlayerMenuPaneId.subtitleTracks,
+    PlayerMenuPaneId.subtitleList,
+    PlayerMenuPaneId.danmakuSettings,
+    PlayerMenuPaneId.danmakuTracks,
+    PlayerMenuPaneId.danmakuList,
+    PlayerMenuPaneId.danmakuOffset,
+    PlayerMenuPaneId.playlist,
+  };
 
   @override
   void initState() {
@@ -75,10 +91,10 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
     });
   }
 
-  void _navigateTo(String view) {
+  void _navigateTo(PlayerMenuPaneId paneId) {
     setState(() {
-      _navigationStack.add(view);
-      _currentView = view;
+      _navigationStack.add(paneId);
+      _currentPane = paneId;
     });
   }
 
@@ -86,7 +102,7 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
     if (_navigationStack.length > 1) {
       setState(() {
         _navigationStack.removeLast();
-        _currentView = _navigationStack.last;
+        _currentPane = _navigationStack.last;
       });
     }
   }
@@ -122,6 +138,33 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
             }
           }
         });
+
+        final menuItems = PlayerMenuDefinitionBuilder(
+          context: PlayerMenuContext(
+            videoState: videoState,
+            kernelType: PlayerFactory.getKernelType(),
+          ),
+          supportedPaneIds: _supportedPaneIds,
+        ).build();
+        final paneLookup = {
+          for (final item in menuItems) item.paneId: item,
+        };
+        final currentTitle = _currentPane == null
+            ? '播放设置'
+            : paneLookup[_currentPane!]?.title ?? '播放设置';
+
+        if (_currentPane != null && !paneLookup.containsKey(_currentPane)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _currentPane = null;
+                _navigationStack
+                  ..clear()
+                  ..add(null);
+              });
+            }
+          });
+        }
 
         return Positioned(
           right: 0,
@@ -205,7 +248,7 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
                                   ),
                                 ),
                                 child: Text(
-                                  _getViewTitle(_currentView),
+                                  currentTitle,
                                   style: FluentTheme.of(context).typography.bodyStrong,
                                 ),
                               ),
@@ -214,7 +257,7 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
                                 child: Column(
                                   children: [
                                     // 返回按钮区域
-                                    if (_currentView != 'main')
+                                    if (_currentPane != null)
                                       Container(
                                         width: double.infinity,
                                         padding: const EdgeInsets.all(8),
@@ -249,10 +292,10 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
                                             );
                                           },
                                         ),
-                                      ),
+                                    ),
                                     // 菜单内容
                                     Expanded(
-                                      child: _buildCurrentView(videoState),
+                                      child: _buildCurrentView(videoState, menuItems),
                                     ),
                                   ],
                                 ),
@@ -271,148 +314,84 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
     );
   }
 
-  String _getViewTitle(String view) {
-    switch (view) {
-      case 'main':
-        return '播放设置';
-      case 'seek_step':
-        return '快进快退时间';
-      case 'video':
-        return '视频设置';
-      case 'audio':
-        return '音频设置';
-      case 'subtitle':
-        return '字幕设置';
-      case 'danmaku':
-        return '弹幕设置';
-      case 'playlist':
-        return '播放列表';
-      case 'playback_rate':
-        return '播放速度';
-      case 'subtitle_tracks':
-        return '字幕轨道';
-      case 'audio_tracks':
-        return '音频轨道';
-      case 'danmaku_tracks':
-        return '弹幕轨道';
-      case 'danmaku_list':
-        return '弹幕列表';
-      case 'subtitle_list':
-        return '字幕列表';
-      case 'danmaku_offset':
-        return '弹幕偏移';
-      default:
-        return '播放设置';
+  Widget _buildCurrentView(
+      VideoPlayerState videoState, List<PlayerMenuItemDefinition> menuItems) {
+    if (_currentPane == null) {
+      return _buildMainMenu(videoState, menuItems);
     }
-  }
 
-  Widget _buildCurrentView(VideoPlayerState videoState) {
-    switch (_currentView) {
-      case 'main':
-        return _buildMainMenu(videoState);
-      case 'seek_step':
+    switch (_currentPane!) {
+      case PlayerMenuPaneId.seekStep:
         return _buildSeekStepMenu(videoState);
-      case 'video':
-        return _buildVideoMenu(videoState);
-      case 'audio':
-        return _buildAudioMenu(videoState);
-      case 'subtitle':
-        return _buildSubtitleMenu(videoState);
-      case 'danmaku':
-        return _buildDanmakuMenu(videoState);
-      case 'playlist':
-        return _buildPlaylistMenu(videoState);
-      case 'playback_rate':
+      case PlayerMenuPaneId.playbackRate:
         return _buildPlaybackRateMenu(videoState);
-      case 'subtitle_tracks':
-        return _buildSubtitleTracksMenu(videoState);
-      case 'audio_tracks':
+      case PlayerMenuPaneId.audioTracks:
         return _buildAudioTracksMenu(videoState);
-      case 'danmaku_tracks':
-        return _buildDanmakuTracksMenu(videoState);
-      case 'danmaku_list':
-        return _buildDanmakuListMenu(videoState);
-      case 'subtitle_list':
+      case PlayerMenuPaneId.subtitleTracks:
+        return _buildSubtitleTracksMenu(videoState);
+      case PlayerMenuPaneId.subtitleList:
         return _buildSubtitleListMenu(videoState);
-      case 'danmaku_offset':
+      case PlayerMenuPaneId.danmakuSettings:
+        return _buildDanmakuMenu(videoState);
+      case PlayerMenuPaneId.danmakuTracks:
+        return _buildDanmakuTracksMenu(videoState);
+      case PlayerMenuPaneId.danmakuList:
+        return _buildDanmakuListMenu(videoState);
+      case PlayerMenuPaneId.danmakuOffset:
         return _buildDanmakuOffsetMenu(videoState);
+      case PlayerMenuPaneId.playlist:
+        return _buildPlaylistMenu(videoState);
       default:
-        return _buildMainMenu(videoState);
+        return _buildMainMenu(videoState, menuItems);
     }
   }
 
-  Widget _buildMainMenu(VideoPlayerState videoState) {
+  Widget _buildMainMenu(
+      VideoPlayerState videoState, List<PlayerMenuItemDefinition> items) {
+    final Map<PlayerMenuCategory, List<PlayerMenuItemDefinition>> grouped = {};
+    for (final item in items) {
+      grouped.putIfAbsent(item.category, () => []).add(item);
+    }
+
+    final children = <Widget>[];
+    grouped.forEach((category, definitions) {
+      children.add(
+        _buildMenuGroup(
+          _categoryTitle(category),
+          definitions.map(_buildMenuItem).toList(growable: false),
+        ),
+      );
+      children.add(const SizedBox(height: 8));
+    });
+    if (children.isNotEmpty) {
+      children.removeLast();
+    }
+
     return ListView(
       padding: const EdgeInsets.all(8),
-      children: [
-        _buildMenuGroup('播放控制', [
-          _buildMenuItem('快进快退时间', FluentIcons.clock, () {
-            _navigateTo('seek_step');
-          }),
-        ]),
-        const SizedBox(height: 8),
-        _buildMenuGroup('视频', [
-          _buildMenuItem('播放速度', FluentIcons.clock, () {
-            _navigateTo('playback_rate');
-          }),
-        ]),
-        const SizedBox(height: 8),
-        _buildMenuGroup('音频', [
-          _buildMenuItem('音频轨道', FluentIcons.volume3, () {
-            _navigateTo('audio_tracks');
-          }),
-        ]),
-        const SizedBox(height: 8),
-        _buildMenuGroup('字幕', [
-          _buildMenuItem('字幕轨道', FluentIcons.closed_caption, () {
-            _navigateTo('subtitle_tracks');
-          }),
-          _buildMenuItem('字幕列表', FluentIcons.list, () {
-            _navigateTo('subtitle_list');
-          }),
-        ]),
-        const SizedBox(height: 8),
-        _buildMenuGroup('弹幕', [
-          _buildMenuItem('弹幕设置', FluentIcons.comment, () {
-            _navigateTo('danmaku');
-          }),
-          _buildMenuItem('弹幕轨道', FluentIcons.list, () {
-            _navigateTo('danmaku_tracks');
-          }),
-          _buildMenuItem('弹幕列表', FluentIcons.list, () {
-            _navigateTo('danmaku_list');
-          }),
-          _buildMenuItem('弹幕偏移', FluentIcons.clock, () {
-            _navigateTo('danmaku_offset');
-          }),
-        ]),
-        const SizedBox(height: 8),
-        _buildMenuGroup('播放器', [
-          if (videoState.currentVideoPath != null || videoState.animeId != null)
-            _buildMenuItem('播放列表', FluentIcons.playlist_music, () {
-              _navigateTo('playlist');
-            }),
-        ]),
-      ],
+      children: children,
     );
   }
 
-  Widget _buildVideoMenu(VideoPlayerState videoState) {
-    return const Center(
-      child: Text('视频设置开发中...'),
-    );
-  }
-
-  Widget _buildAudioMenu(VideoPlayerState videoState) {
-    return const Center(
-      child: Text('音频设置开发中...'),
-    );
-  }
-
-  Widget _buildSubtitleMenu(VideoPlayerState videoState) {
-    return const Center(
-      child: Text('字幕设置开发中...'),
-    );
+  String _categoryTitle(PlayerMenuCategory category) {
+    switch (category) {
+      case PlayerMenuCategory.playbackControl:
+        return '播放控制';
+      case PlayerMenuCategory.video:
+        return '视频';
+      case PlayerMenuCategory.audio:
+        return '音频';
+      case PlayerMenuCategory.subtitle:
+        return '字幕';
+      case PlayerMenuCategory.danmaku:
+        return '弹幕';
+      case PlayerMenuCategory.player:
+        return '播放器';
+      case PlayerMenuCategory.streaming:
+        return '串流';
+      case PlayerMenuCategory.info:
+        return '信息';
+    }
   }
 
   Widget _buildDanmakuMenu(VideoPlayerState videoState) {
@@ -542,11 +521,11 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
     );
   }
 
-  Widget _buildMenuItem(String title, IconData icon, VoidCallback onTap) {
+  Widget _buildMenuItem(PlayerMenuItemDefinition item) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: HoverButton(
-        onPressed: onTap,
+        onPressed: () => _navigateTo(item.paneId),
         builder: (context, states) {
           return Container(
             width: double.infinity,
@@ -560,14 +539,14 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
             child: Row(
               children: [
                 Icon(
-                  icon,
+                  _iconFor(item.icon),
                   size: 16,
                   color: FluentTheme.of(context).resources.textFillColorPrimary,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    title,
+                    item.title,
                     style: FluentTheme.of(context).typography.body?.copyWith(
                       color: FluentTheme.of(context).resources.textFillColorPrimary,
                     ),
@@ -579,5 +558,36 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
         },
       ),
     );
+  }
+
+  IconData _iconFor(PlayerMenuIconToken icon) {
+    switch (icon) {
+      case PlayerMenuIconToken.subtitles:
+        return FluentIcons.closed_caption;
+      case PlayerMenuIconToken.subtitleList:
+        return FluentIcons.list;
+      case PlayerMenuIconToken.audioTrack:
+        return FluentIcons.volume3;
+      case PlayerMenuIconToken.danmakuSettings:
+        return FluentIcons.comment;
+      case PlayerMenuIconToken.danmakuTracks:
+        return FluentIcons.list;
+      case PlayerMenuIconToken.danmakuList:
+        return FluentIcons.list;
+      case PlayerMenuIconToken.danmakuOffset:
+        return FluentIcons.clock;
+      case PlayerMenuIconToken.controlBarSettings:
+        return FluentIcons.settings;
+      case PlayerMenuIconToken.playbackRate:
+        return FluentIcons.clock;
+      case PlayerMenuIconToken.playlist:
+        return FluentIcons.playlist_music;
+      case PlayerMenuIconToken.jellyfinQuality:
+        return FluentIcons.playlist_music;
+      case PlayerMenuIconToken.playbackInfo:
+        return FluentIcons.info;
+      case PlayerMenuIconToken.seekStep:
+        return FluentIcons.settings;
+    }
   }
 }
