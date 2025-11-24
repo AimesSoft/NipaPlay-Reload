@@ -48,6 +48,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载播放结束行为设置
     await _loadPlaybackEndAction();
+    await _loadPauseOnBackgroundSetting();
 
     // 订阅内核切换事件
     _subscribeToKernelChanges();
