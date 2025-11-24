@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart';
 
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
@@ -12,9 +13,11 @@ class CupertinoDanmakuTracksPane extends StatefulWidget {
   const CupertinoDanmakuTracksPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   State<CupertinoDanmakuTracksPane> createState() =>
@@ -166,6 +169,9 @@ class _CupertinoDanmakuTracksPaneState
             ),
             const SizedBox(height: 24),
           ]),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: widget.onBack),
         ),
       ],
     );

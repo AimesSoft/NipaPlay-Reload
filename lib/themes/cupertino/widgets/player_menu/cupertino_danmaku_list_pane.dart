@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoDanmakuListPane extends StatefulWidget {
   const CupertinoDanmakuListPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   State<CupertinoDanmakuListPane> createState() =>
@@ -411,6 +414,9 @@ class _CupertinoDanmakuListPaneState extends State<CupertinoDanmakuListPane> {
               ),
             ),
           ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: widget.onBack),
+        ),
       ],
     );
   }

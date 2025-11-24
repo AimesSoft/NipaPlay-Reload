@@ -7,6 +7,7 @@ import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
@@ -14,9 +15,11 @@ class CupertinoJellyfinQualityPane extends StatefulWidget {
   const CupertinoJellyfinQualityPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   State<CupertinoJellyfinQualityPane> createState() =>
@@ -247,6 +250,9 @@ class _CupertinoJellyfinQualityPaneState
               const SizedBox(height: 12),
             ]),
           ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: widget.onBack),
+        ),
       ],
     );
   }

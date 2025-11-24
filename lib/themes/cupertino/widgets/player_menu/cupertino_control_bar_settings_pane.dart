@@ -1,15 +1,18 @@
 import 'package:flutter/cupertino.dart';
 
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoControlBarSettingsPane extends StatelessWidget {
   const CupertinoControlBarSettingsPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   static const List<int> _colorOptions = [
     0xFFFF7274,
@@ -121,6 +124,9 @@ class CupertinoControlBarSettingsPane extends StatelessWidget {
               ),
             const SizedBox(height: 24),
           ]),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: onBack),
         ),
       ],
     );

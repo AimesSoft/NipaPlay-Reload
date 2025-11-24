@@ -3,10 +3,13 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 
 class CupertinoDanmakuOffsetPane extends StatefulWidget {
-  const CupertinoDanmakuOffsetPane({super.key});
+  const CupertinoDanmakuOffsetPane({super.key, required this.onBack});
+
+  final VoidCallback onBack;
 
   @override
   State<CupertinoDanmakuOffsetPane> createState() =>
@@ -175,11 +178,11 @@ class _CupertinoDanmakuOffsetPaneState
                     ),
                   ],
                 ),
-                CupertinoListSection.insetGrouped(
-                  children: [
-                    CupertinoListTile(
-                      title: const Text('重置偏移'),
-                      subtitle: const Text('恢复为无偏移状态'),
+            CupertinoListSection.insetGrouped(
+              children: [
+                CupertinoListTile(
+                  title: const Text('重置偏移'),
+                  subtitle: const Text('恢复为无偏移状态'),
                       trailing: const Icon(CupertinoIcons.refresh),
                       onTap: currentOffset == 0
                           ? null
@@ -192,6 +195,9 @@ class _CupertinoDanmakuOffsetPaneState
                 ),
                 const SizedBox(height: 24),
               ]),
+            ),
+            SliverToBoxAdapter(
+              child: CupertinoPaneBackButton(onPressed: widget.onBack),
             ),
           ],
         );

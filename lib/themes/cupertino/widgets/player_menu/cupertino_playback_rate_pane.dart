@@ -3,9 +3,12 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 
 class CupertinoPlaybackRatePane extends StatelessWidget {
-  const CupertinoPlaybackRatePane({super.key});
+  const CupertinoPlaybackRatePane({super.key, required this.onBack});
+
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +74,9 @@ class CupertinoPlaybackRatePane extends StatelessWidget {
               ),
             ]),
           ),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: onBack),
         ),
       ],
     );

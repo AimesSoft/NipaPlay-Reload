@@ -15,6 +15,7 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_danmaku_
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_jellyfin_quality_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playback_info_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playback_rate_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_seek_step_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playlist_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_list_pane.dart';
@@ -90,7 +91,8 @@ class _CupertinoPlayerMenuState extends State<CupertinoPlayerMenu> {
             : _CupertinoPlayerMenuPaneView(
                 pane: paneLookup[_activePane]!,
                 onBack: _navigateBack,
-                content: _buildPaneContent(_activePane!, videoState),
+                content: _buildPaneContent(
+                    _activePane!, videoState, _navigateBack),
               );
 
         return AnimatedSwitcher(
@@ -106,44 +108,75 @@ class _CupertinoPlayerMenuState extends State<CupertinoPlayerMenu> {
     );
   }
 
-  Widget _buildPaneContent(
-      PlayerMenuPaneId paneId, VideoPlayerState videoState) {
+  Widget _buildPaneContent(PlayerMenuPaneId paneId, VideoPlayerState videoState,
+      VoidCallback onBack) {
     switch (paneId) {
       case PlayerMenuPaneId.subtitleTracks:
-        return CupertinoSubtitleTracksPane(videoState: videoState);
+        return CupertinoSubtitleTracksPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.subtitleList:
-        return CupertinoSubtitleListPane(videoState: videoState);
+        return CupertinoSubtitleListPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.audioTracks:
-        return CupertinoAudioTracksPane(videoState: videoState);
+        return CupertinoAudioTracksPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.danmakuSettings:
-        return CupertinoDanmakuSettingsPane(videoState: videoState);
+        return CupertinoDanmakuSettingsPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.danmakuTracks:
-        return CupertinoDanmakuTracksPane(videoState: videoState);
+        return CupertinoDanmakuTracksPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.danmakuList:
-        return CupertinoDanmakuListPane(videoState: videoState);
+        return CupertinoDanmakuListPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.danmakuOffset:
-        return const CupertinoDanmakuOffsetPane();
+        return CupertinoDanmakuOffsetPane(onBack: onBack);
       case PlayerMenuPaneId.controlBarSettings:
-        return CupertinoControlBarSettingsPane(videoState: videoState);
+        return CupertinoControlBarSettingsPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.playbackRate:
         return ChangeNotifierProvider(
           create: (_) => PlaybackRatePaneController(videoState: videoState),
-          child: const CupertinoPlaybackRatePane(),
+          child: CupertinoPlaybackRatePane(onBack: onBack),
         );
       case PlayerMenuPaneId.seekStep:
         return ChangeNotifierProvider(
           create: (_) => SeekStepPaneController(videoState: videoState),
-          child: const CupertinoSeekStepPane(),
+          child: CupertinoSeekStepPane(onBack: onBack),
         );
       case PlayerMenuPaneId.playbackInfo:
-        return CupertinoPlaybackInfoPane(videoState: videoState);
+        return CupertinoPlaybackInfoPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.playlist:
-        return CupertinoPlaylistPane(videoState: videoState);
+        return CupertinoPlaylistPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       case PlayerMenuPaneId.jellyfinQuality:
-        return CupertinoJellyfinQualityPane(videoState: videoState);
+        return CupertinoJellyfinQualityPane(
+          videoState: videoState,
+          onBack: onBack,
+        );
       default:
         return _CupertinoPlayerMenuPlaceholder(
           message: '该功能的 Cupertino 样式正在适配中，请使用其他主题或稍后再试。',
+          onBack: onBack,
         );
     }
   }
@@ -285,31 +318,18 @@ class _CupertinoPlayerMenuPaneView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SafeArea(
-          bottom: false,
-          child: CupertinoNavigationBar(
-            leading: CupertinoButton(
-              padding: EdgeInsets.zero,
-              minSize: 0,
-              onPressed: onBack,
-              child: const Icon(CupertinoIcons.chevron_back),
-            ),
-            middle: Text(pane.title),
-            border: null,
-          ),
-        ),
-        Expanded(child: content),
-      ],
-    );
+    return content;
   }
 }
 
 class _CupertinoPlayerMenuPlaceholder extends StatelessWidget {
-  const _CupertinoPlayerMenuPlaceholder({required this.message});
+  const _CupertinoPlayerMenuPlaceholder({
+    required this.message,
+    required this.onBack,
+  });
 
   final String message;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -330,6 +350,9 @@ class _CupertinoPlayerMenuPlaceholder extends StatelessWidget {
               ),
             ),
           ),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: onBack),
         ),
       ],
     );

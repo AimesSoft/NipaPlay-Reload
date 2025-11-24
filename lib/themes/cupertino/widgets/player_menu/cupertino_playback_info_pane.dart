@@ -1,14 +1,17 @@
 import 'package:flutter/cupertino.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoPlaybackInfoPane extends StatelessWidget {
   const CupertinoPlaybackInfoPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +43,9 @@ class CupertinoPlaybackInfoPane extends StatelessWidget {
               ),
             ]),
           ),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: onBack),
         ),
       ],
     );

@@ -4,9 +4,12 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 
 class CupertinoSeekStepPane extends StatefulWidget {
-  const CupertinoSeekStepPane({super.key});
+  const CupertinoSeekStepPane({super.key, required this.onBack});
+
+  final VoidCallback onBack;
 
   @override
   State<CupertinoSeekStepPane> createState() => _CupertinoSeekStepPaneState();
@@ -119,6 +122,9 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
               ),
             ]),
           ),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: widget.onBack),
         ),
       ],
     );

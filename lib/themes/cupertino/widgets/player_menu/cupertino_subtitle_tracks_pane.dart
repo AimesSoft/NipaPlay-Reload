@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
@@ -10,9 +11,11 @@ class CupertinoSubtitleTracksPane extends StatefulWidget {
   const CupertinoSubtitleTracksPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   State<CupertinoSubtitleTracksPane> createState() =>
@@ -303,58 +306,64 @@ class _CupertinoSubtitleTracksPaneState
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) {
         if (noSubtitles) {
-          return [
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      CupertinoIcons.textformat,
-                      size: 44,
-                      color:
-                          CupertinoColors.secondaryLabel.resolveFrom(context),
-                    ),
-                    const SizedBox(height: 8),
+        return [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CupertinoIcons.textformat,
+                    size: 44,
+                    color:
+                        CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '没有可用的字幕轨道',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .textStyle
+                        .copyWith(
+                          fontSize: 16,
+                          color: CupertinoColors.secondaryLabel
+                              .resolveFrom(context),
+                        ),
+                  ),
+                  if (!kIsWeb)
                     Text(
-                      '没有可用的字幕轨道',
+                      '点击上方按钮加载本地字幕',
                       style: CupertinoTheme.of(context)
                           .textTheme
                           .textStyle
                           .copyWith(
-                            fontSize: 16,
-                            color: CupertinoColors.secondaryLabel
+                            fontSize: 13,
+                            color: CupertinoColors.tertiaryLabel
                                 .resolveFrom(context),
                           ),
                     ),
-                    if (!kIsWeb)
-                      Text(
-                        '点击上方按钮加载本地字幕',
-                        style: CupertinoTheme.of(context)
-                            .textTheme
-                            .textStyle
-                            .copyWith(
-                              fontSize: 13,
-                              color: CupertinoColors.tertiaryLabel
-                                  .resolveFrom(context),
-                            ),
-                      ),
-                  ],
-                ),
+                ],
               ),
             ),
-          ];
-        }
-
-        return [
-          SliverPadding(
-            padding: EdgeInsets.only(top: topSpacing, bottom: 24),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate(children),
-            ),
+          ),
+          SliverToBoxAdapter(
+            child: CupertinoPaneBackButton(onPressed: widget.onBack),
           ),
         ];
+      }
+
+      return [
+        SliverPadding(
+          padding: EdgeInsets.only(top: topSpacing, bottom: 24),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate(children),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: widget.onBack),
+        ),
+      ];
       },
     );
   }

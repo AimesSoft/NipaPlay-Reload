@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -10,9 +11,11 @@ class CupertinoDanmakuSettingsPane extends StatefulWidget {
   const CupertinoDanmakuSettingsPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   State<CupertinoDanmakuSettingsPane> createState() =>
@@ -218,6 +221,9 @@ class _CupertinoDanmakuSettingsPaneState
             const SizedBox(height: 24),
           ]),
         ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: widget.onBack),
+        ),
       ],
     );
   }
@@ -249,6 +255,8 @@ class _CupertinoDanmakuSettingsPaneState
     required int divisions,
     required ValueChanged<double> onChanged,
   }) {
+    final double safeValue = value.clamp(min, max);
+
     return CupertinoListTile(
       title: Text(title),
       subtitle: Column(
@@ -256,7 +264,7 @@ class _CupertinoDanmakuSettingsPaneState
         children: [
           Text(description),
           CupertinoSlider(
-            value: value,
+            value: safeValue,
             min: min,
             max: max,
             divisions: divisions,

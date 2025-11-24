@@ -2,15 +2,18 @@ import 'package:flutter/cupertino.dart';
 
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoAudioTracksPane extends StatelessWidget {
   const CupertinoAudioTracksPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +66,9 @@ class CupertinoAudioTracksPane extends StatelessWidget {
               ),
             ]),
           ),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: onBack),
         ),
       ],
     );
@@ -145,6 +151,9 @@ class CupertinoAudioTracksPane extends StatelessWidget {
               ],
             ),
           ),
+        ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: onBack),
         ),
       ],
     );

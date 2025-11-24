@@ -5,15 +5,18 @@ import 'package:flutter/cupertino.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoSubtitleListPane extends StatefulWidget {
   const CupertinoSubtitleListPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   State<CupertinoSubtitleListPane> createState() =>
@@ -260,28 +263,88 @@ class _CupertinoSubtitleListPaneState
   Widget build(BuildContext context) {
     return CupertinoBottomSheetContentLayout(
       controller: _scrollController,
-      sliversBuilder: (context, topSpacing) => [
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 8),
-          sliver: SliverToBoxAdapter(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '字幕预览',
-                        style: CupertinoTheme.of(context)
-                            .textTheme
-                            .navTitleTextStyle,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _allEntries.isEmpty
-                            ? '正在解析字幕文件…'
-                            : '共 ${_allEntries.length} 条字幕，点击任意条目跳转播放位置',
+      sliversBuilder: (context, topSpacing) {
+        final slivers = <Widget>[
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 8),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '字幕预览',
+                          style: CupertinoTheme.of(context)
+                              .textTheme
+                              .navTitleTextStyle,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _allEntries.isEmpty
+                              ? '正在解析字幕文件…'
+                              : '共 ${_allEntries.length} 条字幕，点击任意条目跳转播放位置',
+                          style: CupertinoTheme.of(context)
+                              .textTheme
+                              .textStyle
+                              .copyWith(
+                                fontSize: 13,
+                                color: CupertinoColors.secondaryLabel
+                                    .resolveFrom(context),
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  CupertinoButton(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    onPressed: _isLoading ? null : _loadSubtitles,
+                    child: const Text('重新解析'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ];
+
+        if (_isLoading) {
+          slivers.add(
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: CupertinoActivityIndicator(radius: 16),
+              ),
+            ),
+          );
+        } else if (_errorMessage.isNotEmpty) {
+          slivers.add(
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.exclamationmark_triangle,
+                      size: 40,
+                      color: CupertinoColors.systemYellow.resolveFrom(context),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '无法显示字幕内容',
+                      style: CupertinoTheme.of(context)
+                          .textTheme
+                          .textStyle
+                          .copyWith(fontSize: 16),
+                    ),
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        _errorMessage,
                         style: CupertinoTheme.of(context)
                             .textTheme
                             .textStyle
@@ -290,171 +353,134 @@ class _CupertinoSubtitleListPaneState
                               color: CupertinoColors.secondaryLabel
                                   .resolveFrom(context),
                             ),
+                        textAlign: TextAlign.center,
                       ),
-                    ],
-                  ),
-                ),
-                CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  onPressed: _isLoading ? null : _loadSubtitles,
-                  child: const Text('重新解析'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (_isLoading)
-          const SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: CupertinoActivityIndicator(radius: 16),
-            ),
-          )
-        else if (_errorMessage.isNotEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    CupertinoIcons.exclamationmark_triangle,
-                    size: 40,
-                    color: CupertinoColors.systemYellow.resolveFrom(context),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '无法显示字幕内容',
-                    style: CupertinoTheme.of(context)
-                        .textTheme
-                        .textStyle
-                        .copyWith(fontSize: 16),
-                  ),
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      _errorMessage,
-                      style: CupertinoTheme.of(context)
-                          .textTheme
-                          .textStyle
-                          .copyWith(
-                            fontSize: 13,
-                            color: CupertinoColors.secondaryLabel
-                                .resolveFrom(context),
-                          ),
-                      textAlign: TextAlign.center,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final entry = _visibleEntries[index];
-                  final bool isCurrent = index == _currentLocalIndex;
-                  return Padding(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: GestureDetector(
-                      onTap: () => _seekToTime(entry.startTimeMs),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isCurrent
-                              ? CupertinoTheme.of(context)
-                                  .primaryColor
-                                  .withOpacity(0.12)
-                              : CupertinoColors.systemGrey6
-                                  .resolveFrom(context),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
+          );
+        } else {
+          slivers.add(
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final entry = _visibleEntries[index];
+                    final bool isCurrent = index == _currentLocalIndex;
+                    return Padding(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                      child: GestureDetector(
+                        onTap: () => _seekToTime(entry.startTimeMs),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
                             color: isCurrent
-                                ? CupertinoTheme.of(context).primaryColor
-                                : CupertinoColors.separator
+                                ? CupertinoTheme.of(context)
+                                    .primaryColor
+                                    .withOpacity(0.12)
+                                : CupertinoColors.systemGrey6
                                     .resolveFrom(context),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isCurrent
+                                  ? CupertinoTheme.of(context).primaryColor
+                                  : CupertinoColors.separator
+                                      .resolveFrom(context),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    CupertinoIcons.clock,
+                                    size: 14,
+                                    color: isCurrent
+                                        ? CupertinoTheme.of(context)
+                                            .primaryColor
+                                        : CupertinoColors.secondaryLabel
+                                            .resolveFrom(context),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    entry.formattedStartTime,
+                                    style: CupertinoTheme.of(context)
+                                        .textTheme
+                                        .textStyle
+                                        .copyWith(
+                                          fontWeight: isCurrent
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '→ ${entry.formattedEndTime}',
+                                    style: CupertinoTheme.of(context)
+                                        .textTheme
+                                        .textStyle
+                                        .copyWith(
+                                          color: CupertinoColors.secondaryLabel
+                                              .resolveFrom(context),
+                                          fontSize: 13,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                entry.content.trim().isEmpty
+                                    ? '(空字幕)'
+                                    : entry.content,
+                                style: CupertinoTheme.of(context)
+                                    .textTheme
+                                    .textStyle
+                                    .copyWith(
+                                      fontSize: 15,
+                                      fontWeight: isCurrent
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                    ),
+                              ),
+                            ],
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  CupertinoIcons.clock,
-                                  size: 14,
-                                  color: isCurrent
-                                      ? CupertinoTheme.of(context).primaryColor
-                                      : CupertinoColors.secondaryLabel
-                                          .resolveFrom(context),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  entry.formattedStartTime,
-                                  style: CupertinoTheme.of(context)
-                                      .textTheme
-                                      .textStyle
-                                      .copyWith(
-                                        fontWeight: isCurrent
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                      ),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '→ ${entry.formattedEndTime}',
-                                  style: CupertinoTheme.of(context)
-                                      .textTheme
-                                      .textStyle
-                                      .copyWith(
-                                        color: CupertinoColors.secondaryLabel
-                                            .resolveFrom(context),
-                                        fontSize: 13,
-                                      ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              entry.content.trim().isEmpty
-                                  ? '(空字幕)'
-                                  : entry.content,
-                              style: CupertinoTheme.of(context)
-                                  .textTheme
-                                  .textStyle
-                                  .copyWith(
-                                    fontSize: 15,
-                                    fontWeight: isCurrent
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
-                            ),
-                          ],
-                        ),
                       ),
-                    ),
-                  );
-                },
-                childCount: _visibleEntries.length,
+                    );
+                  },
+                  childCount: _visibleEntries.length,
+                ),
               ),
             ),
-          ),
-        if (_isWindowLoading)
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Center(
-                child: CupertinoActivityIndicator(radius: 10),
+          );
+        }
+
+        if (_isWindowLoading) {
+          slivers.add(
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Center(
+                  child: CupertinoActivityIndicator(radius: 10),
+                ),
               ),
             ),
+          );
+        }
+
+        slivers.add(
+          SliverToBoxAdapter(
+            child: CupertinoPaneBackButton(onPressed: widget.onBack),
           ),
-      ],
+        );
+
+        return slivers;
+      },
     );
   }
 }

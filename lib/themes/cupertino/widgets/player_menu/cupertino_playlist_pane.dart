@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
@@ -12,9 +13,11 @@ class CupertinoPlaylistPane extends StatefulWidget {
   const CupertinoPlaylistPane({
     super.key,
     required this.videoState,
+    required this.onBack,
   });
 
   final VideoPlayerState videoState;
+  final VoidCallback onBack;
 
   @override
   State<CupertinoPlaylistPane> createState() => _CupertinoPlaylistPaneState();
@@ -367,6 +370,9 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
               childCount: _episodes.length,
             ),
           ),
+        SliverToBoxAdapter(
+          child: CupertinoPaneBackButton(onPressed: widget.onBack),
+        ),
       ],
     );
   }
