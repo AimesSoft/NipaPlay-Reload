@@ -20,6 +20,7 @@ import 'playback_info_menu.dart';
 import 'seek_step_menu.dart';
 import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
+import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -97,7 +98,6 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       case PlayerMenuPaneId.danmakuTracks:
         child = DanmakuTracksMenu(
           onClose: () => _closePane(PlayerMenuPaneId.danmakuTracks),
-          videoState: videoState,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
@@ -122,9 +122,12 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         );
         break;
       case PlayerMenuPaneId.playbackRate:
-        child = PlaybackRateMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.playbackRate),
-          onHoverChanged: widget.onHoverChanged,
+        child = ChangeNotifierProvider(
+          create: (_) => PlaybackRatePaneController(videoState: videoState),
+          child: PlaybackRateMenu(
+            onClose: () => _closePane(PlayerMenuPaneId.playbackRate),
+            onHoverChanged: widget.onHoverChanged,
+          ),
         );
         break;
       case PlayerMenuPaneId.playlist:
@@ -141,15 +144,17 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         break;
       case PlayerMenuPaneId.playbackInfo:
         child = PlaybackInfoMenu(
-          videoState: videoState,
           onClose: () => _closePane(PlayerMenuPaneId.playbackInfo),
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.seekStep:
-        child = SeekStepMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.seekStep),
-          onHoverChanged: widget.onHoverChanged,
+        child = ChangeNotifierProvider(
+          create: (_) => SeekStepPaneController(videoState: videoState),
+          child: SeekStepMenu(
+            onClose: () => _closePane(PlayerMenuPaneId.seekStep),
+            onHoverChanged: widget.onHoverChanged,
+          ),
         );
         break;
     }

@@ -15,6 +15,7 @@ import 'fluent_playlist_menu.dart';
 import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 
 class FluentRightEdgeMenu extends StatefulWidget {
   const FluentRightEdgeMenu({super.key});
@@ -403,7 +404,10 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
   }
 
   Widget _buildPlaybackRateMenu(VideoPlayerState videoState) {
-    return FluentPlaybackRateMenu(videoState: videoState);
+    return ChangeNotifierProvider(
+      create: (_) => PlaybackRatePaneController(videoState: videoState),
+      child: const FluentPlaybackRateMenu(),
+    );
   }
 
   Widget _buildSubtitleTracksMenu(VideoPlayerState videoState) {
@@ -431,74 +435,9 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
   }
 
   Widget _buildSeekStepMenu(VideoPlayerState videoState) {
-    final List<int> seekStepOptions = [5, 10, 15, 30, 60]; // 可选的秒数
-    
-    return ListView(
-      padding: const EdgeInsets.all(8),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: Text(
-            '选择快进快退时间',
-            style: FluentTheme.of(context).typography.body?.copyWith(
-              color: FluentTheme.of(context).resources.textFillColorSecondary,
-            ),
-          ),
-        ),
-        ...seekStepOptions.map((seconds) {
-          final isSelected = videoState.seekStepSeconds == seconds;
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: HoverButton(
-              onPressed: () {
-                videoState.setSeekStepSeconds(seconds);
-              },
-              builder: (context, states) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? FluentTheme.of(context).accentColor.withValues(alpha: 0.2)
-                        : states.isHovered
-                            ? FluentTheme.of(context).resources.subtleFillColorSecondary
-                            : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
-                    border: isSelected
-                        ? Border.all(
-                            color: FluentTheme.of(context).accentColor,
-                            width: 1,
-                          )
-                        : null,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        isSelected ? FluentIcons.radio_btn_on : FluentIcons.radio_btn_off,
-                        size: 16,
-                        color: isSelected
-                            ? FluentTheme.of(context).accentColor
-                            : FluentTheme.of(context).resources.textFillColorPrimary,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          '$seconds秒',
-                          style: FluentTheme.of(context).typography.body?.copyWith(
-                            color: isSelected
-                                ? FluentTheme.of(context).accentColor
-                                : FluentTheme.of(context).resources.textFillColorPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          );
-        }),
-      ],
+    return ChangeNotifierProvider(
+      create: (_) => SeekStepPaneController(videoState: videoState),
+      child: const _FluentSeekStepPane(),
     );
   }
 
@@ -589,5 +528,84 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
       case PlayerMenuIconToken.seekStep:
         return FluentIcons.settings;
     }
+  }
+}
+
+class _FluentSeekStepPane extends StatelessWidget {
+  const _FluentSeekStepPane();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<SeekStepPaneController>();
+    final theme = FluentTheme.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.all(8),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: Text(
+            '选择快进快退时间',
+            style: theme.typography.body?.copyWith(
+              color: theme.resources.textFillColorSecondary,
+            ),
+          ),
+        ),
+        ...controller.seekStepOptions.map((seconds) {
+          final isSelected = controller.seekStepSeconds == seconds;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: HoverButton(
+              onPressed: () => controller.setSeekStepSeconds(seconds),
+              builder: (context, states) {
+                return Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? theme.accentColor.withValues(alpha: 0.2)
+                        : states.isHovered
+                            ? theme.resources.subtleFillColorSecondary
+                            : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                    border: isSelected
+                        ? Border.all(
+                            color: theme.accentColor,
+                            width: 1,
+                          )
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isSelected
+                            ? FluentIcons.radio_btn_on
+                            : FluentIcons.radio_btn_off,
+                        size: 16,
+                        color: isSelected
+                            ? theme.accentColor
+                            : theme.resources.textFillColorPrimary,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '$seconds秒',
+                          style: theme.typography.body?.copyWith(
+                            color: isSelected
+                                ? theme.accentColor
+                                : theme.resources.textFillColorPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        }),
+      ],
+    );
   }
 }

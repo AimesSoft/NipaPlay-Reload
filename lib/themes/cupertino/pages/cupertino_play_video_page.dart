@@ -7,7 +7,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/volume_gesture_area.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/video_settings_menu.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -468,7 +468,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   void _showSettingsMenu(BuildContext context) {
     _settingsOverlay?.remove();
     _settingsOverlay = OverlayEntry(
-      builder: (context) => VideoSettingsMenu(
+      builder: (context) => CupertinoPlayerMenu(
         onClose: () {
           _settingsOverlay?.remove();
           _settingsOverlay = null;

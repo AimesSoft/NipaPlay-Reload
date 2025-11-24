@@ -1,21 +1,15 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:provider/provider.dart';
+
+import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 
 class FluentPlaybackRateMenu extends StatelessWidget {
-  final VideoPlayerState videoState;
-
-  const FluentPlaybackRateMenu({
-    super.key,
-    required this.videoState,
-  });
-
-  // 预设的倍速选项
-  static const List<double> _speedOptions = [
-    0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 5.0
-  ];
+  const FluentPlaybackRateMenu({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final controller = context.watch<PlaybackRatePaneController>();
+
     return Column(
       children: [
         // 当前倍速信息
@@ -35,14 +29,16 @@ class FluentPlaybackRateMenu extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${videoState.playbackRate}x',
+                    '${controller.currentRate}x',
                     style: FluentTheme.of(context).typography.bodyStrong,
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(
-                videoState.isSpeedBoostActive ? '正在倍速播放' : '点击下方选项或长按屏幕倍速播放',
+                controller.isSpeedBoostActive
+                    ? '正在倍速播放'
+                    : '点击下方选项或长按屏幕倍速播放',
                 style: FluentTheme.of(context).typography.caption?.copyWith(
                   color: FluentTheme.of(context).resources.textFillColorTertiary,
                 ),
@@ -62,15 +58,15 @@ class FluentPlaybackRateMenu extends StatelessWidget {
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(8),
-            children: _speedOptions.map((speed) {
-              final isSelected = videoState.playbackRate == speed;
+            children: controller.speedOptions.map((speed) {
+              final isSelected = controller.currentRate == speed;
               final isNormalSpeed = speed == 1.0;
               
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 1),
                 child: HoverButton(
                   onPressed: () {
-                    videoState.setPlaybackRate(speed);
+                    controller.setPlaybackRate(speed);
                   },
                   builder: (context, states) {
                     return Container(
