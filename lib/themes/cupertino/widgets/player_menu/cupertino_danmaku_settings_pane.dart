@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -256,14 +257,30 @@ class _CupertinoDanmakuSettingsPaneState
     required ValueChanged<double> onChanged,
   }) {
     final double safeValue = value.clamp(min, max);
+    final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
+    final valueStyle = textTheme.copyWith(
+      fontSize: 13,
+      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+    );
 
     return CupertinoListTile(
-      title: Text(title),
-      subtitle: Column(
+      padding: const EdgeInsetsDirectional.fromSTEB(20, 12, 20, 16),
+      title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(description),
-          CupertinoSlider(
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: textTheme.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Text(description, style: valueStyle),
+            ],
+          ),
+          const SizedBox(height: 12),
+          CupertinoPlayerSlider(
             value: safeValue,
             min: min,
             max: max,
