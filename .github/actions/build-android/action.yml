@@ -26,6 +26,12 @@ runs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
+    - name: Install 7zip dependency
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends p7zip-full
+
     - name: Configure Gradle
       shell: bash
       run: |
@@ -179,4 +185,3 @@ runs:
         apk_paths=$(IFS=';'; echo "${signed_apks[*]}")
         echo "apk_path=$apk_paths" >> $GITHUB_OUTPUT
         echo "生成的APK数量: ${#signed_apks[@]}"
-
