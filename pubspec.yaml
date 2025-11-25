@@ -264,3 +264,5 @@ dependency_overrides:
       url: https://github.com/Shinokawa/media-kit.git
       ref: main
       path: ./libs/macos/media_kit_libs_macos_video
+  smb_connect:
+    path: third_party/smb_connect

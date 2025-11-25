@@ -1,0 +1,11 @@
+#include: package:flutter_lints/flutter.yaml
+include: package:lints/recommended.yaml
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options
+
+linter:
+  rules:
+    unawaited_futures: true
+    constant_identifier_names: false
+    non_constant_identifier_names: false
+    dangling_library_doc_comments: false

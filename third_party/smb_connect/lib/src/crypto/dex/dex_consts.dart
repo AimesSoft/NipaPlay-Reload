@@ -1,0 +1,1 @@
+int DES_BLOCK_SIZE = 8;
