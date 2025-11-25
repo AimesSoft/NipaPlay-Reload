@@ -21,6 +21,7 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
+import 'package:nipaplay/services/shared_remote_playback_sync_service.dart';
 import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';

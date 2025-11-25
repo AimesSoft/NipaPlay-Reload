@@ -294,19 +294,22 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   }
 
   // 更新观看记录
-  Future<void> _updateWatchHistory() async {
+  Future<void> _updateWatchHistory({bool forceRemoteSync = false}) async {
     if (_currentVideoPath == null) {
       return;
     }
 
     // 防止在播放器重置过程中更新历史记录
-    if (_isResetting) {
+    if (_isResetting && !forceRemoteSync) {
       return;
     }
 
     if (_status == PlayerStatus.idle || _status == PlayerStatus.error) {
       return;
     }
+
+    final bool isSharedRemoteStream =
+        SharedRemoteHistoryHelper.isSharedRemoteStreamPath(_currentVideoPath!);
 
     try {
       // 使用 Provider 获取播放记录
@@ -351,9 +354,6 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         final bool isJellyfinStream =
             _currentVideoPath!.startsWith('jellyfin://');
         final bool isEmbyStream = _currentVideoPath!.startsWith('emby://');
-        final bool isSharedRemoteStream =
-            SharedRemoteHistoryHelper.isSharedRemoteStreamPath(
-                _currentVideoPath!);
         if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
           final animeNameCandidate =
               SharedRemoteHistoryHelper.firstNonEmptyString([
@@ -485,6 +485,20 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           // 直接使用数据库添加
           await WatchHistoryDatabase.instance
               .insertOrUpdateWatchHistory(newHistory);
+        }
+      }
+
+      if (isSharedRemoteStream) {
+        try {
+          await SharedRemotePlaybackSyncService.instance.syncProgress(
+            videoUrl: _currentVideoPath!,
+            positionMs: _position.inMilliseconds,
+            durationMs: _duration.inMilliseconds,
+            progress: _progress,
+            force: forceRemoteSync,
+          );
+        } catch (e) {
+          debugPrint('共享媒体播放进度同步失败: $e');
         }
       }
     } catch (e) {

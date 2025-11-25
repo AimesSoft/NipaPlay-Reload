@@ -362,6 +362,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 _saveVideoPosition(_currentVideoPath!, 0);
                 debugPrint(
                     'VideoPlayerState: Video ended, explicitly saved position 0 for $_currentVideoPath');
+                await _updateWatchHistory(forceRemoteSync: true);
 
                 // Jellyfin同步：如果是Jellyfin流媒体，报告播放结束
                 if (_currentVideoPath!.startsWith('jellyfin://')) {
