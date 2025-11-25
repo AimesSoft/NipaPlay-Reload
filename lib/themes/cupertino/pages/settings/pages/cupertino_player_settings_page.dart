@@ -13,6 +13,7 @@ import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -259,6 +260,17 @@ class _CupertinoPlayerSettingsPageState
         .toList();
   }
 
+  List<AdaptivePopupMenuEntry> _playbackEndActionMenuItems() {
+    return PlaybackEndAction.values
+        .map(
+          (action) => AdaptivePopupMenuItem<PlaybackEndAction>(
+            label: action.label,
+            value: action,
+          ),
+        )
+        .toList();
+  }
+
   Widget _buildMenuChip(BuildContext context, String label) {
     final Color background = CupertinoDynamicColor.resolve(
       CupertinoColors.systemGrey5,
@@ -375,9 +387,85 @@ class _CupertinoPlayerSettingsPageState
                 ),
               ],
             );
-          },
-        ),
-      ],
+      },
+    ),
+  ],
+      const SizedBox(height: 16),
+      Consumer<VideoPlayerState>(
+        builder: (context, videoState, child) {
+          final bool isAutoNext =
+              videoState.playbackEndAction == PlaybackEndAction.autoNext;
+          return CupertinoSettingsGroupCard(
+            margin: EdgeInsets.zero,
+            backgroundColor: sectionBackground,
+            addDividers: true,
+            dividerIndent: 16,
+            children: [
+              CupertinoSettingsTile(
+                leading: Icon(
+                  CupertinoIcons.play_circle,
+                  color: resolveSettingsIconColor(context),
+                ),
+                title: const Text('播放结束操作'),
+                subtitle: Text(videoState.playbackEndAction.description),
+                trailing: AdaptivePopupMenuButton.widget<PlaybackEndAction>(
+                  items: _playbackEndActionMenuItems(),
+                  buttonStyle: PopupButtonStyle.gray,
+                  child: _buildMenuChip(
+                    context,
+                    videoState.playbackEndAction.label,
+                  ),
+                  onSelected: (index, entry) async {
+                    final action =
+                        entry.value ?? PlaybackEndAction.values[index];
+                    if (action == videoState.playbackEndAction) return;
+                    await videoState.setPlaybackEndAction(action);
+                    if (!mounted) return;
+                    final message = action == PlaybackEndAction.autoNext
+                        ? '播放结束后将自动进入下一话'
+                        : action == PlaybackEndAction.pause
+                            ? '播放结束后将停留在当前页面'
+                            : '播放结束后将返回上一页';
+                    AdaptiveSnackBar.show(
+                      context,
+                      message: message,
+                      type: AdaptiveSnackBarType.success,
+                    );
+                  },
+                ),
+                backgroundColor: tileBackground,
+              ),
+              CupertinoSettingsTile(
+                leading: Icon(
+                  CupertinoIcons.timer,
+                  color: resolveSettingsIconColor(context),
+                ),
+                title: const Text('自动连播倒计时'),
+                subtitle: Text(
+                  isAutoNext
+                      ? '自动跳转下一话前等待 ${videoState.autoNextCountdownSeconds} 秒'
+                      : '需先启用自动播放下一话',
+                ),
+                trailing: SizedBox(
+                  width: 220,
+                  child: CupertinoSlider(
+                    value: videoState.autoNextCountdownSeconds.toDouble(),
+                    min: AutoNextEpisodeService.minCountdownSeconds.toDouble(),
+                    max: AutoNextEpisodeService.maxCountdownSeconds.toDouble(),
+                    onChanged: isAutoNext
+                        ? (value) {
+                            videoState
+                                .setAutoNextCountdownSeconds(value.round());
+                          }
+                        : null,
+                  ),
+                ),
+                backgroundColor: tileBackground,
+              ),
+            ],
+          );
+        },
+      ),
       if (_selectedKernelType == PlayerKernelType.mediaKit)
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {

@@ -215,9 +215,12 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _lastPositionKey = 'last_video_position';
   final String _videoPositionsKey = 'video_positions';
   final String _playbackEndActionKey = 'playback_end_action';
+  final String _autoNextCountdownSecondsKey = 'auto_next_countdown_seconds';
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
+  int _autoNextCountdownSeconds =
+      AutoNextEpisodeService.defaultCountdownSeconds;
   List<Map<String, dynamic>> _danmakuList = [];
 
   // 多轨道弹幕系统
@@ -485,6 +488,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isPaused => _status == PlayerStatus.paused;
   FocusNode get focusNode => _focusNode;
   PlaybackEndAction get playbackEndAction => _playbackEndAction;
+  int get autoNextCountdownSeconds => _autoNextCountdownSeconds;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
