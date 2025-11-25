@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
-import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_slider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoControlBarSettingsPane extends StatelessWidget {
@@ -40,7 +39,7 @@ class CupertinoControlBarSettingsPane extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '调整播放控制栏高度、底部进度条及颜色',
+                  '调整底部进度条及颜色',
                   style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                         fontSize: 13,
                         color: CupertinoColors.secondaryLabel
@@ -53,12 +52,6 @@ class CupertinoControlBarSettingsPane extends StatelessWidget {
         ),
         SliverList(
           delegate: SliverChildListDelegate([
-            CupertinoListSection.insetGrouped(
-              header: const Text('控制栏高度'),
-              children: [
-                _ControlBarHeightTile(videoState: videoState),
-              ],
-            ),
             CupertinoListSection.insetGrouped(
               header: const Text('附加控件'),
               children: [
@@ -136,52 +129,6 @@ class CupertinoControlBarSettingsPane extends StatelessWidget {
       trailing: CupertinoSwitch(
         value: value,
         onChanged: onChanged,
-      ),
-    );
-  }
-}
-
-class _ControlBarHeightTile extends StatelessWidget {
-  const _ControlBarHeightTile({required this.videoState});
-
-  final VideoPlayerState videoState;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
-    final valueStyle = textTheme.copyWith(
-      fontSize: 13,
-      color: CupertinoColors.secondaryLabel.resolveFrom(context),
-    );
-
-    return CupertinoListTile(
-      padding: const EdgeInsetsDirectional.fromSTEB(20, 12, 20, 16),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '控制栏高度',
-                  style: textTheme.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-              Text(
-                '${videoState.controlBarHeight.toStringAsFixed(0)} px',
-                style: valueStyle,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          CupertinoPlayerSlider(
-            value: videoState.controlBarHeight,
-            min: 0,
-            max: 150,
-            divisions: 15,
-            onChanged: videoState.setControlBarHeight,
-          ),
-        ],
       ),
     );
   }
