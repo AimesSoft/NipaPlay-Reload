@@ -369,17 +369,6 @@ class _FluentLibraryManagementTabState
                 label: const Text('添加 WebDAV'),
                 onPressed: () => _showWebDAVConnectionDialog(),
               ),
-            ] else ...[
-              CommandBarButton(
-                icon: const Icon(FluentIcons.refresh),
-                label: const Text('刷新状态'),
-                onPressed: _refreshSMBConnections,
-              ),
-              CommandBarButton(
-                icon: const Icon(FluentIcons.devices3),
-                label: const Text('添加 SMB'),
-                onPressed: () => _showSMBConnectionDialog(),
-              ),
             ],
           ],
         ),
@@ -427,10 +416,6 @@ class _FluentLibraryManagementTabState
               ComboBoxItem(
                 value: _LibrarySource.webdav,
                 child: Text('WebDAV'),
-              ),
-              ComboBoxItem(
-                value: _LibrarySource.smb,
-                child: Text('SMB'),
               ),
             ],
             onChanged: (value) {

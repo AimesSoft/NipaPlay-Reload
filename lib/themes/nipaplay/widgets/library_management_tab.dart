@@ -1345,47 +1345,6 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                 ),
               ),
 
-              const SizedBox(width: 12),
-
-              Expanded(
-                child: GlassmorphicContainer(
-                  width: double.infinity,
-                  height: 50,
-                  borderRadius: 12,
-                  blur: enableBlur ? 10 : 0,
-                  alignment: Alignment.center,
-                  border: 1,
-                  linearGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.05),
-                    ],
-                  ),
-                  borderGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.3),
-                      Colors.white.withOpacity(0.1),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: scanService.isScanning ? null : _showSMBConnectionDialog,
-                      borderRadius: BorderRadius.circular(12),
-                      child: const Center(
-                        child: Text(
-                          '添加SMB服务器',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -2041,8 +2000,6 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           _buildSourceToggleItem('本地', _LibrarySource.local),
           const SizedBox(width: 4),
           _buildSourceToggleItem('WebDAV', _LibrarySource.webdav),
-          const SizedBox(width: 4),
-          _buildSourceToggleItem('SMB', _LibrarySource.smb),
         ],
       ),
     );

@@ -2398,12 +2398,6 @@ class _CupertinoLibraryManagementSheetState
           icon: CupertinoIcons.cloud_upload,
           onPressed: _showWebDAVConnectionDialog,
         ),
-        _buildActionButton(
-          context,
-          label: '添加 SMB 服务器',
-          icon: CupertinoIcons.share,
-          onPressed: _showSMBConnectionDialog,
-        ),
       ],
     );
   }
@@ -2427,7 +2421,7 @@ class _CupertinoLibraryManagementSheetState
         ),
         const SizedBox(height: 4),
         Text(
-          '在本地文件夹、WebDAV 与 SMB 服务器之间切换。',
+          '在本地文件夹与 WebDAV 服务器之间切换。',
           style: TextStyle(fontSize: 13, color: subtitleColor),
         ),
         const SizedBox(height: 12),
@@ -2449,10 +2443,6 @@ class _CupertinoLibraryManagementSheetState
             _LibrarySource.webdav: Padding(
               padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Text('WebDAV'),
-            ),
-            _LibrarySource.smb: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text('SMB'),
             ),
           },
           onValueChanged: (value) {
