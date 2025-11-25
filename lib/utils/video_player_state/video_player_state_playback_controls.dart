@@ -34,7 +34,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
       // 在停止播放前保存最后的观看记录
       if (_currentVideoPath != null) {
-        await _updateWatchHistory();
+        await _updateWatchHistory(forceRemoteSync: true);
       }
 
       // Jellyfin同步：如果是Jellyfin流媒体，停止同步

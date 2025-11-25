@@ -1267,9 +1267,19 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       mediaOptions[key] = value;
     });
 
+    final preparedMedia = _prepareNetworkMediaIfNeeded(path);
+
     //debugPrint('MediaKitAdapter: 打开媒体 (MAIN VIDEO/AUDIO): $path');
-    if (!_isDisposed)
-      _player.open(Media(path, extras: mediaOptions), play: false);
+    if (!_isDisposed) {
+      _player.open(
+        Media(
+          preparedMedia.url,
+          extras: mediaOptions,
+          httpHeaders: preparedMedia.httpHeaders,
+        ),
+        play: false,
+      );
+    }
 
     // 设置mpv底层video-aspect属性，确保保持原始宽高比
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -1305,6 +1315,70 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         //debugPrint('MediaKitAdapter: setMedia (MAIN VIDEO/AUDIO) - Delayed block executed. Initial track info printed.');
       }
     });
+  }
+
+  _PreparedNetworkMedia _prepareNetworkMediaIfNeeded(String originalPath) {
+    try {
+      final Uri uri = Uri.parse(originalPath);
+      if (!_isHttpScheme(uri.scheme)) {
+        return _PreparedNetworkMedia(url: originalPath);
+      }
+
+      final authHeader = _buildBasicAuthHeader(uri);
+      if (authHeader == null) {
+        return _PreparedNetworkMedia(url: originalPath);
+      }
+
+      final sanitizedUri = _stripUserInfo(uri);
+      return _PreparedNetworkMedia(
+        url: sanitizedUri.toString(),
+        httpHeaders: {'Authorization': authHeader},
+      );
+    } catch (_) {
+      return _PreparedNetworkMedia(url: originalPath);
+    }
+  }
+
+  bool _isHttpScheme(String? scheme) {
+    if (scheme == null) {
+      return false;
+    }
+    final lower = scheme.toLowerCase();
+    return lower == 'http' || lower == 'https';
+  }
+
+  String? _buildBasicAuthHeader(Uri uri) {
+    if (uri.userInfo.isEmpty) {
+      return null;
+    }
+
+    final separatorIndex = uri.userInfo.indexOf(':');
+    String username;
+    String password;
+    if (separatorIndex >= 0) {
+      username = uri.userInfo.substring(0, separatorIndex);
+      password = uri.userInfo.substring(separatorIndex + 1);
+    } else {
+      username = uri.userInfo;
+      password = '';
+    }
+
+    username = Uri.decodeComponent(username);
+    password = Uri.decodeComponent(password);
+
+    final credentials = base64Encode(utf8.encode('$username:$password'));
+    return 'Basic $credentials';
+  }
+
+  Uri _stripUserInfo(Uri uri) {
+    return Uri(
+      scheme: uri.scheme,
+      host: uri.host,
+      port: uri.hasPort ? uri.port : null,
+      path: uri.path,
+      query: uri.hasQuery ? uri.query : null,
+      fragment: uri.fragment.isEmpty ? null : uri.fragment,
+    );
   }
 
   @override
@@ -2010,4 +2084,14 @@ String _getNormalizedLanguageHelper(String input) {
   if (finalTitle.isEmpty) finalTitle = "轨道 ${trackIndexForFallback + 1}";
 
   return (title: finalTitle, language: finalLanguage);
+}
+
+class _PreparedNetworkMedia {
+  final String url;
+  final Map<String, String>? httpHeaders;
+
+  const _PreparedNetworkMedia({
+    required this.url,
+    this.httpHeaders,
+  });
 }

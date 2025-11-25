@@ -414,15 +414,21 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     required SharedRemoteEpisode episode,
   }) {
     final streamUri = buildStreamUri(episode).toString();
+    final int duration = episode.duration ?? 0;
+    final int initialPosition = episode.lastPosition ?? 0;
+    double initialProgress = episode.progress ?? 0;
+    if (initialProgress <= 0 && duration > 0 && initialPosition > 0) {
+      initialProgress = (initialPosition / duration).clamp(0.0, 1.0);
+    }
     return WatchHistoryItem(
       filePath: streamUri,
       animeName: anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
       episodeTitle: episode.title,
       episodeId: episode.episodeId,
       animeId: episode.animeId ?? anime.animeId,
-      watchProgress: episode.progress ?? 0,
-      lastPosition: 0,
-      duration: episode.duration ?? 0,
+      watchProgress: initialProgress,
+      lastPosition: initialPosition,
+      duration: duration,
       lastWatchTime: episode.lastWatchTime ?? DateTime.now(),
       thumbnailPath: anime.imageUrl,
       isFromScan: false,

@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'package:xml/xml.dart';
 
 class WebDAVConnection {
@@ -11,7 +14,7 @@ class WebDAVConnection {
   final String username;
   final String password;
   final bool isConnected;
-  
+
   WebDAVConnection({
     required this.name,
     required this.url,
@@ -19,7 +22,7 @@ class WebDAVConnection {
     required this.password,
     this.isConnected = false,
   });
-  
+
   Map<String, dynamic> toJson() {
     return {
       'name': name,
@@ -29,7 +32,7 @@ class WebDAVConnection {
       'isConnected': isConnected,
     };
   }
-  
+
   factory WebDAVConnection.fromJson(Map<String, dynamic> json) {
     return WebDAVConnection(
       name: json['name'] ?? '',
@@ -39,7 +42,7 @@ class WebDAVConnection {
       isConnected: json['isConnected'] ?? false,
     );
   }
-  
+
   WebDAVConnection copyWith({
     String? name,
     String? url,
@@ -63,7 +66,7 @@ class WebDAVFile {
   final bool isDirectory;
   final int? size;
   final DateTime? lastModified;
-  
+
   WebDAVFile({
     required this.name,
     required this.path,
@@ -75,39 +78,65 @@ class WebDAVFile {
 
 class WebDAVService {
   static const String _connectionsKey = 'webdav_connections';
-  static WebDAVService? _instance;
   static const String _userAgent = 'WebDAVFS/3.0 (NipaPlay)';
-  static const String _propfindRequestBody = '''<?xml version="1.0" encoding="utf-8" ?>
+  static const int _defaultTimeoutMs = 15000;
+  static const String _legacyPropfindRequestBody = '''<?xml version="1.0" encoding="utf-8" ?>
 <D:propfind xmlns:D="DAV:">
   <D:prop>
     <D:resourcetype/>
   </D:prop>
 </D:propfind>''';
   static const List<_PropfindVariant> _propfindVariants = [
-    _PropfindVariant(depth: '1', contentType: 'text/xml; charset="utf-8"', includeBody: true),
-    _PropfindVariant(depth: '0', contentType: 'text/xml; charset="utf-8"', includeBody: true),
-    _PropfindVariant(depth: '1', contentType: 'text/xml; charset="utf-8"', includeBody: false),
-    _PropfindVariant(depth: '1', contentType: 'application/xml', includeBody: true),
-    _PropfindVariant(depth: '0', contentType: 'application/xml', includeBody: true),
+    _PropfindVariant(
+      depth: '1',
+      contentType: 'text/xml; charset="utf-8"',
+      includeBody: true,
+    ),
+    _PropfindVariant(
+      depth: '0',
+      contentType: 'text/xml; charset="utf-8"',
+      includeBody: true,
+    ),
+    _PropfindVariant(
+      depth: '1',
+      contentType: 'text/xml; charset="utf-8"',
+      includeBody: false,
+    ),
+    _PropfindVariant(
+      depth: '1',
+      contentType: 'application/xml',
+      includeBody: true,
+    ),
+    _PropfindVariant(
+      depth: '0',
+      contentType: 'application/xml',
+      includeBody: true,
+    ),
   ];
-  
+  static const List<String> _commonDavPathSuffixes = [
+    '/dav',
+    '/dav/',
+    '/webdav',
+    '/webdav/',
+  ];
+
+  static WebDAVService? _instance;
+
   static WebDAVService get instance {
     _instance ??= WebDAVService._();
     return _instance!;
   }
-  
+
   WebDAVService._();
-  
+
   List<WebDAVConnection> _connections = [];
-  
+
   List<WebDAVConnection> get connections => List.unmodifiable(_connections);
-  
-  /// 初始化，加载保存的连接
+
   Future<void> initialize() async {
     await _loadConnections();
   }
-  
-  /// 加载保存的连接
+
   Future<void> _loadConnections() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -122,60 +151,432 @@ class WebDAVService {
       print('加载WebDAV连接失败: $e');
     }
   }
-  
-  /// 保存连接到本地存储
+
   Future<void> _saveConnections() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final connectionsJson = json.encode(_connections.map((e) => e.toJson()).toList());
+      final connectionsJson =
+          json.encode(_connections.map((e) => e.toJson()).toList());
       await prefs.setString(_connectionsKey, connectionsJson);
     } catch (e) {
       print('保存WebDAV连接失败: $e');
     }
   }
-  
-  /// 添加新的WebDAV连接
+
   Future<bool> addConnection(WebDAVConnection connection) async {
+    final normalized = _normalizeConnection(connection);
     try {
-      // 测试连接
-      final isValid = await testConnection(connection);
-      if (isValid) {
-        final savedConnection = _normalizeConnection(connection).copyWith(isConnected: true);
-        _connections.add(savedConnection);
-        await _saveConnections();
-        return true;
+      final validated = await _validateConnection(normalized);
+      if (validated == null) {
+        return false;
       }
-      return false;
+      _connections.add(validated.copyWith(isConnected: true));
+      await _saveConnections();
+      return true;
     } catch (e) {
       print('添加WebDAV连接失败: $e');
       return false;
     }
   }
-  
-  /// 删除WebDAV连接
+
   Future<void> removeConnection(String name) async {
     _connections.removeWhere((conn) => conn.name == name);
     await _saveConnections();
   }
-  
-  /// 测试WebDAV连接
+
   Future<bool> testConnection(WebDAVConnection connection) async {
+    final normalized = _normalizeConnection(connection);
+    final validated = await _validateConnection(normalized);
+    return validated != null;
+  }
+
+  Future<WebDAVConnection?> _validateConnection(
+    WebDAVConnection connection,
+  ) async {
+    final triedUrls = <String>{};
+    final pending = <WebDAVConnection>[connection];
+
+    while (pending.isNotEmpty) {
+      var current = pending.removeAt(0);
+      final trimmedUrl = current.url.trim();
+      if (trimmedUrl.isEmpty) {
+        continue;
+      }
+
+      if (!triedUrls.add(trimmedUrl)) {
+        continue;
+      }
+
+      if (trimmedUrl != current.url) {
+        current = current.copyWith(url: trimmedUrl);
+      }
+
+      try {
+        final client = _createClient(current);
+        await _pingClient(client);
+        await client.readDir('/');
+        return current;
+      } on DioException catch (e) {
+        if (_isAuthorizationFailure(e)) {
+          final authMsg = _buildAuthorizationErrorMessage(current);
+          print(authMsg);
+          if (pending.isNotEmpty) {
+            continue;
+          }
+          return null;
+        }
+
+        final downgraded = _maybeDowngradeToHttp(e, current);
+        if (downgraded != null && !triedUrls.contains(downgraded.url)) {
+          pending.add(downgraded);
+          continue;
+        }
+
+        if (_shouldTryCommonDavPaths(e, current)) {
+          final candidates = _buildCommonDavConnections(current)
+              .where((candidate) => !triedUrls.contains(candidate.url))
+              .toList();
+          if (candidates.isNotEmpty) {
+            print('🔎 PROPFIND 405，尝试常见WebDAV子路径: ${candidates.map((c) => c.url).join(', ')}');
+            pending.addAll(candidates);
+            continue;
+          }
+        }
+
+        if (_shouldFallbackOnDioException(e)) {
+          print('🔁 webdav_client 连接测试失败 (状态码: ${e.response?.statusCode ?? 'unknown'})，尝试兼容模式...');
+          final fallbackConnection = await _legacyTestConnection(current);
+          if (fallbackConnection != null) {
+            return fallbackConnection;
+          }
+          return null;
+        }
+
+        print('❌ WebDAV连接测试失败: $e');
+        print('📍 堆栈: ${e.stackTrace}');
+        return null;
+      } catch (e, stackTrace) {
+        print('❌ WebDAV连接测试失败: $e');
+        print('📍 堆栈: $stackTrace');
+        final fallbackConnection = await _legacyTestConnection(current);
+        if (fallbackConnection != null) {
+          return fallbackConnection;
+        }
+        return null;
+      }
+    }
+
+    print('⚠️ WebDAV连接测试已尝试所有候选URL，但均失败');
+    return null;
+  }
+
+  Future<List<WebDAVFile>> listDirectory(
+      WebDAVConnection connection, String path) async {
+    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedPath = _normalizeDirectoryPath(path);
+    final client = _createClient(normalizedConnection);
+
+    try {
+      final remoteFiles = await client.readDir(normalizedPath);
+      final result = <WebDAVFile>[];
+
+      for (final remote in remoteFiles) {
+        final converted = _toWebDAVFile(remote, normalizedPath);
+        if (converted == null) {
+          continue;
+        }
+        if (converted.isDirectory || isVideoFile(converted.name)) {
+          result.add(converted);
+        }
+      }
+
+      return result;
+    } on DioException catch (e) {
+      if (_shouldFallbackOnDioException(e)) {
+        print('🔁 webdav_client 列目录失败 (状态码: ${e.response?.statusCode ?? 'unknown'})，尝试兼容模式...');
+        return await _legacyListDirectory(normalizedConnection, normalizedPath);
+      }
+      print('❌ 获取WebDAV目录内容失败: $e');
+      print('📍 堆栈: ${e.stackTrace}');
+      rethrow;
+    } catch (e, stackTrace) {
+      print('❌ 获取WebDAV目录内容失败: $e');
+      print('📍 堆栈: $stackTrace');
+      return await _legacyListDirectory(normalizedConnection, normalizedPath);
+    }
+  }
+
+  bool isVideoFile(String filename) {
+    final lower = filename.toLowerCase();
+    final dotIndex = lower.lastIndexOf('.');
+    if (dotIndex == -1 || dotIndex == lower.length - 1) {
+      return false;
+    }
+    final extension = lower.substring(dotIndex + 1);
+    const supportedExtensions = {
+      'mp4',
+      'mkv',
+      'avi',
+      'mov',
+      'wmv',
+      'flv',
+      'webm',
+      'm4v',
+    };
+    if (supportedExtensions.contains(extension)) {
+      return true;
+    }
+
+    // 某些网盘会使用“文件名+网址”作为文件名，导致扩展名类似.com/.cn 等
+    const urlLikeExtensions = {
+      'com',
+      'cn',
+      'org',
+      'net',
+      'me',
+      'cc',
+      'tv',
+      'co',
+      'xyz',
+    };
+    return urlLikeExtensions.contains(extension);
+  }
+
+  String getFileUrl(WebDAVConnection connection, String filePath) {
+    final normalizedConnection = _normalizeConnection(connection);
+    final trimmedPath = filePath.trim();
+    if (_isFullyQualifiedUrl(trimmedPath)) {
+      return trimmedPath;
+    }
+
+    final baseUri = Uri.parse(normalizedConnection.url);
+    final combinedPath = _buildServerRelativePath(baseUri.path, trimmedPath);
+    final hasAuth = normalizedConnection.username.isNotEmpty ||
+        normalizedConnection.password.isNotEmpty;
+
+    final uri = Uri(
+      scheme: baseUri.scheme,
+      host: baseUri.host,
+      port: baseUri.hasPort ? baseUri.port : null,
+      path: combinedPath,
+      userInfo: hasAuth
+          ? '${Uri.encodeComponent(normalizedConnection.username)}:${Uri.encodeComponent(normalizedConnection.password)}'
+          : null,
+    );
+
+    return uri.toString();
+  }
+
+  Future<void> updateConnectionStatus(String name) async {
+    final index = _connections.indexWhere((conn) => conn.name == name);
+    if (index == -1) {
+      return;
+    }
+    final normalized = _normalizeConnection(_connections[index]);
+    final validated = await _validateConnection(normalized);
+    final isConnected = validated != null;
+    final updatedConnection = (validated ?? normalized).copyWith(
+      isConnected: isConnected,
+    );
+    _connections[index] = updatedConnection;
+    await _saveConnections();
+  }
+
+  WebDAVConnection? getConnection(String name) {
+    try {
+      return _connections.firstWhere((conn) => conn.name == name);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  webdav.Client _createClient(WebDAVConnection connection) {
+    final client = webdav.newClient(
+      connection.url,
+      user: connection.username,
+      password: connection.password,
+      debug: false,
+    );
+    client.setHeaders({
+      'accept-charset': 'utf-8',
+      'user-agent': _userAgent,
+    });
+    client.setConnectTimeout(_defaultTimeoutMs);
+    client.setSendTimeout(_defaultTimeoutMs);
+    client.setReceiveTimeout(_defaultTimeoutMs);
+    return client;
+  }
+
+  Future<void> _pingClient(webdav.Client client) async {
+    try {
+      await client.ping();
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 405 || statusCode == 501) {
+        print('⚠️ WebDAV服务器不支持OPTIONS (状态码: $statusCode)，跳过该错误');
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  bool _shouldFallbackOnDioException(DioException e) {
+    final statusCode = e.response?.statusCode;
+    if (statusCode == 405 || statusCode == 501) {
+      return true;
+    }
+    final message = (e.message ?? e.error?.toString() ?? '').toLowerCase();
+    if (message.contains('method not allowed')) {
+      return true;
+    }
+    final statusMessage = e.response?.statusMessage?.toLowerCase() ?? '';
+    return statusMessage.contains('method not allowed');
+  }
+
+  bool _isAuthorizationFailure(DioException e) {
+    final statusCode = e.response?.statusCode;
+    return statusCode == 401 || statusCode == 403;
+  }
+
+  String _buildAuthorizationErrorMessage(WebDAVConnection connection) {
+    final hasUsername = connection.username.trim().isNotEmpty;
+    final hasPassword = connection.password.isNotEmpty;
+    if (hasUsername || hasPassword) {
+      return '❌ WebDAV服务器拒绝了提供的用户名或密码，请确认凭证正确后重试 (401/403)';
+    }
+    return '⚠️ WebDAV服务器要求身份验证，但当前连接未填写用户名或密码，请在连接设置中提供凭证';
+  }
+
+  WebDAVConnection? _maybeDowngradeToHttp(
+    DioException e,
+    WebDAVConnection connection,
+  ) {
+    if (!_looksLikeTlsProtocolMismatch(e)) {
+      return null;
+    }
+
+    Uri? uri;
+    try {
+      uri = Uri.parse(connection.url);
+    } catch (_) {
+      return null;
+    }
+
+    if (uri.scheme.toLowerCase() != 'https') {
+      return null;
+    }
+
+    final downgradedUri = uri.replace(scheme: 'http');
+    final downgradedConnection = connection.copyWith(url: downgradedUri.toString());
+    print('⚙️ 检测到HTTPS握手失败 (${e.error ?? e.message})，自动降级为HTTP: ${downgradedConnection.url}');
+    return downgradedConnection;
+  }
+
+  bool _looksLikeTlsProtocolMismatch(DioException e) {
+    final buffer = StringBuffer();
+    if (e.message != null) {
+      buffer.write(e.message);
+      buffer.write(' ');
+    }
+    if (e.error != null) {
+      buffer.write(e.error.toString());
+    }
+    final lowered = buffer.toString().toLowerCase();
+    if (lowered.isEmpty) {
+      return false;
+    }
+    return lowered.contains('wrong version number');
+  }
+
+  bool _shouldTryCommonDavPaths(
+    DioException e,
+    WebDAVConnection connection,
+  ) {
+    if (e.response?.statusCode != 405) {
+      return false;
+    }
+    final uri = Uri.tryParse(connection.url);
+    if (uri == null) {
+      return false;
+    }
+    final normalizedPath = uri.path.isEmpty ? '/' : uri.path;
+    return normalizedPath == '/' || normalizedPath.isEmpty;
+  }
+
+  List<WebDAVConnection> _buildCommonDavConnections(
+      WebDAVConnection connection) {
+    final urls = _buildCommonDavUrls(connection.url);
+    if (urls.isEmpty) {
+      return const [];
+    }
+    return urls.map((url) => connection.copyWith(url: url)).toList();
+  }
+
+  List<String> _buildCommonDavUrls(String baseUrl) {
+    final uri = Uri.tryParse(baseUrl);
+    if (uri == null) {
+      return const [];
+    }
+    final normalizedPath = uri.path.isEmpty ? '/' : uri.path;
+    if (normalizedPath != '/') {
+      return const [];
+    }
+
+    final result = <String>[];
+    for (final suffix in _commonDavPathSuffixes) {
+      final candidatePath = _ensureLeadingSlash(suffix);
+      final candidateUri = uri.replace(path: candidatePath);
+      final candidate = candidateUri.toString();
+      if (!result.contains(candidate)) {
+        result.add(candidate);
+      }
+    }
+    return result;
+  }
+
+  String _ensureLeadingSlash(String value) {
+    if (value.isEmpty) {
+      return '/';
+    }
+    return value.startsWith('/') ? value : '/$value';
+  }
+
+  Future<WebDAVConnection?> _legacyTestConnection(
+      WebDAVConnection connection) async {
     try {
       final trimmedUrl = connection.url.trim();
       final normalizedUrl = _normalizeUrl(trimmedUrl);
 
       final urlsToTry = <String>[];
-      if (trimmedUrl.isNotEmpty) {
-        urlsToTry.add(trimmedUrl);
+      void addUrl(String value) {
+        final trimmed = value.trim();
+        if (trimmed.isEmpty) {
+          return;
+        }
+        if (!urlsToTry.contains(trimmed)) {
+          urlsToTry.add(trimmed);
+        }
       }
-      if (normalizedUrl.isNotEmpty && !urlsToTry.contains(normalizedUrl)) {
+
+      addUrl(trimmedUrl);
+      if (normalizedUrl.isNotEmpty && normalizedUrl != trimmedUrl) {
         print('🔧 自动调整WebDAV地址为目录格式: $normalizedUrl');
-        urlsToTry.add(normalizedUrl);
+      }
+      addUrl(normalizedUrl);
+
+      final heuristicsBase = normalizedUrl.isNotEmpty ? normalizedUrl : trimmedUrl;
+      final heuristicUrls = _buildCommonDavUrls(heuristicsBase)
+          .where((candidate) => !urlsToTry.contains(candidate))
+          .toList();
+      final heuristicSet = heuristicUrls.toSet();
+      if (heuristicUrls.isNotEmpty) {
+        print('🔎 已自动添加常见WebDAV子路径候选: ${heuristicUrls.join(', ')}');
+        urlsToTry.addAll(heuristicUrls);
       }
 
       if (urlsToTry.isEmpty) {
         print('❌ URL格式错误: 地址为空');
-        return false;
+        return null;
       }
 
       final username = connection.username.trim();
@@ -183,56 +584,46 @@ class WebDAVService {
 
       for (var index = 0; index < urlsToTry.length; index++) {
         final currentUrl = urlsToTry[index];
-        final isNormalizedAttempt = index > 0;
-
-        if (isNormalizedAttempt) {
-          print('🔁 尝试使用规范化地址: $currentUrl');
-        } else {
+        if (index == 0) {
           print('🔍 测试WebDAV连接: $currentUrl');
+        } else if (heuristicSet.contains(currentUrl)) {
+          print('🔁 尝试常见WebDAV路径: $currentUrl');
+        } else {
+          print('🔁 尝试使用规范化地址: $currentUrl');
         }
 
-        final outcome = await _attemptConnection(
+        final outcome = await _legacyAttemptConnection(
           baseConnection: connection,
           url: currentUrl,
           username: username,
           password: password,
         );
 
-        if (outcome == _AttemptOutcome.success) {
-          if (isNormalizedAttempt) {
+        if (outcome == _LegacyAttemptOutcome.success) {
+          if (heuristicSet.contains(currentUrl)) {
+            print('ℹ️ 常见WebDAV路径尝试成功');
+          } else if (index > 0) {
             print('ℹ️ 使用规范化地址完成连接测试');
           }
-          return true;
+          return connection.copyWith(url: currentUrl);
         }
 
-        if (outcome == _AttemptOutcome.fatal) {
+        if (outcome == _LegacyAttemptOutcome.fatal) {
           print('❌ WebDAV连接失败 (已终止尝试)');
-          return false;
+          return null;
         }
       }
 
       print('❌ WebDAV连接失败，所有尝试均未成功');
-      return false;
+      return null;
     } catch (e, stackTrace) {
-      print('❌ 测试WebDAV连接异常: $e');
-      if (e.toString().contains('SocketException')) {
-        print('🌐 网络连接问题，请检查：');
-        print('  1. 服务器地址是否正确');
-        print('  2. 网络连接是否正常');
-        print('  3. 防火墙是否阻挡');
-      } else if (e.toString().contains('TimeoutException')) {
-        print('⏱️ 连接超时，请检查：');
-        print('  1. 服务器是否响应');
-        print('  2. 网络延迟是否过高');
-      } else if (e.toString().contains('FormatException')) {
-        print('📝 URL格式错误，请检查地址格式');
-      }
-      print('📍 堆栈跟踪: $stackTrace');
-      return false;
+      print('❌ 兼容模式测试WebDAV连接异常: $e');
+      print('📍 堆栈: $stackTrace');
+      return null;
     }
   }
-  
-  Future<_AttemptOutcome> _attemptConnection({
+
+  Future<_LegacyAttemptOutcome> _legacyAttemptConnection({
     required WebDAVConnection baseConnection,
     required String url,
     required String username,
@@ -248,12 +639,12 @@ class WebDAVService {
       print('  路径: ${uri.path}');
     } catch (e) {
       print('❌ URL格式错误: $e');
-      return _AttemptOutcome.fatal;
+      return _LegacyAttemptOutcome.fatal;
     }
 
     if (uri.scheme != 'http' && uri.scheme != 'https') {
       print('❌ 不支持的协议: ${uri.scheme}，仅支持 http 和 https');
-      return _AttemptOutcome.fatal;
+      return _LegacyAttemptOutcome.fatal;
     }
 
     String? credentials;
@@ -293,21 +684,18 @@ class WebDAVService {
 
       request.headers.addAll(headers);
       if (variant.includeBody) {
-        request.bodyBytes = utf8.encode(_propfindRequestBody);
+        request.bodyBytes = utf8.encode(_legacyPropfindRequestBody);
       }
 
       try {
         print('📡 发送WebDAV PROPFIND请求...');
-        final response = await _sendRequest(request, timeout: const Duration(seconds: 15));
+        final response = await _sendRequest(
+          request,
+          timeout: const Duration(seconds: 15),
+        );
 
         print('📥 收到响应: ${response.statusCode}');
         print('📄 响应头: ${response.headers}');
-
-        if (response.body.isNotEmpty && response.body.length < 2000) {
-          print('📄 响应体: ${response.body}');
-        } else {
-          print('📄 响应体长度: ${response.body.length} 字符');
-        }
 
         final isSuccess = response.statusCode == 207 ||
             response.statusCode == 200 ||
@@ -316,29 +704,31 @@ class WebDAVService {
 
         if (isSuccess) {
           print('✅ WebDAV连接成功! (变体: $variantDescription)');
-          return _AttemptOutcome.success;
+          return _LegacyAttemptOutcome.success;
         }
 
         if (response.statusCode == 401) {
           print('❌ 认证失败 (401)，请检查用户名和密码');
-          return _AttemptOutcome.fatal;
+          return _LegacyAttemptOutcome.fatal;
         }
 
         if (response.statusCode == 403) {
           print('❌ 访问被拒绝 (403)，请检查权限设置');
-          return _AttemptOutcome.fatal;
+          return _LegacyAttemptOutcome.fatal;
         }
 
         if (response.statusCode == 404) {
           print('❌ 路径不存在 (404)，请检查WebDAV路径');
-          return _AttemptOutcome.fatal;
+          return _LegacyAttemptOutcome.fatal;
         }
 
         if (response.statusCode == 405) {
           print('⚠️ 方法不被允许 (405)，服务器可能不支持PROPFIND，尝试OPTIONS...');
           final fallbackConnection = baseConnection.copyWith(url: url);
-          final optionsSuccess = await _testWithOptions(fallbackConnection);
-          return optionsSuccess ? _AttemptOutcome.success : _AttemptOutcome.fatal;
+          final optionsSuccess = await _legacyTestWithOptions(fallbackConnection);
+          return optionsSuccess
+              ? _LegacyAttemptOutcome.success
+              : _LegacyAttemptOutcome.retry;
         }
 
         if (response.statusCode >= 500) {
@@ -350,42 +740,44 @@ class WebDAVService {
       } catch (e) {
         print('❌ 发送PROPFIND请求失败: $e');
         if (e.toString().contains('FormatException')) {
-          return _AttemptOutcome.fatal;
+          return _LegacyAttemptOutcome.fatal;
         }
         if (e.toString().contains('HandshakeException')) {
-          return _AttemptOutcome.fatal;
+          return _LegacyAttemptOutcome.fatal;
         }
-        return _AttemptOutcome.retry;
+        return _LegacyAttemptOutcome.retry;
       }
     }
 
-    return _AttemptOutcome.retry;
+    return _LegacyAttemptOutcome.retry;
   }
 
-  /// 使用OPTIONS方法测试连接（备用方法）
-  Future<bool> _testWithOptions(WebDAVConnection connection) async {
+  Future<bool> _legacyTestWithOptions(WebDAVConnection connection) async {
     try {
       print('🔄 尝试OPTIONS方法测试连接...');
       final uri = Uri.parse(connection.url);
-      
+
       final headers = <String, String>{
         'User-Agent': _userAgent,
         'Accept': '*/*',
         'Accept-Encoding': 'identity',
       };
-      
+
       final username = connection.username.trim();
       final password = connection.password;
       if (username.isNotEmpty || password.isNotEmpty) {
         final credentials = base64Encode(utf8.encode('$username:$password'));
         headers['Authorization'] = 'Basic $credentials';
       }
-      
+
       final request = http.Request('OPTIONS', uri);
       request.persistentConnection = false;
       request.headers.addAll(headers);
-      
-      final response = await _sendRequest(request, timeout: const Duration(seconds: 10));
+
+      final response = await _sendRequest(
+        request,
+        timeout: const Duration(seconds: 10),
+      );
 
       print('📥 OPTIONS响应: ${response.statusCode}');
       print('📄 支持的方法: ${response.headers['allow'] ?? 'unknown'}');
@@ -399,19 +791,18 @@ class WebDAVService {
       return false;
     }
   }
-  
-  /// 获取WebDAV目录内容
-  Future<List<WebDAVFile>> listDirectory(WebDAVConnection connection, String path) async {
+
+  Future<List<WebDAVFile>> _legacyListDirectory(
+    WebDAVConnection connection,
+    String path,
+  ) async {
     try {
-      print('📂 获取WebDAV目录内容: ${connection.name}:$path');
-      
-      // 构建正确的URL
+      print('📂 使用兼容模式获取WebDAV目录内容: ${connection.name}:$path');
+
       Uri uri;
       if (path == '/' || path.isEmpty) {
-        // 根目录，直接使用connection.url
         uri = Uri.parse(connection.url);
       } else if (path.startsWith('/')) {
-        // 绝对路径，使用服务器base + path
         final baseUri = Uri.parse(connection.url);
         uri = Uri(
           scheme: baseUri.scheme,
@@ -420,19 +811,18 @@ class WebDAVService {
           path: path,
         );
       } else {
-        // 相对路径，拼接到connection.url
         uri = Uri.parse('${connection.url.replaceAll(RegExp(r'/$'), '')}/$path');
       }
-      
-      print('🔗 请求URL: $uri');
-      
+
+      print('🔗 兼容模式请求URL: $uri');
+
       final request = http.Request('PROPFIND', uri);
       request.persistentConnection = false;
       final headers = <String, String>{
         'User-Agent': _userAgent,
         'Accept': '*/*',
         'Accept-Encoding': 'identity',
-        'Depth': '1', // 获取当前目录和直接子项
+        'Depth': '1',
         'Content-Type': 'text/xml; charset="utf-8"',
       };
 
@@ -444,7 +834,7 @@ class WebDAVService {
       }
 
       request.headers.addAll(headers);
-      
+
       request.bodyBytes = utf8.encode('''<?xml version="1.0" encoding="utf-8" ?>
 <D:propfind xmlns:D="DAV:">
   <D:prop>
@@ -455,44 +845,47 @@ class WebDAVService {
   </D:prop>
 </D:propfind>''');
 
-      print('📡 发送PROPFIND请求...');
-      final response = await _sendRequest(request, timeout: const Duration(seconds: 30));
+      print('📡 兼容模式发送PROPFIND请求...');
+      final response = await _sendRequest(
+        request,
+        timeout: const Duration(seconds: 30),
+      );
       final responseBody = response.body;
-      
-      print('📥 收到响应: ${response.statusCode}');
+
+      print('📥 兼容模式响应: ${response.statusCode}');
       print('📄 响应体长度: ${responseBody.length}');
-      
+
       if (responseBody.length < 2000) {
         print('📄 响应体内容: $responseBody');
       }
-      
+
       if (response.statusCode != 207 && response.statusCode != 200) {
         print('❌ PROPFIND失败: ${response.statusCode}');
         throw Exception('WebDAV PROPFIND failed: ${response.statusCode}');
       }
 
       final files = _parseWebDAVResponse(responseBody, path);
-      print('📁 解析到 ${files.length} 个项目');
-      
+      print('📁 兼容模式解析到 ${files.length} 个项目');
+
       return files;
     } catch (e, stackTrace) {
-      print('❌ 获取WebDAV目录内容失败: $e');
-      print('📍 堆栈跟踪: $stackTrace');
-      throw e;
+      print('❌ 兼容模式获取WebDAV目录内容失败: $e');
+      print('📍 堆栈: $stackTrace');
+      rethrow;
     }
   }
-  
-  /// 解析WebDAV PROPFIND响应
+
   List<WebDAVFile> _parseWebDAVResponse(String xmlResponse, String basePath) {
     final List<WebDAVFile> files = [];
-    
+
     try {
       print('🔍 开始解析WebDAV响应...');
-      print('📄 原始XML前500字符: ${xmlResponse.substring(0, xmlResponse.length > 500 ? 500 : xmlResponse.length)}');
-      
+      print(
+        '📄 原始XML前500字符: ${xmlResponse.substring(0, xmlResponse.length > 500 ? 500 : xmlResponse.length)}',
+      );
+
       final document = XmlDocument.parse(xmlResponse);
-      
-      // 尝试不同的response元素查找方式
+
       var responses = document.findAllElements('response');
       if (responses.isEmpty) {
         responses = document.findAllElements('d:response');
@@ -501,24 +894,25 @@ class WebDAVService {
         responses = document.findAllElements('D:response');
       }
       if (responses.isEmpty) {
-        // 尝试忽略命名空间查找
-        responses = document.descendants.where((node) => 
-          node is XmlElement && 
-          (node.name.local.toLowerCase() == 'response')
-        ).cast<XmlElement>();
+        responses = document.descendants
+            .where(
+              (node) =>
+                  node is XmlElement &&
+                  (node.name.local.toLowerCase() == 'response'),
+            )
+            .cast<XmlElement>();
       }
-      
+
       print('📋 找到 ${responses.length} 个response元素');
-      
+
       if (responses.isEmpty) {
         print('⚠️ 未找到任何response元素，打印完整XML结构：');
         print('📄 完整XML: $xmlResponse');
         return files;
       }
-      
+
       for (final response in responses) {
         try {
-          // 尝试多种href查找方式
           var hrefElements = response.findElements('href');
           if (hrefElements.isEmpty) {
             hrefElements = response.findElements('d:href');
@@ -527,30 +921,33 @@ class WebDAVService {
             hrefElements = response.findElements('D:href');
           }
           if (hrefElements.isEmpty) {
-            hrefElements = response.descendants.where((node) => 
-              node is XmlElement && 
-              node.name.local.toLowerCase() == 'href'
-            ).cast<XmlElement>();
+            hrefElements = response.descendants
+                .where(
+                  (node) =>
+                      node is XmlElement &&
+                      node.name.local.toLowerCase() == 'href',
+                )
+                .cast<XmlElement>();
           }
-          
+
           if (hrefElements.isEmpty) {
             print('⚠️ 跳过：没有href元素');
             continue;
           }
-          
+
           final href = hrefElements.first.text;
-          print('📎 处理href: $href');
-          
-          // 跳过当前目录本身，但要更精确的匹配
-          final normalizedHref = href.endsWith('/') ? href.substring(0, href.length - 1) : href;
-          final normalizedBasePath = basePath.endsWith('/') ? basePath.substring(0, basePath.length - 1) : basePath;
-          
-          if (normalizedHref == normalizedBasePath || href == basePath || href == '$basePath/') {
-            print('📂 跳过当前目录: $href');
+          final normalizedHref =
+              href.endsWith('/') ? href.substring(0, href.length - 1) : href;
+          final normalizedBasePath = basePath.endsWith('/')
+              ? basePath.substring(0, basePath.length - 1)
+              : basePath;
+
+          if (normalizedHref == normalizedBasePath ||
+              href == basePath ||
+              href == '$basePath/') {
             continue;
           }
-          
-          // 尝试多种propstat查找方式
+
           var propstatElements = response.findElements('propstat');
           if (propstatElements.isEmpty) {
             propstatElements = response.findElements('d:propstat');
@@ -559,20 +956,22 @@ class WebDAVService {
             propstatElements = response.findElements('D:propstat');
           }
           if (propstatElements.isEmpty) {
-            propstatElements = response.descendants.where((node) => 
-              node is XmlElement && 
-              node.name.local.toLowerCase() == 'propstat'
-            ).cast<XmlElement>();
+            propstatElements = response.descendants
+                .where(
+                  (node) =>
+                      node is XmlElement &&
+                      node.name.local.toLowerCase() == 'propstat',
+                )
+                .cast<XmlElement>();
           }
-          
+
           if (propstatElements.isEmpty) {
             print('⚠️ 跳过：没有propstat元素');
             continue;
           }
-          
+
           final propstat = propstatElements.first;
-          
-          // 尝试多种prop查找方式
+
           var propElements = propstat.findElements('prop');
           if (propElements.isEmpty) {
             propElements = propstat.findElements('d:prop');
@@ -581,20 +980,22 @@ class WebDAVService {
             propElements = propstat.findElements('D:prop');
           }
           if (propElements.isEmpty) {
-            propElements = propstat.descendants.where((node) => 
-              node is XmlElement && 
-              node.name.local.toLowerCase() == 'prop'
-            ).cast<XmlElement>();
+            propElements = propstat.descendants
+                .where(
+                  (node) =>
+                      node is XmlElement &&
+                      node.name.local.toLowerCase() == 'prop',
+                )
+                .cast<XmlElement>();
           }
-          
+
           if (propElements.isEmpty) {
             print('⚠️ 跳过：没有prop元素');
             continue;
           }
-          
+
           final prop = propElements.first;
-          
-          // 获取显示名称 - 尝试多种方式
+
           var displayNameElements = prop.findElements('displayname');
           if (displayNameElements.isEmpty) {
             displayNameElements = prop.findElements('d:displayname');
@@ -603,28 +1004,29 @@ class WebDAVService {
             displayNameElements = prop.findElements('D:displayname');
           }
           if (displayNameElements.isEmpty) {
-            displayNameElements = prop.descendants.where((node) => 
-              node is XmlElement && 
-              node.name.local.toLowerCase() == 'displayname'
-            ).cast<XmlElement>();
+            displayNameElements = prop.descendants
+                .where(
+                  (node) =>
+                      node is XmlElement &&
+                      node.name.local.toLowerCase() == 'displayname',
+                )
+                .cast<XmlElement>();
           }
-          
+
           String displayName = '';
           if (displayNameElements.isNotEmpty) {
             displayName = displayNameElements.first.text;
           }
-          
-          // 如果没有displayname，从href中提取
+
           if (displayName.isEmpty) {
-            displayName = Uri.decodeComponent(href.split('/').where((s) => s.isNotEmpty).last);
+            displayName = Uri.decodeComponent(
+              href.split('/').where((s) => s.isNotEmpty).last,
+            );
             if (displayName.isEmpty) {
               displayName = href;
             }
           }
-          
-          print('📝 显示名称: $displayName');
-          
-          // 检查是否为目录 - 尝试多种方式
+
           var resourceTypeElements = prop.findElements('resourcetype');
           if (resourceTypeElements.isEmpty) {
             resourceTypeElements = prop.findElements('d:resourcetype');
@@ -633,12 +1035,15 @@ class WebDAVService {
             resourceTypeElements = prop.findElements('D:resourcetype');
           }
           if (resourceTypeElements.isEmpty) {
-            resourceTypeElements = prop.descendants.where((node) => 
-              node is XmlElement && 
-              node.name.local.toLowerCase() == 'resourcetype'
-            ).cast<XmlElement>();
+            resourceTypeElements = prop.descendants
+                .where(
+                  (node) =>
+                      node is XmlElement &&
+                      node.name.local.toLowerCase() == 'resourcetype',
+                )
+                .cast<XmlElement>();
           }
-          
+
           bool isDirectory = false;
           if (resourceTypeElements.isNotEmpty) {
             final resourceType = resourceTypeElements.first;
@@ -650,17 +1055,17 @@ class WebDAVService {
               collectionElements = resourceType.findElements('D:collection');
             }
             if (collectionElements.isEmpty) {
-              collectionElements = resourceType.descendants.where((node) => 
-                node is XmlElement && 
-                node.name.local.toLowerCase() == 'collection'
-              ).cast<XmlElement>();
+              collectionElements = resourceType.descendants
+                  .where(
+                    (node) =>
+                        node is XmlElement &&
+                        node.name.local.toLowerCase() == 'collection',
+                  )
+                  .cast<XmlElement>();
             }
             isDirectory = collectionElements.isNotEmpty;
           }
-          
-          print('📁 是否为目录: $isDirectory');
-          
-          // 获取文件大小
+
           int? size;
           if (!isDirectory) {
             var contentLengthElements = prop.findElements('getcontentlength');
@@ -671,18 +1076,20 @@ class WebDAVService {
               contentLengthElements = prop.findElements('D:getcontentlength');
             }
             if (contentLengthElements.isEmpty) {
-              contentLengthElements = prop.descendants.where((node) => 
-                node is XmlElement && 
-                node.name.local.toLowerCase() == 'getcontentlength'
-              ).cast<XmlElement>();
+              contentLengthElements = prop.descendants
+                  .where(
+                    (node) =>
+                        node is XmlElement &&
+                        node.name.local.toLowerCase() == 'getcontentlength',
+                  )
+                  .cast<XmlElement>();
             }
-            
+
             if (contentLengthElements.isNotEmpty) {
               size = int.tryParse(contentLengthElements.first.text);
             }
           }
-          
-          // 获取最后修改时间
+
           DateTime? lastModified;
           var lastModifiedElements = prop.findElements('getlastmodified');
           if (lastModifiedElements.isEmpty) {
@@ -692,12 +1099,15 @@ class WebDAVService {
             lastModifiedElements = prop.findElements('D:getlastmodified');
           }
           if (lastModifiedElements.isEmpty) {
-            lastModifiedElements = prop.descendants.where((node) => 
-              node is XmlElement && 
-              node.name.local.toLowerCase() == 'getlastmodified'
-            ).cast<XmlElement>();
+            lastModifiedElements = prop.descendants
+                .where(
+                  (node) =>
+                      node is XmlElement &&
+                      node.name.local.toLowerCase() == 'getlastmodified',
+                )
+                .cast<XmlElement>();
           }
-          
+
           if (lastModifiedElements.isNotEmpty) {
             try {
               lastModified = HttpDate.parse(lastModifiedElements.first.text);
@@ -705,125 +1115,37 @@ class WebDAVService {
               print('⚠️ 解析修改时间失败: $e');
             }
           }
-          
-          // 添加所有目录，只对文件进行视频格式过滤
-          if (isDirectory) {
-            // 目录总是添加
-            final file = WebDAVFile(
-              name: displayName,
-              path: href,
-              isDirectory: isDirectory,
-              size: size,
-              lastModified: lastModified,
-            );
-            files.add(file);
-            print('✅ 添加目录: $displayName');
-          } else if (isVideoFile(displayName)) {
-            // 只有视频文件才添加
-            final file = WebDAVFile(
-              name: displayName,
-              path: href,
-              isDirectory: isDirectory,
-              size: size,
-              lastModified: lastModified,
-            );
-            files.add(file);
-            print('✅ 添加视频文件: $displayName');
-          } else {
-            print('⏭️ 跳过非视频文件: $displayName');
+
+          final webDavFile = WebDAVFile(
+            name: displayName,
+            path: href,
+            isDirectory: isDirectory,
+            size: size,
+            lastModified: lastModified,
+          );
+
+          if (isDirectory || isVideoFile(displayName)) {
+            files.add(webDavFile);
           }
         } catch (e) {
           print('❌ 解析单个response失败: $e');
           continue;
         }
       }
-      
+
       print('📊 解析完成，共 ${files.length} 个有效项目');
-      
     } catch (e) {
       print('❌ 解析WebDAV响应失败: $e');
       print('📄 完整XML: $xmlResponse');
     }
-    
+
     return files;
   }
-  
-  /// 检查是否为视频文件
-  bool isVideoFile(String filename) {
-    final extension = filename.toLowerCase().split('.').last;
-    return ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v'].contains(extension);
-  }
-  
-  /// 获取WebDAV文件的下载URL
-  String getFileUrl(WebDAVConnection connection, String filePath) {
-    String finalUrl;
-    
-    // 如果filePath已经是完整的绝对路径（如 /dav/file.mp4），
-    // 则使用服务器的base URL + filePath
-    if (filePath.startsWith('/')) {
-      final baseUri = Uri.parse(connection.url);
-      
-      // 如果有用户名和密码，在URL中包含认证信息
-      if (connection.username.isNotEmpty && connection.password.isNotEmpty) {
-        final uri = Uri(
-          scheme: baseUri.scheme,
-          userInfo: '${Uri.encodeComponent(connection.username)}:${Uri.encodeComponent(connection.password)}',
-          host: baseUri.host,
-          port: baseUri.port,
-          path: filePath,
-        );
-        finalUrl = uri.toString();
-      } else {
-        final uri = Uri(
-          scheme: baseUri.scheme,
-          host: baseUri.host,
-          port: baseUri.port,
-          path: filePath,
-        );
-        finalUrl = uri.toString();
-      }
-    } else {
-      // 如果是相对路径，拼接到connection.url
-      if (connection.username.isNotEmpty && connection.password.isNotEmpty) {
-        final baseUri = Uri.parse(connection.url);
-        final uri = Uri(
-          scheme: baseUri.scheme,
-          userInfo: '${Uri.encodeComponent(connection.username)}:${Uri.encodeComponent(connection.password)}',
-          host: baseUri.host,
-          port: baseUri.port,
-          path: '${baseUri.path}/$filePath',
-        );
-        finalUrl = uri.toString();
-      } else {
-        finalUrl = '${connection.url.replaceAll(RegExp(r'/$'), '')}/$filePath';
-      }
-    }
-    
-    print('🎥 生成播放URL: $filePath → $finalUrl');
-    return finalUrl;
-  }
-  
-  /// 获取连接状态
-  Future<void> updateConnectionStatus(String name) async {
-    final index = _connections.indexWhere((conn) => conn.name == name);
-    if (index != -1) {
-      final connection = _connections[index];
-      final isConnected = await testConnection(connection);
-      _connections[index] = connection.copyWith(isConnected: isConnected);
-      await _saveConnections();
-    }
-  }
-  
-  WebDAVConnection _normalizeConnection(WebDAVConnection connection) {
-    final normalizedUrl = _normalizeUrl(connection.url);
-    if (normalizedUrl == connection.url && connection.url.trim() == connection.url) {
-      return connection;
-    }
 
-    return connection.copyWith(url: normalizedUrl);
-  }
-
-  Future<http.Response> _sendRequest(http.BaseRequest request, {Duration? timeout}) async {
+  Future<http.Response> _sendRequest(
+    http.BaseRequest request, {
+    Duration? timeout,
+  }) async {
     final uri = request.url;
     final client = IOClient(_createHttpClient(uri));
     try {
@@ -871,7 +1193,7 @@ class WebDAVService {
         if (ip.isLoopback) return true;
         final firstByte = ip.rawAddress.isNotEmpty ? ip.rawAddress[0] : 0;
         if (firstByte & 0xfe == 0xfc) {
-          return true; // fc00::/7 unique local address
+          return true;
         }
       }
     } else {
@@ -881,6 +1203,126 @@ class WebDAVService {
     }
 
     return false;
+  }
+
+  WebDAVFile? _toWebDAVFile(webdav.File remoteFile, String fallbackBasePath) {
+    final rawName = remoteFile.name?.trim() ?? '';
+    final name =
+        rawName.isNotEmpty ? rawName : _extractNameFromPath(remoteFile.path);
+    if (name.isEmpty) {
+      return null;
+    }
+
+    final isDirectory = remoteFile.isDir ?? false;
+    var path = remoteFile.path?.trim() ?? '';
+    if (path.isEmpty) {
+      path = _buildChildPath(fallbackBasePath, name, isDirectory);
+    } else {
+      path = _normalizeFilePath(path, isDirectory);
+    }
+
+    return WebDAVFile(
+      name: name,
+      path: path,
+      isDirectory: isDirectory,
+      size: remoteFile.size,
+      lastModified: remoteFile.mTime ?? remoteFile.cTime,
+    );
+  }
+
+  String _buildChildPath(String parent, String childName, bool isDirectory) {
+    final normalizedParent = _normalizeDirectoryPath(parent);
+    final combined = '$normalizedParent$childName';
+    return isDirectory
+        ? _ensureTrailingSlash(combined)
+        : _ensureNoTrailingSlash(combined);
+  }
+
+  String _normalizeDirectoryPath(String path) {
+    var normalized = path.trim();
+    if (normalized.isEmpty) {
+      return '/';
+    }
+    if (!normalized.startsWith('/')) {
+      normalized = '/$normalized';
+    }
+    normalized = _collapseSlashes(normalized);
+    return _ensureTrailingSlash(normalized);
+  }
+
+  String _normalizeFilePath(String path, bool isDirectory) {
+    var normalized = path.trim();
+    if (normalized.isEmpty) {
+      normalized = '/';
+    }
+    if (!normalized.startsWith('/')) {
+      normalized = '/$normalized';
+    }
+    normalized = _collapseSlashes(normalized);
+    return isDirectory
+        ? _ensureTrailingSlash(normalized)
+        : _ensureNoTrailingSlash(normalized);
+  }
+
+  String _ensureTrailingSlash(String value) {
+    if (value == '/') {
+      return value;
+    }
+    return value.endsWith('/') ? value : '$value/';
+  }
+
+  String _ensureNoTrailingSlash(String value) {
+    if (value == '/') {
+      return value;
+    }
+    return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
+  }
+
+  String _collapseSlashes(String value) {
+    return value.replaceAll(RegExp(r'//+'), '/');
+  }
+
+  String _extractNameFromPath(String? path) {
+    if (path == null || path.isEmpty) {
+      return '';
+    }
+    final sanitized = path.endsWith('/') && path.length > 1
+        ? path.substring(0, path.length - 1)
+        : path;
+    final segments = sanitized.split('/');
+    return segments.isNotEmpty ? segments.last : '';
+  }
+
+  String _buildServerRelativePath(String basePath, String relativePath) {
+    final bool isDirectory = relativePath.trim().endsWith('/');
+    var normalizedRelative = _normalizeFilePath(relativePath, isDirectory);
+    final normalizedBase =
+        _ensureTrailingSlash(_collapseSlashes(basePath.isEmpty ? '/' : basePath));
+
+    if (normalizedRelative.startsWith(normalizedBase)) {
+      return normalizedRelative;
+    }
+
+    if (normalizedRelative.startsWith('/')) {
+      normalizedRelative = normalizedRelative.substring(1);
+    }
+
+    final combined = '$normalizedBase$normalizedRelative';
+    final collapsed = _collapseSlashes(combined);
+    return collapsed.startsWith('/') ? collapsed : '/$collapsed';
+  }
+
+  bool _isFullyQualifiedUrl(String path) {
+    final lower = path.toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
+  }
+
+  WebDAVConnection _normalizeConnection(WebDAVConnection connection) {
+    final normalizedUrl = _normalizeUrl(connection.url);
+    if (normalizedUrl == connection.url && connection.url.trim() == connection.url) {
+      return connection;
+    }
+    return connection.copyWith(url: normalizedUrl);
   }
 
   String _normalizeUrl(String url) {
@@ -901,7 +1343,8 @@ class WebDAVService {
       } else if (!uri.path.endsWith('/')) {
         final segments = uri.pathSegments;
         final lastSegment = segments.isNotEmpty ? segments.last : '';
-        final looksLikeFile = lastSegment.contains('.') && !lastSegment.startsWith('.');
+        final looksLikeFile =
+            lastSegment.contains('.') && !lastSegment.startsWith('.');
         if (!looksLikeFile) {
           normalizedUri = uri.replace(path: '${uri.path}/');
         }
@@ -912,18 +1355,9 @@ class WebDAVService {
       return trimmed;
     }
   }
-
-  /// 获取指定名称的连接
-  WebDAVConnection? getConnection(String name) {
-    try {
-      return _connections.firstWhere((conn) => conn.name == name);
-    } catch (e) {
-      return null;
-    }
-  }
 }
 
-enum _AttemptOutcome {
+enum _LegacyAttemptOutcome {
   success,
   retry,
   fatal,

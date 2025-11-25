@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
@@ -49,6 +50,7 @@ class SharedEpisodeInfo {
       'lastModified': modifiedTime?.toIso8601String(),
       'lastWatchTime': historyItem.lastWatchTime.toIso8601String(),
       'duration': historyItem.duration,
+      'lastPosition': historyItem.lastPosition,
       'progress': historyItem.watchProgress,
       'streamPath': '/api/media/local/share/episodes/$shareId/stream',
       'videoHash': historyItem.videoHash,
@@ -338,5 +340,66 @@ class LocalMediaShareService {
         'Cache-Control': 'no-cache',
       },
     );
+  }
+
+  Future<WatchHistoryItem?> updateEpisodeProgress({
+    required String shareId,
+    double? progress,
+    int? positionMs,
+    int? durationMs,
+    DateTime? clientUpdatedAt,
+  }) async {
+    SharedEpisodeInfo? episode = _shareEpisodeMap[shareId];
+    if (episode == null) {
+      _rebuildCache();
+      episode = _shareEpisodeMap[shareId];
+      if (episode == null) {
+        return null;
+      }
+    }
+
+    final watchHistory = ServiceProvider.watchHistoryProvider;
+    final filePath = episode.historyItem.filePath;
+    WatchHistoryItem? existingHistory = await watchHistory.getHistoryItem(filePath);
+    existingHistory ??= episode.historyItem;
+
+    final double sanitizedProgress = progress == null || progress.isNaN
+        ? 0.0
+        : progress.clamp(0.0, 1.0);
+    final int sanitizedPosition = math.max(0, positionMs ?? 0);
+    final int? sanitizedDuration = durationMs != null && durationMs > 0 ? durationMs : null;
+
+    double derivedProgress = sanitizedProgress;
+    if (derivedProgress <= 0 && sanitizedDuration != null && sanitizedDuration > 0) {
+      derivedProgress = (sanitizedPosition / sanitizedDuration).clamp(0.0, 1.0);
+    }
+
+    final double mergedProgress = math.min(
+      1.0,
+      math.max(existingHistory.watchProgress, derivedProgress),
+    );
+    final int mergedPosition = math.max(existingHistory.lastPosition, sanitizedPosition);
+    final int mergedDuration = sanitizedDuration != null
+        ? math.max(existingHistory.duration, sanitizedDuration)
+        : existingHistory.duration;
+
+    final bool shouldUpdate =
+        (mergedProgress - existingHistory.watchProgress).abs() > 1e-4 ||
+            mergedPosition != existingHistory.lastPosition ||
+            mergedDuration != existingHistory.duration;
+
+    if (!shouldUpdate) {
+      return existingHistory;
+    }
+
+    final updatedHistory = existingHistory.copyWith(
+      watchProgress: mergedProgress,
+      lastPosition: mergedPosition,
+      duration: mergedDuration,
+      lastWatchTime: clientUpdatedAt ?? DateTime.now(),
+    );
+
+    await watchHistory.addOrUpdateHistory(updatedHistory);
+    return updatedHistory;
   }
 }

@@ -8,12 +8,17 @@ import 'package:provider/provider.dart';
 
 class AutoNextEpisodeService {
   static AutoNextEpisodeService? _instance;
-  static AutoNextEpisodeService get instance => _instance ??= AutoNextEpisodeService._();
+  static AutoNextEpisodeService get instance =>
+      _instance ??= AutoNextEpisodeService._();
+  static const int defaultCountdownSeconds = 3;
+  static const int minCountdownSeconds = 1;
+  static const int maxCountdownSeconds = 15;
   
   AutoNextEpisodeService._();
   
   Timer? _countdownTimer;
-  int _countdownSeconds = 10;
+  int _countdownSeconds = defaultCountdownSeconds;
+  int _countdownDurationSeconds = defaultCountdownSeconds;
   bool _isCountingDown = false;
   String? _nextEpisodePath;
   BuildContext? _context;
@@ -50,7 +55,7 @@ class AutoNextEpisodeService {
     }
     
     _nextEpisodePath = nextEpisode;
-    _countdownSeconds = 10;
+    _countdownSeconds = _countdownDurationSeconds;
     _isCountingDown = true;
     
     debugPrint('[自动播放] 找到下一话: $nextEpisode，开始倒计时');
@@ -85,6 +90,18 @@ class AutoNextEpisodeService {
   }
 
   bool get autoPlayEnabled => _autoPlayEnabled;
+  int get countdownDurationSeconds => _countdownDurationSeconds;
+
+  void updateCountdownDuration(int seconds) {
+    final clampedSeconds = seconds
+        .clamp(minCountdownSeconds, maxCountdownSeconds)
+        .toInt();
+    if (_countdownDurationSeconds == clampedSeconds) {
+      return;
+    }
+    _countdownDurationSeconds = clampedSeconds;
+    debugPrint('[AutoNext] 倒计时时长更新为 ${_countdownDurationSeconds}s');
+  }
   
   // 查找下一话
   String? _findNextEpisode(String currentVideoPath) {
@@ -135,7 +152,7 @@ class AutoNextEpisodeService {
   // 显示倒计时消息
   void _startCountdown(BuildContext context, String nextEpisodePath) {
     debugPrint('[AutoNext] _startCountdown called, nextEpisodePath=$nextEpisodePath, _countdownSeconds=$_countdownSeconds');
-    _countdownSeconds = 10;
+    _countdownSeconds = _countdownDurationSeconds;
     _isCancelled = false;
     
     // 显示初始倒计时

@@ -38,7 +38,9 @@ import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_pa
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart'
     show MediaServerType;
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 
 // ignore_for_file: prefer_const_constructors
 
@@ -1102,6 +1104,7 @@ class _LocalMediaSummary {
 enum _LibrarySource {
   local,
   webdav,
+  smb,
 }
 
 class CupertinoLocalMediaLibraryCard extends StatefulWidget {
@@ -2163,12 +2166,21 @@ class _CupertinoLibraryManagementSheetState
   bool _isLoadingWebDAV = false;
   bool _webdavInitialized = false;
   String? _webdavErrorMessage;
+  List<SMBConnection> _smbConnections = [];
+  final Map<String, List<SMBFileEntry>> _smbFolderContents = {};
+  final Set<String> _expandedSMBConnections = {};
+  final Set<String> _expandedSMBFolders = {};
+  final Set<String> _loadingSMBFolders = {};
+  bool _isLoadingSMB = false;
+  bool _smbInitialized = false;
+  String? _smbErrorMessage;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_handleScroll);
     _initWebDAVService();
+    _initSMBService();
   }
 
   void _handleScroll() {
@@ -2215,10 +2227,15 @@ class _CupertinoLibraryManagementSheetState
               _buildDetectedChangesInfo(context, scanService),
             ]);
           }
-        } else {
+        } else if (_selectedSource == _LibrarySource.webdav) {
           sections.addAll([
             const SizedBox(height: 16),
             _buildWebDAVSection(context),
+          ]);
+        } else {
+          sections.addAll([
+            const SizedBox(height: 16),
+            _buildSMBSection(context),
           ]);
         }
 
@@ -3300,6 +3317,720 @@ class _CupertinoLibraryManagementSheetState
   }
 
   String _webdavKey(WebDAVConnection connection, String path) {
+    return '${connection.name}:$path';
+  }
+
+  Widget _buildSMBSection(BuildContext context) {
+    final children = <Widget>[
+      _buildSMBHeader(context),
+      const SizedBox(height: 12),
+    ];
+
+    if (_isLoadingSMB && !_smbInitialized) {
+      children.add(_buildSMBPlaceholder(
+        context,
+        title: '正在加载连接',
+        subtitle: '正在读取已保存的 SMB 服务器配置…',
+      ));
+    } else if (_smbErrorMessage != null) {
+      children.add(_buildSMBPlaceholder(
+        context,
+        title: '加载失败',
+        subtitle: _smbErrorMessage!,
+        isError: true,
+      ));
+    } else if (_smbConnections.isEmpty) {
+      children.add(_buildSMBPlaceholder(
+        context,
+        title: '尚未添加 SMB 服务器',
+        subtitle: '点击上方按钮添加服务器，即可浏览局域网共享并挂载到本地媒体库。',
+      ));
+    } else {
+      children.addAll(
+        _smbConnections
+            .map((connection) => _buildSMBConnectionCard(context, connection))
+            .toList(),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  Widget _buildSMBHeader(BuildContext context) {
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'SMB 服务器',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: labelColor,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '连接局域网中的 SMB/NAS 共享，浏览目录并选择需要挂载的媒体文件夹。',
+          style: TextStyle(fontSize: 13, color: subtitleColor, height: 1.4),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSMBPlaceholder(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    bool isError = false,
+  }) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor = isError
+        ? CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context)
+        : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor = isError
+        ? CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context)
+            .withValues(alpha: 0.8)
+        : CupertinoDynamicColor.resolve(
+            CupertinoColors.secondaryLabel,
+            context,
+          );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: labelColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            style: TextStyle(fontSize: 13, color: subtitleColor, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSMBConnectionCard(
+    BuildContext context,
+    SMBConnection connection,
+  ) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final dividerColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.separator, context);
+    final statusColor = connection.isConnected
+        ? CupertinoColors.activeGreen
+        : CupertinoColors.systemRed;
+    final isExpanded = _expandedSMBConnections.contains(connection.name);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: CupertinoDynamicColor.resolve(statusColor, context)
+              .withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 12, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  CupertinoIcons.desktopcomputer,
+                  color: CupertinoDynamicColor.resolve(statusColor, context),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: connection.isConnected
+                        ? () => _toggleSMBConnection(connection)
+                        : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          connection.name,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: labelColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          connection.host,
+                          style: TextStyle(fontSize: 12, color: subtitleColor),
+                        ),
+                        if (connection.username.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Text(
+                              '用户：${connection.username}${connection.domain.isNotEmpty ? ' @${connection.domain}' : ''}',
+                              style:
+                                  TextStyle(fontSize: 12, color: subtitleColor),
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: CupertinoDynamicColor.resolve(
+                                  statusColor,
+                                  context,
+                                ).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                connection.isConnected ? '已连接' : '未连接',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: CupertinoDynamicColor.resolve(
+                                    statusColor,
+                                    context,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (connection.isConnected)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: Icon(
+                                  isExpanded
+                                      ? CupertinoIcons.chevron_down
+                                      : CupertinoIcons.chevron_right,
+                                  size: 14,
+                                  color: subtitleColor,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildSMBIconButton(
+                      icon: CupertinoIcons.pencil,
+                      onPressed: () =>
+                          _showSMBConnectionDialog(editConnection: connection),
+                    ),
+                    _buildSMBIconButton(
+                      icon: CupertinoIcons.delete,
+                      onPressed: () => _removeSMBConnection(connection),
+                    ),
+                    _buildSMBIconButton(
+                      icon: CupertinoIcons.refresh_thin,
+                      onPressed: () => _testSMBConnection(connection),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (!connection.isConnected)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '点击右上角刷新图标测试连接，成功后即可展开并浏览目录。',
+                  style:
+                      TextStyle(fontSize: 12, color: subtitleColor, height: 1.4),
+                ),
+              ),
+            ),
+          if (connection.isConnected && isExpanded)
+            Container(height: 1, color: dividerColor),
+          if (connection.isConnected && isExpanded)
+            _buildSMBFileList(connection, '/', depth: 0),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSMBFileList(
+    SMBConnection connection,
+    String path, {
+    required int depth,
+  }) {
+    final key = _smbKey(connection, path);
+    final files = _smbFolderContents[key];
+    final isLoading = _loadingSMBFolders.contains(key);
+    final indentation = 16.0 + depth * 14;
+
+    if (isLoading) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 16, 16, 16),
+        child: const CupertinoActivityIndicator(radius: 10),
+      );
+    }
+
+    if (files == null) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 16, 16, 16),
+        child: Text(
+          '尚未加载内容',
+          style: TextStyle(
+            fontSize: 13,
+            color: CupertinoDynamicColor.resolve(
+              CupertinoColors.secondaryLabel,
+              context,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (files.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 16, 16, 16),
+        child: Text(
+          '文件夹为空',
+          style: TextStyle(
+            fontSize: 13,
+            color: CupertinoDynamicColor.resolve(
+              CupertinoColors.secondaryLabel,
+              context,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children:
+          files.map((file) => _buildSMBNode(connection, file, depth)).toList(),
+    );
+  }
+
+  Widget _buildSMBNode(
+    SMBConnection connection,
+    SMBFileEntry file,
+    int depth,
+  ) {
+    final key = _smbKey(connection, file.path);
+    final isExpanded = _expandedSMBFolders.contains(key);
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(16.0 + depth * 14, 10, 12, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                file.isDirectory
+                    ? CupertinoIcons.folder
+                    : CupertinoIcons.play_arrow_solid,
+                size: 18,
+                color: file.isDirectory
+                    ? CupertinoDynamicColor.resolve(
+                        CupertinoColors.activeBlue,
+                        context,
+                      )
+                    : CupertinoDynamicColor.resolve(
+                        CupertinoColors.systemGrey,
+                        context,
+                      ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      file.name,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: labelColor,
+                        fontWeight:
+                            file.isDirectory ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                    if (file.size != null)
+                      Text(
+                        '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
+                        style: TextStyle(fontSize: 12, color: subtitleColor),
+                      ),
+                  ],
+                ),
+              ),
+              if (file.isDirectory)
+                Row(
+                  children: [
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minSize: 30,
+                      onPressed: () =>
+                          _scanSMBFolder(connection, file.path, file.name),
+                      child: const Text('扫描'),
+                    ),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minSize: 30,
+                      onPressed: () => _toggleSMBFolder(connection, file.path),
+                      child: Icon(
+                        isExpanded
+                            ? CupertinoIcons.chevron_down
+                            : CupertinoIcons.chevron_right,
+                        size: 16,
+                        color: subtitleColor,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minSize: 28,
+                  onPressed: () => _playSMBFile(connection, file),
+                  child: const Text('播放'),
+                ),
+            ],
+          ),
+        ),
+        if (file.isDirectory && isExpanded)
+          _buildSMBFileList(connection, file.path, depth: depth + 1),
+      ],
+    );
+  }
+
+  CupertinoButton _buildSMBIconButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minSize: 30,
+      onPressed: onPressed,
+      child: Icon(icon, size: 18),
+    );
+  }
+
+  Future<void> _initSMBService() async {
+    setState(() {
+      _isLoadingSMB = true;
+      _smbErrorMessage = null;
+    });
+
+    try {
+      await SMBService.instance.initialize();
+      if (!mounted) return;
+      setState(() {
+        _smbConnections = SMBService.instance.connections;
+        _smbInitialized = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _smbErrorMessage = e.toString();
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingSMB = false;
+      });
+    }
+  }
+
+  void _refreshSMBConnections() {
+    if (!mounted) return;
+    setState(() {
+      _smbConnections = SMBService.instance.connections;
+    });
+  }
+
+  Future<void> _showSMBConnectionDialog({
+    SMBConnection? editConnection,
+  }) async {
+    final result = await SMBConnectionDialog.show(
+      context,
+      editConnection: editConnection,
+    );
+
+    if (result == true) {
+      _refreshSMBConnections();
+      _showSnack(editConnection == null ? '已添加 SMB 连接' : 'SMB 连接已更新');
+    }
+  }
+
+  Future<void> _removeSMBConnection(SMBConnection connection) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('删除 SMB 连接'),
+        content: Text('确定要删除“${connection.name}”吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await SMBService.instance.removeConnection(connection.name);
+      if (!mounted) return;
+      setState(() {
+        _smbConnections = SMBService.instance.connections;
+        _expandedSMBConnections.remove(connection.name);
+        _smbFolderContents
+            .removeWhere((key, value) => key.startsWith('${connection.name}:'));
+        _expandedSMBFolders
+            .removeWhere((key) => key.startsWith('${connection.name}:'));
+      });
+      _showSnack('已删除 ${connection.name}');
+    }
+  }
+
+  Future<void> _testSMBConnection(SMBConnection connection) async {
+    _showSnack('正在测试连接…');
+    await SMBService.instance.updateConnectionStatus(connection.name);
+    if (!mounted) return;
+    _refreshSMBConnections();
+    final updated = SMBService.instance.getConnection(connection.name);
+    if (updated?.isConnected == true) {
+      _showSnack('连接成功，可以展开浏览目录');
+    } else {
+      _showSnack('连接失败，请检查配置');
+    }
+  }
+
+  void _toggleSMBConnection(SMBConnection connection) {
+    if (!connection.isConnected) {
+      _showSnack('请先测试并建立连接');
+      return;
+    }
+
+    final alreadyExpanded = _expandedSMBConnections.contains(connection.name);
+    setState(() {
+      if (alreadyExpanded) {
+        _expandedSMBConnections.remove(connection.name);
+      } else {
+        _expandedSMBConnections.add(connection.name);
+      }
+    });
+
+    if (!alreadyExpanded) {
+      _loadSMBFolderChildren(connection, '/');
+    }
+  }
+
+  void _toggleSMBFolder(SMBConnection connection, String path) {
+    final key = _smbKey(connection, path);
+    final alreadyExpanded = _expandedSMBFolders.contains(key);
+    setState(() {
+      if (alreadyExpanded) {
+        _expandedSMBFolders.remove(key);
+      } else {
+        _expandedSMBFolders.add(key);
+      }
+    });
+
+    if (!alreadyExpanded) {
+      _loadSMBFolderChildren(connection, path);
+    }
+  }
+
+  Future<void> _loadSMBFolderChildren(
+    SMBConnection connection,
+    String path,
+  ) async {
+    final normalizedPath = path.isEmpty ? '/' : path;
+    final key = _smbKey(connection, normalizedPath);
+
+    if (_loadingSMBFolders.contains(key)) {
+      return;
+    }
+
+    setState(() {
+      _loadingSMBFolders.add(key);
+    });
+
+    try {
+      final files = await SMBService.instance.listDirectory(
+        connection,
+        normalizedPath,
+      );
+      if (!mounted) return;
+      setState(() {
+        _smbFolderContents[key] = files;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('加载目录失败：$e');
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _loadingSMBFolders.remove(key);
+      });
+    }
+  }
+
+  Future<void> _scanSMBFolder(
+    SMBConnection connection,
+    String folderPath,
+    String folderName,
+  ) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('扫描 SMB 文件夹'),
+        content: Text('确定要扫描“$folderName”吗？\n扫描后将把其中的视频文件添加到本地媒体库。'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('扫描'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    try {
+      _showSnack('正在扫描 $folderName…');
+      final files = await _getSMBVideoFiles(connection, folderPath);
+      if (files.isEmpty) {
+        _showSnack('未找到可导入的视频文件');
+        return;
+      }
+
+      for (final file in files) {
+        final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+        final historyItem = WatchHistoryItem(
+          filePath: fileUrl,
+          animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+          episodeTitle: '',
+          duration: 0,
+          lastPosition: 0,
+          watchProgress: 0.0,
+          lastWatchTime: DateTime.now(),
+          isFromScan: true,
+        );
+        await WatchHistoryManager.addOrUpdateHistory(historyItem);
+      }
+
+      await context.read<WatchHistoryProvider>().refresh();
+      _showSnack('已添加 ${files.length} 个视频文件');
+    } catch (e) {
+      _showSnack('扫描失败：$e');
+    }
+  }
+
+  Future<List<SMBFileEntry>> _getSMBVideoFiles(
+    SMBConnection connection,
+    String folderPath,
+  ) async {
+    final List<SMBFileEntry> videoFiles = [];
+    try {
+      final files = await SMBService.instance.listDirectory(
+        connection,
+        folderPath,
+      );
+      for (final file in files) {
+        if (file.isDirectory) {
+          final subFiles = await _getSMBVideoFiles(connection, file.path);
+          videoFiles.addAll(subFiles);
+        } else if (SMBService.instance.isVideoFile(file.name)) {
+          videoFiles.add(file);
+        }
+      }
+    } catch (e) {
+      debugPrint('获取SMB视频文件失败: $e');
+    }
+    return videoFiles;
+  }
+
+  Future<void> _playSMBFile(
+    SMBConnection connection,
+    SMBFileEntry file,
+  ) async {
+    try {
+      final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+      final historyItem = WatchHistoryItem(
+        filePath: fileUrl,
+        animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+        episodeTitle: '',
+        duration: 0,
+        lastPosition: 0,
+        watchProgress: 0.0,
+        lastWatchTime: DateTime.now(),
+      );
+      await WatchHistoryManager.addOrUpdateHistory(historyItem);
+
+      final playable = PlayableItem(
+        videoPath: fileUrl,
+        title: historyItem.animeName,
+        historyItem: historyItem,
+      );
+      await PlaybackService().play(playable);
+    } catch (e) {
+      _showSnack('播放失败：$e');
+    }
+  }
+
+  String _smbKey(SMBConnection connection, String path) {
     return '${connection.name}:$path';
   }
 

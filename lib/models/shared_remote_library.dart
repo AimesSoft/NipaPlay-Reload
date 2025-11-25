@@ -114,6 +114,7 @@ class SharedRemoteEpisode {
     this.animeId,
     this.episodeId,
     this.duration,
+    this.lastPosition,
     this.progress,
     this.fileSize,
     this.lastWatchTime,
@@ -128,6 +129,7 @@ class SharedRemoteEpisode {
   final int? animeId;
   final int? episodeId;
   final int? duration;
+  final int? lastPosition;
   final double? progress;
   final int? fileSize;
   final DateTime? lastWatchTime;
@@ -143,6 +145,7 @@ class SharedRemoteEpisode {
       animeId: json['animeId'] as int?,
       episodeId: json['episodeId'] as int?,
       duration: json['duration'] as int?,
+      lastPosition: json['lastPosition'] as int?,
       progress: (json['progress'] as num?)?.toDouble(),
       fileSize: json['fileSize'] as int?,
       lastWatchTime: json['lastWatchTime'] != null

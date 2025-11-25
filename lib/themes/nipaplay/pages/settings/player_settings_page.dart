@@ -17,6 +17,7 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -476,6 +477,37 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                           : '播放结束后将返回上一页',
                 );
               },
+            );
+          },
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final bool isAutoNext =
+                videoState.playbackEndAction == PlaybackEndAction.autoNext;
+            final double minSeconds =
+                AutoNextEpisodeService.minCountdownSeconds.toDouble();
+            final double maxSeconds =
+                AutoNextEpisodeService.maxCountdownSeconds.toDouble();
+            final divisions = AutoNextEpisodeService.maxCountdownSeconds -
+                AutoNextEpisodeService.minCountdownSeconds;
+            return SettingsItem.slider(
+              title: '自动连播倒计时',
+              subtitle: isAutoNext
+                  ? '播放结束后等待多久再自动播放下一话'
+                  : '该设置在“播放结束操作”选择“自动播放下一话”时才会生效',
+              icon: Ionicons.timer_outline,
+              enabled: isAutoNext,
+              value: videoState.autoNextCountdownSeconds.toDouble(),
+              min: minSeconds,
+              max: maxSeconds,
+              divisions: divisions,
+              onChanged: (value) {
+                videoState.setAutoNextCountdownSeconds(value.round());
+              },
+              labelFormatter: (value) => '${value.round()} 秒',
             );
           },
         ),

@@ -12,6 +12,7 @@ import 'package:nipaplay/themes/fluent/widgets/fluent_info_bar.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 
 class FluentPlayerSettingsPage extends StatefulWidget {
   const FluentPlayerSettingsPage({super.key});
@@ -450,6 +451,44 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                       Text(
                         videoState.playbackEndAction.description,
                         style: FluentTheme.of(context).typography.caption,
+                      ),
+                      const SizedBox(height: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '自动连播倒计时：${videoState.autoNextCountdownSeconds} 秒',
+                            style: FluentTheme.of(context).typography.bodyStrong,
+                          ),
+                          const SizedBox(height: 8),
+                          Slider(
+                            value:
+                                videoState.autoNextCountdownSeconds.toDouble(),
+                            min: AutoNextEpisodeService.minCountdownSeconds
+                                .toDouble(),
+                            max: AutoNextEpisodeService.maxCountdownSeconds
+                                .toDouble(),
+                            divisions: AutoNextEpisodeService
+                                    .maxCountdownSeconds -
+                                AutoNextEpisodeService.minCountdownSeconds,
+                            onChanged: videoState.playbackEndAction ==
+                                    PlaybackEndAction.autoNext
+                                ? (value) async {
+                                    await videoState
+                                        .setAutoNextCountdownSeconds(
+                                            value.round());
+                                  }
+                                : null,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            videoState.playbackEndAction ==
+                                    PlaybackEndAction.autoNext
+                                ? '调整播放结束到下一话自动播放之间的等待时间'
+                                : '需先把“播放结束操作”设为“自动播放下一话”才能调节倒计时',
+                            style: FluentTheme.of(context).typography.caption,
+                          ),
+                        ],
                       ),
                     ],
                   ),

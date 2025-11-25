@@ -44,8 +44,17 @@ class DanmakuContainer extends StatefulWidget {
 }
 
 class _DanmakuContainerState extends State<DanmakuContainer> {
-  final double _danmakuHeight = 25.0; // 弹幕高度
-  late final double _verticalSpacing; // 上下间距
+  late final double _baseVerticalSpacing; // 设备基础上下间距
+  int _layoutVersion = 0; // 每当字号或布局参数变化时递增
+  double get _defaultFontSize => globals.isPhone ? 20.0 : 30.0;
+  double get _effectiveFontSize =>
+      widget.fontSize > 0 ? widget.fontSize : _defaultFontSize;
+  double get _danmakuHeight => _effectiveFontSize; // 弹幕高度与字号保持一致
+  double get _verticalSpacing {
+    final double scale =
+        (_effectiveFontSize / _defaultFontSize).clamp(0.7, 2.5);
+    return _baseVerticalSpacing * scale;
+  }
   // final double _horizontalSpacing = 20.0; // 左右间距（未使用，移除）
   // 文本宽度缓存，减少 TextPainter.layout 开销
   final Map<String, double> _textWidthCache = {};
@@ -127,7 +136,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   void initState() {
     super.initState();
     // 根据设备类型设置垂直间距
-    _verticalSpacing = globals.isPhone ? 10.0 : 20.0;
+    _baseVerticalSpacing = globals.isPhone ? 10.0 : 20.0;
 
     // 初始化文本渲染器
     _initializeTextRenderer();
@@ -272,6 +281,26 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     if (widget.danmakuList != oldWidget.danmakuList) {
       _preprocessDanmakuList(); // 在列表对象变化时调用
     }
+
+    if (widget.fontSize != oldWidget.fontSize) {
+      _invalidateLayoutCaches();
+    }
+  }
+
+  void _invalidateLayoutCaches() {
+    _layoutVersion++;
+    _danmakuYPositions.clear();
+    _scrollLaneNextAvailableUntil.clear();
+    _danmakuTrackInfo.clear();
+    for (var type in _trackDanmaku.keys) {
+      _trackDanmaku[type]!.clear();
+    }
+    _currentTrack.updateAll((key, value) => 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   // 重新计算所有弹幕位置
@@ -418,42 +447,6 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     final allowStacking = videoState.danmakuStacking;
 
     // 从 VideoPlayerState 获取轨道信息
-    if (videoState.danmakuTrackInfo.containsKey(danmakuKey)) {
-      final trackInfo = videoState.danmakuTrackInfo[danmakuKey]!;
-      final track = trackInfo['track'] as int;
-
-      // 考虑合并状态调整轨道高度
-      final adjustedDanmakuHeight = isMerged
-          ? _danmakuHeight * _calcMergedFontSizeMultiplier(mergeCount)
-          : _danmakuHeight;
-      final trackHeight = adjustedDanmakuHeight + _verticalSpacing;
-
-      // 根据类型计算Y轴位置
-      double yPosition;
-      if (type == 'bottom') {
-        yPosition = screenHeight -
-            (track + 1) * trackHeight -
-            adjustedDanmakuHeight -
-            _verticalSpacing;
-      } else {
-        // 顶部弹幕：减去2/3字体大小，既贴近顶部又不超出边界
-        yPosition =
-            track * trackHeight + _verticalSpacing - widget.fontSize * 2 / 3;
-      }
-
-      // 更新轨道信息
-      _trackDanmaku[type]!.add({
-        'content': content,
-        'time': time,
-        'track': track,
-        'width': trackInfo['width'] as double,
-        'isMerged': isMerged,
-      });
-
-      _danmakuYPositions[danmakuKey] = yPosition;
-      return yPosition;
-    }
-
     // 计算弹幕宽度和高度（带缓存）
     final fontSize = isMerged
         ? widget.fontSize * _calcMergedFontSizeMultiplier(mergeCount)
@@ -466,7 +459,6 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       return widget.currentTime - danmakuTime > _scrollDurationSeconds;
     });
 
-    // 计算可用轨道数，考虑弹幕高度和间距以及显示区域
     final adjustedDanmakuHeight = isMerged
         ? _danmakuHeight * _calcMergedFontSizeMultiplier(mergeCount)
         : _danmakuHeight;
@@ -484,6 +476,40 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
       // 二次防护：计算结果<=0 时也夹紧为 1，维持原有堆叠/重叠逻辑
       if (maxTracks <= 0) {
         maxTracks = 1;
+      }
+    }
+
+    final trackInfo = videoState.danmakuTrackInfo[danmakuKey];
+    final trackVersion = trackInfo?['layoutVersion'] as int? ?? -1;
+    if (trackInfo != null &&
+        trackVersion == _layoutVersion &&
+        trackInfo['track'] is int) {
+      final track = trackInfo['track'] as int;
+      if (track >= 0 && track < maxTracks) {
+        // 考虑合并状态调整轨道高度
+        double yPosition;
+
+        if (type == 'bottom') {
+          yPosition = screenHeight -
+              (track + 1) * trackHeight -
+              adjustedDanmakuHeight -
+              _verticalSpacing;
+        } else {
+          // 顶部弹幕：减去2/3字体大小，既贴近顶部又不超出边界
+          yPosition =
+              track * trackHeight + _verticalSpacing - widget.fontSize * 2 / 3;
+        }
+
+        _trackDanmaku[type]!.add({
+          'content': content,
+          'time': time,
+          'track': track,
+          'width': trackInfo['width'] as double,
+          'isMerged': isMerged,
+        });
+
+        _danmakuYPositions[danmakuKey] = yPosition;
+        return yPosition;
       }
     }
 
@@ -549,6 +575,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
           'width': danmakuWidth,
           'isMerged': isMerged,
           'mergeCount': mergeCount,
+          'layoutVersion': _layoutVersion,
         });
       });
       return yPosition;
@@ -579,6 +606,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               'track': track,
               'width': danmakuWidth,
               'isMerged': isMerged,
+              'layoutVersion': _layoutVersion,
             });
           });
           return yPosition;
@@ -623,6 +651,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
                 'width': danmakuWidth,
                 'isMerged': isMerged,
                 'mergeCount': mergeCount,
+                'layoutVersion': _layoutVersion,
               });
             });
             return yPosition;
@@ -655,6 +684,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             'width': danmakuWidth,
             'isMerged': isMerged,
             'mergeCount': mergeCount,
+            'layoutVersion': _layoutVersion,
           });
         });
         return yPosition;
@@ -691,6 +721,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
               'track': track,
               'width': danmakuWidth,
               'isMerged': isMerged,
+              'layoutVersion': _layoutVersion,
             });
           });
           return yPosition;
@@ -735,6 +766,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
                 'width': danmakuWidth,
                 'isMerged': isMerged,
                 'mergeCount': mergeCount,
+                'layoutVersion': _layoutVersion,
               });
             });
             return yPosition;
@@ -767,6 +799,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
             'width': danmakuWidth,
             'isMerged': isMerged,
             'mergeCount': mergeCount,
+            'layoutVersion': _layoutVersion,
           });
         });
         return yPosition;

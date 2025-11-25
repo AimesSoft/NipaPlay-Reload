@@ -90,6 +90,41 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadAutoNextCountdownSeconds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedValue = prefs.getInt(_autoNextCountdownSecondsKey);
+    final resolved = (storedValue ??
+            AutoNextEpisodeService.defaultCountdownSeconds)
+        .clamp(
+          AutoNextEpisodeService.minCountdownSeconds,
+          AutoNextEpisodeService.maxCountdownSeconds,
+        )
+        .toInt();
+    final bool changed = resolved != _autoNextCountdownSeconds;
+    _autoNextCountdownSeconds = resolved;
+    AutoNextEpisodeService.instance.updateCountdownDuration(resolved);
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> setAutoNextCountdownSeconds(int seconds) async {
+    final resolved = seconds
+        .clamp(
+          AutoNextEpisodeService.minCountdownSeconds,
+          AutoNextEpisodeService.maxCountdownSeconds,
+        )
+        .toInt();
+    if (_autoNextCountdownSeconds == resolved) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_autoNextCountdownSecondsKey, resolved);
+    _autoNextCountdownSeconds = resolved;
+    AutoNextEpisodeService.instance.updateCountdownDuration(resolved);
+    notifyListeners();
+  }
+
   Future<void> _loadPauseOnBackgroundSetting() async {
     final prefs = await SharedPreferences.getInstance();
     final storedValue = prefs.getBool(_pauseOnBackgroundKey);

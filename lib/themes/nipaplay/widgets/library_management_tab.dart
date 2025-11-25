@@ -22,7 +22,9 @@ import 'package:nipaplay/utils/globals.dart'; // 导入全局变量和设备检�
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动弹幕匹配器
 import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
+import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'; // 导入WebDAV连接对话框
+import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -32,6 +34,8 @@ class LibraryManagementTab extends StatefulWidget {
   @override
   State<LibraryManagementTab> createState() => _LibraryManagementTabState();
 }
+
+enum _LibrarySource { local, webdav, smb }
 
 class _LibraryManagementTabState extends State<LibraryManagementTab> {
   static const String _lastScannedDirectoryPickerPathKey = 'last_scanned_dir_picker_path';
@@ -47,11 +51,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   // 排序相关状态
   int _sortOption = 0; // 0: 文件名升序, 1: 文件名降序, 2: 修改时间升序, 3: 修改时间降序, 4: 大小升序, 5: 大小降序
 
-  // WebDAV相关状态
-  bool _showWebDAVFolders = false; // 控制显示本地文件夹还是WebDAV文件夹
+  // 网络资源相关状态
+  _LibrarySource _activeSource = _LibrarySource.local;
   List<WebDAVConnection> _webdavConnections = [];
   final Map<String, List<WebDAVFile>> _webdavFolderContents = {};
   final Set<String> _loadingWebDAVFolders = {};
+  List<SMBConnection> _smbConnections = [];
+  final Map<String, List<SMBFileEntry>> _smbFolderContents = {};
+  final Set<String> _loadingSMBFolders = {};
 
   @override
   void initState() {
@@ -65,6 +72,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     
     // 初始化WebDAV服务
     _initWebDAVService();
+    _initSMBService();
   }
   
   // 提取为单独的方法，方便管理生命周期
@@ -99,6 +107,19 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       debugPrint('初始化WebDAV服务失败: $e');
     }
   }
+
+  Future<void> _initSMBService() async {
+    try {
+      await SMBService.instance.initialize();
+      if (mounted) {
+        setState(() {
+          _smbConnections = SMBService.instance.connections;
+        });
+      }
+    } catch (e) {
+      debugPrint('初始化SMB服务失败: $e');
+    }
+  }
   
   // 显示WebDAV连接对话框
   Future<void> _showWebDAVConnectionDialog() async {
@@ -109,6 +130,22 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         _webdavConnections = WebDAVService.instance.connections;
       });
       BlurSnackBar.show(context, 'WebDAV连接已添加，您可以切换到WebDAV视图查看');
+    }
+  }
+
+  Future<void> _showSMBConnectionDialog({SMBConnection? editConnection}) async {
+    final result = await SMBConnectionDialog.show(
+      context,
+      editConnection: editConnection,
+    );
+    if (result == true && mounted) {
+      setState(() {
+        _smbConnections = SMBService.instance.connections;
+      });
+      BlurSnackBar.show(
+        context,
+        editConnection == null ? 'SMB连接已添加' : 'SMB连接已更新',
+      );
     }
   }
 
@@ -1120,68 +1157,7 @@ style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
 style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 16),
                   // 切换开关：本地文件夹 / WebDAV
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _showWebDAVFolders = false;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: !_showWebDAVFolders 
-                                  ? Colors.white.withOpacity(0.3) 
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '本地',
-                              style: TextStyle(
-                                color: !_showWebDAVFolders ? Colors.white : Colors.white70,
-                                fontSize: 12,
-                                fontWeight: !_showWebDAVFolders ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _showWebDAVFolders = true;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: _showWebDAVFolders 
-                                  ? Colors.white.withOpacity(0.3) 
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              'WebDAV',
-                              style: TextStyle(
-                                color: _showWebDAVFolders ? Colors.white : Colors.white70,
-                                fontSize: 12,
-                                fontWeight: _showWebDAVFolders ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildSourceToggle(),
                 ],
               ),
               Row(
@@ -1368,6 +1344,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                   ),
                 ),
               ),
+
             ],
           ),
         ),
@@ -1541,12 +1518,28 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
             ),
           ),
         Expanded(
-          child: _showWebDAVFolders
-              ? _buildWebDAVFoldersList() 
-              : (scanService.scannedFolders.isEmpty && !scanService.isScanning
-                  ? const Center(child: Text('尚未添加任何扫描文件夹。\n点击上方按钮添加。', textAlign: TextAlign.center, locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)))
-                  : _buildResponsiveFolderList(scanService)),
+          child: Builder(
+            builder: (_) {
+              switch (_activeSource) {
+                case _LibrarySource.webdav:
+                  return _buildWebDAVFoldersList();
+                case _LibrarySource.smb:
+                  return _buildSMBFoldersList();
+                case _LibrarySource.local:
+                default:
+                  return (scanService.scannedFolders.isEmpty && !scanService.isScanning)
+                      ? const Center(
+                          child: Text(
+                            '尚未添加任何扫描文件夹。\n点击上方按钮添加。',
+                            textAlign: TextAlign.center,
+                            locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70),
+                          ),
+                        )
+                      : _buildResponsiveFolderList(scanService);
+              }
+            },
+          ),
         ),
       ],
     );
@@ -1992,6 +1985,53 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
     return sdkVersion >= 33;
   }
+
+  Widget _buildSourceToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildSourceToggleItem('本地', _LibrarySource.local),
+          const SizedBox(width: 4),
+          _buildSourceToggleItem('WebDAV', _LibrarySource.webdav),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSourceToggleItem(String text, _LibrarySource source) {
+    final bool isActive = _activeSource == source;
+    return GestureDetector(
+      onTap: () {
+        if (_activeSource != source) {
+          setState(() {
+            _activeSource = source;
+          });
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white.withOpacity(0.3) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: isActive ? Colors.white : Colors.white70,
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
   
   // 构建WebDAV文件夹列表
   Widget _buildWebDAVFoldersList() {
@@ -2020,6 +2060,36 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       itemBuilder: (context, index) {
         final connection = _webdavConnections[index];
         return _buildWebDAVConnectionTile(connection);
+      },
+    );
+  }
+
+  Widget _buildSMBFoldersList() {
+    if (_smbConnections.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lan_outlined, size: 64, color: Colors.white54),
+              SizedBox(height: 16),
+              Text(
+                '尚未添加任何SMB服务器。\n点击上方"添加SMB服务器"按钮开始。',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: _smbConnections.length,
+      itemBuilder: (context, index) {
+        final connection = _smbConnections[index];
+        return _buildSMBConnectionTile(connection);
       },
     );
   }
@@ -2112,6 +2182,91 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       ),
     );
   }
+
+  Widget _buildSMBConnectionTile(SMBConnection connection) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: ExpansionTile(
+        key: PageStorageKey<String>('smb_${connection.name}'),
+        leading: const Icon(Icons.dns, color: Colors.white),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                connection.name,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                connection.isConnected ? '已连接' : '未连接',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Text(
+            connection.host,
+            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit, color: Colors.white70, size: 20),
+              onPressed: () => _showSMBConnectionDialog(editConnection: connection),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white70, size: 20),
+              onPressed: () => _removeSMBConnection(connection),
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white70, size: 20),
+              onPressed: () => _testSMBConnection(connection),
+            ),
+          ],
+        ),
+        onExpansionChanged: (isExpanded) {
+          if (isExpanded && connection.isConnected) {
+            _loadSMBFolderChildren(connection, '/');
+          }
+        },
+        children: connection.isConnected
+            ? _buildSMBFileNodes(connection, '/')
+            : [
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    '连接未建立，无法浏览文件。请点击刷新按钮重新连接。',
+                    style: TextStyle(color: Colors.white54),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+      ),
+    );
+  }
   
   // 构建WebDAV文件节点
   List<Widget> _buildWebDAVFileNodes(WebDAVConnection connection, String path) {
@@ -2184,6 +2339,85 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                   )
                 : null,
             onTap: () => _playWebDAVFile(connection, file),
+          ),
+        );
+      }
+    }).toList();
+  }
+
+  List<Widget> _buildSMBFileNodes(SMBConnection connection, String path) {
+    final key = '${connection.name}:$path';
+    final files = _smbFolderContents[key] ?? [];
+
+    if (_loadingSMBFolders.contains(key)) {
+      return [
+        const Center(
+          child: Padding(
+            padding: EdgeInsets.all(16.0),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      ];
+    }
+
+    if (files.isEmpty) {
+      return [
+        const Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text(
+            '文件夹为空或无法访问',
+            style: TextStyle(color: Colors.white54),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ];
+    }
+
+    return files.map((file) {
+      if (file.isDirectory) {
+        return Padding(
+          padding: const EdgeInsets.only(left: 16.0),
+          child: ExpansionTile(
+            key: PageStorageKey<String>('${connection.name}:${file.path}'),
+            leading: Icon(
+              file.isShare ? Icons.cloud_queue : Icons.folder_outlined,
+              color: Colors.white70,
+            ),
+            title: Text(
+              file.name,
+              style: const TextStyle(color: Colors.white),
+            ),
+            trailing: TextButton(
+              onPressed: () => _scanSMBFolder(connection, file.path, file.name),
+              child: const Text(
+                '扫描',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            onExpansionChanged: (isExpanded) {
+              if (isExpanded) {
+                _loadSMBFolderChildren(connection, file.path);
+              }
+            },
+            children: _buildSMBFileNodes(connection, file.path),
+          ),
+        );
+      } else {
+        return Padding(
+          padding: const EdgeInsets.only(left: 32.0),
+          child: ListTile(
+            leading: const Icon(Icons.movie_creation_outlined, color: Colors.white),
+            title: Text(
+              file.name,
+              style: const TextStyle(color: Colors.white),
+            ),
+            subtitle: file.size != null
+                ? Text(
+                    '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  )
+                : null,
+            onTap: () => _playSMBFile(connection, file),
           ),
         );
       }
@@ -2314,6 +2548,163 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     );
     
     widget.onPlayEpisode(historyItem);
+  }
+
+  Future<void> _loadSMBFolderChildren(SMBConnection connection, String path) async {
+    final key = '${connection.name}:$path';
+    if (_loadingSMBFolders.contains(key)) return;
+
+    Future.microtask(() {
+      if (mounted) {
+        setState(() {
+          _loadingSMBFolders.add(key);
+        });
+      }
+    });
+
+    try {
+      final files = await SMBService.instance.listDirectory(connection, path);
+      if (mounted) {
+        setState(() {
+          _smbFolderContents[key] = files;
+          _loadingSMBFolders.remove(key);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingSMBFolders.remove(key);
+        });
+        BlurSnackBar.show(context, '加载SMB文件夹失败: $e');
+      }
+    }
+  }
+
+  Future<void> _scanSMBFolder(SMBConnection connection, String folderPath, String folderName) async {
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '扫描SMB文件夹',
+      content: '确定要扫描SMB文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件添加到媒体库中。',
+      actions: [
+        TextButton(
+          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        TextButton(
+          child: const Text('扫描', style: TextStyle(color: Colors.white)),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+
+    if (confirm == true && mounted) {
+      try {
+        final files = await _getSMBVideoFiles(connection, folderPath);
+        for (final file in files) {
+          final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+          final historyItem = WatchHistoryItem(
+            filePath: fileUrl,
+            animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+            episodeTitle: '',
+            duration: 0,
+            lastPosition: 0,
+            watchProgress: 0.0,
+            lastWatchTime: DateTime.now(),
+            isFromScan: true,
+          );
+          await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        }
+
+        if (mounted) {
+          BlurSnackBar.show(context, '已添加 ${files.length} 个视频文件到媒体库');
+        }
+      } catch (e) {
+        if (mounted) {
+          BlurSnackBar.show(context, '扫描SMB文件夹失败: $e');
+        }
+      }
+    }
+  }
+
+  Future<List<SMBFileEntry>> _getSMBVideoFiles(SMBConnection connection, String folderPath) async {
+    final List<SMBFileEntry> videoFiles = [];
+    try {
+      final files = await SMBService.instance.listDirectory(connection, folderPath);
+      for (final file in files) {
+        if (file.isDirectory) {
+          final nested = await _getSMBVideoFiles(connection, file.path);
+          videoFiles.addAll(nested);
+        } else if (SMBService.instance.isVideoFile(file.name)) {
+          videoFiles.add(file);
+        }
+      }
+    } catch (e) {
+      debugPrint('获取SMB视频文件失败: $e');
+    }
+    return videoFiles;
+  }
+
+  void _playSMBFile(SMBConnection connection, SMBFileEntry file) {
+    final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+    final historyItem = WatchHistoryItem(
+      filePath: fileUrl,
+      animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+      episodeTitle: '',
+      duration: 0,
+      lastPosition: 0,
+      watchProgress: 0.0,
+      lastWatchTime: DateTime.now(),
+    );
+    widget.onPlayEpisode(historyItem);
+  }
+
+  Future<void> _removeSMBConnection(SMBConnection connection) async {
+    final confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '删除SMB连接',
+      content: '确定要删除SMB连接 "${connection.name}" 吗？',
+      actions: [
+        TextButton(
+          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        TextButton(
+          child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+
+    if (confirm == true && mounted) {
+      await SMBService.instance.removeConnection(connection.name);
+      setState(() {
+        _smbConnections = SMBService.instance.connections;
+        _smbFolderContents.removeWhere((key, value) => key.startsWith('${connection.name}:'));
+      });
+      BlurSnackBar.show(context, 'SMB连接已删除');
+    }
+  }
+
+  Future<void> _testSMBConnection(SMBConnection connection) async {
+    try {
+      BlurSnackBar.show(context, '正在测试连接...');
+      await SMBService.instance.updateConnectionStatus(connection.name);
+      if (mounted) {
+        setState(() {
+          _smbConnections = SMBService.instance.connections;
+        });
+        final updated = SMBService.instance.getConnection(connection.name);
+        if (updated?.isConnected == true) {
+          BlurSnackBar.show(context, '连接测试成功！');
+        } else {
+          BlurSnackBar.show(context, '连接测试失败');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '连接测试失败: $e');
+      }
+    }
   }
   
   // 编辑WebDAV连接

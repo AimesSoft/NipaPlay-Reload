@@ -40,6 +40,9 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       _urlController.text = widget.editConnection!.url;
       _usernameController.text = widget.editConnection!.username;
       _passwordController.text = widget.editConnection!.password;
+    } else {
+      // 预填常见的局域网示例地址，减少从零输入的麻烦
+      _urlController.text = 'http://192.168.1.1:5244/';
     }
   }
   
