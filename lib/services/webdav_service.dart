@@ -323,7 +323,23 @@ class WebDAVService {
       'webm',
       'm4v',
     };
-    return supportedExtensions.contains(extension);
+    if (supportedExtensions.contains(extension)) {
+      return true;
+    }
+
+    // 某些网盘会使用“文件名+网址”作为文件名，导致扩展名类似.com/.cn 等
+    const urlLikeExtensions = {
+      'com',
+      'cn',
+      'org',
+      'net',
+      'me',
+      'cc',
+      'tv',
+      'co',
+      'xyz',
+    };
+    return urlLikeExtensions.contains(extension);
   }
 
   String getFileUrl(WebDAVConnection connection, String filePath) {
