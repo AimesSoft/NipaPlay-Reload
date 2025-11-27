@@ -30,8 +30,6 @@ class ServiceProvider {
     serverHistorySyncService.initialize(
       onHistoryUpdated: () => watchHistoryProvider.refresh(),
     );
-    serverHistorySyncService.syncJellyfinResume();
-    serverHistorySyncService.syncEmbyResume();
 
     print('ServiceProvider: 所有服务初始化完成，连接验证将在后台异步进行');
   }
