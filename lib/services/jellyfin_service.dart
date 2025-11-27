@@ -855,6 +855,41 @@ class JellyfinService {
     
     return allMovies;
   }
+
+      /// 获取服务器 resume 列表，用于同步播放进度。
+      Future<List<Map<String, dynamic>>> fetchResumeItems({int limit = 5}) async {
+        if (kIsWeb) return [];
+        if (!_isConnected || _userId == null) {
+          return [];
+        }
+
+        final buffer = StringBuffer('/Users/$_userId/Items/Resume?userId=$_userId');
+        buffer.write('&IncludeItemTypes=Episode,Movie');
+        buffer.write('&Limit=$limit');
+        buffer.write(
+          '&Fields=RunTimeTicks,SeriesName,SeasonName,IndexNumber,ParentId,ImageTags',
+        );
+
+        try {
+          final response = await _makeAuthenticatedRequest(buffer.toString());
+          if (response.statusCode != 200) {
+            DebugLogService().addLog(
+              'JellyfinService: 获取 resume 列表失败，HTTP ${response.statusCode}',
+            );
+            return [];
+          }
+
+          final decoded = json.decode(response.body) as Map<String, dynamic>;
+          final items = decoded['Items'];
+          if (items is List) {
+            return items.whereType<Map<String, dynamic>>().toList(growable: false);
+          }
+        } catch (e, stack) {
+          DebugLogService().addLog('JellyfinService: 获取 resume 列表异常: $e\n$stack');
+        }
+
+        return [];
+      }
   
   // 获取电影详情
   Future<JellyfinMovieInfo?> getMovieDetails(String movieId) async {

@@ -1,0 +1,295 @@
+import 'dart:async';
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+
+class ServerHistorySyncService {
+  ServerHistorySyncService._internal();
+
+  static final ServerHistorySyncService instance =
+      ServerHistorySyncService._internal();
+
+  final JellyfinService _jellyfinService = JellyfinService.instance;
+  final EmbyService _embyService = EmbyService.instance;
+  final WatchHistoryDatabase _historyDatabase = WatchHistoryDatabase.instance;
+
+  bool _initialized = false;
+  bool _isSyncingJellyfin = false;
+  bool _isSyncingEmby = false;
+  Future<void> Function()? _onHistoryUpdated;
+
+  static const _kTimeConflictThresholdSeconds = 30;
+  static const _kResumeFetchLimit = 5;
+
+  /// 初始化同步服务。传入的 [onHistoryUpdated] 在同步写入数据库后触发，
+  /// 以便 UI Provider 重新拉取本地观看记录。
+  void initialize({Future<void> Function()? onHistoryUpdated}) {
+    if (_initialized) return;
+    _initialized = true;
+    _onHistoryUpdated = onHistoryUpdated;
+
+    if (kIsWeb) {
+      DebugLogService().addLog('ServerHistorySyncService: Web 环境跳过初始化');
+      return;
+    }
+
+    _jellyfinService.addReadyListener(_handleJellyfinReady);
+    _embyService.addReadyListener(_handleEmbyReady);
+
+    if (_jellyfinService.isReady) {
+      _scheduleJellyfinSync();
+    }
+    if (_embyService.isReady) {
+      _scheduleEmbySync();
+    }
+  }
+
+  /// 触发一次 Jellyfin Resume 拉取（对外接口，便于手动刷新）。
+  Future<void> syncJellyfinResume() async {
+    if (!_canSyncServer(
+      isSyncing: _isSyncingJellyfin,
+      isReady: _jellyfinService.isReady,
+      isConnected: _jellyfinService.isConnected,
+    )) {
+      return;
+    }
+
+    if (_jellyfinService.userId == null) {
+      DebugLogService()
+          .addLog('ServerHistorySyncService: Jellyfin 缺少 userId，无法同步');
+      return;
+    }
+
+    _isSyncingJellyfin = true;
+    try {
+        final resumeItems =
+          await _jellyfinService.fetchResumeItems(limit: _kResumeFetchLimit);
+      final changed = await _processResumeItems(
+        resumeItems: resumeItems,
+        filePathPrefix: 'jellyfin://',
+        serverLabel: 'Jellyfin',
+      );
+      if (changed && _onHistoryUpdated != null) {
+        await _onHistoryUpdated!.call();
+      }
+    } catch (e, stack) {
+      DebugLogService()
+          .addLog('ServerHistorySyncService: Jellyfin 同步失败: $e\n$stack');
+    } finally {
+      _isSyncingJellyfin = false;
+    }
+  }
+
+  /// 触发一次 Emby Resume 拉取。
+  Future<void> syncEmbyResume() async {
+    if (!_canSyncServer(
+      isSyncing: _isSyncingEmby,
+      isReady: _embyService.isReady,
+      isConnected: _embyService.isConnected,
+    )) {
+      return;
+    }
+
+    if (_embyService.userId == null) {
+      DebugLogService().addLog('ServerHistorySyncService: Emby 缺少 userId，无法同步');
+      return;
+    }
+
+    _isSyncingEmby = true;
+    try {
+        final resumeItems =
+          await _embyService.fetchResumeItems(limit: _kResumeFetchLimit);
+      final changed = await _processResumeItems(
+        resumeItems: resumeItems,
+        filePathPrefix: 'emby://',
+        serverLabel: 'Emby',
+      );
+      if (changed && _onHistoryUpdated != null) {
+        await _onHistoryUpdated!.call();
+      }
+    } catch (e, stack) {
+      DebugLogService()
+          .addLog('ServerHistorySyncService: Emby 同步失败: $e\n$stack');
+    } finally {
+      _isSyncingEmby = false;
+    }
+  }
+
+  void dispose() {
+    _jellyfinService.removeReadyListener(_handleJellyfinReady);
+    _embyService.removeReadyListener(_handleEmbyReady);
+  }
+
+  bool _canSyncServer(
+      {required bool isSyncing,
+      required bool isReady,
+      required bool isConnected}) {
+    if (kIsWeb) return false;
+    if (isSyncing) return false;
+    if (!isConnected || !isReady) {
+      DebugLogService().addLog('ServerHistorySyncService: 服务器未就绪，跳过同步');
+      return false;
+    }
+    return true;
+  }
+
+  Future<bool> _processResumeItems({
+    required List<Map<String, dynamic>> resumeItems,
+    required String filePathPrefix,
+    required String serverLabel,
+  }) async {
+    if (resumeItems.isEmpty) {
+      DebugLogService()
+          .addLog('ServerHistorySyncService: $serverLabel resume 列表为空');
+      return false;
+    }
+
+    int inserted = 0;
+    int updated = 0;
+    int skippedLocalNewer = 0;
+    int skippedSameTimestamp = 0;
+
+    for (final item in resumeItems) {
+      final historyItem = _convertResumeItem(item, filePathPrefix);
+      if (historyItem == null) continue;
+
+      final existing =
+          await _historyDatabase.getHistoryByFilePath(historyItem.filePath);
+      if (existing == null) {
+        await _historyDatabase.insertOrUpdateWatchHistory(historyItem);
+        inserted++;
+        continue;
+      }
+
+      final int diffSeconds = historyItem.lastWatchTime
+          .toUtc()
+          .difference(existing.lastWatchTime.toUtc())
+          .inSeconds;
+
+      if (diffSeconds >= _kTimeConflictThresholdSeconds) {
+        await _historyDatabase.insertOrUpdateWatchHistory(historyItem);
+        updated++;
+        continue;
+      }
+
+      if (diffSeconds <= -_kTimeConflictThresholdSeconds) {
+        skippedLocalNewer++;
+        continue;
+      }
+
+      if (diffSeconds > 0) {
+        await _historyDatabase.insertOrUpdateWatchHistory(historyItem);
+        updated++;
+      } else {
+        skippedSameTimestamp++;
+      }
+    }
+
+    DebugLogService().addLog(
+      'ServerHistorySyncService: $serverLabel resume 同步完成 total=${resumeItems.length}, new=$inserted, updated=$updated, localAhead=$skippedLocalNewer, sameTs=$skippedSameTimestamp',
+    );
+    return (inserted + updated) > 0;
+  }
+
+  void _handleJellyfinReady() {
+    _scheduleJellyfinSync();
+  }
+
+  void _handleEmbyReady() {
+    _scheduleEmbySync();
+  }
+
+  void _scheduleJellyfinSync() {
+    scheduleMicrotask(() {
+      if (_isSyncingJellyfin) return;
+      // ignore: discarded_futures
+      syncJellyfinResume();
+    });
+  }
+
+  void _scheduleEmbySync() {
+    scheduleMicrotask(() {
+      if (_isSyncingEmby) return;
+      // ignore: discarded_futures
+      syncEmbyResume();
+    });
+  }
+
+  WatchHistoryItem? _convertResumeItem(
+      Map<String, dynamic> item, String filePathPrefix) {
+    final userData = item['UserData'] as Map<String, dynamic>?;
+    if (userData == null) {
+      return null;
+    }
+
+    final lastPlayedRaw = userData['LastPlayedDate'];
+    if (lastPlayedRaw == null) {
+      return null;
+    }
+
+    DateTime? lastPlayed;
+    try {
+      lastPlayed = DateTime.parse(lastPlayedRaw).toUtc();
+    } catch (_) {
+      return null;
+    }
+
+    final String? id = item['Id'] as String?;
+    if (id == null) {
+      return null;
+    }
+
+    final runTimeTicks = _readTicks(item['RunTimeTicks']);
+    final playbackTicks = _readTicks(userData['PlaybackPositionTicks']);
+
+    final durationMs = _ticksToMilliseconds(runTimeTicks);
+    final positionMsRaw = _ticksToMilliseconds(playbackTicks);
+    final positionMs =
+        durationMs > 0 ? min(positionMsRaw, durationMs) : positionMsRaw;
+    final progress = _calculateProgress(positionMs, durationMs);
+
+    final displayName = (item['SeriesName'] as String?)?.isNotEmpty == true
+        ? item['SeriesName'] as String
+        : (item['Name'] as String?) ?? 'Server Item';
+
+    return WatchHistoryItem(
+      filePath: '$filePathPrefix$id',
+      animeName: displayName,
+      episodeTitle: item['Name'] as String?,
+      episodeId:
+          (item['IndexNumber'] is int) ? item['IndexNumber'] as int : null,
+      animeId: null,
+      watchProgress: progress,
+      lastPosition: positionMs,
+      duration: durationMs,
+      lastWatchTime: lastPlayed.toLocal(),
+      thumbnailPath: null,
+      isFromScan: false,
+    );
+  }
+
+  int _ticksToMilliseconds(int ticks) {
+    if (ticks <= 0) return 0;
+    return (ticks / 10000).round();
+  }
+
+  double _calculateProgress(int positionMs, int durationMs) {
+    if (durationMs <= 0) return 0.0;
+    final ratio = positionMs / durationMs;
+    if (ratio.isNaN || ratio.isInfinite) {
+      return 0.0;
+    }
+    return ratio.clamp(0.0, 1.0).toDouble();
+  }
+
+  int _readTicks(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 0;
+  }
+}
