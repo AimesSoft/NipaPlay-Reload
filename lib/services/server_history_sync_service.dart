@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,8 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/utils/storage_service.dart';
+import 'package:path/path.dart' as p;
 
 class ServerHistorySyncService {
   ServerHistorySyncService._internal();
@@ -17,6 +20,7 @@ class ServerHistorySyncService {
   final JellyfinService _jellyfinService = JellyfinService.instance;
   final EmbyService _embyService = EmbyService.instance;
   final WatchHistoryDatabase _historyDatabase = WatchHistoryDatabase.instance;
+  Directory? _thumbnailDirectory;
 
   bool _initialized = false;
   bool _isSyncingJellyfin = false;
@@ -67,7 +71,7 @@ class ServerHistorySyncService {
 
     _isSyncingJellyfin = true;
     try {
-        final resumeItems =
+      final resumeItems =
           await _jellyfinService.fetchResumeItems(limit: _kResumeFetchLimit);
       final changed = await _processResumeItems(
         resumeItems: resumeItems,
@@ -102,7 +106,7 @@ class ServerHistorySyncService {
 
     _isSyncingEmby = true;
     try {
-        final resumeItems =
+      final resumeItems =
           await _embyService.fetchResumeItems(limit: _kResumeFetchLimit);
       final changed = await _processResumeItems(
         resumeItems: resumeItems,
@@ -155,8 +159,23 @@ class ServerHistorySyncService {
     int skippedSameTimestamp = 0;
 
     for (final item in resumeItems) {
-      final historyItem = _convertResumeItem(item, filePathPrefix);
+      final String? itemId = item['Id'] as String?;
+      if (itemId == null) {
+        continue;
+      }
+
+      var historyItem = _convertResumeItem(item, filePathPrefix, itemId);
       if (historyItem == null) continue;
+
+      final thumbnailPath = await _resolveThumbnailPath(
+        itemId: itemId,
+        imageTags: item['ImageTags'] as Map<String, dynamic>?,
+        isJellyfin: filePathPrefix == 'jellyfin://',
+        serverLabel: serverLabel,
+      );
+      if (thumbnailPath != null) {
+        historyItem = historyItem.copyWith(thumbnailPath: thumbnailPath);
+      }
 
       final existing =
           await _historyDatabase.getHistoryByFilePath(historyItem.filePath);
@@ -221,7 +240,7 @@ class ServerHistorySyncService {
   }
 
   WatchHistoryItem? _convertResumeItem(
-      Map<String, dynamic> item, String filePathPrefix) {
+      Map<String, dynamic> item, String filePathPrefix, String itemId) {
     final userData = item['UserData'] as Map<String, dynamic>?;
     if (userData == null) {
       return null;
@@ -239,11 +258,6 @@ class ServerHistorySyncService {
       return null;
     }
 
-    final String? id = item['Id'] as String?;
-    if (id == null) {
-      return null;
-    }
-
     final runTimeTicks = _readTicks(item['RunTimeTicks']);
     final playbackTicks = _readTicks(userData['PlaybackPositionTicks']);
 
@@ -258,7 +272,7 @@ class ServerHistorySyncService {
         : (item['Name'] as String?) ?? 'Server Item';
 
     return WatchHistoryItem(
-      filePath: '$filePathPrefix$id',
+      filePath: '$filePathPrefix$itemId',
       animeName: displayName,
       episodeTitle: item['Name'] as String?,
       episodeId:
@@ -291,5 +305,115 @@ class ServerHistorySyncService {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return 0;
+  }
+
+  Future<String?> _resolveThumbnailPath({
+    required String itemId,
+    required Map<String, dynamic>? imageTags,
+    required bool isJellyfin,
+    required String serverLabel,
+  }) async {
+    if (imageTags == null || imageTags.isEmpty) return null;
+    final selected = _pickBestImageTag(imageTags);
+    if (selected == null) return null;
+    final imageType = selected.key;
+    final imageTag = selected.value;
+
+    try {
+      final dir = await _ensureThumbnailDirectory();
+      final prefix = isJellyfin ? 'jellyfin' : 'emby';
+      final safeType = imageType.toLowerCase();
+      final fileName = '${prefix}_${safeType}_${itemId}_$imageTag.jpg';
+      final filePath = p.join(dir.path, fileName);
+      final file = File(filePath);
+
+      if (await file.exists()) {
+        return filePath;
+      }
+
+      final bytes = await _downloadServerThumbnail(
+        itemId: itemId,
+        imageType: imageType,
+        imageTag: imageTag,
+        isJellyfin: isJellyfin,
+      );
+      if (bytes == null || bytes.isEmpty) {
+        return null;
+      }
+
+      await file.writeAsBytes(bytes, flush: true);
+      return filePath;
+    } catch (e, stack) {
+      DebugLogService().addLog(
+        'ServerHistorySyncService: $serverLabel 缩略图保存失败: $e\n$stack',
+      );
+      return null;
+    }
+  }
+
+  Future<List<int>?> _downloadServerThumbnail({
+    required String itemId,
+    required String imageType,
+    required String imageTag,
+    required bool isJellyfin,
+  }) async {
+    try {
+      if (isJellyfin) {
+        return await _jellyfinService.downloadItemImage(
+          itemId,
+          type: imageType,
+          width: 640,
+          height: 360,
+          quality: 90,
+          tag: imageTag,
+        );
+      }
+
+      return await _embyService.downloadItemImage(
+        itemId,
+        type: imageType,
+        width: 640,
+        height: 360,
+        quality: 90,
+        tag: imageTag,
+      );
+    } catch (e, stack) {
+      DebugLogService().addLog(
+        'ServerHistorySyncService: 下载缩略图失败 ($itemId): $e\n$stack',
+      );
+      return null;
+    }
+  }
+
+  Future<Directory> _ensureThumbnailDirectory() async {
+    if (_thumbnailDirectory != null && _thumbnailDirectory!.existsSync()) {
+      return _thumbnailDirectory!;
+    }
+
+    final baseDir = await StorageService.getAppStorageDirectory();
+    final dir = Directory(p.join(baseDir.path, 'server_thumbnails'));
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    _thumbnailDirectory = dir;
+    return dir;
+  }
+
+  MapEntry<String, String>? _pickBestImageTag(Map<String, dynamic> imageTags) {
+    const preferredOrder = ['Thumb', 'Screenshot', 'Primary', 'Backdrop'];
+
+    for (final type in preferredOrder) {
+      final candidate = imageTags[type];
+      if (candidate is String && candidate.isNotEmpty) {
+        return MapEntry(type, candidate);
+      }
+    }
+
+    for (final entry in imageTags.entries) {
+      if (entry.value is String && (entry.value as String).isNotEmpty) {
+        return MapEntry(entry.key, entry.value as String);
+      }
+    }
+    return null;
   }
 }
