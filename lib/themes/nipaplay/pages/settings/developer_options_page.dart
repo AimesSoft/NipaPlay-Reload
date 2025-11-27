@@ -27,7 +27,7 @@ class DeveloperOptionsPage extends StatelessWidget {
             // 危险：全局允许无效/自签名证书（仅 IO 平台生效）
             SettingsItem.toggle(
               title: '允许自签名证书（全局）',
-              subtitle: '仅桌面/Android/iOS生效，Web无效。极度危险，仅在内网或调试时开启。',
+              subtitle: '仅桌面/Android/iOS生效，Web无效，仅在内网或调试时开启。',
               icon: Ionicons.alert_circle_outline,
               value: devOptions.allowInvalidCertsGlobal,
               onChanged: (bool value) async {

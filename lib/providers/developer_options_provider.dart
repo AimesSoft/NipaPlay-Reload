@@ -23,7 +23,7 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   // 是否显示GPUDanmaku弹幕内核轨道编号
   bool _showGPUDanmakuTrackNumbers = false;
 
-  // 是否全局允许无效/自签名证书（仅 IO 平台生效，极度危险）
+  // 是否全局允许无效/自签名证书（仅 IO 平台生效）
   bool _allowInvalidCertsGlobal = false;
   
   // 获取显示系统资源监控状态
