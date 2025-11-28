@@ -34,6 +34,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/main.dart'; // 用于MainPageState
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/server_history_sync_service.dart';
 
 class DashboardHomePage extends StatefulWidget {
   const DashboardHomePage({super.key});
@@ -793,6 +794,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     debugPrint('DashboardHomePage: 数据加载完成，总耗时: ${stopwatch.elapsedMilliseconds}ms');
   }
 
+  void _handleManualRefresh() {
+    if (_isLoadingRecommended) {
+      debugPrint('DashboardHomePage: 忽略刷新请求，正在加载中');
+      return;
+    }
+    unawaited(_loadData());
+    final syncService = ServerHistorySyncService.instance;
+    unawaited(syncService.syncJellyfinResume());
+    unawaited(syncService.syncEmbyResume());
+  }
+
   // 检查并处理待处理的刷新请求
   void _checkPendingRefresh() {
     if (_pendingRefreshAfterLoad && mounted) {
@@ -1531,7 +1543,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 )
               : FloatingActionGlassButton(
                   iconData: Icons.refresh_rounded,
-                  onPressed: _loadData,
+                  onPressed: _handleManualRefresh,
                   description: ' 刷新主页',
                 ),
         ],

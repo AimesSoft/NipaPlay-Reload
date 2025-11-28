@@ -39,26 +39,35 @@ class ServerHistorySyncService {
 
     if (kIsWeb) {
       DebugLogService().addLog('ServerHistorySyncService: Web 环境跳过初始化');
+      debugPrint('ServerHistorySyncService.initialize -> skip on web');
       return;
     }
 
+    debugPrint('ServerHistorySyncService.initialize -> install ready listeners');
     _jellyfinService.addReadyListener(_handleJellyfinReady);
     _embyService.addReadyListener(_handleEmbyReady);
 
     if (_jellyfinService.isReady) {
+      debugPrint(
+          'ServerHistorySyncService.initialize -> Jellyfin already ready, schedule sync');
       _scheduleJellyfinSync();
     }
     if (_embyService.isReady) {
+      debugPrint(
+          'ServerHistorySyncService.initialize -> Emby already ready, schedule sync');
       _scheduleEmbySync();
     }
   }
 
   /// 触发一次 Jellyfin Resume 拉取（对外接口，便于手动刷新）。
   Future<void> syncJellyfinResume() async {
+    debugPrint(
+        'ServerHistorySyncService.syncJellyfinResume -> start ready=${_jellyfinService.isReady} connected=${_jellyfinService.isConnected}');
     if (!_canSyncServer(
       isSyncing: _isSyncingJellyfin,
       isReady: _jellyfinService.isReady,
       isConnected: _jellyfinService.isConnected,
+      serverLabel: 'Jellyfin',
     )) {
       return;
     }
@@ -73,6 +82,8 @@ class ServerHistorySyncService {
     try {
       final resumeItems =
           await _jellyfinService.fetchResumeItems(limit: _kResumeFetchLimit);
+      debugPrint(
+          'ServerHistorySyncService.syncJellyfinResume -> fetched ${resumeItems.length} items');
       final changed = await _processResumeItems(
         resumeItems: resumeItems,
         filePathPrefix: 'jellyfin://',
@@ -91,10 +102,13 @@ class ServerHistorySyncService {
 
   /// 触发一次 Emby Resume 拉取。
   Future<void> syncEmbyResume() async {
+    debugPrint(
+        'ServerHistorySyncService.syncEmbyResume -> start ready=${_embyService.isReady} connected=${_embyService.isConnected}');
     if (!_canSyncServer(
       isSyncing: _isSyncingEmby,
       isReady: _embyService.isReady,
       isConnected: _embyService.isConnected,
+      serverLabel: 'Emby',
     )) {
       return;
     }
@@ -108,6 +122,8 @@ class ServerHistorySyncService {
     try {
       final resumeItems =
           await _embyService.fetchResumeItems(limit: _kResumeFetchLimit);
+      debugPrint(
+          'ServerHistorySyncService.syncEmbyResume -> fetched ${resumeItems.length} items');
       final changed = await _processResumeItems(
         resumeItems: resumeItems,
         filePathPrefix: 'emby://',
@@ -129,14 +145,23 @@ class ServerHistorySyncService {
     _embyService.removeReadyListener(_handleEmbyReady);
   }
 
-  bool _canSyncServer(
-      {required bool isSyncing,
-      required bool isReady,
-      required bool isConnected}) {
+  bool _canSyncServer({
+    required bool isSyncing,
+    required bool isReady,
+    required bool isConnected,
+    required String serverLabel,
+  }) {
     if (kIsWeb) return false;
-    if (isSyncing) return false;
+    if (isSyncing) {
+      debugPrint(
+          'ServerHistorySyncService: $serverLabel 正在同步中，忽略新的请求');
+      return false;
+    }
     if (!isConnected || !isReady) {
-      DebugLogService().addLog('ServerHistorySyncService: 服务器未就绪，跳过同步');
+      final msg =
+          'ServerHistorySyncService: $serverLabel 未就绪(ready=$isReady, connected=$isConnected)，跳过同步';
+      DebugLogService().addLog(msg);
+      debugPrint(msg);
       return false;
     }
     return true;
@@ -150,22 +175,68 @@ class ServerHistorySyncService {
     if (resumeItems.isEmpty) {
       DebugLogService()
           .addLog('ServerHistorySyncService: $serverLabel resume 列表为空');
+      debugPrint(
+          'ServerHistorySyncService._processResumeItems -> $serverLabel list empty');
       return false;
     }
 
+    debugPrint(
+      'ServerHistorySyncService._processResumeItems -> $serverLabel count=${resumeItems.length}');
+    final DateTime syncTimestampUtc = DateTime.now().toUtc();
     int inserted = 0;
     int updated = 0;
     int skippedLocalNewer = 0;
     int skippedSameTimestamp = 0;
+    int missingUserData = 0;
+    int missingLastPlayed = 0;
+  int invalidLastPlayedFormat = 0;
+    int skippedInvalidItem = 0;
+    int loggedMissingLastPlayed = 0;
 
-    for (final item in resumeItems) {
+    for (var index = 0; index < resumeItems.length; index++) {
+      final item = resumeItems[index];
       final String? itemId = item['Id'] as String?;
       if (itemId == null) {
         continue;
       }
 
-      var historyItem = _convertResumeItem(item, filePathPrefix, itemId);
-      if (historyItem == null) continue;
+      final userData = item['UserData'] as Map<String, dynamic>?;
+      if (userData == null) {
+        missingUserData++;
+        continue;
+      }
+
+      final lastPlayedRaw = userData['LastPlayedDate'];
+      DateTime? lastPlayedUtc;
+      if (lastPlayedRaw is String && lastPlayedRaw.isNotEmpty) {
+        try {
+          lastPlayedUtc = DateTime.parse(lastPlayedRaw).toUtc();
+        } catch (_) {
+          invalidLastPlayedFormat++;
+        }
+      }
+
+      if (lastPlayedUtc == null) {
+        missingLastPlayed++;
+        lastPlayedUtc = syncTimestampUtc.subtract(Duration(seconds: index));
+        if (loggedMissingLastPlayed < 3) {
+          debugPrint(
+              'ServerHistorySyncService: $serverLabel item $itemId 缺少可用 LastPlayedDate, fallback=now userData=$userData');
+          loggedMissingLastPlayed++;
+        }
+      }
+
+      var historyItem = _convertResumeItem(
+        item: item,
+        userData: userData,
+        lastPlayedUtc: lastPlayedUtc,
+        filePathPrefix: filePathPrefix,
+        itemId: itemId,
+      );
+      if (historyItem == null) {
+        skippedInvalidItem++;
+        continue;
+      }
 
       final thumbnailPath = await _resolveThumbnailPath(
         itemId: itemId,
@@ -191,7 +262,9 @@ class ServerHistorySyncService {
           .inSeconds;
 
       if (diffSeconds >= _kTimeConflictThresholdSeconds) {
-        await _historyDatabase.insertOrUpdateWatchHistory(historyItem);
+        final merged =
+            _mergeHistoryItems(incoming: historyItem, existing: existing);
+        await _historyDatabase.insertOrUpdateWatchHistory(merged);
         updated++;
         continue;
       }
@@ -202,29 +275,36 @@ class ServerHistorySyncService {
       }
 
       if (diffSeconds > 0) {
-        await _historyDatabase.insertOrUpdateWatchHistory(historyItem);
+        final merged =
+            _mergeHistoryItems(incoming: historyItem, existing: existing);
+        await _historyDatabase.insertOrUpdateWatchHistory(merged);
         updated++;
       } else {
         skippedSameTimestamp++;
       }
     }
 
-    DebugLogService().addLog(
-      'ServerHistorySyncService: $serverLabel resume 同步完成 total=${resumeItems.length}, new=$inserted, updated=$updated, localAhead=$skippedLocalNewer, sameTs=$skippedSameTimestamp',
-    );
+    final summary =
+    'ServerHistorySyncService: $serverLabel resume 同步完成 total=${resumeItems.length}, new=$inserted, updated=$updated, localAhead=$skippedLocalNewer, sameTs=$skippedSameTimestamp, missingUserData=$missingUserData, fallbackLastPlayed=$missingLastPlayed, invalidTs=$invalidLastPlayedFormat, invalid=$skippedInvalidItem';
+    DebugLogService().addLog(summary);
+    debugPrint(summary);
     return (inserted + updated) > 0;
   }
 
   void _handleJellyfinReady() {
+    debugPrint('ServerHistorySyncService._handleJellyfinReady -> received');
     _scheduleJellyfinSync();
   }
 
   void _handleEmbyReady() {
+    debugPrint('ServerHistorySyncService._handleEmbyReady -> received');
     _scheduleEmbySync();
   }
 
   void _scheduleJellyfinSync() {
     scheduleMicrotask(() {
+      debugPrint(
+          'ServerHistorySyncService._scheduleJellyfinSync -> microtask fired, isSyncing=$_isSyncingJellyfin');
       if (_isSyncingJellyfin) return;
       // ignore: discarded_futures
       syncJellyfinResume();
@@ -233,31 +313,21 @@ class ServerHistorySyncService {
 
   void _scheduleEmbySync() {
     scheduleMicrotask(() {
+      debugPrint(
+          'ServerHistorySyncService._scheduleEmbySync -> microtask fired, isSyncing=$_isSyncingEmby');
       if (_isSyncingEmby) return;
       // ignore: discarded_futures
       syncEmbyResume();
     });
   }
 
-  WatchHistoryItem? _convertResumeItem(
-      Map<String, dynamic> item, String filePathPrefix, String itemId) {
-    final userData = item['UserData'] as Map<String, dynamic>?;
-    if (userData == null) {
-      return null;
-    }
-
-    final lastPlayedRaw = userData['LastPlayedDate'];
-    if (lastPlayedRaw == null) {
-      return null;
-    }
-
-    DateTime? lastPlayed;
-    try {
-      lastPlayed = DateTime.parse(lastPlayedRaw).toUtc();
-    } catch (_) {
-      return null;
-    }
-
+  WatchHistoryItem? _convertResumeItem({
+    required Map<String, dynamic> item,
+    required Map<String, dynamic> userData,
+    required DateTime lastPlayedUtc,
+    required String filePathPrefix,
+    required String itemId,
+  }) {
     final runTimeTicks = _readTicks(item['RunTimeTicks']);
     final playbackTicks = _readTicks(userData['PlaybackPositionTicks']);
 
@@ -281,9 +351,28 @@ class ServerHistorySyncService {
       watchProgress: progress,
       lastPosition: positionMs,
       duration: durationMs,
-      lastWatchTime: lastPlayed.toLocal(),
+      lastWatchTime: lastPlayedUtc.toLocal(),
       thumbnailPath: null,
       isFromScan: false,
+    );
+  }
+
+  WatchHistoryItem _mergeHistoryItems({
+    required WatchHistoryItem incoming,
+    required WatchHistoryItem existing,
+  }) {
+    final bool incomingHasMeaningfulName =
+        incoming.animeName.isNotEmpty && incoming.animeName != 'Server Item';
+
+    return incoming.copyWith(
+      animeName:
+          incomingHasMeaningfulName ? incoming.animeName : existing.animeName,
+      episodeTitle: existing.episodeTitle ?? incoming.episodeTitle,
+      episodeId: existing.episodeId ?? incoming.episodeId,
+      animeId: existing.animeId ?? incoming.animeId,
+      thumbnailPath: incoming.thumbnailPath ?? existing.thumbnailPath,
+      isFromScan: existing.isFromScan,
+      videoHash: existing.videoHash ?? incoming.videoHash,
     );
   }
 

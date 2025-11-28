@@ -549,6 +549,27 @@ class EmbyService {
     return normalized;
   }
 
+  /// 确保所有Emby API请求都包含/emby前缀，兼容反向代理子路径
+  String _normalizeEmbyPath(String path) {
+    if (path.isEmpty) return '/emby';
+    final trimmed = path.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+
+    String normalized = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    if (!normalized.toLowerCase().startsWith('/emby')) {
+      normalized = '/emby$normalized';
+    }
+
+    // 避免出现双斜杆导致的404
+    while (normalized.contains('//')) {
+      normalized = normalized.replaceAll('//', '/');
+    }
+
+    return normalized;
+  }
+
   Future<void> _saveConnectionInfo() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -621,7 +642,11 @@ class EmbyService {
     }
 
     // 单地址模式（兼容旧版本）
-    final uri = Uri.parse('$_serverUrl$path');
+    final normalizedPath = _normalizeEmbyPath(path);
+    final uri = normalizedPath.startsWith('http://') ||
+        normalizedPath.startsWith('https://')
+      ? Uri.parse(normalizedPath)
+      : Uri.parse('$_serverUrl$normalizedPath');
     final clientInfo = await _getClientInfo();
     final authHeader = clientInfo + ', Token="$_accessToken"';
     final headers = {
@@ -682,6 +707,7 @@ class EmbyService {
       throw Exception('未连接到 Emby 服务器');
     }
 
+    final normalizedPath = _normalizeEmbyPath(path);
     final addresses = _currentProfile!.enabledAddresses;
     if (addresses.isEmpty) {
       throw Exception('没有可用的服务器地址');
@@ -702,7 +728,10 @@ class EmbyService {
     for (final address in addresses) {
       if (!address.shouldRetry()) continue;
 
-      final uri = Uri.parse('${address.normalizedUrl}$path');
+        final uri = normalizedPath.startsWith('http://') ||
+            normalizedPath.startsWith('https://')
+          ? Uri.parse(normalizedPath)
+          : Uri.parse('${address.normalizedUrl}$normalizedPath');
 
       try {
         http.Response response;
@@ -1067,6 +1096,7 @@ class EmbyService {
   Future<List<Map<String, dynamic>>> fetchResumeItems({int limit = 5}) async {
     if (kIsWeb) return [];
     if (!_isConnected || _userId == null) {
+      debugPrint('EmbyService.fetchResumeItems -> skip, connected=$_isConnected userId=$_userId');
       return [];
     }
 
@@ -1075,11 +1105,13 @@ class EmbyService {
     buffer
       ..write('&IncludeItemTypes=Episode,Movie')
       ..write('&Limit=$limit')
+      ..write('&EnableUserData=true')
       ..write(
         '&Fields=RunTimeTicks,SeriesName,SeasonName,IndexNumber,ParentId,ImageTags',
       );
 
     try {
+      debugPrint('EmbyService.fetchResumeItems -> GET ${buffer.toString()}');
       final response = await _makeAuthenticatedRequest(buffer.toString());
       if (response.statusCode != 200) {
         DebugLogService().addLog(
@@ -1090,11 +1122,14 @@ class EmbyService {
 
       final decoded = json.decode(response.body) as Map<String, dynamic>;
       final items = decoded['Items'];
+      debugPrint(
+          'EmbyService.fetchResumeItems -> HTTP ${response.statusCode}, items=${items is List ? items.length : 'N/A'}');
       if (items is List) {
         return items.whereType<Map<String, dynamic>>().toList(growable: false);
       }
     } catch (e, stack) {
       DebugLogService().addLog('EmbyService: 获取 resume 列表异常: $e\n$stack');
+      debugPrint('EmbyService.fetchResumeItems -> exception $e');
     }
 
     return [];
