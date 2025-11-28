@@ -22,6 +22,7 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
@@ -731,9 +732,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Future<void> _handleRefresh() async {
+    final syncService = ServerHistorySyncService.instance;
     await Future.wait([
       _loadRecommendedContent(forceRefresh: true),
       _loadLatestContent(),
+      syncService.syncJellyfinResume(),
+      syncService.syncEmbyResume(),
     ]);
   }
 
