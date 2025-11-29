@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:crypto/crypto.dart';
+// crypto not needed here (hash computed in RemoteMediaFetcher)
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
@@ -11,6 +11,7 @@ import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/utils/remote_media_fetcher.dart';
 
 /// 负责将Jellyfin媒体与DandanPlay的内容匹配，以获取弹幕和元数据
 class JellyfinDandanplayMatcher {
@@ -18,6 +19,9 @@ class JellyfinDandanplayMatcher {
       JellyfinDandanplayMatcher._internal();
 
   JellyfinDandanplayMatcher._internal();
+
+  final Map<String, Future<Map<String, dynamic>>> _videoInfoTasks = {};
+  final Map<String, Map<String, dynamic>> _videoInfoCache = {};
 
   // 预计算哈希值和预匹配弹幕ID的方法
   //
@@ -31,37 +35,10 @@ class JellyfinDandanplayMatcher {
           episode.name.isNotEmpty ? episode.name : '未知标题';
       debugPrint('开始预计算Jellyfin视频信息和匹配弹幕ID: $seriesName - $episodeName');
 
-      // 启动哈希值计算，但用超时控制，避免阻塞太长时间
+      // 启动哈希值计算并等待真实结果
       Map<String, dynamic> videoInfoMap = {};
       try {
-        videoInfoMap = await calculateVideoHash(episode)
-            .timeout(const Duration(seconds: 5), onTimeout: () {
-          debugPrint('哈希值计算超时，将在后台继续计算');
-          // 在后台继续计算哈希值
-          calculateVideoHash(episode).then((hashResult) {
-            debugPrint(
-                '后台哈希值计算完成: hash=${hashResult["hash"]}, fileName=${hashResult["fileName"]}, fileSize=${hashResult["fileSize"]}');
-          }).catchError((e) {
-            debugPrint('后台哈希值计算出错: $e');
-          });
-
-          // 创建一个基于剧集信息的临时哈希值
-          final String seriesName = episode.seriesName ?? '';
-          final String episodeName =
-              episode.name.isNotEmpty ? episode.name : '';
-          final String tempHash = md5
-              .convert(utf8.encode('$seriesName$episodeName${DateTime.now()}'))
-              .toString();
-          debugPrint('生成临时哈希值: $tempHash (超时)');
-
-          // 返回临时结果
-          return {
-            'hash': tempHash,
-            'fileName': '$seriesName - $episodeName.mp4',
-            'fileSize': 0
-          };
-        });
-
+        videoInfoMap = await calculateVideoHash(episode);
         debugPrint(
             '成功计算视频信息: hash=${videoInfoMap["hash"]}, fileName=${videoInfoMap["fileName"]}, fileSize=${videoInfoMap["fileSize"]}');
       } catch (hashError) {
@@ -177,14 +154,13 @@ class JellyfinDandanplayMatcher {
           '正在为Jellyfin内容创建可播放项: ${episode.seriesName} - ${episode.name}');
       debugPrint('Jellyfin流媒体URL: $streamUrl');
 
-      // 获取视频信息（不阻塞主流程）
+      // 获取视频信息（阻塞等待，确保先尝试哈希匹配）
       Map<String, dynamic> videoInfo = {};
       try {
-        videoInfo = await calculateVideoHash(episode).timeout(
-            const Duration(seconds: 2),
-            onTimeout: () => {'hash': '', 'fileName': '', 'fileSize': 0});
+        videoInfo = await calculateVideoHash(episode);
       } catch (e) {
         debugPrint('获取视频信息失败: $e');
+        videoInfo = {'hash': '', 'fileName': '', 'fileSize': 0};
       }
 
       // 2. 通过DandanPlay API匹配内容
@@ -682,7 +658,7 @@ class JellyfinDandanplayMatcher {
         // 检查是否成功匹配
         if (data['isMatched'] == true) {
           debugPrint('精确匹配成功: ${data['matches']?.length ?? 0} 个结果');
-          return data;
+          return _normalizeMatchApiResult(data);
         } else {
           debugPrint('弹弹play API未能精确匹配');
           return {};
@@ -695,6 +671,47 @@ class JellyfinDandanplayMatcher {
       debugPrint('调用弹弹play匹配API时出错: $e');
       return {};
     }
+  }
+
+  Map<String, dynamic> _normalizeMatchApiResult(Map<String, dynamic> raw) {
+    final matches = raw['matches'];
+    final normalizedMatches = (matches is List)
+        ? matches
+            .whereType<Map<String, dynamic>>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : <Map<String, dynamic>>[];
+
+    if (normalizedMatches.isNotEmpty) {
+      final bestMatch = normalizedMatches.first;
+      final animeId = bestMatch['animeId'];
+      final episodeId = bestMatch['episodeId'];
+      final animeTitle = bestMatch['animeTitle'] ?? raw['animeTitle'];
+      final episodeTitle = bestMatch['episodeTitle'] ?? raw['episodeTitle'];
+
+      if (animeId == null || episodeId == null) {
+        debugPrint(
+            '警告: 精确匹配返回的首条记录缺少animeId或episodeId，可能导致弹幕无法加载');
+      }
+
+      return {
+        'isMatched': true,
+        'animeId': animeId,
+        'animeTitle': animeTitle,
+        'episodeId': episodeId,
+        'episodeTitle': episodeTitle,
+        'matches': normalizedMatches,
+      };
+    }
+
+    return {
+      'isMatched': true,
+      'animeId': raw['animeId'],
+      'animeTitle': raw['animeTitle'],
+      'episodeId': raw['episodeId'],
+      'episodeTitle': raw['episodeTitle'],
+      'matches': normalizedMatches,
+    };
   }
 
   /// 通过DandanPlay搜索动画
@@ -1055,100 +1072,139 @@ class JellyfinDandanplayMatcher {
   ///
   /// 返回包含哈希值、原始文件名和文件大小的Map
   ///
-  /// 注意：此功能暂时被禁用，通过弹窗和关键词搜索匹配弹幕库已经足够使用
+  /// 优先通过直连流+WebDAV首段策略自动计算哈希，失败时回退到手动匹配
+  /// 内部复用同一任务，确保不会重复下载前16MB数据
   Future<Map<String, dynamic>> calculateVideoHash(
+      JellyfinEpisodeInfo episode) {
+    final cached = _videoInfoCache[episode.id];
+    if (cached != null) {
+      debugPrint('命中Jellyfin视频哈希缓存: ${episode.id}');
+      return Future.value(cached);
+    }
+
+    final runningTask = _videoInfoTasks[episode.id];
+    if (runningTask != null) {
+      debugPrint('复用进行中的Jellyfin哈希任务: ${episode.id}');
+      return runningTask;
+    }
+
+    final task = _computeVideoHashInternal(episode).then((result) {
+      if (_isValidVideoInfo(result)) {
+        _videoInfoCache[episode.id] = result;
+      }
+      return result;
+    });
+
+    _videoInfoTasks[episode.id] = task;
+    task.whenComplete(() => _videoInfoTasks.remove(episode.id));
+    return task;
+  }
+
+  Future<Map<String, dynamic>> _computeVideoHashInternal(
       JellyfinEpisodeInfo episode) async {
-    // 返回一个基于剧集信息的临时哈希值，而不是实际计算
     final String seriesName = episode.seriesName ?? '未知剧集';
     final String episodeName = episode.name.isNotEmpty ? episode.name : '未知标题';
-    debugPrint('哈希值计算已禁用，返回基于剧集信息的模拟哈希值');
+    final String fallbackFileName = '$seriesName - $episodeName.mp4';
 
-    final String fallbackString =
-        '$seriesName$episodeName${episode.id}${DateTime.now()}';
-    final String tempHash = md5.convert(utf8.encode(fallbackString)).toString();
-
-    return {
-      'hash': tempHash,
-      'fileName': '$seriesName - $episodeName.mp4',
-      'fileSize': 0
-    };
-
-    /* 原始哈希值计算代码（已禁用）
     try {
-      final String seriesName = episode.seriesName ?? '未知剧集';
-      final String episodeName = episode.name.isNotEmpty ? episode.name : '未知标题';
-      debugPrint('开始计算Jellyfin视频哈希值: $seriesName - $episodeName');
-      
-      const int maxBytes = 16 * 1024 * 1024; // 16MB
-      String? hash;
-      String fileName = ''; 
-      int fileSize = 0;
+      final streamUrl = JellyfinService.instance
+          .getStreamUrlWithOptions(episode.id, forceDirectPlay: true);
+      debugPrint('Jellyfin 哈希计算使用直连URL: $streamUrl');
 
-      // 获取媒体文件信息（并行操作）
-      final mediaInfoFuture = JellyfinService.instance.getMediaInfo(episode.id);
-      
-      // 同时获取流媒体URL并开始计算哈希值
-      final String streamUrl = getPlayUrl(episode);
-      debugPrint('获取流媒体URL: $streamUrl');
+      final remoteHead =
+          await RemoteMediaFetcher.fetchHead(Uri.parse(streamUrl));
+      debugPrint(
+          'Jellyfin 哈希计算成功，读取 ${remoteHead.headBytes.length} 字节，hash=${remoteHead.hash}');
 
-      // 使用HTTP Range头只获取前16MB数据
-      final response = await http.get(
-        Uri.parse(streamUrl),
-        headers: {
-          'Range': 'bytes=0-${maxBytes - 1}', // 指定只获取前16MB数据
-        },
+      // 直接依赖流媒体返回的文件名/大小，跳过额外的媒体信息请求以避免长时间阻塞
+      const Map<String, dynamic> mediaInfo = {};
+
+      final resolvedFileName = _resolveFileName(
+        remoteHead.fileName,
+        mediaInfo,
+        fallbackFileName,
       );
 
-      if (response.statusCode == 200 || response.statusCode == 206) { // 200 OK或206 Partial Content
-        debugPrint('成功获取视频前16MB数据: ${response.contentLength} bytes');
-        
-        // 计算MD5哈希值
-        hash = md5.convert(response.bodyBytes).toString();
-        debugPrint('哈希值计算完成: $hash');
-      } else {
-        debugPrint('请求视频数据失败: HTTP ${response.statusCode}');
-        throw Exception('请求视频数据失败: HTTP ${response.statusCode}');
-      }
-      
-      // 获取媒体文件信息
-      final mediaInfo = await mediaInfoFuture;
-      if (mediaInfo.isNotEmpty) {
-        fileName = mediaInfo['fileName'] ?? '';
-        fileSize = mediaInfo['size'] != null ? int.parse(mediaInfo['size'].toString()) : 0;
-        debugPrint('获取到媒体文件信息: 文件名=$fileName, 大小=$fileSize');
-      } else {
-        debugPrint('未能获取到媒体文件信息，使用默认值');
-        fileName = '$seriesName - $episodeName.mp4'; // 默认文件名
-        fileSize = response.contentLength ?? 0;      // 使用响应大小作为文件大小的估计
-      }
-      
-      // 确保文件大小是有效的数字
-      if (fileSize <= 0 && response.contentLength != null) {
-        debugPrint('文件大小无效，使用响应大小作为替代');
-        fileSize = response.contentLength!;
-      }
-      
+      final resolvedFileSize = _resolveFileSize(
+        remoteHead.fileSize,
+        mediaInfo['size'],
+      );
+
       return {
-        'hash': hash,
-        'fileName': fileName,
-        'fileSize': fileSize
+        'hash': remoteHead.hash,
+        'fileName': resolvedFileName,
+        'fileSize': resolvedFileSize,
       };
-    } catch (e) {
-      debugPrint('计算视频哈希值时出错: $e');
-      // 返回一个基于剧集名称的备用哈希值
-      final String seriesName = episode.seriesName ?? '';
-      final String episodeName = episode.name.isNotEmpty ? episode.name : '';
-      final String episodeId = episode.id;
-      final fallbackString = '$seriesName$episodeName$episodeId';
-      final fallbackHash = md5.convert(utf8.encode(fallbackString)).toString();
-      
+    } catch (e, stackTrace) {
+      debugPrint('Jellyfin 自动哈希失败，回退到手动匹配: $e');
+      debugPrint('错误堆栈: $stackTrace');
       return {
-        'hash': fallbackHash,
-        'fileName': '$seriesName - $episodeName.mp4', // 默认文件名
-        'fileSize': 0                                // 默认文件大小
+        'hash': '',
+        'fileName': fallbackFileName,
+        'fileSize': 0,
       };
     }
-    */
+  }
+
+  bool _isValidVideoInfo(Map<String, dynamic> info) {
+    final hash = (info['hash'] as String?)?.trim() ?? '';
+    final fileSize = info['fileSize'] as int? ?? 0;
+    return hash.isNotEmpty && fileSize > 0;
+  }
+
+  String _resolveFileName(
+    String remoteName,
+    Map<String, dynamic> mediaInfo,
+    String fallback,
+  ) {
+    final trimmedRemote = remoteName.trim();
+    if (_looksLikeRealFileName(trimmedRemote)) {
+      return trimmedRemote;
+    }
+
+    final metadataName = (mediaInfo['fileName'] ?? mediaInfo['Name'])?.toString();
+    if (metadataName != null && metadataName.trim().isNotEmpty) {
+      return metadataName.trim();
+    }
+
+    final path = mediaInfo['path']?.toString();
+    if (path != null && path.trim().isNotEmpty) {
+      final segments = path.split(RegExp(r'[\\/]'));
+      if (segments.isNotEmpty) {
+        return segments.last;
+      }
+    }
+
+    return fallback;
+  }
+
+  int _resolveFileSize(int remoteSize, dynamic metadataSize) {
+    if (remoteSize > 0) {
+      return remoteSize;
+    }
+
+    final parsed = _tryParseSize(metadataSize);
+    return parsed ?? 0;
+  }
+
+  bool _looksLikeRealFileName(String name) {
+    if (name.isEmpty) return false;
+    final lower = name.toLowerCase();
+    if (lower == 'stream' || lower == 'video' || lower == 'master.m3u8') {
+      return false;
+    }
+    return name.contains('.');
+  }
+
+  int? _tryParseSize(dynamic value) {
+    if (value is int) {
+      return value > 0 ? value : null;
+    }
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      return parsed != null && parsed > 0 ? parsed : null;
+    }
+    return null;
   }
 
   /// 保存映射关系到数据库
