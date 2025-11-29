@@ -14,6 +14,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 
 class WatchHistoryPage extends StatefulWidget {
   const WatchHistoryPage({super.key});
@@ -271,21 +272,22 @@ style: TextStyle(
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) async {
     debugPrint('[WatchHistoryPage] _onWatchHistoryItemTap: Received item: $item');
+    var currentItem = item;
 
     // 检查是否为网络URL或流媒体协议URL
-    final isNetworkUrl = item.filePath.startsWith('http://') || item.filePath.startsWith('https://');
-    final isJellyfinProtocol = item.filePath.startsWith('jellyfin://');
-    final isEmbyProtocol = item.filePath.startsWith('emby://');
+    final isNetworkUrl = currentItem.filePath.startsWith('http://') || currentItem.filePath.startsWith('https://');
+    final isJellyfinProtocol = currentItem.filePath.startsWith('jellyfin://');
+    final isEmbyProtocol = currentItem.filePath.startsWith('emby://');
     
     bool fileExists = false;
-    String filePath = item.filePath;
+    String filePath = currentItem.filePath;
     String? actualPlayUrl;
 
     if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol) {
       fileExists = true;
       if (isJellyfinProtocol) {
         try {
-          final jellyfinId = item.filePath.replaceFirst('jellyfin://', '');
+          final jellyfinId = currentItem.filePath.replaceFirst('jellyfin://', '');
           final jellyfinService = JellyfinService.instance;
           if (jellyfinService.isConnected) {
             actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
@@ -301,7 +303,7 @@ style: TextStyle(
       
       if (isEmbyProtocol) {
         try {
-          final embyId = item.filePath.replaceFirst('emby://', '');
+          final embyId = currentItem.filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
             actualPlayUrl = await embyService.getStreamUrl(embyId);
@@ -315,7 +317,7 @@ style: TextStyle(
         }
       }
     } else {
-      final videoFile = File(item.filePath);
+      final videoFile = File(currentItem.filePath);
       fileExists = videoFile.existsSync();
       
       if (!fileExists && Platform.isIOS) {
@@ -326,23 +328,34 @@ style: TextStyle(
         final File altFile = File(altPath);
         if (altFile.existsSync()) {
           filePath = altPath;
+          currentItem = currentItem.copyWith(filePath: filePath);
           fileExists = true;
         }
       }
     }
     
     if (!fileExists) {
-      BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(item.filePath)}');
+      BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(currentItem.filePath)}');
       return;
     }
 
+    if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
+      final matchablePath = actualPlayUrl ?? currentItem.filePath;
+      currentItem = await WatchHistoryAutoMatchHelper.tryAutoMatch(
+        context,
+        currentItem,
+        matchablePath: matchablePath,
+        onMatched: (message) => BlurSnackBar.show(context, message),
+      );
+    }
+
     final playableItem = PlayableItem(
-      videoPath: item.filePath,
-      title: item.animeName,
-      subtitle: item.episodeTitle,
-      animeId: item.animeId,
-      episodeId: item.episodeId,
-      historyItem: item,
+      videoPath: currentItem.filePath,
+      title: currentItem.animeName,
+      subtitle: currentItem.episodeTitle,
+      animeId: currentItem.animeId,
+      episodeId: currentItem.episodeId,
+      historyItem: currentItem,
       actualPlayUrl: actualPlayUrl,
     );
 

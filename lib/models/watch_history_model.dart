@@ -20,6 +20,11 @@ class WatchHistoryItem {
   String? thumbnailPath;
   bool isFromScan;
   String? videoHash; // 添加视频哈希值字段，用于弹幕匹配
+  bool get isDandanplayRemote {
+    final normalized = filePath.toLowerCase();
+    return normalized.startsWith('dandanplay://') ||
+        normalized.contains('/api/v1/stream/');
+  }
 
   WatchHistoryItem({
     required this.filePath,

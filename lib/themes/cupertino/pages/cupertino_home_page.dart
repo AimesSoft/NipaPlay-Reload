@@ -35,6 +35,7 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:path/path.dart' as p;
+import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 
 class CupertinoHomePage extends StatefulWidget {
   const CupertinoHomePage({super.key});
@@ -1776,7 +1777,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Future<PlayableItem?> _buildPlayableItem(WatchHistoryItem item) async {
-    String filePath = item.filePath;
+    WatchHistoryItem currentItem = item;
+    String filePath = currentItem.filePath;
     String? actualPlayUrl;
     bool fileExists = false;
 
@@ -1845,6 +1847,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         final altFile = File(altPath);
         if (altFile.existsSync()) {
           filePath = altPath;
+          currentItem = currentItem.copyWith(filePath: altPath);
           fileExists = true;
         }
       }
@@ -1853,19 +1856,33 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     if (!fileExists) {
       AdaptiveSnackBar.show(
         context,
-        message: '文件不存在或无法访问：${p.basename(item.filePath)}',
+        message: '文件不存在或无法访问：${p.basename(currentItem.filePath)}',
         type: AdaptiveSnackBarType.error,
       );
       return null;
     }
 
+    if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
+      final matchablePath = actualPlayUrl ?? filePath;
+      currentItem = await WatchHistoryAutoMatchHelper.tryAutoMatch(
+        context,
+        currentItem,
+        matchablePath: matchablePath,
+        onMatched: (message) => AdaptiveSnackBar.show(
+          context,
+          message: message,
+          type: AdaptiveSnackBarType.success,
+        ),
+      );
+    }
+
     return PlayableItem(
       videoPath: filePath,
-      title: item.animeName,
-      subtitle: item.episodeTitle,
-      animeId: item.animeId,
-      episodeId: item.episodeId,
-      historyItem: item,
+      title: currentItem.animeName,
+      subtitle: currentItem.episodeTitle,
+      animeId: currentItem.animeId,
+      episodeId: currentItem.episodeId,
+      historyItem: currentItem,
       actualPlayUrl: actualPlayUrl,
     );
   }

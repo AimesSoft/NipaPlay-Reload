@@ -9,6 +9,8 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_tab.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
+import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
 
 class FluentMediaLibraryTabs extends StatefulWidget {
   final int initialIndex;
@@ -37,13 +39,15 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<JellyfinProvider, EmbyProvider>(
-      builder: (context, jellyfinProvider, embyProvider, child) {
+    return Consumer3<JellyfinProvider, EmbyProvider, DandanplayRemoteProvider>(
+      builder: (context, jellyfinProvider, embyProvider, dandanProvider, child) {
         final sharedProvider = Provider.of<SharedRemoteLibraryProvider>(context);
         final isJellyfinConnected = jellyfinProvider.isConnected;
         final isEmbyConnected = embyProvider.isConnected;
+        final isDandanConnected = dandanProvider.isConnected;
 
-        final tabs = _buildTabs(isJellyfinConnected, isEmbyConnected, sharedProvider);
+        final tabs =
+            _buildTabs(isJellyfinConnected, isEmbyConnected, sharedProvider, isDandanConnected);
 
         // Ensure currentIndex is valid
         if (_currentIndex >= tabs.length) {
@@ -65,6 +69,7 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
     bool isJellyfinConnected,
     bool isEmbyConnected,
     SharedRemoteLibraryProvider sharedProvider,
+    bool isDandanConnected,
   ) {
     final List<Tab> tabs = [
       Tab(
@@ -87,6 +92,17 @@ class _FluentMediaLibraryTabsState extends State<FluentMediaLibraryTabs> {
         Tab(
           text: const Text('共享媒体'),
           body: SharedRemoteLibraryView(
+            onPlayEpisode: widget.onPlayEpisode,
+          ),
+        ),
+      );
+    }
+
+    if (isDandanConnected) {
+      tabs.add(
+        Tab(
+          text: const Text('弹弹play'),
+          body: DandanplayRemoteLibraryView(
             onPlayEpisode: widget.onPlayEpisode,
           ),
         ),
