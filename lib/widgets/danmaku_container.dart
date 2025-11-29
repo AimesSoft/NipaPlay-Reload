@@ -49,7 +49,8 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   double get _defaultFontSize => globals.isPhone ? 20.0 : 30.0;
   double get _effectiveFontSize =>
       widget.fontSize > 0 ? widget.fontSize : _defaultFontSize;
-  double get _danmakuHeight => _effectiveFontSize; // 弹幕高度与字号保持一致
+  // 增加1.1倍行高修正，避免由 TextPainter 默认行高大于 fontSize 导致的视觉重叠
+  double get _danmakuHeight => _effectiveFontSize * 1.1;
   double get _verticalSpacing {
     final double scale =
         (_effectiveFontSize / _defaultFontSize).clamp(0.7, 2.5);
@@ -469,10 +470,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     if (trackHeight <= 0) {
       maxTracks = 1;
     } else {
-      maxTracks =
-          ((effectiveHeight - adjustedDanmakuHeight - _verticalSpacing) /
-                  trackHeight)
-              .floor();
+      maxTracks = (effectiveHeight / trackHeight).floor();
       // 二次防护：计算结果<=0 时也夹紧为 1，维持原有堆叠/重叠逻辑
       if (maxTracks <= 0) {
         maxTracks = 1;

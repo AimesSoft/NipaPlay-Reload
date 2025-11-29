@@ -361,6 +361,21 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           }
         }
 
+        // 优先级 4: 如果没有找到任何中文轨道，且存在其他有效字幕轨道（非auto/no），则默认选择第一条有效轨道
+        if (preferredSubtitleIndex == null) {
+          for (var i = 0; i < subtitles.length; i++) {
+            final track = subtitles[i];
+            // 排除 auto 和 no 轨道
+            final trackId = track.metadata['id'];
+            if (trackId != 'auto' && trackId != 'no') {
+              preferredSubtitleIndex = i;
+              debugPrint(
+                  'VideoPlayerState: 未找到符合条件的中文字幕轨道，默认选择第一条有效字幕: ${track.title ?? track.toString()} (Index: $i)');
+              break;
+            }
+          }
+        }
+
         // 如果找到了优先的字幕轨道，就激活它
         if (preferredSubtitleIndex != null) {
           player.activeSubtitleTracks = [preferredSubtitleIndex];
