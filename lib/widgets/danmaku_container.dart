@@ -137,7 +137,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   void initState() {
     super.initState();
     // 根据设备类型设置垂直间距
-    _baseVerticalSpacing = globals.isPhone ? 2.0 : 4.0;
+    _baseVerticalSpacing = globals.isPhone ? 10.0 : 20.0;
 
     // 初始化文本渲染器
     _initializeTextRenderer();
