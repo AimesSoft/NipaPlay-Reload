@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<!-- saved from url=(0048)https://doc.dandanplay.com/open/library-api.html -->
+<html lang="zh-CN" data-theme="light" class=""><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style>body {transition: opacity ease-in 0.2s; } 
+body[unresolved] {opacity: 0; display: block; overflow: hidden; position: relative; } 
+</style><script src="chrome-extension://memhacajcfhmibggbgilihlmiiddeggo/assets/main-world.ts-4ed993c7.js" type="module"></script>
+    
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="generator" content="VuePress 2.0.0-rc.19">
+    <style>
+      :root {
+        --vp-c-bg: #fff;
+      }
+
+      [data-theme='dark'] {
+        --vp-c-bg: #1b1b1f;
+      }
+
+      html,
+      body {
+        background-color: var(--vp-c-bg);
+      }
+    </style>
+    <script>
+      const userMode = localStorage.getItem('vuepress-color-scheme')
+      const systemDarkMode =
+        'matchMedia' in window
+          ? window.matchMedia('(prefers-color-scheme: dark)').matches
+          : false
+
+      if (userMode === 'light') {
+        document.documentElement.dataset.theme = 'light'
+      } else if (userMode === 'dark' || systemDarkMode) {
+        document.documentElement.dataset.theme = 'dark'
+      }
+    </script>
+    <link rel="icon" href="./弹弹play远程访问API（PC版） _ 弹弹play_files/logo.png"><link rel="stylesheet" href="./弹弹play远程访问API（PC版） _ 弹弹play_files/style.css"><meta name="description" content="这是弹弹play帮助文档">
+    <link rel="preload" href="./弹弹play远程访问API（PC版） _ 弹弹play_files/style-BSAtsLYr.css" as="style"><link rel="stylesheet" href="./弹弹play远程访问API（PC版） _ 弹弹play_files/style-BSAtsLYr.css">
+    <link rel="modulepreload" href="./弹弹play远程访问API（PC版） _ 弹弹play_files/app-B8HL1RCt.js"><link rel="modulepreload" href="https://doc.dandanplay.com/assets/library-api.html-CHtYspyq.js">
+    <link rel="prefetch" href="https://doc.dandanplay.com/assets/index.html-CA1ZS_YY.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/index.html-DpCw7Z6S.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-14.5.html-D28woqam.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.10.html-wZhOOFmK.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.11.html-D288XpLo.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.12.html-Bq7RXkS4.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.13.html-DC9go6Ib.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.3.html-CQ9UTYhQ.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.4.html-DWsXYTu9.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.5.html-DAPoWNLK.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.6.html-B0sdR8ph.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.7.html-DMpwk3Yt.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.8.html-DqcN3sfe.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/windows-15.9.html-DLA1-0ca.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/index.html-y9WOdYno.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/account.html-DtnvdYAE.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/download.html-UhlDreY2.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/load-danmaku.html-DzTsvlM3.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/pc-backup.html-BIdxgKIi.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/pc-beta.html-DuKbqKfI.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/pc-cannot-start.html-Bi_zsfR-.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/pc-performance.html-C-17TfQ6.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/resource-service.html-DQtUCjLa.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/index.html-CAoshH6B.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/ai-speech-recognition.html-CwtXNkjj.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/ai-translate.html-V79S9QOi.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/ai-video-summary.html-DFaQ9Qgf.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/backuped-danmaku.html-C-ijmXWG.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/cast-to-tv.html-v5AxjydN.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/danmaku-overlay.html-BMsZBy4O.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/download-banlist.html-7LoG_mIa.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/kernel-compare.html-BtEIFJWS.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/media-library.html-CeJAla78.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/media-sniff.html-DnYHfBgX.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/medialibrary-remote-dandanplay.html-CVjIwGaZ.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/medialibrary-remote-emby.html-Bk9H1mFP.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/medialibrary-remote-onedrive.html-dbXog3mq.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/medialibrary-remote-plex.html-Bl1dLdk3.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/member.html-CfT69J2C.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/online-databases.html-hZb_73k6.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/screenshot-gif.html-fcG6v1Hr.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/video-frame-interpolation.html-cxBX55yD.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/index.html-WIRQkTZ0.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/android.html-DhDj7hA0.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/clients.html-CKfpPGm_.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/pc.html-BCtHOAhq.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/index.html-DB3VO0YE.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/changelog.html-CC2nrJGe.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/client-protocol.html-DkrClD5U.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/resource-service-api.html-zUv1BDRs.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/index.html-D-tl-9LG.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/donate.html-BQj8J1Bf.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/feedback.html-0APg5yw7.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/privacy.html-HtMPImqG.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/404.html-B3ItQTP_.js" as="script"><link rel="prefetch" href="https://doc.dandanplay.com/assets/setupDevtools-7MC2TMWH-CeEweDjL.js" as="script">
+  <style type="text/css">.medium-zoom-overlay{position:fixed;top:0;right:0;bottom:0;left:0;opacity:0;transition:opacity .3s;will-change:opacity}.medium-zoom--opened .medium-zoom-overlay{cursor:pointer;cursor:zoom-out;opacity:1}.medium-zoom-image{cursor:pointer;cursor:zoom-in;transition:transform .3s cubic-bezier(.2,0,.2,1)!important}.medium-zoom-image--hidden{visibility:hidden}.medium-zoom-image--opened{position:relative;cursor:pointer;cursor:zoom-out;will-change:transform}</style><style type="text/css">.MathJax_Hover_Frame {border-radius: .25em; -webkit-border-radius: .25em; -moz-border-radius: .25em; -khtml-border-radius: .25em; box-shadow: 0px 0px 15px #83A; -webkit-box-shadow: 0px 0px 15px #83A; -moz-box-shadow: 0px 0px 15px #83A; -khtml-box-shadow: 0px 0px 15px #83A; border: 1px solid #A6D ! important; display: inline-block; position: absolute}
+.MathJax_Menu_Button .MathJax_Hover_Arrow {position: absolute; cursor: pointer; display: inline-block; border: 2px solid #AAA; border-radius: 4px; -webkit-border-radius: 4px; -moz-border-radius: 4px; -khtml-border-radius: 4px; font-family: 'Courier New',Courier; font-size: 9px; color: #F0F0F0}
+.MathJax_Menu_Button .MathJax_Hover_Arrow span {display: block; background-color: #AAA; border: 1px solid; border-radius: 3px; line-height: 0; padding: 4px}
+.MathJax_Hover_Arrow:hover {color: white!important; border: 2px solid #CCC!important}
+.MathJax_Hover_Arrow:hover span {background-color: #CCC!important}
+</style><style type="text/css">#MathJax_About {position: fixed; left: 50%; width: auto; text-align: center; border: 3px outset; padding: 1em 2em; background-color: #DDDDDD; color: black; cursor: default; font-family: message-box; font-size: 120%; font-style: normal; text-indent: 0; text-transform: none; line-height: normal; letter-spacing: normal; word-spacing: normal; word-wrap: normal; white-space: nowrap; float: none; z-index: 201; border-radius: 15px; -webkit-border-radius: 15px; -moz-border-radius: 15px; -khtml-border-radius: 15px; box-shadow: 0px 10px 20px #808080; -webkit-box-shadow: 0px 10px 20px #808080; -moz-box-shadow: 0px 10px 20px #808080; -khtml-box-shadow: 0px 10px 20px #808080; filter: progid:DXImageTransform.Microsoft.dropshadow(OffX=2, OffY=2, Color='gray', Positive='true')}
+#MathJax_About.MathJax_MousePost {outline: none}
+.MathJax_Menu {position: absolute; background-color: white; color: black; width: auto; padding: 5px 0px; border: 1px solid #CCCCCC; margin: 0; cursor: default; font: menu; text-align: left; text-indent: 0; text-transform: none; line-height: normal; letter-spacing: normal; word-spacing: normal; word-wrap: normal; white-space: nowrap; float: none; z-index: 201; border-radius: 5px; -webkit-border-radius: 5px; -moz-border-radius: 5px; -khtml-border-radius: 5px; box-shadow: 0px 10px 20px #808080; -webkit-box-shadow: 0px 10px 20px #808080; -moz-box-shadow: 0px 10px 20px #808080; -khtml-box-shadow: 0px 10px 20px #808080; filter: progid:DXImageTransform.Microsoft.dropshadow(OffX=2, OffY=2, Color='gray', Positive='true')}
+.MathJax_MenuItem {padding: 1px 2em; background: transparent}
+.MathJax_MenuArrow {position: absolute; right: .5em; padding-top: .25em; color: #666666; font-size: .75em}
+.MathJax_MenuActive .MathJax_MenuArrow {color: white}
+.MathJax_MenuArrow.RTL {left: .5em; right: auto}
+.MathJax_MenuCheck {position: absolute; left: .7em}
+.MathJax_MenuCheck.RTL {right: .7em; left: auto}
+.MathJax_MenuRadioCheck {position: absolute; left: .7em}
+.MathJax_MenuRadioCheck.RTL {right: .7em; left: auto}
+.MathJax_MenuLabel {padding: 1px 2em 3px 1.33em; font-style: italic}
+.MathJax_MenuRule {border-top: 1px solid #DDDDDD; margin: 4px 3px}
+.MathJax_MenuDisabled {color: GrayText}
+.MathJax_MenuActive {background-color: #606872; color: white}
+.MathJax_MenuDisabled:focus, .MathJax_MenuLabel:focus {background-color: #E8E8E8}
+.MathJax_ContextMenu:focus {outline: none}
+.MathJax_ContextMenu .MathJax_MenuItem:focus {outline: none}
+#MathJax_AboutClose {top: .2em; right: .2em}
+.MathJax_Menu .MathJax_MenuClose {top: -10px; left: -10px}
+.MathJax_MenuClose {position: absolute; cursor: pointer; display: inline-block; border: 2px solid #AAA; border-radius: 18px; -webkit-border-radius: 18px; -moz-border-radius: 18px; -khtml-border-radius: 18px; font-family: 'Courier New',Courier; font-size: 24px; color: #F0F0F0}
+.MathJax_MenuClose span {display: block; background-color: #AAA; border: 1.5px solid; border-radius: 18px; -webkit-border-radius: 18px; -moz-border-radius: 18px; -khtml-border-radius: 18px; line-height: 0; padding: 8px 0 6px}
+.MathJax_MenuClose:hover {color: white!important; border: 2px solid #CCC!important}
+.MathJax_MenuClose:hover span {background-color: #CCC!important}
+.MathJax_MenuClose:hover:focus {outline: none}
+</style><style type="text/css">.MathJax_Preview .MJXf-math {color: inherit!important}
+</style><style type="text/css">.MJX_Assistive_MathML {position: absolute!important; top: 0; left: 0; clip: rect(1px, 1px, 1px, 1px); padding: 1px 0 0 0!important; border: 0!important; height: 1px!important; width: 1px!important; overflow: hidden!important; display: block!important; -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none}
+.MJX_Assistive_MathML.MJX_Assistive_MathML_Block {width: 100%!important}
+</style><style type="text/css">#MathJax_Zoom {position: absolute; background-color: #F0F0F0; overflow: auto; display: block; z-index: 301; padding: .5em; border: 1px solid black; margin: 0; font-weight: normal; font-style: normal; text-align: left; text-indent: 0; text-transform: none; line-height: normal; letter-spacing: normal; word-spacing: normal; word-wrap: normal; white-space: nowrap; float: none; -webkit-box-sizing: content-box; -moz-box-sizing: content-box; box-sizing: content-box; box-shadow: 5px 5px 15px #AAAAAA; -webkit-box-shadow: 5px 5px 15px #AAAAAA; -moz-box-shadow: 5px 5px 15px #AAAAAA; -khtml-box-shadow: 5px 5px 15px #AAAAAA; filter: progid:DXImageTransform.Microsoft.dropshadow(OffX=2, OffY=2, Color='gray', Positive='true')}
+#MathJax_ZoomOverlay {position: absolute; left: 0; top: 0; z-index: 300; display: inline-block; width: 100%; height: 100%; border: 0; padding: 0; margin: 0; background-color: white; opacity: 0; filter: alpha(opacity=0)}
+#MathJax_ZoomFrame {position: relative; display: inline-block; height: 0; width: 0}
+#MathJax_ZoomEventTrap {position: absolute; left: 0; top: 0; z-index: 302; display: inline-block; border: 0; padding: 0; margin: 0; background-color: white; opacity: 0; filter: alpha(opacity=0)}
+</style><style type="text/css">.MathJax_Preview {color: #888}
+#MathJax_Message {position: fixed; left: 1em; bottom: 1.5em; background-color: #E6E6E6; border: 1px solid #959595; margin: 0px; padding: 2px 8px; z-index: 102; color: black; font-size: 80%; width: auto; white-space: nowrap}
+#MathJax_MSIE_Frame {position: absolute; top: 0; left: 0; width: 0px; z-index: 101; border: 0px; margin: 0px; padding: 0px}
+.MathJax_Error {color: #CC0000; font-style: italic}
+</style><style type="text/css">.MJXp-script {font-size: .8em}
+.MJXp-right {-webkit-transform-origin: right; -moz-transform-origin: right; -ms-transform-origin: right; -o-transform-origin: right; transform-origin: right}
+.MJXp-bold {font-weight: bold}
+.MJXp-italic {font-style: italic}
+.MJXp-scr {font-family: MathJax_Script,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-frak {font-family: MathJax_Fraktur,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-sf {font-family: MathJax_SansSerif,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-cal {font-family: MathJax_Caligraphic,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-mono {font-family: MathJax_Typewriter,'Times New Roman',Times,STIXGeneral,serif}
+.MJXp-largeop {font-size: 150%}
+.MJXp-largeop.MJXp-int {vertical-align: -.2em}
+.MJXp-math {display: inline-block; line-height: 1.2; text-indent: 0; font-family: 'Times New Roman',Times,STIXGeneral,serif; white-space: nowrap; border-collapse: collapse}
+.MJXp-display {display: block; text-align: center; margin: 1em 0}
+.MJXp-math span {display: inline-block}
+.MJXp-box {display: block!important; text-align: center}
+.MJXp-box:after {content: " "}
+.MJXp-rule {display: block!important; margin-top: .1em}
+.MJXp-char {display: block!important}
+.MJXp-mo {margin: 0 .15em}
+.MJXp-mfrac {margin: 0 .125em; vertical-align: .25em}
+.MJXp-denom {display: inline-table!important; width: 100%}
+.MJXp-denom > * {display: table-row!important}
+.MJXp-surd {vertical-align: top}
+.MJXp-surd > * {display: block!important}
+.MJXp-script-box > *  {display: table!important; height: 50%}
+.MJXp-script-box > * > * {display: table-cell!important; vertical-align: top}
+.MJXp-script-box > *:last-child > * {vertical-align: bottom}
+.MJXp-script-box > * > * > * {display: block!important}
+.MJXp-mphantom {visibility: hidden}
+.MJXp-munderover {display: inline-table!important}
+.MJXp-over {display: inline-block!important; text-align: center}
+.MJXp-over > * {display: block!important}
+.MJXp-munderover > * {display: table-row!important}
+.MJXp-mtable {vertical-align: .25em; margin: 0 .125em}
+.MJXp-mtable > * {display: inline-table!important; vertical-align: middle}
+.MJXp-mtr {display: table-row!important}
+.MJXp-mtd {display: table-cell!important; text-align: center; padding: .5em 0 0 .5em}
+.MJXp-mtr > .MJXp-mtd:first-child {padding-left: 0}
+.MJXp-mtr:first-child > .MJXp-mtd {padding-top: 0}
+.MJXp-mlabeledtr {display: table-row!important}
+.MJXp-mlabeledtr > .MJXp-mtd:first-child {padding-left: 0}
+.MJXp-mlabeledtr:first-child > .MJXp-mtd {padding-top: 0}
+.MJXp-merror {background-color: #FFFF88; color: #CC0000; border: 1px solid #CC0000; padding: 1px 3px; font-style: normal; font-size: 90%}
+.MJXp-scale0 {-webkit-transform: scaleX(.0); -moz-transform: scaleX(.0); -ms-transform: scaleX(.0); -o-transform: scaleX(.0); transform: scaleX(.0)}
+.MJXp-scale1 {-webkit-transform: scaleX(.1); -moz-transform: scaleX(.1); -ms-transform: scaleX(.1); -o-transform: scaleX(.1); transform: scaleX(.1)}
+.MJXp-scale2 {-webkit-transform: scaleX(.2); -moz-transform: scaleX(.2); -ms-transform: scaleX(.2); -o-transform: scaleX(.2); transform: scaleX(.2)}
+.MJXp-scale3 {-webkit-transform: scaleX(.3); -moz-transform: scaleX(.3); -ms-transform: scaleX(.3); -o-transform: scaleX(.3); transform: scaleX(.3)}
+.MJXp-scale4 {-webkit-transform: scaleX(.4); -moz-transform: scaleX(.4); -ms-transform: scaleX(.4); -o-transform: scaleX(.4); transform: scaleX(.4)}
+.MJXp-scale5 {-webkit-transform: scaleX(.5); -moz-transform: scaleX(.5); -ms-transform: scaleX(.5); -o-transform: scaleX(.5); transform: scaleX(.5)}
+.MJXp-scale6 {-webkit-transform: scaleX(.6); -moz-transform: scaleX(.6); -ms-transform: scaleX(.6); -o-transform: scaleX(.6); transform: scaleX(.6)}
+.MJXp-scale7 {-webkit-transform: scaleX(.7); -moz-transform: scaleX(.7); -ms-transform: scaleX(.7); -o-transform: scaleX(.7); transform: scaleX(.7)}
+.MJXp-scale8 {-webkit-transform: scaleX(.8); -moz-transform: scaleX(.8); -ms-transform: scaleX(.8); -o-transform: scaleX(.8); transform: scaleX(.8)}
+.MJXp-scale9 {-webkit-transform: scaleX(.9); -moz-transform: scaleX(.9); -ms-transform: scaleX(.9); -o-transform: scaleX(.9); transform: scaleX(.9)}
+.MathJax_PHTML .noError {vertical-align: ; font-size: 90%; text-align: left; color: black; padding: 1px 3px; border: 1px solid}
+</style><title>弹弹play远程访问API（PC版） | 弹弹play</title></head>
+  <body><div id="MathJax_Message" style="display: none;"></div>
+    <div id="app"><!--[--><div class="vp-theme-container external-link-icon" vp-container=""><!--[--><header class="vp-navbar" vp-navbar=""><div class="vp-toggle-sidebar-button" title="切换侧边栏" aria-expanded="false" role="button" tabindex="0"><div class="icon" aria-hidden="true"><span></span><span></span><span></span></div></div><span><a class="route-link" href="https://doc.dandanplay.com/"><img class="vp-site-logo" src="./弹弹play远程访问API（PC版） _ 弹弹play_files/logo.png" alt="弹弹play"><span class="vp-site-name vp-hide-mobile" aria-hidden="true">弹弹play</span></a></span><div class="vp-navbar-items-wrapper" style="max-width: 1286px;"><!--[--><!--]--><nav class="vp-navbar-items vp-hide-mobile" aria-label="site navigation"><!--[--><div class="vp-navbar-item"><a class="auto-link external-link" href="https://www.dandanplay.com/" aria-label="弹弹play官网" rel="noopener noreferrer" target="_blank"><!--[--><!--[--><!--]--><!--]-->弹弹play官网<!--[--><!--[--><!--]--><!--]--></a></div><!--]--></nav><!--[--><!--]--><button type="button" class="vp-toggle-color-mode-button" title="切换颜色模式"><svg class="light-icon" viewBox="0 0 32 32" style=""><path d="M16 12.005a4 4 0 1 1-4 4a4.005 4.005 0 0 1 4-4m0-2a6 6 0 1 0 6 6a6 6 0 0 0-6-6z" fill="currentColor"></path><path d="M5.394 6.813l1.414-1.415l3.506 3.506L8.9 10.318z" fill="currentColor"></path><path d="M2 15.005h5v2H2z" fill="currentColor"></path><path d="M5.394 25.197L8.9 21.691l1.414 1.415l-3.506 3.505z" fill="currentColor"></path><path d="M15 25.005h2v5h-2z" fill="currentColor"></path><path d="M21.687 23.106l1.414-1.415l3.506 3.506l-1.414 1.414z" fill="currentColor"></path><path d="M25 15.005h5v2h-5z" fill="currentColor"></path><path d="M21.687 8.904l3.506-3.506l1.414 1.415l-3.506 3.505z" fill="currentColor"></path><path d="M15 2.005h2v5h-2z" fill="currentColor"></path></svg><svg class="dark-icon" viewBox="0 0 32 32" style="display:none;"><path d="M13.502 5.414a15.075 15.075 0 0 0 11.594 18.194a11.113 11.113 0 0 1-7.975 3.39c-.138 0-.278.005-.418 0a11.094 11.094 0 0 1-3.2-21.584M14.98 3a1.002 1.002 0 0 0-.175.016a13.096 13.096 0 0 0 1.825 25.981c.164.006.328 0 .49 0a13.072 13.072 0 0 0 10.703-5.555a1.01 1.01 0 0 0-.783-1.565A13.08 13.08 0 0 1 15.89 4.38A1.015 1.015 0 0 0 14.98 3z" fill="currentColor"></path></svg></button><form class="search-box" role="search"><input type="search" placeholder="搜索 Ⓢ" autocomplete="off" spellcheck="false" value=""><!----></form></div></header><!--]--><div class="vp-sidebar-mask"></div><!--[--><aside class="vp-sidebar" vp-sidebar=""><nav class="vp-navbar-items" aria-label="site navigation"><!--[--><div class="vp-navbar-item"><a class="auto-link external-link" href="https://www.dandanplay.com/" aria-label="弹弹play官网" rel="noopener noreferrer" target="_blank"><!--[--><!--[--><!--]--><!--]-->弹弹play官网<!--[--><!--[--><!--]--><!--]--></a></div><!--]--></nav><!--[--><!--]--><ul class="vp-sidebar-items"><!--[--><li><a class="route-link auto-link vp-sidebar-item vp-sidebar-heading" href="https://doc.dandanplay.com/guide/" aria-label="指南"><!--[--><!--[--><!--]--><!--]-->指南<!--[--><!--[--><!--]--><!--]--></a><ul style="" class="vp-sidebar-children"><!--[--><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/guide/" aria-label="项目简介"><!--[--><!--[--><!--]--><!--]-->项目简介<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/guide/clients.html" aria-label="客户端介绍"><!--[--><!--[--><!--]--><!--]-->客户端介绍<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/guide/pc.html" aria-label="PC版"><!--[--><!--[--><!--]--><!--]-->PC版<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/guide/android.html" aria-label="安卓概念版"><!--[--><!--[--><!--]--><!--]-->安卓概念版<!--[--><!--[--><!--]--><!--]--></a><!----></li><!--]--></ul></li><li><a class="route-link auto-link vp-sidebar-item vp-sidebar-heading" href="https://doc.dandanplay.com/function/" aria-label="常用功能"><!--[--><!--[--><!--]--><!--]-->常用功能<!--[--><!--[--><!--]--><!--]--></a><ul style="" class="vp-sidebar-children"><!--[--><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/member.html" aria-label="弹弹play会员功能介绍"><!--[--><!--[--><!--]--><!--]-->弹弹play会员功能介绍<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/danmaku-overlay.html" aria-label="『弹幕外挂』功能说明"><!--[--><!--[--><!--]--><!--]-->『弹幕外挂』功能说明<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/kernel-compare.html" aria-label="PC版播放器内核功能对比"><!--[--><!--[--><!--]--><!--]-->PC版播放器内核功能对比<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/video-frame-interpolation.html" aria-label="在弹弹play中启用插帧"><!--[--><!--[--><!--]--><!--]-->在弹弹play中启用插帧<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/cast-to-tv.html" aria-label="向电视投屏播放视频和弹幕"><!--[--><!--[--><!--]--><!--]-->向电视投屏播放视频和弹幕<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/backuped-danmaku.html" aria-label="使用“备用弹幕”功能优化弹幕加载体验"><!--[--><!--[--><!--]--><!--]-->使用“备用弹幕”功能优化弹幕加载体验<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/ai-speech-recognition.html" aria-label="使用AI语音识别为视频生成字幕"><!--[--><!--[--><!--]--><!--]-->使用AI语音识别为视频生成字幕<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/ai-translate.html" aria-label="使用弹弹play在线服务翻译字幕文件"><!--[--><!--[--><!--]--><!--]-->使用弹弹play在线服务翻译字幕文件<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/ai-video-summary.html" aria-label="使用『AI视频总结』功能为视频生成大纲和总结"><!--[--><!--[--><!--]--><!--]-->使用『AI视频总结』功能为视频生成大纲和总结<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/download-banlist.html" aria-label="下载器黑名单"><!--[--><!--[--><!--]--><!--]-->下载器黑名单<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/media-sniff.html" aria-label="使用『媒体嗅探』，从网页中提取视频并附加弹幕"><!--[--><!--[--><!--]--><!--]-->使用『媒体嗅探』，从网页中提取视频并附加弹幕<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/media-library.html" aria-label="媒体库功能介绍"><!--[--><!--[--><!--]--><!--]-->媒体库功能介绍<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/medialibrary-remote-emby.html" aria-label="连接到远程Emby/Jellyfin媒体服务器"><!--[--><!--[--><!--]--><!--]-->连接到远程Emby/Jellyfin媒体服务器<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/medialibrary-remote-dandanplay.html" aria-label="连接到远程电脑上的弹弹play（PC版）"><!--[--><!--[--><!--]--><!--]-->连接到远程电脑上的弹弹play（PC版）<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/medialibrary-remote-onedrive.html" aria-label="连接到 OneDrive 个人版网盘"><!--[--><!--[--><!--]--><!--]-->连接到 OneDrive 个人版网盘<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/medialibrary-remote-plex.html" aria-label="连接到远程Plex媒体服务器"><!--[--><!--[--><!--]--><!--]-->连接到远程Plex媒体服务器<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/function/screenshot-gif.html" aria-label="截取GIF动图"><!--[--><!--[--><!--]--><!--]-->截取GIF动图<!--[--><!--[--><!--]--><!--]--></a><!----></li><!--]--></ul></li><li><a class="route-link auto-link vp-sidebar-item vp-sidebar-heading" href="https://doc.dandanplay.com/faq/" aria-label="常见问题"><!--[--><!--[--><!--]--><!--]-->常见问题<!--[--><!--[--><!--]--><!--]--></a><ul style="" class="vp-sidebar-children"><!--[--><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/faq/download.html" aria-label="下载相关问题"><!--[--><!--[--><!--]--><!--]-->下载相关问题<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/faq/resource-service.html" aria-label="资源搜索功能相关问题"><!--[--><!--[--><!--]--><!--]-->资源搜索功能相关问题<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/faq/pc-beta.html" aria-label="如何试用PC测试版"><!--[--><!--[--><!--]--><!--]-->如何试用PC测试版<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/faq/account.html" aria-label="账号、注册、登录相关问题"><!--[--><!--[--><!--]--><!--]-->账号、注册、登录相关问题<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/faq/pc-cannot-start.html" aria-label="播放器无法启动如何解决"><!--[--><!--[--><!--]--><!--]-->播放器无法启动如何解决<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/faq/load-danmaku.html" aria-label="弹弹play是如何加载弹幕的？"><!--[--><!--[--><!--]--><!--]-->弹弹play是如何加载弹幕的？<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/faq/pc-backup.html" aria-label="备份弹弹play的数据（PC版）"><!--[--><!--[--><!--]--><!--]-->备份弹弹play的数据（PC版）<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/faq/pc-performance.html" aria-label="弹弹play PC版性能问题汇总"><!--[--><!--[--><!--]--><!--]-->弹弹play PC版性能问题汇总<!--[--><!--[--><!--]--><!--]--></a><!----></li><!--]--></ul></li><li><a class="route-link route-link-active auto-link vp-sidebar-item vp-sidebar-heading active" href="https://doc.dandanplay.com/open/" aria-label="开放平台"><!--[--><!--[--><!--]--><!--]-->开放平台<!--[--><!--[--><!--]--><!--]--></a><ul style="" class="vp-sidebar-children"><!--[--><li><a class="route-link route-link-active auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/" aria-label="弹弹play开放平台"><!--[--><!--[--><!--]--><!--]-->弹弹play开放平台<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/changelog.html" aria-label="开放平台 API 变动日志"><!--[--><!--[--><!--]--><!--]-->开放平台 API 变动日志<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/client-protocol.html" aria-label="弹弹play专用链（PC版）"><!--[--><!--[--><!--]--><!--]-->弹弹play专用链（PC版）<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link route-link-active auto-link vp-sidebar-item active" href="https://doc.dandanplay.com/open/library-api.html" aria-label="弹弹play远程访问API（PC版）"><!--[--><!--[--><!--]--><!--]-->弹弹play远程访问API（PC版）<!--[--><!--[--><!--]--><!--]--></a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%85%B3%E4%BA%8E%E5%BC%B9%E5%BC%B9play-%E8%BF%9C%E7%A8%8B%E8%AE%BF%E9%97%AE-%E5%8A%9F%E8%83%BD" aria-label="关于弹弹play“远程访问”功能">关于弹弹play“远程访问”功能</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8E%9F%E7%90%86" aria-label="原理">原理</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E9%80%9A%E8%BF%87%E7%BD%91%E5%9D%80%E4%B8%8E%E7%AB%AF%E5%8F%A3%E8%AE%BF%E9%97%AE" aria-label="通过网址与端口访问">通过网址与端口访问</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#url" aria-label="URL">URL</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#api%E5%AF%86%E9%92%A5%E9%AA%8C%E8%AF%81" aria-label="API密钥验证">API密钥验证</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_1-%E8%8E%B7%E5%8F%96%E6%AC%A2%E8%BF%8E%E4%BF%A1%E6%81%AF-api-v1-welcome-%E5%92%8C-welcome" aria-label="1.获取欢迎信息： /api/v1/welcome 和 /welcome">1.获取欢迎信息： /api/v1/welcome 和 /welcome</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0%E4%B8%8E%E9%AA%8C%E8%AF%81" aria-label="参数与验证">参数与验证</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC" aria-label="返回值">返回值</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E" aria-label="返回值说明">返回值说明</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_2-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E8%B0%83%E6%95%B4%E9%9F%B3%E9%87%8F-api-v1-control-volume-volume" aria-label="2.控制播放器调整音量 /api/v1/control/volume/{volume}">2.控制播放器调整音量 /api/v1/control/volume/{volume}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0" aria-label="参数">参数</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_3-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E8%B7%B3%E8%BD%AC%E8%BF%9B%E5%BA%A6-api-v1-control-seek-time" aria-label="3.控制播放器跳转进度 /api/v1/control/seek/{time}">3.控制播放器跳转进度 /api/v1/control/seek/{time}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-1" aria-label="参数">参数</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_4-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E5%BD%93%E5%89%8D%E7%9A%84%E6%92%AD%E6%94%BE%E7%8A%B6%E6%80%81-api-v1-control-method" aria-label="4.控制播放器当前的播放状态 /api/v1/control/{method}">4.控制播放器当前的播放状态 /api/v1/control/{method}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-2" aria-label="参数">参数</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_5-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E6%AD%A3%E5%9C%A8%E6%92%AD%E6%94%BE%E7%9A%84%E8%A7%86%E9%A2%91%E4%BF%A1%E6%81%AF-api-v1-current-video" aria-label="5.获取当前正在播放的视频信息 /api/v1/current/video">5.获取当前正在播放的视频信息 /api/v1/current/video</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-1" aria-label="返回值">返回值</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-1" aria-label="返回值说明">返回值说明</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_6-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E8%A7%86%E9%A2%91%E7%9A%84%E5%BC%B9%E5%B9%95%E5%88%97%E8%A1%A8-api-v1-current-comment" aria-label="6.获取当前视频的弹幕列表 /api/v1/current/comment">6.获取当前视频的弹幕列表 /api/v1/current/comment</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-%E5%A7%8B%E7%BB%88%E4%B8%BAxml%E6%A0%BC%E5%BC%8F" aria-label="返回值（始终为xml格式）">返回值（始终为xml格式）</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-2" aria-label="返回值说明">返回值说明</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_7-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E6%92%AD%E6%94%BE%E5%88%97%E8%A1%A8%E5%86%85%E5%AE%B9-api-v1-playlist" aria-label="7.获取当前播放列表内容 /api/v1/playlist">7.获取当前播放列表内容 /api/v1/playlist</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-2" aria-label="返回值">返回值</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-3" aria-label="返回值说明">返回值说明</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_8-%E8%8E%B7%E5%8F%96%E5%AA%92%E4%BD%93%E5%BA%93%E4%B8%AD%E7%9A%84%E6%89%80%E6%9C%89%E5%86%85%E5%AE%B9-api-v1-library" aria-label="8.获取媒体库中的所有内容 /api/v1/library">8.获取媒体库中的所有内容 /api/v1/library</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-3" aria-label="返回值">返回值</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-4" aria-label="返回值说明">返回值说明</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_9-%E8%8E%B7%E5%8F%96%E8%A7%86%E9%A2%91%E7%BC%A9%E7%95%A5%E5%9B%BE-api-v1-image-hash-%E5%92%8C-api-v1-image-id-id" aria-label="9.获取视频缩略图 /api/v1/image/{hash} 和 /api/v1/image/id/{id}">9.获取视频缩略图 /api/v1/image/{hash} 和 /api/v1/image/id/{id}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-3" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-4" aria-label="返回值">返回值</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_10-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E5%8A%A0%E8%BD%BD%E6%96%87%E4%BB%B6-api-v1-load-hash-%E5%92%8C-api-v1-load-id-id" aria-label="10.控制播放器加载文件 /api/v1/load/{hash} 和 /api/v1/load/id/{id}">10.控制播放器加载文件 /api/v1/load/{hash} 和 /api/v1/load/id/{id}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-4" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8" aria-label="备注">备注</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_11-%E8%8E%B7%E5%8F%96%E6%8C%87%E5%AE%9A%E8%A7%86%E9%A2%91%E7%9A%84%E5%BC%B9%E5%B9%95-api-v1-comment-hash-%E5%92%8C-api-v1-comment-id-id" aria-label="11.获取指定视频的弹幕/api/v1/comment/{hash} 和 /api/v1/comment/id/{id}">11.获取指定视频的弹幕/api/v1/comment/{hash} 和 /api/v1/comment/id/{id}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-5" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-%E5%A7%8B%E7%BB%88%E4%B8%BAxml%E6%A0%BC%E5%BC%8F-1" aria-label="返回值（始终为xml格式）">返回值（始终为xml格式）</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-1" aria-label="备注">备注</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_12-%E4%B8%B2%E6%B5%81%E8%A7%86%E9%A2%91-api-v1-stream-hash-%E5%92%8C-api-v1-stream-id-id" aria-label="12.串流视频 /api/v1/stream/{hash} 和 /api/v1/stream/id/{id}">12.串流视频 /api/v1/stream/{hash} 和 /api/v1/stream/id/{id}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-6" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-5" aria-label="返回值">返回值</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_13-%E8%8E%B7%E5%8F%96%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1%E5%88%97%E8%A1%A8-api-v1-download-tasks" aria-label="13.获取下载任务列表 /api/v1/download/tasks">13.获取下载任务列表 /api/v1/download/tasks</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-6" aria-label="返回值">返回值</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-5" aria-label="返回值说明">返回值说明</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_14-%E8%8E%B7%E5%8F%96%E6%9F%90%E4%B8%80%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1%E7%9A%84%E4%BF%A1%E6%81%AF-api-v1-download-tasks-taskid" aria-label="14.获取某一下载任务的信息 /api/v1/download/tasks/{taskId}">14.获取某一下载任务的信息 /api/v1/download/tasks/{taskId}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-7" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-7" aria-label="返回值">返回值</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_15-%E6%B7%BB%E5%8A%A0%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1-api-v1-download-tasks-add-magnet-magnet" aria-label="15.添加下载任务 /api/v1/download/tasks/add?magnet={magnet}">15.添加下载任务 /api/v1/download/tasks/add?magnet={magnet}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-8" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-8" aria-label="返回值">返回值</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_16-%E6%8E%A7%E5%88%B6%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1-api-v1-download-tasks-taskid-method-remove-remove" aria-label="16.控制下载任务 /api/v1/download/tasks/{taskId}/{method}?remove={remove}">16.控制下载任务 /api/v1/download/tasks/{taskId}/{method}?remove={remove}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-9" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-9" aria-label="返回值">返回值</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_17-%E6%89%AB%E6%8F%8F%E5%AA%92%E4%BD%93%E5%BA%93%E6%96%87%E4%BB%B6%E5%A4%B9%E4%B8%AD%E7%9A%84%E6%96%87%E4%BB%B6%E6%94%B9%E5%8A%A8-api-v1-library-scan" aria-label="17.扫描媒体库文件夹中的文件改动 /api/v1/library/scan">17.扫描媒体库文件夹中的文件改动 /api/v1/library/scan</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-2" aria-label="备注">备注</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-10" aria-label="返回值">返回值</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_18-%E6%9B%B4%E6%96%B0%E5%AA%92%E4%BD%93%E5%BA%93%E6%89%80%E6%9C%89%E8%A7%86%E9%A2%91%E7%9A%84%E5%85%B3%E8%81%94%E4%BF%A1%E6%81%AF-api-v1-library-refreshmatch" aria-label="18.更新媒体库所有视频的关联信息 /api/v1/library/refreshmatch">18.更新媒体库所有视频的关联信息 /api/v1/library/refreshmatch</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-3" aria-label="备注">备注</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-11" aria-label="返回值">返回值</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_19-%E8%8E%B7%E5%8F%96%E8%A7%86%E9%A2%91%E6%96%87%E4%BB%B6%E5%AF%B9%E5%BA%94%E7%9A%84%E5%AD%97%E5%B9%95%E6%96%87%E4%BB%B6%E5%88%97%E8%A1%A8-api-v1-subtitle-info-id" aria-label="19.获取视频文件对应的字幕文件列表 /api/v1/subtitle/info/{id}">19.获取视频文件对应的字幕文件列表 /api/v1/subtitle/info/{id}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-10" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-12" aria-label="返回值">返回值</a><!----></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#_20-%E8%8E%B7%E5%8F%96%E5%AD%97%E5%B9%95%E6%96%87%E4%BB%B6%E5%86%85%E5%AE%B9-api-v1-subtitle-file-id-filename-filename" aria-label="20.获取字幕文件内容 /api/v1/subtitle/file/{id}?fileName={fileName}">20.获取字幕文件内容 /api/v1/subtitle/file/{id}?fileName={fileName}</a><ul class="vp-sidebar-children"><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-11" aria-label="参数">参数</a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-13" aria-label="返回值">返回值</a><!----></li></ul></li></ul></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/open/resource-service-api.html" aria-label="弹弹play资源搜索节点API规范"><!--[--><!--[--><!--]--><!--]-->弹弹play资源搜索节点API规范<!--[--><!--[--><!--]--><!--]--></a><!----></li><!--]--></ul></li><li><a class="route-link auto-link vp-sidebar-item vp-sidebar-heading" href="https://doc.dandanplay.com/changelog/" aria-label="客户端更新日志"><!--[--><!--[--><!--]--><!--]-->客户端更新日志<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item vp-sidebar-heading" href="https://doc.dandanplay.com/other/" aria-label="其他"><!--[--><!--[--><!--]--><!--]-->其他<!--[--><!--[--><!--]--><!--]--></a><ul style="" class="vp-sidebar-children"><!--[--><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/other/feedback.html" aria-label="问题反馈"><!--[--><!--[--><!--]--><!--]-->问题反馈<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/other/privacy.html" aria-label="隐私政策"><!--[--><!--[--><!--]--><!--]-->隐私政策<!--[--><!--[--><!--]--><!--]--></a><!----></li><li><a class="route-link auto-link vp-sidebar-item" href="https://doc.dandanplay.com/other/donate.html" aria-label="赞助"><!--[--><!--[--><!--]--><!--]-->赞助<!--[--><!--[--><!--]--><!--]--></a><!----></li><!--]--></ul></li><!--]--></ul><!--[--><!--]--></aside><!--]--><!--[--><main class="vp-page"><div vp-content=""><div><h1 id="弹弹play远程访问api-pc版" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%BC%B9%E5%BC%B9play%E8%BF%9C%E7%A8%8B%E8%AE%BF%E9%97%AEapi-pc%E7%89%88"><span>弹弹play远程访问API（PC版）</span></a></h1><nav class="table-of-contents"><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%85%B3%E4%BA%8E%E5%BC%B9%E5%BC%B9play-%E8%BF%9C%E7%A8%8B%E8%AE%BF%E9%97%AE-%E5%8A%9F%E8%83%BD" class="router-link-active router-link-exact-active">关于弹弹play“远程访问”功能</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8E%9F%E7%90%86" class="router-link-active router-link-exact-active">原理</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E9%80%9A%E8%BF%87%E7%BD%91%E5%9D%80%E4%B8%8E%E7%AB%AF%E5%8F%A3%E8%AE%BF%E9%97%AE" class="router-link-active router-link-exact-active">通过网址与端口访问</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#url" class="router-link-active router-link-exact-active">URL</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#api%E5%AF%86%E9%92%A5%E9%AA%8C%E8%AF%81" class="router-link-active router-link-exact-active">API密钥验证</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_1-%E8%8E%B7%E5%8F%96%E6%AC%A2%E8%BF%8E%E4%BF%A1%E6%81%AF-api-v1-welcome-%E5%92%8C-welcome" class="router-link-active router-link-exact-active">1.获取欢迎信息： /api/v1/welcome 和 /welcome</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0%E4%B8%8E%E9%AA%8C%E8%AF%81" class="router-link-active router-link-exact-active">参数与验证</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC" class="router-link-active router-link-exact-active">返回值</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E" class="router-link-active router-link-exact-active">返回值说明</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_2-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E8%B0%83%E6%95%B4%E9%9F%B3%E9%87%8F-api-v1-control-volume-volume" class="router-link-active router-link-exact-active">2.控制播放器调整音量 /api/v1/control/volume/{volume}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0" class="router-link-active router-link-exact-active">参数</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_3-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E8%B7%B3%E8%BD%AC%E8%BF%9B%E5%BA%A6-api-v1-control-seek-time" class="router-link-active router-link-exact-active">3.控制播放器跳转进度 /api/v1/control/seek/{time}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-1" class="router-link-active router-link-exact-active">参数</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_4-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E5%BD%93%E5%89%8D%E7%9A%84%E6%92%AD%E6%94%BE%E7%8A%B6%E6%80%81-api-v1-control-method" class="router-link-active router-link-exact-active">4.控制播放器当前的播放状态 /api/v1/control/{method}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-2" class="router-link-active router-link-exact-active">参数</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_5-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E6%AD%A3%E5%9C%A8%E6%92%AD%E6%94%BE%E7%9A%84%E8%A7%86%E9%A2%91%E4%BF%A1%E6%81%AF-api-v1-current-video" class="router-link-active router-link-exact-active">5.获取当前正在播放的视频信息 /api/v1/current/video</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-1" class="router-link-active router-link-exact-active">返回值</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-1" class="router-link-active router-link-exact-active">返回值说明</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_6-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E8%A7%86%E9%A2%91%E7%9A%84%E5%BC%B9%E5%B9%95%E5%88%97%E8%A1%A8-api-v1-current-comment" class="router-link-active router-link-exact-active">6.获取当前视频的弹幕列表 /api/v1/current/comment</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-%E5%A7%8B%E7%BB%88%E4%B8%BAxml%E6%A0%BC%E5%BC%8F" class="router-link-active router-link-exact-active">返回值（始终为xml格式）</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-2" class="router-link-active router-link-exact-active">返回值说明</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_7-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E6%92%AD%E6%94%BE%E5%88%97%E8%A1%A8%E5%86%85%E5%AE%B9-api-v1-playlist" class="router-link-active router-link-exact-active">7.获取当前播放列表内容 /api/v1/playlist</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-2" class="router-link-active router-link-exact-active">返回值</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-3" class="router-link-active router-link-exact-active">返回值说明</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_8-%E8%8E%B7%E5%8F%96%E5%AA%92%E4%BD%93%E5%BA%93%E4%B8%AD%E7%9A%84%E6%89%80%E6%9C%89%E5%86%85%E5%AE%B9-api-v1-library" class="router-link-active router-link-exact-active">8.获取媒体库中的所有内容 /api/v1/library</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-3" class="router-link-active router-link-exact-active">返回值</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-4" class="router-link-active router-link-exact-active">返回值说明</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_9-%E8%8E%B7%E5%8F%96%E8%A7%86%E9%A2%91%E7%BC%A9%E7%95%A5%E5%9B%BE-api-v1-image-hash-%E5%92%8C-api-v1-image-id-id" class="router-link-active router-link-exact-active">9.获取视频缩略图 /api/v1/image/{hash} 和 /api/v1/image/id/{id}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-3" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-4" class="router-link-active router-link-exact-active">返回值</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_10-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E5%8A%A0%E8%BD%BD%E6%96%87%E4%BB%B6-api-v1-load-hash-%E5%92%8C-api-v1-load-id-id" class="router-link-active router-link-exact-active">10.控制播放器加载文件 /api/v1/load/{hash} 和 /api/v1/load/id/{id}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-4" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8" class="router-link-active router-link-exact-active">备注</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_11-%E8%8E%B7%E5%8F%96%E6%8C%87%E5%AE%9A%E8%A7%86%E9%A2%91%E7%9A%84%E5%BC%B9%E5%B9%95-api-v1-comment-hash-%E5%92%8C-api-v1-comment-id-id" class="router-link-active router-link-exact-active">11.获取指定视频的弹幕/api/v1/comment/{hash} 和 /api/v1/comment/id/{id}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-5" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-%E5%A7%8B%E7%BB%88%E4%B8%BAxml%E6%A0%BC%E5%BC%8F-1" class="router-link-active router-link-exact-active">返回值（始终为xml格式）</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-1" class="router-link-active router-link-exact-active">备注</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_12-%E4%B8%B2%E6%B5%81%E8%A7%86%E9%A2%91-api-v1-stream-hash-%E5%92%8C-api-v1-stream-id-id" class="router-link-active router-link-exact-active">12.串流视频 /api/v1/stream/{hash} 和 /api/v1/stream/id/{id}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-6" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-5" class="router-link-active router-link-exact-active">返回值</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_13-%E8%8E%B7%E5%8F%96%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1%E5%88%97%E8%A1%A8-api-v1-download-tasks" class="router-link-active router-link-exact-active">13.获取下载任务列表 /api/v1/download/tasks</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-6" class="router-link-active router-link-exact-active">返回值</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-5" class="router-link-active router-link-exact-active">返回值说明</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_14-%E8%8E%B7%E5%8F%96%E6%9F%90%E4%B8%80%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1%E7%9A%84%E4%BF%A1%E6%81%AF-api-v1-download-tasks-taskid" class="router-link-active router-link-exact-active">14.获取某一下载任务的信息 /api/v1/download/tasks/{taskId}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-7" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-7" class="router-link-active router-link-exact-active">返回值</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_15-%E6%B7%BB%E5%8A%A0%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1-api-v1-download-tasks-add-magnet-magnet" class="router-link-active router-link-exact-active">15.添加下载任务 /api/v1/download/tasks/add?magnet={magnet}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-8" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-8" class="router-link-active router-link-exact-active">返回值</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_16-%E6%8E%A7%E5%88%B6%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1-api-v1-download-tasks-taskid-method-remove-remove" class="router-link-active router-link-exact-active">16.控制下载任务 /api/v1/download/tasks/{taskId}/{method}?remove={remove}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-9" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-9" class="router-link-active router-link-exact-active">返回值</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_17-%E6%89%AB%E6%8F%8F%E5%AA%92%E4%BD%93%E5%BA%93%E6%96%87%E4%BB%B6%E5%A4%B9%E4%B8%AD%E7%9A%84%E6%96%87%E4%BB%B6%E6%94%B9%E5%8A%A8-api-v1-library-scan" class="router-link-active router-link-exact-active">17.扫描媒体库文件夹中的文件改动 /api/v1/library/scan</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-2" class="router-link-active router-link-exact-active">备注</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-10" class="router-link-active router-link-exact-active">返回值</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_18-%E6%9B%B4%E6%96%B0%E5%AA%92%E4%BD%93%E5%BA%93%E6%89%80%E6%9C%89%E8%A7%86%E9%A2%91%E7%9A%84%E5%85%B3%E8%81%94%E4%BF%A1%E6%81%AF-api-v1-library-refreshmatch" class="router-link-active router-link-exact-active">18.更新媒体库所有视频的关联信息 /api/v1/library/refreshmatch</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-3" class="router-link-active router-link-exact-active">备注</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-11" class="router-link-active router-link-exact-active">返回值</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_19-%E8%8E%B7%E5%8F%96%E8%A7%86%E9%A2%91%E6%96%87%E4%BB%B6%E5%AF%B9%E5%BA%94%E7%9A%84%E5%AD%97%E5%B9%95%E6%96%87%E4%BB%B6%E5%88%97%E8%A1%A8-api-v1-subtitle-info-id" class="router-link-active router-link-exact-active">19.获取视频文件对应的字幕文件列表 /api/v1/subtitle/info/{id}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-10" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-12" class="router-link-active router-link-exact-active">返回值</a></li></ul></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#_20-%E8%8E%B7%E5%8F%96%E5%AD%97%E5%B9%95%E6%96%87%E4%BB%B6%E5%86%85%E5%AE%B9-api-v1-subtitle-file-id-filename-filename" class="router-link-active router-link-exact-active">20.获取字幕文件内容 /api/v1/subtitle/file/{id}?fileName={fileName}</a><ul><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-11" class="router-link-active router-link-exact-active">参数</a></li><li><a aria-current="page" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-13" class="router-link-active router-link-exact-active">返回值</a></li></ul></li></ul></nav><h2 id="关于弹弹play-远程访问-功能" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%85%B3%E4%BA%8E%E5%BC%B9%E5%BC%B9play-%E8%BF%9C%E7%A8%8B%E8%AE%BF%E9%97%AE-%E5%8A%9F%E8%83%BD"><span>关于弹弹play“远程访问”功能</span></a></h2><p>弹弹play“远程访问”功能能够在弹弹play播放器内部建立起一个微型web服务，可以让第三方app或是浏览器通过接口来控制播放器的播放、查看播放器内部数据、展示当前播放进度、获取弹幕、控制下载，甚至可以直接串流播放PC上的视频文件。</p><p>远程访问API即为面向外部app的应用程序接口。</p><h2 id="原理" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8E%9F%E7%90%86"><span>原理</span></a></h2><p>弹弹play“远程访问”功能是在弹弹play（for Windows/UWP客户端）中搭建了一个小型的http web应用服务器，并将播放器内部相关的功能和数据以RESTful API接口的形式暴露在局域网中。也就是说，弹弹play播放器既是一个客户端（相对于弹弹play服务器而言），又是一个服务器端（相对于其他应用）。</p><h2 id="通过网址与端口访问" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E9%80%9A%E8%BF%87%E7%BD%91%E5%9D%80%E4%B8%8E%E7%AB%AF%E5%8F%A3%E8%AE%BF%E9%97%AE"><span>通过网址与端口访问</span></a></h2><p>默认情况下，弹弹play将会监听本机所有IP的 <code>80</code> 端口，用户可以修改此项设置。假设本机IP为 <code>192.168.31.100</code>，那么你的应用则可以通过 <code>http://192.168.31.100:80</code> 连接到弹弹play“远程访问”服务。</p><p>如果当前机器有公网IP并绑定了域名，也可以通过域名进行访问，例如 <code>http://www.xxxxx.com:80</code></p><h2 id="url" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#url"><span>URL</span></a></h2><p>远程访问API为了方便使用与开发，所有接口都以 <code>/api/v1</code> 开头，而且都可以直接通过HTTP <code>GET</code> 方法来访问到。 除了某些获取数据等类型的请求以外，客户端在发送请求后不需要判断返回码以及请求是否成功完成。 下面列表中，URL包含大括号的表示此处为参数，例如 <code>{hash}</code> 表示在访问这个API时需要将 <code>{hash}</code> 替换为真正的参数值。</p><p>所有API都支持CORS。</p><h2 id="api密钥验证" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#api%E5%AF%86%E9%92%A5%E9%AA%8C%E8%AF%81"><span>API密钥验证</span></a></h2><p>从9.0版开始，远程访问支持使用密钥对API进行加密。如果用户打开了这个设置，您的应用在访问时需要提供对应的密钥才可以正常返回数据，否则会返回http 401错误。通过验证的方式有两个，使用下列方法其中的一种即可： （假设用户设置了 abcdefgh 作为API密钥）</p><ul><li>在http header添加Authorization头。例如: <ul><li><strong>Authorization: Bearer</strong> abcdefgh</li></ul></li><li>在url参数列表中增加token参数。例如： <ul><li>/api/v1/control/volume/99?<strong>token=abcde</strong></li><li>/api/v1/download/tasks/1122-3344-5566/?remove=1&amp;<strong>token=abcdefgh</strong></li></ul></li></ul><p>可以通过 <code>/api/v1/welcome</code> 接口返回的 <code>tokenRequired</code> 参数来判断当前用户是否开启了密钥验证。</p><h1 id="api列表" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#api%E5%88%97%E8%A1%A8"><span>API列表</span></a></h1><h2 id="_1-获取欢迎信息-api-v1-welcome-和-welcome" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_1-%E8%8E%B7%E5%8F%96%E6%AC%A2%E8%BF%8E%E4%BF%A1%E6%81%AF-api-v1-welcome-%E5%92%8C-welcome"><span>1.获取欢迎信息： /api/v1/welcome 和 /welcome</span></a></h2><h3 id="参数与验证" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0%E4%B8%8E%E9%AA%8C%E8%AF%81"><span>参数与验证</span></a></h3><p>无需API密钥即可调用。</p><h3 id="返回值" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC"><span>返回值</span></a></h3><div class="language-json line-numbers-mode" data-highlighter="prismjs" data-ext="json" data-title="json"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token punctuation">{</span></span>
+<span class="line">  <span class="token property">"message"</span><span class="token operator">:</span> <span class="token string">"Hello dandanplay user!"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"version"</span><span class="token operator">:</span> <span class="token string">"9.4.7.517"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"time"</span><span class="token operator">:</span> <span class="token string">"05/19/2019 11:45:45"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"tokenRequired"</span><span class="token operator">:</span> <span class="token boolean">true</span></span>
+<span class="line"><span class="token punctuation">}</span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h3 id="返回值说明" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E"><span>返回值说明</span></a></h3><ul><li>version：弹弹play当前的版本号，可以通过此值判断某些api是否存在。</li><li>time：当前运行弹弹play播放器的本机时间。</li><li>tokenRequired：表示当前是否开启了API验证，如果此项为 <code>true</code>，请求时需要附加密钥，详情请见上方“API验证”一节。</li></ul><h2 id="_2-控制播放器调整音量-api-v1-control-volume-volume" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_2-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E8%B0%83%E6%95%B4%E9%9F%B3%E9%87%8F-api-v1-control-volume-volume"><span>2.控制播放器调整音量 /api/v1/control/volume/{volume}</span></a></h2><h3 id="参数" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0"><span>参数</span></a></h3><ul><li>volume：整数，范围0-100</li></ul><h2 id="_3-控制播放器跳转进度-api-v1-control-seek-time" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_3-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E8%B7%B3%E8%BD%AC%E8%BF%9B%E5%BA%A6-api-v1-control-seek-time"><span>3.控制播放器跳转进度 /api/v1/control/seek/{time}</span></a></h2><h3 id="参数-1" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-1"><span>参数</span></a></h3><ul><li>time：整数，范围0-max。单位为毫秒，例如传入 12345代表将视频跳转到第12.345秒处</li></ul><h2 id="_4-控制播放器当前的播放状态-api-v1-control-method" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_4-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E5%BD%93%E5%89%8D%E7%9A%84%E6%92%AD%E6%94%BE%E7%8A%B6%E6%80%81-api-v1-control-method"><span>4.控制播放器当前的播放状态 /api/v1/control/{method}</span></a></h2><h3 id="参数-2" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-2"><span>参数</span></a></h3><ul><li>method：播放器要执行的动作 <ul><li>play：播放</li><li>stop：停止</li><li>pause：暂停</li><li>next：切换至下一个视频</li><li>previous：切换至上一个视频</li></ul></li></ul><h2 id="_5-获取当前正在播放的视频信息-api-v1-current-video" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_5-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E6%AD%A3%E5%9C%A8%E6%92%AD%E6%94%BE%E7%9A%84%E8%A7%86%E9%A2%91%E4%BF%A1%E6%81%AF-api-v1-current-video"><span>5.获取当前正在播放的视频信息 /api/v1/current/video</span></a></h2><h3 id="返回值-1" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-1"><span>返回值</span></a></h3><div class="language-json line-numbers-mode" data-highlighter="prismjs" data-ext="json" data-title="json"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token punctuation">{</span></span>
+<span class="line">  <span class="token property">"EpisodeId"</span><span class="token operator">:</span> <span class="token string">"136290001"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"AnimeTitle"</span><span class="token operator">:</span> <span class="token string">"不受欢迎者之家"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"EpisodeTitle"</span><span class="token operator">:</span> <span class="token string">"第1话 ロマンティックあげるよ"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Duration"</span><span class="token operator">:</span> <span class="token number">720052</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Position"</span><span class="token operator">:</span> <span class="token number">0.455077559</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Seekable"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Volume"</span><span class="token operator">:</span> <span class="token number">100</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Playing"</span><span class="token operator">:</span> <span class="token boolean">true</span></span>
+<span class="line"><span class="token punctuation">}</span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h3 id="返回值说明-1" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-1"><span>返回值说明</span></a></h3><ul><li>EpisodeId：弹幕库编号，此值为字符串格式，并且可能为<code>null</code></li><li>AnimeTitle：主标题</li><li>EpisodeTitle：子标题</li><li>Duration：视频长度（毫秒），此数值可以用来配合跳转进度条api使用</li><li>Position：当前进度，范围0.0-1.0</li><li>Seekable：当前视频是否支持跳转进度，部分流媒体视频和直播视频不支持跳转</li><li>Volume：当前播放器声音大小，范围0-100</li></ul><h2 id="_6-获取当前视频的弹幕列表-api-v1-current-comment" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_6-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E8%A7%86%E9%A2%91%E7%9A%84%E5%BC%B9%E5%B9%95%E5%88%97%E8%A1%A8-api-v1-current-comment"><span>6.获取当前视频的弹幕列表 /api/v1/current/comment</span></a></h2><h3 id="返回值-始终为xml格式" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-%E5%A7%8B%E7%BB%88%E4%B8%BAxml%E6%A0%BC%E5%BC%8F"><span>返回值（始终为xml格式）</span></a></h3><div class="language-xml line-numbers-mode" data-highlighter="prismjs" data-ext="xml" data-title="xml"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token prolog">&lt;?xml version="1.0"?&gt;</span></span>
+<span class="line"><span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>ArrayOfVisualDmItem</span> <span class="token attr-name"><span class="token namespace">xmlns:</span>xsi</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>http://www.w3.org/2001/XMLSchema-instance<span class="token punctuation">"</span></span> <span class="token attr-name"><span class="token namespace">xmlns:</span>xsd</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>http://www.w3.org/2001/XMLSchema<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>VisualDmItem</span> <span class="token attr-name">ID</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>6216430746861568<span class="token punctuation">"</span></span> <span class="token attr-name">UserID</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>[BiliBili]a74890bc<span class="token punctuation">"</span></span> <span class="token attr-name">Time</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>36.126<span class="token punctuation">"</span></span> <span class="token attr-name">Mode</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>Normal<span class="token punctuation">"</span></span> <span class="token attr-name">Color</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>16777215<span class="token punctuation">"</span></span> <span class="token attr-name">Size</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>25<span class="token punctuation">"</span></span> <span class="token attr-name">Timestamp</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>1538999075<span class="token punctuation">"</span></span> <span class="token attr-name">Pool</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>没什么 人气<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>VisualDmItem</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>VisualDmItem</span> <span class="token attr-name">ID</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>6216455581335554<span class="token punctuation">"</span></span> <span class="token attr-name">UserID</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>[BiliBili]ac3e8e82<span class="token punctuation">"</span></span> <span class="token attr-name">Time</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>339.338<span class="token punctuation">"</span></span> <span class="token attr-name">Mode</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>Normal<span class="token punctuation">"</span></span> <span class="token attr-name">Color</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>16777215<span class="token punctuation">"</span></span> <span class="token attr-name">Size</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>25<span class="token punctuation">"</span></span> <span class="token attr-name">Timestamp</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>1538999123<span class="token punctuation">"</span></span> <span class="token attr-name">Pool</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>这台词太恶意了<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>VisualDmItem</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>VisualDmItem</span> <span class="token attr-name">ID</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>6216487250952192<span class="token punctuation">"</span></span> <span class="token attr-name">UserID</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>[BiliBili]6c718d25<span class="token punctuation">"</span></span> <span class="token attr-name">Time</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>630.841<span class="token punctuation">"</span></span> <span class="token attr-name">Mode</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>Normal<span class="token punctuation">"</span></span> <span class="token attr-name">Color</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>16777215<span class="token punctuation">"</span></span> <span class="token attr-name">Size</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>25<span class="token punctuation">"</span></span> <span class="token attr-name">Timestamp</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>1538999183<span class="token punctuation">"</span></span> <span class="token attr-name">Pool</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>安心的音效<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>VisualDmItem</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line"><span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>ArrayOfVisualDmItem</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h3 id="返回值说明-2" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-2"><span>返回值说明</span></a></h3><ul><li>ID：弹幕编号。在每个xml文件中保证唯一</li><li>UserID：用户名称</li><li>Time：弹幕出现时间，单位为秒</li><li>Mode：弹幕模式 <ul><li>Normal：滚动弹幕</li><li>Top：顶部弹幕</li><li>Bottom：底部弹幕</li></ul></li><li>Size：弹幕字号。此数值在弹弹play中无实际作用</li><li>Timestamp：弹幕发送时间。为Unix时间戳</li><li>Pool：弹幕池。暂无实际作用。</li></ul><h2 id="_7-获取当前播放列表内容-api-v1-playlist" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_7-%E8%8E%B7%E5%8F%96%E5%BD%93%E5%89%8D%E6%92%AD%E6%94%BE%E5%88%97%E8%A1%A8%E5%86%85%E5%AE%B9-api-v1-playlist"><span>7.获取当前播放列表内容 /api/v1/playlist</span></a></h2><h3 id="返回值-2" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-2"><span>返回值</span></a></h3><div class="language-json line-numbers-mode" data-highlighter="prismjs" data-ext="json" data-title="json"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token punctuation">[</span></span>
+<span class="line">  <span class="token string">"Y:\\不受欢迎者之家\\[HYSUB]Himote House[01][GB_MP4][1280X720].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token string">"Y:\\不受欢迎者之家\\[HYSUB]Himote House[02][GB_MP4][1280X720]V2.mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token string">"Y:\\不受欢迎者之家\\[HYSUB]Himote House[03][GB_MP4][1280X720].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token string">"Y:\\不受欢迎者之家\\[HYSUB]Himote House[04][GB_MP4][1280X720].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token string">"Y:\\不受欢迎者之家\\[HYSUB]Himote House[05][GB_MP4][1280X720].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token string">"Y:\\不受欢迎者之家\\[HYSUB]Himote House[06][GB_MP4][1280X720].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token string">"Y:\\不受欢迎者之家\\[HYSUB]Himote House[07][GB_MP4][1280X720].mp4"</span></span>
+<span class="line"><span class="token punctuation">]</span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h3 id="返回值说明-3" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-3"><span>返回值说明</span></a></h3><p>字符串列表，内容为视频在本机硬盘上的完整路径。</p><h2 id="_8-获取媒体库中的所有内容-api-v1-library" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_8-%E8%8E%B7%E5%8F%96%E5%AA%92%E4%BD%93%E5%BA%93%E4%B8%AD%E7%9A%84%E6%89%80%E6%9C%89%E5%86%85%E5%AE%B9-api-v1-library"><span>8.获取媒体库中的所有内容 /api/v1/library</span></a></h2><h3 id="返回值-3" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-3"><span>返回值</span></a></h3><div class="language-json line-numbers-mode" data-highlighter="prismjs" data-ext="json" data-title="json"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token punctuation">[</span></span>
+<span class="line">  <span class="token punctuation">{</span></span>
+<span class="line">    <span class="token property">"AnimeId"</span><span class="token operator">:</span> <span class="token number">14198</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EpisodeId"</span><span class="token operator">:</span> <span class="token number">141980003</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"AnimeTitle"</span><span class="token operator">:</span> <span class="token string">"佐贺偶像是传奇"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EpisodeTitle"</span><span class="token operator">:</span> <span class="token string">"第3话 DEAD OR LIVE SAGA"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Id"</span><span class="token operator">:</span> <span class="token string">"c004e475-d9bb-41e1-976b-7fce00997f3a"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Hash"</span><span class="token operator">:</span> <span class="token string">"03778309A0E8A09C2F43603A490F2E98"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Name"</span><span class="token operator">:</span> <span class="token string">"[Zombieland Saga][03][BIG5][1080P].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Path"</span><span class="token operator">:</span> <span class="token string">"Y:\\[Zombieland Saga][03][BIG5][1080P].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Size"</span><span class="token operator">:</span> <span class="token number">518754774</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Rate"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"IsStandalone"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Created"</span><span class="token operator">:</span> <span class="token string">"2018-10-21T23:14:59"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastMatch"</span><span class="token operator">:</span> <span class="token string">"0001-01-01T00:00:00"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastPlay"</span><span class="token operator">:</span> <span class="token string">"2019-04-25T18:00:22"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastThumbnail"</span><span class="token operator">:</span> <span class="token string">"2019-03-05T22:03:20"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Duration"</span><span class="token operator">:</span> <span class="token number">1420</span></span>
+<span class="line">  <span class="token punctuation">}</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token punctuation">{</span></span>
+<span class="line">    <span class="token property">"AnimeId"</span><span class="token operator">:</span> <span class="token number">11167</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EpisodeId"</span><span class="token operator">:</span> <span class="token number">111670021</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"AnimeTitle"</span><span class="token operator">:</span> <span class="token string">"命运石之门 0"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EpisodeTitle"</span><span class="token operator">:</span> <span class="token string">"第21话 結像のリナシメント Return of Phoenix"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Id"</span><span class="token operator">:</span> <span class="token string">"686b4d07-d8de-4f2e-b716-3cf0843cc903"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Hash"</span><span class="token operator">:</span> <span class="token string">"334763177A0B9A5647B263AA74E0A013"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Name"</span><span class="token operator">:</span> <span class="token string">"[Nekomoe kissaten][Steins;Gate 0][21][GB][720P].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Path"</span><span class="token operator">:</span> <span class="token string">"Y:\\[Nekomoe kissaten][Steins;Gate 0][21][GB][720P].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Size"</span><span class="token operator">:</span> <span class="token number">128023969</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Rate"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"IsStandalone"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Created"</span><span class="token operator">:</span> <span class="token string">"2018-09-23T23:30:38"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastMatch"</span><span class="token operator">:</span> <span class="token string">"0001-01-01T00:00:00"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastPlay"</span><span class="token operator">:</span> <span class="token null keyword">null</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastThumbnail"</span><span class="token operator">:</span> <span class="token string">"2019-03-05T22:03:22"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Duration"</span><span class="token operator">:</span> <span class="token number">1420</span></span>
+<span class="line">  <span class="token punctuation">}</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token punctuation">{</span></span>
+<span class="line">    <span class="token property">"AnimeId"</span><span class="token operator">:</span> <span class="token number">13031</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EpisodeId"</span><span class="token operator">:</span> <span class="token number">130310010</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"AnimeTitle"</span><span class="token operator">:</span> <span class="token string">"Princess Principal"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EpisodeTitle"</span><span class="token operator">:</span> <span class="token string">"第10话 Comfort Comrade"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Id"</span><span class="token operator">:</span> <span class="token string">"07c0d08a-6191-49aa-866c-5ea91cf91f23"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Hash"</span><span class="token operator">:</span> <span class="token string">"432A9EC48627FFA2F092B418840A5D98"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Name"</span><span class="token operator">:</span> <span class="token string">"[HYSUB]Princess Principal[10][GB_MP4][1280X720].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Path"</span><span class="token operator">:</span> <span class="token string">"Y:\\Princess Principal\\[HYSUB]Princess Principal[10][GB_MP4][1280X720].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Size"</span><span class="token operator">:</span> <span class="token number">158818535</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Rate"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"IsStandalone"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Created"</span><span class="token operator">:</span> <span class="token string">"2017-10-08T17:09:31"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastMatch"</span><span class="token operator">:</span> <span class="token string">"0001-01-01T00:00:00"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastPlay"</span><span class="token operator">:</span> <span class="token null keyword">null</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LastThumbnail"</span><span class="token operator">:</span> <span class="token string">"2019-03-05T22:03:23"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Duration"</span><span class="token operator">:</span> <span class="token number">1470</span></span>
+<span class="line">  <span class="token punctuation">}</span></span>
+<span class="line"><span class="token punctuation">]</span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h3 id="返回值说明-4" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-4"><span>返回值说明</span></a></h3><p>一个视频信息的列表。</p><ul><li>Id：此视频文件的唯一编号，GUID格式</li><li>AnimeId：动画编号，属于相同动画的视频总有同样的动画编号</li><li>EpisodeId：弹幕库编号</li><li>AnimeTitle：主标题</li><li>EpisodeTitle：子标题</li><li>Hash：此视频的特征码（重要）</li><li>Name：此视频的文件名（去除路径信息）</li><li>Path：此视频在硬盘上的完整路径</li><li>Size：文件体积，单位为Byte</li><li>Rate：用户对此视频内容的打分，目前全部为0</li><li>Created：弹弹play媒体库收录此视频的时间</li><li>LastPlay：上次使用弹弹play播放此视频的时间</li><li>Duration：视频时长，单位为秒</li><li>LastThumbnail：上次生成缩略图的时间，可能为<code>null</code></li><li>IsStandalone：是否为独立文件，即不包含在媒体库监视文件夹内的文件</li></ul><h2 id="_9-获取视频缩略图-api-v1-image-hash-和-api-v1-image-id-id" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_9-%E8%8E%B7%E5%8F%96%E8%A7%86%E9%A2%91%E7%BC%A9%E7%95%A5%E5%9B%BE-api-v1-image-hash-%E5%92%8C-api-v1-image-id-id"><span>9.获取视频缩略图 /api/v1/image/{hash} 和 /api/v1/image/id/{id}</span></a></h2><h3 id="参数-3" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-3"><span>参数</span></a></h3><ul><li>hash：视频特征码</li><li>id：视频编号</li></ul><h3 id="返回值-4" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-4"><span>返回值</span></a></h3><p>jpeg格式的图片文件</p><h2 id="_10-控制播放器加载文件-api-v1-load-hash-和-api-v1-load-id-id" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_10-%E6%8E%A7%E5%88%B6%E6%92%AD%E6%94%BE%E5%99%A8%E5%8A%A0%E8%BD%BD%E6%96%87%E4%BB%B6-api-v1-load-hash-%E5%92%8C-api-v1-load-id-id"><span>10.控制播放器加载文件 /api/v1/load/{hash} 和 /api/v1/load/id/{id}</span></a></h2><h3 id="参数-4" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-4"><span>参数</span></a></h3><ul><li>hash：视频特征码</li><li>id：视频编号</li></ul><h3 id="备注" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8"><span>备注</span></a></h3><p>当使用 <code>hash</code> 参数加载文件时，如果有多个相同hash的视频（例如一个视频保存在了多个地方），将随机加载其中的一个。</p><h2 id="_11-获取指定视频的弹幕-api-v1-comment-hash-和-api-v1-comment-id-id" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_11-%E8%8E%B7%E5%8F%96%E6%8C%87%E5%AE%9A%E8%A7%86%E9%A2%91%E7%9A%84%E5%BC%B9%E5%B9%95-api-v1-comment-hash-%E5%92%8C-api-v1-comment-id-id"><span>11.获取指定视频的弹幕/api/v1/comment/{hash} 和 /api/v1/comment/id/{id}</span></a></h2><h3 id="参数-5" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-5"><span>参数</span></a></h3><ul><li>hash：视频特征码</li><li>id：视频编号</li></ul><h3 id="返回值-始终为xml格式-1" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-%E5%A7%8B%E7%BB%88%E4%B8%BAxml%E6%A0%BC%E5%BC%8F-1"><span>返回值（始终为xml格式）</span></a></h3><div class="language-xml line-numbers-mode" data-highlighter="prismjs" data-ext="xml" data-title="xml"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token prolog">&lt;?xml version="1.0"?&gt;</span></span>
+<span class="line"><span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>i</span> <span class="token attr-name"><span class="token namespace">xmlns:</span>xsi</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>http://www.w3.org/2001/XMLSchema-instance<span class="token punctuation">"</span></span> <span class="token attr-name"><span class="token namespace">xmlns:</span>xsd</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>http://www.w3.org/2001/XMLSchema<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>chatserver</span><span class="token punctuation">&gt;</span></span>chat.bilibili.com<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>chatserver</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>chatid</span><span class="token punctuation">&gt;</span></span>10000<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>chatid</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>mission</span><span class="token punctuation">&gt;</span></span>0<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>mission</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>maxlimit</span><span class="token punctuation">&gt;</span></span>8000<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>maxlimit</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>source</span><span class="token punctuation">&gt;</span></span>e-r<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>source</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>ds</span><span class="token punctuation">&gt;</span></span>931869000<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>ds</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>de</span><span class="token punctuation">&gt;</span></span>937654881<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>de</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>max_count</span><span class="token punctuation">&gt;</span></span>8000<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>max_count</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>37.26,1,25,16777215,1500358682,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>艾尔之光<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>1419.41,1,25,16777215,1500459905,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>自古红蓝。。。<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>825.54,1,25,16777215,1500479598,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>多萝西最早是绿野仙踪的女主角好不好<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>451.43,1,25,16777215,1500654750,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>高中JK拯救世界？<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>787646,5,25,16777215,1500746390,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>有人吗<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>1370.48,1,25,16777215,1500823550,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>这个ED想到狼辛<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>1043153,1,25,16777215,1500998696,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>cm先看看资料<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>1402.12,1,25,16777215,1501421432,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>观感不错啊<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>138.36,1,25,16777215,1501592568,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>药效过不了三集<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>1220.78,1,25,16777215,1501595590,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>没看懂，不打算让他妹逃亡之后为啥又改主意了<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line">  <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>d</span> <span class="token attr-name">p</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>333.23,1,25,16777215,1502119367,0,0,0<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>常识是子弹其实打不穿轮胎<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>d</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line"><span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>i</span><span class="token punctuation">&gt;</span></span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h3 id="备注-1" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-1"><span>备注</span></a></h3><p>返回格式与BiliBili的弹幕格式相同，不再详述。弹弹play会联网获取最新的弹幕，所以访问此api时可能很久才会返回弹幕。</p><h2 id="_12-串流视频-api-v1-stream-hash-和-api-v1-stream-id-id" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_12-%E4%B8%B2%E6%B5%81%E8%A7%86%E9%A2%91-api-v1-stream-hash-%E5%92%8C-api-v1-stream-id-id"><span>12.串流视频 /api/v1/stream/{hash} 和 /api/v1/stream/id/{id}</span></a></h2><h3 id="参数-6" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-6"><span>参数</span></a></h3><ul><li>hash：视频特征码</li><li>id：视频编号</li></ul><h3 id="返回值-5" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-5"><span>返回值</span></a></h3><p>视频文件流，支持 range，可以直接在浏览器中播放。</p><h2 id="_13-获取下载任务列表-api-v1-download-tasks" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_13-%E8%8E%B7%E5%8F%96%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1%E5%88%97%E8%A1%A8-api-v1-download-tasks"><span>13.获取下载任务列表 /api/v1/download/tasks</span></a></h2><h3 id="返回值-6" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-6"><span>返回值</span></a></h3><p>当前所有下载任务的列表。</p><div class="language-json line-numbers-mode" data-highlighter="prismjs" data-ext="json" data-title="json"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token punctuation">[</span></span>
+<span class="line">  <span class="token punctuation">{</span></span>
+<span class="line">    <span class="token property">"Id"</span><span class="token operator">:</span> <span class="token string">"9CF5D1F0A923B423848327F6AC533C72EFF37192"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Progress"</span><span class="token operator">:</span> <span class="token number">1</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"IsDownloadFinished"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Title"</span><span class="token operator">:</span> <span class="token string">"[DMG&amp;MH][Shoujo Kageki Revue Starlight][12 END][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"State"</span><span class="token operator">:</span> <span class="token number">6</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"StateText"</span><span class="token operator">:</span> <span class="token string">"Stopped"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"TotalBytes"</span><span class="token operator">:</span> <span class="token number">124095425</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"DownloadedBytes"</span><span class="token operator">:</span> <span class="token number">124095425</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"DownloadSpeed"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"UploadSpeed"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"RemainTime"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"SavePath"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Ignore"</span><span class="token operator">:</span> <span class="token string">""</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"CreatedTime"</span><span class="token operator">:</span> <span class="token string">"2018-10-08T23:09:35.724706+08:00"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"FirstFinishTime"</span><span class="token operator">:</span> <span class="token null keyword">null</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"UpdatedTime"</span><span class="token operator">:</span> <span class="token null keyword">null</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EnableAcceleration"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EnteredAcceleration"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"IsDeleted"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LazyLoad"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Files"</span><span class="token operator">:</span> <span class="token punctuation">[</span></span>
+<span class="line">      <span class="token punctuation">{</span></span>
+<span class="line">        <span class="token property">"FileIndex"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token property">"FileName"</span><span class="token operator">:</span> <span class="token string">"[DMG&amp;MH][Shoujo Kageki Revue Starlight][12 END][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token property">"FilePath"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧\\[DMG&amp;MH][Shoujo Kageki Revue Starlight][12 END][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token property">"Progress"</span><span class="token operator">:</span> <span class="token number">1</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token property">"FileSize"</span><span class="token operator">:</span> <span class="token number">124095425</span></span>
+<span class="line">      <span class="token punctuation">}</span></span>
+<span class="line">    <span class="token punctuation">]</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"ContainingFolder"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧\\[DMG&amp;MH][Shoujo Kageki Revue Starlight][12 END][720P][GB].mp4"</span></span>
+<span class="line">  <span class="token punctuation">}</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token punctuation">{</span></span>
+<span class="line">    <span class="token property">"Id"</span><span class="token operator">:</span> <span class="token string">"A6A3CE0BB1F34752D349ABB5AEFFA2693A631178"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Progress"</span><span class="token operator">:</span> <span class="token number">1</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"IsDownloadFinished"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Title"</span><span class="token operator">:</span> <span class="token string">"[DMG&amp;MH][Shoujo Kageki Revue Starlight][01][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"State"</span><span class="token operator">:</span> <span class="token number">6</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"StateText"</span><span class="token operator">:</span> <span class="token string">"Stopped"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"TotalBytes"</span><span class="token operator">:</span> <span class="token number">171046271</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"DownloadedBytes"</span><span class="token operator">:</span> <span class="token number">171046271</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"DownloadSpeed"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"UploadSpeed"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"RemainTime"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"SavePath"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Ignore"</span><span class="token operator">:</span> <span class="token string">""</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"CreatedTime"</span><span class="token operator">:</span> <span class="token string">"2018-09-07T12:06:23.7257195+08:00"</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"FirstFinishTime"</span><span class="token operator">:</span> <span class="token null keyword">null</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"UpdatedTime"</span><span class="token operator">:</span> <span class="token null keyword">null</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EnableAcceleration"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"EnteredAcceleration"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"IsDeleted"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"LazyLoad"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"Files"</span><span class="token operator">:</span> <span class="token punctuation">[</span></span>
+<span class="line">      <span class="token punctuation">{</span></span>
+<span class="line">        <span class="token property">"FileIndex"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token property">"FileName"</span><span class="token operator">:</span> <span class="token string">"[DMG&amp;MH][Shoujo Kageki Revue Starlight][01][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token property">"FilePath"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧\\[DMG&amp;MH][Shoujo Kageki Revue Starlight][01][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token property">"Progress"</span><span class="token operator">:</span> <span class="token number">1</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token property">"FileSize"</span><span class="token operator">:</span> <span class="token number">171046271</span></span>
+<span class="line">      <span class="token punctuation">}</span></span>
+<span class="line">    <span class="token punctuation">]</span><span class="token punctuation">,</span></span>
+<span class="line">    <span class="token property">"ContainingFolder"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧\\[DMG&amp;MH][Shoujo Kageki Revue Starlight][01][720P][GB].mp4"</span></span>
+<span class="line">  <span class="token punctuation">}</span></span>
+<span class="line"><span class="token punctuation">]</span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h3 id="返回值说明-5" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC%E8%AF%B4%E6%98%8E-5"><span>返回值说明</span></a></h3><ul><li>Id：下载任务ID，即BT Hash</li><li>Progress：下载进度，范围是0.0-1.0。可以通过此数字判断任务状态，小于1.0为未完成，大于等于1.0为已完成</li><li>Title：下载任务标题</li><li>State：（已弃用，请使用StateText）下载状态 <ul><li>0：已停止</li><li>1：已暂停（或正等待开始）</li><li>2：正在下载</li><li>3：正在做种</li><li>4：正在计算Hash</li><li>5：正在停止</li><li>6：出错</li><li>7：正在获取元数据</li></ul></li><li>StateText：下载状态 <ul><li>WaitingForStart</li><li>Downloading</li><li>Paused</li><li>Seeding</li><li>Stopping</li><li>Stopped</li><li>Hashing</li><li>Metadata</li><li>Error</li></ul></li><li>TotalBytes：下载任务总共字节数</li><li>DownloadedBytes：已下载的字节数</li><li>DownloadSpeed：下载速度，单位是 Byte/s</li><li>UploadSpeed：上传速度，单位是 Byte/s</li><li>RemainTime：剩余时间，单位是秒。-1表示无法估算或任务已暂停</li><li>SavePath：下载保存目录</li><li>Ignore：不下载（被忽略）文件的列表，使用相对路径，不同文件之间用“|”符号分割，例如 1.txt|example\2.txt|3.txt</li><li>CreatedTime：任务创建时间，使用PC系统的当前时区</li><li>FirstFinishTime：首次下载完成的时间，可能为<code>null</code></li><li>UpdatedTime：任务信息更新时间，可能为<code>null</code></li><li>EnableAcceleration：用户允许此任务使用“会员加速下载”</li><li>EnteredAcceleration：此任务是否已进入“会员加速下载”状态</li><li>IsDeleted：已经删除到“回收站”</li><li>LazyLoad：当用户启动下载时再初始化相关代码并刷新任务信息</li><li>Files：任务中包含的文件 <ul><li>FileIndex：文件索引，从<code>0</code>开始</li><li>FileName：文件名称</li><li>FilePath：文件完整路径</li><li>Progress：文件下载进度，范围是 0.0-1.0</li><li>FileSize：文件体积，单位是 Byte</li></ul></li><li>ContainingFolder：任务所在文件夹。如果当前任务为单文件的BT任务，则值为此文件的路径。如果为多文件的BT任务，则值为此任务的根目录。</li></ul><h2 id="_14-获取某一下载任务的信息-api-v1-download-tasks-taskid" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_14-%E8%8E%B7%E5%8F%96%E6%9F%90%E4%B8%80%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1%E7%9A%84%E4%BF%A1%E6%81%AF-api-v1-download-tasks-taskid"><span>14.获取某一下载任务的信息 /api/v1/download/tasks/{taskId}</span></a></h2><h3 id="参数-7" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-7"><span>参数</span></a></h3><ul><li>taskId：下载任务的ID，即bt hash，为32位长度的大写字母字符串</li></ul><h3 id="返回值-7" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-7"><span>返回值</span></a></h3><p>各个属性同上方"获取下载任务列表"API的返回值，只返回一个json对象</p><div class="language-json line-numbers-mode" data-highlighter="prismjs" data-ext="json" data-title="json"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token punctuation">{</span></span>
+<span class="line">  <span class="token property">"Id"</span><span class="token operator">:</span> <span class="token string">"C7C1F5BEEC78122CCA8CBD0AEE8F8300C3192D3C"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Progress"</span><span class="token operator">:</span> <span class="token number">1</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"IsDownloadFinished"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Title"</span><span class="token operator">:</span> <span class="token string">"[DMG&amp;MH][Shoujo Kageki Revue Starlight][09][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"State"</span><span class="token operator">:</span> <span class="token number">6</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"StateText"</span><span class="token operator">:</span> <span class="token string">"Stopped"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"TotalBytes"</span><span class="token operator">:</span> <span class="token number">128029807</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"DownloadedBytes"</span><span class="token operator">:</span> <span class="token number">128029807</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"DownloadSpeed"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"UploadSpeed"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"RemainTime"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"SavePath"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Ignore"</span><span class="token operator">:</span> <span class="token string">""</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"CreatedTime"</span><span class="token operator">:</span> <span class="token string">"2018-09-23T18:04:50.4946945+08:00"</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"FirstFinishTime"</span><span class="token operator">:</span> <span class="token null keyword">null</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"UpdatedTime"</span><span class="token operator">:</span> <span class="token null keyword">null</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"EnableAcceleration"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"EnteredAcceleration"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"IsDeleted"</span><span class="token operator">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"LazyLoad"</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"Files"</span><span class="token operator">:</span> <span class="token punctuation">[</span></span>
+<span class="line">    <span class="token punctuation">{</span></span>
+<span class="line">      <span class="token property">"FileIndex"</span><span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span></span>
+<span class="line">      <span class="token property">"FileName"</span><span class="token operator">:</span> <span class="token string">"[DMG&amp;MH][Shoujo Kageki Revue Starlight][09][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">      <span class="token property">"FilePath"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧\\[DMG&amp;MH][Shoujo Kageki Revue Starlight][09][720P][GB].mp4"</span><span class="token punctuation">,</span></span>
+<span class="line">      <span class="token property">"Progress"</span><span class="token operator">:</span> <span class="token number">1</span><span class="token punctuation">,</span></span>
+<span class="line">      <span class="token property">"FileSize"</span><span class="token operator">:</span> <span class="token number">128029807</span></span>
+<span class="line">    <span class="token punctuation">}</span></span>
+<span class="line">  <span class="token punctuation">]</span><span class="token punctuation">,</span></span>
+<span class="line">  <span class="token property">"ContainingFolder"</span><span class="token operator">:</span> <span class="token string">"Y:\\少女歌剧\\[DMG&amp;MH][Shoujo Kageki Revue Starlight][09][720P][GB].mp4"</span></span>
+<span class="line"><span class="token punctuation">}</span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h2 id="_15-添加下载任务-api-v1-download-tasks-add-magnet-magnet" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_15-%E6%B7%BB%E5%8A%A0%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1-api-v1-download-tasks-add-magnet-magnet"><span>15.添加下载任务 /api/v1/download/tasks/add?magnet={magnet}</span></a></h2><h3 id="参数-8" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-8"><span>参数</span></a></h3><ul><li>magnet：需要添加下载的磁力链接，此参数需要先进行Url编码然后放到参数中。磁力链接必须含有 <code>urn:btih=</code> 段</li></ul><h3 id="返回值-8" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-8"><span>返回值</span></a></h3><ul><li>如果任务创建成功，则返回此新建任务的信息，格式同"获取某一下载任务的信息"API相同。</li><li>如果任务ID已存在，则会在更新当前下载任务之后返回此任务的信息。</li><li>如果创建任务失败，将会返回<code>null</code>。</li></ul><h2 id="_16-控制下载任务-api-v1-download-tasks-taskid-method-remove-remove" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_16-%E6%8E%A7%E5%88%B6%E4%B8%8B%E8%BD%BD%E4%BB%BB%E5%8A%A1-api-v1-download-tasks-taskid-method-remove-remove"><span>16.控制下载任务 /api/v1/download/tasks/{taskId}/{method}?remove={remove}</span></a></h2><h3 id="参数-9" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-9"><span>参数</span></a></h3><ul><li>taskId：下载任务ID</li><li>method：需要进行的操作 <ul><li>start：开始</li><li>pause：暂停</li><li>delete：删除任务</li></ul></li><li>remove：删除任务时是否删除对应的视频文件 <ul><li>1：删除文件</li><li>0：不删除并保留文件。仅在<code>method</code>=<code>delete</code>时remove参数才会有效。</li></ul></li></ul><h3 id="返回值-9" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-9"><span>返回值</span></a></h3><p>返回此任务的信息，返回格式同 "获取某一下载任务的信息" API相同。</p><h2 id="_17-扫描媒体库文件夹中的文件改动-api-v1-library-scan" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_17-%E6%89%AB%E6%8F%8F%E5%AA%92%E4%BD%93%E5%BA%93%E6%96%87%E4%BB%B6%E5%A4%B9%E4%B8%AD%E7%9A%84%E6%96%87%E4%BB%B6%E6%94%B9%E5%8A%A8-api-v1-library-scan"><span>17.扫描媒体库文件夹中的文件改动 /api/v1/library/scan</span></a></h2><h3 id="备注-2" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-2"><span>备注</span></a></h3><p>将执行以下操作：</p><ul><li>扫描媒体库中所有文件的文件改动</li><li>为新视频生成缩略图</li><li>为新视频关联弹幕库</li></ul><h3 id="返回值-10" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-10"><span>返回值</span></a></h3><p>无返回值。请求后将马上返回，刷新操作将在PC端后台进行。</p><h2 id="_18-更新媒体库所有视频的关联信息-api-v1-library-refreshmatch" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_18-%E6%9B%B4%E6%96%B0%E5%AA%92%E4%BD%93%E5%BA%93%E6%89%80%E6%9C%89%E8%A7%86%E9%A2%91%E7%9A%84%E5%85%B3%E8%81%94%E4%BF%A1%E6%81%AF-api-v1-library-refreshmatch"><span>18.更新媒体库所有视频的关联信息 /api/v1/library/refreshmatch</span></a></h2><h3 id="备注-3" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%A4%87%E6%B3%A8-3"><span>备注</span></a></h3><p>将重新联网刷新媒体库中所有视频的关联信息。</p><h3 id="返回值-11" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-11"><span>返回值</span></a></h3><p>无返回值。请求后将马上返回，刷新操作将在PC端后台进行。</p><h2 id="_19-获取视频文件对应的字幕文件列表-api-v1-subtitle-info-id" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_19-%E8%8E%B7%E5%8F%96%E8%A7%86%E9%A2%91%E6%96%87%E4%BB%B6%E5%AF%B9%E5%BA%94%E7%9A%84%E5%AD%97%E5%B9%95%E6%96%87%E4%BB%B6%E5%88%97%E8%A1%A8-api-v1-subtitle-info-id"><span>19.获取视频文件对应的字幕文件列表 /api/v1/subtitle/info/{id}</span></a></h2><h3 id="参数-10" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-10"><span>参数</span></a></h3><ul><li>id: 视频文件ID</li></ul><h3 id="返回值-12" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-12"><span>返回值</span></a></h3><p>将返回此视频文件对应的字幕文件的文件名列表，其中包括视频所在文件夹中与所有文件名与视频同名、或文件名中包含视频文件名的字幕文件。只支持识别 ass/ssa/srt 格式的字幕文件。取得文件名后，后续即可通过下载字幕文件的接口获取到字幕文件的内容.</p><div class="language-json line-numbers-mode" data-highlighter="prismjs" data-ext="json" data-title="json"><button type="button" class="vp-copy-code-button" aria-label="复制代码" data-copied="已复制"></button><pre copy-code=""><code><span class="line"><span class="token punctuation">{</span></span>
+<span class="line">    <span class="token property">"subtitles"</span><span class="token operator">:</span> <span class="token punctuation">[</span></span>
+<span class="line">        <span class="token punctuation">{</span></span>
+<span class="line">            <span class="token property">"fileName"</span><span class="token operator">:</span> <span class="token string">"test.ass"</span><span class="token punctuation">,</span></span>
+<span class="line">            <span class="token property">"fileSize"</span><span class="token operator">:</span> <span class="token number">158463</span></span>
+<span class="line">        <span class="token punctuation">}</span><span class="token punctuation">,</span></span>
+<span class="line">        <span class="token punctuation">{</span></span>
+<span class="line">            <span class="token property">"fileName"</span><span class="token operator">:</span> <span class="token string">"test-1.srt"</span><span class="token punctuation">,</span></span>
+<span class="line">            <span class="token property">"fileSize"</span><span class="token operator">:</span> <span class="token number">158463</span></span>
+<span class="line">        <span class="token punctuation">}</span></span>
+<span class="line">    <span class="token punctuation">]</span></span>
+<span class="line"><span class="token punctuation">}</span></span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h2 id="_20-获取字幕文件内容-api-v1-subtitle-file-id-filename-filename" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#_20-%E8%8E%B7%E5%8F%96%E5%AD%97%E5%B9%95%E6%96%87%E4%BB%B6%E5%86%85%E5%AE%B9-api-v1-subtitle-file-id-filename-filename"><span>20.获取字幕文件内容 /api/v1/subtitle/file/{id}?fileName={fileName}</span></a></h2><h3 id="参数-11" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E5%8F%82%E6%95%B0-11"><span>参数</span></a></h3><ul><li>id: 视频文件ID</li><li>fileName: 字幕文件的文件名，不包含路径信息，可以通过上一个接口获取</li></ul><h3 id="返回值-13" tabindex="-1"><a class="header-anchor" href="https://doc.dandanplay.com/open/library-api.html#%E8%BF%94%E5%9B%9E%E5%80%BC-13"><span>返回值</span></a></h3><p>将以<code>text/plain</code>格式返回字幕文件的内容</p></div></div><footer class="vp-page-meta"><!----><div class="vp-meta-item git-info"><div class="vp-meta-item last-updated"><span class="meta-item-label">上次更新: </span><span class="meta-item-info">9/11/2025, 4:56:35 PM</span></div><div class="vp-meta-item contributors"><span class="meta-item-label">贡献者: </span><span class="meta-item-info"><span class="contributor" title="email: kaedei@qq.com">kaedei</span><!----></span></div></div></footer><nav class="vp-page-nav" aria-label="page navigation"><a class="route-link auto-link prev" href="https://doc.dandanplay.com/open/client-protocol.html" aria-label="弹弹play专用链（PC版）"><div class="hint"><span class="arrow left"></span> 上一篇</div><div class="link"><span>弹弹play专用链（PC版）</span></div></a><a class="route-link auto-link next" href="https://doc.dandanplay.com/open/resource-service-api.html" aria-label="弹弹play资源搜索节点API规范"><div class="hint">下一篇 <span class="arrow right"></span></div><div class="link"><span>弹弹play资源搜索节点API规范</span></div></a></nav></main><!--]--></div><!--[--><!----><!--]--><!--]--></div>
+    <script type="module" src="./弹弹play远程访问API（PC版） _ 弹弹play_files/app-B8HL1RCt.js" defer=""></script>
+  
+
+<script type="text/javascript" src="./弹弹play远程访问API（PC版） _ 弹弹play_files/MathJax.js"></script><script id="texAllTheThingsPageScript" type="text/javascript" src="chrome-extension://cbimabofgmfdkicghcadidpemeenbffn/js/pageScript.js" inlinemath="[[&quot;$&quot;,&quot;$&quot;],[&quot;[;&quot;,&quot;;]&quot;]]" displaymath="[[&quot;$$&quot;,&quot;$$&quot;],[&quot;\\[&quot;,&quot;\\]&quot;]]" skiptags="[&quot;script&quot;,&quot;noscript&quot;,&quot;style&quot;,&quot;textarea&quot;,&quot;pre&quot;,&quot;code&quot;]" ignoreclass="false" processclass="false"></script><yd-mg-icon style="position: fixed; z-index: 2147483647;"><template shadowrootmode="open"><style>
+.item {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.all {
+    direction: ltr;
+}
+.all > * {
+    direction: rtl;
+}
+.hidden {
+    display: none;
+    transition: width 0.3s linear;
+}
+.container:hover .hidden {
+    width: var(--131b0bc3);
+    height: var(--367772ca);
+    display: flex;
+}
+.container {
+    position: fixed;
+    top:var(--8b7ed71a);
+    right:var(--2c4e45ba);
+    width: var(--b2ad46e2);
+    height: var(--14b33b7e);
+    background-color: #fff;
+    border-radius: var(--e55f886a);
+    box-shadow: 0 0 10px #b3b5b8;
+    transition: width 0.3s linear;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.container:hover {
+    width: var(--301156d1);
+    border-radius: var(--e55f886a);
+    justify-content: space-around;
+}
+.icon {
+    width: var(--131b0bc3);
+    height: var(--367772ca);
+    cursor: pointer;
+    user-select: none;
+}
+.icon:hover {
+}
+.yd-translate-loader {
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    height: var(--367772ca);
+    width:  var(--131b0bc3);
+    animation: spin 0.5s linear infinite;
+}
+@keyframes spin {
+0% { transform: rotate(0deg);
+}
+100% { transform: rotate(360deg);
+}
+}
+@keyframes append-animate {
+from {
+        opacity: 0;
+}
+to {
+        opacity: 1;
+}
+}
+.popup {
+  animation: popup 0.3s forwards;
+}
+@keyframes popup {
+0% {
+    opacity: 0;
+    transform: scale(0);
+}
+100% {
+    opacity: 1;
+    transform: scale(1);
+}
+}
+</style><div class="all" style="position: fixed; z-index: 2147483647; --131b0bc3: 22px; --367772ca: 22px; --8b7ed71a: 0px; --2c4e45ba: 0px; --b2ad46e2: 26px; --14b33b7e: 26px; --e55f886a: 13px; --301156d1: 78px;"><!----></div></template></yd-mg-icon><yd-mg-block-icon><template shadowrootmode="open"><style>@charset "UTF-8";
+.disabled-element[data-v-d3135d60] {
+  cursor: not-allowed;
+}
+.all[data-v-d3135d60] {
+  position: absolute;
+  z-index: 1;
+}
+.all .container[data-v-d3135d60] {
+  width: var(--5a3ced10);
+  height: var(--58dc89c6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.all .container .yd-line[data-v-d3135d60] {
+  display: block;
+  position: absolute;
+  height: var(--c03ec7f0);
+  top: var(--7808ebd8);
+  left: var(--891c21b0);
+}
+.all .container .yd-line .orignal[data-v-d3135d60] {
+  padding: 1px;
+  background-color: #E4E7F3;
+  height: var(--5934d8d6);
+}
+.all .container .yd-line .yd[data-v-d3135d60] {
+  padding: 1px;
+  background-color: #FF939E;
+  height: var(--4d327ada);
+}
+.all .container .yd-line .llm[data-v-d3135d60] {
+  padding: 1px;
+  background-color: #2485FF;
+  height: var(--18678bd3);
+}
+.all .container .tooltip-container[data-v-d3135d60] {
+  display: inline-block;
+  position: absolute;
+  top: var(--147b79a2);
+  left: var(--7afb4d26);
+}
+.all .container .tooltip-container .icon[data-v-d3135d60] {
+  width: var(--5a3ced10);
+  height: var(--58dc89c6);
+  background-image: var(--4a440a69);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.all .container .tooltip-container .icon[data-v-d3135d60]::before {
+  content: var(--4809e853);
+  display: none;
+}
+.all .container .tooltip-container .icon[data-v-d3135d60]:hover {
+  box-shadow: 0px 4px 10px rgba(56, 112, 200, 0.16);
+  transition: width 0.3s linear;
+  background-image: var(--4809e853);
+  cursor: pointer;
+}
+.all .container .tooltip-container .llmIcon[data-v-d3135d60] {
+  width: var(--5a3ced10);
+  height: var(--58dc89c6);
+  background-image: var(--4a440a69);
+  border-radius: 5px;
+}
+.all .container .tooltip-container .llmIcon[data-v-d3135d60]:hover {
+  width: var(--5a3ced10);
+  height: 48px;
+  background-image: var(--11da4116);
+  border-radius: 5px;
+}
+.all .container .tooltip-container .tooltip[data-v-d3135d60] {
+  position: absolute;
+  top: var(--523390c5);
+  /* 放在元素的上方 */
+  left: var(--178a82d2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-color: #F9FBFF;
+  padding: 8px;
+  width: 150px;
+  height: 40px;
+  border-radius: 8px;
+  box-sizing: border-box;
+  border: 1px solid rgba(216, 217, 219, 0.5);
+  box-shadow: 0px 1.2px 3.6px 0px rgba(0, 0, 0, 0.1), 0px 2px 20px 0px rgba(27, 19, 98, 0.08);
+  font-family: PingFang SC;
+  font-size: 16px;
+  font-weight: normal;
+  line-height: 150%;
+  text-align: center;
+  letter-spacing: 0em;
+  user-select: none;
+  color: #2A2B2E;
+}
+.all .container .tooltip-container .llmTooltip[data-v-d3135d60] {
+  position: absolute;
+  top: var(--523390c5);
+  /* 放在元素的上方 */
+  left: var(--178a82d2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-color: #F9FBFF;
+  padding: 8px;
+  width: 200px;
+  height: 40px;
+  border-radius: 8px;
+  box-sizing: border-box;
+  border: 1px solid rgba(216, 217, 219, 0.5);
+  box-shadow: 0px 1.2px 3.6px 0px rgba(0, 0, 0, 0.1), 0px 2px 20px 0px rgba(27, 19, 98, 0.08);
+  font-family: PingFang SC;
+  font-size: 16px;
+  font-weight: normal;
+  line-height: 150%;
+  text-align: center;
+  letter-spacing: 0em;
+  user-select: none;
+  color: #2A2B2E;
+}
+.all .container .yd-translate-loader-block[data-v-d3135d60] {
+  position: absolute;
+  top: var(--147b79a2);
+  left: var(--7afb4d26);
+  width: var(--5a3ced10);
+  height: var(--5a3ced10);
+  background-image: var(--3fa19693);
+  /* 确保这里是正确的图片路径 */
+  background-repeat: no-repeat;
+  background-size: cover;
+  box-shadow: 0px 4px 10px rgba(56, 112, 200, 0.16);
+  overflow: hidden;
+  /* 保持子元素的圆角效果 */
+}
+.all .container .yd-translate-loader-block[data-v-d3135d60]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: linear-gradient(to left bottom, rgba(38, 132, 255, 0.6), rgba(120, 85, 250, 0.6));
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+.all .container .tip[data-v-d3135d60] {
+  background-color: #F9FBFF;
+  padding: 8px;
+  border-radius: 8px;
+  height: 400px;
+  border: 1px solid #D8D9DB;
+}</style><div data-v-d3135d60="" class="all notranslate" style="--5a3ced10: 24px; --58dc89c6: 24px; --c03ec7f0: 0px; --7808ebd8: 0px; --891c21b0: 0px; --5934d8d6: 0px; --4d327ada: 0px; --18678bd3: 0px; --147b79a2: -16px; --7afb4d26: -44px; --4a440a69: url(chrome-extension://memhacajcfhmibggbgilihlmiiddeggo/block.svg); --4809e853: url(chrome-extension://memhacajcfhmibggbgilihlmiiddeggo/block-h.svg); --11da4116: url(chrome-extension://memhacajcfhmibggbgilihlmiiddeggo/block-h-llm.svg); --523390c5: undefined; --178a82d2: undefined; --3fa19693: url(chrome-extension://memhacajcfhmibggbgilihlmiiddeggo/block-l.gif);"><!----></div></template></yd-mg-block-icon><yd-image-ocr style="z-index: 2147483647;"><template shadowrootmode="open"><style>@charset "UTF-8";
+.modal-overlay[data-v-04ce0a75] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.modal-content[data-v-04ce0a75] {
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+  display: flex;
+  gap: 20px;
+  width: 800px;
+  height: 500px;
+  flex-direction: column;
+  position: relative;
+}
+.modal-header[data-v-04ce0a75] {
+  display: flex;
+  justify-content: flex-end;
+  height: 24px;
+}
+.modal-body[data-v-04ce0a75] {
+  display: flex;
+  flex-grow: 1;
+  flex-direction: row;
+}
+.modal-body .imageContainer[data-v-04ce0a75] {
+  flex: 2;
+  justify-content: center;
+}
+.modal-body .img[data-v-04ce0a75] {
+  position: relative;
+  background-size: contain;
+  background-position: center;
+  height: 600px;
+  background-repeat: no-repeat;
+}
+.modal-body .img .box[data-v-04ce0a75] {
+  position: absolute;
+  border: #333 3px solid;
+}
+.modal-body .text-content[data-v-04ce0a75] {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* 根据需要调整文本内容的样式 */
+}
+.modal-body .text-content .text[data-v-04ce0a75] {
+  overflow-y: auto;
+  height: 450px;
+}
+.modal-body .text-content .toolbar[data-v-04ce0a75] {
+  height: 36px;
+  display: flex;
+  justify-content: space-around;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.close-button[data-v-04ce0a75] {
+  background-color: transparent;
+  /* 透明背景 */
+  border: none;
+  /* 去除边框 */
+  cursor: pointer;
+  /* 鼠标悬停时显示指针 */
+  outline: none;
+  /* 去除焦点轮廓 */
+  position: absolute;
+  /* 绝对定位 */
+  top: 10px;
+  /* 距顶部的距离 */
+  right: 10px;
+  /* 距右边的距离 */
+  font-size: 24px;
+  /* 字体大小 */
+  line-height: 24px;
+  /* 行高，以确保垂直居中 */
+  color: #333;
+  /* 字体颜色 */
+  font-weight: bold;
+  /* 字体加粗 */
+}
+.close-button[data-v-04ce0a75]:hover {
+  color: #666;
+  /* 鼠标悬停时的颜色变化 */
+}
+.line[data-v-04ce0a75], .redline[data-v-04ce0a75] {
+  font-family: Arial, Helvetica, sans-serif;
+  /* 使用无衬线字体 */
+  font-size: 16px;
+  /* 设置合适的字体大小 */
+  line-height: 24px;
+  color: #333;
+  /* 文字颜色 */
+  padding: 3px 3px 3px 6px;
+  /* 内边距 */
+  margin-top: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s, border-left-color 0.3s;
+  /* 背景色和边框颜色变化的过渡效果 */
+  border-left: 3px solid #ddd;
+  /* 设置灰色的左边框 */
+}
+.redline[data-v-04ce0a75] {
+  border-left-color: #e53935;
+  /* 鼠标悬停时边框颜色变为红色 */
+  background-color: #f5f5f5;
+}
+.button[data-v-04ce0a75] {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  background-color: #FB4A3E;
+  /* 一个明亮但不饱和的红色 */
+  color: white;
+  /* 文本颜色为白色 */
+  padding: 5px 10px;
+  /* 按钮内边距 */
+  border: none;
+  /* 无边框 */
+  border-radius: 5px;
+  /* 轻微的圆角 */
+  font-size: 10px;
+  text-transform: uppercase;
+  /* 文本大写 */
+  cursor: pointer;
+  /* 鼠标悬停时的指针样式 */
+  transition: background-color 0.3s;
+  /* 背景颜色变化的过渡效果 */
+}
+.button[data-v-04ce0a75]:hover {
+  background-color: #d32f2f;
+  /* 鼠标悬停时的背景颜色稍暗 */
+}
+.button[data-v-04ce0a75]:active {
+  background-color: #c62828;
+  /* 鼠标点击时的背景颜色更暗 */
+}
+.button[data-v-04ce0a75]:disabled {
+  background-color: #ef9a9a;
+  /* 禁用状态的按钮颜色更亮，更少饱和度 */
+  cursor: default;
+  /* 禁用状态的鼠标样式 */
+}
+.loading-indicator[data-v-04ce0a75] {
+  /* 添加你的样式，比如居中显示、动画等 */
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.5em;
+  /* ...其他样式 */
+}
+.message[data-v-04ce0a75] {
+  position: absolute;
+  top: 50%;
+  /* 定位到父元素的中间 */
+  left: 50%;
+  /* 定位到父元素的中间 */
+  transform: translate(-50%, -50%);
+  /* 使用 transform 实现精确居中 */
+  padding: 10px;
+  background-color: white;
+  /* 设置背景颜色为白色 */
+  border: 1px solid blue;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  /* 添加阴影效果 */
+  text-align: center;
+  z-index: 100;
+  /* 确保提示信息在其他元素上方 */
+}
+.loader[data-v-04ce0a75] {
+  border: 5px solid #f3f3f3;
+  /* 浅灰色边框 */
+  border-top: 5px solid #3498db;
+  /* 蓝色边框 */
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin-04ce0a75 2s linear infinite;
+  margin-bottom: 20px;
+}
+@keyframes spin-04ce0a75 {
+0% {
+    transform: rotate(0deg);
+}
+100% {
+    transform: rotate(360deg);
+}
+}</style><!----></template></yd-image-ocr></body></html>

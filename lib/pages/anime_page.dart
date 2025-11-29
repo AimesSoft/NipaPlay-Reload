@@ -29,8 +29,10 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_library_view.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -266,11 +268,13 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   bool _isJellyfinConnected = false;
   bool _isEmbyConnected = false;
   bool _hasSharedRemoteHosts = false;
+  bool _isDandanConnected = false;
   
   // 动态计算标签页数量
   int get _tabCount {
     int count = 2; // 基础标签: 媒体库, 库管理
     if (_hasSharedRemoteHosts) count++;
+    if (_isDandanConnected) count++;
     if (_isJellyfinConnected) count++;
     if (_isEmbyConnected) count++;
     return count;
@@ -303,10 +307,12 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
     final sharedProvider = Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+    final dandanProvider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
     _isJellyfinConnected = jellyfinProvider.isConnected;
     _isEmbyConnected = embyProvider.isConnected;
     _hasSharedRemoteHosts = sharedProvider.hasReachableActiveHost;
-    print('_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected');
+    _isDandanConnected = dandanProvider.isConnected;
+    print('_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected, Dandan: $_isDandanConnected');
   }
 
   TabChangeNotifier? _tabChangeNotifierRef;
@@ -403,20 +409,29 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final enableAnimation = appearanceSettings.enablePageAnimation;
     
-    return Consumer3<JellyfinProvider, EmbyProvider, SharedRemoteLibraryProvider>(
-      builder: (context, jellyfinProvider, embyProvider, sharedProvider, child) {
+    return Consumer4<JellyfinProvider, EmbyProvider, SharedRemoteLibraryProvider,
+        DandanplayRemoteProvider>(
+      builder: (context, jellyfinProvider, embyProvider, sharedProvider,
+          dandanProvider, child) {
         final currentJellyfinConnectionState = jellyfinProvider.isConnected;
         final currentEmbyConnectionState = embyProvider.isConnected;
         final currentSharedState = sharedProvider.hasReachableActiveHost;
+        final currentDandanState = dandanProvider.isConnected;
         
         // 检查连接状态是否改变
         if (_isJellyfinConnected != currentJellyfinConnectionState || 
             _isEmbyConnected != currentEmbyConnectionState ||
-            _hasSharedRemoteHosts != currentSharedState) {
-          print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState, Shared: $_hasSharedRemoteHosts -> $currentSharedState');
+            _hasSharedRemoteHosts != currentSharedState ||
+            _isDandanConnected != currentDandanState) {
+          print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState, Shared: $_hasSharedRemoteHosts -> $currentSharedState, Dandan: $_isDandanConnected -> $currentDandanState');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _updateTabController(currentJellyfinConnectionState, currentEmbyConnectionState, currentSharedState);
+              _updateTabController(
+                currentJellyfinConnectionState,
+                currentEmbyConnectionState,
+                currentSharedState,
+                currentDandanState,
+              );
             }
           });
         }
@@ -440,6 +455,16 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           pageChildren.add(
             RepaintBoundary(
               child: SharedRemoteLibraryView(
+                onPlayEpisode: widget.onPlayEpisode,
+              ),
+            ),
+          );
+        }
+
+        if (currentDandanState) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: DandanplayRemoteLibraryView(
                 onPlayEpisode: widget.onPlayEpisode,
               ),
             ),
@@ -476,6 +501,10 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         
         if (currentSharedState) {
           tabs.add(const Tab(text: "共享媒体"));
+        }
+
+        if (currentDandanState) {
+          tabs.add(const Tab(text: "弹弹play"));
         }
 
         if (_isJellyfinConnected) {
@@ -570,10 +599,16 @@ style: TextStyle(color: Colors.white70, fontSize: 12),
     );
   }
   
-  void _updateTabController(bool isJellyfinConnected, bool isEmbyConnected, bool hasSharedHosts) {
+  void _updateTabController(
+    bool isJellyfinConnected,
+    bool isEmbyConnected,
+    bool hasSharedHosts,
+    bool isDandanConnected,
+  ) {
     if (_isJellyfinConnected == isJellyfinConnected &&
         _isEmbyConnected == isEmbyConnected &&
-        _hasSharedRemoteHosts == hasSharedHosts) {
+        _hasSharedRemoteHosts == hasSharedHosts &&
+        _isDandanConnected == isDandanConnected) {
       return;
     }
     
@@ -581,6 +616,7 @@ style: TextStyle(color: Colors.white70, fontSize: 12),
     _isJellyfinConnected = isJellyfinConnected;
     _isEmbyConnected = isEmbyConnected;
     _hasSharedRemoteHosts = hasSharedHosts;
+    _isDandanConnected = isDandanConnected;
     
     // 创建新的TabController
     final newController = TabController(

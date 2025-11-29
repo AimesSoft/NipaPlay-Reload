@@ -514,6 +514,8 @@ void main(List<String> args) async {
           ChangeNotifierProvider.value(value: debugLogService),
           ChangeNotifierProvider.value(value: ServiceProvider.jellyfinProvider),
           ChangeNotifierProvider.value(value: ServiceProvider.embyProvider),
+          ChangeNotifierProvider.value(
+              value: ServiceProvider.dandanplayRemoteProvider),
         ],
         child: NipaPlayApp(launchFilePath: launchFilePath),
       ),

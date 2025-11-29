@@ -54,13 +54,26 @@ class AnimeCard extends StatefulWidget {
 }
 
 class _AnimeCardState extends State<AnimeCard> {
-  late final String _displayImageUrl;
+  late String _displayImageUrl;
 
   @override
   void initState() {
     super.initState();
+    _updateDisplayImageUrl();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimeCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      _updateDisplayImageUrl();
+    }
+  }
+
+  void _updateDisplayImageUrl() {
     if (kIsWeb && widget.imageUrl.startsWith('http')) {
-      _displayImageUrl = '/api/image_proxy?url=${Uri.encodeComponent(widget.imageUrl)}';
+      _displayImageUrl =
+          '/api/image_proxy?url=${Uri.encodeComponent(widget.imageUrl)}';
     } else {
       _displayImageUrl = widget.imageUrl;
     }
@@ -108,7 +121,7 @@ class _AnimeCardState extends State<AnimeCard> {
   // 占位图组件
   Widget _buildPlaceholder(BuildContext context) {
     return Container(
-      color: Colors.grey[800]?.withOpacity(0.5),
+      color: Colors.grey[800]?.withValues(alpha: 0.5),
       child: const Center(
         child: Icon(
           Ionicons.image_outline,
@@ -169,13 +182,13 @@ class _AnimeCardState extends State<AnimeCard> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               width: 0.5,
             ),
             boxShadow: widget.enableShadow
                 ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
+                      color: Colors.black.withValues(alpha: 0.25),
                       blurRadius: 4,
                       offset: const Offset(0, 1),
                     ),
@@ -202,7 +215,8 @@ class _AnimeCardState extends State<AnimeCard> {
               // 中间层：半透明遮罩，提高可读性
               Positioned.fill(
                 child: Container(
-                  color: const Color.fromARGB(255, 252, 252, 252).withOpacity(0.1),
+                  color: const Color.fromARGB(255, 252, 252, 252)
+                      .withValues(alpha: 0.1),
                 ),
               ),
               
@@ -224,8 +238,8 @@ class _AnimeCardState extends State<AnimeCard> {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withOpacity(0.1),
-                            Colors.black.withOpacity(0.3),
+                            Colors.black.withValues(alpha: 0.1),
+                            Colors.black.withValues(alpha: 0.3),
                           ],
                         ),
                       ),
@@ -252,7 +266,11 @@ class _AnimeCardState extends State<AnimeCard> {
                       padding: const EdgeInsets.only(bottom: 4.0, right: 4.0),
                       child: Align(
                         alignment: Alignment.bottomRight,
-                        child: Icon(Ionicons.time_outline, color: Colors.greenAccent.withOpacity(0.8), size: 12),
+                        child: Icon(
+                          Ionicons.time_outline,
+                          color: Colors.greenAccent.withValues(alpha: 0.8),
+                          size: 12,
+                        ),
                       ),
                     ),
                 ],

@@ -136,7 +136,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     final filteredHistory = watchHistory.where((item) =>
         !item.filePath.startsWith('jellyfin://') &&
         !item.filePath.startsWith('emby://') &&
-        !item.filePath.contains('/api/media/local/share/')).toList();
+      !item.filePath.contains('/api/media/local/share/') &&
+      !item.isDandanplayRemote).toList();
 
     final Map<int, WatchHistoryItem> latestHistoryItemMap = {};
     for (var item in filteredHistory) {

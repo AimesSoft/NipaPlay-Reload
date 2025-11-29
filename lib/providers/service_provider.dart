@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/services/web_server_service.dart';
-import 'jellyfin_provider.dart';
+
+import 'dandanplay_remote_provider.dart';
 import 'emby_provider.dart';
+import 'jellyfin_provider.dart';
 import 'watch_history_provider.dart';
 
 class ServiceProvider {
@@ -10,6 +13,8 @@ class ServiceProvider {
   static final WebServerService webServer = WebServerService();
   static final JellyfinProvider jellyfinProvider = JellyfinProvider();
   static final EmbyProvider embyProvider = EmbyProvider();
+  static final DandanplayRemoteProvider dandanplayRemoteProvider =
+      DandanplayRemoteProvider();
   static final WatchHistoryProvider watchHistoryProvider =
       WatchHistoryProvider();
   static final ServerHistorySyncService serverHistorySyncService =
@@ -21,6 +26,7 @@ class ServiceProvider {
     await Future.wait([
       jellyfinProvider.initialize(),
       embyProvider.initialize(),
+      dandanplayRemoteProvider.initialize(),
     ]);
 
     // 本地观看历史需要同步等待加载完成
@@ -31,6 +37,6 @@ class ServiceProvider {
       onHistoryUpdated: () => watchHistoryProvider.refresh(),
     );
 
-    print('ServiceProvider: 所有服务初始化完成，连接验证将在后台异步进行');
+    debugPrint('ServiceProvider: 所有服务初始化完成，连接验证将在后台异步进行');
   }
 }
