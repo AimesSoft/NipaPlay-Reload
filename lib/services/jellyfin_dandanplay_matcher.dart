@@ -35,22 +35,12 @@ class JellyfinDandanplayMatcher {
           episode.name.isNotEmpty ? episode.name : '未知标题';
       debugPrint('开始预计算Jellyfin视频信息和匹配弹幕ID: $seriesName - $episodeName');
 
-      // 启动哈希值计算并等待真实结果
-      Map<String, dynamic> videoInfoMap = {};
-      try {
-        videoInfoMap = await calculateVideoHash(episode);
-        debugPrint(
-            '成功计算视频信息: hash=${videoInfoMap["hash"]}, fileName=${videoInfoMap["fileName"]}, fileSize=${videoInfoMap["fileSize"]}');
-      } catch (hashError) {
-        debugPrint('哈希值计算发生错误: $hashError');
-        // 哈希计算失败不影响主流程，继续匹配
-        // 使用默认值
-        videoInfoMap = {
-          'hash': '',
-          'fileName': '$seriesName - $episodeName.mp4',
-          'fileSize': 0
-        };
-      }
+      // 预计算阶段不再触发哈希计算，直接返回默认信息
+      final videoInfoMap = {
+        'hash': '',
+        'fileName': '$seriesName - $episodeName.mp4',
+        'fileSize': 0
+      };
 
       // 获取预匹配结果
       final matchResult =
@@ -85,8 +75,8 @@ class JellyfinDandanplayMatcher {
       debugPrint('预匹配未能找到完全匹配的结果');
       return {
         'success': false,
-        'message': '未能找到完全匹配的结果',
-        'videoHash': videoInfoMap['hash'], // 即使匹配失败，也可以返回已计算的哈希值
+        'message': '预计算阶段不再执行哈希，仅在播放前处理',
+        'videoHash': '',
         'fileName': videoInfoMap['fileName'],
         'fileSize': videoInfoMap['fileSize']
       };
