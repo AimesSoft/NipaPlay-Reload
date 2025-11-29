@@ -280,32 +280,38 @@ class EmbyDandanplayMatcher {
 
       debugPrint('开始匹配Emby内容: "$queryTitle"');
 
-      // 跳过自动匹配，直接进入手动选择弹窗
-      // 因为自动匹配经常失败，用户更倾向于手动选择正确的匹配项
-
-      /*
       // 如果有视频信息，尝试使用哈希值、文件名和文件大小进行匹配
-      if (videoInfo != null && 
-          (videoInfo['hash']?.isNotEmpty == true || 
-           videoInfo['fileName']?.isNotEmpty == true || 
-           videoInfo['fileSize'] != null && videoInfo['fileSize'] > 0)) {
-        
-        debugPrint('尝试使用精确信息匹配: ${videoInfo['fileName']}, 文件大小: ${videoInfo['fileSize']} 字节, 哈希值: ${videoInfo['hash']}');
-        
-        // 尝试使用弹弹play的match API进行精确匹配
-        try {
-          final matchApiResult = await _matchWithDandanPlayAPI(videoInfo);
-          if (matchApiResult.isNotEmpty && matchApiResult['isMatched'] == true) {
-            debugPrint('使用match API精确匹配成功');
-            return matchApiResult;
-          } else {
-            debugPrint('match API匹配未成功，尝试fallback搜索');
+      final info = videoInfo;
+      if (info != null) {
+        final hasHash = info['hash']?.toString().isNotEmpty ?? false;
+        final fileSize = info['fileSize'];
+        final hasBasicInfo =
+            (info['fileName']?.toString().isNotEmpty ?? false) ||
+                (fileSize is int && fileSize > 0);
+
+        if (hasHash) {
+          debugPrint(
+              '尝试使用精确信息匹配: ${info['fileName']}, 文件大小: ${info['fileSize']} 字节, 哈希值: ${info['hash']}');
+
+          try {
+            final matchApiResult = await _matchWithDandanPlayAPI(info);
+            if (matchApiResult.isNotEmpty &&
+                matchApiResult['isMatched'] == true) {
+              debugPrint('使用match API精确匹配成功');
+              return matchApiResult;
+            } else {
+              debugPrint('match API匹配未成功，尝试fallback搜索');
+            }
+          } catch (e) {
+            debugPrint('使用match API匹配时出错: $e，尝试fallback搜索');
           }
-        } catch (e) {
-          debugPrint('使用match API匹配时出错: $e，尝试fallback搜索');
+        } else {
+          final reason = hasBasicInfo ? '缺少有效哈希值' : '没有可用的精确信息';
+          debugPrint('$reason，使用标题搜索匹配');
         }
+      } else {
+        debugPrint('没有可用的精确信息，使用标题搜索匹配');
       }
-      */
 
       // 为弹窗预搜索一些候选项，但不依赖搜索结果
       debugPrint('为弹窗预搜索候选动画: "$queryTitle"');
@@ -527,85 +533,102 @@ class EmbyDandanplayMatcher {
     }
   }
 
-  /// 使用弹弹play的match API进行精确匹配（已禁用）
+  /// 使用弹弹play的match API进行精确匹配
   ///
   /// [videoInfo] 包含文件哈希值、文件名和文件大小的Map
-  ///
-  /// 注释：由于自动匹配经常不准确，已禁用此功能，直接使用手动选择
-  /*
-  Future<Map<String, dynamic>> _matchWithDandanPlayAPI(Map<String, dynamic> videoInfo) async {
+  Future<Map<String, dynamic>> _matchWithDandanPlayAPI(
+      Map<String, dynamic> videoInfo) async {
     try {
       final String? hash = videoInfo['hash'] as String?;
       final String? fileName = videoInfo['fileName'] as String?;
       final int fileSize = (videoInfo['fileSize'] ?? 0) as int;
-      
-      if ((hash == null || hash.isEmpty) && (fileName == null || fileName.isEmpty)) {
+
+      if ((hash == null || hash.isEmpty) &&
+          (fileName == null || fileName.isEmpty)) {
         return {};
       }
-      
-      debugPrint('使用弹弹play的match API进行精确匹配: hash=$hash, fileName=$fileName, fileSize=$fileSize');
-      
-      // 获取appSecret
+
+      debugPrint(
+          '使用弹弹play的match API进行精确匹配: hash=$hash, fileName=$fileName, fileSize=$fileSize');
+
       final appSecret = await DandanplayService.getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/match';
-      
-      // 构建请求头和请求体
+
       final headers = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-AppId': DandanplayService.appId,
         'X-Signature': DandanplayService.generateSignature(
-          DandanplayService.appId, 
-          timestamp, 
-          apiPath, 
-          appSecret
-        ),
+            DandanplayService.appId, timestamp, apiPath, appSecret),
         'X-Timestamp': '$timestamp',
       };
-      
+
       final body = json.encode({
         'fileName': fileName,
         'fileHash': hash,
         'fileSize': fileSize,
         'matchMode': 'hashAndFileName',
       });
-      
+
       debugPrint('发送匹配请求到弹弹play API');
       final response = await http.post(
         Uri.parse('${await DandanplayService.getApiBaseUrl()}/api/v2/match'),
         headers: headers,
         body: body,
       );
-      
+
       debugPrint('弹弹play match API响应状态: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        debugPrint('match API响应数据: ${response.body}');
-        
-        if (data['success'] == true && data['matches'] != null) {
-          final matches = data['matches'] as List;
-          if (matches.isNotEmpty) {
-            final match = matches[0];
-            return {
-              'isMatched': true,
-              'animeId': match['animeId'],
-              'animeTitle': match['animeTitle'],
-              'episodeId': match['episodeId'],
-              'episodeTitle': match['episodeTitle'],
-              'matches': matches,
-            };
-          }
+        if (data['isMatched'] == true) {
+          return _normalizeMatchApiResult(data);
         }
       }
     } catch (e) {
       debugPrint('使用弹弹play match API时出错: $e');
     }
-    
+
     return {};
   }
-  */
+
+  Map<String, dynamic> _normalizeMatchApiResult(Map<String, dynamic> raw) {
+    final matches = raw['matches'];
+    final normalizedMatches = (matches is List)
+        ? matches
+            .whereType<Map<String, dynamic>>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : <Map<String, dynamic>>[];
+
+    if (normalizedMatches.isNotEmpty) {
+      final bestMatch = normalizedMatches.first;
+      final animeId = bestMatch['animeId'];
+      final episodeId = bestMatch['episodeId'];
+      final animeTitle = bestMatch['animeTitle'] ?? raw['animeTitle'];
+      final episodeTitle = bestMatch['episodeTitle'] ?? raw['episodeTitle'];
+
+      return {
+        'isMatched': true,
+        'animeId': animeId,
+        'animeTitle': animeTitle,
+        'episodeId': episodeId,
+        'episodeTitle': episodeTitle,
+        'matches': normalizedMatches,
+      };
+    }
+
+    return {
+      'isMatched': true,
+      'animeId': raw['animeId'],
+      'animeTitle': raw['animeTitle'],
+      'episodeId': raw['episodeId'],
+      'episodeTitle': raw['episodeTitle'],
+      'matches': normalizedMatches,
+    };
+  }
 
   /// 搜索动画
   ///
@@ -853,22 +876,15 @@ class EmbyDandanplayMatcher {
       debugPrint(
           'Emby 哈希计算成功，读取 ${remoteHead.headBytes.length} 字节，hash=${remoteHead.hash}');
 
-      Map<String, dynamic>? mediaInfo;
-      try {
-        mediaInfo = await EmbyService.instance.getMediaFileInfo(episode.id);
-      } catch (infoError) {
-        debugPrint('获取Emby媒体信息失败: $infoError');
-      }
-
       final resolvedFileName = _resolveFileName(
         remoteHead.fileName,
-        mediaInfo,
+        null,
         fallbackFileName,
       );
 
       final resolvedFileSize = _resolveFileSize(
         remoteHead.fileSize,
-        mediaInfo != null ? mediaInfo['fileSize'] : null,
+        null,
       );
 
       return {

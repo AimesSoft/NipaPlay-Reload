@@ -266,16 +266,22 @@ class JellyfinDandanplayMatcher {
       debugPrint('开始匹配Jellyfin内容: "$queryTitle"');
 
       // 如果有视频信息，尝试使用哈希值、文件名和文件大小进行匹配
-      if (videoInfo != null &&
-          (videoInfo['hash']?.isNotEmpty == true ||
-              videoInfo['fileName']?.isNotEmpty == true ||
-              videoInfo['fileSize'] != null && videoInfo['fileSize'] > 0)) {
+      final info = videoInfo;
+      final hasVideoInfo = info != null;
+      final hasHash = info?['hash']?.toString().isNotEmpty ?? false;
+      final fileSize = info?['fileSize'];
+      final hasBasicInfo =
+          (info?['fileName']?.toString().isNotEmpty ?? false) ||
+              (fileSize is int && fileSize > 0);
+
+      if (hasHash && hasVideoInfo) {
+        final nonNullInfo = info!;
         debugPrint(
-            '尝试使用精确信息匹配: ${videoInfo['fileName']}, 文件大小: ${videoInfo['fileSize']} 字节, 哈希值: ${videoInfo['hash']}');
+            '尝试使用精确信息匹配: ${nonNullInfo['fileName']}, 文件大小: ${nonNullInfo['fileSize']} 字节, 哈希值: ${nonNullInfo['hash']}');
 
         // 尝试使用弹弹play的match API进行精确匹配
         try {
-          final matchResult = await _matchWithDandanPlayAPI(videoInfo);
+          final matchResult = await _matchWithDandanPlayAPI(nonNullInfo);
           if (matchResult.isNotEmpty && matchResult['isMatched'] == true) {
             debugPrint(
                 '通过精确匹配成功! 匹配结果: ${matchResult['animeTitle']} - ${matchResult['episodeTitle']}');
@@ -287,7 +293,10 @@ class JellyfinDandanplayMatcher {
           debugPrint('精确匹配过程中出错: $e，回退到搜索匹配');
         }
       } else {
-        debugPrint('没有可用的精确匹配信息，使用标题搜索匹配');
+        final reason = hasVideoInfo && hasBasicInfo
+            ? '缺少有效哈希值'
+            : '没有可用的精确信息';
+        debugPrint('$reason，使用标题搜索匹配');
       }
 
       // 使用DandanPlay的API搜索动画
