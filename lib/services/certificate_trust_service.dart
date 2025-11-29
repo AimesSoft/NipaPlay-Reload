@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -91,6 +92,10 @@ class CertificateTrustService {
   /// - derBytes: 服务器返回的证书 DER 原始字节，用于指纹校验（可为空，若为空仅根据 allowInvalid 判断）
   bool allowHost(String host, {Uint8List? derBytes}) {
     if (_globalAllow) return true;
+    if (_isLanHost(host)) {
+      debugPrint('LAN 主机 ${host.trim()} 自动信任无效证书');
+      return true;
+    }
     final rule = _rules.firstWhere(
       (r) => _hostEquals(r.host, host),
       orElse: () => TrustedCertRule(host: '__none__'),
@@ -121,5 +126,51 @@ class CertificateTrustService {
       sb.write(b.toRadixString(16).padLeft(2, '0'));
     }
     return sb.toString();
+  }
+
+  bool _isLanHost(String host) {
+    final sanitized = _sanitizeHost(host);
+    if (sanitized.isEmpty) return false;
+    if (sanitized == 'localhost') return true;
+    if (sanitized.endsWith('.local') || sanitized.endsWith('.lan')) {
+      return true;
+    }
+
+    final address = InternetAddress.tryParse(sanitized);
+    if (address == null) return false;
+
+    if (address.type == InternetAddressType.IPv4) {
+      final bytes = address.rawAddress;
+      if (bytes.length != 4) return false;
+      final first = bytes[0];
+      final second = bytes[1];
+      if (first == 10) return true;
+      if (first == 127) return true;
+      if (first == 192 && second == 168) return true;
+      if (first == 172 && second >= 16 && second <= 31) return true;
+      if (first == 169 && second == 254) return true;
+      return false;
+    }
+
+    if (address.type == InternetAddressType.IPv6) {
+      final firstByte = address.rawAddress.isNotEmpty ? address.rawAddress[0] : 0;
+      if (address.isLoopback || address.isLinkLocal) return true;
+      if ((firstByte & 0xfe) == 0xfc) return true; // fc00::/7
+      return false;
+    }
+
+    return false;
+  }
+
+  String _sanitizeHost(String host) {
+    var result = host.trim().toLowerCase();
+    if (result.startsWith('[') && result.endsWith(']')) {
+      result = result.substring(1, result.length - 1);
+    }
+    final colon = result.indexOf(':');
+    if (colon != -1) {
+      result = result.substring(0, colon);
+    }
+    return result;
   }
 }
