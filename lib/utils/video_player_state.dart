@@ -294,6 +294,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final double _maxDanmakuSpeedMultiplier = 2.0;
   final double _baseDanmakuScrollDurationSeconds = 10.0;
   double _danmakuSpeedMultiplier = 1.0; // 默认标准速度
+  double _autoDanmakuOffset = 0.0; // 弹弹Play自动匹配的时间偏移
 
   // 添加播放速度相关状态
   final String _playbackRateKey = 'playback_rate';
@@ -506,6 +507,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get danmakuScrollDurationSeconds =>
       _baseDanmakuScrollDurationSeconds / _danmakuSpeedMultiplier;
   bool get danmakuStacking => _danmakuStacking;
+  double get autoDanmakuOffset => _autoDanmakuOffset;
   bool get pauseOnBackground => _pauseOnBackground;
   Anime4KProfile get anime4kProfile => _anime4kProfile;
   bool get isAnime4KEnabled => _anime4kProfile != Anime4KProfile.off;
@@ -536,6 +538,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // Volume Getters
   double get currentSystemVolume => _currentVolume;
+
+  void _setAutoDanmakuOffset(double offset) {
+    if ((_autoDanmakuOffset - offset).abs() < 0.0001) {
+      return;
+    }
+    _autoDanmakuOffset = offset;
+    notifyListeners();
+  }
   bool get isVolumeUIVisible =>
       _isVolumeIndicatorVisible; // Renamed for clarity
 

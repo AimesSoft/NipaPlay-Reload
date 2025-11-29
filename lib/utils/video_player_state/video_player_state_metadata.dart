@@ -83,6 +83,9 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
   Future<void> _recognizeVideo(String videoPath) async {
     if (videoPath.isEmpty) return;
 
+    // 每次识别新视频时重置自动弹幕偏移
+    _setAutoDanmakuOffset(0.0);
+
     try {
       _setStatus(PlayerStatus.recognizing, message: '正在识别视频...');
 
@@ -105,6 +108,14 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
           if (videoInfo['matches'] != null && videoInfo['matches'].isNotEmpty) {
             final match = videoInfo['matches'][0];
             if (match['episodeId'] != null && match['animeId'] != null) {
+              final shiftValue = match['shift'];
+              double autoOffset = 0.0;
+              if (shiftValue is num) {
+                autoOffset = shiftValue.toDouble();
+              } else if (shiftValue is String) {
+                autoOffset = double.tryParse(shiftValue) ?? 0.0;
+              }
+              _setAutoDanmakuOffset(autoOffset);
               try {
                 //debugPrint('尝试加载弹幕...');
                 _setStatus(PlayerStatus.recognizing, message: '正在加载弹幕...');

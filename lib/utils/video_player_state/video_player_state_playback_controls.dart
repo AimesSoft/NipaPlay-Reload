@@ -410,6 +410,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     danmakuController
         ?.dispose(); // Assuming danmakuController has a dispose method
     danmakuController = null;
+    _setAutoDanmakuOffset(0.0);
     _duration = Duration.zero;
     _position = Duration.zero;
     _progress = 0.0;
@@ -450,6 +451,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     danmakuController
         ?.dispose(); // Assuming danmakuController has a dispose method
     danmakuController = null;
+    _setAutoDanmakuOffset(0.0);
     _videoDuration = Duration.zero;
   }
 

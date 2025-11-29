@@ -43,6 +43,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
     return Consumer2<VideoPlayerState, SettingsProvider>(
       builder: (context, videoState, settingsProvider, child) {
         final kernelType = DanmakuKernelFactory.getKernelType();
+        final combinedTimeOffset =
+            settingsProvider.danmakuTimeOffset + videoState.autoDanmakuOffset;
 
         // 直接从videoState获取已处理好的弹幕列表
         final activeDanmakuList = videoState.danmakuList;
@@ -64,7 +66,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
                   status: videoState.status.toString(),
                   playbackRate: videoState.playbackRate,
                   displayArea: videoState.danmakuDisplayArea,
-                  timeOffset: settingsProvider.danmakuTimeOffset,
+                  timeOffset: combinedTimeOffset,
                   scrollDurationSeconds: scrollDuration,
                   onLayoutCalculated: (danmaku) {
                     // Update state with the calculated positions
@@ -109,7 +111,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             blockScrollDanmaku: videoState.blockScrollDanmaku,
             blockWords: videoState.danmakuBlockWords,
             currentTime: widget.currentPosition / 1000 +
-                settingsProvider.danmakuTimeOffset,
+                combinedTimeOffset,
             isPlaying: widget.isPlaying,
             playbackRate: videoState.playbackRate,
             scrollDurationSeconds: scrollDuration,
@@ -127,7 +129,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           status: videoState.status.toString(),
           playbackRate: videoState.playbackRate,
           displayArea: videoState.danmakuDisplayArea,
-          timeOffset: settingsProvider.danmakuTimeOffset,
+          timeOffset: combinedTimeOffset,
           scrollDurationSeconds: scrollDuration,
         );
       },
