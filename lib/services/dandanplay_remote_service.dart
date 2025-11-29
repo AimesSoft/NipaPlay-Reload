@@ -37,7 +37,7 @@ class DandanplayRemoteService {
   List<DandanplayRemoteEpisode> get cachedEpisodes =>
       List.unmodifiable(_cachedEpisodes);
 
-  Future<void> loadSavedSettings() async {
+  Future<void> loadSavedSettings({bool backgroundRefresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final savedBase = prefs.getString(_baseUrlKey);
     final savedToken = prefs.getString(_tokenKey);
@@ -55,14 +55,22 @@ class DandanplayRemoteService {
     _apiToken = savedToken;
     _tokenRequired = savedTokenRequired;
 
-    try {
-      await refreshLibrary(force: true);
-      _isConnected = true;
-      _lastError = null;
-      _notifyConnectionState(true);
-    } catch (e) {
-      _isConnected = false;
-      _lastError = e.toString();
+    Future<void> refreshTask() async {
+      try {
+        await refreshLibrary(force: true);
+        _isConnected = true;
+        _lastError = null;
+        _notifyConnectionState(true);
+      } catch (e) {
+        _isConnected = false;
+        _lastError = e.toString();
+      }
+    }
+
+    if (backgroundRefresh) {
+      unawaited(refreshTask());
+    } else {
+      await refreshTask();
     }
   }
 

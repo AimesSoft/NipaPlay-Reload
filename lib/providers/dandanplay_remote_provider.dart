@@ -42,7 +42,7 @@ class DandanplayRemoteProvider extends ChangeNotifier {
     if (_isInitialized) return;
     _setLoading(true);
     try {
-      await _service.loadSavedSettings();
+      await _service.loadSavedSettings(backgroundRefresh: true);
       _episodes = _service.cachedEpisodes;
       _rebuildGroups();
     } finally {
@@ -102,7 +102,11 @@ class DandanplayRemoteProvider extends ChangeNotifier {
   }
 
   void _handleConnectionChange(bool connected) {
-    if (!connected) {
+    if (connected) {
+      _episodes = _service.cachedEpisodes;
+      _rebuildGroups();
+      _errorMessage = null;
+    } else {
       _episodes = [];
       _animeGroups = [];
       notifyListeners();
