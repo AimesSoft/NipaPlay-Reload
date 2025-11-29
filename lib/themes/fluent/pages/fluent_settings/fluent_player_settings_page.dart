@@ -29,7 +29,7 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
   List<String> _selectedDecoders = [];
   late DecoderManager _decoderManager;
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
-  DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.cpu;
+  DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
   bool _isLoading = true;
   Anime4KProfile? _anime4kSelectionOverride;
 

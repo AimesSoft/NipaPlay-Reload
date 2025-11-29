@@ -171,13 +171,13 @@ class PlayerKernelManager {
 
   /// 获取支持的弹幕内核列表
   static List<String> getSupportedDanmakuKernels() {
-    return ['GPU渲染', 'CPU渲染'];
+    return ['Canvas 弹幕', 'GPU渲染', 'CPU渲染'];
   }
 
   /// 获取当前弹幕内核
   static Future<String> getCurrentDanmakuKernel() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('danmaku_kernel') ?? 'GPU渲染';
+    return prefs.getString('danmaku_kernel') ?? 'Canvas 弹幕';
   }
 
   /// 设置弹幕内核
@@ -194,8 +194,12 @@ class PlayerKernelManager {
       case 'CPU渲染':
         engine = DanmakuRenderEngine.cpu;
         break;
+      case 'Canvas弹幕':
+      case 'Canvas 弹幕':
+        engine = DanmakuRenderEngine.canvas;
+        break;
       default:
-        engine = DanmakuRenderEngine.gpu;
+        engine = DanmakuRenderEngine.canvas;
     }
 
     // 通知DanmakuKernelFactory内核已改变

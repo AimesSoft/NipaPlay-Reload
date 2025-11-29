@@ -35,7 +35,7 @@ class _CupertinoPlayerSettingsPageState
   List<String> _selectedDecoders = [];
   late DecoderManager _decoderManager;
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
-  DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.cpu;
+  DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
   bool _initialized = false;
   bool _initializing = false;
 

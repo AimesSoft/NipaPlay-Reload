@@ -36,7 +36,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   late DecoderManager _decoderManager;
   String _playerCoreName = "MDK";
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
-  DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.cpu;
+  DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
 
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();

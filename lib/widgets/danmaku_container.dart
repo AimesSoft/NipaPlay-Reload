@@ -136,7 +136,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
   void initState() {
     super.initState();
     // 根据设备类型设置垂直间距
-    _baseVerticalSpacing = globals.isPhone ? 10.0 : 20.0;
+    _baseVerticalSpacing = globals.isPhone ? 2.0 : 4.0;
 
     // 初始化文本渲染器
     _initializeTextRenderer();
@@ -469,10 +469,7 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     if (trackHeight <= 0) {
       maxTracks = 1;
     } else {
-      maxTracks =
-          ((effectiveHeight - adjustedDanmakuHeight - _verticalSpacing) /
-                  trackHeight)
-              .floor();
+      maxTracks = (effectiveHeight / trackHeight).floor();
       // 二次防护：计算结果<=0 时也夹紧为 1，维持原有堆叠/重叠逻辑
       if (maxTracks <= 0) {
         maxTracks = 1;
