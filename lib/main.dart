@@ -69,6 +69,7 @@ import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
+import 'constants/settings_keys.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -426,8 +427,8 @@ void main(List<String> args) async {
       };
     }),
 
-    // 清理过期的弹幕缓存
-    DanmakuCacheManager.clearExpiredCache(),
+    // 根据设置清理弹幕缓存
+    _prepareDanmakuCachePolicy(),
 
     // 初始化 BangumiService
     BangumiService.instance.initialize(),
@@ -540,6 +541,22 @@ Future<void> _initializeAppDirectories() async {
     debugPrint('应用目录结构初始化完成');
   } catch (e) {
     debugPrint('创建应用目录结构失败: $e');
+  }
+}
+
+Future<void> _prepareDanmakuCachePolicy() async {
+  try {
+    final clearOnLaunch = await SettingsStorage.loadBool(
+      SettingsKeys.clearDanmakuCacheOnLaunch,
+      defaultValue: false,
+    );
+    if (clearOnLaunch) {
+      await DanmakuCacheManager.clearAllCache();
+    } else {
+      await DanmakuCacheManager.clearExpiredCache();
+    }
+  } catch (e) {
+    debugPrint('初始化弹幕缓存策略失败: $e');
   }
 }
 

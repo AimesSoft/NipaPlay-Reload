@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as path;
 
 import 'package:nipaplay/utils/storage_service.dart';
 
@@ -11,10 +12,65 @@ class DanmakuCacheManager {
   static const Duration _oldAnimeCacheDuration = Duration(days: 7);
   static const Duration _newAnimeCacheDuration = Duration(hours: 2);
   static final Map<String, Map<String, dynamic>> _memoryCache = {};
+  static io.Directory? _cachedDanmakuDir;
+  static bool _migrationAttempted = false;
+
+  static Future<io.Directory> _getDanmakuCacheDirectory() async {
+    if (_cachedDanmakuDir != null) return _cachedDanmakuDir!;
+    final cacheRoot = await StorageService.getCacheDirectory();
+    final danmakuDir = io.Directory('${cacheRoot.path}/danmaku');
+    if (!await danmakuDir.exists()) {
+      await danmakuDir.create(recursive: true);
+    }
+    await _migrateLegacyCacheIfNeeded(danmakuDir);
+    _cachedDanmakuDir = danmakuDir;
+    return danmakuDir;
+  }
 
   static Future<String> _getCacheFilePath(String episodeId) async {
-    final directory = await StorageService.getAppStorageDirectory();
+    final directory = await _getDanmakuCacheDirectory();
     return '${directory.path}/$_cacheKeyPrefix$episodeId.json';
+  }
+
+  static Future<void> _migrateLegacyCacheIfNeeded(io.Directory newDir) async {
+    if (_migrationAttempted) return;
+    _migrationAttempted = true;
+    try {
+      final legacyDir = await StorageService.getAppStorageDirectory();
+      if (legacyDir.path == newDir.path) {
+        return;
+      }
+
+      final legacyEntities = await legacyDir.list().toList();
+      final legacyFiles = legacyEntities.whereType<io.File>().where((file) {
+        final fileName = path.basename(file.path);
+        return fileName.startsWith(_cacheKeyPrefix) && fileName.endsWith('.json');
+      }).toList();
+
+      if (legacyFiles.isEmpty) {
+        return;
+      }
+
+      for (final file in legacyFiles) {
+        final fileName = path.basename(file.path);
+        final targetFile = io.File(path.join(newDir.path, fileName));
+        if (await targetFile.exists()) {
+          continue;
+        }
+        try {
+          await file.rename(targetFile.path);
+        } catch (_) {
+          try {
+            await file.copy(targetFile.path);
+            await file.delete();
+          } catch (e) {
+            //////debugPrint('迁移弹幕缓存文件失败: $e');
+          }
+        }
+      }
+    } catch (e) {
+      //////debugPrint('迁移旧弹幕缓存失败: $e');
+    }
   }
 
   static Future<bool> isCacheValid(String episodeId) async {
@@ -155,9 +211,11 @@ class DanmakuCacheManager {
       });
 
       // 清理文件缓存
-      final directory = await StorageService.getAppStorageDirectory();
-      final files = await directory.list().where((entity) => 
-        entity.path.contains(_cacheKeyPrefix)).toList();
+      final directory = await _getDanmakuCacheDirectory();
+      final files = await directory
+          .list()
+          .where((entity) => entity.path.contains(_cacheKeyPrefix))
+          .toList();
 
       for (var file in files) {
         if (file is io.File) {
@@ -185,4 +243,31 @@ class DanmakuCacheManager {
       //////debugPrint('清理过期缓存失败: $e');
     }
   }
-} 
+
+  static Future<void> clearAllCache() async {
+    if (kIsWeb) return;
+    try {
+      _memoryCache.clear();
+      final directory = await _getDanmakuCacheDirectory();
+      if (!await directory.exists()) {
+        return;
+      }
+
+      await for (final entity in directory.list()) {
+        if (entity is io.File) {
+          final fileName = path.basename(entity.path);
+          if (fileName.startsWith(_cacheKeyPrefix) &&
+              fileName.endsWith('.json')) {
+            try {
+              await entity.delete();
+            } catch (_) {
+              // ignore deletion errors to avoid breaking the cleanup flow
+            }
+          }
+        }
+      }
+    } catch (e) {
+      //////debugPrint('清理弹幕缓存失败: $e');
+    }
+  }
+}

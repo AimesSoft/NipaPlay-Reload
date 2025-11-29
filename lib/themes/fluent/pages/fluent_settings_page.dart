@@ -13,6 +13,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/fluent/pages/fluent_settings/fluent_watch_history_page.dart';
 import 'package:nipaplay/themes/fluent/pages/fluent_settings/fluent_network_settings_page.dart';
 import 'package:nipaplay/themes/fluent/pages/fluent_settings/fluent_backup_restore_page.dart';
+import 'package:nipaplay/themes/fluent/pages/fluent_settings/fluent_storage_page.dart';
 
 class FluentSettingsPage extends StatefulWidget {
   const FluentSettingsPage({super.key});
@@ -29,6 +30,7 @@ class _FluentSettingsPageState extends State<FluentSettingsPage> {
     const FluentUIThemePage(),
     const FluentAppearancePage(),
     const FluentGeneralPage(),
+    const FluentStoragePage(),
     const FluentNetworkSettingsPage(),
     const FluentWatchHistoryPage(),
     if (!globals.isPhone) const FluentBackupRestorePage(),
@@ -45,6 +47,7 @@ class _FluentSettingsPageState extends State<FluentSettingsPage> {
     '主题（实验性）',
     '外观',
     '通用',
+    '存储',
     '网络',
     '观看记录',
     if (!globals.isPhone) '备份与恢复',
@@ -61,6 +64,7 @@ class _FluentSettingsPageState extends State<FluentSettingsPage> {
     FluentIcons.color,
     FluentIcons.brightness,
     FluentIcons.settings,
+    FluentIcons.database,
     FluentIcons.server,
     FluentIcons.history,
     if (!globals.isPhone) FluentIcons.cloud_download,

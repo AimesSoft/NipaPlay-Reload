@@ -18,6 +18,7 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_pag
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/ui_theme_page.dart'; // 导入UI主题设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
 import 'package:provider/provider.dart';
@@ -147,6 +148,17 @@ style: TextStyle(
                 color: Colors.white),
             onTap: () {
               _handleItemTap(const GeneralPage(), "通用设置");
+            },
+          ),
+          ListTile(
+            title: const Text("存储",
+                locale:Locale("zh-Hans","zh"),
+style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            trailing: const Icon(Ionicons.chevron_forward_outline,
+                color: Colors.white),
+            onTap: () {
+              _handleItemTap(const StoragePage(), "存储设置");
             },
           ),
           ListTile(
