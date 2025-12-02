@@ -90,7 +90,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
                     config: GPUDanmakuConfig.fromVideoPlayerState(videoState),
                     isVisible: widget.isVisible,
                     opacity: widget.opacity,
-                    currentTime: widget.currentPosition / 1000,
+                    currentTime:
+                        widget.currentPosition / 1000 + combinedTimeOffset,
                   );
                 },
               ),
