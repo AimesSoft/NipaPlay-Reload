@@ -16,6 +16,16 @@ class ThemeRegistry {
   static ThemeDescriptor get defaultTheme =>
       _themes[defaultThemeId] ?? const NipaplayThemeDescriptor();
 
+  static ThemeDescriptor defaultThemeForEnvironment(ThemeEnvironment env) {
+    if (env.isIOS) {
+      final cupertinoTheme = maybeGet(ThemeIds.cupertino);
+      if (cupertinoTheme != null && cupertinoTheme.isSupported(env)) {
+        return cupertinoTheme;
+      }
+    }
+    return defaultTheme;
+  }
+
   static ThemeDescriptor? maybeGet(String? id) {
     if (id == null) return null;
     return _themes[id];
@@ -32,6 +42,10 @@ class ThemeRegistry {
     final candidate = maybeGet(id);
     if (candidate != null && candidate.isSupported(env)) {
       return candidate;
+    }
+    final preferred = defaultThemeForEnvironment(env);
+    if (preferred.isSupported(env)) {
+      return preferred;
     }
     final available = supportedThemes(env);
     if (available.isNotEmpty) {

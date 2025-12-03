@@ -6,6 +6,7 @@ import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/themes/theme_registry.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UIThemeProvider extends ChangeNotifier {
@@ -52,6 +53,7 @@ class UIThemeProvider extends ChangeNotifier {
         isDesktop: globals.isDesktop,
         isPhone: globals.isPhone,
         isWeb: kIsWeb,
+        isIOS: !kIsWeb && Platform.isIOS,
       );
 
   Future<void> _loadTheme() async {

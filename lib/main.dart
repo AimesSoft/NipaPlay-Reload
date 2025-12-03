@@ -781,6 +781,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
             isDesktop: globals.isDesktop,
             isPhone: globals.isPhone,
             isWeb: kIsWeb,
+            isIOS: !kIsWeb && Platform.isIOS,
           );
           final overlayBuilder = (Widget child) => Stack(
                 children: [
