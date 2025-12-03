@@ -24,6 +24,9 @@ class WatchHistoryPage extends StatefulWidget {
 }
 
 class _WatchHistoryPageState extends State<WatchHistoryPage> {
+  bool _isAutoMatching = false;
+  bool _autoMatchDialogVisible = false;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,7 +69,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
   Widget _buildWatchHistoryItem(WatchHistoryItem item) {
     final appearanceProvider = context.watch<AppearanceSettingsProvider>();
     return GestureDetector(
-      onLongPress: () => _showDeleteConfirmDialog(item),
+      onLongPress:
+          _isAutoMatching ? null : () => _showDeleteConfirmDialog(item),
       child: GlassmorphicContainer(
         width: double.infinity,
         height: 70,
@@ -93,7 +97,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => _onWatchHistoryItemTap(item),
+            onTap: _isAutoMatching ? null : () => _onWatchHistoryItemTap(item),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
@@ -271,6 +275,11 @@ style: TextStyle(
   }
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) async {
+    if (_isAutoMatching) {
+      BlurSnackBar.show(context, '正在自动匹配，请稍候');
+      return;
+    }
+
     debugPrint('[WatchHistoryPage] _onWatchHistoryItemTap: Received item: $item');
     var currentItem = item;
 
@@ -341,12 +350,7 @@ style: TextStyle(
 
     if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
       final matchablePath = actualPlayUrl ?? currentItem.filePath;
-      currentItem = await WatchHistoryAutoMatchHelper.tryAutoMatch(
-        context,
-        currentItem,
-        matchablePath: matchablePath,
-        onMatched: (message) => BlurSnackBar.show(context, message),
-      );
+      currentItem = await _performAutoMatch(currentItem, matchablePath);
     }
 
     final playableItem = PlayableItem(
@@ -360,6 +364,81 @@ style: TextStyle(
     );
 
     await PlaybackService().play(playableItem);
+  }
+
+  Future<WatchHistoryItem> _performAutoMatch(
+    WatchHistoryItem currentItem,
+    String matchablePath,
+  ) async {
+    _updateAutoMatchingState(true);
+    _showAutoMatchingDialog();
+    String? notification;
+
+    try {
+      return await WatchHistoryAutoMatchHelper.tryAutoMatch(
+        context,
+        currentItem,
+        matchablePath: matchablePath,
+        onMatched: (message) => notification = message,
+      );
+    } finally {
+      _hideAutoMatchingDialog();
+      _updateAutoMatchingState(false);
+      if (notification != null && mounted) {
+        BlurSnackBar.show(context, notification!);
+      }
+    }
+  }
+
+  void _updateAutoMatchingState(bool value) {
+    if (!mounted) {
+      _isAutoMatching = value;
+      return;
+    }
+    if (_isAutoMatching == value) {
+      return;
+    }
+    setState(() {
+      _isAutoMatching = value;
+    });
+  }
+
+  void _showAutoMatchingDialog() {
+    if (_autoMatchDialogVisible || !mounted) return;
+    _autoMatchDialogVisible = true;
+    BlurDialog.show(
+      context: context,
+      title: '正在自动匹配',
+      barrierDismissible: false,
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(height: 8),
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          ),
+          SizedBox(height: 16),
+          Text(
+            '正在为历史记录匹配弹幕，请稍候…',
+            style: TextStyle(color: Colors.white, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      _autoMatchDialogVisible = false;
+    });
+  }
+
+  void _hideAutoMatchingDialog() {
+    if (!_autoMatchDialogVisible) {
+      return;
+    }
+    if (!mounted) {
+      _autoMatchDialogVisible = false;
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   void _showDeleteConfirmDialog(WatchHistoryItem item) {

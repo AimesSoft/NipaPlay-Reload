@@ -7,6 +7,7 @@ import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 import 'package:provider/provider.dart';
@@ -92,6 +93,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
   bool _isLoading = true;
   String? _error;
   bool _isMovie = false; // 新增状态，判断是否为电影
+
+  bool _isDetailAutoMatching = false;
+  bool _detailAutoMatchDialogVisible = false;
+  bool _detailAutoMatchCancelled = false;
 
   TabController? _tabController;
 
@@ -357,35 +362,36 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
 
   Future<void> _playMovie() async {
     if (_mediaDetail == null || !_isMovie) return;
+    if (_isDetailAutoMatching) {
+      BlurSnackBar.show(context, '正在自动匹配，请稍候');
+      return;
+    }
 
     try {
-      dynamic matcher;
-      dynamic playableItem;
-      
-      if (widget.serverType == MediaServerType.jellyfin) {
-        // 将MediaItemDetail转换为JellyfinMovieInfo
-        final movieInfo = JellyfinMovieInfo(
-          id: _mediaDetail!.id,
-          name: _mediaDetail!.name,
-          overview: _mediaDetail!.overview,
-          originalTitle: _mediaDetail!.originalTitle,
-          imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
-          imageBackdropTag: _mediaDetail!.imageBackdropTag,
-          productionYear: _mediaDetail!.productionYear,
-          dateAdded: _mediaDetail!.dateAdded,
-          premiereDate: _mediaDetail!.premiereDate,
-          communityRating: _mediaDetail!.communityRating,
-          genres: _mediaDetail!.genres,
-          officialRating: _mediaDetail!.officialRating,
-          cast: _mediaDetail!.cast,
-          directors: _mediaDetail!.directors,
-          runTimeTicks: _mediaDetail!.runTimeTicks,
-          studio: _mediaDetail!.seriesStudio,
-        );
-        matcher = JellyfinDandanplayMatcher.instance;
-        playableItem = await matcher.createPlayableHistoryItemFromMovie(context, movieInfo);
-      } else {
-        // 将MediaItemDetail转换为EmbyMovieInfo
+      final playableItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(() async {
+        if (widget.serverType == MediaServerType.jellyfin) {
+          final movieInfo = JellyfinMovieInfo(
+            id: _mediaDetail!.id,
+            name: _mediaDetail!.name,
+            overview: _mediaDetail!.overview,
+            originalTitle: _mediaDetail!.originalTitle,
+            imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
+            imageBackdropTag: _mediaDetail!.imageBackdropTag,
+            productionYear: _mediaDetail!.productionYear,
+            dateAdded: _mediaDetail!.dateAdded,
+            premiereDate: _mediaDetail!.premiereDate,
+            communityRating: _mediaDetail!.communityRating,
+            genres: _mediaDetail!.genres,
+            officialRating: _mediaDetail!.officialRating,
+            cast: _mediaDetail!.cast,
+            directors: _mediaDetail!.directors,
+            runTimeTicks: _mediaDetail!.runTimeTicks,
+            studio: _mediaDetail!.seriesStudio,
+          );
+          return JellyfinDandanplayMatcher.instance
+              .createPlayableHistoryItemFromMovie(context, movieInfo);
+        }
+
         final movieInfo = EmbyMovieInfo(
           id: _mediaDetail!.id,
           name: _mediaDetail!.name,
@@ -404,19 +410,21 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
           runTimeTicks: _mediaDetail!.runTimeTicks,
           studio: _mediaDetail!.seriesStudio,
         );
-        matcher = EmbyDandanplayMatcher.instance;
-        playableItem = await matcher.createPlayableHistoryItemFromMovie(context, movieInfo);
+        return EmbyDandanplayMatcher.instance
+            .createPlayableHistoryItemFromMovie(context, movieInfo);
+      });
+
+      if (playableItem == null) {
+        if (!_detailAutoMatchCancelled && mounted) {
+          BlurSnackBar.show(context, '未能找到匹配的弹幕信息，但仍可播放。');
+          final basicItem = _mediaDetail!.toWatchHistoryItem();
+          Navigator.of(context).pop(basicItem);
+        }
+        return;
       }
-      
-      if (playableItem == null) return; // 用户取消，彻底中断
+
       if (mounted) {
         Navigator.of(context).pop(playableItem);
-      } else if (mounted) {
-        // 如果匹配失败，可以给用户一个提示
-        BlurSnackBar.show(context, '未能找到匹配的弹幕信息，但仍可播放。');
-        // 即使没有弹幕，也创建一个基本的播放项
-        final basicItem = _mediaDetail!.toWatchHistoryItem();
-        Navigator.of(context).pop(basicItem);
       }
     } catch (e) {
       if (mounted) {
@@ -439,6 +447,95 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
     } else {
       return '$minutes分钟';
     }
+  }
+
+  Future<T?> _runDetailAutoMatchTask<T>(Future<T?> Function() task) async {
+    if (_isDetailAutoMatching) {
+      if (mounted) {
+        BlurSnackBar.show(context, '正在自动匹配，请稍候');
+      }
+      return null;
+    }
+
+    _updateDetailAutoMatchingState(true);
+    _detailAutoMatchCancelled = false;
+    _showDetailAutoMatchingDialog();
+
+    try {
+      final result = await task();
+      if (_detailAutoMatchCancelled) {
+        if (mounted) {
+          BlurSnackBar.show(context, '已取消自动匹配');
+        }
+        return null;
+      }
+      return result;
+    } finally {
+      _hideDetailAutoMatchingDialog();
+      _updateDetailAutoMatchingState(false);
+    }
+  }
+
+  void _updateDetailAutoMatchingState(bool value) {
+    if (!mounted) {
+      _isDetailAutoMatching = value;
+      return;
+    }
+    if (_isDetailAutoMatching == value) {
+      return;
+    }
+    setState(() {
+      _isDetailAutoMatching = value;
+    });
+  }
+
+  void _showDetailAutoMatchingDialog() {
+    if (_detailAutoMatchDialogVisible || !mounted) {
+      return;
+    }
+    _detailAutoMatchDialogVisible = true;
+    BlurDialog.show(
+      context: context,
+      title: '正在自动匹配',
+      barrierDismissible: false,
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(height: 8),
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          ),
+          SizedBox(height: 16),
+          Text(
+            '正在为当前条目匹配弹幕，请稍候…',
+            style: TextStyle(color: Colors.white, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            _detailAutoMatchCancelled = true;
+            Navigator.of(context, rootNavigator: true).pop();
+          },
+          child: const Text('中断匹配', style: TextStyle(color: Colors.redAccent)),
+        ),
+      ],
+    ).whenComplete(() {
+      _detailAutoMatchDialogVisible = false;
+    });
+  }
+
+  void _hideDetailAutoMatchingDialog() {
+    if (!_detailAutoMatchDialogVisible) {
+      return;
+    }
+    if (!mounted) {
+      _detailAutoMatchDialogVisible = false;
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   @override
@@ -1059,7 +1156,13 @@ style: TextStyle(
               BlurButton(
                 icon: Icons.play_arrow,
                 text: '播放',
-                onTap: _playMovie,
+                onTap: () {
+                  if (_isDetailAutoMatching) {
+                    BlurSnackBar.show(context, '正在自动匹配，请稍候');
+                    return;
+                  }
+                  _playMovie();
+                },
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 fontSize: 18,
               ),
@@ -1199,6 +1302,7 @@ style: TextStyle(color: Colors.white70)));
         
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          enabled: !_isDetailAutoMatching,
           leading: SizedBox(
             width: 100, // 调整图片宽度
             height: 60, // 调整图片高度，保持宽高比
@@ -1270,6 +1374,10 @@ style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
           ),
           trailing: const Icon(Ionicons.play_circle_outline, color: Colors.white70, size: 22), // 添加播放按钮指示
           onTap: () async {
+            if (_isDetailAutoMatching) {
+              BlurSnackBar.show(context, '正在自动匹配，请稍候');
+              return;
+            }
             try {
               BlurSnackBar.show(context, '准备播放: ${episode.name}');
               
@@ -1289,7 +1397,7 @@ style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
               
               // 使用JellyfinDandanplayMatcher创建增强的WatchHistoryItem
               // 这一步会显示匹配对话框，阻塞直到用户完成选择或跳过
-              final historyItem = await _createWatchHistoryItem(episode);
+              final historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(() => _createWatchHistoryItem(episode));
               if (historyItem == null) return; // 用户关闭弹窗，什么都不做
               
               // 用户已完成匹配选择，现在可以继续播放流程

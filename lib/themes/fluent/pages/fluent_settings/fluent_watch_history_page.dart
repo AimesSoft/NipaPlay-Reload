@@ -20,6 +20,9 @@ class FluentWatchHistoryPage extends StatefulWidget {
 }
 
 class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
+  bool _isAutoMatching = false;
+  bool _autoMatchDialogVisible = false;
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldPage.scrollable(
@@ -98,11 +101,12 @@ class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
             const SizedBox(width: 8),
             IconButton(
               icon: const Icon(FluentIcons.delete, size: 16),
-              onPressed: () => _showDeleteConfirmDialog(item),
+              onPressed:
+                  _isAutoMatching ? null : () => _showDeleteConfirmDialog(item),
             ),
           ],
         ),
-        onPressed: () => _onWatchHistoryItemTap(item),
+        onPressed: _isAutoMatching ? null : () => _onWatchHistoryItemTap(item),
       ),
     );
   }
@@ -206,6 +210,11 @@ class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
   }
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) async {
+    if (_isAutoMatching) {
+      MessageHelper.showMessage(context, '正在自动匹配，请稍候');
+      return;
+    }
+
     debugPrint('[FluentWatchHistoryPage] _onWatchHistoryItemTap: Received item: $item');
     var currentItem = item;
 
@@ -276,12 +285,7 @@ class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
 
     if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
       final matchablePath = actualPlayUrl ?? currentItem.filePath;
-      currentItem = await WatchHistoryAutoMatchHelper.tryAutoMatch(
-        context,
-        currentItem,
-        matchablePath: matchablePath,
-        onMatched: (message) => MessageHelper.showMessage(context, message),
-      );
+      currentItem = await _performAutoMatch(currentItem, matchablePath);
     }
 
     final playableItem = PlayableItem(
@@ -295,6 +299,79 @@ class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
     );
 
     await PlaybackService().play(playableItem);
+  }
+
+  Future<WatchHistoryItem> _performAutoMatch(
+    WatchHistoryItem currentItem,
+    String matchablePath,
+  ) async {
+    _updateAutoMatchingState(true);
+    _showAutoMatchingDialog();
+    String? notification;
+
+    try {
+      return await WatchHistoryAutoMatchHelper.tryAutoMatch(
+        context,
+        currentItem,
+        matchablePath: matchablePath,
+        onMatched: (message) => notification = message,
+      );
+    } finally {
+      _hideAutoMatchingDialog();
+      _updateAutoMatchingState(false);
+      if (notification != null && mounted) {
+        MessageHelper.showMessage(context, notification!);
+      }
+    }
+  }
+
+  void _updateAutoMatchingState(bool value) {
+    if (!mounted) {
+      _isAutoMatching = value;
+      return;
+    }
+    if (_isAutoMatching == value) {
+      return;
+    }
+    setState(() {
+      _isAutoMatching = value;
+    });
+  }
+
+  void _showAutoMatchingDialog() {
+    if (_autoMatchDialogVisible || !mounted) return;
+    _autoMatchDialogVisible = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return ContentDialog(
+          title: const Text('正在自动匹配'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              SizedBox(height: 8),
+              ProgressRing(),
+              SizedBox(height: 16),
+              Text('正在为历史记录匹配弹幕，请稍候…'),
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      _autoMatchDialogVisible = false;
+    });
+  }
+
+  void _hideAutoMatchingDialog() {
+    if (!_autoMatchDialogVisible) {
+      return;
+    }
+    if (!mounted) {
+      _autoMatchDialogVisible = false;
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   void _showDeleteConfirmDialog(WatchHistoryItem item) {
