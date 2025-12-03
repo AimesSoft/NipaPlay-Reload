@@ -11,7 +11,7 @@ class AutoNextEpisodeService {
   static AutoNextEpisodeService get instance =>
       _instance ??= AutoNextEpisodeService._();
   static const int defaultCountdownSeconds = 3;
-  static const int minCountdownSeconds = 1;
+  static const int minCountdownSeconds = 0;
   static const int maxCountdownSeconds = 15;
   
   AutoNextEpisodeService._();
@@ -154,6 +154,14 @@ class AutoNextEpisodeService {
     debugPrint('[AutoNext] _startCountdown called, nextEpisodePath=$nextEpisodePath, _countdownSeconds=$_countdownSeconds');
     _countdownSeconds = _countdownDurationSeconds;
     _isCancelled = false;
+
+    if (_countdownSeconds <= 0) {
+      debugPrint('[AutoNext] 倒计时设置为0秒，直接播放下一话');
+      CountdownSnackBar.hide();
+      _isCountingDown = false;
+      _playNextEpisode(context, nextEpisodePath);
+      return;
+    }
     
     // 显示初始倒计时
     CountdownSnackBar.show(
@@ -182,6 +190,7 @@ class AutoNextEpisodeService {
       if (_countdownSeconds <= 0) {
         timer.cancel();
         CountdownSnackBar.hide();
+        _isCountingDown = false;
         
         if (!_isCancelled) {
           debugPrint('[AutoNext] 倒计时结束，调用_playNextEpisode, nextEpisodePath=$nextEpisodePath');
