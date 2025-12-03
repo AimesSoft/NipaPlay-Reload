@@ -17,7 +17,7 @@ class ThemeRegistry {
       _themes[defaultThemeId] ?? const NipaplayThemeDescriptor();
 
   static ThemeDescriptor defaultThemeForEnvironment(ThemeEnvironment env) {
-    if (env.isIOS) {
+    if (env.isIOS && env.isPhone && !env.isTablet) {
       final cupertinoTheme = maybeGet(ThemeIds.cupertino);
       if (cupertinoTheme != null && cupertinoTheme.isSupported(env)) {
         return cupertinoTheme;

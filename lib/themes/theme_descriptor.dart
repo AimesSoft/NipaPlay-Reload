@@ -8,12 +8,14 @@ class ThemeEnvironment {
   final bool isPhone;
   final bool isWeb;
   final bool isIOS;
+  final bool isTablet;
 
   const ThemeEnvironment({
     required this.isDesktop,
     required this.isPhone,
     required this.isWeb,
     this.isIOS = false,
+    this.isTablet = false,
   });
 }
 
