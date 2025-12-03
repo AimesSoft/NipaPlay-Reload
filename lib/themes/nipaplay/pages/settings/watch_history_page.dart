@@ -24,6 +24,14 @@ class WatchHistoryPage extends StatefulWidget {
 }
 
 class _WatchHistoryPageState extends State<WatchHistoryPage> {
+  OverlayEntry? _contextMenuOverlay;
+
+  @override
+  void dispose() {
+    _hideContextMenu();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,7 +74,9 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
   Widget _buildWatchHistoryItem(WatchHistoryItem item) {
     final appearanceProvider = context.watch<AppearanceSettingsProvider>();
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onLongPress: () => _showDeleteConfirmDialog(item),
+      onSecondaryTapDown: (details) => _showContextMenu(details.globalPosition, item),
       child: GlassmorphicContainer(
         width: double.infinity,
         height: 70,
@@ -363,6 +373,7 @@ style: TextStyle(
   }
 
   void _showDeleteConfirmDialog(WatchHistoryItem item) {
+    _hideContextMenu();
     BlurDialog.show(
       context: context,
       title: '删除观看记录',
@@ -385,6 +396,131 @@ style: TextStyle(color: Colors.red)),
           },
         ),
       ],
+    );
+  }
+
+  void _showContextMenu(Offset tapPosition, WatchHistoryItem item) {
+    final overlay = Overlay.of(context);
+    if (overlay == null) return;
+
+    _hideContextMenu();
+
+    final renderBox = overlay.context.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+
+    const double menuWidth = 196;
+    const double menuHeight = 56;
+    final Size overlaySize = renderBox.size;
+    final Offset overlayPosition = renderBox.globalToLocal(tapPosition);
+
+    double left = overlayPosition.dx;
+    double top = overlayPosition.dy;
+
+    if (left + menuWidth > overlaySize.width) {
+      left = overlaySize.width - menuWidth - 12;
+    }
+    if (top + menuHeight > overlaySize.height) {
+      top = overlaySize.height - menuHeight - 12;
+    }
+
+    final bool enableBlur = context.read<AppearanceSettingsProvider>().enableWidgetBlurEffect;
+
+    _contextMenuOverlay = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _hideContextMenu,
+              onSecondaryTap: _hideContextMenu,
+            ),
+          ),
+          Positioned(
+            left: left,
+            top: top,
+            child: _BlurContextMenu(
+              enableBlur: enableBlur,
+              onDelete: () {
+                _hideContextMenu();
+                _showDeleteConfirmDialog(item);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+
+    overlay.insert(_contextMenuOverlay!);
+  }
+
+  void _hideContextMenu() {
+    _contextMenuOverlay?.remove();
+    _contextMenuOverlay = null;
+  }
+}
+
+class _BlurContextMenu extends StatelessWidget {
+  final bool enableBlur;
+  final VoidCallback onDelete;
+
+  const _BlurContextMenu({
+    required this.enableBlur,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassmorphicContainer(
+      width: 196,
+      height: 56,
+      borderRadius: 12,
+      blur: enableBlur ? 16 : 0,
+      border: 0.8,
+      alignment: Alignment.center,
+      linearGradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withOpacity(0.18),
+          Colors.white.withOpacity(0.08),
+        ],
+      ),
+      borderGradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withOpacity(0.45),
+          Colors.white.withOpacity(0.15),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onDelete,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Ionicons.trash_outline,
+                  size: 18,
+                  color: Colors.redAccent,
+                ),
+                SizedBox(width: 10),
+                Text(
+                  '删除观看记录',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
