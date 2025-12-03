@@ -37,6 +37,9 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart'
     show MediaServerType;
+import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/pages/network_media/cupertino_dandanplay_library_page.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
@@ -91,10 +94,16 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       color: backgroundColor,
       child: Stack(
         children: [
-          Consumer3<SharedRemoteLibraryProvider, JellyfinProvider,
-              EmbyProvider>(
-            builder:
-                (context, sharedProvider, jellyfinProvider, embyProvider, _) {
+          Consumer4<SharedRemoteLibraryProvider, JellyfinProvider,
+              EmbyProvider, DandanplayRemoteProvider>(
+            builder: (
+              context,
+              sharedProvider,
+              jellyfinProvider,
+              embyProvider,
+              dandanProvider,
+              _,
+            ) {
               return CustomScrollView(
                 controller: _scrollController,
                 physics: const BouncingScrollPhysics(
@@ -125,6 +134,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                     context,
                     jellyfinProvider,
                     embyProvider,
+                    dandanProvider,
                   ),
                   SliverToBoxAdapter(
                     child: _buildSectionTitle('NipaPlay 共享媒体库'),
@@ -198,9 +208,11 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     BuildContext context,
     JellyfinProvider jellyfinProvider,
     EmbyProvider embyProvider,
+    DandanplayRemoteProvider dandanProvider,
   ) {
     final bool jellyfinConnected = jellyfinProvider.isConnected;
     final bool embyConnected = embyProvider.isConnected;
+    final bool dandanConnected = dandanProvider.isConnected;
     final List<Widget> slivers = [];
 
     final List<Widget> cards = [];
@@ -254,6 +266,21 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
             MediaServerType.emby,
           ),
           onManage: () => _showNetworkServerDialog(MediaServerType.emby),
+        ),
+      );
+    }
+
+    if (dandanConnected) {
+      cards.add(
+        CupertinoGlassMediaServerCard(
+          title: '弹弹play 媒体库',
+          subtitle: _formatServerSubtitle(null, dandanProvider.serverUrl),
+          icon: CupertinoIcons.chat_bubble_2_fill,
+          accentColor: const Color(0xFFFFC857),
+          summaryText: _buildDandanSummary(dandanProvider),
+          isLoading: dandanProvider.isLoading,
+          onTap: () => _openDandanplayLibraryPage(dandanProvider),
+          onManage: () => _manageDandanplayConnection(dandanProvider),
         ),
       );
     }
@@ -318,6 +345,13 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
 
   String _trimUrlScheme(String url) {
     return url.replaceFirst(RegExp(r'^https?://'), '');
+  }
+
+  String _buildDandanSummary(DandanplayRemoteProvider provider) {
+    final String syncedLabel = _formatDateTime(provider.lastSyncedAt);
+    final int animeCount = provider.animeGroups.length;
+    final int episodeCount = provider.episodes.length;
+    return '番剧 $animeCount · 视频 $episodeCount · 最近同步：$syncedLabel';
   }
 
   Future<void> _openNetworkServerLibrariesPage(MediaServerType type) async {
@@ -948,6 +982,60 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
 
     await PlaybackService().play(playable);
     await context.read<WatchHistoryProvider>().refresh();
+  }
+
+  Future<void> _openDandanplayLibraryPage(
+    DandanplayRemoteProvider provider,
+  ) async {
+    if (!provider.isConnected) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '请先连接弹弹play 远程服务',
+        type: AdaptiveSnackBarType.warning,
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => const CupertinoDandanplayLibraryPage(),
+      ),
+    );
+  }
+
+  Future<void> _manageDandanplayConnection(
+    DandanplayRemoteProvider provider,
+  ) async {
+    final bool hasExisting = provider.serverUrl?.isNotEmpty == true;
+    final config = await showCupertinoDandanplayConnectionDialog(
+      context: context,
+      provider: provider,
+    );
+    if (config == null) {
+      return;
+    }
+
+    try {
+      await provider.connect(
+        config.baseUrl,
+        token: config.apiToken,
+      );
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: hasExisting
+            ? '弹弹play 远程服务配置已更新'
+            : '弹弹play 远程服务已连接',
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '连接失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
+    }
   }
 
   String _formatDateTime(DateTime? time) {

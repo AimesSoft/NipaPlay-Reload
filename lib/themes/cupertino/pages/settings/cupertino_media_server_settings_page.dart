@@ -10,6 +10,7 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_remote_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_server_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_media_library_sheet.dart';
@@ -218,161 +219,38 @@ class _CupertinoMediaServerSettingsPageState
     }
   }
 
-  Future<void> _showDandanplayConnectSheet(
+  Future<void> _showDandanplayConnectionDialog(
     DandanplayRemoteProvider provider,
   ) async {
     final bool hasExisting = provider.serverUrl?.isNotEmpty == true;
-    final TextEditingController urlController =
-        TextEditingController(text: provider.serverUrl ?? '');
-    final TextEditingController tokenController = TextEditingController();
-    bool isSubmitting = false;
-    String? errorText;
+    final config = await showCupertinoDandanplayConnectionDialog(
+      context: context,
+      provider: provider,
+    );
+    if (config == null) {
+      return;
+    }
 
     try {
-      final bool? result = await CupertinoBottomSheet.show<bool>(
-        context: context,
-        title: hasExisting ? '管理弹弹play远程访问' : '连接弹弹play远程访问',
-        floatingTitle: true,
-        child: StatefulBuilder(
-          builder: (sheetContext, setState) {
-            Future<void> handleSubmit() async {
-              final String baseUrl = urlController.text.trim();
-              final String token = tokenController.text.trim();
-              if (baseUrl.isEmpty) {
-                setState(() {
-                  errorText = '请输入远程服务地址';
-                });
-                return;
-              }
-
-              FocusScope.of(sheetContext).unfocus();
-              setState(() {
-                isSubmitting = true;
-                errorText = null;
-              });
-
-              try {
-                await provider.connect(
-                  baseUrl,
-                  token: token.isEmpty ? null : token,
-                );
-                Navigator.of(sheetContext).pop(true);
-              } catch (e) {
-                setState(() {
-                  errorText = e.toString();
-                  isSubmitting = false;
-                });
-              }
-            }
-
-            final Color secondaryLabel = CupertinoDynamicColor.resolve(
-              CupertinoColors.secondaryLabel,
-              sheetContext,
-            );
-
-            final String tokenPlaceholder =
-                provider.tokenRequired ? '服务器已启用 API 验证' : '如启用 API 验证请填写';
-
-            return CupertinoBottomSheetContentLayout(
-              sliversBuilder: (context, topSpacing) => [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      topSpacing + 12,
-                      20,
-                      32,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '请输入桌面端显示的远程服务地址以及可选的 API 密钥。',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: secondaryLabel,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          '远程服务地址',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.label,
-                              sheetContext,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        CupertinoTextField(
-                          controller: urlController,
-                          keyboardType: TextInputType.url,
-                          placeholder: '例如 http://192.168.1.2:23333',
-                          textInputAction: TextInputAction.next,
-                          autocorrect: false,
-                          enableSuggestions: false,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'API 密钥（可选）',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.label,
-                              sheetContext,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        CupertinoTextField(
-                          controller: tokenController,
-                          placeholder: tokenPlaceholder,
-                          obscureText: true,
-                        ),
-                        if (errorText != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            errorText!,
-                            style: TextStyle(
-                              color: CupertinoDynamicColor.resolve(
-                                CupertinoColors.systemRed,
-                                sheetContext,
-                              ),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-                        CupertinoButton.filled(
-                          onPressed: isSubmitting ? null : handleSubmit,
-                          borderRadius: BorderRadius.circular(14),
-                          child: isSubmitting
-                              ? const CupertinoActivityIndicator()
-                              : Text(hasExisting ? '保存' : '连接'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
+      await provider.connect(
+        config.baseUrl,
+        token: config.apiToken,
       );
-
-      if (result == true && mounted) {
-        AdaptiveSnackBar.show(
-          context,
-          message: '弹弹play 远程服务配置已更新',
-          type: AdaptiveSnackBarType.success,
-        );
-      }
-    } finally {
-      urlController.dispose();
-      tokenController.dispose();
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: hasExisting
+            ? '弹弹play 远程服务配置已更新'
+            : '弹弹play 远程服务已连接',
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '连接失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
     }
   }
 
@@ -580,7 +458,7 @@ class _CupertinoMediaServerSettingsPageState
                     animeGroupCount: dandanProvider.animeGroups.length,
                     episodeCount: dandanProvider.episodes.length,
                     previewGroups: dandanPreview,
-                    onManage: () => _showDandanplayConnectSheet(
+                    onManage: () => _showDandanplayConnectionDialog(
                       dandanProvider,
                     ),
                     onRefresh: dandanProvider.isConnected

@@ -16,7 +16,8 @@ import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart'
-    show MediaServerType;
+  show MediaServerType;
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 
@@ -77,6 +78,9 @@ class _CupertinoMediaServerDetailPageState
   String? _error;
   bool _isMovie = false;
   int _currentSegment = 0;
+  bool _isDetailAutoMatching = false;
+  bool _detailAutoMatchDialogVisible = false;
+  bool _detailAutoMatchCancelled = false;
 
   @override
   void initState() {
@@ -347,6 +351,15 @@ class _CupertinoMediaServerDetailPageState
       return;
     }
 
+    if (_isDetailAutoMatching) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '正在自动匹配，请稍候',
+        type: AdaptiveSnackBarType.info,
+      );
+      return;
+    }
+
     try {
       dynamic matcher;
       WatchHistoryItem? historyItem;
@@ -372,8 +385,12 @@ class _CupertinoMediaServerDetailPageState
           studio: _mediaDetail!.seriesStudio,
         );
         matcher = JellyfinDandanplayMatcher.instance;
-        historyItem = await matcher.createPlayableHistoryItemFromMovie(
-            context, movieInfo);
+        historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(
+          () => matcher.createPlayableHistoryItemFromMovie(
+            context,
+            movieInfo,
+          ),
+        );
         if (historyItem != null) {
           streamUrl = JellyfinService.instance.getStreamUrl(_mediaDetail!.id);
         }
@@ -397,8 +414,12 @@ class _CupertinoMediaServerDetailPageState
           studio: _mediaDetail!.seriesStudio,
         );
         matcher = EmbyDandanplayMatcher.instance;
-        historyItem = await matcher.createPlayableHistoryItemFromMovie(
-            context, movieInfo);
+        historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(
+          () => matcher.createPlayableHistoryItemFromMovie(
+            context,
+            movieInfo,
+          ),
+        );
         if (historyItem != null) {
           streamUrl = await EmbyService.instance.getStreamUrl(_mediaDetail!.id);
         }
@@ -1311,6 +1332,15 @@ class _CupertinoMediaServerDetailPageState
 
   Future<void> _playEpisode(dynamic episode) async {
     try {
+      if (_isDetailAutoMatching) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '正在自动匹配，请稍候',
+          type: AdaptiveSnackBarType.info,
+        );
+        return;
+      }
+
       AdaptiveSnackBar.show(
         context,
         message: '准备播放: ${episode.name}',
@@ -1330,7 +1360,9 @@ class _CupertinoMediaServerDetailPageState
         type: AdaptiveSnackBarType.info,
       );
 
-      final historyItem = await _createWatchHistoryItem(episode);
+      final historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(
+        () => _createWatchHistoryItem(episode),
+      );
       if (historyItem == null) {
         return;
       }
@@ -1359,5 +1391,111 @@ class _CupertinoMediaServerDetailPageState
         type: AdaptiveSnackBarType.error,
       );
     }
+  }
+
+  Future<T?> _runDetailAutoMatchTask<T>(Future<T?> Function() task) async {
+    if (_isDetailAutoMatching) {
+      if (mounted) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '正在自动匹配，请稍候',
+          type: AdaptiveSnackBarType.info,
+        );
+      }
+      return null;
+    }
+
+    _updateDetailAutoMatchingState(true);
+    _detailAutoMatchCancelled = false;
+    _showDetailAutoMatchingDialog();
+
+    try {
+      final result = await task();
+      if (_detailAutoMatchCancelled) {
+        if (mounted) {
+          AdaptiveSnackBar.show(
+            context,
+            message: '已取消自动匹配',
+            type: AdaptiveSnackBarType.warning,
+          );
+        }
+        return null;
+      }
+      return result;
+    } finally {
+      _hideDetailAutoMatchingDialog();
+      _updateDetailAutoMatchingState(false);
+    }
+  }
+
+  void _updateDetailAutoMatchingState(bool value) {
+    if (!mounted) {
+      _isDetailAutoMatching = value;
+      return;
+    }
+    if (_isDetailAutoMatching == value) {
+      return;
+    }
+    setState(() {
+      _isDetailAutoMatching = value;
+    });
+  }
+
+  void _showDetailAutoMatchingDialog() {
+    if (_detailAutoMatchDialogVisible || !mounted) {
+      return;
+    }
+    _detailAutoMatchDialogVisible = true;
+    BlurDialog.show(
+      context: context,
+      title: '正在自动匹配',
+      barrierDismissible: false,
+      contentWidget: _buildDetailAutoMatchDialogContent(),
+      actions: [
+        CupertinoDialogAction(
+          isDestructiveAction: true,
+          onPressed: () {
+            _detailAutoMatchCancelled = true;
+            Navigator.of(context, rootNavigator: true).pop();
+          },
+          child: const Text('中断匹配'),
+        ),
+      ],
+    ).whenComplete(() {
+      _detailAutoMatchDialogVisible = false;
+    });
+  }
+
+  void _hideDetailAutoMatchingDialog() {
+    if (!_detailAutoMatchDialogVisible) {
+      return;
+    }
+    if (!mounted) {
+      _detailAutoMatchDialogVisible = false;
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
+    _detailAutoMatchDialogVisible = false;
+  }
+
+  Widget _buildDetailAutoMatchDialogContent() {
+    final textColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 8),
+        const CupertinoActivityIndicator(radius: 12),
+        const SizedBox(height: 16),
+        Text(
+          '正在为当前条目匹配弹幕，请稍候…',
+          style: TextStyle(color: textColor, fontSize: 14),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
   }
 }

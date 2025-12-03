@@ -370,21 +370,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       context: _context!,
       title: '正在搜索$episodeType',
       barrierDismissible: false,
-      contentWidget: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          SizedBox(height: 8),
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-          ),
-          SizedBox(height: 16),
-          Text(
-            '正在定位剧集并匹配弹幕，请稍候…',
-            style: TextStyle(color: Colors.white, fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+      contentWidget: _buildEpisodeNavigationDialogContent(),
     ).whenComplete(() {
       _navigationDialogVisible = false;
     });
@@ -396,6 +382,44 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
     Navigator.of(_context!, rootNavigator: true).pop();
     _navigationDialogVisible = false;
+  }
+
+  Widget _buildEpisodeNavigationDialogContent() {
+    final isCupertinoTheme = _context != null && _context!.mounted
+        ? Provider.of<UIThemeProvider>(_context!, listen: false)
+            .isCupertinoTheme
+        : false;
+
+    final Widget indicator = isCupertinoTheme
+        ? const CupertinoActivityIndicator(radius: 12)
+        : const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          );
+
+    final TextStyle textStyle = isCupertinoTheme
+        ? const TextStyle(
+            color: CupertinoColors.secondaryLabel,
+            fontSize: 14,
+          )
+        : const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+          );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(height: 8),
+        indicator,
+        const SizedBox(height: 16),
+        Text(
+          '正在定位剧集并匹配弹幕，请稍候…',
+          style: textStyle,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
   }
 
   // 显示剧集未找到的消息
