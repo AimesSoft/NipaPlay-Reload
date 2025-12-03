@@ -9,7 +9,7 @@ NipaPlay 提供多种播放器内核，各有特点：
 - **Libmpv（推荐）**：
   - ✅ 支持硬件解码，性能优异
   - ✅ 兼容性强，支持各种视频格式和字幕
-  - ✅ 解码能力完整（需 Windows 用户手动优化，见下文）
+  - ✅ 解码能力完整（官方 Windows 包已自动集成完整版 libmpv，手动构建可参考下文）
   - 🎯 **最推荐使用**，特别是性能受限的设备
 
 - **MDK**：
@@ -30,9 +30,11 @@ NipaPlay 提供多种播放器内核，各有特点：
 
 ## Windows 平台解码器优化
 
-> **重要**：Windows 版本由于上游 media-kit 的限制，默认的 libmpv 库解码器不够完整，可能无法播放某些格式或字幕（如 HDR、10bit、PGS字幕等）。
+> **重要**：Windows 版本由于上游 media-kit 的限制，默认的 libmpv 库解码器不够完整，可能无法播放某些格式或字幕（如 HDR、10bit、PGS字幕等）。  
+> 现在官方 GitHub Actions 构建会自动从 [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake) 拉取最新的 `mpv-dev-x86_64-v3` 包（该 Dev 包才包含 `libmpv-2.dll`），并使用 `windows/libmpv-2.dll` 替换原始库，因此直接下载 Release/构建产物即可获得完整版解码能力。  
+> 如果你需要固定到特定版本，可在自建流水线中设置 `LIBMPV_DOWNLOAD_URL`（或 `LIBMPV_ASSET_PATTERN`）环境变量覆盖默认下载逻辑。只有在你自行编译或希望替换成其他 libmpv 分支时，才需要按照下方步骤手动操作。
 
-### 解决方案：手动替换 libmpv 库
+### 解决方案（自编译场景）：手动替换 libmpv 库
 
 社区提供了完整版本的 libmpv 库来解决解码器缺失问题：
 

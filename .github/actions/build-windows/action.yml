@@ -37,6 +37,78 @@ runs:
       run: |
         chmod +x build_and_copy_web.sh
         ./build_and_copy_web.sh
+
+    - name: Download full libmpv package
+      shell: pwsh
+      run: |
+        $customUrl = $env:LIBMPV_DOWNLOAD_URL
+        $assetPattern = $env:LIBMPV_ASSET_PATTERN
+        if ([string]::IsNullOrEmpty($assetPattern)) {
+          $assetPattern = "mpv-dev-x86_64-v3.*\.7z"
+        }
+        choco install 7zip -y --no-progress
+        $sevenZip = $null
+        if ($env:ProgramFiles) {
+          $candidate = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          if (Test-Path $candidate) {
+            $sevenZip = $candidate
+          }
+        }
+        if (-not $sevenZip -and ${env:ProgramFiles(x86)}) {
+          $candidate = Join-Path ${env:ProgramFiles(x86)} "7-Zip\7z.exe"
+          if (Test-Path $candidate) {
+            $sevenZip = $candidate
+          }
+        }
+        if (-not $sevenZip) {
+          throw "未找到 7z.exe，请确保 7zip 安装成功"
+        }
+        $packagePath = "windows\libmpv-package.7z"
+        $extractDir = "windows\libmpv-package"
+        Remove-Item $packagePath -Force -ErrorAction SilentlyContinue
+        Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -Path $extractDir -ItemType Directory -Force | Out-Null
+        if ([string]::IsNullOrEmpty($customUrl)) {
+          $releaseApi = "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest"
+          $headers = @{
+            "User-Agent" = "NipaPlay-Build"
+            "Accept"    = "application/vnd.github+json"
+          }
+          if ($env:GITHUB_TOKEN) {
+            $headers["Authorization"] = "Bearer $($env:GITHUB_TOKEN)"
+          }
+          try {
+            $release = Invoke-RestMethod -Uri $releaseApi -Headers $headers -UseBasicParsing
+          } catch {
+            throw "获取 mpv 最新版本信息失败：$($_.Exception.Message)"
+          }
+          $asset = $release.assets | Where-Object { $_.name -match $assetPattern } | Select-Object -First 1
+          if (-not $asset) {
+            $fallbackPattern = "mpv-dev-x86_64.*\.7z"
+            $asset = $release.assets | Where-Object { $_.name -match $fallbackPattern } | Select-Object -First 1
+          }
+          if (-not $asset) {
+            $fallbackPattern = "libmpv-shared-x86_64.*\.7z"
+            $asset = $release.assets | Where-Object { $_.name -match $fallbackPattern } | Select-Object -First 1
+          }
+          if (-not $asset) {
+            throw "未在 mpv 最新 release 中找到匹配的 libmpv 包"
+          }
+          $customUrl = $asset.browser_download_url
+          Write-Host "选用 libmpv 资源：$($asset.name)"
+        } else {
+          Write-Host "使用自定义 libmpv 下载地址：$customUrl"
+        }
+        Write-Host "开始下载 libmpv 包：$customUrl"
+        Invoke-WebRequest -Uri $customUrl -OutFile $packagePath -UseBasicParsing
+        & $sevenZip x $packagePath "-o$extractDir" -y | Out-Null
+        $dll = Get-ChildItem -Path $extractDir -Recurse -Filter "libmpv-2.dll" | Select-Object -First 1
+        if (-not $dll) {
+          throw "libmpv 包中未找到 libmpv-2.dll"
+        }
+        Copy-Item -Path $dll.FullName -Destination "windows\libmpv-2.dll" -Force
+        Remove-Item $packagePath -Force -ErrorAction SilentlyContinue
+        Write-Host "libmpv-2.dll 已下载并可用于后续打包"
     
     - name: Build Windows
       id: build
@@ -47,6 +119,15 @@ runs:
         $version = "${{ inputs.app-version }}"
         $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
         $SrcDir = "build\windows\x64\runner\Release"
+        $CustomLib = "windows\libmpv-2.dll"
+        if (!(Test-Path $SrcDir)) {
+          throw "Windows 构建输出目录不存在：$SrcDir"
+        }
+        if (!(Test-Path $CustomLib)) {
+          throw "未找到内置的完整版 libmpv：$CustomLib"
+        }
+        Copy-Item -Path $CustomLib -Destination "$SrcDir\libmpv-2.dll" -Force
+        Write-Host "已将构建输出中的 libmpv-2.dll 替换为完整版"
         New-Item -Path $DestDir -ItemType Directory -Force
         Copy-Item -Path "$SrcDir\*" -Destination $DestDir -Recurse -Force
         Copy-Item -Path "windows\*.dll" -Destination $DestDir -Force
@@ -210,4 +291,3 @@ runs:
           $sizeKB = [math]::Round($_.Length / 1KB, 2)
           Write-Host "$($_.Name) - ${sizeKB} KB"
         }
-

@@ -18,6 +18,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
@@ -338,6 +339,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         await _showEmbyServerDialog();
       } else if (result == 'nipaplay') {
         await _showNipaplayServerDialog();
+      } else if (result == 'dandanplay') {
+        await _showDandanplayServerDialog();
       }
     }
   }
@@ -390,6 +393,57 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
           }
         },
       );
+    }
+  }
+
+  Future<void> _showDandanplayServerDialog() async {
+    final provider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+    if (!provider.isInitialized) {
+      await provider.initialize();
+    }
+    final hasExisting = provider.serverUrl?.isNotEmpty == true;
+
+    final result = await BlurLoginDialog.show(
+      context,
+      title: hasExisting ? '更新弹弹play远程连接' : '连接弹弹play远程服务',
+      loginButtonText: hasExisting ? '保存' : '连接',
+      fields: [
+        LoginField(
+          key: 'baseUrl',
+          label: '远程服务地址',
+          hint: '例如 http://192.168.1.2:23333',
+          initialValue: provider.serverUrl ?? '',
+        ),
+        LoginField(
+          key: 'token',
+          label: 'API密钥 (可选)',
+          hint: provider.tokenRequired
+              ? '服务器已启用 API 验证'
+              : '若服务器开启验证请填写',
+          isPassword: true,
+          required: false,
+        ),
+      ],
+      onLogin: (values) async {
+        final baseUrl = values['baseUrl'] ?? '';
+        final token = values['token'];
+        if (baseUrl.isEmpty) {
+          return const LoginResult(success: false, message: '请输入远程服务地址');
+        }
+        try {
+          await provider.connect(baseUrl, token: token);
+          return const LoginResult(
+            success: true,
+            message: '已连接至弹弹play远程服务',
+          );
+        } catch (e) {
+          return LoginResult(success: false, message: e.toString());
+        }
+      },
+    );
+
+    if (result == true && mounted) {
+      BlurSnackBar.show(context, '弹弹play远程服务配置已更新');
     }
   }
 

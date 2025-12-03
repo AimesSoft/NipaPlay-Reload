@@ -109,6 +109,16 @@ style: TextStyle(
 
                     const SizedBox(height: 12),
 
+                    _buildServerOptionWithImage(
+                      imageAsset: 'assets/dandanplay.png',
+                      title: '弹弹play',
+                      subtitle: '弹幕番剧远程服务',
+                      color: const Color(0xFF4DA3FF),
+                      onTap: () => Navigator.of(context).pop('dandanplay'),
+                    ),
+
+                    const SizedBox(height: 12),
+
                     // Emby 选项
                     _buildServerOptionWithSvg(
                       svgAsset: 'assets/emby.svg',

@@ -37,6 +37,9 @@ class _SettingsPageState extends State<SettingsPage>
   // 也可以考虑给它一个初始值，这样桌面端一进来右侧不是空的
   Widget? currentPage; // 初始可以为 null
   late TabController _tabController;
+  static const Locale _titleLocale = Locale("zh-Hans", "zh");
+  static const TextStyle _titleTextStyle =
+      TextStyle(color: Colors.white, fontWeight: FontWeight.bold);
 
   @override
   void initState() {
@@ -92,184 +95,145 @@ class _SettingsPageState extends State<SettingsPage>
 
   @override
   Widget build(BuildContext context) {
+    final entries = _buildSettingEntries(context);
     // ResponsiveContainer 会根据 isDesktop 决定是否显示 currentPage
     return ResponsiveContainer(
       currentPage: currentPage ?? Container(), // 将当前页面状态传递给 ResponsiveContainer
       // child 是 ListView，始终显示
-      child: ListView(
-        children: [
-          ListTile(
-            title: const Text("账号",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const AccountPage(), "账号设置");
-            },
-          ),
-          ListTile(
-            title: const Text("外观",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              final themeNotifier =
-                  context.read<ThemeNotifier>(); // 获取 Notifier
-              // 调用通用处理函数
-              _handleItemTap(
-                  ThemeModePage(themeNotifier: themeNotifier), // 目标页面
-                  "外观设置" // 移动端 AppBar 标题
-                  );
-            },
-          ),
-          // 在Android平台隐藏主题设置
-          if (!Platform.isAndroid)
-            ListTile(
-              title: const Text("主题（实验性）",
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-              trailing: const Icon(Ionicons.chevron_forward_outline,
-                  color: Colors.white),
-              onTap: () {
-                _handleItemTap(const UIThemePage(), "主题设置");
-              },
-            ),
-          ListTile(
-            title: const Text("通用",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const GeneralPage(), "通用设置");
-            },
-          ),
-          ListTile(
-            title: const Text("存储",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const StoragePage(), "存储设置");
-            },
-          ),
-          ListTile(
-            title: const Text("网络",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const NetworkSettingsPage(), "网络设置");
-            },
-          ),
-          ListTile(
-            title: const Text("观看记录",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const WatchHistoryPage(), "观看记录");
-            },
-          ),
-          if (!globals.isPhone)
-            ListTile(
-              title: const Text("备份与恢复",
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-              trailing: const Icon(Ionicons.chevron_forward_outline,
-                  color: Colors.white),
-              onTap: () {
-                _handleItemTap(const BackupRestorePage(), "备份与恢复");
-              },
-            ),
-          ListTile(
-            title: const Text("播放器",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const PlayerSettingsPage(), "播放器设置");
-            },
-          ),
-          if (!globals.isPhone)
-            ListTile(
-              title: const Text("快捷键",
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-              trailing: const Icon(Ionicons.chevron_forward_outline,
-                  color: Colors.white),
-              onTap: () {
-                _handleItemTap(const ShortcutsSettingsPage(), "快捷键设置");
-              },
-            ),
-          if (!globals.isPhone)
-            ListTile(
-              title: const Text("远程访问（实验性）",
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-              trailing: const Icon(Ionicons.chevron_forward_outline,
-                  color: Colors.white),
-              onTap: () {
-                _handleItemTap(const RemoteAccessPage(), "远程访问");
-              },
-            ),
-          ListTile(
-            title: const Text("远程媒体库",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const RemoteMediaLibraryPage(), "远程媒体库");
-            },
-          ),
-          // 开发者选项
-          ListTile(
-            title: const Text("开发者选项",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              _handleItemTap(const DeveloperOptionsPage(), "开发者选项");
-            },
-          ),
-          ListTile(
-            title: const Text("关于",
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            trailing: const Icon(Ionicons.chevron_forward_outline,
-                color: Colors.white),
-            onTap: () {
-              // 调用通用处理函数
-              _handleItemTap(
-                  const AboutPage(), // 目标页面
-                  "关于" // 移动端 AppBar 标题
-                  );
-            },
-          ),
-        ],
+      child: ListView.separated(
+        itemCount: entries.length,
+        itemBuilder: (context, index) => _buildSettingTile(entries[index]),
+        separatorBuilder: (context, index) => Divider(
+          height: 1,
+          color: Colors.white.withOpacity(0.08),
+        ),
       ),
     );
   }
+
+  List<_SettingEntry> _buildSettingEntries(BuildContext context) {
+    final themeNotifier = context.read<ThemeNotifier>();
+    final entries = <_SettingEntry>[
+      _SettingEntry(
+        title: "账号",
+        icon: Ionicons.person_outline,
+        onTap: () => _handleItemTap(const AccountPage(), "账号设置"),
+      ),
+      _SettingEntry(
+        title: "外观",
+        icon: Ionicons.color_palette_outline,
+        onTap: () => _handleItemTap(
+            ThemeModePage(themeNotifier: themeNotifier), "外观设置"),
+      ),
+    ];
+
+    if (!Platform.isAndroid) {
+      entries.add(
+        _SettingEntry(
+          title: "主题（实验性）",
+          icon: Ionicons.color_wand_outline,
+          onTap: () => _handleItemTap(const UIThemePage(), "主题设置"),
+        ),
+      );
+    }
+
+    entries.addAll([
+      _SettingEntry(
+        title: "通用",
+        icon: Ionicons.settings_outline,
+        onTap: () => _handleItemTap(const GeneralPage(), "通用设置"),
+      ),
+      _SettingEntry(
+        title: "存储",
+        icon: Ionicons.folder_open_outline,
+        onTap: () => _handleItemTap(const StoragePage(), "存储设置"),
+      ),
+      _SettingEntry(
+        title: "网络",
+        icon: Ionicons.wifi_outline,
+        onTap: () => _handleItemTap(const NetworkSettingsPage(), "网络设置"),
+      ),
+      _SettingEntry(
+        title: "观看记录",
+        icon: Ionicons.time_outline,
+        onTap: () => _handleItemTap(const WatchHistoryPage(), "观看记录"),
+      ),
+    ]);
+
+    if (!globals.isPhone) {
+      entries.add(
+        _SettingEntry(
+          title: "备份与恢复",
+          icon: Ionicons.cloud_upload_outline,
+          onTap: () => _handleItemTap(const BackupRestorePage(), "备份与恢复"),
+        ),
+      );
+    }
+
+    entries.add(
+      _SettingEntry(
+        title: "播放器",
+        icon: Ionicons.play_circle_outline,
+        onTap: () => _handleItemTap(const PlayerSettingsPage(), "播放器设置"),
+      ),
+    );
+
+    if (!globals.isPhone) {
+      entries.addAll([
+        _SettingEntry(
+          title: "快捷键",
+          icon: Ionicons.key_outline,
+          onTap: () => _handleItemTap(const ShortcutsSettingsPage(), "快捷键设置"),
+        ),
+        _SettingEntry(
+          title: "远程访问（实验性）",
+          icon: Ionicons.link_outline,
+          onTap: () => _handleItemTap(const RemoteAccessPage(), "远程访问"),
+        ),
+      ]);
+    }
+
+    entries.addAll([
+      _SettingEntry(
+        title: "远程媒体库",
+        icon: Ionicons.library_outline,
+        onTap: () =>
+            _handleItemTap(const RemoteMediaLibraryPage(), "远程媒体库"),
+      ),
+      _SettingEntry(
+        title: "开发者选项",
+        icon: Ionicons.code_slash_outline,
+        onTap: () => _handleItemTap(const DeveloperOptionsPage(), "开发者选项"),
+      ),
+      _SettingEntry(
+        title: "关于",
+        icon: Ionicons.information_circle_outline,
+        onTap: () => _handleItemTap(const AboutPage(), "关于"),
+      ),
+    ]);
+
+    return entries;
+  }
+
+  Widget _buildSettingTile(_SettingEntry entry) {
+    return ListTile(
+      leading: Icon(entry.icon, color: Colors.white),
+      title: Text(entry.title, locale: _titleLocale, style: _titleTextStyle),
+      trailing:
+          const Icon(Ionicons.chevron_forward_outline, color: Colors.white),
+      onTap: entry.onTap,
+    );
+  }
+}
+
+class _SettingEntry {
+  const _SettingEntry({
+    required this.title,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final IconData icon;
+  final VoidCallback onTap;
 }
