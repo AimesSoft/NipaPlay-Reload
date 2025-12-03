@@ -12,6 +12,7 @@ class CupertinoGlassMediaServerCard extends StatelessWidget {
     this.subtitle,
     this.libraryNames = const <String>[],
     this.isLoading = false,
+    this.summaryText,
   });
 
   final String title;
@@ -22,6 +23,7 @@ class CupertinoGlassMediaServerCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onManage;
   final bool isLoading;
+  final String? summaryText;
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +55,8 @@ class CupertinoGlassMediaServerCard extends StatelessWidget {
       context,
     );
 
-    final String summary = _buildLibrarySummary();
+    final String summary = summaryText ?? _buildLibrarySummary();
+    final bool hasCustomSummary = summaryText != null && summaryText!.isNotEmpty;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -129,7 +132,7 @@ class CupertinoGlassMediaServerCard extends StatelessWidget {
                 summary,
                 style: TextStyle(
                   fontSize: 13,
-                  color: libraryNames.isNotEmpty
+                  color: (hasCustomSummary || libraryNames.isNotEmpty)
                       ? secondaryLabelColor
                       : tertiaryLabelColor,
                   height: 1.3,

@@ -20,6 +20,7 @@ import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
@@ -65,6 +66,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // Provider 通知后的轻量防抖（覆盖库选择等状态变化）
   Timer? _jfDebounceTimer;
   Timer? _emDebounceTimer;
+
+  bool _isHistoryAutoMatching = false;
+  bool _historyAutoMatchDialogVisible = false;
   
   
   @override
@@ -2406,7 +2410,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
 
   Widget _buildContinueWatchingCard(WatchHistoryItem item, {bool compact = false}) {
     return GestureDetector(
-      onTap: () => _onWatchHistoryItemTap(item),
+      onTap: _isHistoryAutoMatching ? null : () => _onWatchHistoryItemTap(item),
       child: SizedBox(
         key: ValueKey('continue_${item.animeId ?? 0}_${item.filePath.hashCode}'), // 添加唯一key
         width: compact ? 220 : 280, // 手机更窄
@@ -3146,6 +3150,11 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
   }
 
   void _onWatchHistoryItemTap(WatchHistoryItem item) async {
+    if (_isHistoryAutoMatching) {
+      BlurSnackBar.show(context, '正在自动匹配，请稍候');
+      return;
+    }
+
     var currentItem = item;
     // 检查是否为网络URL或流媒体协议URL
     final isNetworkUrl = currentItem.filePath.startsWith('http://') || currentItem.filePath.startsWith('https://');
@@ -3214,12 +3223,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
 
     if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
       final matchablePath = actualPlayUrl ?? currentItem.filePath;
-      currentItem = await WatchHistoryAutoMatchHelper.tryAutoMatch(
-        context,
-        currentItem,
-        matchablePath: matchablePath,
-        onMatched: (message) => BlurSnackBar.show(context, message),
-      );
+      currentItem = await _performHistoryAutoMatch(currentItem, matchablePath);
     }
 
     final playableItem = PlayableItem(
@@ -3233,6 +3237,81 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
     );
 
     await PlaybackService().play(playableItem);
+  }
+
+  Future<WatchHistoryItem> _performHistoryAutoMatch(
+    WatchHistoryItem currentItem,
+    String matchablePath,
+  ) async {
+    _updateHistoryAutoMatchingState(true);
+    _showHistoryAutoMatchingDialog();
+    String? notification;
+
+    try {
+      return await WatchHistoryAutoMatchHelper.tryAutoMatch(
+        context,
+        currentItem,
+        matchablePath: matchablePath,
+        onMatched: (message) => notification = message,
+      );
+    } finally {
+      _hideHistoryAutoMatchingDialog();
+      _updateHistoryAutoMatchingState(false);
+      if (notification != null && mounted) {
+        BlurSnackBar.show(context, notification!);
+      }
+    }
+  }
+
+  void _updateHistoryAutoMatchingState(bool value) {
+    if (!mounted) {
+      _isHistoryAutoMatching = value;
+      return;
+    }
+    if (_isHistoryAutoMatching == value) {
+      return;
+    }
+    setState(() {
+      _isHistoryAutoMatching = value;
+    });
+  }
+
+  void _showHistoryAutoMatchingDialog() {
+    if (_historyAutoMatchDialogVisible || !mounted) return;
+    _historyAutoMatchDialogVisible = true;
+    BlurDialog.show(
+      context: context,
+      title: '正在自动匹配',
+      barrierDismissible: false,
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(height: 8),
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          ),
+          SizedBox(height: 16),
+          Text(
+            '正在为历史记录匹配弹幕，请稍候…',
+            style: TextStyle(color: Colors.white, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      _historyAutoMatchDialogVisible = false;
+    });
+  }
+
+  void _hideHistoryAutoMatchingDialog() {
+    if (!_historyAutoMatchDialogVisible) {
+      return;
+    }
+    if (!mounted) {
+      _historyAutoMatchDialogVisible = false;
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   // 导航到媒体库-库管理页面

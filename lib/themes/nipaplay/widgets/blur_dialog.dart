@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -20,6 +21,17 @@ class BlurDialog {
     
     if (uiThemeProvider.isFluentUITheme) {
       return FluentDialog.show<T>(
+        context: context,
+        title: title,
+        content: content,
+        contentWidget: contentWidget,
+        actions: actions,
+        barrierDismissible: barrierDismissible,
+      );
+    }
+
+    if (uiThemeProvider.isCupertinoTheme) {
+      return _showCupertinoDialog<T>(
         context: context,
         title: title,
         content: content,
@@ -188,6 +200,54 @@ class BlurDialog {
                 padding: EdgeInsets.only(bottom: keyboardHeight),
                 child: dialogContent,
               ),
+        );
+      },
+    );
+  }
+
+  static Future<T?> _showCupertinoDialog<T>({
+    required BuildContext context,
+    required String title,
+    String? content,
+    Widget? contentWidget,
+    List<Widget>? actions,
+    bool barrierDismissible = true,
+  }) {
+    return showCupertinoDialog<T>(
+      context: context,
+      barrierDismissible: barrierDismissible,
+      builder: (BuildContext ctx) {
+        final List<Widget> children = [];
+
+        if (content != null && content.isNotEmpty) {
+          children.add(Text(
+            content,
+            style: const TextStyle(fontSize: 15, height: 1.35),
+            textAlign: TextAlign.center,
+          ));
+        }
+
+        if (contentWidget != null) {
+          if (children.isNotEmpty) {
+            children.add(const SizedBox(height: 12));
+          }
+          children.add(contentWidget);
+        }
+
+        return CupertinoAlertDialog(
+          title: title.isNotEmpty
+              ? Text(
+                  title,
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                )
+              : null,
+          content: children.isEmpty
+              ? null
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: children,
+                ),
+          actions: actions ?? const <Widget>[],
         );
       },
     );

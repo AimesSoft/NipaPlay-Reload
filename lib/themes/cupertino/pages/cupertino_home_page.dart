@@ -29,6 +29,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_anime_detail_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
@@ -36,6 +37,8 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
+import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
+import 'package:nipaplay/models/dandanplay_remote_model.dart';
 
 class CupertinoHomePage extends StatefulWidget {
   const CupertinoHomePage({super.key});
@@ -57,6 +60,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   bool _isLoadingLatest = false;
   bool _didScheduleInitialLoad = false;
   double _scrollOffset = 0.0;
+  bool _isHistoryAutoMatching = false;
+  bool _historyAutoMatchDialogVisible = false;
 
   List<_CupertinoRecommendedItem> _recommendedItems = [];
   
@@ -64,10 +69,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   Map<String, List<dynamic>> _recentJellyfinItemsByLibrary = {};
   Map<String, List<dynamic>> _recentEmbyItemsByLibrary = {};
   List<WatchHistoryItem> _recentLocalItems = [];
+  List<DandanplayRemoteAnimeGroup> _recentDandanGroups = [];
 
   JellyfinProvider? _jellyfinProvider;
   EmbyProvider? _embyProvider;
   WatchHistoryProvider? _watchHistoryProvider;
+  DandanplayRemoteProvider? _dandanProvider;
 
   final Map<int, String> _localImageCache = {};
   final Map<String, Map<String, dynamic>> _thumbnailCache = {};
@@ -80,6 +87,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   static Map<String, List<dynamic>> _cachedJellyfinItemsByLibrary = {};
   static Map<String, List<dynamic>> _cachedEmbyItemsByLibrary = {};
   static List<WatchHistoryItem> _cachedLocalItems = [];
+  static List<DandanplayRemoteAnimeGroup> _cachedDandanGroups = [];
   static DateTime? _lastLatestLoadTime;
 
   @override
@@ -124,6 +132,13 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       }
     }
 
+    final dandan = Provider.of<DandanplayRemoteProvider>(context);
+    if (_dandanProvider != dandan) {
+      _dandanProvider?.removeListener(_onSourceChanged);
+      _dandanProvider = dandan;
+      _dandanProvider?.addListener(_onSourceChanged);
+    }
+
     if (!_didScheduleInitialLoad) {
       _didScheduleInitialLoad = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -145,6 +160,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     _jellyfinProvider?.removeListener(_onSourceChanged);
     _embyProvider?.removeListener(_onSourceChanged);
     _watchHistoryProvider?.removeListener(_onHistoryChanged);
+    _dandanProvider?.removeListener(_onSourceChanged);
 
     super.dispose();
   }
@@ -234,7 +250,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       if (historyProvider != null && historyProvider.isLoaded) {
         final localHistory = historyProvider.history.where((item) {
           return !item.filePath.startsWith('jellyfin://') &&
-              !item.filePath.startsWith('emby://');
+              !item.filePath.startsWith('emby://') &&
+              !item.isDandanplayRemote;
         }).toList();
 
         final Map<int, WatchHistoryItem> latestLocalItems = {};
@@ -248,6 +265,15 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         }
 
         allCandidates.addAll(latestLocalItems.values.take(20));
+      }
+
+      final dandanProvider = _dandanProvider;
+      if (dandanProvider != null &&
+          dandanProvider.isConnected &&
+          dandanProvider.animeGroups.isNotEmpty) {
+        final groups =
+            List<DandanplayRemoteAnimeGroup>.from(dandanProvider.animeGroups);
+        allCandidates.addAll(groups.take(20));
       }
 
       if (allCandidates.isEmpty) {
@@ -341,6 +367,33 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             mediaServerItemId: null,
             mediaServerType: null,
           );
+        } else if (candidate is DandanplayRemoteAnimeGroup) {
+          final dandanProvider = _dandanProvider;
+          final animeId = candidate.animeId;
+          if (dandanProvider == null ||
+              !dandanProvider.isConnected ||
+              animeId == null) {
+            continue;
+          }
+
+          final coverUrl = await _resolveDandanCover(candidate);
+          final subtitle = candidate.latestEpisode.episodeTitle.isNotEmpty
+              ? candidate.latestEpisode.episodeTitle
+              : '最近播放';
+
+          built = _CupertinoRecommendedItem(
+            id: _buildDandanRecommendedId(candidate),
+            title: candidate.title,
+            subtitle: subtitle,
+            imageUrl: coverUrl,
+            source: _CupertinoRecommendedSource.dandanplay,
+            rating: null,
+            animeId: animeId,
+            episodeCount: candidate.episodeCount,
+            mediaServerItemId: null,
+            mediaServerType: null,
+            dandanGroup: candidate,
+          );
         }
 
         if (built != null && seenIds.add(built.id)) {
@@ -411,6 +464,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         _recentJellyfinItemsByLibrary = _cachedJellyfinItemsByLibrary;
         _recentEmbyItemsByLibrary = _cachedEmbyItemsByLibrary;
         _recentLocalItems = _cachedLocalItems;
+        _recentDandanGroups = _cachedDandanGroups;
         _isLoadingLatest = false;
       });
       return;
@@ -483,7 +537,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         try {
           final localHistory = historyProvider.history.where((item) {
             return !item.filePath.startsWith('jellyfin://') &&
-                !item.filePath.startsWith('emby://');
+                !item.filePath.startsWith('emby://') &&
+                !item.isDandanplayRemote;
           }).toList();
 
           final Map<int, WatchHistoryItem> latestByAnimeId = {};
@@ -511,10 +566,23 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         _recentLocalItems = [];
       }
 
+      // 弹弹play 最近同步
+      final dandanProvider = _dandanProvider;
+      if (dandanProvider != null &&
+          dandanProvider.isConnected &&
+          dandanProvider.animeGroups.isNotEmpty) {
+        final groups =
+            List<DandanplayRemoteAnimeGroup>.from(dandanProvider.animeGroups);
+        _recentDandanGroups = groups.take(20).toList();
+      } else {
+        _recentDandanGroups = [];
+      }
+
       // 保存到缓存
       _cachedJellyfinItemsByLibrary = _recentJellyfinItemsByLibrary;
       _cachedEmbyItemsByLibrary = _recentEmbyItemsByLibrary;
       _cachedLocalItems = _recentLocalItems;
+      _cachedDandanGroups = _recentDandanGroups;
       _lastLatestLoadTime = DateTime.now();
 
       if (mounted) {
@@ -533,6 +601,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Future<String?> _loadPersistedImage(int animeId) async {
+    if (animeId <= 0) {
+      return null;
+    }
     final cached = _localImageCache[animeId];
     if (cached != null && cached.isNotEmpty) {
       if (_looksHighQualityUrl(cached)) {
@@ -923,8 +994,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     final hasJellyfin = _recentJellyfinItemsByLibrary.isNotEmpty;
     final hasEmby = _recentEmbyItemsByLibrary.isNotEmpty;
     final hasLocal = _recentLocalItems.isNotEmpty;
+    final hasDandan = _recentDandanGroups.isNotEmpty;
 
-    if (!hasJellyfin && !hasEmby && !hasLocal) {
+    if (!hasJellyfin && !hasEmby && !hasLocal && !hasDandan) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
         child: Center(
@@ -949,6 +1021,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         if (hasJellyfin) ..._buildJellyfinLatestSections(),
         // Emby媒体库
         if (hasEmby) ..._buildEmbyLatestSections(),
+        if (hasDandan) _buildDandanLatestSection(),
         // 本地媒体库
         if (hasLocal) _buildLocalLatestSection(),
       ],
@@ -1058,6 +1131,39 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               return Padding(
                 padding: const EdgeInsets.only(right: 12),
                 child: _buildLocalLatestCard(item),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDandanLatestSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 20, top: 12, bottom: 8),
+          child: Text(
+            '弹弹play - 最近同步',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 210,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: _recentDandanGroups.length,
+            itemBuilder: (context, index) {
+              final group = _recentDandanGroups[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _buildDandanLatestCard(group),
               );
             },
           ),
@@ -1200,6 +1306,291 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             const SizedBox(height: 6),
             Text(
               item.animeName.isNotEmpty ? item.animeName : '本地媒体',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _buildDandanRecommendedId(DandanplayRemoteAnimeGroup group) {
+    if (group.animeId != null) {
+      return 'dandan_${group.animeId}';
+    }
+    final hash = group.primaryHash;
+    if (hash != null && hash.isNotEmpty) {
+      return 'dandan_hash_$hash';
+    }
+    return 'dandan_${group.title.hashCode}_${group.episodeCount}_${group.latestPlayTime?.millisecondsSinceEpoch ?? 0}';
+  }
+
+  Future<String?> _resolveDandanCover(DandanplayRemoteAnimeGroup group) async {
+    final animeId = group.animeId;
+    if (animeId != null) {
+      final persisted = await _loadPersistedImage(animeId);
+      if (persisted != null && persisted.isNotEmpty) {
+        return persisted;
+      }
+    }
+    final provider = _dandanProvider;
+    return provider?.buildImageUrl(group.primaryHash ?? '');
+  }
+
+  Future<void> _openDandanDetailFromGroup(
+    DandanplayRemoteAnimeGroup group,
+  ) async {
+    final provider = _dandanProvider;
+    if (provider == null || !provider.isConnected) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '尚未连接弹弹play 远程服务',
+        type: AdaptiveSnackBarType.warning,
+      );
+      return;
+    }
+
+    final animeId = group.animeId;
+    if (animeId == null) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '该条目缺少 Bangumi ID，暂无法显示详情',
+        type: AdaptiveSnackBarType.warning,
+      );
+      return;
+    }
+
+    final coverUrl = await _resolveDandanCover(group);
+    if (!mounted) return;
+
+    final summary = _buildDandanSharedSummary(
+      group,
+      provider,
+      coverUrl: coverUrl,
+    );
+
+    Future<List<SharedRemoteEpisode>> episodeLoader({bool force = false}) async {
+      final episodes = group.episodes.reversed
+          .map((episode) => _mapDandanEpisode(episode, provider))
+          .whereType<SharedRemoteEpisode>()
+          .toList();
+      if (episodes.isEmpty) {
+        throw Exception('该番剧暂无可播放的剧集');
+      }
+      return episodes;
+    }
+
+    Future<PlayableItem> playableBuilder(
+      BuildContext _,
+      SharedRemoteEpisode episode,
+    ) async {
+      return _buildDandanPlayableItem(summary: summary, episode: episode);
+    }
+
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: null,
+      showCloseButton: true,
+      child: CupertinoSharedAnimeDetailPage(
+        anime: summary,
+        hideBackButton: true,
+        showCloseButton: true,
+        customEpisodeLoader: ({bool force = false}) => episodeLoader(force: force),
+        customPlayableBuilder: playableBuilder,
+        sourceLabelOverride: provider.serverUrl ?? '弹弹play',
+      ),
+    );
+  }
+
+  SharedRemoteAnimeSummary _buildDandanSharedSummary(
+    DandanplayRemoteAnimeGroup group,
+    DandanplayRemoteProvider provider, {
+    String? coverUrl,
+  }) {
+    final resolvedCover = coverUrl ??
+        (group.animeId != null ? _localImageCache[group.animeId!] : null) ??
+        provider.buildImageUrl(group.primaryHash ?? '');
+
+    return SharedRemoteAnimeSummary(
+      animeId: group.animeId!,
+      name: group.title,
+      nameCn: group.title,
+      summary: null,
+      imageUrl: resolvedCover,
+      lastWatchTime:
+          group.latestPlayTime ?? DateTime.fromMillisecondsSinceEpoch(0),
+      episodeCount: group.episodeCount,
+      hasMissingFiles: false,
+    );
+  }
+
+  SharedRemoteEpisode? _mapDandanEpisode(
+    DandanplayRemoteEpisode episode,
+    DandanplayRemoteProvider provider,
+  ) {
+    final streamUrl = provider.buildStreamUrlForEpisode(episode);
+    if (streamUrl == null || streamUrl.isEmpty) {
+      return null;
+    }
+
+    final resolvedEpisodeId = episode.episodeId ??
+        (episode.entryId.isNotEmpty
+            ? episode.entryId.hashCode
+            : (episode.hash.isNotEmpty
+                ? episode.hash.hashCode
+                : episode.name.hashCode));
+
+    final shareKey = episode.entryId.isNotEmpty
+        ? episode.entryId
+        : (episode.hash.isNotEmpty ? episode.hash : episode.path);
+
+    return SharedRemoteEpisode(
+      shareId: 'dandan_$shareKey',
+      title: episode.episodeTitle.isNotEmpty
+          ? episode.episodeTitle
+          : episode.name,
+      fileName: episode.name,
+      streamPath: streamUrl,
+      fileExists: true,
+      animeId: episode.animeId,
+      episodeId: resolvedEpisodeId,
+      duration: episode.duration,
+      lastPosition: 0,
+      progress: 0,
+      fileSize: episode.size,
+      lastWatchTime: episode.lastPlay ?? episode.created,
+      videoHash: episode.hash.isNotEmpty ? episode.hash : null,
+    );
+  }
+
+  PlayableItem _buildDandanPlayableItem({
+    required SharedRemoteAnimeSummary summary,
+    required SharedRemoteEpisode episode,
+  }) {
+    final watchItem = _buildDandanWatchHistoryItem(
+      summary: summary,
+      episode: episode,
+    );
+
+    return PlayableItem(
+      videoPath: watchItem.filePath,
+      title: watchItem.animeName,
+      subtitle: watchItem.episodeTitle,
+      animeId: watchItem.animeId,
+      episodeId: watchItem.episodeId,
+      historyItem: watchItem,
+      actualPlayUrl: watchItem.filePath,
+    );
+  }
+
+  WatchHistoryItem _buildDandanWatchHistoryItem({
+    required SharedRemoteAnimeSummary summary,
+    required SharedRemoteEpisode episode,
+  }) {
+    final duration = episode.duration ?? 0;
+    final lastPosition = episode.lastPosition ?? 0;
+    double progress = episode.progress ?? 0;
+    if (progress <= 0 && duration > 0 && lastPosition > 0) {
+      progress = (lastPosition / duration).clamp(0.0, 1.0);
+    }
+
+    return WatchHistoryItem(
+      filePath: episode.streamPath,
+      animeName:
+          summary.nameCn?.isNotEmpty == true ? summary.nameCn! : summary.name,
+      episodeTitle: episode.title,
+      episodeId: episode.episodeId,
+      animeId: summary.animeId,
+      watchProgress: progress,
+      lastPosition: lastPosition,
+      duration: duration,
+      lastWatchTime: episode.lastWatchTime ?? summary.lastWatchTime,
+      thumbnailPath: summary.imageUrl,
+      isFromScan: false,
+      videoHash: episode.videoHash,
+    );
+  }
+
+  Widget _buildDandanLatestCard(DandanplayRemoteAnimeGroup group) {
+    final provider = _dandanProvider;
+    final title = group.title;
+
+    return GestureDetector(
+      onTap: () => _openDandanDetailFromGroup(group),
+      child: SizedBox(
+        width: 120,
+        height: 210,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Expanded(
+              child: FutureBuilder<String?>(
+                future: _resolveDandanCover(group),
+                builder: (context, snapshot) {
+                  final coverUrl = snapshot.data;
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox.expand(
+                      child: coverUrl != null
+                          ? Image.network(
+                              coverUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.systemGrey5,
+                                  context,
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    CupertinoIcons.photo_on_rectangle,
+                                    size: 32,
+                                    color: CupertinoColors.systemGrey,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Container(
+                              color: CupertinoDynamicColor.resolve(
+                                CupertinoColors.systemGrey5,
+                                context,
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  CupertinoIcons.photo_on_rectangle,
+                                  size: 32,
+                                  color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.systemGrey,
+                                    context,
+                                  ),
+                                ),
+                              ),
+                            ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              provider?.serverUrl ?? title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.secondaryLabel,
+                  context,
+                ),
+              ),
+            ),
+            Text(
+              title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -1751,6 +2142,15 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Future<void> _handleRecentTap(WatchHistoryItem item) async {
+    if (_isHistoryAutoMatching) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '正在自动匹配，请稍候',
+        type: AdaptiveSnackBarType.info,
+      );
+      return;
+    }
+
     if (item.filePath.isEmpty) {
       AdaptiveSnackBar.show(
         context,
@@ -1864,15 +2264,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
     if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
       final matchablePath = actualPlayUrl ?? filePath;
-      currentItem = await WatchHistoryAutoMatchHelper.tryAutoMatch(
-        context,
+      currentItem = await _performHistoryAutoMatch(
         currentItem,
-        matchablePath: matchablePath,
-        onMatched: (message) => AdaptiveSnackBar.show(
-          context,
-          message: message,
-          type: AdaptiveSnackBarType.success,
-        ),
+        matchablePath,
       );
     }
 
@@ -1884,6 +2278,95 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       episodeId: currentItem.episodeId,
       historyItem: currentItem,
       actualPlayUrl: actualPlayUrl,
+    );
+  }
+
+  Future<WatchHistoryItem> _performHistoryAutoMatch(
+    WatchHistoryItem currentItem,
+    String matchablePath,
+  ) async {
+    _updateHistoryAutoMatchingState(true);
+    _showHistoryAutoMatchingDialog();
+    String? notification;
+
+    try {
+      return await WatchHistoryAutoMatchHelper.tryAutoMatch(
+        context,
+        currentItem,
+        matchablePath: matchablePath,
+        onMatched: (message) => notification = message,
+      );
+    } finally {
+      _hideHistoryAutoMatchingDialog();
+      _updateHistoryAutoMatchingState(false);
+      if (notification != null && mounted) {
+        AdaptiveSnackBar.show(
+          context,
+          message: notification!,
+          type: AdaptiveSnackBarType.success,
+        );
+      }
+    }
+  }
+
+  void _updateHistoryAutoMatchingState(bool value) {
+    if (!mounted) {
+      _isHistoryAutoMatching = value;
+      return;
+    }
+    if (_isHistoryAutoMatching == value) {
+      return;
+    }
+    setState(() {
+      _isHistoryAutoMatching = value;
+    });
+  }
+
+  void _showHistoryAutoMatchingDialog() {
+    if (_historyAutoMatchDialogVisible || !mounted) {
+      return;
+    }
+    _historyAutoMatchDialogVisible = true;
+    BlurDialog.show(
+      context: context,
+      title: '正在自动匹配',
+      barrierDismissible: false,
+      contentWidget: _buildHistoryAutoMatchDialogContent(),
+    ).whenComplete(() {
+      _historyAutoMatchDialogVisible = false;
+    });
+  }
+
+  void _hideHistoryAutoMatchingDialog() {
+    if (!_historyAutoMatchDialogVisible) {
+      return;
+    }
+    if (!mounted) {
+      _historyAutoMatchDialogVisible = false;
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
+    _historyAutoMatchDialogVisible = false;
+  }
+
+  Widget _buildHistoryAutoMatchDialogContent() {
+    final textColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 8),
+        const CupertinoActivityIndicator(radius: 12),
+        const SizedBox(height: 16),
+        Text(
+          '正在为历史记录匹配弹幕，请稍候…',
+          style: TextStyle(color: textColor, fontSize: 14),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
@@ -1941,6 +2424,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         return 'Emby';
       case _CupertinoRecommendedSource.local:
         return '本地媒体';
+      case _CupertinoRecommendedSource.dandanplay:
+        return '弹弹play';
       case _CupertinoRecommendedSource.placeholder:
         return '';
     }
@@ -1954,6 +2439,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         return CupertinoIcons.tv_music_note;
       case _CupertinoRecommendedSource.local:
         return CupertinoIcons.tray_full;
+      case _CupertinoRecommendedSource.dandanplay:
+        return CupertinoIcons.chat_bubble_2_fill;
       case _CupertinoRecommendedSource.placeholder:
         return CupertinoIcons.sparkles;
     }
@@ -1972,6 +2459,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Future<void> _openHeroDetail(_CupertinoRecommendedItem item) async {
     if (!mounted) return;
+
+    if (item.source == _CupertinoRecommendedSource.dandanplay &&
+        item.dandanGroup != null) {
+      await _openDandanDetailFromGroup(item.dandanGroup!);
+      return;
+    }
 
     if (item.mediaServerItemId != null && item.mediaServerType != null) {
       await _openMediaServerDetail(item);
@@ -2102,6 +2595,7 @@ class _CupertinoRecommendedItem {
   final int? episodeCount;
   final String? mediaServerItemId;
   final MediaServerType? mediaServerType;
+  final DandanplayRemoteAnimeGroup? dandanGroup;
 
   _CupertinoRecommendedItem({
     required this.id,
@@ -2114,6 +2608,7 @@ class _CupertinoRecommendedItem {
     this.episodeCount,
     this.mediaServerItemId,
     this.mediaServerType,
+    this.dandanGroup,
   });
 }
 
@@ -2121,5 +2616,6 @@ enum _CupertinoRecommendedSource {
   jellyfin,
   emby,
   local,
+  dandanplay,
   placeholder,
 }

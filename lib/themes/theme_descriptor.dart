@@ -7,11 +7,13 @@ class ThemeEnvironment {
   final bool isDesktop;
   final bool isPhone;
   final bool isWeb;
+  final bool isIOS;
 
   const ThemeEnvironment({
     required this.isDesktop,
     required this.isPhone,
     required this.isWeb,
+    this.isIOS = false,
   });
 }
 

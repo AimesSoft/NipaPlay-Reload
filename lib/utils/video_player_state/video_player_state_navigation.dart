@@ -8,8 +8,18 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       return;
     }
 
+    if (_isEpisodeNavigating) {
+      debugPrint('[上一话] 已有切集任务，忽略本次请求');
+      _showNavigationBusyMessage('上一话');
+      return;
+    }
+
+    _isEpisodeNavigating = true;
+
     try {
       debugPrint('[上一话] 开始使用剧集导航服务查找上一话');
+
+      _showEpisodeNavigationDialog('上一话');
 
       // Jellyfin同步：如果是Jellyfin流媒体，先报告播放停止
       if (_currentVideoPath != null &&
@@ -63,34 +73,56 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       if (result.success) {
         debugPrint('[上一话] ${result.message}');
 
-        // 根据结果类型调用不同的播放逻辑
-        if (result.historyItem != null) {
-          // 从数据库找到的剧集，包含完整的历史信息
-          final historyItem = result.historyItem!;
+        WatchHistoryItem? historyItem = result.historyItem;
 
+        if (historyItem == null && result.filePath != null) {
+          historyItem = await WatchHistoryDatabase.instance
+              .getHistoryByFilePath(result.filePath!);
+        }
+
+        if (historyItem == null && result.filePath != null) {
+          // 为本地文件构造简易历史项
+          historyItem = WatchHistoryItem(
+            filePath: result.filePath!,
+            animeName: '未知',
+            watchProgress: 0,
+            lastPosition: 0,
+            duration: 0,
+            lastWatchTime: DateTime.now(),
+          );
+        }
+
+        if (historyItem != null &&
+            WatchHistoryAutoMatchHelper.shouldAutoMatch(historyItem)) {
+          historyItem = await _tryAutoMatchForNavigation(historyItem);
+        }
+
+        if (historyItem != null) {
+          // 从数据库找到的剧集，包含完整的历史信息
+          final resolvedHistory = historyItem;
           // 检查是否为Jellyfin或Emby流媒体，如果是则需要获取实际的HTTP URL
-          if (historyItem.filePath.startsWith('jellyfin://')) {
+          if (resolvedHistory.filePath.startsWith('jellyfin://')) {
             try {
               // 从jellyfin://协议URL中提取episodeId（简单格式：jellyfin://episodeId）
               final episodeId =
-                  historyItem.filePath.replaceFirst('jellyfin://', '');
+                  resolvedHistory.filePath.replaceFirst('jellyfin://', '');
               // 获取实际的HTTP流媒体URL
               final actualPlayUrl =
                   JellyfinService.instance.getStreamUrl(episodeId);
               debugPrint('[上一话] 获取Jellyfin流媒体URL: $actualPlayUrl');
 
               // 使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(historyItem.filePath,
-                  historyItem: historyItem, actualPlayUrl: actualPlayUrl);
+              await initializePlayer(resolvedHistory.filePath,
+                  historyItem: resolvedHistory, actualPlayUrl: actualPlayUrl);
             } catch (e) {
               debugPrint('[上一话] 获取Jellyfin流媒体URL失败: $e');
               _showEpisodeErrorMessage('上一话', '获取流媒体URL失败: $e');
               return;
             }
-          } else if (historyItem.filePath.startsWith('emby://')) {
+          } else if (resolvedHistory.filePath.startsWith('emby://')) {
             try {
               // 从emby://协议URL中提取episodeId（只取最后一部分）
-              final embyPath = historyItem.filePath.replaceFirst('emby://', '');
+              final embyPath = resolvedHistory.filePath.replaceFirst('emby://', '');
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
               // 获取实际的HTTP流媒体URL
@@ -99,8 +131,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               debugPrint('[上一话] 获取Emby流媒体URL: $actualPlayUrl');
 
               // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(historyItem.filePath,
-                  historyItem: historyItem, actualPlayUrl: actualPlayUrl);
+              await initializePlayer(resolvedHistory.filePath,
+                  historyItem: resolvedHistory, actualPlayUrl: actualPlayUrl);
             } catch (e) {
               debugPrint('[上一话] 获取Emby流媒体URL失败: $e');
               _showEpisodeErrorMessage('上一话', '获取流媒体URL失败: $e');
@@ -108,15 +140,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             }
           } else {
             // 本地文件或其他类型
-            await initializePlayer(historyItem.filePath,
-                historyItem: historyItem);
+            await initializePlayer(resolvedHistory.filePath,
+                historyItem: resolvedHistory);
           }
-        } else if (result.filePath != null) {
-          // 从文件系统找到的文件，需要创建基本的历史记录
-          final historyItemForPrevVideo = await WatchHistoryDatabase.instance
-              .getHistoryByFilePath(result.filePath!);
-          await initializePlayer(result.filePath!,
-              historyItem: historyItemForPrevVideo);
+        } else {
+          _showEpisodeErrorMessage('上一话', '无法加载上一话的历史记录');
         }
       } else {
         debugPrint('[上一话] ${result.message}');
@@ -125,6 +153,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     } catch (e) {
       debugPrint('[上一话] 播放上一话时出错：$e');
       _showEpisodeErrorMessage('上一话', e.toString());
+    } finally {
+      _hideEpisodeNavigationDialog();
+      _isEpisodeNavigating = false;
     }
   }
 
@@ -135,8 +166,18 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       return;
     }
 
+    if (_isEpisodeNavigating) {
+      debugPrint('[下一话] 已有切集任务，忽略本次请求');
+      _showNavigationBusyMessage('下一话');
+      return;
+    }
+
+    _isEpisodeNavigating = true;
+
     try {
       debugPrint('[下一话] 开始使用剧集导航服务查找下一话 (自动播放触发)');
+
+      _showEpisodeNavigationDialog('下一话');
 
       // Jellyfin同步：如果是Jellyfin流媒体，先报告播放停止
       if (_currentVideoPath != null &&
@@ -190,34 +231,55 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       if (result.success) {
         debugPrint('[下一话] ${result.message}');
 
-        // 根据结果类型调用不同的播放逻辑
-        if (result.historyItem != null) {
-          // 从数据库找到的剧集，包含完整的历史信息
-          final historyItem = result.historyItem!;
+        WatchHistoryItem? historyItem = result.historyItem;
 
+        if (historyItem == null && result.filePath != null) {
+          historyItem = await WatchHistoryDatabase.instance
+              .getHistoryByFilePath(result.filePath!);
+        }
+
+        if (historyItem == null && result.filePath != null) {
+          historyItem = WatchHistoryItem(
+            filePath: result.filePath!,
+            animeName: '未知',
+            watchProgress: 0,
+            lastPosition: 0,
+            duration: 0,
+            lastWatchTime: DateTime.now(),
+          );
+        }
+
+        if (historyItem != null &&
+            WatchHistoryAutoMatchHelper.shouldAutoMatch(historyItem)) {
+          historyItem = await _tryAutoMatchForNavigation(historyItem);
+        }
+
+        if (historyItem != null) {
+          // 从数据库找到的剧集，包含完整的历史信息
+          final resolvedHistory = historyItem;
           // 检查是否为Jellyfin或Emby流媒体，如果是则需要获取实际的HTTP URL
-          if (historyItem.filePath.startsWith('jellyfin://')) {
+          if (resolvedHistory.filePath.startsWith('jellyfin://')) {
             try {
               // 从jellyfin://协议URL中提取episodeId（简单格式：jellyfin://episodeId）
               final episodeId =
-                  historyItem.filePath.replaceFirst('jellyfin://', '');
+                  resolvedHistory.filePath.replaceFirst('jellyfin://', '');
               // 获取实际的HTTP流媒体URL
               final actualPlayUrl =
                   JellyfinService.instance.getStreamUrl(episodeId);
               debugPrint('[下一话] 获取Jellyfin流媒体URL: $actualPlayUrl');
 
               // 使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(historyItem.filePath,
-                  historyItem: historyItem, actualPlayUrl: actualPlayUrl);
+              await initializePlayer(resolvedHistory.filePath,
+                  historyItem: resolvedHistory, actualPlayUrl: actualPlayUrl);
             } catch (e) {
               debugPrint('[下一话] 获取Jellyfin流媒体URL失败: $e');
               _showEpisodeErrorMessage('下一话', '获取流媒体URL失败: $e');
               return;
             }
-          } else if (historyItem.filePath.startsWith('emby://')) {
+          } else if (resolvedHistory.filePath.startsWith('emby://')) {
             try {
               // 从emby://协议URL中提取episodeId（只取最后一部分）
-              final embyPath = historyItem.filePath.replaceFirst('emby://', '');
+              final embyPath = resolvedHistory.filePath.replaceFirst('emby://', '');
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
               // 获取实际的HTTP流媒体URL
@@ -226,8 +288,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               debugPrint('[下一话] 获取Emby流媒体URL: $actualPlayUrl');
 
               // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(historyItem.filePath,
-                  historyItem: historyItem, actualPlayUrl: actualPlayUrl);
+              await initializePlayer(resolvedHistory.filePath,
+                  historyItem: resolvedHistory, actualPlayUrl: actualPlayUrl);
             } catch (e) {
               debugPrint('[下一话] 获取Emby流媒体URL失败: $e');
               _showEpisodeErrorMessage('下一话', '获取流媒体URL失败: $e');
@@ -235,15 +297,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             }
           } else {
             // 本地文件或其他类型
-            await initializePlayer(historyItem.filePath,
-                historyItem: historyItem);
+            await initializePlayer(resolvedHistory.filePath,
+                historyItem: resolvedHistory);
           }
-        } else if (result.filePath != null) {
-          // 从文件系统找到的文件，需要创建基本的历史记录
-          final historyItemForNextVideo = await WatchHistoryDatabase.instance
-              .getHistoryByFilePath(result.filePath!);
-          await initializePlayer(result.filePath!,
-              historyItem: historyItemForNextVideo);
+        } else {
+          _showEpisodeErrorMessage('下一话', '无法加载下一话的历史记录');
         }
       } else {
         debugPrint('[下一话] ${result.message}');
@@ -252,7 +310,128 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     } catch (e) {
       debugPrint('[下一话] 播放下一话时出错：$e');
       _showEpisodeErrorMessage('下一话', e.toString());
+    } finally {
+      _hideEpisodeNavigationDialog();
+      _isEpisodeNavigating = false;
     }
+  }
+
+  Future<WatchHistoryItem?> _tryAutoMatchForNavigation(
+    WatchHistoryItem historyItem,
+  ) async {
+    if (_context == null || !_context!.mounted) {
+      return historyItem;
+    }
+
+    final matchablePath = await _resolveMatchablePath(historyItem.filePath);
+    if (matchablePath == null) {
+      return historyItem;
+    }
+
+    return await WatchHistoryAutoMatchHelper.tryAutoMatch(
+      _context!,
+      historyItem,
+      matchablePath: matchablePath,
+      onMatched: (msg) => BlurSnackBar.show(_context!, msg),
+    );
+  }
+
+  Future<String?> _resolveMatchablePath(String filePath) async {
+    if (filePath.startsWith('jellyfin://')) {
+      final episodeId = filePath.replaceFirst('jellyfin://', '');
+      return JellyfinService.instance.isConnected
+          ? JellyfinService.instance.getStreamUrl(episodeId)
+          : null;
+    }
+    if (filePath.startsWith('emby://')) {
+      final embyPath = filePath.replaceFirst('emby://', '');
+      final episodeId = embyPath.split('/').last;
+      if (!EmbyService.instance.isConnected) {
+        return null;
+      }
+      return await EmbyService.instance.getStreamUrl(episodeId);
+    }
+    return filePath;
+  }
+
+  void _showNavigationBusyMessage(String episodeType) {
+    if (_context == null || !_context!.mounted) {
+      return;
+    }
+    BlurSnackBar.show(_context!, '正在处理$episodeType请求，请稍候');
+  }
+
+  void _showEpisodeNavigationDialog(String episodeType) {
+    if (_context == null || !_context!.mounted || _navigationDialogVisible) {
+      return;
+    }
+
+    if (!_shouldShowNavigationDialog()) {
+      return;
+    }
+    _navigationDialogVisible = true;
+    BlurDialog.show(
+      context: _context!,
+      title: '正在搜索$episodeType',
+      barrierDismissible: false,
+      contentWidget: _buildEpisodeNavigationDialogContent(),
+    ).whenComplete(() {
+      _navigationDialogVisible = false;
+    });
+  }
+
+  bool _shouldShowNavigationDialog() {
+    if (_currentVideoPath == null) {
+      return false;
+    }
+    return _currentVideoPath!.startsWith('jellyfin://') ||
+        _currentVideoPath!.startsWith('emby://');
+  }
+
+  void _hideEpisodeNavigationDialog() {
+    if (!_navigationDialogVisible || _context == null || !_context!.mounted) {
+      return;
+    }
+    Navigator.of(_context!, rootNavigator: true).pop();
+    _navigationDialogVisible = false;
+  }
+
+  Widget _buildEpisodeNavigationDialogContent() {
+    final isCupertinoTheme = _context != null && _context!.mounted
+        ? Provider.of<UIThemeProvider>(_context!, listen: false)
+            .isCupertinoTheme
+        : false;
+
+    final Widget indicator = isCupertinoTheme
+        ? const CupertinoActivityIndicator(radius: 12)
+        : const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          );
+
+    final TextStyle textStyle = isCupertinoTheme
+        ? const TextStyle(
+            color: CupertinoColors.secondaryLabel,
+            fontSize: 14,
+          )
+        : const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+          );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(height: 8),
+        indicator,
+        const SizedBox(height: 16),
+        Text(
+          '正在定位剧集并匹配弹幕，请稍候…',
+          style: textStyle,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
   }
 
   // 显示剧集未找到的消息

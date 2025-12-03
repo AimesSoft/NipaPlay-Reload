@@ -1,19 +1,20 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
-
 /// 剧集导航结果
 class EpisodeNavigationResult {
+
   final String? filePath;
   final WatchHistoryItem? historyItem;
   final String message;
@@ -37,6 +38,13 @@ class EpisodeNavigationResult {
       : filePath = null,
         historyItem = null,
         success = false;
+}
+
+class _DandanplayStreamIdentifier {
+  const _DandanplayStreamIdentifier({this.hash, this.entryId});
+
+  final String? hash;
+  final String? entryId;
 }
 
 /// 剧集导航服务
@@ -104,6 +112,20 @@ class EpisodeNavigationService {
       debugPrint('[剧集导航] Emby模式未找到上一话，原因：${embyResult.message}');
     }
 
+    // 检查是否为弹弹play远程流媒体
+    if (_isDandanplayRemoteUrl(currentFilePath)) {
+      final dandanResult = await _getPreviousEpisodeFromDandanplay(
+        currentFilePath,
+        animeId: animeId,
+        episodeId: episodeId,
+      );
+      if (dandanResult.success) {
+        debugPrint('[剧集导航] 弹弹play远程模式成功找到上一话');
+        return dandanResult;
+      }
+      debugPrint('[剧集导航] 弹弹play远程模式未找到上一话，原因：${dandanResult.message}');
+    }
+
     // 模式1：优先尝试基于文件系统的导航
     final fileSystemResult = await _getPreviousEpisodeFromFileSystem(currentFilePath);
     if (fileSystemResult.success) {
@@ -154,6 +176,20 @@ class EpisodeNavigationService {
       debugPrint('[剧集导航] Emby模式未找到下一话，原因：${embyResult.message}');
     }
 
+    // 检查是否为弹弹play远程流媒体
+    if (_isDandanplayRemoteUrl(currentFilePath)) {
+      final dandanResult = await _getNextEpisodeFromDandanplay(
+        currentFilePath,
+        animeId: animeId,
+        episodeId: episodeId,
+      );
+      if (dandanResult.success) {
+        debugPrint('[剧集导航] 弹弹play远程模式成功找到下一话');
+        return dandanResult;
+      }
+      debugPrint('[剧集导航] 弹弹play远程模式未找到下一话，原因：${dandanResult.message}');
+    }
+
     // 模式1：优先尝试基于文件系统的导航
     final fileSystemResult = await _getNextEpisodeFromFileSystem(currentFilePath);
     if (fileSystemResult.success) {
@@ -174,6 +210,432 @@ class EpisodeNavigationService {
 
     debugPrint('[剧集导航] 所有模式都未找到下一话');
     return EpisodeNavigationResult.failure('没有找到可播放的下一话');
+  }
+
+  /// 弹弹play远程媒体：获取上一话
+  Future<EpisodeNavigationResult> _getPreviousEpisodeFromDandanplay(
+    String currentFilePath, {
+    int? animeId,
+    int? episodeId,
+  }) async {
+    final service = DandanplayRemoteService.instance;
+    if (!service.isConnected) {
+      return EpisodeNavigationResult.failure('弹弹play远程服务未连接');
+    }
+
+    List<DandanplayRemoteEpisode> library = service.cachedEpisodes;
+    if (library.isEmpty) {
+      try {
+        library = await service.refreshLibrary(force: true);
+      } catch (e) {
+        return EpisodeNavigationResult.failure('刷新弹弹play远程媒体库失败: $e');
+      }
+    }
+
+    if (library.isEmpty) {
+      return EpisodeNavigationResult.failure('弹弹play远程媒体库为空');
+    }
+
+    final history =
+        await WatchHistoryDatabase.instance.getHistoryByFilePath(currentFilePath);
+    final identifier = _extractDandanplayIdentifier(currentFilePath);
+
+    final currentEpisode = _locateRemoteEpisode(
+      library,
+      preferredAnimeId: history?.animeId ?? animeId,
+      preferredEpisodeId: history?.episodeId ?? episodeId,
+      preferredEpisodeTitle: history?.episodeTitle,
+      identifier: identifier,
+      videoHash: history?.videoHash,
+    );
+
+    if (currentEpisode == null) {
+      return EpisodeNavigationResult.failure('未能在弹弹play远程媒体库中定位当前剧集');
+    }
+
+    final groupEpisodes = _collectRemoteGroup(
+      library,
+      currentEpisode,
+      preferredAnimeId: history?.animeId ?? animeId,
+    );
+
+    if (groupEpisodes.length <= 1) {
+      return EpisodeNavigationResult.failure('该番剧没有其他可播放的剧集');
+    }
+
+    final sortedGroup = _sortRemoteEpisodes(groupEpisodes);
+    final currentIndex = sortedGroup.indexWhere(
+      (episode) => _isSameRemoteEpisode(
+        episode,
+        currentEpisode,
+        identifier,
+        history?.videoHash,
+      ),
+    );
+
+    if (currentIndex == -1) {
+      return EpisodeNavigationResult.failure('弹弹play远程媒体库未包含当前剧集记录');
+    }
+
+    if (currentIndex == 0) {
+      return EpisodeNavigationResult.failure('已经是第一话');
+    }
+
+    final target = sortedGroup[currentIndex - 1];
+    final historyItem = await _buildDandanplayHistoryItem(target);
+    if (historyItem == null) {
+      return EpisodeNavigationResult.failure('无法生成上一话的播放信息');
+    }
+
+    final displayTitle =
+        target.episodeTitle.isNotEmpty ? target.episodeTitle : target.name;
+
+    return EpisodeNavigationResult.success(
+      historyItem: historyItem,
+      message: '从弹弹play远程媒体找到上一话：$displayTitle',
+    );
+  }
+
+  /// 弹弹play远程媒体：获取下一话
+  Future<EpisodeNavigationResult> _getNextEpisodeFromDandanplay(
+    String currentFilePath, {
+    int? animeId,
+    int? episodeId,
+  }) async {
+    final service = DandanplayRemoteService.instance;
+    if (!service.isConnected) {
+      return EpisodeNavigationResult.failure('弹弹play远程服务未连接');
+    }
+
+    List<DandanplayRemoteEpisode> library = service.cachedEpisodes;
+    if (library.isEmpty) {
+      try {
+        library = await service.refreshLibrary(force: true);
+      } catch (e) {
+        return EpisodeNavigationResult.failure('刷新弹弹play远程媒体库失败: $e');
+      }
+    }
+
+    if (library.isEmpty) {
+      return EpisodeNavigationResult.failure('弹弹play远程媒体库为空');
+    }
+
+    final history =
+        await WatchHistoryDatabase.instance.getHistoryByFilePath(currentFilePath);
+    final identifier = _extractDandanplayIdentifier(currentFilePath);
+
+    final currentEpisode = _locateRemoteEpisode(
+      library,
+      preferredAnimeId: history?.animeId ?? animeId,
+      preferredEpisodeId: history?.episodeId ?? episodeId,
+      preferredEpisodeTitle: history?.episodeTitle,
+      identifier: identifier,
+      videoHash: history?.videoHash,
+    );
+
+    if (currentEpisode == null) {
+      return EpisodeNavigationResult.failure('未能在弹弹play远程媒体库中定位当前剧集');
+    }
+
+    final groupEpisodes = _collectRemoteGroup(
+      library,
+      currentEpisode,
+      preferredAnimeId: history?.animeId ?? animeId,
+    );
+
+    if (groupEpisodes.length <= 1) {
+      return EpisodeNavigationResult.failure('该番剧没有其他可播放的剧集');
+    }
+
+    final sortedGroup = _sortRemoteEpisodes(groupEpisodes);
+    final currentIndex = sortedGroup.indexWhere(
+      (episode) => _isSameRemoteEpisode(
+        episode,
+        currentEpisode,
+        identifier,
+        history?.videoHash,
+      ),
+    );
+
+    if (currentIndex == -1) {
+      return EpisodeNavigationResult.failure('弹弹play远程媒体库未包含当前剧集记录');
+    }
+
+    if (currentIndex >= sortedGroup.length - 1) {
+      return EpisodeNavigationResult.failure('已经是最后一话');
+    }
+
+    final target = sortedGroup[currentIndex + 1];
+    final historyItem = await _buildDandanplayHistoryItem(target);
+    if (historyItem == null) {
+      return EpisodeNavigationResult.failure('无法生成下一话的播放信息');
+    }
+
+    final displayTitle =
+        target.episodeTitle.isNotEmpty ? target.episodeTitle : target.name;
+
+    return EpisodeNavigationResult.success(
+      historyItem: historyItem,
+      message: '从弹弹play远程媒体找到下一话：$displayTitle',
+    );
+  }
+
+  List<DandanplayRemoteEpisode> _collectRemoteGroup(
+    List<DandanplayRemoteEpisode> source,
+    DandanplayRemoteEpisode current, {
+    int? preferredAnimeId,
+  }) {
+    final targetAnimeId = preferredAnimeId ?? current.animeId;
+    if (targetAnimeId != null) {
+      final matches =
+          source.where((episode) => episode.animeId == targetAnimeId).toList();
+      if (matches.isNotEmpty) {
+        return matches;
+      }
+    }
+
+    final normalizedTitle = current.animeTitle.trim().toLowerCase();
+    if (normalizedTitle.isNotEmpty) {
+      final matchesByTitle = source
+          .where((episode) => episode.animeTitle.trim().toLowerCase() ==
+              normalizedTitle)
+          .toList();
+      if (matchesByTitle.isNotEmpty) {
+        return matchesByTitle;
+      }
+    }
+
+    return source;
+  }
+
+  List<DandanplayRemoteEpisode> _sortRemoteEpisodes(
+      List<DandanplayRemoteEpisode> episodes) {
+    final sorted = List<DandanplayRemoteEpisode>.from(episodes);
+    sorted.sort((a, b) {
+      final aEpisodeId = a.episodeId ?? -1;
+      final bEpisodeId = b.episodeId ?? -1;
+      if (aEpisodeId != -1 && bEpisodeId != -1 && aEpisodeId != bEpisodeId) {
+        return aEpisodeId.compareTo(bEpisodeId);
+      }
+      final aTime = a.created ?? a.lastMatch ?? a.lastPlay ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b.created ?? b.lastMatch ?? b.lastPlay ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      if (aTime != bTime) {
+        return aTime.compareTo(bTime);
+      }
+      return a.name.compareTo(b.name);
+    });
+    return sorted;
+  }
+
+  bool _isSameRemoteEpisode(
+    DandanplayRemoteEpisode candidate,
+    DandanplayRemoteEpisode target,
+    _DandanplayStreamIdentifier? identifier,
+    String? videoHash,
+  ) {
+    if (identifier != null) {
+      if (identifier.entryId?.isNotEmpty == true &&
+          _stringEqualsIgnoreCase(candidate.entryId, identifier.entryId)) {
+        return true;
+      }
+      if (identifier.hash?.isNotEmpty == true &&
+          _stringEqualsIgnoreCase(candidate.hash, identifier.hash)) {
+        return true;
+      }
+    }
+    if (videoHash?.isNotEmpty == true &&
+        _stringEqualsIgnoreCase(candidate.hash, videoHash)) {
+      return true;
+    }
+    if (target.entryId.isNotEmpty &&
+        _stringEqualsIgnoreCase(candidate.entryId, target.entryId)) {
+      return true;
+    }
+    if (target.hash.isNotEmpty &&
+        _stringEqualsIgnoreCase(candidate.hash, target.hash)) {
+      return true;
+    }
+    if (target.episodeId != null && target.episodeId! > 0 &&
+        candidate.episodeId == target.episodeId) {
+      return true;
+    }
+    if (candidate.path.isNotEmpty && candidate.path == target.path) {
+      return true;
+    }
+    if (candidate.name.isNotEmpty && candidate.name == target.name) {
+      return true;
+    }
+    return false;
+  }
+
+  Future<WatchHistoryItem?> _buildDandanplayHistoryItem(
+      DandanplayRemoteEpisode episode) async {
+    final service = DandanplayRemoteService.instance;
+    final streamUrl = service.buildEpisodeStreamUrl(
+      hash: episode.hash.isNotEmpty ? episode.hash : null,
+      entryId: episode.entryId.isNotEmpty ? episode.entryId : null,
+    );
+    if (streamUrl == null || streamUrl.isEmpty) {
+      return null;
+    }
+
+    final resolvedEpisodeId = episode.episodeId ??
+        (episode.entryId.isNotEmpty
+            ? episode.entryId.hashCode
+            : (episode.hash.isNotEmpty
+                ? episode.hash.hashCode
+                : episode.name.hashCode));
+
+    return WatchHistoryItem(
+      filePath: streamUrl,
+      animeName: episode.animeTitle.isNotEmpty
+          ? episode.animeTitle
+          : (episode.name.isNotEmpty ? episode.name : '弹弹play剧集'),
+      episodeTitle: episode.episodeTitle.isNotEmpty
+          ? episode.episodeTitle
+          : episode.name,
+      episodeId: resolvedEpisodeId,
+      animeId: episode.animeId,
+      watchProgress: 0,
+      lastPosition: 0,
+      duration: episode.duration ?? 0,
+      lastWatchTime: episode.lastPlay ??
+          episode.created ??
+          DateTime.now(),
+      thumbnailPath: null,
+      isFromScan: false,
+      videoHash: episode.hash.isNotEmpty ? episode.hash : null,
+    );
+  }
+
+  DandanplayRemoteEpisode? _locateRemoteEpisode(
+    List<DandanplayRemoteEpisode> source, {
+    int? preferredAnimeId,
+    int? preferredEpisodeId,
+    String? preferredEpisodeTitle,
+    _DandanplayStreamIdentifier? identifier,
+    String? videoHash,
+  }) {
+    if (identifier != null && identifier.entryId?.isNotEmpty == true) {
+      final entryId = identifier.entryId!;
+      for (final episode in source) {
+        if (_stringEqualsIgnoreCase(episode.entryId, entryId)) {
+          return episode;
+        }
+      }
+    }
+
+    if (identifier != null && identifier.hash?.isNotEmpty == true) {
+      final hash = identifier.hash!;
+      for (final episode in source) {
+        if (_stringEqualsIgnoreCase(episode.hash, hash)) {
+          return episode;
+        }
+      }
+    }
+
+    if (videoHash?.isNotEmpty == true) {
+      for (final episode in source) {
+        if (_stringEqualsIgnoreCase(episode.hash, videoHash)) {
+          return episode;
+        }
+      }
+    }
+
+    if (preferredEpisodeId != null && preferredEpisodeId > 0) {
+      for (final episode in source) {
+        if (episode.episodeId == preferredEpisodeId) {
+          return episode;
+        }
+      }
+    }
+
+    if (preferredEpisodeTitle?.isNotEmpty == true) {
+      final normalizedTitle = preferredEpisodeTitle!.trim();
+      for (final episode in source) {
+        if (episode.episodeTitle.trim() == normalizedTitle ||
+            episode.name.trim() == normalizedTitle) {
+          return episode;
+        }
+      }
+    }
+
+    if (preferredAnimeId != null) {
+      final matches =
+          source.where((episode) => episode.animeId == preferredAnimeId).toList();
+      if (matches.length == 1) {
+        return matches.first;
+      }
+    }
+
+    return null;
+  }
+
+  _DandanplayStreamIdentifier _extractDandanplayIdentifier(String filePath) {
+    String normalized = filePath.trim();
+    String? hash;
+    String? entryId;
+
+    if (normalized.startsWith('dandanplay://')) {
+      normalized = normalized.substring('dandanplay://'.length);
+      if (normalized.startsWith('id/')) {
+        entryId = normalized.substring(3);
+      } else if (normalized.startsWith('stream/')) {
+        final parts = normalized.split('/');
+        if (parts.length >= 3 && parts[1] == 'id') {
+          entryId = parts[2];
+        } else if (parts.length >= 2) {
+          hash = parts[1];
+        }
+      } else {
+        hash = normalized;
+      }
+
+      return _DandanplayStreamIdentifier(
+        hash: _normalizeRemoteKey(hash),
+        entryId: _normalizeRemoteKey(entryId),
+      );
+    }
+
+    final uri = Uri.tryParse(normalized);
+    final segments = (uri?.pathSegments ?? normalized.split('/'))
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+
+    final streamIndex = segments.indexOf('stream');
+    if (streamIndex != -1 && streamIndex + 1 < segments.length) {
+      final nextSegment = segments[streamIndex + 1];
+      if (nextSegment == 'id' && streamIndex + 2 < segments.length) {
+        entryId = Uri.decodeComponent(segments[streamIndex + 2]);
+      } else if (nextSegment != 'id') {
+        hash = Uri.decodeComponent(nextSegment);
+      }
+    }
+
+    return _DandanplayStreamIdentifier(
+      hash: _normalizeRemoteKey(hash),
+      entryId: _normalizeRemoteKey(entryId),
+    );
+  }
+
+  String? _normalizeRemoteKey(String? value) {
+    if (value == null) {
+      return null;
+    }
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  bool _stringEqualsIgnoreCase(String? a, String? b) {
+    if (a == null || b == null) {
+      return false;
+    }
+    return a.toLowerCase() == b.toLowerCase();
   }
 
   /// 模式2：从数据库获取上一话（回退模式）
@@ -571,6 +1033,13 @@ class EpisodeNavigationService {
   /// 检查是否为Emby URL
   bool _isEmbyUrl(String filePath) {
     return filePath.startsWith('emby://');
+  }
+
+  /// 检查是否为弹弹play远程URL
+  bool _isDandanplayRemoteUrl(String filePath) {
+    final normalized = filePath.toLowerCase();
+    return normalized.startsWith('dandanplay://') ||
+        normalized.contains('/api/v1/stream/');
   }
 
   /// Jellyfin模式：获取上一话
