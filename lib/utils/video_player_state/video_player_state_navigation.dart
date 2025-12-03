@@ -365,6 +365,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     if (_context == null || !_context!.mounted || _navigationDialogVisible) {
       return;
     }
+
+    if (!_shouldShowNavigationDialog()) {
+      return;
+    }
     _navigationDialogVisible = true;
     BlurDialog.show(
       context: _context!,
@@ -374,6 +378,14 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     ).whenComplete(() {
       _navigationDialogVisible = false;
     });
+  }
+
+  bool _shouldShowNavigationDialog() {
+    if (_currentVideoPath == null) {
+      return false;
+    }
+    return _currentVideoPath!.startsWith('jellyfin://') ||
+        _currentVideoPath!.startsWith('emby://');
   }
 
   void _hideEpisodeNavigationDialog() {
