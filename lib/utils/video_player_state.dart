@@ -30,6 +30,7 @@ import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 
 import 'package:path/path.dart' as p; // Added import for path package
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
@@ -67,6 +68,7 @@ import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 import 'hotkey_service.dart'; // Added import for HotkeyService
 import 'player_kernel_manager.dart'; // 导入播放器内核管理器
 import 'shared_remote_history_helper.dart';
+import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 
 part 'video_player_state/video_player_state_metadata.dart';
 part 'video_player_state/video_player_state_initialization.dart';
@@ -323,6 +325,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final List<VoidCallback> _thumbnailUpdateListeners = []; // 缩略图更新监听器列表
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性
+  bool _isEpisodeNavigating = false; // 防止重复切集
+  bool _navigationDialogVisible = false; // 控制切集对话框
 
   // 从 historyItem 传入的弹幕 ID（用于保持弹幕关联）
   int? _episodeId; // 存储从 historyItem 传入的 episodeId

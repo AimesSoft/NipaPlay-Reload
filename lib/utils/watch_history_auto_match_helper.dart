@@ -6,6 +6,10 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
+import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 
 class WatchHistoryAutoMatchHelper {
   static bool shouldAutoMatch(WatchHistoryItem item) {
@@ -108,6 +112,14 @@ class WatchHistoryAutoMatchHelper {
         } catch (_) {
           // ignore, possibly not in provider scope
         }
+
+        await _recordServerMappingsIfNeeded(
+          updatedItem,
+          animeId: animeId,
+          episodeId: episodeId,
+          animeTitle: animeTitle ?? updatedItem.animeName,
+        );
+
         onMatched?.call('已为历史记录自动匹配弹幕');
         return updatedItem;
       }
@@ -116,5 +128,148 @@ class WatchHistoryAutoMatchHelper {
     }
 
     return item;
+  }
+
+  static Future<void> _recordServerMappingsIfNeeded(
+    WatchHistoryItem item, {
+    required int animeId,
+    required int episodeId,
+    required String? animeTitle,
+  }) async {
+    final filePath = item.filePath;
+    if (filePath.startsWith('jellyfin://')) {
+      await _recordJellyfinMapping(
+        filePath,
+        animeId: animeId,
+        episodeId: episodeId,
+        animeTitle: animeTitle,
+      );
+    } else if (filePath.startsWith('emby://')) {
+      await _recordEmbyMapping(
+        filePath,
+        animeId: animeId,
+        episodeId: episodeId,
+        animeTitle: animeTitle,
+      );
+    }
+  }
+
+  static Future<void> _recordJellyfinMapping(
+    String filePath, {
+    required int animeId,
+    required int episodeId,
+    required String? animeTitle,
+  }) async {
+    final jellyfinService = JellyfinService.instance;
+    if (!jellyfinService.isConnected) {
+      debugPrint('[WatchHistoryAutoMatch] Jellyfin未连接，跳过映射写入');
+      return;
+    }
+
+    final jellyfinEpisodeId = _extractServerEpisodeId(filePath, 'jellyfin://');
+    if (jellyfinEpisodeId == null) {
+      return;
+    }
+
+    try {
+      final episodeInfo = await jellyfinService.getEpisodeDetails(jellyfinEpisodeId);
+      if (episodeInfo == null) {
+        debugPrint('[WatchHistoryAutoMatch] 无法获取Jellyfin剧集详情，跳过映射写入');
+        return;
+      }
+
+      final seriesId = episodeInfo.seriesId;
+      if (seriesId == null || seriesId.isEmpty) {
+        debugPrint('[WatchHistoryAutoMatch] Jellyfin剧集缺少seriesId，无法写入映射');
+        return;
+      }
+
+      final mappingId = await JellyfinEpisodeMappingService.instance.createOrUpdateAnimeMapping(
+        jellyfinSeriesId: seriesId,
+        jellyfinSeriesName: episodeInfo.seriesName ?? '',
+        jellyfinSeasonId: episodeInfo.seasonId,
+        dandanplayAnimeId: animeId,
+        dandanplayAnimeTitle: animeTitle ?? '',
+      );
+
+      final indexNumber = episodeInfo.indexNumber ?? 0;
+      await JellyfinEpisodeMappingService.instance.recordEpisodeMapping(
+        jellyfinEpisodeId: episodeInfo.id,
+        jellyfinIndexNumber: indexNumber,
+        dandanplayEpisodeId: episodeId,
+        mappingId: mappingId,
+        confirmed: true,
+      );
+      debugPrint('[WatchHistoryAutoMatch] 已写入Jellyfin映射: episode=${episodeInfo.id}, danmakuEpisode=$episodeId');
+    } catch (e) {
+      debugPrint('[WatchHistoryAutoMatch] 保存Jellyfin映射失败: $e');
+    }
+  }
+
+  static Future<void> _recordEmbyMapping(
+    String filePath, {
+    required int animeId,
+    required int episodeId,
+    required String? animeTitle,
+  }) async {
+    final embyService = EmbyService.instance;
+    if (!embyService.isConnected) {
+      debugPrint('[WatchHistoryAutoMatch] Emby未连接，跳过映射写入');
+      return;
+    }
+
+    final embyEpisodeId = _extractServerEpisodeId(filePath, 'emby://');
+    if (embyEpisodeId == null) {
+      return;
+    }
+
+    try {
+      final episodeInfo = await embyService.getEpisodeDetails(embyEpisodeId);
+      if (episodeInfo == null) {
+        debugPrint('[WatchHistoryAutoMatch] 无法获取Emby剧集详情，跳过映射写入');
+        return;
+      }
+
+      final seriesId = episodeInfo.seriesId;
+      if (seriesId == null || seriesId.isEmpty) {
+        debugPrint('[WatchHistoryAutoMatch] Emby剧集缺少seriesId，无法写入映射');
+        return;
+      }
+
+      final mappingId = await EmbyEpisodeMappingService.instance.createOrUpdateAnimeMapping(
+        embySeriesId: seriesId,
+        embySeriesName: episodeInfo.seriesName ?? '',
+        embySeasonId: episodeInfo.seasonId,
+        dandanplayAnimeId: animeId,
+        dandanplayAnimeTitle: animeTitle ?? '',
+      );
+
+      final indexNumber = episodeInfo.indexNumber ?? 0;
+      await EmbyEpisodeMappingService.instance.recordEpisodeMapping(
+        embyEpisodeId: episodeInfo.id,
+        embyIndexNumber: indexNumber,
+        dandanplayEpisodeId: episodeId,
+        mappingId: mappingId,
+        confirmed: true,
+      );
+      debugPrint('[WatchHistoryAutoMatch] 已写入Emby映射: episode=${episodeInfo.id}, danmakuEpisode=$episodeId');
+    } catch (e) {
+      debugPrint('[WatchHistoryAutoMatch] 保存Emby映射失败: $e');
+    }
+  }
+
+  static String? _extractServerEpisodeId(String filePath, String prefix) {
+    if (!filePath.startsWith(prefix)) {
+      return null;
+    }
+    final raw = filePath.substring(prefix.length);
+    if (raw.isEmpty) {
+      return null;
+    }
+    final segments = raw.split('/').where((part) => part.isNotEmpty).toList();
+    if (segments.isEmpty) {
+      return null;
+    }
+    return segments.last;
   }
 }
