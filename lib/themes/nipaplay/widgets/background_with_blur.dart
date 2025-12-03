@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/theme_notifier.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -22,14 +23,21 @@ class BackgroundWithBlur extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SettingsProvider>(
-      builder: (context, settingsProvider, _) {
+    return Consumer2<SettingsProvider, ThemeNotifier>(
+      builder: (context, settingsProvider, themeNotifier, _) {
         return Stack(
           children: [
             // 背景图像
             Positioned.fill(
               child: _buildBackgroundImage(),
             ),
+            // 自定义颜色遮罩
+            if (themeNotifier.useCustomThemeColor)
+              Positioned.fill(
+                child: Container(
+                  color: themeNotifier.customOverlayColor,
+                ),
+              ),
             // 使用 GlassmorphicContainer 实现毛玻璃效果
             if (settingsProvider.isBlurEnabled)
               Positioned.fill(

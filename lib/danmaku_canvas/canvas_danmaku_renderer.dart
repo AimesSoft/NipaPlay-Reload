@@ -92,6 +92,11 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
 
   // 添加已添加弹幕的跟踪集合，避免重复添加
   final Set<String> _addedDanmakuKeys = {};
+  static const double _historyWindowSeconds = 5.0;
+  static const double _historyWindowAfterJumpSeconds = 1.0;
+  static const double _scrollLeadTimeSeconds = 1.0;
+  static const double _staticLeadTimeSeconds = 0.0;
+  static const double _timeJumpLeadBonusSeconds = 0.5;
 
   @override
   void initState() {
@@ -272,8 +277,11 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
 
     // 获取弹幕显示的时间窗口
     // 如果发生时间跳跃，使用较小的前置窗口以快速响应
-    final windowStart = timeJumped ? currentTime - 1.0 : currentTime - 5.0;
-    final windowEnd = currentTime + 15.0;
+    final windowStart = currentTime -
+        (timeJumped
+            ? _historyWindowAfterJumpSeconds
+            : _historyWindowSeconds);
+    final windowEnd = currentTime + _forwardWindowSeconds(timeJumped);
 
     //print('Canvas弹幕: 时间窗口 $windowStart ~ $windowEnd (时间跳跃: $timeJumped)');
 
@@ -323,6 +331,11 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       // 将抽象弹幕模型转换为Canvas弹幕模型
       final canvasDanmaku = _convertToCanvasDanmaku(danmakuData, text);
       if (canvasDanmaku != null) {
+        // 仅在允许的提前量内才真正显示，防止提前十几秒
+        if (!_isDanmakuReadyToDisplay(
+            canvasDanmaku, time, currentTime, timeJumped)) {
+          continue;
+        }
         //print('Canvas弹幕: 准备添加弹幕 "$text" 时间=$time 类型=${canvasDanmaku.type}');
         _controller!.addDanmaku(canvasDanmaku);
         _addedDanmakuKeys.add(danmakuKey); // 记录已添加的弹幕
@@ -346,6 +359,24 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       _addedDanmakuKeys.clear();
       //print('Canvas弹幕: 清理弹幕键值缓存，避免内存泄漏');
     }
+  }
+
+  double _forwardWindowSeconds(bool timeJumped) {
+    return _scrollLeadTimeSeconds +
+        (timeJumped ? _timeJumpLeadBonusSeconds : 0.0);
+  }
+
+  bool _isDanmakuReadyToDisplay(
+    canvas_models.DanmakuContentItem danmaku,
+    double scheduledTime,
+    double currentTime,
+    bool timeJumped,
+  ) {
+    final baseLead = danmaku.type == canvas_models.DanmakuItemType.scroll
+        ? _scrollLeadTimeSeconds
+        : _staticLeadTimeSeconds;
+    final allowedLead = baseLead + (timeJumped ? _timeJumpLeadBonusSeconds : 0.0);
+    return scheduledTime - currentTime <= allowedLead;
   }
 
   // 检查弹幕是否应该被屏蔽

@@ -409,6 +409,11 @@ void main(List<String> args) async {
       SettingsStorage.loadString('customBackgroundPath'),
       SettingsStorage.loadString('anime_detail_display_mode',
           defaultValue: 'simple'),
+      SettingsStorage.loadBool(ThemeNotifier.useCustomThemeColorKey),
+      SettingsStorage.loadInt(
+        ThemeNotifier.customOverlayColorKey,
+        defaultValue: ThemeNotifier.defaultOverlayMaskColor.value,
+      ),
     ]).then((results) {
       globals.backgroundImageMode =
           (results[1] as String?) ?? globals.backgroundImageMode;
@@ -420,10 +425,15 @@ void main(List<String> args) async {
 
       final themeMode = (results[0] as String?) ?? 'system';
       final animeDetailMode = (results[3] as String?) ?? 'simple';
+      final useCustomThemeColor = (results[4] as bool?) ?? false;
+      final overlayColorValue =
+          (results[5] as int?) ?? ThemeNotifier.defaultOverlayMaskColor.value;
 
-      return <String, String>{
+      return <String, dynamic>{
         'themeMode': themeMode,
         'animeDetailMode': animeDetailMode,
+        'useCustomThemeColor': useCustomThemeColor,
+        'customOverlayColor': overlayColorValue,
       };
     }),
 
@@ -452,9 +462,15 @@ void main(List<String> args) async {
     });
 
     // 处理主题模式设置
-    final settingsMap = results[2] as Map<String, String>;
-    final savedThemeMode = settingsMap['themeMode'] ?? 'system';
-    final savedDetailModeString = settingsMap['animeDetailMode'] ?? 'simple';
+    final settingsMap = results[2] as Map<String, dynamic>;
+    final savedThemeMode = settingsMap['themeMode'] as String? ?? 'system';
+    final savedDetailModeString =
+        settingsMap['animeDetailMode'] as String? ?? 'simple';
+    final savedUseCustomThemeColor =
+        settingsMap['useCustomThemeColor'] as bool? ?? false;
+    final savedOverlayColorValue =
+        settingsMap['customOverlayColor'] as int? ??
+            ThemeNotifier.defaultOverlayMaskColor.value;
     final savedDetailMode =
         AnimeDetailDisplayModeStorage.fromString(savedDetailModeString);
     ThemeMode initialThemeMode;
@@ -499,6 +515,8 @@ void main(List<String> args) async {
               initialBackgroundImageMode: globals.backgroundImageMode,
               initialCustomBackgroundPath: globals.customBackgroundPath,
               initialAnimeDetailDisplayMode: savedDetailMode,
+              initialUseCustomThemeColor: savedUseCustomThemeColor,
+              initialCustomOverlayColor: Color(savedOverlayColorValue),
             ),
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),

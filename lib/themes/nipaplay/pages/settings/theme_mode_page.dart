@@ -1,4 +1,5 @@
 // ThemeModePage.dart
+import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
@@ -32,11 +33,14 @@ class _ThemeModePageState extends State<ThemeModePage> {
   final GlobalKey _blurDropdownKey = GlobalKey();
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
   final GlobalKey _animationDropdownKey = GlobalKey();
+  bool _isCustomThemeMode = false;
+  late Color _customOverlayColor;
 
   @override
   void initState() {
     super.initState();
-    // 不再需要在 initState 中加载背景图像模式，因为已经在 main.dart 中加载了
+    _isCustomThemeMode = widget.themeNotifier.useCustomThemeColor;
+    _customOverlayColor = widget.themeNotifier.customOverlayColor;
   }
 
   Future<void> _pickCustomBackground(BuildContext context) async {
@@ -178,27 +182,48 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 DropdownMenuItemData(
                   title: "日间模式",
                   value: ThemeMode.light,
-                  isSelected: widget.themeNotifier.themeMode == ThemeMode.light,
+                  isSelected: !_isCustomThemeMode &&
+                      widget.themeNotifier.themeMode == ThemeMode.light,
                 ),
                 DropdownMenuItemData(
                   title: "夜间模式",
                   value: ThemeMode.dark,
-                  isSelected: widget.themeNotifier.themeMode == ThemeMode.dark,
+                  isSelected: !_isCustomThemeMode &&
+                      widget.themeNotifier.themeMode == ThemeMode.dark,
                 ),
                 DropdownMenuItemData(
                   title: "跟随系统",
                   value: ThemeMode.system,
-                  isSelected: widget.themeNotifier.themeMode == ThemeMode.system,
+                  isSelected: !_isCustomThemeMode &&
+                      widget.themeNotifier.themeMode == ThemeMode.system,
+                ),
+                DropdownMenuItemData(
+                  title: "自定义颜色",
+                  value: 'custom',
+                  isSelected: _isCustomThemeMode,
                 ),
               ],
               onChanged: (mode) {
-                setState(() {
-                  widget.themeNotifier.themeMode = mode;
-                  _saveThemeMode(mode);
-                });
+                if (mode == 'custom') {
+                  setState(() {
+                    _isCustomThemeMode = true;
+                  });
+                  widget.themeNotifier.useCustomThemeColor = true;
+                } else if (mode is ThemeMode) {
+                  setState(() {
+                    _isCustomThemeMode = false;
+                    widget.themeNotifier.themeMode = mode;
+                    _saveThemeMode(mode);
+                    _customOverlayColor = widget.themeNotifier.customOverlayColor;
+                  });
+                }
               },
               dropdownKey: _dropdownKey,
             ),
+            if (_isCustomThemeMode) ...[
+              const Divider(color: Colors.white12, height: 1),
+              _buildCustomOverlayColorTile(),
+            ],
             const Divider(color: Colors.white12, height: 1),
             SettingsItem.dropdown(
               title: "背景毛玻璃效果",
@@ -310,6 +335,176 @@ class _ThemeModePageState extends State<ThemeModePage> {
         ),
       ),
     );
+  }
+
+  Widget _buildCustomOverlayColorTile() {
+    final hexValue = _formatColorHex(_customOverlayColor);
+    return ListTile(
+      leading: const Icon(
+        Ionicons.color_palette_outline,
+        color: Colors.white70,
+      ),
+      title: const Text(
+        "遮罩颜色",
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      subtitle: const Text(
+        "设置覆盖背景图像的颜色以提升可读性",
+        style: TextStyle(color: Colors.white70),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.white24, width: 1),
+              color: _customOverlayColor,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            hexValue,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+      onTap: _showOverlayColorPicker,
+    );
+  }
+
+  Future<void> _showOverlayColorPicker() async {
+    double alpha = _customOverlayColor.alpha.toDouble();
+    double red = _customOverlayColor.red.toDouble();
+    double green = _customOverlayColor.green.toDouble();
+    double blue = _customOverlayColor.blue.toDouble();
+    Color previewColor = _customOverlayColor;
+
+    Color clampToColor() {
+      return Color.fromARGB(
+        alpha.clamp(0, 255).toInt(),
+        red.clamp(0, 255).toInt(),
+        green.clamp(0, 255).toInt(),
+        blue.clamp(0, 255).toInt(),
+      );
+    }
+
+    final Color? selectedColor = await BlurDialog.show<Color>(
+      context: context,
+      title: "选择遮罩颜色",
+      contentWidget: StatefulBuilder(
+        builder: (context, setPreviewState) {
+          Widget buildSlider({
+            required String label,
+            required double value,
+            required ValueChanged<double> onChanged,
+            required Color activeColor,
+          }) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "$label ${value.toInt()}",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                Slider(
+                  min: 0,
+                  max: 255,
+                  divisions: 255,
+                  value: value,
+                  onChanged: (val) {
+                    setPreviewState(() {
+                      onChanged(val);
+                      previewColor = clampToColor();
+                    });
+                  },
+                  activeColor: activeColor,
+                  inactiveColor: Colors.white24,
+                ),
+              ],
+            );
+          }
+
+          return SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 80,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white24, width: 1),
+                    color: previewColor,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                buildSlider(
+                  label: "不透明度",
+                  value: alpha,
+                  onChanged: (val) => alpha = val,
+                  activeColor: Colors.white,
+                ),
+                buildSlider(
+                  label: "红色",
+                  value: red,
+                  onChanged: (val) => red = val,
+                  activeColor: Colors.redAccent,
+                ),
+                buildSlider(
+                  label: "绿色",
+                  value: green,
+                  onChanged: (val) => green = val,
+                  activeColor: Colors.lightGreenAccent,
+                ),
+                buildSlider(
+                  label: "蓝色",
+                  value: blue,
+                  onChanged: (val) => blue = val,
+                  activeColor: Colors.lightBlueAccent,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "当前值：${_formatColorHex(previewColor)}",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          style: TextButton.styleFrom(foregroundColor: Colors.white70),
+          child: const Text("取消"),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(previewColor),
+          style: TextButton.styleFrom(foregroundColor: Colors.white),
+          child: const Text("确定"),
+        ),
+      ],
+    );
+
+    if (selectedColor != null) {
+      setState(() {
+        _customOverlayColor = selectedColor;
+      });
+      widget.themeNotifier.customOverlayColor = selectedColor;
+    }
+  }
+
+  String _formatColorHex(Color color) {
+    return '#${color.value.toRadixString(16).padLeft(8, '0').toUpperCase()}';
   }
 
   Future<void> _saveThemeMode(ThemeMode mode) async {
