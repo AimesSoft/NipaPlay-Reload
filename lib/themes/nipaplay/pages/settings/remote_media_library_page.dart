@@ -667,10 +667,11 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
         children: [
           Row(
             children: [
-              const Icon(
-                Ionicons.chatbubble_ellipses_outline,
-                color: Color(0xFFFFC857),
-                size: 24,
+              Image.asset(
+                'assets/dandanplay.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.contain,
               ),
               const SizedBox(width: 12),
               const Text(
