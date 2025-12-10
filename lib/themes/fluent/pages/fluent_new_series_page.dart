@@ -32,6 +32,8 @@ class _FluentNewSeriesPageState extends State<FluentNewSeriesPage>
   String? _error;
   bool _isReversed = false;
   String _searchQuery = '';
+  Map<int, List<BangumiAnime>>? _groupedAnimesCache;
+  bool _groupCacheDirty = true;
   
   // 分组状态
   final Map<int, bool> _expansionStates = {};
@@ -112,6 +114,7 @@ class _FluentNewSeriesPageState extends State<FluentNewSeriesPage>
         setState(() {
           _animes = animes;
           _isLoading = false;
+          _groupCacheDirty = true;
         });
       }
     } catch (e) {
@@ -137,6 +140,7 @@ class _FluentNewSeriesPageState extends State<FluentNewSeriesPage>
 
   /// 按星期几分组番剧并应用筛选
   Map<int, List<BangumiAnime>> _groupAnimesByWeekday() {
+    _groupCacheDirty = false;
     final grouped = <int, List<BangumiAnime>>{};
     
     // 应用筛选条件
@@ -188,6 +192,13 @@ class _FluentNewSeriesPageState extends State<FluentNewSeriesPage>
     }
     
     return grouped;
+  }
+
+  Map<int, List<BangumiAnime>> _getGroupedAnimes() {
+    if (_groupCacheDirty || _groupedAnimesCache == null) {
+      _groupedAnimesCache = _groupAnimesByWeekday();
+    }
+    return _groupedAnimesCache!;
   }
 
   /// 显示番剧详情
@@ -283,6 +294,7 @@ class _FluentNewSeriesPageState extends State<FluentNewSeriesPage>
             _searchQuery = query;
             _showOnlyAiring = airing;
             _minRating = rating;
+            _groupCacheDirty = true;
           });
         },
       ),
@@ -424,7 +436,7 @@ class _FluentNewSeriesPageState extends State<FluentNewSeriesPage>
       );
     }
 
-    final groupedAnimes = _groupAnimesByWeekday();
+    final groupedAnimes = _getGroupedAnimes();
     
     if (groupedAnimes.isEmpty) {
       return Center(

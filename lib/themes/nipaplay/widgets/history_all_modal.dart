@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
@@ -28,6 +29,7 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
   bool _isLoading = false;
   bool _hasMoreData = true;
   late List<WatchHistoryItem> _validHistory;
+  final Map<String, Future<Uint8List?>> _thumbnailFutures = {};
   
   @override
   void initState() {
@@ -158,6 +160,7 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
                       return HistoryListItem(
                         key: ValueKey('history_${item.filePath}'),
                         item: item,
+                        thumbnailLoader: _loadThumbnail,
                         onTap: () {
                           Navigator.pop(context);
                           widget.onItemTap(item);
@@ -184,6 +187,7 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
                         return HistoryListItem(
                           key: ValueKey('history_${item.filePath}'),
                           item: item,
+                          thumbnailLoader: _loadThumbnail,
                           onTap: () {
                             Navigator.pop(context);
                             widget.onItemTap(item);
@@ -210,18 +214,33 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
       ),
     );
   }
-} 
+
+  Future<Uint8List?> _loadThumbnail(String? path) {
+    if (path == null) return Future.value(null);
+    return _thumbnailFutures.putIfAbsent(path, () async {
+      try {
+        final file = File(path);
+        if (!await file.exists()) return null;
+        return await file.readAsBytes();
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+}
 
 /// 历史记录列表项组件
 /// 将列表项抽取为独立的StatelessWidget可以减少主状态组件的重建范围
 class HistoryListItem extends StatelessWidget {
   final WatchHistoryItem item;
   final VoidCallback onTap;
+  final Future<Uint8List?> Function(String?) thumbnailLoader;
 
   const HistoryListItem({
     super.key,
     required this.item,
     required this.onTap,
+    required this.thumbnailLoader,
   });
 
   @override
@@ -270,19 +289,24 @@ class HistoryListItem extends StatelessWidget {
                   // 缩略图
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
-                    child: SizedBox(
-                      width: 72,
-                      height: 48,
-                      child: item.thumbnailPath != null && 
-                             File(item.thumbnailPath!).existsSync()
-                          ? Image.file(
-                              File(item.thumbnailPath!),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
-                            )
-                          : _buildDefaultThumbnail(),
-                    ),
-                  ),
+                          child: SizedBox(
+                            width: 72,
+                            height: 48,
+                            child: FutureBuilder<Uint8List?>(
+                              future: thumbnailLoader(item.thumbnailPath),
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData && snapshot.data != null) {
+                                  return Image.memory(
+                                    snapshot.data!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
+                                  );
+                                }
+                                return _buildDefaultThumbnail();
+                              },
+                            ),
+                          ),
+                        ),
                   const SizedBox(width: 12),
                   // 标题和副标题
                   Expanded(

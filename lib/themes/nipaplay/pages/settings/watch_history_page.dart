@@ -27,6 +27,9 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
   bool _isAutoMatching = false;
   bool _autoMatchDialogVisible = false;
   OverlayEntry? _contextMenuOverlay;
+  final Map<String, Future<Uint8List?>> _thumbnailFutures = {};
+  List<WatchHistoryItem> _cachedValidHistory = const [];
+  int _lastHistoryHash = 0;
 
   @override
   void dispose() {
@@ -52,8 +55,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
             );
           }
 
-          // 过滤出真正被观看过的记录（与主页仪表盘保持一致）
-          final validHistory = historyProvider.history.where((item) => item.duration > 0).toList();
+          final validHistory = _getValidHistory(historyProvider.history);
 
           if (validHistory.isEmpty) {
             return _buildEmptyState();
@@ -192,30 +194,28 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
   }
 
   Widget _buildThumbnail(WatchHistoryItem item) {
-    if (item.thumbnailPath != null) {
-      final thumbnailFile = File(item.thumbnailPath!);
-      if (thumbnailFile.existsSync()) {
-        return FutureBuilder<Uint8List>(
-          future: thumbnailFile.readAsBytes(),
-          builder: (context, snapshot) {
-            if (snapshot.hasData) {
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.memory(
-                  snapshot.data!,
-                  width: 80,
-                  height: 45, // 16:9 比例
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return _buildDefaultThumbnail();
-                  },
-                ),
-              );
-            }
-            return _buildDefaultThumbnail();
-          },
-        );
-      }
+    final path = item.thumbnailPath;
+    if (path != null) {
+      return FutureBuilder<Uint8List?>(
+        future: _getThumbnailBytes(path),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.memory(
+                snapshot.data!,
+                width: 80,
+                height: 45, // 16:9 比例
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildDefaultThumbnail();
+                },
+              ),
+            );
+          }
+          return _buildDefaultThumbnail();
+        },
+      );
     }
     return _buildDefaultThumbnail();
   }
@@ -537,6 +537,37 @@ style: TextStyle(color: Colors.red)),
   void _hideContextMenu() {
     _contextMenuOverlay?.remove();
     _contextMenuOverlay = null;
+  }
+
+  List<WatchHistoryItem> _getValidHistory(List<WatchHistoryItem> history) {
+    final hash = _historyHash(history);
+    if (hash != _lastHistoryHash) {
+      _cachedValidHistory =
+          history.where((item) => item.duration > 0).toList(growable: false);
+      _lastHistoryHash = hash;
+    }
+    return _cachedValidHistory;
+  }
+
+  Future<Uint8List?> _getThumbnailBytes(String path) {
+    return _thumbnailFutures.putIfAbsent(path, () async {
+      try {
+        final file = File(path);
+        if (!await file.exists()) return null;
+        return await file.readAsBytes();
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
+  int _historyHash(List<WatchHistoryItem> history) {
+    int hash = history.length;
+    final sample = history.length > 5 ? history.take(5) : history;
+    for (final item in sample) {
+      hash = hash ^ item.filePath.hashCode ^ item.lastWatchTime.millisecondsSinceEpoch;
+    }
+    return hash;
   }
 }
 
