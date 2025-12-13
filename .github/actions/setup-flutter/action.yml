@@ -42,6 +42,19 @@ runs:
         key: ${{ runner.os }}-fvm-${{ hashFiles('.fvmrc') }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v1
         restore-keys: |
           ${{ runner.os }}-fvm-
+
+    - name: Add Pub Cache bin to PATH (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        echo "${PUB_CACHE:-$HOME/.pub-cache}/bin" >> "$GITHUB_PATH"
+
+    - name: Add Pub Cache bin to PATH (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $pubCache = if ($env:PUB_CACHE) { $env:PUB_CACHE } else { "$env:LOCALAPPDATA\\Pub\\Cache" }
+        Add-Content -Path $env:GITHUB_PATH -Value "$pubCache\\bin"
     
     - name: Install FVM
       shell: bash
@@ -52,15 +65,15 @@ runs:
       if: runner.os != 'Windows'
       shell: bash
       run: |
-        dart pub global run fvm install
-        dart pub global run fvm use --force
+        fvm install
+        fvm use --force
 
     - name: Install Flutter via FVM (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        dart pub global run fvm install
-        dart pub global run fvm use --force
+        fvm install
+        fvm use --force
 
     - name: Add Flutter to PATH (Linux/macOS)
       if: runner.os != 'Windows'
