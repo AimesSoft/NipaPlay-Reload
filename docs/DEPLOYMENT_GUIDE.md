@@ -27,7 +27,7 @@
 │  │  │  │                                            │ │  │ │
 │  │  │  │  ┌─────────────┐  ┌─────────────────────┐  │ │  │ │
 │  │  │  │  │ HTTP Server │  │   Media Processing  │  │ │  │ │
-│  │  │  │  │   :8080     │  │                     │  │ │  │ │
+│  │  │  │  │   :1180     │  │                     │  │ │  │ │
 │  │  │  │  └─────────────┘  └─────────────────────┘  │ │  │ │
 │  │  │  └─────────────────────────────────────────────┘ │  │ │
 │  │  └─────────────────────────────────────────────────┘  │ │
@@ -153,7 +153,7 @@ RUN cp -r build/web/* build/linux/x64/release/bundle/data/flutter_assets/web/
 
 # 设置运行时环境
 ENV NIPAPLAY_HEADLESS=true
-ENV NIPAPLAY_WEB_PORT=8080
+ENV NIPAPLAY_WEB_PORT=1180
 ENV NIPAPLAY_DATA_DIR=/data
 ENV NIPAPLAY_MEDIA_DIR=/media
 
@@ -161,7 +161,7 @@ ENV NIPAPLAY_MEDIA_DIR=/media
 RUN mkdir -p /data /media
 
 # 暴露端口
-EXPOSE 8080
+EXPOSE 1180
 
 # 设置启动命令
 CMD ["./build/linux/x64/release/bundle/nipaplay", "--headless"]
@@ -179,7 +179,7 @@ services:
     container_name: nipaplay-server
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "1180:1180"
     volumes:
       # 媒体文件目录
       - /path/to/your/media:/media:ro
@@ -189,7 +189,7 @@ services:
       - ./cache:/app/cache
     environment:
       - NIPAPLAY_HEADLESS=true
-      - NIPAPLAY_WEB_PORT=8080
+      - NIPAPLAY_WEB_PORT=1180
       - NIPAPLAY_AUTO_SCAN=true
       - NIPAPLAY_LOG_LEVEL=INFO
     networks:
@@ -230,7 +230,7 @@ docker-compose up -d
 echo "📊 服务状态:"
 docker-compose ps
 
-echo "🌐 访问地址: http://$(hostname -I | awk '{print $1}'):8080"
+echo "🌐 访问地址: http://$(hostname -I | awk '{print $1}'):1180"
 echo "📁 请将媒体文件放置在绑定的媒体目录中"
 ```
 
@@ -245,7 +245,7 @@ echo "📁 请将媒体文件放置在绑定的媒体目录中"
 # 3. 创建容器时配置:
 
 # 端口设置
-本地端口: 8080 -> 容器端口: 8080
+本地端口: 1180 -> 容器端口: 1180
 
 # 卷映射
 /volume1/media -> /media (只读)
@@ -275,7 +275,7 @@ docker start nipaplay-server
 名称: NipaPlay
 镜像: nipaplay:latest
 网络模式: bridge
-端口: 8080:8080
+端口: 1180:1180
 
 # 共享文件夹映射
 /share/Multimedia -> /media
@@ -299,7 +299,7 @@ omv-extras-org
 ```bash
 # .env 文件
 NIPAPLAY_HEADLESS=true
-NIPAPLAY_WEB_PORT=8080
+NIPAPLAY_WEB_PORT=1180
 NIPAPLAY_DATA_DIR=/data
 NIPAPLAY_MEDIA_DIR=/media
 NIPAPLAY_CACHE_DIR=/cache
@@ -347,7 +347,7 @@ class HeadlessConfig {
 ```dockerfile
 # 在Dockerfile中添加健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/api/health || exit 1
+  CMD curl -f http://localhost:1180/api/health || exit 1
 ```
 
 ```dart

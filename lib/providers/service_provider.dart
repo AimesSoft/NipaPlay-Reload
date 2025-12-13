@@ -37,6 +37,13 @@ class ServiceProvider {
       onHistoryUpdated: () => watchHistoryProvider.refresh(),
     );
 
+    // Web 远程访问：若用户开启了“软件启动自动开启”，则在此启动 WebServer
+    try {
+      await webServer.loadSettings();
+    } catch (e) {
+      debugPrint('ServiceProvider: WebServer 初始化失败: $e');
+    }
+
     debugPrint('ServiceProvider: 所有服务初始化完成，连接验证将在后台异步进行');
   }
 }

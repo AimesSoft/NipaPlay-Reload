@@ -70,6 +70,8 @@ import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'constants/settings_keys.dart';
+import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
+    if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -719,6 +721,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
     super.initState();
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      DesktopExitHandler.instance.initialize(navigatorKey);
       debugPrint('_NipaPlayAppState: 应用初始化完成，设置监听器');
 
       // 调试：启动时打印数据库内容

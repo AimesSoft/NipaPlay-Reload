@@ -568,7 +568,7 @@ class _SharedLibrarySection extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               TextBox(
-                placeholder: '访问地址 (如 http://192.168.1.50:8080)',
+                placeholder: '访问地址 (如 http://192.168.1.50:1180)',
                 controller: urlController,
               ),
             ],

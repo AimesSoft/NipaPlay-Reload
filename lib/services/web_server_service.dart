@@ -12,29 +12,41 @@ import 'package:nipaplay/utils/asset_helper.dart';
 import 'package:flutter/foundation.dart';
 
 class WebServerService {
-  static const String _enabledKey = 'web_server_enabled';
+  // 兼容旧版本：历史上使用 web_server_enabled 来表示“自动启动”
+  static const String _legacyAutoStartKey = 'web_server_enabled';
+  static const String _autoStartKey = 'web_server_auto_start';
   static const String _portKey = 'web_server_port';
   
   HttpServer? _server;
-  int _port = 8080;
+  int _port = 1180;
   bool _isRunning = false;
+  bool _autoStart = false;
   final WebApiService _webApiService = WebApiService();
 
   bool get isRunning => _isRunning;
   int get port => _port;
+  bool get autoStart => _autoStart;
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    _port = prefs.getInt(_portKey) ?? 8080;
-    final enabled = prefs.getBool(_enabledKey) ?? false;
-    if (enabled) {
+    _port = prefs.getInt(_portKey) ?? 1180;
+    if (prefs.containsKey(_autoStartKey)) {
+      _autoStart = prefs.getBool(_autoStartKey) ?? false;
+    } else {
+      final legacyValue = prefs.getBool(_legacyAutoStartKey) ?? false;
+      _autoStart = legacyValue;
+      // 迁移旧配置到新Key，避免后续版本再依赖旧字段语义
+      if (prefs.containsKey(_legacyAutoStartKey)) {
+        await prefs.setBool(_autoStartKey, legacyValue);
+      }
+    }
+    if (_autoStart) {
       await startServer();
     }
   }
 
   Future<void> saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_enabledKey, _isRunning);
     await prefs.setInt(_portKey, _port);
   }
 
@@ -121,7 +133,10 @@ class WebServerService {
   }
 
   Future<void> setAutoStart(bool enabled) async {
+    _autoStart = enabled;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_enabledKey, enabled);
+    await prefs.setBool(_autoStartKey, enabled);
+    // 写回旧Key，便于降级/旧版本读取
+    await prefs.setBool(_legacyAutoStartKey, enabled);
   }
 } 
