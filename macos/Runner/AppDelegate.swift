@@ -331,7 +331,8 @@ class AppDelegate: FlutterAppDelegate {
   }
   
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    return true
+    // 需要支持“关闭窗口后仍驻留菜单栏(托盘)”的行为，因此不能在最后一个窗口关闭时退出进程。
+    return false
   }
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

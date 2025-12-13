@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/foundation.dart';
@@ -31,7 +32,8 @@ class DesktopExitDecision {
   });
 }
 
-class DesktopExitHandler with WindowListener, TrayListener {
+class DesktopExitHandler
+    with WindowListener, TrayListener, material.WidgetsBindingObserver {
   DesktopExitHandler._();
 
   static final DesktopExitHandler instance = DesktopExitHandler._();
@@ -42,9 +44,11 @@ class DesktopExitHandler with WindowListener, TrayListener {
 
   material.GlobalKey<material.NavigatorState>? _navigatorKey;
 
+  bool _bindingHooked = false;
   bool _windowHooked = false;
   bool _trayReady = false;
   bool _handlingWindowClose = false;
+  bool _handlingExitRequest = false;
   bool _quitting = false;
 
   Future<void> initialize(
@@ -52,11 +56,20 @@ class DesktopExitHandler with WindowListener, TrayListener {
   ) async {
     if (kIsWeb || !globals.isDesktop) return;
     _navigatorKey ??= navigatorKey;
-    if (_windowHooked) return;
-    _windowHooked = true;
 
-    await windowManager.setPreventClose(true);
-    windowManager.addListener(this);
+    if (!_bindingHooked) {
+      material.WidgetsBinding.instance.addObserver(this);
+      _bindingHooked = true;
+    }
+
+    if (_windowHooked) return;
+    try {
+      await windowManager.setPreventClose(true);
+      windowManager.addListener(this);
+      _windowHooked = true;
+    } catch (e) {
+      debugPrint('[DesktopExitHandler] 初始化窗口关闭拦截失败: $e');
+    }
   }
 
   @override
@@ -86,6 +99,33 @@ class DesktopExitHandler with WindowListener, TrayListener {
       }
     } finally {
       _handlingWindowClose = false;
+    }
+  }
+
+  @override
+  Future<ui.AppExitResponse> didRequestAppExit() async {
+    if (kIsWeb || !globals.isDesktop) return ui.AppExitResponse.exit;
+    if (_quitting) return ui.AppExitResponse.exit;
+
+    if (_handlingWindowClose || _handlingExitRequest) {
+      return ui.AppExitResponse.cancel;
+    }
+
+    _handlingExitRequest = true;
+    try {
+      final action = await _resolveExitAction();
+      switch (action) {
+        case DesktopExitAction.cancelAndReturn:
+          return ui.AppExitResponse.cancel;
+        case DesktopExitAction.minimizeToTrayOrTaskbar:
+          await _minimizeToTrayOrTaskbar();
+          return ui.AppExitResponse.cancel;
+        case DesktopExitAction.closePlayer:
+          await _exitApp();
+          return ui.AppExitResponse.exit;
+      }
+    } finally {
+      _handlingExitRequest = false;
     }
   }
 
@@ -220,7 +260,7 @@ class DesktopExitHandler with WindowListener, TrayListener {
             ),
           ),
           child: material.Text(
-            '最小化到系统托盘/任务栏',
+            '最小化到系统托盘',
             style: isFluent ? null : const material.TextStyle(color: material.Colors.white),
           ),
         ),
@@ -244,22 +284,45 @@ class DesktopExitHandler with WindowListener, TrayListener {
   }
 
   Future<void> _minimizeToTrayOrTaskbar() async {
-    try {
-      final trayOk = await _ensureTray();
-      if (trayOk) {
-        await windowManager.setSkipTaskbar(true);
+    final trayOk = await _ensureTray();
+    if (!trayOk) {
+      await windowManager.minimize();
+      return;
+    }
+
+    if (Platform.isMacOS) {
+      try {
         await windowManager.hide();
+      } catch (_) {
+        await windowManager.minimize();
         return;
       }
+
+      try {
+        await windowManager.setSkipTaskbar(true);
+      } catch (_) {}
+      return;
+    }
+
+    try {
+      await windowManager.setSkipTaskbar(true);
     } catch (_) {}
 
-    await windowManager.minimize();
+    try {
+      await windowManager.hide();
+      return;
+    } catch (_) {
+      await windowManager.minimize();
+    }
   }
 
   Future<void> _exitApp() async {
     _quitting = true;
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
+    if (Platform.isMacOS) {
+      exit(0);
+    }
   }
 
   Future<bool> _ensureTray() async {
