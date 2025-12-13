@@ -13,50 +13,19 @@ class CustomScaffold extends StatefulWidget {
   final List<Widget> tabPage;
   final bool pageIsHome;
   final TabController? tabController;
-  
-  const CustomScaffold({
-    super.key,
-    required this.pages,
-    required this.tabPage,
-    required this.pageIsHome,
-    this.tabController
-  });
+
+  const CustomScaffold(
+      {super.key,
+      required this.pages,
+      required this.tabPage,
+      required this.pageIsHome,
+      this.tabController});
 
   @override
   State<CustomScaffold> createState() => _CustomScaffoldState();
 }
 
 class _CustomScaffoldState extends State<CustomScaffold> {
-  @override
-  void initState() {
-    super.initState();
-    widget.tabController?.addListener(_handleExternalTabChanged);
-  }
-  
-  void _handleExternalTabChanged() {
-    if (mounted) {
-      setState(() {
-      });
-    }
-  }
-  
-  @override
-  void didUpdateWidget(CustomScaffold oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    
-    if (widget.tabController != oldWidget.tabController) {
-      oldWidget.tabController?.removeListener(_handleExternalTabChanged);
-      widget.tabController?.addListener(_handleExternalTabChanged);
-      setState(() {});
-    }
-  }
-  
-  @override
-  void dispose() {
-    widget.tabController?.removeListener(_handleExternalTabChanged);
-    super.dispose();
-  }
-  
   void _handlePageChangedBySwitchableView(int index) {
     if (widget.tabController != null && widget.tabController!.index != index) {
       widget.tabController!.animateTo(index);
@@ -66,16 +35,24 @@ class _CustomScaffoldState extends State<CustomScaffold> {
   @override
   Widget build(BuildContext context) {
     if (widget.tabController == null) {
-      print('[CustomScaffold] CRITICAL: widget.tabController is null. Tabs will not work.');
-      return const Center(child: Text("Error: TabController not provided to CustomScaffold"));
+      print(
+          '[CustomScaffold] CRITICAL: widget.tabController is null. Tabs will not work.');
+      return const Center(
+          child: Text("Error: TabController not provided to CustomScaffold"));
     }
 
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
+        final appearanceSettings =
+            Provider.of<AppearanceSettingsProvider>(context);
         final enableAnimation = appearanceSettings.enablePageAnimation;
 
         final currentIndex = widget.tabController!.index;
+        final preloadIndices = widget.pageIsHome
+            ? List<int>.generate(widget.pages.length, (i) => i)
+                .where((i) => i != 1)
+                .toList()
+            : const <int>[];
 
         return BackgroundWithBlur(
           child: Scaffold(
@@ -84,55 +61,61 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                 ? Colors.black.withOpacity(0.7)
                 : Colors.black.withOpacity(0.2),
             extendBodyBehindAppBar: false,
-            appBar: videoState.shouldShowAppBar() && widget.tabPage.isNotEmpty ? AppBar(
-              toolbarHeight: !widget.pageIsHome && !globals.isDesktop
-                  ? 100
-                  : globals.isDesktop
-                      ? 20
-                      : globals.isTablet ? 30 : 60,
-              leading: widget.pageIsHome
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Ionicons.chevron_back_outline),
-                      color: Colors.white,
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
+            appBar: videoState.shouldShowAppBar() && widget.tabPage.isNotEmpty
+                ? AppBar(
+                    toolbarHeight: !widget.pageIsHome && !globals.isDesktop
+                        ? 100
+                        : globals.isDesktop
+                            ? 20
+                            : globals.isTablet
+                                ? 30
+                                : 60,
+                    leading: widget.pageIsHome
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Ionicons.chevron_back_outline),
+                            color: Colors.white,
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                          ),
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    bottom: TabBar(
+                      controller: widget.tabController,
+                      isScrollable: true,
+                      tabs: widget.tabPage,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white60,
+                      labelPadding: const EdgeInsets.only(bottom: 15.0),
+                      tabAlignment: TabAlignment.start,
+                      // 恢复灰色背景条，并使用自定义指示器
+                      dividerColor: const Color.fromARGB(59, 255, 255, 255),
+                      dividerHeight: 3.0,
+                      indicator: const _CustomTabIndicator(
+                        indicatorHeight: 3.0,
+                        indicatorColor: Colors.white,
+                        radius: 30.0, // 使用大圆角形成药丸形状
+                      ),
+                      indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
                     ),
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              bottom: TabBar(
-                controller: widget.tabController,
-                isScrollable: true,
-                tabs: widget.tabPage,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white60,
-                labelPadding: const EdgeInsets.only(bottom: 15.0),
-                tabAlignment: TabAlignment.start,
-                // 恢复灰色背景条，并使用自定义指示器
-                dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                dividerHeight: 3.0,
-                indicator: const _CustomTabIndicator(
-                  indicatorHeight: 3.0,
-                  indicatorColor: Colors.white,
-                  radius: 30.0, // 使用大圆角形成药丸形状
-                ),
-                indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
-              ),
-            ) : null,
+                  )
+                : null,
             body: TabControllerScope(
               controller: widget.tabController!,
               enabled: true,
               child: SwitchableView(
                 enableAnimation: enableAnimation,
+                keepAlive: true,
+                preloadIndices: preloadIndices,
                 currentIndex: currentIndex,
                 physics: enableAnimation
                     ? const PageScrollPhysics()
                     : const NeverScrollableScrollPhysics(),
                 onPageChanged: _handlePageChangedBySwitchableView,
-                children: widget.pages.map((page) => 
-                  RepaintBoundary(child: page)
-                ).toList(),
+                children: widget.pages
+                    .map((page) => RepaintBoundary(child: page))
+                    .toList(),
               ),
             ),
           ),
@@ -155,7 +138,8 @@ class TabControllerScope extends InheritedWidget {
   });
 
   static TabController? of(BuildContext context) {
-    final TabControllerScope? scope = context.dependOnInheritedWidgetOfExactType<TabControllerScope>();
+    final TabControllerScope? scope =
+        context.dependOnInheritedWidgetOfExactType<TabControllerScope>();
     return scope?.enabled == true ? scope?.controller : null;
   }
 
@@ -186,17 +170,17 @@ class _CustomTabIndicator extends Decoration {
 class _CustomPainter extends BoxPainter {
   final _CustomTabIndicator decoration;
 
-  _CustomPainter(this.decoration, VoidCallback? onChanged)
-      : super(onChanged);
+  _CustomPainter(this.decoration, VoidCallback? onChanged) : super(onChanged);
 
   @override
   void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
     assert(configuration.size != null);
     // 将指示器绘制在TabBar的底部
     final Rect rect = Offset(
-      offset.dx,
-      (configuration.size!.height - decoration.indicatorHeight),
-    ) & Size(configuration.size!.width, decoration.indicatorHeight);
+          offset.dx,
+          (configuration.size!.height - decoration.indicatorHeight),
+        ) &
+        Size(configuration.size!.width, decoration.indicatorHeight);
     final Paint paint = Paint();
     paint.color = decoration.indicatorColor;
     paint.style = PaintingStyle.fill;
