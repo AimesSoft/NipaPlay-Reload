@@ -3,6 +3,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/service_provider.dart';
+import 'package:nipaplay/utils/remote_access_address_utils.dart';
 
 class FluentRemoteAccessPage extends StatefulWidget {
   const FluentRemoteAccessPage({super.key});
@@ -13,11 +14,12 @@ class FluentRemoteAccessPage extends StatefulWidget {
 
 class _FluentRemoteAccessPageState extends State<FluentRemoteAccessPage> {
   bool _webServerEnabled = false;
+  bool _autoStartEnabled = false;
   List<String> _accessUrls = const [];
   String? _publicIpUrl;
   bool _isLoadingPublicIp = false;
   bool _isBusy = false;
-  int _currentPort = 8080;
+  int _currentPort = 1180;
 
   @override
   void initState() {
@@ -32,6 +34,7 @@ class _FluentRemoteAccessPageState extends State<FluentRemoteAccessPage> {
 
     setState(() {
       _webServerEnabled = server.isRunning;
+      _autoStartEnabled = server.autoStart;
       _currentPort = server.port;
     });
 
@@ -113,8 +116,6 @@ class _FluentRemoteAccessPageState extends State<FluentRemoteAccessPage> {
           _publicIpUrl = null;
         });
       }
-
-      await server.setAutoStart(enabled);
     } catch (e) {
       _showInfoBar('操作失败: $e', severity: InfoBarSeverity.error);
       setState(() {
@@ -126,6 +127,31 @@ class _FluentRemoteAccessPageState extends State<FluentRemoteAccessPage> {
           _isBusy = false;
         });
       }
+    }
+  }
+
+  Future<void> _toggleAutoStart(bool enabled) async {
+    if (_isBusy) return;
+    setState(() {
+      _autoStartEnabled = enabled;
+    });
+
+    try {
+      await ServiceProvider.webServer.setAutoStart(enabled);
+      if (enabled) {
+        _showInfoBar('已开启自动开启：下次启动将自动启用远程访问', severity: InfoBarSeverity.success);
+      } else {
+        if (_webServerEnabled) {
+          _showInfoBar('已关闭自动开启（当前服务仍在运行）', severity: InfoBarSeverity.info);
+        } else {
+          _showInfoBar('已关闭自动开启', severity: InfoBarSeverity.info);
+        }
+      }
+    } catch (e) {
+      _showInfoBar('操作失败: $e', severity: InfoBarSeverity.error);
+      setState(() {
+        _autoStartEnabled = !enabled;
+      });
     }
   }
 
@@ -232,10 +258,21 @@ class _FluentRemoteAccessPageState extends State<FluentRemoteAccessPage> {
 
     final items = <Widget>[];
     for (final url in _accessUrls) {
+      final type = RemoteAccessAddressUtils.classifyUrl(url);
+      final label = RemoteAccessAddressUtils.labelZh(type);
+      final iconData = switch (type) {
+        RemoteAccessAddressType.local => FluentIcons.home,
+        RemoteAccessAddressType.lan => FluentIcons.wifi,
+        RemoteAccessAddressType.wan => FluentIcons.globe,
+        RemoteAccessAddressType.unknown => FluentIcons.plug_connected,
+      };
+
       items.add(_AccessUrlTile(
         url: url,
-        iconData: FluentIcons.plug_connected,
+        iconData: iconData,
         onCopy: () => _copyUrl(url),
+        type: type,
+        typeLabel: label,
       ));
     }
 
@@ -251,15 +288,31 @@ class _FluentRemoteAccessPageState extends State<FluentRemoteAccessPage> {
         ),
       ));
     } else if (_publicIpUrl != null) {
+      final type = RemoteAccessAddressUtils.classifyUrl(_publicIpUrl!);
+      final label = RemoteAccessAddressUtils.labelZh(type);
       items.add(_AccessUrlTile(
         url: _publicIpUrl!,
         iconData: FluentIcons.globe,
         onCopy: () => _copyUrl(_publicIpUrl!),
-        isPublic: true,
+        type: type,
+        typeLabel: label,
       ));
     }
 
-    return Column(children: items);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '选择建议：\n'
+          '• 本机：仅在这台设备上访问（localhost/127.0.0.1）\n'
+          '• 内网：同一 Wi‑Fi/局域网的其他设备访问（推荐）\n'
+          '• 外网：需要公网 IP + 路由器端口转发/防火墙放行后才能访问（注意安全）',
+          style: textStyle?.copyWith(height: 1.35),
+        ),
+        const SizedBox(height: 12),
+        ...items,
+      ],
+    );
   }
 
   @override
@@ -322,6 +375,24 @@ class _FluentRemoteAccessPageState extends State<FluentRemoteAccessPage> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InfoLabel(
+                              label: '软件打开自动开启远程访问',
+                              child: Text(
+                                '启动 NipaPlay 时自动开启 Web 远程访问（不影响手动开关）',
+                                style: FluentTheme.of(context).typography.caption,
+                              ),
+                            ),
+                          ),
+                          ToggleSwitch(
+                            checked: _autoStartEnabled,
+                            onChanged: _isBusy ? null : _toggleAutoStart,
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 16),
                       AnimatedOpacity(
                         opacity: _webServerEnabled ? 1 : 0.4,
@@ -368,18 +439,27 @@ class _AccessUrlTile extends StatelessWidget {
   final String url;
   final IconData iconData;
   final VoidCallback onCopy;
-  final bool isPublic;
+  final RemoteAccessAddressType type;
+  final String typeLabel;
 
   const _AccessUrlTile({
     required this.url,
     required this.iconData,
     required this.onCopy,
-    this.isPublic = false,
+    required this.type,
+    required this.typeLabel,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final tagColor = switch (type) {
+      RemoteAccessAddressType.local => const Color(0xFF0078D4),
+      RemoteAccessAddressType.lan => const Color(0xFF107C10),
+      RemoteAccessAddressType.wan => const Color(0xFFD83B01),
+      RemoteAccessAddressType.unknown => theme.resources.controlStrokeColorDefault,
+    };
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -387,14 +467,25 @@ class _AccessUrlTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         color: theme.cardColor.withOpacity(0.6),
         border: Border.all(
-          color: isPublic
-              ? theme.accentColor.withOpacity(0.4)
-              : theme.resources.controlStrokeColorDefault,
+          color: tagColor.withOpacity(0.45),
         ),
       ),
       child: Row(
         children: [
           Icon(iconData),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: tagColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: tagColor.withOpacity(0.35)),
+            ),
+            child: Text(
+              typeLabel,
+              style: theme.typography.caption?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: SelectableText(

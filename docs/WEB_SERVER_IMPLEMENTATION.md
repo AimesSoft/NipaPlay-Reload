@@ -59,7 +59,7 @@ class WebServerService {
   static const String _portKey = 'web_server_port';
   
   HttpServer? _server;
-  int _port = 8080;
+  int _port = 1180;
   bool _isRunning = false;
   
   // 启动服务器
@@ -307,7 +307,7 @@ lib/
 ### 默认配置
 ```dart
 class WebServerConfig {
-  static const int defaultPort = 8080;
+  static const int defaultPort = 1180;
   static const bool defaultAutoStart = false;
   static const String webAssetsPath = 'assets/web';
   static const Duration syncInterval = Duration(seconds: 1);

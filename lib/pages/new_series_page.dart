@@ -42,9 +42,6 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   bool _isLoadingVideoFromDetail = false;
   String _loadingMessageForDetail = '正在加载视频...';
 
-  final Map<int, bool> _expansionStates = {}; // For weekday expansion state
-  final Map<int, bool> _hoverStates = {}; // For weekday header hover state
-
   // Override wantKeepAlive for AutomaticKeepAliveClientMixin
   @override
   bool get wantKeepAlive => true;
@@ -82,9 +79,6 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   void initState() {
     super.initState();
     _loadAnimes();
-    // final today = DateTime.now().weekday % 7; // 旧的初始化方式移除
-    // _expansionStates[today] = true; 
-    // _expansionStates and _hoverStates will be initialized on-demand in build
   }
 
   @override
@@ -191,33 +185,63 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     return grouped;
   }
 
-  // Modified to accept weekdayKey for PageStorageKey
-  Widget _buildAnimeSection(List<BangumiAnime> animes, int weekdayKey) {
-    if (animes.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Center(child: Text("本日无新番", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70))),
-      );
-    }
-    return GridView.builder(
-      key: PageStorageKey<String>('gridview_for_weekday_$weekdayKey'), // Added unique PageStorageKey
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(top: 8.0, bottom: 16.0, left: 16.0, right: 16.0), // Add padding around the grid
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 150,
-        childAspectRatio: 7/12,
-        crossAxisSpacing: 20,
-        mainAxisSpacing: 20, // Added mainAxisSpacing for vertical gap
+  SliverPadding _buildAnimeGridSliver(List<BangumiAnime> animes, int weekdayKey) {
+    return SliverPadding(
+      padding: const EdgeInsets.only(top: 8.0, bottom: 16.0, left: 16.0, right: 16.0),
+      sliver: SliverGrid(
+        key: ValueKey<String>('sliver_grid_for_weekday_$weekdayKey'),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 150,
+          childAspectRatio: 7 / 12,
+          crossAxisSpacing: 20,
+          mainAxisSpacing: 20,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final anime = animes[index];
+            return _buildAnimeCard(context, anime, key: ValueKey(anime.id));
+          },
+          childCount: animes.length,
+          addAutomaticKeepAlives: false,
+          addRepaintBoundaries: false,
+        ),
       ),
-      itemCount: animes.length,
-      addAutomaticKeepAlives: false,
-      addRepaintBoundaries: false,
-      itemBuilder: (context, index) {
-        final anime = animes[index];
-        return _buildAnimeCard(context, anime, key: ValueKey(anime.id));
-      },
+    );
+  }
+
+  SliverPadding _buildWeekdayHeaderSliver(
+    BuildContext context, {
+    required String title,
+    required int weekdayKey,
+    required int count,
+    required bool isToday,
+  }) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+      sliver: SliverToBoxAdapter(
+        child: _buildWeekdayHeader(
+          context,
+          title: title,
+          weekdayKey: weekdayKey,
+          count: count,
+          isToday: isToday,
+        ),
+      ),
+    );
+  }
+
+  SliverToBoxAdapter _buildEmptyDaySliver() {
+    return const SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+        child: Center(
+          child: Text(
+            "本日无新番",
+            locale: Locale("zh-Hans", "zh"),
+            style: TextStyle(color: Colors.white70),
+          ),
+        ),
+      ),
     );
   }
 
@@ -277,7 +301,6 @@ style: TextStyle(color: Colors.white70))),
 
     final groupedAnimes = _groupAnimesByWeekday();
     final knownWeekdays = groupedAnimes.keys.where((day) => day != -1).toList();
-    final unknownWeekdays = groupedAnimes.keys.where((day) => day == -1).toList();
 
     knownWeekdays.sort((a, b) {
       final today = DateTime.now().weekday % 7;
@@ -288,59 +311,45 @@ style: TextStyle(color: Colors.white70))),
       return _isReversed ? distB.compareTo(distA) : distA.compareTo(distB);
     });
 
+    final today = DateTime.now().weekday % 7;
+    final unknownAnimes = groupedAnimes[-1] ?? const <BangumiAnime>[];
+
     return Stack(
       children: [
         CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    ...knownWeekdays.map((weekday) {
-                      // Initialize states if not present
-                      _expansionStates.putIfAbsent(weekday, () => weekday == (DateTime.now().weekday % 7));
-                      _hoverStates.putIfAbsent(weekday, () => false);
-
-                      bool isExpanded = _expansionStates[weekday]!;
-                      bool isHovering = _hoverStates[weekday]!;
-
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6.0),
-                        child: Column( // Changed from ExpansionTile to Column
-                          children: [
-                            MouseRegion(
-                              onEnter: (_) => setState(() => _hoverStates[weekday] = true),
-                              onExit: (_) => setState(() => _hoverStates[weekday] = false),
-                              child: _buildCollapsibleSectionHeader(context, _weekdays[weekday] ?? '未知', weekday, isExpanded, isHovering),
-                            ),
-                            // Conditional rendering of children with animation
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                              child: Visibility(
-                                visible: isExpanded,
-                                // maintainState: true, // Consider if state should be kept for hidden children
-                                child: _buildAnimeSection(groupedAnimes[weekday]!, weekday),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                    if (unknownWeekdays.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      const Divider(color: Colors.white24, indent: 16, endIndent: 16),
-                      const SizedBox(height: 12),
-                      _buildCollapsibleSectionHeader(context, '更新时间未定', -1, false, false), // isHovering is false as it's not interactive
-                      // For non-interactive 'unknown' section, direct visibility or no animation
-                      if (groupedAnimes[-1] != null && groupedAnimes[-1]!.isNotEmpty) // Ensure there are animes to show
-                         _buildAnimeSection(groupedAnimes[-1]!, -1),
-                    ],
-                  ]),
-                ),
+          key: const PageStorageKey<String>('new_series_scroll_view'),
+          slivers: [
+            for (final weekday in knownWeekdays) ...[
+              _buildWeekdayHeaderSliver(
+                context,
+                title: _weekdays[weekday] ?? '未知',
+                weekdayKey: weekday,
+                count: groupedAnimes[weekday]?.length ?? 0,
+                isToday: weekday == today,
               ),
+              if ((groupedAnimes[weekday]?.isNotEmpty ?? false))
+                _buildAnimeGridSliver(groupedAnimes[weekday]!, weekday)
+              else
+                _buildEmptyDaySliver(),
             ],
-          ),
+            if (unknownAnimes.isNotEmpty) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              const SliverToBoxAdapter(
+                child: Divider(color: Colors.white24, indent: 16, endIndent: 16),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+              _buildWeekdayHeaderSliver(
+                context,
+                title: '更新时间未定',
+                weekdayKey: -1,
+                count: unknownAnimes.length,
+                isToday: false,
+              ),
+              _buildAnimeGridSliver(unknownAnimes, -1),
+            ],
+            const SliverToBoxAdapter(child: SizedBox(height: 120)),
+          ],
+        ),
         Positioned(
           right: 16,
           bottom: 16,
@@ -394,23 +403,6 @@ style: TextStyle(color: Colors.white70))),
         ratingDetails: anime.ratingDetails,
         onTap: () => _showAnimeDetail(anime),
       );
-    }
-  }
-
-  String _formatDate(String? dateStr) {
-    if (dateStr == null || dateStr.isEmpty) {
-      return '';
-    }
-    try {
-      final parts = dateStr.split('-');
-      if (parts.length == 3) {
-        return '${parts[0]}年${parts[1]}月${parts[2]}日';
-      }
-      //////debugPrint('日期格式不正确: $dateStr');
-      return dateStr;
-    } catch (e) {
-      //////debugPrint('格式化日期出错: $e');
-      return dateStr;
     }
   }
 
@@ -506,80 +498,72 @@ style: TextStyle(color: Colors.white70))),
     }
   }
 
-  // New method for the custom collapsible section header
-  Widget _buildCollapsibleSectionHeader(BuildContext context, String title, int weekdayKey, bool isExpanded, bool isHovering) {
-    // 根据悬停状态调整颜色
-    final Color backgroundColor = isHovering
-        ? Colors.white.withOpacity(0.2)
-        : Colors.white.withOpacity(0.1);
-    
-    final Color borderColor = isHovering
-        ? Colors.white.withOpacity(0.3)
-        : Colors.white.withOpacity(0.2);
+  Widget _buildWeekdayHeader(
+    BuildContext context, {
+    required String title,
+    required int weekdayKey,
+    required int count,
+    required bool isToday,
+  }) {
+    final Color backgroundColor =
+        isToday ? Colors.white.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.1);
 
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _expansionStates[weekdayKey] = !isExpanded;
-        });
-      },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25.0 : 0.0,
-            sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25.0 : 0.0,
-          ),
-          child: Container(
-            width: double.infinity,
-            height: 48,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: borderColor,
-                width: 0.5,
+    final Color borderColor =
+        isToday ? Colors.white.withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.2);
+
+    final String countText = '$count 部';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25.0 : 0.0,
+          sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25.0 : 0.0,
+        ),
+        child: Container(
+          key: ValueKey<String>('weekday_header_$weekdayKey'),
+          width: double.infinity,
+          height: 48,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: borderColor,
+              width: 0.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                  ),
+                ),
+                Text(
+                  countText,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white70,
+                      ),
                 ),
               ],
-            ),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                      ),
-                    ),
-                    AnimatedRotation(
-                      turns: isExpanded ? 0.5 : 0.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: const Icon(
-                        Ionicons.chevron_down_outline,
-                        color: Colors.white70,
-                        size: 20,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ),
           ),
         ),
       ),
     );
   }
-} 
+}
