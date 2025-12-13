@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_player_widget.dart';
@@ -14,6 +15,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/lock_controls_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
 import '../player_abstraction/player_abstraction.dart';
@@ -35,10 +37,19 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _isHoveringBackButton = false;
   double _horizontalDragDistance = 0.0;
   final GlobalKey<SendDanmakuDialogContentState> _danmakuDialogKey = GlobalKey();
+  bool _isUiLocked = false;
+  bool _showUiLockButton = false;
+  Timer? _uiLockButtonTimer;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _uiLockButtonTimer?.cancel();
+    super.dispose();
   }
   
   // 处理系统返回键事件
@@ -125,6 +136,39 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
+  void _toggleUiLock(VideoPlayerState videoState) {
+    if (!globals.isPhone) return;
+    final nextLocked = !_isUiLocked;
+    _uiLockButtonTimer?.cancel();
+    setState(() {
+      _isUiLocked = nextLocked;
+      _showUiLockButton = nextLocked;
+    });
+    videoState.setShowControls(!nextLocked);
+
+    if (nextLocked) {
+      _showUiLockButtonTemporarily();
+    }
+  }
+
+  void _showUiLockButtonTemporarily([Duration duration = const Duration(seconds: 3)]) {
+    if (!mounted) return;
+    if (!globals.isPhone) return;
+    if (!_isUiLocked) return;
+
+    _uiLockButtonTimer?.cancel();
+    setState(() {
+      _showUiLockButton = true;
+    });
+    _uiLockButtonTimer = Timer(duration, () {
+      if (!mounted) return;
+      if (!_isUiLocked) return;
+      setState(() {
+        _showUiLockButton = false;
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final uiThemeProvider = Provider.of<UIThemeProvider>(context);
@@ -159,6 +203,10 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   }
 
   Widget _buildMaterialControls(VideoPlayerState videoState) {
+    final bool uiLocked = globals.isPhone ? _isUiLocked : false;
+    final bool showLockButton = globals.isPhone &&
+        (videoState.showControls || (uiLocked && _showUiLockButton));
+
     return Stack(
       children: [
         Consumer<VideoPlayerState>(
@@ -243,6 +291,40 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             ),
           ),
         const VideoControlsOverlay(),
+        if (uiLocked)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _showUiLockButtonTemporarily,
+              child: const SizedBox.expand(),
+            ),
+          ),
+        if (globals.isPhone)
+          Positioned(
+            left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Transform.translate(
+                offset: const Offset(0, -90),
+                child: AnimatedSlide(
+                  duration: const Duration(milliseconds: 150),
+                  offset: Offset(showLockButton ? 0 : -0.1, 0),
+                  child: AnimatedOpacity(
+                    opacity: showLockButton ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 150),
+                    child: IgnorePointer(
+                      ignoring: !showLockButton,
+                      child: LockControlsButton(
+                        locked: uiLocked,
+                        onPressed: () => _toggleUiLock(videoState),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

@@ -63,7 +63,14 @@ class PlayerKernelManager {
 
     // 5. 恢复播放状态
     if (videoPlayerState.hasVideo) {
-      videoPlayerState.player.volume = currentVolume;
+      if (Platform.isAndroid || Platform.isIOS) {
+        // 移动端使用系统音量时，播放器内部音量保持 1.0，避免与系统音量叠乘
+        try {
+          videoPlayerState.player.volume = 1.0;
+        } catch (_) {}
+      } else {
+        videoPlayerState.player.volume = currentVolume;
+      }
       // 恢复播放速度设置
       if (currentPlaybackRate != 1.0) {
         videoPlayerState.player.setPlaybackRate(currentPlaybackRate);

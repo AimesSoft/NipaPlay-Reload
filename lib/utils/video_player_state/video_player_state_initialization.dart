@@ -20,6 +20,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadDanmakuVisible(); // 加载弹幕可见性
     await _loadMergeDanmaku(); // 加载弹幕合并设置
     await _loadDanmakuStacking(); // 加载弹幕堆叠设置
+    await _loadTimelineDanmakuEnabled(); // 加载时间轴告知弹幕轨道开关
 
     // 加载弹幕类型屏蔽设置
     await _loadBlockTopDanmaku();
@@ -99,12 +100,26 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedVolume = prefs.getDouble(_playerVolumeKey);
-      double initialVolume = savedVolume ?? player.volume;
-      _currentVolume =
-          initialVolume.clamp(0.0, 1.0); // Ensure it's within 0-1 range
-      _initialDragVolume = _currentVolume;
-      player.volume = _currentVolume;
-      await _setSystemVolume(_currentVolume);
+
+      if (_useSystemVolume) {
+        _ensurePlayerVolumeMatchesPlatformPolicy();
+        _systemVolumeController ??= VolumeController.instance;
+        _systemVolumeController!.showSystemUI = false;
+        final currentSystemVolume = await _systemVolumeController!.getVolume();
+        final initialVolume =
+            (savedVolume ?? currentSystemVolume).clamp(0.0, 1.0);
+        _currentVolume = initialVolume;
+        _initialDragVolume = initialVolume;
+        if (savedVolume != null) {
+          await _setSystemVolume(initialVolume);
+        }
+      } else {
+        // Web 等不支持系统音量时：使用播放器内部音量
+        final initialVolume = (savedVolume ?? player.volume).clamp(0.0, 1.0);
+        _currentVolume = initialVolume;
+        _initialDragVolume = initialVolume;
+        player.volume = initialVolume;
+      }
       //debugPrint("Initial volume loaded: $_currentVolume (saved: ${savedVolume != null})");
     } catch (e) {
       //debugPrint("Failed to get initial system volume from player: $e");

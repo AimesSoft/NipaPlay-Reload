@@ -276,6 +276,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _blockScrollDanmaku = false; // 默认不屏蔽滚动弹幕
 
   // 时间轴告知弹幕轨道状态
+  final String _timelineDanmakuEnabledKey = 'timeline_danmaku_enabled';
   bool _isTimelineDanmakuEnabled = true;
 
   // 弹幕屏蔽词
@@ -360,6 +361,18 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   StreamSubscription<double>? _systemVolumeSubscription;
   bool _isSystemVolumeUpdating = false;
 
+  bool get _useSystemVolume => globals.isPhone && !kIsWeb;
+
+  void _ensurePlayerVolumeMatchesPlatformPolicy() {
+    if (!_useSystemVolume) return;
+    try {
+      // 在移动端使用系统音量时，播放器内部音量应保持 1.0，避免与系统音量叠乘导致音量偏小。
+      if ((player.volume - 1.0).abs() > 0.0001) {
+        player.volume = 1.0;
+      }
+    } catch (_) {}
+  }
+
   // Horizontal Seek Drag State
   bool _isSeekingViaDrag = false;
   Duration _dragSeekStartPosition = Duration.zero;
@@ -400,6 +413,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   VideoPlayerState() {
     // 创建临时播放器实例，后续会被 _initialize 中的异步创建替换
     player = Player();
+    _ensurePlayerVolumeMatchesPlatformPolicy();
     _subtitleManager = SubtitleManager(player: player);
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
@@ -430,14 +444,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   Future<void> _initializeSystemVolumeController() async {
-    if (!globals.isPhone) return;
+    if (!_useSystemVolume) return;
     try {
       _systemVolumeController ??= VolumeController.instance;
       _systemVolumeController!.showSystemUI = false;
       _systemVolumeSubscription?.cancel();
       _systemVolumeSubscription = _systemVolumeController!.addListener(
         _handleExternalSystemVolumeChange,
-        fetchInitialVolume: true,
+        // 初始音量由 _loadInitialVolume 主动读取，避免初始化阶段回调打乱持久化/恢复逻辑。
+        fetchInitialVolume: false,
       );
     } catch (e) {
       debugPrint('初始化系统音量控制失败: $e');
@@ -445,7 +460,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   void _handleExternalSystemVolumeChange(double volume) {
-    if (!globals.isPhone) return;
+    if (!_useSystemVolume) return;
     if (_isSystemVolumeUpdating) return;
     final double normalized = volume.clamp(0.0, 1.0);
     if ((_currentVolume - normalized).abs() < 0.001) {
@@ -453,18 +468,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     _currentVolume = normalized;
     _initialDragVolume = normalized;
-    try {
-      player.volume = normalized;
-    } catch (e) {
-      debugPrint('同步系统音量到播放器失败: $e');
-    }
+    _ensurePlayerVolumeMatchesPlatformPolicy();
     _showVolumeIndicator();
     _scheduleVolumePersistence();
     notifyListeners();
   }
 
   Future<void> _setSystemVolume(double volume) async {
-    if (!globals.isPhone) return;
+    if (!_useSystemVolume) return;
     if (_systemVolumeController == null) return;
     _isSystemVolumeUpdating = true;
     try {

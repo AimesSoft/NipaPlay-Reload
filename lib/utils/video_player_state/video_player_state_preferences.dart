@@ -249,6 +249,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  // 加载时间轴告知弹幕轨道开关
+  Future<void> _loadTimelineDanmakuEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    _isTimelineDanmakuEnabled =
+        prefs.getBool(_timelineDanmakuEnabledKey) ?? true;
+    notifyListeners();
+  }
+
   // 设置弹幕堆叠
   Future<void> setDanmakuStacking(bool stacking) async {
     if (_danmakuStacking != stacking) {

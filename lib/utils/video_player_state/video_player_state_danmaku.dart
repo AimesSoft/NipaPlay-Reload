@@ -597,27 +597,36 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     }
   }
 
-  // 切换时间轴告知弹幕轨道
-  void toggleTimelineDanmaku(bool enabled) {
-    _isTimelineDanmakuEnabled = enabled;
-
-    if (enabled) {
-      // 生成并添加时间轴弹幕轨道
-      final timelineDanmaku =
-          TimelineDanmakuService.generateTimelineDanmaku(_duration);
-      _danmakuTracks['timeline'] = {
-        'name': timelineDanmaku['name'],
-        'source': timelineDanmaku['source'],
-        'danmakuList': timelineDanmaku['comments'],
-        'count': timelineDanmaku['count'],
-      };
-      _danmakuTrackEnabled['timeline'] = true;
-    } else {
-      // 移除时间轴弹幕轨道
+  void _applyTimelineDanmakuTrackForCurrentVideo() {
+    if (!_isTimelineDanmakuEnabled || _duration <= Duration.zero) {
       _danmakuTracks.remove('timeline');
       _danmakuTrackEnabled.remove('timeline');
+      return;
     }
 
+    final timelineDanmaku =
+        TimelineDanmakuService.generateTimelineDanmaku(_duration);
+    _danmakuTracks['timeline'] = {
+      'name': timelineDanmaku['name'],
+      'source': timelineDanmaku['source'],
+      'danmakuList': timelineDanmaku['comments'],
+      'count': timelineDanmaku['count'],
+    };
+    _danmakuTrackEnabled['timeline'] = true;
+  }
+
+  // 切换时间轴告知弹幕轨道
+  Future<void> toggleTimelineDanmaku(bool enabled) async {
+    _isTimelineDanmakuEnabled = enabled;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_timelineDanmakuEnabledKey, enabled);
+    } catch (e) {
+      debugPrint('保存时间轴告知开关失败: $e');
+    }
+
+    _applyTimelineDanmakuTrackForCurrentVideo();
     _updateMergedDanmakuList();
     notifyListeners();
   }
