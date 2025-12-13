@@ -30,6 +30,12 @@ runs:
         sudo apt-get update
         # Install core build dependencies
         sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+        # tray_manager needs ayatana-appindicator (or legacy appindicator)
+        if apt-cache show libayatana-appindicator3-dev >/dev/null 2>&1; then
+          sudo apt-get install -y libayatana-appindicator3-dev
+        else
+          sudo apt-get install -y libappindicator3-dev
+        fi
         # Install mpv dependencies for media_kit (必需，即使系统没有也要安装用于构建)
         sudo apt-get install -y libmpv-dev mpv
         # Install mimalloc for better memory management
