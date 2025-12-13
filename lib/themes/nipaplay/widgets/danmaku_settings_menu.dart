@@ -27,6 +27,22 @@ class DanmakuSettingsMenu extends StatefulWidget {
 }
 
 class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
+  static const List<double> _danmakuDisplayAreaOptions = <double>[
+    0.125, // 1/8
+    0.25, // 1/4
+    0.33, // 1/3
+    0.67, // 2/3
+    1.0, // 全屏
+  ];
+
+  static final Map<double, String> _danmakuDisplayAreaLabels = <double, String>{
+    0.125: '1/8 屏幕',
+    0.25: '1/4 屏幕',
+    0.33: '1/3 屏幕',
+    0.67: '2/3 屏幕',
+    1.0: '全屏',
+  };
+
   // 屏蔽词输入控制器
   final TextEditingController _blockWordController = TextEditingController();
   // 屏蔽词是否有错误
@@ -132,6 +148,24 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
         );
       },
     );
+  }
+
+  double _snapDanmakuDisplayArea(double value) {
+    double best = _danmakuDisplayAreaOptions.first;
+    double bestDiff = (value - best).abs();
+    for (final option in _danmakuDisplayAreaOptions.skip(1)) {
+      final diff = (value - option).abs();
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = option;
+      }
+    }
+    return best;
+  }
+
+  String _danmakuDisplayAreaText(double value) {
+    final snapped = _snapDanmakuDisplayArea(value);
+    return _danmakuDisplayAreaLabels[snapped] ?? '全屏';
   }
 
   @override
@@ -300,27 +334,14 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SettingsSlider(
-                      value: videoState.danmakuDisplayArea,
-                      onChanged: (v) {
-                        // 将连续值映射到离散值
-                        double area;
-                        if (v < 0.5) {
-                          area = 0.33; // 1/3
-                        } else if (v < 0.83) {
-                          area = 0.67; // 2/3
-                        } else {
-                          area = 1.0; // 全部
-                        }
-                        videoState.setDanmakuDisplayArea(area);
-                      },
+                      value: _snapDanmakuDisplayArea(
+                          videoState.danmakuDisplayArea),
+                      onChanged: (v) => videoState
+                          .setDanmakuDisplayArea(_snapDanmakuDisplayArea(v)),
                       label: '轨道显示区域',
-                      displayTextBuilder: (v) {
-                        if (v <= 0.34) return '1/3 屏幕';
-                        if (v <= 0.68) return '2/3 屏幕';
-                        return '全屏';
-                      },
-                      min: 0.33,
-                      max: 1.0,
+                      displayTextBuilder: _danmakuDisplayAreaText,
+                      min: _danmakuDisplayAreaOptions.first,
+                      max: _danmakuDisplayAreaOptions.last,
                     ),
                     const SizedBox(height: 4),
                     const SettingsHintText('设置弹幕轨道在屏幕上的显示范围'),
