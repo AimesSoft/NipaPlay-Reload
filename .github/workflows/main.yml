@@ -11,9 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
-env:
-  FLUTTER_VERSION: 3.35.6
-
 jobs:
   Gatekeeper:
     name: Check Commit Message
@@ -41,8 +38,6 @@ jobs:
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-android.yml
-    with:
-      flutter-version: 3.35.6
     secrets:
       SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
       KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
@@ -54,8 +49,6 @@ jobs:
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-macos.yml
-    with:
-      flutter-version: 3.35.6
     secrets:
       MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -68,16 +61,12 @@ jobs:
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-windows.yml
-    with:
-      flutter-version: 3.35.6
 
   Build-Linux:
     name: Build Linux
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-linux.yml
-    with:
-      flutter-version: 3.35.6
 
   Publish:
     name: Publish Release

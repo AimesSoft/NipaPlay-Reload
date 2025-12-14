@@ -30,6 +30,29 @@ class MultiAddressManagerWidget extends StatefulWidget {
 class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
+  late List<ServerAddress> _sortedAddresses;
+
+  @override
+  void initState() {
+    super.initState();
+    _sortedAddresses =
+        _sortedAddressList(widget.addresses, widget.currentAddressId);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.addresses.isEmpty) {
+        _showAddAddressDialog();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant MultiAddressManagerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.addresses != widget.addresses ||
+        oldWidget.currentAddressId != widget.currentAddressId) {
+      _sortedAddresses =
+          _sortedAddressList(widget.addresses, widget.currentAddressId);
+    }
+  }
   
   @override
   void dispose() {
@@ -389,6 +412,17 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
     
     return const SizedBox.shrink();
   }
+
+  List<ServerAddress> _sortedAddressList(
+      List<ServerAddress> addresses, String? currentId) {
+    final sorted = List<ServerAddress>.from(addresses);
+    sorted.sort((a, b) {
+      if (a.id == currentId && b.id != currentId) return -1;
+      if (b.id == currentId && a.id != currentId) return 1;
+      return a.priority.compareTo(b.priority);
+    });
+    return sorted;
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -418,49 +452,36 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        
-        // 地址列表
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
           ),
-          child: Builder(
-            builder: (context) {
-              // 按优先级排序地址列表
-              final sortedAddresses = List<ServerAddress>.from(widget.addresses);
-              sortedAddresses.sort((a, b) {
-                // 当前使用的地址优先显示
-                if (a.id == widget.currentAddressId && b.id != widget.currentAddressId) return -1;
-                if (b.id == widget.currentAddressId && a.id != widget.currentAddressId) return 1;
-                
-                // 按优先级排序（数字越小优先级越高）
-                return a.priority.compareTo(b.priority);
-              });
-              
-              return ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: sortedAddresses.length,
-                separatorBuilder: (context, index) => Divider(
-                  color: Colors.white.withOpacity(0.1),
-                  height: 1,
-                ),
-                itemBuilder: (context, index) {
-                  final address = sortedAddresses[index];
-                  final isCurrent = address.id == widget.currentAddressId;
-              
-                  return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                title: Row(
-                  children: [
-                    // 优先级标记
-                    _buildPriorityBadge(address),
+        ],
+      ),
+      const SizedBox(height: 12),
+      
+      // 地址列表
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        child: ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _sortedAddresses.length,
+          separatorBuilder: (context, index) => Divider(
+            color: Colors.white.withOpacity(0.1),
+            height: 1,
+          ),
+          itemBuilder: (context, index) {
+            final address = _sortedAddresses[index];
+            final isCurrent = address.id == widget.currentAddressId;
+      
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              title: Row(
+                children: [
+                  // 优先级标记
+                  _buildPriorityBadge(address),
                     if (widget.addresses.length > 1) const SizedBox(width: 8),
                     Text(
                       address.name,
@@ -506,15 +527,13 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                         icon: Icon(Icons.delete_outline, color: Colors.red.withOpacity(0.7)),
                         tooltip: '删除地址',
                         onPressed: () => _confirmRemoveAddress(address),
-                      ),
-                  ],
-                ),
-                  );
-                },
-              );
-            },
-          ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
+      ),
         
         // 提示信息
         const SizedBox(height: 12),

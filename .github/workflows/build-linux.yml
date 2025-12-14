@@ -2,11 +2,6 @@ name: Build Linux
 
 on:
   workflow_call:
-    inputs:
-      flutter-version:
-        description: 'Flutter 版本'
-        required: true
-        type: string
     outputs:
       version:
         description: '应用版本号'
@@ -35,8 +30,6 @@ jobs:
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
-        with:
-          flutter-version: ${{ inputs.flutter-version }}
       
       - name: Build Linux Packages
         uses: ./.github/actions/build-linux
@@ -52,4 +45,3 @@ jobs:
         with:
           name: release-Linux-amd64
           path: build/linux/
-

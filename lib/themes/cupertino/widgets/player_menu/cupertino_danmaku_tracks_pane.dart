@@ -51,26 +51,124 @@ class _CupertinoDanmakuTracksPaneState
       final file = await openFile(acceptedTypeGroups: [jsonType, xmlType]);
       if (file == null) return;
 
-      final content = await file.readAsString();
-      if (file.name.toLowerCase().endsWith('.json')) {
-        final decoded = json.decode(content);
-        if (decoded is List) {
-          _showMessage('成功加载 JSON 弹幕：${file.name}');
-        } else {
-          _showMessage('无效的 JSON 弹幕格式');
-        }
+      final fileBytes = await file.readAsBytes();
+      final content = utf8.decode(fileBytes);
+      final fileName = file.name.toLowerCase();
+
+      Map<String, dynamic> jsonData;
+      if (fileName.endsWith('.xml')) {
+        jsonData = _convertXmlToJson(content);
       } else {
-        if (content.contains('<d ') || content.contains('<item>')) {
-          _showMessage('成功加载 XML 弹幕：${file.name}');
+        final decoded = json.decode(content);
+        if (decoded is Map) {
+          jsonData =
+              Map<String, dynamic>.from(decoded.cast<String, dynamic>());
+        } else if (decoded is List) {
+          jsonData = {'comments': decoded};
         } else {
-          _showMessage('XML 文件格式无法识别');
+          throw Exception('JSON 文件格式不正确，根节点必须是对象或数组');
         }
       }
+
+      final commentCount = _countDanmakuComments(jsonData);
+      if (commentCount == 0) {
+        throw Exception('弹幕文件中没有弹幕数据');
+      }
+
+      final localTrackCount = widget.videoState.danmakuTracks.values
+          .where((track) => track['source'] == 'local')
+          .length;
+      final trackName = '本地弹幕${localTrackCount + 1}';
+
+      await widget.videoState.loadDanmakuFromLocal(
+        jsonData,
+        trackName: trackName,
+      );
+
+      _showMessage('弹幕轨道添加成功：$trackName（$commentCount条）');
     } catch (e) {
       _showMessage('加载弹幕文件失败：$e');
     } finally {
       if (mounted) setState(() => _isLoadingLocal = false);
     }
+  }
+
+  int _countDanmakuComments(Map<String, dynamic> jsonData) {
+    final comments = jsonData['comments'];
+    if (comments is List) return comments.length;
+
+    final data = jsonData['data'];
+    if (data is List) return data.length;
+    if (data is String) {
+      try {
+        final parsed = json.decode(data);
+        if (parsed is List) return parsed.length;
+      } catch (_) {
+        return 0;
+      }
+    }
+
+    return 0;
+  }
+
+  Map<String, dynamic> _convertXmlToJson(String xmlContent) {
+    final List<Map<String, dynamic>> comments = [];
+
+    final RegExp danmakuRegex = RegExp(r'<d p="([^"]+)">([^<]+)</d>');
+    final Iterable<RegExpMatch> matches = danmakuRegex.allMatches(xmlContent);
+
+    for (final match in matches) {
+      try {
+        final String pAttr = match.group(1) ?? '';
+        final String textContent = match.group(2) ?? '';
+
+        if (textContent.isEmpty) continue;
+
+        final List<String> pParams = pAttr.split(',');
+        if (pParams.length < 4) continue;
+
+        final double time = double.tryParse(pParams[0]) ?? 0.0;
+        final int typeCode = int.tryParse(pParams[1]) ?? 1;
+        final int fontSize = int.tryParse(pParams[2]) ?? 25;
+        final int colorCode = int.tryParse(pParams[3]) ?? 16777215;
+
+        String danmakuType;
+        switch (typeCode) {
+          case 4:
+            danmakuType = 'bottom';
+            break;
+          case 5:
+            danmakuType = 'top';
+            break;
+          case 1:
+          case 6:
+          default:
+            danmakuType = 'scroll';
+            break;
+        }
+
+        final int r = (colorCode >> 16) & 0xFF;
+        final int g = (colorCode >> 8) & 0xFF;
+        final int b = colorCode & 0xFF;
+        final String color = 'rgb($r,$g,$b)';
+
+        comments.add({
+          't': time,
+          'c': textContent,
+          'y': danmakuType,
+          'r': color,
+          'fontSize': fontSize,
+          'originalType': typeCode,
+        });
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return {
+      'count': comments.length,
+      'comments': comments,
+    };
   }
 
   void _showMessage(String message) {

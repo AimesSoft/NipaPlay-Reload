@@ -55,6 +55,9 @@ runs:
       run: |
         echo "开始iOS构建流程..."
         echo "当前工作目录: $(pwd)"
+
+        echo "预下载 Flutter iOS 构建依赖..."
+        flutter precache --ios
         
         echo "更新CocoaPods依赖..."
         cd ios
@@ -100,4 +103,3 @@ runs:
         ipa_name="NipaPlay_${{ inputs.app-version }}_iOS_arm64.ipa"
         zip -9 "$ipa_name" -r Payload
         echo "ipa_path=build/$ipa_name" >> $GITHUB_OUTPUT
-

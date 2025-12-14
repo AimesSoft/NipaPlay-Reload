@@ -22,6 +22,9 @@ class FluentWatchHistoryPage extends StatefulWidget {
 class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
   bool _isAutoMatching = false;
   bool _autoMatchDialogVisible = false;
+  final Map<String, Future<Uint8List?>> _thumbnailFutures = {};
+  List<WatchHistoryItem> _cachedValidHistory = const [];
+  int _lastHistoryHash = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +41,7 @@ class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
               );
             }
 
-            // 过滤出真正被观看过的记录（与主页仪表盘保持一致）
-            final validHistory = historyProvider.history.where((item) => item.duration > 0).toList();
+            final validHistory = _getValidHistory(historyProvider.history);
 
             if (validHistory.isEmpty) {
               return _buildEmptyState();
@@ -112,35 +114,33 @@ class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
   }
 
   Widget _buildThumbnail(WatchHistoryItem item) {
-    if (item.thumbnailPath != null) {
-      final thumbnailFile = File(item.thumbnailPath!);
-      if (thumbnailFile.existsSync()) {
-        return FutureBuilder<Uint8List>(
-          future: thumbnailFile.readAsBytes(),
-          builder: (context, snapshot) {
-            if (snapshot.hasData) {
-              return Container(
-                width: 80,
-                height: 45,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
+    final path = item.thumbnailPath;
+    if (path != null) {
+      return FutureBuilder<Uint8List?>(
+        future: _getThumbnailBytes(path),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return Container(
+              width: 80,
+              height: 45,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Image.memory(
+                  snapshot.data!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildDefaultThumbnail();
+                  },
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Image.memory(
-                    snapshot.data!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return _buildDefaultThumbnail();
-                    },
-                  ),
-                ),
-              );
-            }
-            return _buildDefaultThumbnail();
-          },
-        );
-      }
+              ),
+            );
+          }
+          return _buildDefaultThumbnail();
+        },
+      );
     }
     return _buildDefaultThumbnail();
   }
@@ -323,6 +323,37 @@ class _FluentWatchHistoryPageState extends State<FluentWatchHistoryPage> {
         MessageHelper.showMessage(context, notification!);
       }
     }
+  }
+
+  List<WatchHistoryItem> _getValidHistory(List<WatchHistoryItem> history) {
+    final hash = _historyHash(history);
+    if (hash != _lastHistoryHash) {
+      _cachedValidHistory =
+          history.where((item) => item.duration > 0).toList(growable: false);
+      _lastHistoryHash = hash;
+    }
+    return _cachedValidHistory;
+  }
+
+  Future<Uint8List?> _getThumbnailBytes(String path) {
+    return _thumbnailFutures.putIfAbsent(path, () async {
+      try {
+        final file = File(path);
+        if (!await file.exists()) return null;
+        return await file.readAsBytes();
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
+  int _historyHash(List<WatchHistoryItem> history) {
+    int hash = history.length;
+    final sample = history.length > 5 ? history.take(5) : history;
+    for (final item in sample) {
+      hash = hash ^ item.filePath.hashCode ^ item.lastWatchTime.millisecondsSinceEpoch;
+    }
+    return hash;
   }
 
   void _updateAutoMatchingState(bool value) {

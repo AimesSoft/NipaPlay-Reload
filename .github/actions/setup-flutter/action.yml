@@ -1,10 +1,6 @@
 name: 'Setup Flutter Environment'
-description: '设置 Flutter 开发环境，包括 Java、Flutter 和获取版本信息'
+description: '设置 Flutter 开发环境，包括 Java、FVM/Flutter 和获取版本信息'
 inputs:
-  flutter-version:
-    description: 'Flutter 版本'
-    required: true
-    default: '3.35.6'
   java-version:
     description: 'Java 版本'
     required: false
@@ -21,13 +17,81 @@ runs:
       with:
         distribution: 'temurin'
         java-version: ${{ inputs.java-version }}
-    
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
+
+    - name: Setup Dart (for FVM)
+      uses: dart-lang/setup-dart@v1
+
+    - name: Cache FVM & Pub cache (Linux/macOS)
+      if: runner.os != 'Windows'
+      uses: actions/cache@v4
       with:
-        flutter-version: ${{ inputs.flutter-version }}
-        cache: true
-        cache-key: ${{ runner.os }}-flutter-${{ inputs.flutter-version }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v4
+        path: |
+          ~/.fvm
+          ~/.pub-cache
+        key: ${{ runner.os }}-fvm-${{ hashFiles('.fvmrc') }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v1
+        restore-keys: |
+          ${{ runner.os }}-fvm-
+
+    - name: Cache FVM & Pub cache (Windows)
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.USERPROFILE }}\.fvm
+          ${{ env.LOCALAPPDATA }}\Pub\Cache
+        key: ${{ runner.os }}-fvm-${{ hashFiles('.fvmrc') }}-${{ hashFiles('**/pubspec.lock') }}-${{ hashFiles('**/gradle-wrapper.properties') }}-v1
+        restore-keys: |
+          ${{ runner.os }}-fvm-
+
+    - name: Add Pub Cache bin to PATH (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        echo "${PUB_CACHE:-$HOME/.pub-cache}/bin" >> "$GITHUB_PATH"
+
+    - name: Add Pub Cache bin to PATH (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $pubCache = if ($env:PUB_CACHE) { $env:PUB_CACHE } else { "$env:LOCALAPPDATA\\Pub\\Cache" }
+        Add-Content -Path $env:GITHUB_PATH -Value "$pubCache\\bin"
+    
+    - name: Install FVM
+      shell: bash
+      run: |
+        dart pub global activate fvm
+
+    - name: Install Flutter via FVM (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        fvm install
+        fvm use --force
+
+    - name: Install Flutter via FVM (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        fvm install
+        fvm use --force
+
+    - name: Add Flutter to PATH (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        echo "$GITHUB_WORKSPACE/.fvm/flutter_sdk/bin" >> "$GITHUB_PATH"
+
+    - name: Add Flutter to PATH (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Add-Content -Path $env:GITHUB_PATH -Value "$env:GITHUB_WORKSPACE\.fvm\flutter_sdk\bin"
+
+    - name: Disable Flutter analytics
+      shell: bash
+      run: |
+        flutter config --no-analytics
+        flutter --version
     
     - name: Get app version
       id: get_version
@@ -50,4 +114,3 @@ runs:
           git config --global core.longpaths true
         fi
         flutter pub get
-

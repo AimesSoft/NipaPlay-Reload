@@ -415,7 +415,11 @@ extension JellyfinQualitySwitch on VideoPlayerState {
       // 恢复播放状态（等待状态稳定后再操作）
       if (hasVideo) {
         await Future.delayed(const Duration(milliseconds: 150));
-        player.volume = currentVolume;
+        if (_useSystemVolume) {
+          _ensurePlayerVolumeMatchesPlatformPolicy();
+        } else {
+          player.volume = currentVolume;
+        }
         if (currentPlaybackRate != 1.0) {
           player.setPlaybackRate(currentPlaybackRate);
         }
@@ -482,7 +486,11 @@ extension EmbyQualitySwitch on VideoPlayerState {
 
       if (hasVideo) {
         await Future.delayed(const Duration(milliseconds: 150));
-        player.volume = currentVolume;
+        if (_useSystemVolume) {
+          _ensurePlayerVolumeMatchesPlatformPolicy();
+        } else {
+          player.volume = currentVolume;
+        }
         if (currentPlaybackRate != 1.0) {
           player.setPlaybackRate(currentPlaybackRate);
         }

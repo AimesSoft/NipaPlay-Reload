@@ -366,7 +366,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
           LoginField(
             key: 'baseUrl',
             label: '访问地址',
-            hint: '例如：http://192.168.1.100:8080',
+            hint: '例如：http://192.168.1.100:1180',
           ),
         ],
         loginButtonText: '添加',

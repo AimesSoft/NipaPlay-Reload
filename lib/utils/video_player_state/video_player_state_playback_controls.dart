@@ -327,6 +327,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     // <<< ADDED DEBUG LOG >>>
     debugPrint(
         '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
+    _ensurePlayerVolumeMatchesPlatformPolicy();
     if (hasVideo &&
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
@@ -722,10 +723,13 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     newVolume = newVolume.clamp(0.0, 1.0);
 
     try {
-      // Set system volume using MDK player.volume (0.0-1.0 range)
-      // Check if volume property is available
-      player.volume = newVolume;
-      await _setSystemVolume(newVolume);
+      if (_useSystemVolume) {
+        _ensurePlayerVolumeMatchesPlatformPolicy();
+        await _setSystemVolume(newVolume);
+      } else {
+        // Web 等不支持系统音量时：使用播放器内部音量
+        player.volume = newVolume;
+      }
       _currentVolume = newVolume;
       _initialDragVolume = newVolume;
       _showVolumeIndicator();

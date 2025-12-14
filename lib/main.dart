@@ -70,6 +70,8 @@ import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'constants/settings_keys.dart';
+import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
+    if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 将通道定义为全局变量
@@ -468,9 +470,8 @@ void main(List<String> args) async {
         settingsMap['animeDetailMode'] as String? ?? 'simple';
     final savedUseCustomThemeColor =
         settingsMap['useCustomThemeColor'] as bool? ?? false;
-    final savedOverlayColorValue =
-        settingsMap['customOverlayColor'] as int? ??
-            ThemeNotifier.defaultOverlayMaskColor.value;
+    final savedOverlayColorValue = settingsMap['customOverlayColor'] as int? ??
+        ThemeNotifier.defaultOverlayMaskColor.value;
     final savedDetailMode =
         AnimeDetailDisplayModeStorage.fromString(savedDetailModeString);
     ThemeMode initialThemeMode;
@@ -720,6 +721,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
     super.initState();
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      DesktopExitHandler.instance.initialize(navigatorKey);
       debugPrint('_NipaPlayAppState: 应用初始化完成，设置监听器');
 
       // 调试：启动时打印数据库内容
@@ -902,6 +904,8 @@ class MainPageState extends State<MainPage>
   // 用于热键管理
   bool _hotkeysAreRegistered = false;
   VideoPlayerState? _videoPlayerState;
+  AppearanceSettingsProvider? _appearanceSettingsProvider;
+  bool? _mainTabAnimationEnabled;
 
   // Static method to find MainPageState from context
   static MainPageState? of(BuildContext context) {
@@ -927,8 +931,15 @@ class MainPageState extends State<MainPage>
         if (globalTabController!.index != index) {
           try {
             debugPrint('[MainPageState] 尝试切换到标签: $index');
-            globalTabController!.animateTo(index);
-            debugPrint('[MainPageState] 成功调用animateTo($index)');
+            final enablePageAnimation =
+                context.read<AppearanceSettingsProvider>().enablePageAnimation;
+            if (enablePageAnimation) {
+              globalTabController!.animateTo(index);
+            } else {
+              globalTabController!.index = index;
+            }
+            debugPrint(
+                '[MainPageState] 已切换到标签: $index (动画: $enablePageAnimation)');
           } catch (e) {
             debugPrint('[MainPageState] 切换标签失败: $e');
           }
@@ -1018,6 +1029,11 @@ class MainPageState extends State<MainPage>
   Future<void> _initializeController() async {
     final prefs = await SharedPreferences.getInstance();
     _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
+    final enablePageAnimationPref = prefs.getBool('enable_page_animation') ??
+        (!kIsWeb && (Platform.isIOS || Platform.isAndroid));
+    _mainTabAnimationEnabled ??= enablePageAnimationPref;
+    final enablePageAnimation =
+        _mainTabAnimationEnabled ?? enablePageAnimationPref;
 
     // 在iOS平台上确保默认页面索引不会指向新番更新页面
     // iOS: 索引顺序为 0-主页, 1-视频播放, 2-媒体库, 3-设置
@@ -1040,6 +1056,7 @@ class MainPageState extends State<MainPage>
         length: tabLength,
         vsync: this,
         initialIndex: _defaultPageIndex,
+        animationDuration: enablePageAnimation ? null : Duration.zero,
       );
       debugPrint(
           '[MainPageState] TabController initialized with length: $tabLength, index: $_defaultPageIndex');
@@ -1150,6 +1167,17 @@ class MainPageState extends State<MainPage>
   void didChangeDependencies() {
     super.didChangeDependencies();
 
+    final newAppearanceSettingsProvider =
+        Provider.of<AppearanceSettingsProvider>(context, listen: false);
+    if (newAppearanceSettingsProvider != _appearanceSettingsProvider) {
+      _appearanceSettingsProvider
+          ?.removeListener(_handleAppearanceSettingsChanged);
+      _appearanceSettingsProvider = newAppearanceSettingsProvider;
+      _appearanceSettingsProvider
+          ?.addListener(_handleAppearanceSettingsChanged);
+      _handleAppearanceSettingsChanged();
+    }
+
     // 初始化对话框尺寸管理器 - 只初始化一次
     if (!globals.DialogSizes.isInitialized) {
       final screenSize = MediaQuery.of(context).size;
@@ -1171,10 +1199,43 @@ class MainPageState extends State<MainPage>
     _manageHotkeys(); // 初始状态检查
   }
 
+  void _handleAppearanceSettingsChanged() {
+    final enablePageAnimation =
+        _appearanceSettingsProvider?.enablePageAnimation;
+    if (enablePageAnimation == null) return;
+
+    if (_mainTabAnimationEnabled == enablePageAnimation) {
+      return;
+    }
+    _mainTabAnimationEnabled = enablePageAnimation;
+
+    final oldController = globalTabController;
+    if (oldController == null) return;
+
+    final currentIndex = oldController.index;
+    final length = oldController.length;
+    oldController.removeListener(_onTabChange);
+    oldController.dispose();
+
+    globalTabController = TabController(
+      length: length,
+      vsync: this,
+      initialIndex: currentIndex.clamp(0, length - 1),
+      animationDuration: enablePageAnimation ? null : Duration.zero,
+    );
+    globalTabController?.addListener(_onTabChange);
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
+    _appearanceSettingsProvider
+        ?.removeListener(_handleAppearanceSettingsChanged);
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();
@@ -1420,9 +1481,15 @@ void _navigateToPage(BuildContext context, int pageIndex) {
   MainPageState? mainPageState = MainPageState.of(context);
   if (mainPageState != null && mainPageState.globalTabController != null) {
     if (mainPageState.globalTabController!.index != pageIndex) {
-      mainPageState.globalTabController!.animateTo(pageIndex);
+      final enablePageAnimation =
+          context.read<AppearanceSettingsProvider>().enablePageAnimation;
+      if (enablePageAnimation) {
+        mainPageState.globalTabController!.animateTo(pageIndex);
+      } else {
+        mainPageState.globalTabController!.index = pageIndex;
+      }
       debugPrint(
-          '[Dart - _navigateToPage] 直接调用了globalTabController.animateTo($pageIndex)');
+          '[Dart - _navigateToPage] 直接切换到标签页$pageIndex (动画: $enablePageAnimation)');
     } else {
       debugPrint(
           '[Dart - _navigateToPage] globalTabController已经在索引$pageIndex，无需切换');

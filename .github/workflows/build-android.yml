@@ -2,11 +2,6 @@ name: Build Android
 
 on:
   workflow_call:
-    inputs:
-      flutter-version:
-        description: 'Flutter 版本'
-        required: true
-        type: string
     secrets:
       SIGNING_KEY:
         description: 'Base64 编码的签名密钥'
@@ -59,8 +54,6 @@ jobs:
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
-        with:
-          flutter-version: ${{ inputs.flutter-version }}
 
       - name: Pre-download Gradle Wrapper
         run: |
@@ -83,4 +76,3 @@ jobs:
         with:
           name: release-Android
           path: build/app/outputs/apk/release/NipaPlay-*.apk
-

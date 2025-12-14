@@ -510,6 +510,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
 
+      // 应用时间轴告知弹幕轨道：避免开关默认开启但轨道未生成导致“无效”
+      _applyTimelineDanmakuTrackForCurrentVideo();
+      _updateMergedDanmakuList();
+
       // 设置进入最终加载阶段，以优化动画性能
       _isInFinalLoadingPhase = true;
       notifyListeners();

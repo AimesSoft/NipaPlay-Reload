@@ -2,11 +2,6 @@ name: Build iOS
 
 on:
   workflow_call:
-    inputs:
-      flutter-version:
-        description: 'Flutter 版本'
-        required: true
-        type: string
     outputs:
       version:
         description: '应用版本号'
@@ -47,8 +42,6 @@ jobs:
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
-        with:
-          flutter-version: ${{ inputs.flutter-version }}
       
       - name: Build iOS IPA
         uses: ./.github/actions/build-ios
