@@ -155,3 +155,96 @@ class SharedRemoteEpisode {
     );
   }
 }
+
+class SharedRemoteScannedFolder {
+  SharedRemoteScannedFolder({
+    required this.path,
+    required this.name,
+    required this.exists,
+  });
+
+  final String path;
+  final String name;
+  final bool exists;
+
+  factory SharedRemoteScannedFolder.fromJson(Map<String, dynamic> json) {
+    return SharedRemoteScannedFolder(
+      path: json['path'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      exists: json['exists'] as bool? ?? false,
+    );
+  }
+}
+
+class SharedRemoteScanStatus {
+  SharedRemoteScanStatus({
+    required this.isScanning,
+    required this.progress,
+    required this.message,
+    required this.totalFilesFound,
+  });
+
+  final bool isScanning;
+  final double progress;
+  final String message;
+  final int totalFilesFound;
+
+  factory SharedRemoteScanStatus.fromJson(Map<String, dynamic> json) {
+    return SharedRemoteScanStatus(
+      isScanning: json['isScanning'] as bool? ?? false,
+      progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
+      message: json['message'] as String? ?? '',
+      totalFilesFound: json['totalFilesFound'] as int? ?? 0,
+    );
+  }
+}
+
+class SharedRemoteFileEntry {
+  SharedRemoteFileEntry({
+    required this.path,
+    required this.name,
+    required this.isDirectory,
+    this.size,
+    this.modifiedTime,
+    this.animeName,
+    this.episodeTitle,
+    this.animeId,
+    this.episodeId,
+    this.isFromScan,
+  });
+
+  final String path;
+  final String name;
+  final bool isDirectory;
+  final int? size;
+  final DateTime? modifiedTime;
+  final String? animeName;
+  final String? episodeTitle;
+  final int? animeId;
+  final int? episodeId;
+  final bool? isFromScan;
+
+  factory SharedRemoteFileEntry.fromJson(Map<String, dynamic> json) {
+    int? parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value);
+      return null;
+    }
+
+    return SharedRemoteFileEntry(
+      path: json['path'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      isDirectory: json['isDirectory'] as bool? ?? false,
+      size: json['size'] as int?,
+      modifiedTime: json['modifiedTime'] != null
+          ? DateTime.tryParse(json['modifiedTime'] as String)
+          : null,
+      animeName: json['animeName'] as String?,
+      episodeTitle: json['episodeTitle'] as String?,
+      animeId: parseInt(json['animeId']),
+      episodeId: parseInt(json['episodeId']),
+      isFromScan: json['isFromScan'] as bool?,
+    );
+  }
+}

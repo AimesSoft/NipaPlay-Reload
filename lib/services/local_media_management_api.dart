@@ -1,0 +1,501 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:shelf/shelf.dart';
+import 'package:shelf_router/shelf_router.dart';
+
+import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/providers/service_provider.dart';
+import 'package:nipaplay/services/scan_service.dart';
+
+class LocalMediaManagementApi {
+  LocalMediaManagementApi() {
+    router.get('/folders', _handleListFolders);
+    router.post('/folders', _handleAddFolder);
+    router.delete('/folders', _handleRemoveFolder);
+
+    router.get('/browse', _handleBrowse);
+    router.get('/stream', _handleStream);
+    router.add('HEAD', '/stream', _handleStreamHead);
+
+    router.get('/scan/status', _handleScanStatus);
+    router.post('/scan/rescan', _handleRescanAll);
+  }
+
+  final Router router = Router();
+
+  ScanService get _scanService => ServiceProvider.scanService;
+  static const Set<String> _allowedMediaExtensions = {
+    '.mp4',
+    '.m4v',
+    '.mkv',
+    '.mov',
+    '.avi',
+    '.flv',
+    '.ts',
+    '.mpeg',
+    '.mpg',
+    '.webm',
+    '.mp3',
+    '.flac',
+    '.aac',
+    '.wav',
+    '.ass',
+    '.ssa',
+    '.srt',
+  };
+
+  Future<Response> _handleListFolders(Request request) async {
+    try {
+      final folders = await _buildFolderPayload(_scanService.scannedFolders);
+      return _jsonOk({
+        'success': true,
+        'data': {'folders': folders},
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '读取扫描文件夹列表失败: $e');
+    }
+  }
+
+  Future<Response> _handleAddFolder(Request request) async {
+    Map<String, dynamic> payload = const {};
+    try {
+      final body = await request.readAsString();
+      if (body.isNotEmpty) {
+        payload = json.decode(body) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      return _jsonError(HttpStatus.badRequest, 'Invalid JSON payload');
+    }
+
+    final folderPath =
+        (payload['path'] ?? payload['folderPath'] ?? payload['folder'] ?? '')
+            .toString()
+            .trim();
+    if (folderPath.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing folder path');
+    }
+
+    final bool scan = payload['scan'] == true;
+    final bool skipPreviouslyMatchedUnwatched =
+        payload['skipPreviouslyMatchedUnwatched'] == true;
+
+    try {
+      if (scan) {
+        if (_scanService.isScanning) {
+          return _jsonOk({
+            'success': false,
+            'message': '已有扫描任务在进行中，请稍后重试。',
+          });
+        }
+        unawaited(_scanService.startDirectoryScan(
+          folderPath,
+          skipPreviouslyMatchedUnwatched: skipPreviouslyMatchedUnwatched,
+        ));
+      } else {
+        await _scanService.addScannedFolder(folderPath);
+      }
+
+      final folders = await _buildFolderPayload(_scanService.scannedFolders);
+      return _jsonOk({
+        'success': true,
+        'data': {
+          'folders': folders,
+          'scanStarted': scan,
+        },
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '添加文件夹失败: $e');
+    }
+  }
+
+  Future<Response> _handleRemoveFolder(Request request) async {
+    final folderPath = request.url.queryParameters['path']?.trim();
+    if (folderPath == null || folderPath.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing folder path');
+    }
+
+    if (_scanService.isScanning) {
+      return _jsonOk({
+        'success': false,
+        'message': '扫描进行中，无法移除文件夹。',
+      });
+    }
+
+    try {
+      await _scanService.removeScannedFolder(folderPath);
+      final folders = await _buildFolderPayload(_scanService.scannedFolders);
+      return _jsonOk({
+        'success': true,
+        'data': {'folders': folders},
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '移除文件夹失败: $e');
+    }
+  }
+
+  Future<Response> _handleBrowse(Request request) async {
+    final rawPath = request.url.queryParameters['path']?.trim();
+    if (rawPath == null || rawPath.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, '缺少 path 参数');
+    }
+
+    final targetPath = p.normalize(rawPath);
+    if (!_isAllowedPath(targetPath)) {
+      return _jsonError(HttpStatus.forbidden, '路径不允许访问');
+    }
+
+    try {
+      final directory = Directory(targetPath);
+      if (!await directory.exists()) {
+        return _jsonError(HttpStatus.notFound, '目录不存在');
+      }
+
+      final entries = <Map<String, dynamic>>[];
+      await for (final entity in directory.list(recursive: false, followLinks: false)) {
+        if (entity is Directory) {
+          entries.add(await _buildEntryJson(entity, isDirectory: true));
+          continue;
+        }
+        if (entity is File) {
+          final ext = p.extension(entity.path).toLowerCase();
+          if (!_allowedMediaExtensions.contains(ext)) {
+            continue;
+          }
+          entries.add(await _buildEntryJson(entity, isDirectory: false));
+        }
+      }
+
+      entries.sort((a, b) {
+        final bool aDir = a['isDirectory'] == true;
+        final bool bDir = b['isDirectory'] == true;
+        if (aDir != bDir) {
+          return aDir ? -1 : 1;
+        }
+        final aName = (a['name'] as String? ?? '').toLowerCase();
+        final bName = (b['name'] as String? ?? '').toLowerCase();
+        return aName.compareTo(bName);
+      });
+
+      return _jsonOk({
+        'success': true,
+        'data': {
+          'path': targetPath,
+          'entries': entries,
+        },
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '读取目录失败: $e');
+    }
+  }
+
+  Future<Response> _handleStream(Request request) async {
+    return _handleStreamInternal(request, headOnly: false);
+  }
+
+  Future<Response> _handleStreamHead(Request request) async {
+    return _handleStreamInternal(request, headOnly: true);
+  }
+
+  Future<Response> _handleStreamInternal(
+    Request request, {
+    required bool headOnly,
+  }) async {
+    final rawPath = request.url.queryParameters['path']?.trim();
+    if (rawPath == null || rawPath.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, '缺少 path 参数');
+    }
+
+    final targetPath = p.normalize(rawPath);
+    if (!_isAllowedPath(targetPath)) {
+      return _jsonError(HttpStatus.forbidden, '路径不允许访问');
+    }
+
+    final ext = p.extension(targetPath).toLowerCase();
+    if (!_allowedMediaExtensions.contains(ext)) {
+      return _jsonError(HttpStatus.forbidden, '不支持的文件类型');
+    }
+
+    try {
+      final file = File(targetPath);
+      if (!await file.exists()) {
+        return Response.notFound('File not found');
+      }
+
+      final totalLength = await file.length();
+      final contentType = _determineContentType(targetPath);
+      final contentDisposition = _buildContentDispositionHeader(p.basename(targetPath));
+      final rangeHeader = request.headers['range'];
+
+      if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+        final match = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(rangeHeader);
+        if (match != null) {
+          final startStr = match.group(1);
+          final endStr = match.group(2);
+          final start = startStr != null && startStr.isNotEmpty ? int.parse(startStr) : 0;
+          final end = endStr != null && endStr.isNotEmpty ? int.parse(endStr) : totalLength - 1;
+          if (start >= totalLength) {
+            return Response(
+              HttpStatus.requestedRangeNotSatisfiable,
+              headers: {
+                'Content-Range': 'bytes */$totalLength',
+                'Content-Disposition': contentDisposition,
+              },
+            );
+          }
+          final adjustedEnd = end >= totalLength ? totalLength - 1 : end;
+          final chunkSize = adjustedEnd - start + 1;
+          final stream = headOnly ? null : file.openRead(start, adjustedEnd + 1);
+          return Response(
+            HttpStatus.partialContent,
+            body: stream,
+            headers: {
+              'Content-Type': contentType,
+              'Content-Length': '$chunkSize',
+              'Accept-Ranges': 'bytes',
+              'Content-Range': 'bytes $start-$adjustedEnd/$totalLength',
+              'Cache-Control': 'no-cache',
+              'Content-Disposition': contentDisposition,
+            },
+          );
+        }
+      }
+
+      final stream = headOnly ? null : file.openRead();
+      return Response.ok(
+        stream,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': '$totalLength',
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'no-cache',
+          'Content-Disposition': contentDisposition,
+        },
+      );
+    } catch (e) {
+      return Response.internalServerError(body: '文件读取失败: $e');
+    }
+  }
+
+  Future<Response> _handleScanStatus(Request request) async {
+    try {
+      return _jsonOk({
+        'success': true,
+        'data': {
+          'isScanning': _scanService.isScanning,
+          'progress': _scanService.scanProgress,
+          'message': _scanService.scanMessage,
+          'totalFilesFound': _scanService.totalFilesFound,
+          'scannedFolders': _scanService.scannedFolders,
+        },
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '获取扫描状态失败: $e');
+    }
+  }
+
+  Future<Response> _handleRescanAll(Request request) async {
+    Map<String, dynamic> payload = const {};
+    try {
+      final body = await request.readAsString();
+      if (body.isNotEmpty) {
+        payload = json.decode(body) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      return _jsonError(HttpStatus.badRequest, 'Invalid JSON payload');
+    }
+
+    final bool skipPreviouslyMatchedUnwatched =
+        payload['skipPreviouslyMatchedUnwatched'] != false;
+
+    if (_scanService.isScanning) {
+      return _jsonOk({
+        'success': false,
+        'message': '已有扫描任务在进行中，请稍后重试。',
+      });
+    }
+
+    try {
+      unawaited(_scanService.rescanAllFolders(
+        skipPreviouslyMatchedUnwatched: skipPreviouslyMatchedUnwatched,
+      ));
+      return _jsonOk({
+        'success': true,
+        'data': {'scanStarted': true},
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '启动刷新失败: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _buildFolderPayload(
+    List<String> folders,
+  ) async {
+    final List<Map<String, dynamic>> payload = [];
+    for (final folder in folders) {
+      bool exists = false;
+      try {
+        exists = await Directory(folder).exists();
+      } catch (_) {
+        exists = false;
+      }
+      payload.add({
+        'path': folder,
+        'name': p.basename(folder),
+        'exists': exists,
+      });
+    }
+    return payload;
+  }
+
+  Response _jsonOk(Map<String, dynamic> body) {
+    return Response.ok(
+      json.encode(body),
+      headers: const {'Content-Type': 'application/json; charset=utf-8'},
+    );
+  }
+
+  Response _jsonError(int status, String message) {
+    return Response(
+      status,
+      body: json.encode({'success': false, 'message': message}),
+      headers: const {'Content-Type': 'application/json; charset=utf-8'},
+    );
+  }
+
+  bool _isAllowedPath(String targetPath) {
+    for (final root in _scanService.scannedFolders) {
+      final rootNormalized = p.normalize(root);
+      for (final candidateRoot in _pathCandidates(rootNormalized)) {
+        for (final candidateTarget in _pathCandidates(targetPath)) {
+          if (p.equals(candidateTarget, candidateRoot) ||
+              p.isWithin(candidateRoot, candidateTarget)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  List<String> _pathCandidates(String value) {
+    final normalized = p.normalize(value);
+    final candidates = <String>{normalized};
+
+    // iOS 路径在 /private 前缀上可能出现别名差异（/var/... 与 /private/var/...）。
+    if (Platform.isIOS) {
+      if (normalized.startsWith('/private')) {
+        candidates.add(normalized.replaceFirst('/private', ''));
+      } else if (normalized.startsWith('/')) {
+        candidates.add('/private$normalized');
+      }
+    }
+
+    return candidates.toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> _buildEntryJson(
+    FileSystemEntity entity, {
+    required bool isDirectory,
+  }) async {
+    String name = p.basename(entity.path);
+    int? size;
+    DateTime? modifiedTime;
+    try {
+      final stat = await entity.stat();
+      modifiedTime = stat.modified;
+      if (!isDirectory) {
+        size = stat.size;
+      }
+    } catch (_) {
+      size = null;
+      modifiedTime = null;
+    }
+
+    String? animeName;
+    String? episodeTitle;
+    int? animeId;
+    int? episodeId;
+    bool? isFromScan;
+    if (!isDirectory) {
+      try {
+        final history = await WatchHistoryManager.getHistoryItem(entity.path);
+        if (history != null) {
+          final candidateAnimeId = history.animeId;
+          final candidateEpisodeId = history.episodeId;
+          if (candidateAnimeId != null &&
+              candidateAnimeId > 0 &&
+              candidateEpisodeId != null &&
+              candidateEpisodeId > 0) {
+            animeName = history.animeName;
+            episodeTitle = history.episodeTitle;
+            animeId = candidateAnimeId;
+            episodeId = candidateEpisodeId;
+            isFromScan = history.isFromScan;
+          }
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    return {
+      'path': entity.path,
+      'name': name,
+      'isDirectory': isDirectory,
+      'size': size,
+      'modifiedTime': modifiedTime?.toIso8601String(),
+      'animeName': animeName,
+      'episodeTitle': episodeTitle,
+      'animeId': animeId,
+      'episodeId': episodeId,
+      'isFromScan': isFromScan,
+    };
+  }
+
+  String _determineContentType(String filePath) {
+    final ext = p.extension(filePath).toLowerCase();
+    switch (ext) {
+      case '.mp4':
+      case '.m4v':
+        return 'video/mp4';
+      case '.mkv':
+        return 'video/x-matroska';
+      case '.mov':
+        return 'video/quicktime';
+      case '.avi':
+        return 'video/x-msvideo';
+      case '.flv':
+        return 'video/x-flv';
+      case '.ts':
+      case '.mpeg':
+      case '.mpg':
+        return 'video/mpeg';
+      case '.webm':
+        return 'video/webm';
+      case '.mp3':
+        return 'audio/mpeg';
+      case '.flac':
+        return 'audio/flac';
+      case '.aac':
+        return 'audio/aac';
+      case '.wav':
+        return 'audio/wav';
+      case '.ass':
+      case '.ssa':
+        return 'text/plain';
+      case '.srt':
+        return 'application/x-subrip';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  String _buildContentDispositionHeader(String fileName) {
+    final safeName = fileName.replaceAll('"', '\\"');
+    final encodedName = Uri.encodeComponent(fileName);
+    return 'inline; filename="$safeName"; filename*=UTF-8\'\'$encodedName';
+  }
+}

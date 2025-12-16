@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/services/web_server_service.dart';
+import 'package:nipaplay/services/scan_service.dart';
 
 import 'dandanplay_remote_provider.dart';
 import 'emby_provider.dart';
@@ -17,6 +18,7 @@ class ServiceProvider {
       DandanplayRemoteProvider();
   static final WatchHistoryProvider watchHistoryProvider =
       WatchHistoryProvider();
+  static final ScanService scanService = ScanService();
   static final ServerHistorySyncService serverHistorySyncService =
       ServerHistorySyncService.instance;
 
@@ -31,6 +33,8 @@ class ServiceProvider {
 
     // 本地观看历史需要同步等待加载完成
     await watchHistoryProvider.loadHistory();
+    // 让 WatchHistoryProvider 能响应扫描完成（包括来自远程 API 的扫描请求）
+    watchHistoryProvider.setScanService(scanService);
 
     // 初始化服务器观看历史同步（当前仅支持 Jellyfin 下行同步）
     serverHistorySyncService.initialize(

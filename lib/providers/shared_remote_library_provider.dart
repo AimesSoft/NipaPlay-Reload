@@ -14,6 +14,8 @@ import 'package:nipaplay/models/watch_history_model.dart';
 class SharedRemoteLibraryProvider extends ChangeNotifier {
   static const String _hostsPrefsKey = 'shared_remote_hosts';
   static const String _activeHostIdKey = 'shared_remote_active_host';
+  static const String _managementUnsupportedMessage =
+      '远程端暂不支持“库管理”共享，请更新对方 NipaPlay。';
 
   SharedRemoteLibraryProvider() {
     _loadPersistedHosts();
@@ -28,6 +30,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   bool _isInitializing = true;
   bool _autoRefreshPaused = false;
   DateTime? _lastRefreshFailureAt;
+  List<SharedRemoteScannedFolder> _scannedFolders = [];
+  SharedRemoteScanStatus? _scanStatus;
+  bool _isManagementLoading = false;
+  String? _managementErrorMessage;
 
   List<SharedRemoteHost> get hosts => List.unmodifiable(_hosts);
   String? get activeHostId => _activeHostId;
@@ -45,6 +51,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get hasActiveHost => _activeHostId != null && _hosts.any((h) => h.id == _activeHostId);
   bool get hasReachableActiveHost => activeHost?.isOnline == true;
+  List<SharedRemoteScannedFolder> get scannedFolders => List.unmodifiable(_scannedFolders);
+  SharedRemoteScanStatus? get scanStatus => _scanStatus;
+  bool get isManagementLoading => _isManagementLoading;
+  String? get managementErrorMessage => _managementErrorMessage;
 
   Future<void> _loadPersistedHosts() async {
     try {
@@ -103,6 +113,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _activeHostId = _hosts.isNotEmpty ? _hosts.first.id : null;
       _animeSummaries = [];
       _episodeCache.clear();
+      _scannedFolders = [];
+      _scanStatus = null;
+      _managementErrorMessage = null;
     }
     await _persistHosts();
     notifyListeners();
@@ -117,6 +130,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     _activeHostId = hostId;
     _animeSummaries = [];
     _episodeCache.clear();
+    _scannedFolders = [];
+    _scanStatus = null;
+    _managementErrorMessage = null;
     await _persistHosts();
     notifyListeners();
     await refreshLibrary(userInitiated: true);
@@ -317,6 +333,66 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
+  Future<http.Response> _sendPostRequest(
+    Uri uri, {
+    Map<String, dynamic>? jsonBody,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final sanitizedUri = _sanitizeUri(uri);
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      'User-Agent': 'NipaPlay/1.0',
+      'Content-Type': 'application/json; charset=utf-8',
+    };
+
+    final authHeader = _buildBasicAuthHeader(uri);
+    if (authHeader != null) {
+      headers['Authorization'] = authHeader;
+    }
+
+    final client = IOClient(_createHttpClient(uri));
+    try {
+      return await client
+          .post(
+            sanitizedUri,
+            headers: headers,
+            body: json.encode(jsonBody ?? const <String, dynamic>{}),
+          )
+          .timeout(timeout, onTimeout: () {
+        throw TimeoutException('请求超时');
+      });
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<http.Response> _sendDeleteRequest(
+    Uri uri, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final sanitizedUri = _sanitizeUri(uri);
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      'User-Agent': 'NipaPlay/1.0',
+    };
+
+    final authHeader = _buildBasicAuthHeader(uri);
+    if (authHeader != null) {
+      headers['Authorization'] = authHeader;
+    }
+
+    final client = IOClient(_createHttpClient(uri));
+    try {
+      return await client
+          .delete(sanitizedUri, headers: headers)
+          .timeout(timeout, onTimeout: () {
+        throw TimeoutException('请求超时');
+      });
+    } finally {
+      client.close();
+    }
+  }
+
   Uri _sanitizeUri(Uri source) {
     return Uri(
       scheme: source.scheme,
@@ -492,6 +568,502 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       lastConnectedAt: DateTime.now(),
       lastError: lastError,
     );
+  }
+
+  Future<void> refreshManagement({bool userInitiated = false}) async {
+    final host = activeHost;
+    if (host == null) {
+      return;
+    }
+
+    _isManagementLoading = true;
+    _managementErrorMessage = null;
+    notifyListeners();
+
+    try {
+      final foldersUri =
+          Uri.parse('${host.baseUrl}/api/media/local/manage/folders');
+      final response =
+          await _sendGetRequest(foldersUri, timeout: const Duration(seconds: 10));
+
+      if (response.statusCode == HttpStatus.notFound) {
+        _scannedFolders = [];
+        _scanStatus = null;
+        _managementErrorMessage = _managementUnsupportedMessage;
+        _updateHostStatus(host.id, isOnline: true, lastError: null);
+        return;
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? true;
+      if (!success) {
+        _managementErrorMessage =
+            payloadMap['message'] as String? ?? '远程端返回失败';
+        return;
+      }
+
+      final data = payloadMap['data'];
+      final foldersRaw = data is Map<String, dynamic>
+          ? data['folders']
+          : payloadMap['folders'];
+
+      final folders = <SharedRemoteScannedFolder>[];
+      if (foldersRaw is List) {
+        for (final item in foldersRaw) {
+          if (item is Map<String, dynamic>) {
+            folders.add(SharedRemoteScannedFolder.fromJson(item));
+          } else if (item is Map) {
+            folders.add(SharedRemoteScannedFolder.fromJson(
+                item.cast<String, dynamic>()));
+          }
+        }
+      }
+      _scannedFolders = folders;
+
+      await refreshScanStatus(showLoading: false);
+      _updateHostStatus(host.id, isOnline: true, lastError: null);
+    } catch (e) {
+      _scannedFolders = [];
+      _scanStatus = null;
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+      await _persistHosts();
+    }
+  }
+
+  Future<void> refreshScanStatus({bool showLoading = true}) async {
+    final host = activeHost;
+    if (host == null) {
+      return;
+    }
+
+    if (showLoading) {
+      _isManagementLoading = true;
+      notifyListeners();
+    }
+
+    try {
+      final statusUri =
+          Uri.parse('${host.baseUrl}/api/media/local/manage/scan/status');
+      final response =
+          await _sendGetRequest(statusUri, timeout: const Duration(seconds: 5));
+
+      if (response.statusCode == HttpStatus.notFound) {
+        _scanStatus = null;
+        _managementErrorMessage ??= _managementUnsupportedMessage;
+        _updateHostStatus(host.id, isOnline: true, lastError: null);
+        return;
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? true;
+      if (!success) {
+        _managementErrorMessage =
+            payloadMap['message'] as String? ?? '远程端返回失败';
+        return;
+      }
+
+      final data = payloadMap['data'];
+      if (data is Map<String, dynamic>) {
+        _scanStatus = SharedRemoteScanStatus.fromJson(data);
+      } else if (payloadMap.isNotEmpty) {
+        _scanStatus = SharedRemoteScanStatus.fromJson(payloadMap);
+      } else {
+        _scanStatus = null;
+      }
+
+      _updateHostStatus(host.id, isOnline: true, lastError: null);
+    } catch (e) {
+      _scanStatus = null;
+      _managementErrorMessage ??= _buildManagementFriendlyError(e, host);
+      _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
+    } finally {
+      if (showLoading) {
+        _isManagementLoading = false;
+      }
+      notifyListeners();
+      if (showLoading) {
+        await _persistHosts();
+      }
+    }
+  }
+
+  Future<List<SharedRemoteFileEntry>> browseRemoteDirectory(String directoryPath) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedPath = directoryPath.trim();
+    if (sanitizedPath.isEmpty) {
+      throw Exception('目录路径为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/browse')
+          .replace(queryParameters: {'path': sanitizedPath});
+      final response = await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
+
+      if (response.statusCode == HttpStatus.notFound) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+
+        final message =
+            apiMessage != null && apiMessage.trim().isNotEmpty ? apiMessage : _managementUnsupportedMessage;
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? true;
+      if (!success) {
+        final message = payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final data = payloadMap['data'];
+      final entriesRaw = data is Map<String, dynamic>
+          ? data['entries']
+          : payloadMap['entries'];
+
+      final entries = <SharedRemoteFileEntry>[];
+      if (entriesRaw is List) {
+        for (final item in entriesRaw) {
+          if (item is Map<String, dynamic>) {
+            entries.add(SharedRemoteFileEntry.fromJson(item));
+          } else if (item is Map) {
+            entries.add(
+              SharedRemoteFileEntry.fromJson(item.cast<String, dynamic>()),
+            );
+          }
+        }
+      }
+
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+
+      return entries;
+    } catch (e) {
+      final existing = _managementErrorMessage;
+      final rawMessage = e.toString();
+      final friendly = existing != null && existing.trim().isNotEmpty
+          ? existing
+          : (rawMessage.contains(_managementUnsupportedMessage)
+              ? _managementUnsupportedMessage
+              : _buildManagementFriendlyError(e, host));
+      _managementErrorMessage = friendly;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Uri buildRemoteFileStreamUri(String filePath) {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+    return Uri.parse('${host.baseUrl}/api/media/local/manage/stream')
+        .replace(queryParameters: {'path': filePath});
+  }
+
+  Future<void> addRemoteFolder({
+    required String folderPath,
+    bool scan = true,
+    bool skipPreviouslyMatchedUnwatched = false,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      _managementErrorMessage = '未选择远程主机';
+      notifyListeners();
+      return;
+    }
+
+    final sanitized = folderPath.trim();
+    if (sanitized.isEmpty) {
+      _managementErrorMessage = '请输入文件夹路径';
+      notifyListeners();
+      return;
+    }
+
+    _isManagementLoading = true;
+    _managementErrorMessage = null;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/folders');
+      final response = await _sendPostRequest(
+        uri,
+        jsonBody: {
+          'path': sanitized,
+          'scan': scan,
+          'skipPreviouslyMatchedUnwatched': skipPreviouslyMatchedUnwatched,
+        },
+        timeout: const Duration(seconds: 10),
+      );
+
+      if (response.statusCode == HttpStatus.notFound) {
+        _managementErrorMessage = _managementUnsupportedMessage;
+        _updateHostStatus(host.id, isOnline: true, lastError: null);
+        return;
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? false;
+      if (!success) {
+        _managementErrorMessage =
+            payloadMap['message'] as String? ?? '远程端返回失败';
+        return;
+      }
+
+      final data = payloadMap['data'];
+      final foldersRaw = data is Map<String, dynamic>
+          ? data['folders']
+          : payloadMap['folders'];
+
+      final folders = <SharedRemoteScannedFolder>[];
+      if (foldersRaw is List) {
+        for (final item in foldersRaw) {
+          if (item is Map<String, dynamic>) {
+            folders.add(SharedRemoteScannedFolder.fromJson(item));
+          } else if (item is Map) {
+            folders.add(SharedRemoteScannedFolder.fromJson(
+                item.cast<String, dynamic>()));
+          }
+        }
+      }
+      if (folders.isNotEmpty) {
+        _scannedFolders = folders;
+      }
+
+      await refreshScanStatus(showLoading: false);
+      _updateHostStatus(host.id, isOnline: true, lastError: null);
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+      await _persistHosts();
+    }
+  }
+
+  Future<void> removeRemoteFolder(String folderPath) async {
+    final host = activeHost;
+    if (host == null) {
+      _managementErrorMessage = '未选择远程主机';
+      notifyListeners();
+      return;
+    }
+
+    final sanitized = folderPath.trim();
+    if (sanitized.isEmpty) {
+      _managementErrorMessage = '文件夹路径为空';
+      notifyListeners();
+      return;
+    }
+
+    _isManagementLoading = true;
+    _managementErrorMessage = null;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/folders')
+          .replace(queryParameters: {'path': sanitized});
+      final response =
+          await _sendDeleteRequest(uri, timeout: const Duration(seconds: 10));
+
+      if (response.statusCode == HttpStatus.notFound) {
+        _managementErrorMessage = _managementUnsupportedMessage;
+        _updateHostStatus(host.id, isOnline: true, lastError: null);
+        return;
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? false;
+      if (!success) {
+        _managementErrorMessage =
+            payloadMap['message'] as String? ?? '远程端返回失败';
+        return;
+      }
+
+      final data = payloadMap['data'];
+      final foldersRaw = data is Map<String, dynamic>
+          ? data['folders']
+          : payloadMap['folders'];
+
+      final folders = <SharedRemoteScannedFolder>[];
+      if (foldersRaw is List) {
+        for (final item in foldersRaw) {
+          if (item is Map<String, dynamic>) {
+            folders.add(SharedRemoteScannedFolder.fromJson(item));
+          } else if (item is Map) {
+            folders.add(SharedRemoteScannedFolder.fromJson(
+                item.cast<String, dynamic>()));
+          }
+        }
+      }
+      _scannedFolders = folders;
+
+      await refreshScanStatus(showLoading: false);
+      _updateHostStatus(host.id, isOnline: true, lastError: null);
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+      await _persistHosts();
+    }
+  }
+
+  Future<void> rescanRemoteAll({bool skipPreviouslyMatchedUnwatched = true}) async {
+    final host = activeHost;
+    if (host == null) {
+      _managementErrorMessage = '未选择远程主机';
+      notifyListeners();
+      return;
+    }
+
+    _isManagementLoading = true;
+    _managementErrorMessage = null;
+    notifyListeners();
+
+    try {
+      final uri =
+          Uri.parse('${host.baseUrl}/api/media/local/manage/scan/rescan');
+      final response = await _sendPostRequest(
+        uri,
+        jsonBody: {
+          'skipPreviouslyMatchedUnwatched': skipPreviouslyMatchedUnwatched,
+        },
+        timeout: const Duration(seconds: 10),
+      );
+
+      if (response.statusCode == HttpStatus.notFound) {
+        _managementErrorMessage = _managementUnsupportedMessage;
+        _updateHostStatus(host.id, isOnline: true, lastError: null);
+        return;
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? false;
+      if (!success) {
+        _managementErrorMessage =
+            payloadMap['message'] as String? ?? '远程端返回失败';
+        return;
+      }
+
+      await refreshScanStatus(showLoading: false);
+      _updateHostStatus(host.id, isOnline: true, lastError: null);
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+      await _persistHosts();
+    }
+  }
+
+  String _buildManagementFriendlyError(Object e, SharedRemoteHost host) {
+    if (e is TimeoutException) {
+      return '连接超时，请检查网络或主机是否在线';
+    }
+
+    final message = e.toString();
+    if (message.contains('SocketException') || message.contains('Connection')) {
+      if (message.contains('No route to host') || message.contains('errno = 65')) {
+        return '无法连接到主机 ${host.baseUrl}\n错误详情: $e';
+      }
+      if (message.contains('Connection refused')) {
+        return '连接被拒绝，请确认主机已开启远程访问服务';
+      }
+      if (message.contains('timed out') || message.contains('TimeoutException')) {
+        return '连接超时，请检查网络连接或主机是否在线';
+      }
+      return '网络连接失败: $e';
+    }
+
+    if (message.contains('HTTP')) {
+      return '服务器响应错误: $e';
+    }
+
+    return '同步失败: $e';
+  }
+
+  void clearManagementError() {
+    _managementErrorMessage = null;
+    notifyListeners();
   }
 
   void clearError() {

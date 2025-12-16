@@ -524,7 +524,7 @@ void main(List<String> args) async {
           // 统一使用 ServiceProvider 中的全局实例，避免重复初始化与事件风暴
           ChangeNotifierProvider.value(
               value: ServiceProvider.watchHistoryProvider),
-          ChangeNotifierProvider(create: (_) => ScanService()),
+          ChangeNotifierProvider.value(value: ServiceProvider.scanService),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
           ChangeNotifierProvider(create: (_) => UIThemeProvider()),

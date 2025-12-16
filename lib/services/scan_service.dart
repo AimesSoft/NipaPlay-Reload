@@ -783,6 +783,29 @@ class ScanService with ChangeNotifier {
     }
   }
 
+  Future<void> addScannedFolder(String folderPath) async {
+    if (kIsWeb) {
+      _updateScanMessage("Web版不支持扫描本地媒体库。");
+      return;
+    }
+
+    final sanitized = folderPath.trim();
+    if (sanitized.isEmpty) {
+      _updateScanMessage("文件夹路径为空。");
+      return;
+    }
+
+    if (_scannedFolders.contains(sanitized)) {
+      _updateScanMessage("文件夹已在扫描列表中：$sanitized");
+      return;
+    }
+
+    _scannedFolders = List.from(_scannedFolders)..add(sanitized);
+    await _saveScannedFolders();
+    _updateScanMessage("已添加媒体文件夹：$sanitized");
+    notifyListeners();
+  }
+
   Future<void> removeScannedFolder(String folderPath) async {
     if (kIsWeb) {
       _updateScanMessage("Web版不支持扫描本地媒体库。");

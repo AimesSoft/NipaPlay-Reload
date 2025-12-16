@@ -288,7 +288,11 @@ class LocalMediaShareService {
     }
   }
 
-  Future<Response> buildStreamResponse(Request request, SharedEpisodeInfo episode) async {
+  Future<Response> buildStreamResponse(
+    Request request,
+    SharedEpisodeInfo episode, {
+    bool headOnly = false,
+  }) async {
     final file = File(episode.historyItem.filePath);
     if (!await file.exists()) {
       return Response.notFound('File not found');
@@ -296,6 +300,7 @@ class LocalMediaShareService {
 
     final totalLength = await file.length();
     final contentType = determineContentType(file.path);
+    final contentDisposition = _buildContentDispositionHeader(p.basename(file.path));
     final rangeHeader = request.headers['range'];
 
     if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
@@ -315,7 +320,7 @@ class LocalMediaShareService {
         }
         final adjustedEnd = end >= totalLength ? totalLength - 1 : end;
         final chunkSize = adjustedEnd - start + 1;
-        final stream = file.openRead(start, adjustedEnd + 1);
+        final stream = headOnly ? null : file.openRead(start, adjustedEnd + 1);
         return Response(
           HttpStatus.partialContent,
           body: stream,
@@ -325,12 +330,13 @@ class LocalMediaShareService {
             'Accept-Ranges': 'bytes',
             'Content-Range': 'bytes $start-$adjustedEnd/$totalLength',
             'Cache-Control': 'no-cache',
+            'Content-Disposition': contentDisposition,
           },
         );
       }
     }
 
-    final stream = file.openRead();
+    final stream = headOnly ? null : file.openRead();
     return Response.ok(
       stream,
       headers: {
@@ -338,8 +344,15 @@ class LocalMediaShareService {
         'Content-Length': '$totalLength',
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'no-cache',
+        'Content-Disposition': contentDisposition,
       },
     );
+  }
+
+  String _buildContentDispositionHeader(String fileName) {
+    final safeName = fileName.replaceAll('"', '\\"');
+    final encodedName = Uri.encodeComponent(fileName);
+    return 'inline; filename="$safeName"; filename*=UTF-8\'\'$encodedName';
   }
 
   Future<WatchHistoryItem?> updateEpisodeProgress({
