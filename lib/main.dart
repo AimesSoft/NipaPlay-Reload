@@ -491,6 +491,7 @@ void main(List<String> args) async {
 
     if (globals.isDesktop) {
       windowManager.ensureInitialized();
+      windowManager.setIcon('assets/images/logo512.png');
       WindowOptions windowOptions = const WindowOptions(
         skipTaskbar: false,
         titleBarStyle: TitleBarStyle.hidden,
