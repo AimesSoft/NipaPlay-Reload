@@ -116,12 +116,55 @@ runs:
     - name: Install Android build tools
       shell: bash
       run: |
+        set -euo pipefail
+
+        SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+        if [ -z "${SDK_ROOT}" ]; then
+          echo "错误：ANDROID_SDK_ROOT/ANDROID_HOME 未设置，无法安装 NDK。"
+          exit 1
+        fi
+
+        # 从项目配置读取 ndkVersion，避免 CI 与项目不一致导致找不到 clang
+        NDK_VERSION="$(grep -E '^[[:space:]]*ndkVersion[[:space:]]*=' -m 1 android/app/build.gradle | sed -E 's/.*['\''"]([^'\''"]+)['\''"].*/\1/')"
+        if [ -z "${NDK_VERSION}" ]; then
+          echo "错误：未能从 android/app/build.gradle 解析 ndkVersion。"
+          exit 1
+        fi
+
+        echo "Installing Android SDK packages:"
+        echo "- build-tools;29.0.3"
+        echo "- ndk;${NDK_VERSION}"
+        echo "- cmake;3.22.1"
+
+        # sdkmanager 在 pipefail 下可能因为 yes 的 SIGPIPE 导致误判失败，这里临时关闭 pipefail
         set +o pipefail
-        # 与 android/app/build.gradle 中的 ndkVersion 保持一致
-        yes | sdkmanager "build-tools;29.0.3" "ndk;27.0.12077973" "cmake;3.22.1"
+        yes | sdkmanager --sdk_root="${SDK_ROOT}" "build-tools;29.0.3" "ndk;${NDK_VERSION}" "cmake;3.22.1"
         set -o pipefail
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+
+        NDK_DIR="${SDK_ROOT}/ndk/${NDK_VERSION}"
+        if [ ! -d "${NDK_DIR}" ]; then
+          echo "错误：NDK 目录不存在：${NDK_DIR}"
+          echo "当前 ${SDK_ROOT}/ndk 目录："
+          ls -la "${SDK_ROOT}/ndk" || true
+          exit 1
+        fi
+
+        CLANG_PATH="$(find "${NDK_DIR}/toolchains/llvm/prebuilt" -maxdepth 3 -type f -name clang -print -quit 2>/dev/null || true)"
+        if [ -z "${CLANG_PATH}" ]; then
+          echo "错误：Android NDK clang 未找到（Flutter 需要它）：${NDK_DIR}"
+          echo "toolchains/llvm/prebuilt 目录："
+          ls -la "${NDK_DIR}/toolchains/llvm/prebuilt" || true
+          exit 1
+        fi
+        echo "NDK clang: ${CLANG_PATH}"
+
+        {
+          echo "ANDROID_SDK_ROOT=${SDK_ROOT}"
+          echo "ANDROID_HOME=${SDK_ROOT}"
+          echo "ANDROID_NDK_HOME=${NDK_DIR}"
+          echo "ANDROID_NDK_ROOT=${NDK_DIR}"
+          echo "NDK_HOME=${NDK_DIR}"
+        } >> "$GITHUB_ENV"
     
     - name: Build and Sign Android
       id: build
