@@ -7,6 +7,22 @@ pluginManagement {
         return flutterSdkPath
     }()
 
+    def flutterVersionFile = file("$flutterSdkPath/version")
+    if (!flutterVersionFile.exists()) {
+        def flutterVersionJson = file("$flutterSdkPath/bin/cache/flutter.version.json")
+        if (flutterVersionJson.exists()) {
+            try {
+                def json = new groovy.json.JsonSlurper().parseText(flutterVersionJson.text)
+                def resolvedVersion = json.frameworkVersion ?: json.flutterVersion
+                if (resolvedVersion != null) {
+                    flutterVersionFile.text = resolvedVersion.toString().trim()
+                }
+            } catch (Exception e) {
+                println("Warning: unable to generate Flutter version file at ${flutterVersionFile.path}: ${e.message}")
+            }
+        }
+    }
+
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {

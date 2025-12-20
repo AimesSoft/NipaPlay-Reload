@@ -8,8 +8,8 @@ plugins {
 android {
     namespace = "com.aimessoft.nipaplay"
     compileSdk = flutter.compileSdkVersion
-    // fvp 0.33.1 构建链依赖 NDK 26.1，直接指定避免在CI上重复安装多个版本导致磁盘耗尽
-    ndkVersion = "26.1.10909125"
+    // 多个插件要求 NDK 27.0.12077973，固定版本避免安装多版本导致磁盘耗尽
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
