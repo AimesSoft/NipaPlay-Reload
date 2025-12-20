@@ -550,12 +550,35 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
   String _normalizeBaseUrl(String url) {
     var normalized = url.trim();
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    if (normalized.isEmpty) return normalized;
+
+    final hasScheme = normalized.contains('://');
+    if (!hasScheme) {
       normalized = 'http://$normalized';
     }
+
+    // 先去掉末尾斜杠，避免 Uri.parse 解析 path 导致的歧义。
     if (normalized.endsWith('/')) {
       normalized = normalized.substring(0, normalized.length - 1);
     }
+
+    try {
+      final uri = Uri.parse(normalized);
+
+      // 用户未显式指定端口时：若是局域网/本机地址，则默认走 NipaPlay 远程访问默认端口 1180。
+      if (!uri.hasPort &&
+          uri.scheme == 'http' &&
+          _shouldBypassProxy(uri.host)) {
+        normalized = uri.replace(port: 1180).toString();
+      }
+    } catch (_) {
+      // 若解析失败，保留原始输入（上层会在请求时给出错误提示）
+    }
+
+    if (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+
     return normalized;
   }
 

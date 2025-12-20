@@ -9,7 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:nipaplay/utils/storage_service.dart';
 import 'web_api_service.dart';
 import 'package:nipaplay/utils/asset_helper.dart';
-import 'package:flutter/foundation.dart';
+import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 
 class WebServerService {
   // 兼容旧版本：历史上使用 web_server_enabled 来表示“自动启动”
@@ -22,6 +22,8 @@ class WebServerService {
   bool _isRunning = false;
   bool _autoStart = false;
   final WebApiService _webApiService = WebApiService();
+  final NipaPlayLanDiscoveryResponder _lanDiscoveryResponder =
+      NipaPlayLanDiscoveryResponder();
 
   bool get isRunning => _isRunning;
   int get port => _port;
@@ -81,11 +83,13 @@ class WebServerService {
       _server = await shelf_io.serve(handler, '0.0.0.0', _port);
       _isRunning = true;
       print('Web server started on port ${_server!.port}');
+      await _lanDiscoveryResponder.start(webPort: _server!.port);
       await saveSettings();
       return true;
     } catch (e) {
       print('Failed to start web server: $e');
       _isRunning = false;
+      await _lanDiscoveryResponder.stop();
       return false;
     }
   }
@@ -95,6 +99,7 @@ class WebServerService {
       await _server!.close(force: true);
       _server = null;
       _isRunning = false;
+      await _lanDiscoveryResponder.stop();
       print('Web server stopped.');
       await saveSettings();
     }

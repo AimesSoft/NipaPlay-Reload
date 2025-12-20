@@ -235,7 +235,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
         LoginField(
           key: 'baseUrl',
           label: '访问地址',
-          hint: '例如：http://192.168.1.100:1180',
+          hint: '例如：192.168.1.100（默认1180）或 192.168.1.100:2345',
         ),
       ],
       loginButtonText: '添加',

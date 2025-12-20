@@ -1096,7 +1096,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       builder: (context) => IOS26AlertDialog(
         title: '添加NipaPlay共享客户端',
         input: const AdaptiveAlertDialogInput(
-          placeholder: '例如：http://192.168.1.100:1180',
+          placeholder: '例如：192.168.1.100（默认1180）或 192.168.1.100:2345',
           initialValue: '',
           keyboardType: TextInputType.url,
         ),
