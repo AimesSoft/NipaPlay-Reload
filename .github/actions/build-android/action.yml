@@ -117,7 +117,8 @@ runs:
       shell: bash
       run: |
         set +o pipefail
-        yes | sdkmanager "build-tools;29.0.3" "ndk;26.1.10909125" "cmake;3.22.1"
+        # 与 android/app/build.gradle 中的 ndkVersion 保持一致
+        yes | sdkmanager "build-tools;29.0.3" "ndk;27.0.12077973" "cmake;3.22.1"
         set -o pipefail
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
