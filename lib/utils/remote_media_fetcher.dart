@@ -41,6 +41,7 @@ class RemoteMediaFetcher {
 
     final client = IOClient(_createHttpClientForUri(originalUri));
     try {
+      String? resolvedFileName;
       int? fileSize;
 
       // 尝试 HEAD 获取 Content-Length
@@ -53,6 +54,7 @@ class RemoteMediaFetcher {
 
         if (headResponse.statusCode >= 200 && headResponse.statusCode < 400) {
           fileSize = _parseContentLength(headResponse.headers);
+          resolvedFileName ??= _parseContentDispositionFileName(headResponse.headers);
         } else {
           debugPrint('RemoteMediaFetcher: HEAD 请求失败 (HTTP ${headResponse.statusCode})');
         }
@@ -79,6 +81,7 @@ class RemoteMediaFetcher {
         }
 
         fileSize ??= _parseContentRange(rangeStreamed.headers) ?? rangeStreamed.contentLength;
+        resolvedFileName ??= _parseContentDispositionFileName(rangeStreamed.headers);
         headBytes = await _readLimitedBytes(rangeStreamed.stream, maxHashLength);
       } catch (e) {
         debugPrint('RemoteMediaFetcher: Range 请求异常: $e');
@@ -104,7 +107,7 @@ class RemoteMediaFetcher {
       final expectedBytes = math.min(fileSize, maxHashLength);
       final hasFullRequiredData = headBytes.length >= expectedBytes;
 
-      final fileName = _extractFileNameFromUri(originalUri);
+      final fileName = resolvedFileName ?? _extractFileNameFromUri(originalUri);
       final hash = _computeHash(headBytes, expectedBytes);
 
       if (!hasFullRequiredData) {
@@ -238,6 +241,22 @@ class RemoteMediaFetcher {
   }
 
   static String _extractFileNameFromUri(Uri uri) {
+    final queryPath = uri.queryParameters['path'] ??
+        uri.queryParameters['filePath'] ??
+        uri.queryParameters['file'];
+    if (queryPath != null) {
+      final trimmed = queryPath.trim();
+      if (trimmed.isNotEmpty) {
+        final lastSlash = trimmed.lastIndexOf('/');
+        final lastBackslash = trimmed.lastIndexOf('\\');
+        final cutIndex = math.max(lastSlash, lastBackslash);
+        final candidate = cutIndex >= 0 ? trimmed.substring(cutIndex + 1) : trimmed;
+        if (candidate.trim().isNotEmpty) {
+          return candidate.trim();
+        }
+      }
+    }
+
     if (uri.pathSegments.isNotEmpty) {
       for (var i = uri.pathSegments.length - 1; i >= 0; i--) {
         final segment = uri.pathSegments[i];
@@ -251,6 +270,67 @@ class RemoteMediaFetcher {
       return lastSlash >= 0 ? uri.path.substring(lastSlash + 1) : uri.path;
     }
     return 'video';
+  }
+
+  static String? _parseContentDispositionFileName(Map<String, String> headers) {
+    String? disposition;
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == 'content-disposition') {
+        disposition = entry.value;
+        break;
+      }
+    }
+
+    if (disposition == null || disposition.trim().isEmpty) {
+      return null;
+    }
+
+    final starMatch = RegExp(
+      r'filename\*\s*=\s*([^;]+)',
+      caseSensitive: false,
+    ).firstMatch(disposition);
+    if (starMatch != null) {
+      final rawValue = starMatch.group(1)?.trim();
+      if (rawValue != null && rawValue.isNotEmpty) {
+        final cleaned = _stripQuotes(rawValue);
+        final parts = cleaned.split("''");
+        final encodedPart = parts.length == 2 ? parts[1] : cleaned;
+        try {
+          final decoded = Uri.decodeComponent(encodedPart);
+          if (decoded.trim().isNotEmpty) {
+            return decoded.trim();
+          }
+        } catch (_) {
+          // ignore
+        }
+      }
+    }
+
+    final nameMatch = RegExp(
+      r'filename\s*=\s*([^;]+)',
+      caseSensitive: false,
+    ).firstMatch(disposition);
+    if (nameMatch != null) {
+      final rawValue = nameMatch.group(1)?.trim();
+      if (rawValue != null && rawValue.isNotEmpty) {
+        final cleaned = _stripQuotes(rawValue);
+        if (cleaned.trim().isNotEmpty) {
+          return cleaned.trim();
+        }
+      }
+    }
+
+    return null;
+  }
+
+  static String _stripQuotes(String value) {
+    var cleaned = value.trim();
+    if (cleaned.length >= 2 &&
+        ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+            (cleaned.startsWith("'") && cleaned.endsWith("'")))) {
+      cleaned = cleaned.substring(1, cleaned.length - 1);
+    }
+    return cleaned;
   }
 
   static String? _buildBasicAuthHeader(Uri uri) {

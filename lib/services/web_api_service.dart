@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'bangumi_service.dart';
@@ -8,24 +9,29 @@ import 'search_service.dart'; // 导入SearchService
 import 'package:flutter/foundation.dart'; // 导入debugPrint
 import '../providers/service_provider.dart';
 import 'local_media_share_api.dart';
+import 'local_media_management_api.dart';
 
 class WebApiService {
   final Router _router = Router();
-  final SearchService _searchService = SearchService.instance; // 获取SearchService实例
+  final SearchService _searchService =
+      SearchService.instance; // 获取SearchService实例
   final LocalMediaShareApi _localMediaShareApi = LocalMediaShareApi();
+  final LocalMediaManagementApi _localMediaManagementApi =
+      LocalMediaManagementApi();
 
   WebApiService() {
+    _router.get('/info', handleInfoRequest);
     _router.get('/bangumi/calendar', handleBangumiCalendarRequest);
     _router.get('/bangumi/detail/<id>', handleBangumiDetailRequest);
     _router.get('/danmaku/video_info', handleVideoInfoRequest);
     _router.get('/danmaku/load', handleDanmakuLoadRequest);
     _router.get('/image_proxy', handleImageProxyRequest);
-    
+
     // 新增搜索相关的API路由
     _router.get('/search/config', handleSearchConfigRequest);
     _router.post('/search/by-tags', handleSearchByTagsRequest);
     _router.post('/search/advanced', handleAdvancedSearchRequest);
-    
+
     // 弹弹play账号相关API路由
     _router.get('/dandanplay/login_status', handleLoginStatusRequest);
     _router.post('/dandanplay/login', handleLoginRequest);
@@ -35,16 +41,40 @@ class WebApiService {
     _router.post('/dandanplay/send_danmaku', handleSendDanmakuRequest);
     _router.post('/dandanplay/add_play_history', handleAddPlayHistoryRequest);
     _router.post('/dandanplay/add_favorite', handleAddFavoriteRequest);
-    _router.delete('/dandanplay/remove_favorite/<animeId>', handleRemoveFavoriteRequest);
-    
+    _router.delete(
+        '/dandanplay/remove_favorite/<animeId>', handleRemoveFavoriteRequest);
+
     // 本地媒体库相关API路由
     _router.get('/media/libraries', handleGetLibrariesRequest);
     _router.get('/media/local/items', handleGetLocalMediaItemsRequest);
-    _router.get('/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
+    _router.get(
+        '/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
     _router.mount('/media/local/share/', _localMediaShareApi.router);
+    _router.mount('/media/local/manage/', _localMediaManagementApi.router);
   }
 
   Handler get handler => _router;
+
+  Future<Response> handleInfoRequest(Request request) async {
+    try {
+      return Response.ok(
+        json.encode({
+          'success': true,
+          'app': 'NipaPlay',
+          'hostname': Platform.localHostname,
+          'os': Platform.operatingSystem,
+          'features': {
+            'share': true,
+            'manage': true,
+          },
+        }),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+          body: 'Error getting server info: $e');
+    }
+  }
 
   Future<Response> handleBangumiCalendarRequest(Request request) async {
     try {
@@ -73,7 +103,8 @@ class WebApiService {
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      return Response.internalServerError(body: 'Error getting anime details: $e');
+      return Response.internalServerError(
+          body: 'Error getting anime details: $e');
     }
   }
 
@@ -93,12 +124,14 @@ class WebApiService {
         // 解码失败（非法的Base64格式），则假定它是一个未经编码的普通URL
         imageUrl = urlParam;
       }
-      
+
       final response = await http.get(Uri.parse(imageUrl));
       if (response.statusCode == 200) {
         return Response.ok(
           response.bodyBytes,
-          headers: {'Content-Type': response.headers['content-type'] ?? 'image/jpeg'},
+          headers: {
+            'Content-Type': response.headers['content-type'] ?? 'image/jpeg'
+          },
         );
       } else {
         return Response(response.statusCode, body: 'Failed to fetch image');
@@ -117,8 +150,10 @@ class WebApiService {
         'success': true,
         'errorCode': 0,
         'errorMessage': null,
-        'tags': config.tags.map((t) => {'key': t.key, 'value': t.value}).toList(),
-        'types': config.types.map((t) => {'key': t.key, 'value': t.value}).toList(),
+        'tags':
+            config.tags.map((t) => {'key': t.key, 'value': t.value}).toList(),
+        'types':
+            config.types.map((t) => {'key': t.key, 'value': t.value}).toList(),
         'minYear': config.minYear,
         'maxYear': config.maxYear,
       };
@@ -127,7 +162,8 @@ class WebApiService {
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      return Response.internalServerError(body: 'Error getting search config: $e');
+      return Response.internalServerError(
+          body: 'Error getting search config: $e');
     }
   }
 
@@ -166,17 +202,18 @@ class WebApiService {
     try {
       final body = await request.readAsString();
       final Map<String, dynamic> params = json.decode(body);
-      
+
       final result = await _searchService.searchAnimeAdvanced(
         keyword: params['keyword'],
         type: params['type'],
-        tagIds: params['tagIds'] != null ? List<int>.from(params['tagIds']) : null,
+        tagIds:
+            params['tagIds'] != null ? List<int>.from(params['tagIds']) : null,
         year: params['year'],
         minRate: params['minRate'] ?? 0,
         maxRate: params['maxRate'] ?? 10,
         sort: params['sort'] ?? 0,
       );
-      
+
       final resultJson = {
         'success': true,
         'bangumis': result.animes.map((a) => a.toJson()).toList(), // 修正字段名
@@ -187,7 +224,8 @@ class WebApiService {
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      return Response.internalServerError(body: 'Error with advanced search: $e');
+      return Response.internalServerError(
+          body: 'Error with advanced search: $e');
     }
   }
 
@@ -199,13 +237,14 @@ class WebApiService {
         'userName': DandanplayService.userName,
         'screenName': DandanplayService.screenName,
       };
-      
+
       return Response.ok(
         json.encode(status),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      return Response.internalServerError(body: 'Error getting login status: $e');
+      return Response.internalServerError(
+          body: 'Error getting login status: $e');
     }
   }
 
@@ -215,13 +254,13 @@ class WebApiService {
       final Map<String, dynamic> data = json.decode(body);
       final String username = data['username'] ?? '';
       final String password = data['password'] ?? '';
-      
+
       if (username.isEmpty || password.isEmpty) {
         return Response.badRequest(body: 'Username and password are required');
       }
-      
+
       final result = await DandanplayService.login(username, password);
-      
+
       return Response.ok(
         json.encode(result),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -234,7 +273,7 @@ class WebApiService {
   Future<Response> handleLogoutRequest(Request request) async {
     try {
       await DandanplayService.clearLoginInfo();
-      
+
       return Response.ok(
         json.encode({'success': true, 'message': 'Logged out successfully'}),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -248,29 +287,30 @@ class WebApiService {
     try {
       final fromDateStr = request.url.queryParameters['fromDate'];
       final toDateStr = request.url.queryParameters['toDate'];
-      
+
       DateTime? fromDate;
       DateTime? toDate;
-      
+
       if (fromDateStr != null) {
         fromDate = DateTime.tryParse(fromDateStr);
       }
-      
+
       if (toDateStr != null) {
         toDate = DateTime.tryParse(toDateStr);
       }
-      
+
       final result = await DandanplayService.getUserPlayHistory(
         fromDate: fromDate,
         toDate: toDate,
       );
-      
+
       return Response.ok(
         json.encode(result),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      return Response.internalServerError(body: 'Error getting play history: $e');
+      return Response.internalServerError(
+          body: 'Error getting play history: $e');
     }
   }
 
@@ -278,11 +318,11 @@ class WebApiService {
     try {
       final onlyOnAirParam = request.url.queryParameters['onlyOnAir'];
       final onlyOnAir = onlyOnAirParam == 'true';
-      
+
       final result = await DandanplayService.getUserFavorites(
         onlyOnAir: onlyOnAir,
       );
-      
+
       return Response.ok(
         json.encode(result),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -296,17 +336,21 @@ class WebApiService {
     try {
       final body = await request.readAsString();
       final Map<String, dynamic> data = json.decode(body);
-      
+
       final episodeId = data['episodeId'] as int?;
       final time = (data['time'] as num?)?.toDouble();
       final mode = data['mode'] as int?;
       final color = data['color'] as int?;
       final comment = data['comment'] as String?;
-      
-      if (episodeId == null || time == null || mode == null || color == null || comment == null) {
+
+      if (episodeId == null ||
+          time == null ||
+          mode == null ||
+          color == null ||
+          comment == null) {
         return Response.badRequest(body: 'Missing required parameters');
       }
-      
+
       final result = await DandanplayService.sendDanmaku(
         episodeId: episodeId,
         time: time,
@@ -314,7 +358,7 @@ class WebApiService {
         color: color,
         comment: comment,
       );
-      
+
       return Response.ok(
         json.encode(result),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -328,27 +372,28 @@ class WebApiService {
     try {
       final body = await request.readAsString();
       final Map<String, dynamic> data = json.decode(body);
-      
+
       final episodeIdList = List<int>.from(data['episodeIdList'] ?? []);
       final addToFavorite = data['addToFavorite'] as bool? ?? false;
       final rating = data['rating'] as int? ?? 0;
-      
+
       if (episodeIdList.isEmpty) {
         return Response.badRequest(body: 'Episode ID list cannot be empty');
       }
-      
+
       final result = await DandanplayService.addPlayHistory(
         episodeIdList: episodeIdList,
         addToFavorite: addToFavorite,
         rating: rating,
       );
-      
+
       return Response.ok(
         json.encode(result),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      return Response.internalServerError(body: 'Error adding play history: $e');
+      return Response.internalServerError(
+          body: 'Error adding play history: $e');
     }
   }
 
@@ -356,23 +401,23 @@ class WebApiService {
     try {
       final body = await request.readAsString();
       final Map<String, dynamic> data = json.decode(body);
-      
+
       final animeId = data['animeId'] as int?;
       final favoriteStatus = data['favoriteStatus'] as String?;
       final rating = data['rating'] as int? ?? 0;
       final comment = data['comment'] as String?;
-      
+
       if (animeId == null) {
         return Response.badRequest(body: 'Anime ID is required');
       }
-      
+
       final result = await DandanplayService.addFavorite(
         animeId: animeId,
         favoriteStatus: favoriteStatus,
         rating: rating,
         comment: comment,
       );
-      
+
       return Response.ok(
         json.encode(result),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -385,13 +430,13 @@ class WebApiService {
   Future<Response> handleRemoveFavoriteRequest(Request request) async {
     try {
       final animeId = int.tryParse(request.params['animeId'] ?? '');
-      
+
       if (animeId == null) {
         return Response.badRequest(body: 'Invalid or missing anime ID');
       }
-      
+
       final result = await DandanplayService.removeFavorite(animeId);
-      
+
       return Response.ok(
         json.encode(result),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
@@ -422,7 +467,8 @@ class WebApiService {
     final animeId = int.tryParse(request.url.queryParameters['animeId'] ?? '');
 
     if (episodeId == null || animeId == null) {
-      return Response.badRequest(body: 'Missing or invalid "episodeId" or "animeId" parameters');
+      return Response.badRequest(
+          body: 'Missing or invalid "episodeId" or "animeId" parameters');
     }
 
     try {
@@ -444,15 +490,17 @@ class WebApiService {
 
       // 1. 获取本地媒体库 (通过观看历史聚合)
       final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
-      if (watchHistoryProvider.isLoaded && watchHistoryProvider.history.isNotEmpty) {
+      if (watchHistoryProvider.isLoaded &&
+          watchHistoryProvider.history.isNotEmpty) {
         final localMediaCount = watchHistoryProvider.history
-            .where((item) => !item.filePath.startsWith('jellyfin://') && 
-                           !item.filePath.startsWith('emby://'))
+            .where((item) =>
+                !item.filePath.startsWith('jellyfin://') &&
+                !item.filePath.startsWith('emby://'))
             .map((item) => item.animeId)
             .where((animeId) => animeId != null)
             .toSet()
             .length;
-            
+
         allLibraries.add({
           'id': 'local',
           'name': '本地媒体',
@@ -464,24 +512,28 @@ class WebApiService {
       // 2. 获取Jellyfin媒体库
       final jellyfinProvider = ServiceProvider.jellyfinProvider;
       if (jellyfinProvider.isConnected) {
-        final jellyfinLibs = jellyfinProvider.availableLibraries.map((lib) => {
-          'id': lib.id,
-          'name': lib.name,
-          'type': 'jellyfin',
-          'itemCount': lib.totalItems ?? 0,
-        }).toList();
+        final jellyfinLibs = jellyfinProvider.availableLibraries
+            .map((lib) => {
+                  'id': lib.id,
+                  'name': lib.name,
+                  'type': 'jellyfin',
+                  'itemCount': lib.totalItems ?? 0,
+                })
+            .toList();
         allLibraries.addAll(jellyfinLibs);
       }
 
       // 3. 获取Emby媒体库
       final embyProvider = ServiceProvider.embyProvider;
       if (embyProvider.isConnected) {
-        final embyLibs = embyProvider.availableLibraries.map((lib) => {
-          'id': lib.id,
-          'name': lib.name,
-          'type': 'emby',
-          'itemCount': lib.totalItems ?? 0,
-        }).toList();
+        final embyLibs = embyProvider.availableLibraries
+            .map((lib) => {
+                  'id': lib.id,
+                  'name': lib.name,
+                  'type': 'emby',
+                  'itemCount': lib.totalItems ?? 0,
+                })
+            .toList();
         allLibraries.addAll(embyLibs);
       }
 
@@ -500,7 +552,7 @@ class WebApiService {
   Future<Response> handleGetLocalMediaItemsRequest(Request request) async {
     try {
       final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
-      
+
       if (!watchHistoryProvider.isLoaded) {
         return Response.ok(
           json.encode([]), // 返回空数组，与新番更新API格式一致
@@ -510,8 +562,9 @@ class WebApiService {
 
       // 过滤本地媒体项目
       final localHistory = watchHistoryProvider.history
-          .where((item) => !item.filePath.startsWith('jellyfin://') && 
-                         !item.filePath.startsWith('emby://'))
+          .where((item) =>
+              !item.filePath.startsWith('jellyfin://') &&
+              !item.filePath.startsWith('emby://'))
           .toList();
 
       // 按动画ID聚合，保留最新的观看记录
@@ -520,7 +573,8 @@ class WebApiService {
         if (item.animeId != null) {
           final animeId = item.animeId!;
           if (latestHistoryItemMap.containsKey(animeId)) {
-            if (item.lastWatchTime.isAfter(latestHistoryItemMap[animeId]['lastWatchTime'])) {
+            if (item.lastWatchTime
+                .isAfter(latestHistoryItemMap[animeId]['lastWatchTime'])) {
               latestHistoryItemMap[animeId] = {
                 'animeId': animeId,
                 'animeName': item.animeName,
@@ -545,14 +599,16 @@ class WebApiService {
 
       // 按最后观看时间排序
       final uniqueItems = latestHistoryItemMap.values.toList();
-      uniqueItems.sort((a, b) => b['lastWatchTime'].compareTo(a['lastWatchTime']));
+      uniqueItems
+          .sort((a, b) => b['lastWatchTime'].compareTo(a['lastWatchTime']));
 
       // 获取每个动画的详细信息，构建完整的BangumiAnime对象
       final List<Map<String, dynamic>> completeAnimes = [];
-      
+
       for (var item in uniqueItems) {
         try {
-          final animeDetail = await BangumiService.instance.getAnimeDetails(item['animeId']);
+          final animeDetail =
+              await BangumiService.instance.getAnimeDetails(item['animeId']);
           // 构建完整的BangumiAnime JSON，与新番更新API格式一致
           completeAnimes.add({
             'id': animeDetail.id,
@@ -615,48 +671,55 @@ class WebApiService {
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      return Response.internalServerError(body: 'Error getting local media items: $e');
+      return Response.internalServerError(
+          body: 'Error getting local media items: $e');
     }
   }
 
   Future<Response> handleGetLocalMediaItemDetailRequest(Request request) async {
     final animeIdStr = request.params['animeId'];
     final animeId = int.tryParse(animeIdStr ?? '');
-    
+
     if (animeId == null) {
       return Response.badRequest(body: 'Invalid anime ID');
     }
 
     try {
       // 获取番组详细信息
-      final animeDetail = await BangumiService.instance.getAnimeDetails(animeId);
-      
+      final animeDetail =
+          await BangumiService.instance.getAnimeDetails(animeId);
+
       // 获取该动画的所有观看历史
       final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
       final animeHistory = watchHistoryProvider.history
-          .where((item) => item.animeId == animeId && 
-                         !item.filePath.startsWith('jellyfin://') && 
-                         !item.filePath.startsWith('emby://'))
+          .where((item) =>
+              item.animeId == animeId &&
+              !item.filePath.startsWith('jellyfin://') &&
+              !item.filePath.startsWith('emby://'))
           .toList();
-      
+
       // 按时间排序
       animeHistory.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
-      
-      final episodes = animeHistory.map((item) => {
-        'id': item.hashCode.toString(),
-        'title': item.episodeTitle ?? '未知剧集',
-        'filePath': item.filePath,
-        'lastWatchTime': item.lastWatchTime.toIso8601String(),
-        'progress': item.watchProgress,
-        'duration': item.duration,
-      }).toList();
+
+      final episodes = animeHistory
+          .map((item) => {
+                'id': item.hashCode.toString(),
+                'title': item.episodeTitle ?? '未知剧集',
+                'filePath': item.filePath,
+                'lastWatchTime': item.lastWatchTime.toIso8601String(),
+                'progress': item.watchProgress,
+                'duration': item.duration,
+              })
+          .toList();
 
       final detailData = {
         'success': true,
         'item': {
           'id': animeId.toString(),
           'animeId': animeId,
-          'name': animeDetail.nameCn.isNotEmpty ? animeDetail.nameCn : animeDetail.name,
+          'name': animeDetail.nameCn.isNotEmpty
+              ? animeDetail.nameCn
+              : animeDetail.name,
           'nameOriginal': animeDetail.name,
           'summary': animeDetail.summary,
           'imageUrl': animeDetail.imageUrl,
@@ -665,7 +728,9 @@ class WebApiService {
           'airDate': animeDetail.airDate,
           'episodes': episodes,
           'type': 'anime',
-          'source': episodes.isNotEmpty ? _getSourceFromFilePath(episodes.first['filePath'] as String) : 'local',
+          'source': episodes.isNotEmpty
+              ? _getSourceFromFilePath(episodes.first['filePath'] as String)
+              : 'local',
         },
       };
 
@@ -674,15 +739,18 @@ class WebApiService {
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      return Response.internalServerError(body: 'Error getting anime detail: $e');
+      return Response.internalServerError(
+          body: 'Error getting anime detail: $e');
     }
   }
 
   String? _getSourceFromFilePath(String filePath) {
     if (filePath.startsWith('jellyfin://')) return 'Jellyfin';
     if (filePath.startsWith('emby://')) return 'Emby';
-    if (filePath.contains('SMB://') || filePath.contains('smb://')) return 'SMB';
-    if (filePath.startsWith('http://') || filePath.startsWith('https://')) return 'Network';
+    if (filePath.contains('SMB://') || filePath.contains('smb://'))
+      return 'SMB';
+    if (filePath.startsWith('http://') || filePath.startsWith('https://'))
+      return 'Network';
     return 'Local';
   }
 }

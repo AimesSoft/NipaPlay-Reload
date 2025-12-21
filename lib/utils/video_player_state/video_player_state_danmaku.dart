@@ -562,38 +562,57 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   }
 
   // 显示发送弹幕对话框
-  void showSendDanmakuDialog() {
+  Future<void> showSendDanmakuDialog() async {
     debugPrint('[VideoPlayerState] 快捷键触发发送弹幕');
+
+    if (_context == null) {
+      debugPrint('[VideoPlayerState] Context为空，无法显示发送弹幕对话框');
+      return;
+    }
 
     // 先检查是否已经有弹幕对话框在显示
     final dialogManager = DanmakuDialogManager();
 
     // 如果已经在显示弹幕对话框，则关闭它，否则显示新对话框
     if (!dialogManager.handleSendDanmakuHotkey()) {
+      final wasPlaying = player.state == PlaybackState.playing;
+
       // 对话框未显示，显示新对话框
       // 检查是否能发送弹幕
       if (episodeId == null) {
-        if (_context != null) {
-          // 使用BlurSnackBar显示提示
-          BlurSnackBar.show(_context!, '无法获取剧集信息，无法发送弹幕');
-        }
+        // 使用BlurSnackBar显示提示
+        BlurSnackBar.show(_context!, '无法获取剧集信息，无法发送弹幕');
         return;
       }
 
-      DanmakuDialogManager().showSendDanmakuDialog(
-        context: _context!,
-        episodeId: episodeId!,
-        currentTime: position.inSeconds.toDouble(),
-        onDanmakuSent: (danmaku) {
-          addDanmakuToNewTrack(danmaku);
-        },
-        onDialogClosed: () {
-          if (player.state == PlaybackState.playing) {
-            player.playDirectly();
+      if (wasPlaying) {
+        try {
+          await player.pauseDirectly();
+        } catch (e) {
+          debugPrint('[VideoPlayerState] 暂停失败: $e');
+        }
+      }
+
+      try {
+        await DanmakuDialogManager().showSendDanmakuDialog(
+          context: _context!,
+          episodeId: episodeId!,
+          currentTime: position.inSeconds.toDouble(),
+          onDanmakuSent: (danmaku) {
+            addDanmakuToNewTrack(danmaku);
+          },
+          onDialogClosed: () {},
+          wasPlaying: wasPlaying,
+        );
+      } finally {
+        if (wasPlaying) {
+          try {
+            await player.playDirectly();
+          } catch (e) {
+            debugPrint('[VideoPlayerState] 恢复播放失败: $e');
           }
-        },
-        wasPlaying: player.state == PlaybackState.playing,
-      );
+        }
+      }
     }
   }
 

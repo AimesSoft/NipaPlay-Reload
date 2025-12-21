@@ -10,6 +10,7 @@ class LocalMediaShareApi {
     router.get('/animes', _handleListAnimes);
     router.get('/animes/<animeId|[0-9]+>', _handleAnimeDetail);
     router.get('/episodes/<shareId>/stream', _handleEpisodeStream);
+    router.add('HEAD', '/episodes/<shareId>/stream', _handleEpisodeStreamHead);
     router.post('/episodes/<shareId>/progress', _handleUpdateEpisodeProgress);
   }
 
@@ -62,6 +63,28 @@ class LocalMediaShareApi {
 
     try {
       return await _service.buildStreamResponse(request, episode);
+    } catch (e) {
+      return Response.internalServerError(body: 'Error streaming shared episode: $e');
+    }
+  }
+
+  Future<Response> _handleEpisodeStreamHead(Request request) async {
+    final shareId = request.params['shareId'];
+    if (shareId == null || shareId.isEmpty) {
+      return Response.badRequest(body: 'Missing shareId');
+    }
+
+    final episode = _service.getEpisodeByShareId(shareId);
+    if (episode == null) {
+      return Response.notFound('Episode not found');
+    }
+
+    try {
+      return await _service.buildStreamResponse(
+        request,
+        episode,
+        headOnly: true,
+      );
     } catch (e) {
       return Response.internalServerError(body: 'Error streaming shared episode: $e');
     }

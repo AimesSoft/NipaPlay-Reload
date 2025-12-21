@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
@@ -532,6 +533,12 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                       icon: CupertinoIcons.collections,
                       onPressed: () => _showMediaLibraryBottomSheet(provider),
                       primary: true,
+                    ),
+                    _buildActionButton(
+                      context,
+                      label: '库管理',
+                      icon: CupertinoIcons.folder,
+                      onPressed: () => _showRemoteLibraryManagementBottomSheet(provider),
                     ),
                     _buildActionButton(
                       context,
@@ -1073,13 +1080,23 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     );
   }
 
+  Future<void> _showRemoteLibraryManagementBottomSheet(
+      SharedRemoteLibraryProvider provider) async {
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '共享库管理',
+      floatingTitle: true,
+      child: _SharedRemoteLibraryManagementContent(provider: provider),
+    );
+  }
+
   Future<void> _openAddHostDialog(SharedRemoteLibraryProvider provider) async {
     final result = await showCupertinoDialog<String>(
       context: context,
       builder: (context) => IOS26AlertDialog(
         title: '添加NipaPlay共享客户端',
         input: const AdaptiveAlertDialogInput(
-          placeholder: '例如：http://192.168.1.100:1180',
+          placeholder: '例如：192.168.1.100（默认1180）或 192.168.1.100:2345',
           initialValue: '',
           keyboardType: TextInputType.url,
         ),
@@ -4620,5 +4637,831 @@ class _CupertinoMediaLibraryListPageState
       return '$baseUrl$imageUrl';
     }
     return '$baseUrl/$imageUrl';
+  }
+}
+
+class _SharedRemoteLibraryManagementContent extends StatefulWidget {
+  const _SharedRemoteLibraryManagementContent({required this.provider});
+
+  final SharedRemoteLibraryProvider provider;
+
+  @override
+  State<_SharedRemoteLibraryManagementContent> createState() =>
+      _SharedRemoteLibraryManagementContentState();
+}
+
+class _SharedRemoteLibraryManagementContentState
+    extends State<_SharedRemoteLibraryManagementContent> {
+  final ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0.0;
+  Timer? _pollTimer;
+  bool _pollRequestInFlight = false;
+  final Map<String, List<SharedRemoteFileEntry>> _expandedRemoteDirectories = {};
+  final Set<String> _loadingRemoteDirectories = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.provider.scannedFolders.isEmpty &&
+          widget.provider.scanStatus == null) {
+        widget.provider.refreshManagement(userInitiated: true).then((_) {
+          if (!mounted) return;
+          _maybeStartPolling(widget.provider);
+        });
+      } else {
+        _maybeStartPolling(widget.provider);
+      }
+    });
+  }
+
+  void _handleScroll() {
+    if (!mounted) return;
+    setState(() {
+      _scrollOffset = _scrollController.offset;
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _maybeStartPolling(SharedRemoteLibraryProvider provider) {
+    if (provider.scanStatus?.isScanning == true) {
+      _startPolling();
+    }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        _pollTimer?.cancel();
+        _pollTimer = null;
+        return;
+      }
+
+      final provider = widget.provider;
+      if (provider.scanStatus?.isScanning != true) {
+        _pollTimer?.cancel();
+        _pollTimer = null;
+        return;
+      }
+
+      if (_pollRequestInFlight) {
+        return;
+      }
+      _pollRequestInFlight = true;
+      provider.refreshScanStatus(showLoading: false).whenComplete(() {
+        _pollRequestInFlight = false;
+      });
+    });
+  }
+
+  Future<void> _toggleRemoteDirectory(
+    SharedRemoteLibraryProvider provider,
+    String directoryPath,
+  ) async {
+    final normalized = directoryPath.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    if (_expandedRemoteDirectories.containsKey(normalized)) {
+      setState(() {
+        _expandedRemoteDirectories.remove(normalized);
+      });
+      return;
+    }
+
+    await _loadRemoteDirectory(provider, normalized);
+  }
+
+  Future<void> _loadRemoteDirectory(
+    SharedRemoteLibraryProvider provider,
+    String directoryPath,
+  ) async {
+    if (_loadingRemoteDirectories.contains(directoryPath)) {
+      return;
+    }
+
+    setState(() {
+      _loadingRemoteDirectories.add(directoryPath);
+    });
+
+    try {
+      final entries = await provider.browseRemoteDirectory(directoryPath);
+      if (!mounted) return;
+      setState(() {
+        _expandedRemoteDirectories[directoryPath] = entries;
+        _loadingRemoteDirectories.remove(directoryPath);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingRemoteDirectories.remove(directoryPath);
+      });
+      AdaptiveSnackBar.show(
+        context,
+        message: '加载文件夹失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
+    }
+  }
+
+  List<Widget> _buildRemoteDirectoryChildren(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+    String directoryPath,
+    int depth,
+  ) {
+    final entries = _expandedRemoteDirectories[directoryPath] ?? const [];
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final secondaryLabelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+    if (entries.isEmpty) {
+      return [
+        Padding(
+          padding: EdgeInsets.fromLTRB(12.0 + depth * 16.0, 6, 0, 6),
+          child: Text(
+            '（空文件夹）',
+            style: TextStyle(color: secondaryLabelColor, fontSize: 12),
+          ),
+        ),
+      ];
+    }
+
+    final widgets = <Widget>[];
+    for (final entry in entries) {
+      final entryPath = entry.path;
+      final entryName = entry.name.isNotEmpty ? entry.name : entryPath;
+      final left = 12.0 + depth * 16.0;
+
+      if (entry.isDirectory) {
+        final expanded = _expandedRemoteDirectories.containsKey(entryPath);
+        final loading = _loadingRemoteDirectories.contains(entryPath);
+        widgets.add(
+          GestureDetector(
+            onTap: () => _toggleRemoteDirectory(provider, entryPath),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(left, 4, 8, 4),
+              child: Row(
+                children: [
+                  Icon(CupertinoIcons.folder, size: 18, color: secondaryLabelColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      entryName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13, color: labelColor),
+                    ),
+                  ),
+                  if (loading)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CupertinoActivityIndicator(radius: 7),
+                    )
+                  else
+                    Icon(
+                      expanded ? CupertinoIcons.chevron_down : CupertinoIcons.chevron_forward,
+                      size: 16,
+                      color: secondaryLabelColor,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+        if (expanded) {
+          widgets.addAll(_buildRemoteDirectoryChildren(context, provider, entryPath, depth + 1));
+        }
+        continue;
+      }
+
+      widgets.add(
+        GestureDetector(
+          onTap: () => _playRemoteFile(provider, entry),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(left, 4, 8, 4),
+            child: Row(
+              children: [
+                Icon(CupertinoIcons.play_circle, size: 18, color: secondaryLabelColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entryName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, color: labelColor),
+                      ),
+                      if (_remoteEntrySubtitle(entry) != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          _remoteEntrySubtitle(entry)!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: secondaryLabelColor),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  Future<void> _playRemoteFile(
+    SharedRemoteLibraryProvider provider,
+    SharedRemoteFileEntry entry,
+  ) async {
+    try {
+      final streamUrl = provider.buildRemoteFileStreamUri(entry.path).toString();
+      final name = entry.name.isNotEmpty ? entry.name : entry.path;
+      final title = p.basenameWithoutExtension(name);
+
+      final history = WatchHistoryItem(
+        filePath: streamUrl,
+        animeName: (entry.animeName?.trim().isNotEmpty == true)
+            ? entry.animeName!.trim()
+            : (title.isNotEmpty ? title : p.basenameWithoutExtension(entry.path)),
+        episodeTitle: entry.episodeTitle?.trim().isNotEmpty == true
+            ? entry.episodeTitle!.trim()
+            : null,
+        animeId: entry.animeId,
+        episodeId: entry.episodeId,
+        watchProgress: 0.0,
+        lastPosition: 0,
+        duration: 0,
+        lastWatchTime: DateTime.now(),
+      );
+
+      final playable = PlayableItem(
+        videoPath: history.filePath,
+        title: history.animeName,
+        subtitle: history.episodeTitle,
+        animeId: history.animeId,
+        episodeId: history.episodeId,
+        historyItem: history,
+      );
+
+      await PlaybackService().play(playable);
+      if (mounted) {
+        await context.read<WatchHistoryProvider>().refresh();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '播放失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
+    }
+  }
+
+  String? _remoteEntrySubtitle(SharedRemoteFileEntry entry) {
+    final hasIds = (entry.animeId ?? 0) > 0 && (entry.episodeId ?? 0) > 0;
+    if (!hasIds) {
+      return null;
+    }
+
+    final parts = <String>[];
+    final animeName = entry.animeName?.trim();
+    if (animeName != null && animeName.isNotEmpty) {
+      parts.add(animeName);
+    }
+    final episodeTitle = entry.episodeTitle?.trim();
+    if (episodeTitle != null && episodeTitle.isNotEmpty) {
+      parts.add(episodeTitle);
+    }
+
+    if (parts.isEmpty) {
+      return '已识别';
+    }
+    return parts.join(' - ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGroupedBackground,
+      context,
+    );
+    final titleOpacity = (1.0 - (_scrollOffset / 12.0)).clamp(0.0, 1.0);
+
+    return ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+      value: widget.provider,
+      child: Consumer<SharedRemoteLibraryProvider>(
+        builder: (context, provider, _) {
+          final sections = <Widget>[
+            _buildStatusCard(context, provider),
+            const SizedBox(height: 16),
+            _buildActionButtons(context, provider),
+            const SizedBox(height: 16),
+            _buildFolderSection(context, provider),
+            const SizedBox(height: 32),
+          ];
+
+          return CupertinoBottomSheetContentLayout(
+            controller: _scrollController,
+            backgroundColor: backgroundColor,
+            floatingTitleOpacity: titleOpacity,
+            sliversBuilder: (context, topSpacing) => [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 0),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate(sections),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStatusCard(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final secondaryLabelColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+
+    final status = provider.scanStatus;
+    final isScanning = status?.isScanning == true;
+    final message = status?.message ?? provider.managementErrorMessage ?? '';
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isScanning ? CupertinoIcons.arrow_2_circlepath : CupertinoIcons.folder,
+                size: 20,
+                color: labelColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isScanning ? '远程端正在扫描' : '共享库管理',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: labelColor,
+                ),
+              ),
+              const Spacer(),
+              if (provider.isManagementLoading)
+                const CupertinoActivityIndicator(radius: 10),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildStatusRow(
+            context,
+            label: '扫描文件夹',
+            value: '${provider.scannedFolders.length}',
+          ),
+          if (status != null) ...[
+            const SizedBox(height: 6),
+            _buildStatusRow(
+              context,
+              label: '进度',
+              value: '${(status.progress * 100).toStringAsFixed(0)}%',
+            ),
+          ],
+          if (message.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: secondaryLabelColor,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+  }) {
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final valueColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            style: TextStyle(color: labelColor, fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(color: valueColor, fontSize: 14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
+    final busy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _buildActionButton(
+          context,
+          label: '添加文件夹',
+          icon: CupertinoIcons.add_circled,
+          primary: true,
+          onPressed: busy ? null : () => _handleAddFolder(provider),
+        ),
+        _buildActionButton(
+          context,
+          label: '智能刷新',
+          icon: CupertinoIcons.refresh,
+          onPressed: busy ? null : () => _handleRescanAll(provider),
+        ),
+        _buildActionButton(
+          context,
+          label: '刷新状态',
+          icon: CupertinoIcons.arrow_down_doc,
+          onPressed: () => provider.refreshManagement(userInitiated: true),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool primary = false,
+  }) {
+    final color = primary
+        ? CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context)
+        : CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
+    final textColor = primary ? CupertinoColors.white : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    return CupertinoButton(
+      onPressed: onPressed,
+      color: color,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      borderRadius: BorderRadius.circular(14),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: textColor),
+          const SizedBox(width: 8),
+          Text(label, style: TextStyle(fontSize: 14, color: textColor)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFolderSection(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
+    final folders = provider.scannedFolders;
+    if (provider.isManagementLoading && folders.isEmpty) {
+      return const Center(child: CupertinoActivityIndicator());
+    }
+
+    if (folders.isEmpty) {
+      final subtitle = provider.managementErrorMessage?.isNotEmpty == true
+          ? provider.managementErrorMessage!
+          : '远程端尚未添加媒体文件夹。';
+      return _buildEmptyPlaceholder(
+        context,
+        icon: CupertinoIcons.folder,
+        title: '暂无文件夹',
+        subtitle: subtitle,
+      );
+    }
+
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final secondaryLabelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '扫描文件夹列表',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: labelColor,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...folders.map((folder) {
+          final busy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+          final statusColor = folder.exists
+              ? CupertinoDynamicColor.resolve(CupertinoColors.systemGreen, context)
+              : CupertinoDynamicColor.resolve(CupertinoColors.systemOrange, context);
+          final title = folder.name.isNotEmpty ? folder.name : folder.path;
+          final folderPath = folder.path;
+          final expanded = _expandedRemoteDirectories.containsKey(folderPath);
+          final loading = _loadingRemoteDirectories.contains(folderPath);
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: () => _toggleRemoteDirectory(provider, folderPath),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            CupertinoIcons.folder,
+                            size: 18,
+                            color: statusColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: labelColor,
+                              ),
+                            ),
+                          ),
+                          if (loading)
+                            const CupertinoActivityIndicator(radius: 8)
+                          else
+                            Icon(
+                              expanded ? CupertinoIcons.chevron_down : CupertinoIcons.chevron_forward,
+                              size: 16,
+                              color: secondaryLabelColor,
+                            ),
+                          const SizedBox(width: 4),
+                          CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            minSize: 32,
+                            onPressed: busy
+                                ? null
+                                : () => _handleScanFolder(provider, folderPath),
+                            child: Icon(
+                              CupertinoIcons.refresh,
+                              size: 18,
+                              color: busy ? secondaryLabelColor : labelColor,
+                            ),
+                          ),
+                          CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            minSize: 32,
+                            onPressed: busy
+                                ? null
+                                : () => _handleRemoveFolder(provider, folderPath),
+                            child: Icon(
+                              CupertinoIcons.delete,
+                              size: 18,
+                              color: busy
+                                  ? secondaryLabelColor
+                                  : CupertinoDynamicColor.resolve(
+                                      CupertinoColors.systemRed,
+                                      context,
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        folderPath,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.35,
+                          color: secondaryLabelColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (expanded)
+                ..._buildRemoteDirectoryChildren(context, provider, folderPath, 1),
+              const SizedBox(height: 12),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildEmptyPlaceholder(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    final iconColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
+    final titleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 52, color: iconColor),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: titleColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, height: 1.4, color: subtitleColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAddFolder(SharedRemoteLibraryProvider provider) async {
+    final result = await showCupertinoDialog<String>(
+      context: context,
+      builder: (_) => IOS26AlertDialog(
+        title: '添加媒体文件夹（远程）',
+        input: const AdaptiveAlertDialogInput(
+          placeholder: '例如：/Volumes/Media 或 D:\\Anime',
+          initialValue: '',
+          keyboardType: TextInputType.text,
+        ),
+        actions: [
+          AlertAction(
+            title: '取消',
+            style: AlertActionStyle.cancel,
+            onPressed: () {},
+          ),
+          AlertAction(
+            title: '添加并扫描',
+            style: AlertActionStyle.primary,
+            onPressed: () {},
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || result.trim().isEmpty) {
+      return;
+    }
+
+    await provider.addRemoteFolder(
+      folderPath: result.trim(),
+      scan: true,
+      skipPreviouslyMatchedUnwatched: false,
+    );
+
+    final error = provider.managementErrorMessage;
+    if (!mounted) return;
+    if (error != null && error.isNotEmpty) {
+      AdaptiveSnackBar.show(
+        context,
+        message: error,
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+
+    AdaptiveSnackBar.show(
+      context,
+      message: '已请求远程端开始扫描',
+      type: AdaptiveSnackBarType.success,
+    );
+    _maybeStartPolling(provider);
+  }
+
+  Future<void> _handleRescanAll(SharedRemoteLibraryProvider provider) async {
+    await provider.rescanRemoteAll(skipPreviouslyMatchedUnwatched: true);
+    final error = provider.managementErrorMessage;
+    if (!mounted) return;
+    if (error != null && error.isNotEmpty) {
+      AdaptiveSnackBar.show(
+        context,
+        message: error,
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+    AdaptiveSnackBar.show(
+      context,
+      message: '已请求远程端开始智能刷新',
+      type: AdaptiveSnackBarType.success,
+    );
+    _maybeStartPolling(provider);
+  }
+
+  Future<void> _handleScanFolder(
+    SharedRemoteLibraryProvider provider,
+    String folderPath,
+  ) async {
+    await provider.addRemoteFolder(
+      folderPath: folderPath,
+      scan: true,
+      skipPreviouslyMatchedUnwatched: false,
+    );
+    _maybeStartPolling(provider);
+  }
+
+  Future<void> _handleRemoveFolder(
+    SharedRemoteLibraryProvider provider,
+    String folderPath,
+  ) async {
+    await provider.removeRemoteFolder(folderPath);
+    final error = provider.managementErrorMessage;
+    if (!mounted) return;
+    if (error != null && error.isNotEmpty) {
+      AdaptiveSnackBar.show(
+        context,
+        message: error,
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+    AdaptiveSnackBar.show(
+      context,
+      message: '已移除文件夹',
+      type: AdaptiveSnackBarType.success,
+    );
   }
 }
