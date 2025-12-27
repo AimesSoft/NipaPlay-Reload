@@ -22,9 +22,13 @@ class _FluentDanmakuTracksMenuState extends State<FluentDanmakuTracksMenu> {
   Future<void> _loadLocalDanmakuFile() async {
     if (_isLoadingLocalDanmaku) return;
 
-    setState(() {
+    final videoState = widget.videoState;
+    final initialVideoPath = videoState.currentVideoPath;
+    if (mounted) {
+      setState(() => _isLoadingLocalDanmaku = true);
+    } else {
       _isLoadingLocalDanmaku = true;
-    });
+    }
 
     try {
       final XTypeGroup jsonTypeGroup = XTypeGroup(
@@ -47,52 +51,142 @@ class _FluentDanmakuTracksMenuState extends State<FluentDanmakuTracksMenu> {
         acceptedTypeGroups: [jsonTypeGroup, xmlTypeGroup],
       );
 
-      if (file == null) {
-        setState(() {
-          _isLoadingLocalDanmaku = false;
-        });
+      if (file == null) return;
+
+      if (videoState.isDisposed || videoState.currentVideoPath != initialVideoPath) {
+        debugPrint('视频已切换或播放器已销毁，取消加载本地弹幕');
         return;
       }
 
       // 读取文件内容
-      final String content = await file.readAsString();
-      
-      // 简单验证文件格式
-      if (file.name.toLowerCase().endsWith('.json')) {
-        try {
-          final decoded = json.decode(content);
-          if (decoded is List) {
-            _showSuccessInfo('成功加载JSON弹幕文件: ${file.name}');
-            // 这里可以调用VideoPlayerState的方法来加载弹幕
-            // widget.videoState.loadLocalDanmakuFromJson(decoded);
-          } else {
-            _showErrorInfo('无效的JSON弹幕文件格式');
-          }
-        } catch (e) {
-          _showErrorInfo('解析JSON文件失败: $e');
-        }
-      } else if (file.name.toLowerCase().endsWith('.xml')) {
-        if (content.contains('<d ') || content.contains('<item>')) {
-          _showSuccessInfo('成功加载XML弹幕文件: ${file.name}');
-          // 这里可以调用VideoPlayerState的方法来加载弹幕
-          // widget.videoState.loadLocalDanmakuFromXml(content);
+      final content = utf8.decode(await file.readAsBytes());
+      final fileName = file.name.toLowerCase();
+
+      Map<String, dynamic> jsonData;
+      if (fileName.endsWith('.xml')) {
+        jsonData = _convertXmlToJson(content);
+      } else if (fileName.endsWith('.json')) {
+        final decoded = json.decode(content);
+        if (decoded is Map) {
+          jsonData = Map<String, dynamic>.from(decoded.cast<String, dynamic>());
+        } else if (decoded is List) {
+          jsonData = {'comments': decoded};
         } else {
-          _showErrorInfo('无效的XML弹幕文件格式');
+          throw Exception('JSON 文件格式不正确，根节点必须是对象或数组');
         }
       } else {
-        _showErrorInfo('不支持的文件格式');
+        throw Exception('不支持的文件格式');
       }
+
+      final commentCount = _countDanmakuComments(jsonData);
+      if (commentCount == 0) {
+        throw Exception('弹幕文件中没有弹幕数据');
+      }
+
+      final localTrackCount = videoState.danmakuTracks.values
+          .where((track) => track['source'] == 'local')
+          .length;
+      final trackName = '本地弹幕${localTrackCount + 1}';
+
+      if (videoState.isDisposed || videoState.currentVideoPath != initialVideoPath) {
+        debugPrint('视频已切换或播放器已销毁，取消加载本地弹幕');
+        return;
+      }
+      await videoState.loadDanmakuFromLocal(jsonData, trackName: trackName);
+      _showSuccessInfo('弹幕轨道添加成功：$trackName（$commentCount条）');
 
     } catch (e) {
       _showErrorInfo('加载弹幕文件失败: $e');
     } finally {
-      setState(() {
+      if (mounted) {
+        setState(() => _isLoadingLocalDanmaku = false);
+      } else {
         _isLoadingLocalDanmaku = false;
-      });
+      }
     }
   }
 
+  int _countDanmakuComments(Map<String, dynamic> jsonData) {
+    final comments = jsonData['comments'];
+    if (comments is List) return comments.length;
+
+    final data = jsonData['data'];
+    if (data is List) return data.length;
+    if (data is String) {
+      try {
+        final parsed = json.decode(data);
+        if (parsed is List) return parsed.length;
+      } catch (_) {
+        return 0;
+      }
+    }
+
+    return 0;
+  }
+
+  Map<String, dynamic> _convertXmlToJson(String xmlContent) {
+    final List<Map<String, dynamic>> comments = [];
+
+    // 解析B站XML弹幕格式: <d p="参数">内容</d>
+    final RegExp danmakuRegex = RegExp(r'<d p="([^"]+)">([^<]+)</d>');
+    final Iterable<RegExpMatch> matches = danmakuRegex.allMatches(xmlContent);
+
+    for (final match in matches) {
+      try {
+        final String pAttr = match.group(1) ?? '';
+        final String textContent = match.group(2) ?? '';
+        if (textContent.isEmpty) continue;
+
+        final List<String> pParams = pAttr.split(',');
+        if (pParams.length < 4) continue;
+
+        // XML弹幕格式参数：时间,类型,字号,颜色,时间戳,池,用户id,弹幕id
+        final double time = double.tryParse(pParams[0]) ?? 0.0;
+        final int typeCode = int.tryParse(pParams[1]) ?? 1;
+        final int fontSize = int.tryParse(pParams[2]) ?? 25;
+        final int colorCode = int.tryParse(pParams[3]) ?? 16777215; // 默认白色
+
+        String danmakuType;
+        switch (typeCode) {
+          case 4:
+            danmakuType = 'bottom';
+            break;
+          case 5:
+            danmakuType = 'top';
+            break;
+          case 1:
+          case 6:
+          default:
+            danmakuType = 'scroll';
+            break;
+        }
+
+        final int r = (colorCode >> 16) & 0xFF;
+        final int g = (colorCode >> 8) & 0xFF;
+        final int b = colorCode & 0xFF;
+        final String color = 'rgb($r,$g,$b)';
+
+        comments.add({
+          't': time,
+          'c': textContent,
+          'y': danmakuType,
+          'r': color,
+          'fontSize': fontSize,
+          'originalType': typeCode,
+        });
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return {
+      'count': comments.length,
+      'comments': comments,
+    };
+  }
+
   void _showSuccessInfo(String message) {
+    if (!mounted) return;
     displayInfoBar(context, builder: (context, close) {
       return InfoBar(
         title: const Text('成功'),
@@ -104,6 +198,7 @@ class _FluentDanmakuTracksMenuState extends State<FluentDanmakuTracksMenu> {
   }
 
   void _showErrorInfo(String message) {
+    if (!mounted) return;
     displayInfoBar(context, builder: (context, close) {
       return InfoBar(
         title: const Text('错误'),

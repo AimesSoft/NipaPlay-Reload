@@ -173,6 +173,7 @@ class _VideoDimensionSnapshot {
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
   BuildContext? _context;
+  bool _isDisposed = false;
   StreamSubscription? _playerKernelChangeSubscription; // 播放器内核切换事件订阅
   StreamSubscription? _danmakuKernelChangeSubscription; // 弹幕内核切换事件订阅
   PlayerStatus _status = PlayerStatus.idle;
@@ -493,6 +494,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   PlayerStatus get status => _status;
   List<String> get statusMessages => _statusMessages;
   bool get showControls => _showControls;
+  bool get isDisposed => _isDisposed;
   bool get showRightMenu => _showRightMenu;
   bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
@@ -606,6 +608,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   @override
   void dispose() {
+    _isDisposed = true;
     // 在销毁前进行一次截图
     if (hasVideo) {
       _captureConditionalScreenshot("销毁前");

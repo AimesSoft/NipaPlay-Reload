@@ -219,10 +219,18 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       onTap: () async {
                         debugPrint('=== 弹幕设置菜单：点击手动匹配弹幕按钮 ===');
                         print('=== 强制输出：手动匹配弹幕按钮被点击！ ===');
+                        final videoState = widget.videoState;
+                        final initialVideoPath = videoState.currentVideoPath;
                         final result = await ManualDanmakuMatcher.instance
                             .showManualMatchDialog(context);
 
                         if (result != null) {
+                          if (videoState.isDisposed ||
+                              videoState.currentVideoPath != initialVideoPath) {
+                            debugPrint('视频已切换或播放器已销毁，取消加载弹幕');
+                            return;
+                          }
+
                           // 如果用户选择了弹幕，重新加载弹幕
                           final episodeId =
                               result['episodeId']?.toString() ?? '';
@@ -232,7 +240,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                             // 调用新的弹幕历史同步方法来更新历史记录
                             try {
                               final currentVideoPath =
-                                  widget.videoState.currentVideoPath;
+                                  videoState.currentVideoPath;
                               if (currentVideoPath != null) {
                                 await DanmakuHistorySync
                                     .updateHistoryWithDanmakuInfo(
@@ -245,9 +253,9 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                                 );
 
                                 // 立即更新视频播放器状态中的动漫和剧集标题
-                                widget.videoState.setAnimeTitle(
+                                videoState.setAnimeTitle(
                                     result['animeTitle']?.toString());
-                                widget.videoState.setEpisodeTitle(
+                                videoState.setEpisodeTitle(
                                     result['episodeTitle']?.toString());
                               }
                             } catch (e) {
@@ -256,7 +264,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
 
                             // 直接调用 loadDanmaku，不检查 mounted 状态
                             // 因为 videoState 是独立的状态管理对象，不依赖于当前组件的生命周期
-                            widget.videoState.loadDanmaku(episodeId, animeId);
+                            videoState.loadDanmaku(episodeId, animeId);
                           }
                         }
                       },

@@ -29,9 +29,18 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
   Future<void> _loadLocalDanmakuFile() async {
     if (_isLoadingLocalDanmaku) return;
 
-    setState(() {
+    // 重要：此菜单可能会因右侧控件自动隐藏而被销毁（鼠标移出/弹窗/文件选择器等）。
+    // 为了避免“控件消失就加载失败”，提前拿到 videoState，后续不再依赖 context/provider。
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    final initialVideoPath = videoState.currentVideoPath;
+
+    if (mounted) {
+      setState(() {
+        _isLoadingLocalDanmaku = true;
+      });
+    } else {
       _isLoadingLocalDanmaku = true;
-    });
+    }
 
     try {
       // 使用文件选择器选择弹幕文件
@@ -56,11 +65,11 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
         confirmButtonText: '选择弹幕文件',
       );
 
-      if (file == null) {
-        // 用户取消选择
-        setState(() {
-          _isLoadingLocalDanmaku = false;
-        });
+      // 用户取消选择
+      if (file == null) return;
+
+      if (videoState.isDisposed || videoState.currentVideoPath != initialVideoPath) {
+        debugPrint('视频已切换或播放器已销毁，取消加载本地弹幕');
         return;
       }
 
@@ -114,12 +123,14 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
         throw Exception('弹幕文件中没有弹幕数据');
       }
 
-      // 获取VideoPlayerState并计算轨道编号
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       final localTrackCount = videoState.danmakuTracks.values.where((track) => track['source'] == 'local').length;
       final trackName = '本地弹幕${localTrackCount + 1}';
       
       // 添加弹幕轨道
+      if (videoState.isDisposed || videoState.currentVideoPath != initialVideoPath) {
+        debugPrint('视频已切换或播放器已销毁，取消加载本地弹幕');
+        return;
+      }
       await videoState.loadDanmakuFromLocal(jsonData, trackName: trackName);
 
       if (mounted) {
@@ -132,9 +143,9 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoadingLocalDanmaku = false;
-        });
+        setState(() => _isLoadingLocalDanmaku = false);
+      } else {
+        _isLoadingLocalDanmaku = false;
       }
     }
   }
