@@ -2045,6 +2045,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               if (snapshot.hasError || !snapshot.hasData) {
                 return _buildDefaultThumbnail();
               }
+              if (snapshot.data!.isEmpty) {
+                return _buildDefaultThumbnail();
+              }
               try {
                 return Image.memory(
                   snapshot.data!,
@@ -2053,6 +2056,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
+                  errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
                 );
               } catch (e) {
                 return _buildDefaultThumbnail();
@@ -2096,12 +2100,16 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             if (snapshot.hasError || !snapshot.hasData) {
               return _buildDefaultThumbnail();
             }
+            if (snapshot.data!.isEmpty) {
+              return _buildDefaultThumbnail();
+            }
             try {
               return Image.memory(
                 snapshot.data!,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
+                errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
               );
             } catch (e) {
               return _buildDefaultThumbnail();

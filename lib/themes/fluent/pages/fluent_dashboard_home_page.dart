@@ -1382,12 +1382,16 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
             if (snapshot.hasError || !snapshot.hasData) {
               return _buildDefaultThumbnail();
             }
+            if (snapshot.data!.isEmpty) {
+              return _buildDefaultThumbnail();
+            }
             try {
               return Image.memory(
                 snapshot.data!,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
+                errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
               );
             } catch (e) {
               return _buildDefaultThumbnail();
