@@ -57,6 +57,7 @@ DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
   - fvp (from `Flutter/ephemeral/.symlinks/plugins/fvp/darwin`)
   - hotkey_manager_macos (from `Flutter/ephemeral/.symlinks/plugins/hotkey_manager_macos/macos`)
+  - mdk (from `../third_party/podspecs/mdk.podspec.json`)
   - media_kit_libs_macos_video (from `Flutter/ephemeral/.symlinks/plugins/media_kit_libs_macos_video/macos`)
   - media_kit_video (from `Flutter/ephemeral/.symlinks/plugins/media_kit_video/macos`)
   - nipaplay_smb2 (from `Flutter/ephemeral/.symlinks/plugins/nipaplay_smb2/macos`)
@@ -76,7 +77,6 @@ DEPENDENCIES:
 SPEC REPOS:
   trunk:
     - HotKey
-    - mdk
 
 EXTERNAL SOURCES:
   desktop_drop:
@@ -91,6 +91,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/fvp/darwin
   hotkey_manager_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/hotkey_manager_macos/macos
+  mdk:
+    :podspec: "../third_party/podspecs/mdk.podspec.json"
   media_kit_libs_macos_video:
     :path: Flutter/ephemeral/.symlinks/plugins/media_kit_libs_macos_video/macos
   media_kit_video:
@@ -130,7 +132,7 @@ SPEC CHECKSUMS:
   fvp: ed100b827d10aff53789fb9cb9dfdd85a87d037d
   HotKey: 400beb7caa29054ea8d864c96f5ba7e5b4852277
   hotkey_manager_macos: a4317849af96d2430fa89944d3c58977ca089fbe
-  mdk: 622e3452cea55a982c0712ec9ce931d8ec718b22
+  mdk: add580fdae1046e61d22be4fd0fc8393591bc265
   media_kit_libs_macos_video: 85a23e549b5f480e72cae3e5634b5514bc692f65
   media_kit_video: fa6564e3799a0a28bff39442334817088b7ca758
   nipaplay_smb2: da01641bec939e73001cd1934643d5c5d2acb866
@@ -147,6 +149,6 @@ SPEC CHECKSUMS:
   wakelock_plus: 917609be14d812ddd9e9528876538b2263aaa03b
   window_manager: 1d01fa7ac65a6e6f83b965471b1a7fdd3f06166c
 
-PODFILE CHECKSUM: 42e4b1c9e6f4a09dbf48e647f749a91cb1a01114
+PODFILE CHECKSUM: 04091e4299c7b1993b25833440586da479203a65
 
 COCOAPODS: 1.16.2

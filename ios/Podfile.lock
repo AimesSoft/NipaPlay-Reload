@@ -90,6 +90,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - fvp (from `.symlinks/plugins/fvp/darwin`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
+  - mdk (from `../third_party/podspecs/mdk.podspec.json`)
   - media_kit_libs_ios_video (from `.symlinks/plugins/media_kit_libs_ios_video/ios`)
   - media_kit_video (from `.symlinks/plugins/media_kit_video/ios`)
   - nipaplay_smb2 (from `.symlinks/plugins/nipaplay_smb2/ios`)
@@ -108,7 +109,6 @@ SPEC REPOS:
   trunk:
     - DKImagePickerController
     - DKPhotoGallery
-    - mdk
     - SDWebImage
     - SwiftyGif
 
@@ -127,6 +127,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/fvp/darwin"
   image_picker_ios:
     :path: ".symlinks/plugins/image_picker_ios/ios"
+  mdk:
+    :podspec: "../third_party/podspecs/mdk.podspec.json"
   media_kit_libs_ios_video:
     :path: ".symlinks/plugins/media_kit_libs_ios_video/ios"
   media_kit_video:
@@ -164,7 +166,7 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   fvp: ed100b827d10aff53789fb9cb9dfdd85a87d037d
   image_picker_ios: 7fe1ff8e34c1790d6fff70a32484959f563a928a
-  mdk: 622e3452cea55a982c0712ec9ce931d8ec718b22
+  mdk: add580fdae1046e61d22be4fd0fc8393591bc265
   media_kit_libs_ios_video: 5a18affdb97d1f5d466dc79988b13eff6c5e2854
   media_kit_video: 1746e198cb697d1ffb734b1d05ec429d1fcd1474
   nipaplay_smb2: 7fdcd026af3238f24b888ab979fe90fe90fb83e5
@@ -181,6 +183,6 @@ SPEC CHECKSUMS:
   volume_controller: 3657a1f65bedb98fa41ff7dc5793537919f31b12
   wakelock_plus: e29112ab3ef0b318e58cfa5c32326458be66b556
 
-PODFILE CHECKSUM: 5a1c2ea2a0878f25112f3442ef43519a2faa2d78
+PODFILE CHECKSUM: d9a8d55330effacbfa245dde131df00eedf54321
 
 COCOAPODS: 1.16.2
