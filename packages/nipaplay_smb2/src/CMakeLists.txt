@@ -14,7 +14,8 @@ set(ENABLE_GSSAPI OFF CACHE BOOL "Enable gssapi support" FORCE)
 
 if(WIN32)
   # libsmb2 headers use _WINDOWS to determine SOCKET types.
-  add_definitions(-D_WINDOWS)
+  # Avoid Windows SDK winsock.h/winsock2.h redefinition conflicts.
+  add_definitions(-D_WINDOWS -D_WINSOCKAPI_ -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
 endif()
 
 add_subdirectory(
