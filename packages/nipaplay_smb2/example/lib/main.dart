@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 
 import 'package:nipaplay_smb2/nipaplay_smb2.dart' as nipaplay_smb2;
 
@@ -15,14 +14,17 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late int sumResult;
-  late Future<int> sumAsyncResult;
+  late final String status;
 
   @override
   void initState() {
     super.initState();
-    sumResult = nipaplay_smb2.sum(1, 2);
-    sumAsyncResult = nipaplay_smb2.sumAsync(3, 4);
+    try {
+      nipaplay_smb2.nipaplaySmb2Bindings;
+      status = 'nipaplay_smb2 loaded';
+    } catch (e) {
+      status = 'Failed to load nipaplay_smb2: $e';
+    }
   }
 
   @override
@@ -47,22 +49,9 @@ class _MyAppState extends State<MyApp> {
                 ),
                 spacerSmall,
                 Text(
-                  'sum(1, 2) = $sumResult',
+                  status,
                   style: textStyle,
                   textAlign: .center,
-                ),
-                spacerSmall,
-                FutureBuilder<int>(
-                  future: sumAsyncResult,
-                  builder: (BuildContext context, AsyncSnapshot<int> value) {
-                    final displayValue =
-                        (value.hasData) ? value.data : 'loading';
-                    return Text(
-                      'await sumAsync(3, 4) = $displayValue',
-                      style: textStyle,
-                      textAlign: .center,
-                    );
-                  },
                 ),
               ],
             ),

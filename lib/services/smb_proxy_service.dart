@@ -123,7 +123,7 @@ class SMBProxyService {
 
     final smbPath = _stripTrailingSlash(_normalizeSmbPath(rawPath));
 
-    if (!kIsWeb && Platform.isMacOS) {
+    if (Smb2NativeService.instance.isSupported) {
       try {
         final stat = await Smb2NativeService.instance.stat(connection, smbPath);
         if (stat.isDirectory) {

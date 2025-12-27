@@ -32,6 +32,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 
 class FluentDashboardHomePage extends StatefulWidget {
   const FluentDashboardHomePage({super.key});
@@ -425,7 +426,8 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
         try {
           final localHistory = watchHistoryProvider.history.where((item) => 
             !item.filePath.startsWith('jellyfin://') &&
-            !item.filePath.startsWith('emby://')
+            !item.filePath.startsWith('emby://') &&
+            !MediaSourceUtils.isSmbPath(item.filePath)
           ).toList();
           
           final Map<int, WatchHistoryItem> latestLocalItems = {};
@@ -629,7 +631,8 @@ class _FluentDashboardHomePageState extends State<FluentDashboardHomePage>
         try {
           final localHistory = watchHistoryProvider.history.where((item) => 
             !item.filePath.startsWith('jellyfin://') &&
-            !item.filePath.startsWith('emby://')
+            !item.filePath.startsWith('emby://') &&
+            !MediaSourceUtils.isSmbPath(item.filePath)
           ).toList();
 
           final Map<int, WatchHistoryItem> representativeItems = {};

@@ -4,7 +4,7 @@ version: 0.0.1
 homepage:
 
 environment:
-  sdk: ^3.10.4
+  sdk: ^3.5.3
   flutter: '>=3.3.0'
 
 dependencies:
@@ -38,7 +38,15 @@ flutter:
   # Please refer to README.md for a detailed explanation.
   plugin:
     platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true
       macos:
+        ffiPlugin: true
+      windows:
         ffiPlugin: true
 
   # To add assets to your plugin package, add an assets section, like this:

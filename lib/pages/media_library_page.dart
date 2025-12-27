@@ -17,6 +17,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
@@ -137,8 +138,9 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     final filteredHistory = watchHistory.where((item) =>
         !item.filePath.startsWith('jellyfin://') &&
         !item.filePath.startsWith('emby://') &&
-      !item.filePath.contains('/api/media/local/share/') &&
-      !item.isDandanplayRemote).toList();
+        !MediaSourceUtils.isSmbPath(item.filePath) &&
+        !item.filePath.contains('/api/media/local/share/') &&
+        !item.isDandanplayRemote).toList();
 
     final Map<int, WatchHistoryItem> latestHistoryItemMap = {};
     for (var item in filteredHistory) {

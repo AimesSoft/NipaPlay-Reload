@@ -35,6 +35,7 @@ import 'package:path/path.dart' as path;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/main.dart'; // 用于MainPageState
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
@@ -954,6 +955,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           final localHistory = watchHistoryProvider.history.where((item) => 
             !item.filePath.startsWith('jellyfin://') &&
             !item.filePath.startsWith('emby://') &&
+            !MediaSourceUtils.isSmbPath(item.filePath) &&
             !item.isDandanplayRemote
           ).toList();
           
@@ -1307,6 +1309,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           final localHistory = watchHistoryProvider.history.where((item) => 
             !item.filePath.startsWith('jellyfin://') &&
             !item.filePath.startsWith('emby://') &&
+            !MediaSourceUtils.isSmbPath(item.filePath) &&
             !item.isDandanplayRemote
           ).toList();
 

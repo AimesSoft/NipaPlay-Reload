@@ -2303,7 +2303,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
             ),
             IconButton(
               icon: const Icon(Icons.refresh, color: Colors.white70, size: 20),
-              onPressed: () => _testSMBConnection(connection),
+              onPressed: () => _refreshSMBConnection(connection),
             ),
           ],
         ),
@@ -2745,24 +2745,27 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     }
   }
 
-  Future<void> _testSMBConnection(SMBConnection connection) async {
+  Future<void> _refreshSMBConnection(SMBConnection connection) async {
     try {
-      BlurSnackBar.show(context, '正在测试连接...');
+      BlurSnackBar.show(context, '正在刷新SMB连接...');
       await SMBService.instance.updateConnectionStatus(connection.name);
       if (mounted) {
         setState(() {
           _smbConnections = SMBService.instance.connections;
+          _smbFolderContents
+              .removeWhere((key, value) => key.startsWith('${connection.name}:'));
         });
         final updated = SMBService.instance.getConnection(connection.name);
         if (updated?.isConnected == true) {
-          BlurSnackBar.show(context, '连接测试成功！');
+          await _loadSMBFolderChildren(updated!, '/');
+          BlurSnackBar.show(context, 'SMB目录已刷新');
         } else {
-          BlurSnackBar.show(context, '连接测试失败');
+          BlurSnackBar.show(context, '连接失败，请检查配置');
         }
       }
     } catch (e) {
       if (mounted) {
-        BlurSnackBar.show(context, '连接测试失败: $e');
+        BlurSnackBar.show(context, '刷新失败: $e');
       }
     }
   }

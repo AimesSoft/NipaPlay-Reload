@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <stdlib.h>
 
 #if _WIN32
 #define FFI_PLUGIN_EXPORT __declspec(dllexport)

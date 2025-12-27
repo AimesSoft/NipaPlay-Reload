@@ -45,7 +45,7 @@ import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_smb_connection_dialog.dart';
 
 // ignore_for_file: prefer_const_constructors
 
@@ -2504,6 +2504,12 @@ class _CupertinoLibraryManagementSheetState
           icon: CupertinoIcons.cloud_upload,
           onPressed: _showWebDAVConnectionDialog,
         ),
+        _buildActionButton(
+          context,
+          label: '添加 SMB 服务器',
+          icon: CupertinoIcons.folder_badge_plus,
+          onPressed: () => _showSMBConnectionDialog(),
+        ),
       ],
     );
   }
@@ -2527,7 +2533,7 @@ class _CupertinoLibraryManagementSheetState
         ),
         const SizedBox(height: 4),
         Text(
-          '在本地文件夹与 WebDAV 服务器之间切换。',
+          '在本地文件夹、WebDAV 服务器与 SMB 服务器之间切换。',
           style: TextStyle(fontSize: 13, color: subtitleColor),
         ),
         const SizedBox(height: 12),
@@ -2549,6 +2555,10 @@ class _CupertinoLibraryManagementSheetState
             _LibrarySource.webdav: Padding(
               padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Text('WebDAV'),
+            ),
+            _LibrarySource.smb: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text('SMB'),
             ),
           },
           onValueChanged: (value) {
@@ -3088,7 +3098,7 @@ class _CupertinoLibraryManagementSheetState
                             file.isDirectory ? FontWeight.w600 : FontWeight.w500,
                       ),
                     ),
-                    if (file.size != null)
+                    if (!file.isDirectory && file.size != null && file.size! > 0)
                       Text(
                         '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
                         style: TextStyle(fontSize: 12, color: subtitleColor),
@@ -3672,7 +3682,7 @@ class _CupertinoLibraryManagementSheetState
                     ),
                     _buildSMBIconButton(
                       icon: CupertinoIcons.refresh_thin,
-                      onPressed: () => _testSMBConnection(connection),
+                      onPressed: () => _refreshSMBConnection(connection),
                     ),
                   ],
                 ),
@@ -3685,7 +3695,7 @@ class _CupertinoLibraryManagementSheetState
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '点击右上角刷新图标测试连接，成功后即可展开并浏览目录。',
+                  '点击右上角刷新图标以连接并加载目录。',
                   style:
                       TextStyle(fontSize: 12, color: subtitleColor, height: 1.4),
                 ),
@@ -3803,7 +3813,7 @@ class _CupertinoLibraryManagementSheetState
                             file.isDirectory ? FontWeight.w600 : FontWeight.w500,
                       ),
                     ),
-                    if (file.size != null)
+                    if (!file.isDirectory && file.size != null && file.size! > 0)
                       Text(
                         '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
                         style: TextStyle(fontSize: 12, color: subtitleColor),
@@ -3899,7 +3909,7 @@ class _CupertinoLibraryManagementSheetState
   Future<void> _showSMBConnectionDialog({
     SMBConnection? editConnection,
   }) async {
-    final result = await SMBConnectionDialog.show(
+    final result = await CupertinoSmbConnectionDialog.show(
       context,
       editConnection: editConnection,
     );
@@ -3945,22 +3955,47 @@ class _CupertinoLibraryManagementSheetState
     }
   }
 
-  Future<void> _testSMBConnection(SMBConnection connection) async {
-    _showSnack('正在测试连接…');
+  Future<void> _refreshSMBConnection(SMBConnection connection) async {
+    _showSnack('正在刷新 SMB 连接…');
+
     await SMBService.instance.updateConnectionStatus(connection.name);
     if (!mounted) return;
+
     _refreshSMBConnections();
     final updated = SMBService.instance.getConnection(connection.name);
-    if (updated?.isConnected == true) {
-      _showSnack('连接成功，可以展开浏览目录');
-    } else {
+    if (updated?.isConnected != true) {
       _showSnack('连接失败，请检查配置');
+      return;
     }
+
+    setState(() {
+      _smbFolderContents
+          .removeWhere((key, _) => key.startsWith('${connection.name}:'));
+      _loadingSMBFolders
+          .removeWhere((key) => key.startsWith('${connection.name}:'));
+    });
+
+    final expandedFolderKeys = _expandedSMBFolders
+        .where((key) => key.startsWith('${connection.name}:'))
+        .toList();
+    final pathsToReload = <String>{'/'};
+    for (final key in expandedFolderKeys) {
+      final path = key.substring(connection.name.length + 1);
+      if (path.trim().isNotEmpty) {
+        pathsToReload.add(path);
+      }
+    }
+
+    for (final path in pathsToReload) {
+      await _loadSMBFolderChildren(updated!, path);
+    }
+
+    _showSnack('已刷新 ${connection.name}');
   }
 
   void _toggleSMBConnection(SMBConnection connection) {
     if (!connection.isConnected) {
-      _showSnack('请先测试并建立连接');
+      _showSnack('请先刷新连接以加载目录');
       return;
     }
 

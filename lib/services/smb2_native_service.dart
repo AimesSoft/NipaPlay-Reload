@@ -11,10 +11,21 @@ import 'package:nipaplay/services/smb_service.dart';
 
 class Smb2NativeService {
   Smb2NativeService._();
-
+ 
   static final Smb2NativeService instance = Smb2NativeService._();
 
-  bool get isSupported => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+  bool get isSupported {
+    if (kIsWeb) return false;
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android ||
+      TargetPlatform.iOS ||
+      TargetPlatform.linux ||
+      TargetPlatform.macOS ||
+      TargetPlatform.windows =>
+        true,
+      _ => false,
+    };
+  }
 
   Future<List<SMBFileEntry>> listDirectory(
     SMBConnection connection,
@@ -470,10 +481,24 @@ class _Smb2Native {
 }
 
 DynamicLibrary _openDynamicLibrary() {
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
-    return DynamicLibrary.open('nipaplay_smb2.framework/nipaplay_smb2');
+  if (kIsWeb) {
+    throw UnsupportedError('libsmb2 is not supported on web.');
   }
-  throw UnsupportedError('libsmb2 is only wired on macOS for now.');
+
+  return switch (defaultTargetPlatform) {
+    TargetPlatform.macOS || TargetPlatform.iOS => DynamicLibrary.open(
+        'nipaplay_smb2.framework/nipaplay_smb2',
+      ),
+    TargetPlatform.android || TargetPlatform.linux => DynamicLibrary.open(
+        'libnipaplay_smb2.so',
+      ),
+    TargetPlatform.windows => DynamicLibrary.open(
+        'nipaplay_smb2.dll',
+      ),
+    _ => throw UnsupportedError(
+        'libsmb2 is not supported on $defaultTargetPlatform.',
+      ),
+  };
 }
 
 T _withUtf8<T>(String value, T Function(Pointer<Utf8>) fn) {

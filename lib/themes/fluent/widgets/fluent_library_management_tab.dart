@@ -739,7 +739,7 @@ class _FluentLibraryManagementTabState
       showDialog: ({editConnection}) =>
           _showSMBConnectionDialog(editConnection: editConnection),
       removeConnection: _removeSMBConnection,
-      testConnection: _testSMBConnection,
+      testConnection: _refreshSMBConnection,
       toggleConnection: _toggleSMBConnection,
       toggleFolder: _toggleSMBFolder,
       scanFolder: _scanSMBFolder,
@@ -969,7 +969,7 @@ class _FluentLibraryManagementTabState
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '点击刷新测试连接，成功后即可展开查看目录。',
+                  '点击刷新以连接并加载目录。',
                   style: theme.typography.caption,
                 ),
               ),
@@ -1492,22 +1492,47 @@ class _FluentLibraryManagementTabState
     }
   }
 
-  Future<void> _testSMBConnection(SMBConnection connection) async {
-    _showInfoBar('正在测试连接…');
+  Future<void> _refreshSMBConnection(SMBConnection connection) async {
+    _showInfoBar('正在刷新 SMB 连接…');
     await SMBService.instance.updateConnectionStatus(connection.name);
     if (!mounted) return;
+
     _refreshSMBConnections();
     final updated = SMBService.instance.getConnection(connection.name);
-    if (updated?.isConnected == true) {
-      _showInfoBar('连接成功，可以展开浏览目录', severity: InfoBarSeverity.success);
-    } else {
+    if (updated?.isConnected != true) {
       _showInfoBar('连接失败，请检查配置', severity: InfoBarSeverity.error);
+      return;
     }
+
+    setState(() {
+      _smbFolderContents
+          .removeWhere((key, _) => key.startsWith('${connection.name}:'));
+      _loadingSMBFolders
+          .removeWhere((key) => key.startsWith('${connection.name}:'));
+    });
+
+    final expandedFolderKeys = _expandedSMBFolders
+        .where((key) => key.startsWith('${connection.name}:'))
+        .toList();
+    final pathsToReload = <String>{'/'};
+    for (final key in expandedFolderKeys) {
+      final path = key.substring(connection.name.length + 1);
+      if (path.trim().isNotEmpty) {
+        pathsToReload.add(path);
+      }
+    }
+
+    for (final path in pathsToReload) {
+      await _loadSMBFolderChildren(updated!, path);
+    }
+
+    _showInfoBar('已刷新 ${connection.name}',
+        severity: InfoBarSeverity.success);
   }
 
   void _toggleSMBConnection(SMBConnection connection) {
     if (!connection.isConnected) {
-      _showInfoBar('请先测试并建立连接', severity: InfoBarSeverity.warning);
+      _showInfoBar('请先刷新连接以加载目录', severity: InfoBarSeverity.warning);
       return;
     }
 

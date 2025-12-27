@@ -15,55 +15,250 @@ import 'dart:ffi' as ffi;
 class NipaplaySmb2Bindings {
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-      _lookup;
+  _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
   NipaplaySmb2Bindings(ffi.DynamicLibrary dynamicLibrary)
-      : _lookup = dynamicLibrary.lookup;
+    : _lookup = dynamicLibrary.lookup;
 
   /// The symbols are looked up with [lookup].
   NipaplaySmb2Bindings.fromLookup(
-      ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-          lookup)
-      : _lookup = lookup;
+    ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
+  ) : _lookup = lookup;
 
-  /// A very short-lived native function.
+  /// Free memory returned from this library.
+  void np_smb2_free(ffi.Pointer<ffi.Void> ptr) {
+    return _np_smb2_free(ptr);
+  }
+
+  late final _np_smb2_freePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'np_smb2_free',
+      );
+  late final _np_smb2_free = _np_smb2_freePtr
+      .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  /// List SMB shares (root path) or directory entries as JSON array.
   ///
-  /// For very short-lived functions, it is fine to call them on the main isolate.
-  /// They will block the Dart execution while running the native function, so
-  /// only do this for native functions which are guaranteed to be short-lived.
-  int sum(
-    int a,
-    int b,
+  /// `path` accepts `/`, `/share`, `/share/dir`.
+  /// Returns a malloc-allocated UTF-8 JSON string on success; returns NULL on
+  /// error and writes a message into `err_buf`.
+  ffi.Pointer<ffi.Char> np_smb2_list_entries_json(
+    ffi.Pointer<ffi.Char> host,
+    int port,
+    ffi.Pointer<ffi.Char> username,
+    ffi.Pointer<ffi.Char> password,
+    ffi.Pointer<ffi.Char> domain,
+    ffi.Pointer<ffi.Char> path,
+    ffi.Pointer<ffi.Char> err_buf,
+    int err_len,
   ) {
-    return _sum(
-      a,
-      b,
+    return _np_smb2_list_entries_json(
+      host,
+      port,
+      username,
+      password,
+      domain,
+      path,
+      err_buf,
+      err_len,
     );
   }
 
-  late final _sumPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>('sum');
-  late final _sum = _sumPtr.asFunction<int Function(int, int)>();
+  late final _np_smb2_list_entries_jsonPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+          )
+        >
+      >('np_smb2_list_entries_json');
+  late final _np_smb2_list_entries_json = _np_smb2_list_entries_jsonPtr
+      .asFunction<
+        ffi.Pointer<ffi.Char> Function(
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          int,
+        )
+      >();
 
-  /// A longer lived native function, which occupies the thread calling it.
-  ///
-  /// Do not call these kind of native functions in the main isolate. They will
-  /// block Dart execution. This will cause dropped frames in Flutter applications.
-  /// Instead, call these native functions on a separate isolate.
-  int sum_long_running(
-    int a,
-    int b,
+  /// Stat a SMB path.
+  /// Returns 0 on success, <0 on failure (negative errno-like).
+  int np_smb2_stat(
+    ffi.Pointer<ffi.Char> host,
+    int port,
+    ffi.Pointer<ffi.Char> username,
+    ffi.Pointer<ffi.Char> password,
+    ffi.Pointer<ffi.Char> domain,
+    ffi.Pointer<ffi.Char> path,
+    ffi.Pointer<ffi.Uint32> out_type,
+    ffi.Pointer<ffi.Uint64> out_size,
+    ffi.Pointer<ffi.Char> err_buf,
+    int err_len,
   ) {
-    return _sum_long_running(
-      a,
-      b,
+    return _np_smb2_stat(
+      host,
+      port,
+      username,
+      password,
+      domain,
+      path,
+      out_type,
+      out_size,
+      err_buf,
+      err_len,
     );
   }
 
-  late final _sum_long_runningPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>(
-          'sum_long_running');
-  late final _sum_long_running =
-      _sum_long_runningPtr.asFunction<int Function(int, int)>();
+  late final _np_smb2_statPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Uint32>,
+            ffi.Pointer<ffi.Uint64>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+          )
+        >
+      >('np_smb2_stat');
+  late final _np_smb2_stat = _np_smb2_statPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Uint32>,
+          ffi.Pointer<ffi.Uint64>,
+          ffi.Pointer<ffi.Char>,
+          int,
+        )
+      >();
+
+  /// Open a file reader for streaming reads.
+  /// Returns a non-zero opaque handle on success; 0 on failure.
+  int np_smb2_reader_open(
+    ffi.Pointer<ffi.Char> host,
+    int port,
+    ffi.Pointer<ffi.Char> username,
+    ffi.Pointer<ffi.Char> password,
+    ffi.Pointer<ffi.Char> domain,
+    ffi.Pointer<ffi.Char> path,
+    ffi.Pointer<ffi.Uint64> out_size,
+    ffi.Pointer<ffi.Char> err_buf,
+    int err_len,
+  ) {
+    return _np_smb2_reader_open(
+      host,
+      port,
+      username,
+      password,
+      domain,
+      path,
+      out_size,
+      err_buf,
+      err_len,
+    );
+  }
+
+  late final _np_smb2_reader_openPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.IntPtr Function(
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Uint64>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+          )
+        >
+      >('np_smb2_reader_open');
+  late final _np_smb2_reader_open = _np_smb2_reader_openPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Uint64>,
+          ffi.Pointer<ffi.Char>,
+          int,
+        )
+      >();
+
+  /// Read bytes at `offset` into `buf`.
+  /// Returns >=0 bytes read, or <0 on failure (negative errno-like).
+  int np_smb2_reader_pread(
+    int reader,
+    int offset,
+    ffi.Pointer<ffi.Uint8> buf,
+    int count,
+    ffi.Pointer<ffi.Char> err_buf,
+    int err_len,
+  ) {
+    return _np_smb2_reader_pread(reader, offset, buf, count, err_buf, err_len);
+  }
+
+  late final _np_smb2_reader_preadPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.IntPtr,
+            ffi.Uint64,
+            ffi.Pointer<ffi.Uint8>,
+            ffi.Uint32,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+          )
+        >
+      >('np_smb2_reader_pread');
+  late final _np_smb2_reader_pread = _np_smb2_reader_preadPtr
+      .asFunction<
+        int Function(
+          int,
+          int,
+          ffi.Pointer<ffi.Uint8>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          int,
+        )
+      >();
+
+  /// Close and free a reader handle.
+  void np_smb2_reader_close(int reader) {
+    return _np_smb2_reader_close(reader);
+  }
+
+  late final _np_smb2_reader_closePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.IntPtr)>>(
+        'np_smb2_reader_close',
+      );
+  late final _np_smb2_reader_close = _np_smb2_reader_closePtr
+      .asFunction<void Function(int)>();
 }

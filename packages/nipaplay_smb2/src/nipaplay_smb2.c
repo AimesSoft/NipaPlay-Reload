@@ -2,9 +2,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#if defined(_WIN32) || defined(_WINDOWS)
+#include "compat.h"
+#else
 #include <poll.h>
+#endif
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -246,7 +251,7 @@ static void np_share_enum_cb(struct smb2_context *smb2, int status,
 static int np_run_until_done(struct smb2_context *ctx,
                              struct np_share_enum_state *state) {
   while (state->done == 0) {
-    const int fd = smb2_get_fd(ctx);
+    const t_socket fd = smb2_get_fd(ctx);
     const int events = smb2_which_events(ctx);
 
     struct pollfd pfd;

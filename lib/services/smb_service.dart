@@ -209,7 +209,7 @@ class SMBService {
   ) async {
     final normalizedConnection = _normalizeConnection(connection);
 
-    if (!kIsWeb && io.Platform.isMacOS) {
+    if (Smb2NativeService.instance.isSupported) {
       try {
         return await Smb2NativeService.instance
             .listDirectory(normalizedConnection, path);
@@ -257,7 +257,7 @@ class SMBService {
   }
 
   Future<bool> _testConnection(SMBConnection connection) async {
-    if (!kIsWeb && io.Platform.isMacOS) {
+    if (Smb2NativeService.instance.isSupported) {
       try {
         await Smb2NativeService.instance.listDirectory(connection, '/');
         return true;
