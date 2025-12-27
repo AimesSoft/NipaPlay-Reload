@@ -12,9 +12,10 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+
+import 'desktop_exit_preferences.dart';
 
 enum DesktopExitAction {
   cancelAndReturn,
@@ -37,10 +38,6 @@ class DesktopExitHandler
   DesktopExitHandler._();
 
   static final DesktopExitHandler instance = DesktopExitHandler._();
-
-  static const String _rememberedActionKey = 'desktop_exit_action';
-  static const String _rememberedActionMinimize = 'minimize';
-  static const String _rememberedActionClose = 'close';
 
   material.GlobalKey<material.NavigatorState>? _navigatorKey;
 
@@ -151,26 +148,26 @@ class DesktopExitHandler
   }
 
   Future<DesktopExitAction?> _loadRememberedAction() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_rememberedActionKey);
-    switch (value) {
-      case _rememberedActionMinimize:
-        return DesktopExitAction.minimizeToTrayOrTaskbar;
-      case _rememberedActionClose:
-        return DesktopExitAction.closePlayer;
-      default:
+    final behavior = await DesktopExitPreferences.load();
+    switch (behavior) {
+      case DesktopExitBehavior.askEveryTime:
         return null;
+      case DesktopExitBehavior.minimizeToTrayOrTaskbar:
+        return DesktopExitAction.minimizeToTrayOrTaskbar;
+      case DesktopExitBehavior.closePlayer:
+        return DesktopExitAction.closePlayer;
     }
   }
 
   Future<void> _saveRememberedAction(DesktopExitAction action) async {
-    final prefs = await SharedPreferences.getInstance();
     switch (action) {
       case DesktopExitAction.minimizeToTrayOrTaskbar:
-        await prefs.setString(_rememberedActionKey, _rememberedActionMinimize);
+        await DesktopExitPreferences.save(
+          DesktopExitBehavior.minimizeToTrayOrTaskbar,
+        );
         return;
       case DesktopExitAction.closePlayer:
-        await prefs.setString(_rememberedActionKey, _rememberedActionClose);
+        await DesktopExitPreferences.save(DesktopExitBehavior.closePlayer);
         return;
       case DesktopExitAction.cancelAndReturn:
         return;
