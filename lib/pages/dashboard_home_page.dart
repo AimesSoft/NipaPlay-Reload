@@ -35,6 +35,7 @@ import 'package:path/path.dart' as path;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/main.dart'; // 用于MainPageState
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
@@ -954,6 +955,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           final localHistory = watchHistoryProvider.history.where((item) => 
             !item.filePath.startsWith('jellyfin://') &&
             !item.filePath.startsWith('emby://') &&
+            !MediaSourceUtils.isSmbPath(item.filePath) &&
             !item.isDandanplayRemote
           ).toList();
           
@@ -1307,6 +1309,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           final localHistory = watchHistoryProvider.history.where((item) => 
             !item.filePath.startsWith('jellyfin://') &&
             !item.filePath.startsWith('emby://') &&
+            !MediaSourceUtils.isSmbPath(item.filePath) &&
             !item.isDandanplayRemote
           ).toList();
 
@@ -2813,6 +2816,9 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
               if (snapshot.hasError || !snapshot.hasData) {
                 return _buildDefaultThumbnail();
               }
+              if (snapshot.data!.isEmpty) {
+                return _buildDefaultThumbnail();
+              }
               try {
                 return Image.memory(
                   snapshot.data!,
@@ -2820,6 +2826,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
+                  errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
                 );
               } catch (e) {
                 return _buildDefaultThumbnail();
@@ -2861,12 +2868,16 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
             if (snapshot.hasError || !snapshot.hasData) {
               return _buildDefaultThumbnail();
             }
+            if (snapshot.data!.isEmpty) {
+              return _buildDefaultThumbnail();
+            }
             try {
               return Image.memory(
                 snapshot.data!,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
+                errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
               );
             } catch (e) {
               return _buildDefaultThumbnail();

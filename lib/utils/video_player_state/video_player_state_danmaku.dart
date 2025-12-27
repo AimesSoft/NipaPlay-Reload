@@ -2,6 +2,11 @@ part of video_player_state;
 
 extension VideoPlayerStateDanmaku on VideoPlayerState {
   Future<void> loadDanmaku(String episodeId, String animeIdStr) async {
+    if (_isDisposed) return;
+    final targetVideoPath = _currentVideoPath;
+    bool canContinue() =>
+        !_isDisposed && _currentVideoPath == targetVideoPath;
+
     try {
       debugPrint('尝试为episodeId=$episodeId, animeId=$animeIdStr加载弹幕');
       _setStatus(PlayerStatus.recognizing, message: '正在加载弹幕...');
@@ -16,7 +21,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       debugPrint('清除之前的弹幕数据');
       _danmakuList.clear();
       danmakuController?.clearDanmaku();
-      notifyListeners();
+      if (canContinue()) {
+        notifyListeners();
+      } else {
+        return;
+      }
 
       // 更新内部状态变量，确保新的弹幕ID被保存
       final parsedAnimeId = int.tryParse(animeIdStr) ?? 0;
@@ -31,13 +40,18 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       // 从缓存加载弹幕
       final cachedDanmaku =
           await DanmakuCacheManager.getDanmakuFromCache(episodeId);
+      if (!canContinue()) return;
       if (cachedDanmaku != null) {
         debugPrint('从缓存中找到弹幕数据，共${cachedDanmaku.length}条');
         _setStatus(PlayerStatus.recognizing, message: '正在从缓存加载弹幕...');
 
         // 设置最终加载阶段标志，减少动画性能消耗
         _isInFinalLoadingPhase = true;
-        notifyListeners();
+        if (canContinue()) {
+          notifyListeners();
+        } else {
+          return;
+        }
 
         // 加载弹幕到控制器
         danmakuController?.loadDanmaku(cachedDanmaku);
@@ -47,6 +61,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         // 解析弹幕数据并添加到弹弹play轨道
         final parsedDanmaku = await compute(
             parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
+        if (!canContinue()) return;
 
         _danmakuTracks['dandanplay'] = {
           'name': '弹弹play',
@@ -59,12 +74,15 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         _danmakuTrackEnabled['dandanplay'] = true;
 
         // 重新计算合并后的弹幕列表
+        if (!canContinue()) return;
         _updateMergedDanmakuList();
 
         // 移除GPU弹幕字符集预构建调用
         // await _prebuildGPUDanmakuCharsetIfNeeded();
 
-        notifyListeners();
+        if (canContinue()) {
+          notifyListeners();
+        }
         return;
       }
 
@@ -74,12 +92,17 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
       // 设置最终加载阶段标志，减少动画性能消耗
       _isInFinalLoadingPhase = true;
-      notifyListeners();
+      if (canContinue()) {
+        notifyListeners();
+      } else {
+        return;
+      }
 
       final danmakuData = await DandanplayService.getDanmaku(episodeId, animeId)
           .timeout(const Duration(seconds: 15), onTimeout: () {
         throw TimeoutException('加载弹幕超时');
       });
+      if (!canContinue()) return;
 
       if (danmakuData['comments'] != null && danmakuData['comments'] is List) {
         debugPrint('成功从网络加载弹幕，共${danmakuData['count']}条');
@@ -93,6 +116,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         // 解析弹幕数据并添加到弹弹play轨道
         final parsedDanmaku = await compute(parseDanmakuListInBackground,
             danmakuData['comments'] as List<dynamic>?);
+        if (!canContinue()) return;
 
         _danmakuTracks['dandanplay'] = {
           'name': '弹弹play',
@@ -105,27 +129,44 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         _danmakuTrackEnabled['dandanplay'] = true;
 
         // 重新计算合并后的弹幕列表
+        if (!canContinue()) return;
         _updateMergedDanmakuList();
 
         // 移除GPU弹幕字符集预构建调用
-        await _prebuildGPUDanmakuCharsetIfNeeded();
+        if (canContinue()) {
+          await _prebuildGPUDanmakuCharsetIfNeeded();
+        } else {
+          return;
+        }
 
         _setStatus(PlayerStatus.playing,
             message: '弹幕加载完成 (${danmakuData['count']}条)');
-        notifyListeners();
+        if (canContinue()) {
+          notifyListeners();
+        }
       } else {
         debugPrint('网络返回的弹幕数据无效');
-        _setStatus(PlayerStatus.playing, message: '弹幕数据无效，跳过加载');
+        if (canContinue()) {
+          _setStatus(PlayerStatus.playing, message: '弹幕数据无效，跳过加载');
+        }
       }
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('加载弹幕失败: $e');
-      _setStatus(PlayerStatus.playing, message: '弹幕加载失败');
+      debugPrintStack(stackTrace: st);
+      if (canContinue()) {
+        _setStatus(PlayerStatus.playing, message: '弹幕加载失败');
+      }
     }
   }
 
   // 从本地JSON数据加载弹幕（多轨道模式）
   Future<void> loadDanmakuFromLocal(Map<String, dynamic> jsonData,
       {String? trackName}) async {
+    if (_isDisposed) return;
+    final targetVideoPath = _currentVideoPath;
+    bool canContinue() =>
+        !_isDisposed && _currentVideoPath == targetVideoPath;
+
     try {
       debugPrint('开始从本地JSON加载弹幕...');
 
@@ -167,12 +208,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       // 解析弹幕数据
       final parsedDanmaku =
           await compute(parseDanmakuListInBackground, comments);
+      if (!canContinue()) return;
 
       // 生成轨道名称
       final String finalTrackName =
           trackName ?? 'local_${DateTime.now().millisecondsSinceEpoch}';
 
       // 添加到本地轨道
+      if (!canContinue()) return;
       _danmakuTracks[finalTrackName] = {
         'name': trackName ?? '本地轨道${_danmakuTracks.length}',
         'source': 'local',
@@ -183,14 +226,19 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _danmakuTrackEnabled[finalTrackName] = true;
 
       // 重新计算合并后的弹幕列表
+      if (!canContinue()) return;
       _updateMergedDanmakuList();
 
       debugPrint('本地弹幕轨道添加完成: $finalTrackName，共${comments.length}条');
-      _setStatus(PlayerStatus.playing,
-          message: '本地弹幕轨道添加完成 (${comments.length}条)');
-      notifyListeners();
-    } catch (e) {
+      if (canContinue()) {
+        _setStatus(PlayerStatus.playing,
+            message: '本地弹幕轨道添加完成 (${comments.length}条)');
+        notifyListeners();
+      }
+    } catch (e, st) {
+      if (!canContinue()) return;
       debugPrint('加载本地弹幕失败: $e');
+      debugPrintStack(stackTrace: st);
       _setStatus(PlayerStatus.playing, message: '本地弹幕加载失败');
       rethrow;
     }

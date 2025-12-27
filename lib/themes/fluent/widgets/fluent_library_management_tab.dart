@@ -17,6 +17,7 @@ import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -730,7 +731,7 @@ class _FluentLibraryManagementTabState
       initialized: _smbInitialized,
       errorMessage: _smbErrorMessage,
       nameBuilder: (c) => c.name,
-      subtitleBuilder: (c) => c.host,
+      subtitleBuilder: (c) => c.port != 445 ? '${c.host}:${c.port}' : c.host,
       extraSubtitleBuilder: (c) => c.username.isNotEmpty
           ? '用户：${c.username}${c.domain.isNotEmpty ? " @${c.domain}" : ''}'
           : null,
@@ -738,7 +739,7 @@ class _FluentLibraryManagementTabState
       showDialog: ({editConnection}) =>
           _showSMBConnectionDialog(editConnection: editConnection),
       removeConnection: _removeSMBConnection,
-      testConnection: _testSMBConnection,
+      testConnection: _refreshSMBConnection,
       toggleConnection: _toggleSMBConnection,
       toggleFolder: _toggleSMBFolder,
       scanFolder: _scanSMBFolder,
@@ -968,7 +969,7 @@ class _FluentLibraryManagementTabState
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '点击刷新测试连接，成功后即可展开查看目录。',
+                  '点击刷新以连接并加载目录。',
                   style: theme.typography.caption,
                 ),
               ),
@@ -1491,22 +1492,47 @@ class _FluentLibraryManagementTabState
     }
   }
 
-  Future<void> _testSMBConnection(SMBConnection connection) async {
-    _showInfoBar('正在测试连接…');
+  Future<void> _refreshSMBConnection(SMBConnection connection) async {
+    _showInfoBar('正在刷新 SMB 连接…');
     await SMBService.instance.updateConnectionStatus(connection.name);
     if (!mounted) return;
+
     _refreshSMBConnections();
     final updated = SMBService.instance.getConnection(connection.name);
-    if (updated?.isConnected == true) {
-      _showInfoBar('连接成功，可以展开浏览目录', severity: InfoBarSeverity.success);
-    } else {
+    if (updated?.isConnected != true) {
       _showInfoBar('连接失败，请检查配置', severity: InfoBarSeverity.error);
+      return;
     }
+
+    setState(() {
+      _smbFolderContents
+          .removeWhere((key, _) => key.startsWith('${connection.name}:'));
+      _loadingSMBFolders
+          .removeWhere((key) => key.startsWith('${connection.name}:'));
+    });
+
+    final expandedFolderKeys = _expandedSMBFolders
+        .where((key) => key.startsWith('${connection.name}:'))
+        .toList();
+    final pathsToReload = <String>{'/'};
+    for (final key in expandedFolderKeys) {
+      final path = key.substring(connection.name.length + 1);
+      if (path.trim().isNotEmpty) {
+        pathsToReload.add(path);
+      }
+    }
+
+    for (final path in pathsToReload) {
+      await _loadSMBFolderChildren(updated!, path);
+    }
+
+    _showInfoBar('已刷新 ${connection.name}',
+        severity: InfoBarSeverity.success);
   }
 
   void _toggleSMBConnection(SMBConnection connection) {
     if (!connection.isConnected) {
-      _showInfoBar('请先测试并建立连接', severity: InfoBarSeverity.warning);
+      _showInfoBar('请先刷新连接以加载目录', severity: InfoBarSeverity.warning);
       return;
     }
 
@@ -1611,7 +1637,7 @@ class _FluentLibraryManagementTabState
       }
 
       for (final file in files) {
-        final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+        final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
         final historyItem = WatchHistoryItem(
           filePath: fileUrl,
           animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
@@ -1662,7 +1688,7 @@ class _FluentLibraryManagementTabState
     SMBFileEntry file,
   ) async {
     try {
-      final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+      final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
       final historyItem = WatchHistoryItem(
         filePath: fileUrl,
         animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),

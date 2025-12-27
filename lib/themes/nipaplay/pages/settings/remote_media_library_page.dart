@@ -1,5 +1,6 @@
 // remote_media_library_page.dart
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
@@ -7,12 +8,14 @@ import 'package:nipaplay/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
+import 'package:nipaplay/services/media_server_device_id_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_settings_section.dart';
 
@@ -24,6 +27,70 @@ class RemoteMediaLibraryPage extends StatefulWidget {
 }
 
 class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
+  Future<_MediaServerDeviceIdInfo>? _deviceIdInfoFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _deviceIdInfoFuture = _loadDeviceIdInfo();
+  }
+
+  static String _clientPlatformLabel() {
+    if (kIsWeb || kDebugMode) {
+      return 'Flutter';
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+        return 'Ios';
+      case TargetPlatform.android:
+        return 'Android';
+      case TargetPlatform.macOS:
+        return 'Macos';
+      case TargetPlatform.windows:
+        return 'Windows';
+      case TargetPlatform.linux:
+        return 'Linux';
+      case TargetPlatform.fuchsia:
+        return 'Fuchsia';
+    }
+  }
+
+  Future<_MediaServerDeviceIdInfo> _loadDeviceIdInfo() async {
+    String appName = 'NipaPlay';
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (packageInfo.appName.isNotEmpty) {
+        appName = packageInfo.appName;
+      }
+    } catch (_) {}
+
+    final platform = _clientPlatformLabel();
+    final customDeviceId =
+        await MediaServerDeviceIdService.instance.getCustomDeviceId();
+    final generatedDeviceId =
+        await MediaServerDeviceIdService.instance.getOrCreateGeneratedDeviceId();
+    final effectiveDeviceId =
+        await MediaServerDeviceIdService.instance.getEffectiveDeviceId(
+      appName: appName,
+      platform: platform,
+    );
+
+    return _MediaServerDeviceIdInfo(
+      appName: appName,
+      platform: platform,
+      effectiveDeviceId: effectiveDeviceId,
+      generatedDeviceId: generatedDeviceId,
+      customDeviceId: customDeviceId,
+    );
+  }
+
+  void _refreshDeviceIdInfo() {
+    setState(() {
+      _deviceIdInfoFuture = _loadDeviceIdInfo();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer3<JellyfinProvider, EmbyProvider, DandanplayRemoteProvider>(
@@ -94,6 +161,11 @@ style: TextStyle(color: Colors.white70),
 
             // 其他远程媒体库服务 (预留)
             _buildOtherServicesSection(),
+
+            const SizedBox(height: 20),
+
+            // 设备标识（Jellyfin/Emby）
+            _buildDeviceIdSection(),
           ],
         );
       },
@@ -530,6 +602,296 @@ style: TextStyle(
               ],
         ],
       ),
+    );
+  }
+
+  Widget _buildDeviceIdSection() {
+    return SettingsCard(
+      child: FutureBuilder<_MediaServerDeviceIdInfo>(
+        future: _deviceIdInfoFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Row(
+              children: [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  '正在加载设备标识...',
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ],
+            );
+          }
+
+          if (snapshot.hasError) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '设备标识',
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '加载失败: ${snapshot.error}',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(color: Colors.red[300], fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: _buildGlassButton(
+                    onPressed: _refreshDeviceIdInfo,
+                    icon: Icons.refresh,
+                    label: '重试',
+                  ),
+                ),
+              ],
+            );
+          }
+
+          final info = snapshot.data;
+          if (info == null) {
+            return const Text(
+              '设备标识加载失败',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70),
+            );
+          }
+
+          final hasCustom = info.customDeviceId != null;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.fingerprint, color: Colors.white),
+                  const SizedBox(width: 12),
+                  const Text(
+                    '设备标识（Jellyfin/Emby）',
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (hasCustom)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue, width: 1),
+                      ),
+                      child: const Text(
+                        '已自定义',
+                        locale: Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '用于区分不同设备，避免多台 iOS 设备被识别为同一设备导致互踢登出。',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              _buildDeviceIdValueRow('当前 DeviceId', info.effectiveDeviceId),
+              const SizedBox(height: 8),
+              if (!hasCustom)
+                _buildDeviceIdValueRow('自动生成标识', info.generatedDeviceId),
+              if (hasCustom) ...[
+                const SizedBox(height: 8),
+                _buildDeviceIdValueRow('自定义 DeviceId', info.customDeviceId!),
+              ],
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.yellow.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.yellow.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.yellow, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '修改 DeviceId 后，建议断开并重新连接 Jellyfin/Emby 以确保生效。',
+                        locale: Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildGlassButton(
+                      onPressed: () => _showCustomDeviceIdDialog(info),
+                      icon: Icons.edit,
+                      label: hasCustom ? '修改 DeviceId' : '自定义 DeviceId',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildGlassButton(
+                      onPressed: hasCustom
+                          ? () async {
+                              try {
+                                await MediaServerDeviceIdService.instance
+                                    .setCustomDeviceId(null);
+                                if (!context.mounted) return;
+                                _refreshDeviceIdInfo();
+                                BlurSnackBar.show(context, '已恢复自动生成的设备ID');
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                BlurSnackBar.show(context, '操作失败: $e');
+                              }
+                            }
+                          : null,
+                      icon: Icons.refresh,
+                      label: '恢复自动生成',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDeviceIdValueRow(String label, String value) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            locale: const Locale("zh-Hans", "zh"),
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          SelectableText(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              height: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCustomDeviceIdDialog(_MediaServerDeviceIdInfo info) async {
+    final controller = TextEditingController(text: info.customDeviceId ?? '');
+
+    await BlurDialog.show<void>(
+      context: context,
+      title: '自定义 DeviceId',
+      contentWidget: SizedBox(
+        width: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '留空表示使用自动生成的设备标识。\n\n建议只使用字母/数字/下划线/短横线，长度不超过128，且不要包含双引号或换行。',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLength: 128,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: '例如: My-iPhone-01',
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                counterStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.06),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      BorderSide(color: Colors.white.withOpacity(0.15), width: 1),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      BorderSide(color: Colors.white.withOpacity(0.35), width: 1),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70)),
+        ),
+        TextButton(
+          onPressed: () async {
+            try {
+              await MediaServerDeviceIdService.instance
+                  .setCustomDeviceId(controller.text);
+              if (!mounted) return;
+              Navigator.of(context).pop();
+              _refreshDeviceIdInfo();
+              BlurSnackBar.show(context, '设备ID已更新，重新连接后生效');
+            } on FormatException {
+              if (mounted) {
+                BlurSnackBar.show(
+                    context, 'DeviceId 无效：请避免双引号/换行，且长度 ≤ 128');
+              }
+            } catch (e) {
+              if (mounted) {
+                BlurSnackBar.show(context, '保存失败: $e');
+              }
+            }
+          },
+          child: const Text('保存', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 
@@ -1433,4 +1795,20 @@ style: TextStyle(color: Colors.red)),
       }
     }
   }
+}
+
+class _MediaServerDeviceIdInfo {
+  const _MediaServerDeviceIdInfo({
+    required this.appName,
+    required this.platform,
+    required this.effectiveDeviceId,
+    required this.generatedDeviceId,
+    required this.customDeviceId,
+  });
+
+  final String appName;
+  final String platform;
+  final String effectiveDeviceId;
+  final String generatedDeviceId;
+  final String? customDeviceId;
 }

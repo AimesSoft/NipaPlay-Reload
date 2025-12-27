@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
@@ -26,6 +27,8 @@ class _GeneralPageState extends State<GeneralPage> {
   bool _filterAdultContent = true;
   int _defaultPageIndex = 0;
   final GlobalKey _defaultPageDropdownKey = GlobalKey();
+  DesktopExitBehavior _desktopExitBehavior = DesktopExitBehavior.askEveryTime;
+  final GlobalKey _desktopExitBehaviorDropdownKey = GlobalKey();
 
   // 根据平台生成默认页面选项
   List<DropdownMenuItemData<int>> _getDefaultPageItems() {
@@ -47,6 +50,27 @@ class _GeneralPageState extends State<GeneralPage> {
     return items;
   }
 
+  List<DropdownMenuItemData<DesktopExitBehavior>> _getDesktopExitItems() {
+    return [
+      DropdownMenuItemData(
+        title: "每次询问",
+        value: DesktopExitBehavior.askEveryTime,
+        isSelected: _desktopExitBehavior == DesktopExitBehavior.askEveryTime,
+      ),
+      DropdownMenuItemData(
+        title: "最小化到系统托盘",
+        value: DesktopExitBehavior.minimizeToTrayOrTaskbar,
+        isSelected:
+            _desktopExitBehavior == DesktopExitBehavior.minimizeToTrayOrTaskbar,
+      ),
+      DropdownMenuItemData(
+        title: "直接退出",
+        value: DesktopExitBehavior.closePlayer,
+        isSelected: _desktopExitBehavior == DesktopExitBehavior.closePlayer,
+      ),
+    ];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -55,10 +79,12 @@ class _GeneralPageState extends State<GeneralPage> {
 
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
+    final desktopExitBehavior = await DesktopExitPreferences.load();
     if (mounted) {
       setState(() {
         _filterAdultContent = prefs.getBool(globalFilterAdultContentKey) ?? true;
         var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
+        _desktopExitBehavior = desktopExitBehavior;
 
         // 在iOS平台上，如果存储的索引是新番更新页面(3)，调整为设置页面(3)
         // 如果存储的索引是设置页面(4)，也调整为设置页面(3)
@@ -81,6 +107,10 @@ class _GeneralPageState extends State<GeneralPage> {
     await prefs.setInt(defaultPageIndexKey, index);
   }
 
+  Future<void> _saveDesktopExitBehavior(DesktopExitBehavior behavior) async {
+    await DesktopExitPreferences.save(behavior);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AppearanceSettingsProvider>(
@@ -100,6 +130,22 @@ class _GeneralPageState extends State<GeneralPage> {
 
             return ListView(
               children: [
+                if (globals.isDesktop)
+                SettingsItem.dropdown(
+                  title: "关闭窗口时",
+                  subtitle: "设置关闭按钮的默认行为，可随时修改“记住我的选择”",
+                  icon: Ionicons.close_outline,
+                  items: _getDesktopExitItems(),
+                  onChanged: (behavior) {
+                    setState(() {
+                      _desktopExitBehavior = behavior as DesktopExitBehavior;
+                    });
+                    _saveDesktopExitBehavior(behavior as DesktopExitBehavior);
+                  },
+                  dropdownKey: _desktopExitBehaviorDropdownKey,
+                ),
+                if (globals.isDesktop)
+                const Divider(color: Colors.white12, height: 1),
                 SettingsItem.dropdown(
                   title: "默认展示页面",
                   subtitle: "选择应用启动后默认显示的页面",

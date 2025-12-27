@@ -12,6 +12,8 @@ import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
 /// 剧集导航结果
 class EpisodeNavigationResult {
 
@@ -891,6 +893,11 @@ class EpisodeNavigationService {
   /// 模式1：从文件系统获取上一话（优先模式）
   Future<EpisodeNavigationResult> _getPreviousEpisodeFromFileSystem(String currentFilePath) async {
     try {
+      // SMB 代理流媒体：按目录文件名排序导航
+      if (_isSmbProxyStreamUrl(currentFilePath)) {
+        return await _getPreviousEpisodeFromSmbProxyStream(currentFilePath);
+      }
+
       // 如果是流媒体URL，无法使用文件系统导航
       if (_isStreamingUrl(currentFilePath)) {
         return EpisodeNavigationResult.failure('流媒体无法使用文件系统导航');
@@ -939,6 +946,11 @@ class EpisodeNavigationService {
   /// 模式1：从文件系统获取下一话（优先模式）
   Future<EpisodeNavigationResult> _getNextEpisodeFromFileSystem(String currentFilePath) async {
     try {
+      // SMB 代理流媒体：按目录文件名排序导航
+      if (_isSmbProxyStreamUrl(currentFilePath)) {
+        return await _getNextEpisodeFromSmbProxyStream(currentFilePath);
+      }
+
       // 如果是流媒体URL，无法使用文件系统导航
       if (_isStreamingUrl(currentFilePath)) {
         return EpisodeNavigationResult.failure('流媒体无法使用文件系统导航');
@@ -1015,6 +1027,174 @@ class EpisodeNavigationService {
     } catch (e) {
       debugPrint('[文件检查] 检查文件是否存在时出错：$e');
       return false;
+    }
+  }
+
+  bool _isSmbProxyStreamUrl(String filePath) {
+    final uri = Uri.tryParse(filePath);
+    if (uri == null) return false;
+    if (uri.path != '/smb/stream') return false;
+    return (uri.queryParameters['conn']?.trim().isNotEmpty ?? false) &&
+        (uri.queryParameters['path']?.trim().isNotEmpty ?? false);
+  }
+
+  ({String connName, String smbPath})? _parseSmbProxyStreamUrl(String filePath) {
+    final uri = Uri.tryParse(filePath);
+    if (uri == null) return null;
+    if (uri.path != '/smb/stream') return null;
+    final conn = uri.queryParameters['conn']?.trim();
+    final smbPath = uri.queryParameters['path']?.trim();
+    if (conn == null || conn.isEmpty || smbPath == null || smbPath.isEmpty) {
+      return null;
+    }
+    return (connName: conn, smbPath: _normalizeSmbPath(smbPath));
+  }
+
+  String _normalizeSmbPath(String rawPath) {
+    if (rawPath.isEmpty) return '/';
+    var normalized = rawPath.replaceAll('\\', '/');
+    if (!normalized.startsWith('/')) {
+      normalized = '/$normalized';
+    }
+    normalized = normalized.replaceAll(RegExp(r'/{2,}'), '/');
+    if (normalized.length > 1 && normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
+
+  String _dirnameSmbPath(String smbPath) {
+    final normalized = _normalizeSmbPath(smbPath);
+    final idx = normalized.lastIndexOf('/');
+    if (idx <= 0) return '/';
+    return normalized.substring(0, idx);
+  }
+
+  SMBConnection? _findSmbConnectionByNameOrHost(String connName) {
+    final direct = SMBService.instance.getConnection(connName);
+    if (direct != null) return direct;
+
+    final matches = SMBService.instance.connections.where((c) {
+      if (c.host == connName) return true;
+      if ('${c.host}:${c.port}' == connName) return true;
+      return false;
+    }).toList();
+
+    if (matches.length == 1) return matches.first;
+    return null;
+  }
+
+  Future<EpisodeNavigationResult> _getNextEpisodeFromSmbProxyStream(
+    String currentFilePath,
+  ) async {
+    try {
+      final parsed = _parseSmbProxyStreamUrl(currentFilePath);
+      if (parsed == null) {
+        return EpisodeNavigationResult.failure('不是有效的SMB流媒体地址');
+      }
+
+      await SMBService.instance.initialize();
+      final connection = _findSmbConnectionByNameOrHost(parsed.connName);
+      if (connection == null) {
+        return EpisodeNavigationResult.failure('找不到SMB连接：${parsed.connName}');
+      }
+
+      final parentDir = _dirnameSmbPath(parsed.smbPath);
+      if (parentDir == '/') {
+        return EpisodeNavigationResult.failure('无法在共享根目录导航下一话');
+      }
+
+      final entries =
+          await SMBService.instance.listDirectory(connection, parentDir);
+      final videoFiles = entries
+          .where((e) =>
+              !e.isDirectory && SMBService.instance.isVideoFile(e.name))
+          .toList();
+
+      if (videoFiles.length <= 1) {
+        return EpisodeNavigationResult.failure('目录中没有其他视频文件');
+      }
+
+      videoFiles.sort((a, b) => a.name.compareTo(b.name));
+
+      final currentIndex = videoFiles.indexWhere(
+        (e) => _normalizeSmbPath(e.path) == parsed.smbPath,
+      );
+      if (currentIndex == -1) {
+        return EpisodeNavigationResult.failure('在目录中找不到当前文件');
+      }
+
+      if (currentIndex >= videoFiles.length - 1) {
+        return EpisodeNavigationResult.failure('没有找到可播放的下一个视频文件');
+      }
+
+      final nextFile = videoFiles[currentIndex + 1];
+      final nextUrl =
+          SMBProxyService.instance.buildStreamUrl(connection, nextFile.path);
+      return EpisodeNavigationResult.success(
+        filePath: nextUrl,
+        message: '从文件列表找到下一个视频：${nextFile.name}',
+      );
+    } catch (e) {
+      debugPrint('[SMB导航] 获取下一话时出错：$e');
+      return EpisodeNavigationResult.failure('SMB导航出错：$e');
+    }
+  }
+
+  Future<EpisodeNavigationResult> _getPreviousEpisodeFromSmbProxyStream(
+    String currentFilePath,
+  ) async {
+    try {
+      final parsed = _parseSmbProxyStreamUrl(currentFilePath);
+      if (parsed == null) {
+        return EpisodeNavigationResult.failure('不是有效的SMB流媒体地址');
+      }
+
+      await SMBService.instance.initialize();
+      final connection = _findSmbConnectionByNameOrHost(parsed.connName);
+      if (connection == null) {
+        return EpisodeNavigationResult.failure('找不到SMB连接：${parsed.connName}');
+      }
+
+      final parentDir = _dirnameSmbPath(parsed.smbPath);
+      if (parentDir == '/') {
+        return EpisodeNavigationResult.failure('无法在共享根目录导航上一话');
+      }
+
+      final entries =
+          await SMBService.instance.listDirectory(connection, parentDir);
+      final videoFiles = entries
+          .where((e) =>
+              !e.isDirectory && SMBService.instance.isVideoFile(e.name))
+          .toList();
+
+      if (videoFiles.length <= 1) {
+        return EpisodeNavigationResult.failure('目录中没有其他视频文件');
+      }
+
+      videoFiles.sort((a, b) => a.name.compareTo(b.name));
+
+      final currentIndex = videoFiles.indexWhere(
+        (e) => _normalizeSmbPath(e.path) == parsed.smbPath,
+      );
+      if (currentIndex == -1) {
+        return EpisodeNavigationResult.failure('在目录中找不到当前文件');
+      }
+
+      if (currentIndex <= 0) {
+        return EpisodeNavigationResult.failure('没有找到可播放的上一个视频文件');
+      }
+
+      final previousFile = videoFiles[currentIndex - 1];
+      final previousUrl = SMBProxyService.instance
+          .buildStreamUrl(connection, previousFile.path);
+      return EpisodeNavigationResult.success(
+        filePath: previousUrl,
+        message: '从文件列表找到上一个视频：${previousFile.name}',
+      );
+    } catch (e) {
+      debugPrint('[SMB导航] 获取上一话时出错：$e');
+      return EpisodeNavigationResult.failure('SMB导航出错：$e');
     }
   }
 
@@ -1455,7 +1635,7 @@ class EpisodeNavigationService {
 
   /// 检查是否可以使用文件系统导航
   bool canUseFileSystemNavigation(String filePath) {
-    return !_isStreamingUrl(filePath);
+    return !_isStreamingUrl(filePath) || _isSmbProxyStreamUrl(filePath);
   }
 
   /// 检查是否可以使用流媒体简单导航（Jellyfin/Emby的adjacentTo API）

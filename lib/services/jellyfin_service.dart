@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart'
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'debug_log_service.dart';
+import 'media_server_device_id_service.dart';
 
 import 'package:nipaplay/utils/url_name_generator.dart';
 import '../models/jellyfin_transcode_settings.dart';
@@ -60,8 +61,10 @@ class JellyfinService {
   final MultiAddressServerService _multiAddressService =
       MultiAddressServerService.instance;
 
-  // Client information cache
-  String? _cachedClientInfo;
+  // Client information cache (DeviceId is stored separately)
+  String? _cachedClientAppName;
+  String? _cachedClientVersion;
+  String? _cachedClientPlatform;
 
   // Transcode preferences cache (loaded once and updated by provider)
   bool _transcodeEnabledCache = false;
@@ -70,37 +73,55 @@ class JellyfinService {
 
   // Get dynamic client information
   Future<String> _getClientInfo() async {
-    if (_cachedClientInfo != null) {
-      return _cachedClientInfo!;
-    }
+    String appName;
+    String version;
+    String platform;
 
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final appName =
-          packageInfo.appName.isNotEmpty ? packageInfo.appName : 'NipaPlay';
-      final version =
-          packageInfo.version.isNotEmpty ? packageInfo.version : '1.4.9';
+      if (_cachedClientAppName == null ||
+          _cachedClientVersion == null ||
+          _cachedClientPlatform == null) {
+        final packageInfo = await PackageInfo.fromPlatform();
+        appName =
+            packageInfo.appName.isNotEmpty ? packageInfo.appName : 'NipaPlay';
+        version =
+            packageInfo.version.isNotEmpty ? packageInfo.version : '1.4.9';
 
-      String platform = 'Flutter';
-      if (!kIsWeb && !kDebugMode) {
-        try {
-          platform = Platform.operatingSystem;
-          // Capitalize first letter
-          platform = platform[0].toUpperCase() + platform.substring(1);
-        } catch (e) {
-          platform = 'Flutter';
+        platform = 'Flutter';
+        if (!kIsWeb && !kDebugMode) {
+          try {
+            platform = Platform.operatingSystem;
+            platform = platform[0].toUpperCase() + platform.substring(1);
+          } catch (_) {
+            platform = 'Flutter';
+          }
         }
-      }
 
-      _cachedClientInfo =
-          'MediaBrowser Client="$appName", Device="$platform", DeviceId="$appName-$platform", Version="$version"';
-      return _cachedClientInfo!;
-    } catch (e) {
-      // Fallback to static values
-      _cachedClientInfo =
-          'MediaBrowser Client="NipaPlay", Device="Flutter", DeviceId="NipaPlay-Flutter", Version="1.4.9"';
-      return _cachedClientInfo!;
+        _cachedClientAppName = appName;
+        _cachedClientVersion = version;
+        _cachedClientPlatform = platform;
+      } else {
+        appName = _cachedClientAppName!;
+        version = _cachedClientVersion!;
+        platform = _cachedClientPlatform!;
+      }
+    } catch (_) {
+      appName = 'NipaPlay';
+      version = '1.4.9';
+      platform = 'Flutter';
     }
+
+    String deviceId;
+    try {
+      deviceId = await MediaServerDeviceIdService.instance.getEffectiveDeviceId(
+        appName: appName,
+        platform: platform,
+      );
+    } catch (_) {
+      deviceId = '$appName-$platform';
+    }
+
+    return 'MediaBrowser Client="$appName", Device="$platform", DeviceId="$deviceId", Version="$version"';
   }
 
   /// 获取服务器端的媒体技术元数据（容器/编解码器/Profile/Level/HDR/声道/码率等）

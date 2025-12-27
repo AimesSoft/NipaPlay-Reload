@@ -1,6 +1,8 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
@@ -8,6 +10,7 @@ import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/services/media_server_device_id_service.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connection_dialog.dart';
@@ -16,6 +19,8 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_server_card.da
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_media_library_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_media_management_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_server_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart'
     show MediaServerType;
 
@@ -31,6 +36,233 @@ class CupertinoMediaServerSettingsPage extends StatefulWidget {
 
 class _CupertinoMediaServerSettingsPageState
     extends State<CupertinoMediaServerSettingsPage> {
+  Future<_MediaServerDeviceIdInfo>? _deviceIdInfoFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _deviceIdInfoFuture = _loadDeviceIdInfo();
+  }
+
+  static String _clientPlatformLabel() {
+    if (kIsWeb || kDebugMode) {
+      return 'Flutter';
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+        return 'Ios';
+      case TargetPlatform.android:
+        return 'Android';
+      case TargetPlatform.macOS:
+        return 'Macos';
+      case TargetPlatform.windows:
+        return 'Windows';
+      case TargetPlatform.linux:
+        return 'Linux';
+      case TargetPlatform.fuchsia:
+        return 'Fuchsia';
+    }
+  }
+
+  Future<_MediaServerDeviceIdInfo> _loadDeviceIdInfo() async {
+    String appName = 'NipaPlay';
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (packageInfo.appName.isNotEmpty) {
+        appName = packageInfo.appName;
+      }
+    } catch (_) {}
+
+    final platform = _clientPlatformLabel();
+    final customDeviceId =
+        await MediaServerDeviceIdService.instance.getCustomDeviceId();
+    final generatedDeviceId =
+        await MediaServerDeviceIdService.instance.getOrCreateGeneratedDeviceId();
+    final effectiveDeviceId =
+        await MediaServerDeviceIdService.instance.getEffectiveDeviceId(
+      appName: appName,
+      platform: platform,
+    );
+
+    return _MediaServerDeviceIdInfo(
+      appName: appName,
+      platform: platform,
+      effectiveDeviceId: effectiveDeviceId,
+      generatedDeviceId: generatedDeviceId,
+      customDeviceId: customDeviceId,
+    );
+  }
+
+  void _refreshDeviceIdInfo() {
+    setState(() {
+      _deviceIdInfoFuture = _loadDeviceIdInfo();
+    });
+  }
+
+  Widget _buildDeviceIdSection(BuildContext context) {
+    return FutureBuilder<_MediaServerDeviceIdInfo>(
+      future: _deviceIdInfoFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const CupertinoSettingsGroupCard(
+            margin: EdgeInsets.zero,
+            children: [
+              CupertinoSettingsTile(
+                title: Text('设备标识 (DeviceId)'),
+                subtitle: Text('正在加载...'),
+                trailing: CupertinoActivityIndicator(radius: 10),
+              ),
+            ],
+          );
+        }
+
+        final info = snapshot.data;
+        if (info == null) {
+          return CupertinoSettingsGroupCard(
+            margin: EdgeInsets.zero,
+            children: [
+              CupertinoSettingsTile(
+                title: const Text('设备标识 (DeviceId)'),
+                subtitle: Text(
+                  snapshot.hasError ? '加载失败：${snapshot.error}' : '加载失败',
+                ),
+                trailing: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: _refreshDeviceIdInfo,
+                  child: const Text('重试'),
+                ),
+              ),
+            ],
+          );
+        }
+
+        final bool hasCustom = info.customDeviceId != null;
+        final String customSubtitle = hasCustom
+            ? '已设置：${info.customDeviceId}'
+            : '未设置（使用自动生成）';
+
+        return CupertinoSettingsGroupCard(
+          margin: EdgeInsets.zero,
+          addDividers: true,
+          children: [
+            CupertinoSettingsTile(
+              title: const Text('设备标识 (DeviceId)'),
+              subtitle: const Text('用于 Jellyfin / Emby 区分不同设备，避免互踢登出。'),
+              showChevron: true,
+              onTap: () => _showCustomDeviceIdDialog(info),
+            ),
+            CupertinoSettingsTile(
+              title: const Text('当前 DeviceId'),
+              subtitle: Text(info.effectiveDeviceId),
+            ),
+            CupertinoSettingsTile(
+              title: const Text('自动生成标识'),
+              subtitle: Text(info.generatedDeviceId),
+            ),
+            CupertinoSettingsTile(
+              title: const Text('自定义 DeviceId'),
+              subtitle: Text(customSubtitle),
+              showChevron: true,
+              onTap: () => _showCustomDeviceIdDialog(info),
+            ),
+            CupertinoSettingsTile(
+              title: const Text('恢复自动生成'),
+              subtitle: const Text('清除自定义 DeviceId'),
+              onTap: hasCustom
+                  ? () async {
+                      try {
+                        await MediaServerDeviceIdService.instance
+                            .setCustomDeviceId(null);
+                        if (!context.mounted) return;
+                        _refreshDeviceIdInfo();
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: '已恢复自动生成的设备ID',
+                          type: AdaptiveSnackBarType.success,
+                        );
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: '操作失败：$e',
+                          type: AdaptiveSnackBarType.error,
+                        );
+                      }
+                    }
+                  : null,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showCustomDeviceIdDialog(_MediaServerDeviceIdInfo info) async {
+    final controller = TextEditingController(text: info.customDeviceId ?? '');
+
+    final String? input = await showCupertinoDialog<String>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('自定义 DeviceId'),
+        content: Column(
+          children: [
+            const SizedBox(height: 12),
+            const Text('留空表示使用自动生成的设备标识。'),
+            const SizedBox(height: 12),
+            CupertinoTextField(
+              controller: controller,
+              placeholder: '例如: My-iPhone-01',
+              autocorrect: false,
+            ),
+            const SizedBox(height: 8),
+            const Text('不要包含双引号/换行，长度不超过128。'),
+          ],
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            isDefaultAction: true,
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (input == null) return;
+
+    try {
+      await MediaServerDeviceIdService.instance.setCustomDeviceId(input);
+      if (!mounted) return;
+      _refreshDeviceIdInfo();
+      AdaptiveSnackBar.show(
+        context,
+        message: '设备ID已更新，建议断开并重新连接服务器',
+        type: AdaptiveSnackBarType.success,
+      );
+    } on FormatException {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: 'DeviceId 无效：请避免双引号/换行，且长度 ≤ 128',
+        type: AdaptiveSnackBarType.error,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '保存失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
+    }
+  }
+
   Future<void> _showNetworkServerDialog(MediaServerType type) async {
     // 检查是否已连接
     bool isConnected;
@@ -99,9 +331,13 @@ class _CupertinoMediaServerSettingsPageState
   }
 
   Future<void> _disconnectNetworkServer(MediaServerType type) async {
+    final buildContext = context;
     final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
+    final jellyfinProvider = buildContext.read<JellyfinProvider>();
+    final embyProvider = buildContext.read<EmbyProvider>();
+
     final confirm = await showCupertinoDialog<bool>(
-      context: context,
+      context: buildContext,
       builder: (ctx) => CupertinoAlertDialog(
         title: const Text('断开连接'),
         content: Text('确定要断开与 $label 服务器的连接吗？'),
@@ -120,23 +356,24 @@ class _CupertinoMediaServerSettingsPageState
     );
 
     if (confirm != true) return;
+    if (!buildContext.mounted) return;
 
     try {
       if (type == MediaServerType.jellyfin) {
-        await context.read<JellyfinProvider>().disconnectFromServer();
+        await jellyfinProvider.disconnectFromServer();
       } else {
-        await context.read<EmbyProvider>().disconnectFromServer();
+        await embyProvider.disconnectFromServer();
       }
-      if (!mounted) return;
+      if (!buildContext.mounted) return;
       AdaptiveSnackBar.show(
-        context,
+        buildContext,
         message: '$label 已断开连接',
         type: AdaptiveSnackBarType.success,
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!buildContext.mounted) return;
       AdaptiveSnackBar.show(
-        context,
+        buildContext,
         message: '断开 $label 失败：$e',
         type: AdaptiveSnackBarType.error,
       );
@@ -468,6 +705,8 @@ class _CupertinoMediaServerSettingsPageState
                         ? () => _disconnectDandanplay(dandanProvider)
                         : null,
                   ),
+                  const SizedBox(height: 16),
+                  _buildDeviceIdSection(context),
                 ],
               );
             },
@@ -476,4 +715,20 @@ class _CupertinoMediaServerSettingsPageState
       ),
     );
   }
+}
+
+class _MediaServerDeviceIdInfo {
+  const _MediaServerDeviceIdInfo({
+    required this.appName,
+    required this.platform,
+    required this.effectiveDeviceId,
+    required this.generatedDeviceId,
+    required this.customDeviceId,
+  });
+
+  final String appName;
+  final String platform;
+  final String effectiveDeviceId;
+  final String generatedDeviceId;
+  final String? customDeviceId;
 }

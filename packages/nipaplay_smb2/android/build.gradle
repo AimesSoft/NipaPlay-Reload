@@ -1,0 +1,52 @@
+// The Android Gradle Plugin builds the native code with the Android NDK.
+
+group = "com.aimessoft.nipaplay_smb2"
+version = "1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        // Keep this in sync with the root project to avoid Gradle plugin conflicts.
+        classpath("com.android.tools.build:gradle:8.9.1")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+android {
+    namespace = "com.aimessoft.nipaplay_smb2"
+
+    // Keep this conservative; the host app can use a higher compileSdk.
+    compileSdk = 34
+
+    // Match the host project's NDK version (see android/app/build.gradle).
+    ndkVersion = "27.0.12077973"
+
+    // Invoke the shared CMake build.
+    externalNativeBuild {
+        cmake {
+            path = "../src/CMakeLists.txt"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    defaultConfig {
+        minSdk = 21
+    }
+}
+

@@ -8,23 +8,9 @@ class SMBConnectionDialog {
     BuildContext context, {
     SMBConnection? editConnection,
   }) {
-    if (editConnection == null) {
-      return BlurDialog.show<bool>(
-        context: context,
-        title: '功能开发中',
-        content: '添加SMB服务器功能暂未开发完毕，敬请期待后续更新。',
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context, rootNavigator: true).pop(false),
-            child: const Text('我知道了'),
-          ),
-        ],
-      );
-    }
-
     return BlurDialog.show<bool>(
       context: context,
-      title: '编辑SMB服务器',
+      title: editConnection == null ? '添加SMB服务器' : '编辑SMB服务器',
       contentWidget: _SMBConnectionForm(editConnection: editConnection),
     );
   }
@@ -43,6 +29,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _hostController = TextEditingController();
+  final _portController = TextEditingController();
   final _domainController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -57,9 +44,12 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
     if (connection != null) {
       _nameController.text = connection.name;
       _hostController.text = connection.host;
+      _portController.text = connection.port.toString();
       _domainController.text = connection.domain;
       _usernameController.text = connection.username;
       _passwordController.text = connection.password;
+    } else {
+      _portController.text = '445';
     }
   }
 
@@ -67,6 +57,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
   void dispose() {
     _nameController.dispose();
     _hostController.dispose();
+    _portController.dispose();
     _domainController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
@@ -99,13 +90,31 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
           _buildTextField(
             controller: _hostController,
             label: '主机/IP 地址',
-            hint: '例如：192.168.1.10 或 nas.local',
+            hint: '例如：192.168.1.10 或 nas.local（IPv6: [fe80::1]）',
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return '请输入主机或IP地址';
               }
               if (value.contains('://')) {
                 return '无需包含协议，请直接输入主机或IP';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 14),
+          _buildTextField(
+            controller: _portController,
+            label: '端口',
+            hint: '默认 445',
+            keyboardType: TextInputType.number,
+            validator: (value) {
+              final trimmed = value?.trim() ?? '';
+              if (trimmed.isEmpty) {
+                return null;
+              }
+              final port = int.tryParse(trimmed);
+              if (port == null || port <= 0 || port > 65535) {
+                return '端口范围应为 1-65535';
               }
               return null;
             },
@@ -185,12 +194,14 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
     required String label,
     String? hint,
     String? Function(String?)? validator,
+    TextInputType? keyboardType,
     bool obscureText = false,
     Widget? suffixIcon,
   }) {
     return TextFormField(
       controller: controller,
       validator: validator,
+      keyboardType: keyboardType,
       obscureText: obscureText,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
@@ -227,9 +238,13 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
       _isSubmitting = true;
     });
 
+    final port =
+        int.tryParse(_portController.text.trim()) ?? widget.editConnection?.port ?? 445;
+
     final connection = SMBConnection(
       name: _nameController.text.trim(),
       host: _hostController.text.trim(),
+      port: port,
       username: _usernameController.text.trim(),
       password: _passwordController.text,
       domain: _domainController.text.trim(),

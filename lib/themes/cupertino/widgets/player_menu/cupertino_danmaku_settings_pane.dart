@@ -54,20 +54,29 @@ class _CupertinoDanmakuSettingsPaneState
   }
 
   Future<void> _handleManualMatch() async {
+    final videoState = widget.videoState;
+    final initialVideoPath = videoState.currentVideoPath;
     final result =
         await ManualDanmakuMatcher.instance.showManualMatchDialog(context);
     if (result == null) return;
+
+    if (videoState.isDisposed || videoState.currentVideoPath != initialVideoPath) {
+      debugPrint('视频已切换或播放器已销毁，取消加载弹幕');
+      return;
+    }
 
     final episodeId = result['episodeId']?.toString() ?? '';
     final animeId = result['animeId']?.toString() ?? '';
 
     if (episodeId.isEmpty || animeId.isEmpty) {
-      BlurSnackBar.show(context, '未选择有效的弹幕记录');
+      if (mounted) {
+        BlurSnackBar.show(context, '未选择有效的弹幕记录');
+      }
       return;
     }
 
     try {
-      final currentPath = widget.videoState.currentVideoPath;
+      final currentPath = videoState.currentVideoPath;
       if (currentPath != null) {
         await DanmakuHistorySync.updateHistoryWithDanmakuInfo(
           videoPath: currentPath,
@@ -76,15 +85,15 @@ class _CupertinoDanmakuSettingsPaneState
           animeTitle: result['animeTitle']?.toString(),
           episodeTitle: result['episodeTitle']?.toString(),
         );
-        widget.videoState
-            .setAnimeTitle(result['animeTitle']?.toString() ?? '');
-        widget.videoState
-            .setEpisodeTitle(result['episodeTitle']?.toString() ?? '');
+        videoState.setAnimeTitle(result['animeTitle']?.toString() ?? '');
+        videoState.setEpisodeTitle(result['episodeTitle']?.toString() ?? '');
       }
     } catch (_) {}
 
-    widget.videoState.loadDanmaku(episodeId, animeId);
-    BlurSnackBar.show(context, '已开始加载弹幕');
+    videoState.loadDanmaku(episodeId, animeId);
+    if (mounted) {
+      BlurSnackBar.show(context, '已开始加载弹幕');
+    }
   }
 
   @override

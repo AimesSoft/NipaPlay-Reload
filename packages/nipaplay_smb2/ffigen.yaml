@@ -1,0 +1,19 @@
+# Run with `dart run ffigen --config ffigen.yaml`.
+name: NipaplaySmb2Bindings
+description: |
+  Bindings for `src/nipaplay_smb2.h`.
+
+  Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
+output: 'lib/nipaplay_smb2_bindings_generated.dart'
+headers:
+  entry-points:
+    - 'src/nipaplay_smb2.h'
+  include-directives:
+    - 'src/nipaplay_smb2.h'
+preamble: |
+  // ignore_for_file: always_specify_types
+  // ignore_for_file: camel_case_types
+  // ignore_for_file: non_constant_identifier_names
+comments:
+  style: any
+  length: full

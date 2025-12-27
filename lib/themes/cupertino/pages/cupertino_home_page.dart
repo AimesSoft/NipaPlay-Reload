@@ -37,6 +37,7 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
 
@@ -251,6 +252,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         final localHistory = historyProvider.history.where((item) {
           return !item.filePath.startsWith('jellyfin://') &&
               !item.filePath.startsWith('emby://') &&
+              !MediaSourceUtils.isSmbPath(item.filePath) &&
               !item.isDandanplayRemote;
         }).toList();
 
@@ -538,6 +540,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           final localHistory = historyProvider.history.where((item) {
             return !item.filePath.startsWith('jellyfin://') &&
                 !item.filePath.startsWith('emby://') &&
+                !MediaSourceUtils.isSmbPath(item.filePath) &&
                 !item.isDandanplayRemote;
           }).toList();
 
@@ -2045,6 +2048,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               if (snapshot.hasError || !snapshot.hasData) {
                 return _buildDefaultThumbnail();
               }
+              if (snapshot.data!.isEmpty) {
+                return _buildDefaultThumbnail();
+              }
               try {
                 return Image.memory(
                   snapshot.data!,
@@ -2053,6 +2059,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
+                  errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
                 );
               } catch (e) {
                 return _buildDefaultThumbnail();
@@ -2096,12 +2103,16 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             if (snapshot.hasError || !snapshot.hasData) {
               return _buildDefaultThumbnail();
             }
+            if (snapshot.data!.isEmpty) {
+              return _buildDefaultThumbnail();
+            }
             try {
               return Image.memory(
                 snapshot.data!,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
+                errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
               );
             } catch (e) {
               return _buildDefaultThumbnail();

@@ -1,11 +1,16 @@
 import 'dart:convert';
+import 'dart:io' as io;
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smb_connect/smb_connect.dart';
+
+import 'package:nipaplay/services/smb2_native_service.dart';
 
 class SMBConnection {
   final String name;
   final String host;
+  final int port;
   final String username;
   final String password;
   final String domain;
@@ -14,6 +19,7 @@ class SMBConnection {
   const SMBConnection({
     required this.name,
     required this.host,
+    this.port = 445,
     required this.username,
     required this.password,
     this.domain = '',
@@ -23,6 +29,7 @@ class SMBConnection {
   SMBConnection copyWith({
     String? name,
     String? host,
+    int? port,
     String? username,
     String? password,
     String? domain,
@@ -31,6 +38,7 @@ class SMBConnection {
     return SMBConnection(
       name: name ?? this.name,
       host: host ?? this.host,
+      port: port ?? this.port,
       username: username ?? this.username,
       password: password ?? this.password,
       domain: domain ?? this.domain,
@@ -42,6 +50,7 @@ class SMBConnection {
     return {
       'name': name,
       'host': host,
+      'port': port,
       'username': username,
       'password': password,
       'domain': domain,
@@ -53,6 +62,9 @@ class SMBConnection {
     return SMBConnection(
       name: json['name'] ?? '',
       host: json['host'] ?? '',
+      port: json['port'] is int
+          ? json['port'] as int
+          : int.tryParse(json['port']?.toString() ?? '') ?? 445,
       username: json['username'] ?? '',
       password: json['password'] ?? '',
       domain: json['domain'] ?? '',
@@ -80,24 +92,74 @@ class SMBFileEntry {
 class SMBService {
   static const String _connectionsKey = 'smb_connections';
   static const Set<String> _videoExtensions = {
+    '264',
+    '265',
+    '3g2',
     'mp4',
+    'mp4v',
     'mkv',
+    'mk3d',
     'avi',
+    'divx',
     'mov',
+    'qt',
     'wmv',
+    'asf',
     'flv',
+    'f4v',
     'webm',
     'm4v',
     'ts',
+    'trp',
+    'tp',
+    'm2t',
     'm2ts',
+    'mts',
     'mpg',
     'mpeg',
+    'mpe',
+    'm2p',
+    'm2v',
+    'm1v',
+    'mpv',
+    'mp2v',
     '3gp',
     '3gpp',
+    'amv',
     'rmvb',
     'rm',
     'ogv',
-    'asf',
+    'ogm',
+    'ogx',
+    'ivf',
+    'mjpg',
+    'mjpeg',
+    'h264',
+    'h265',
+    'hevc',
+    'avc',
+    'mxf',
+    'gxf',
+    'drc',
+    'dvr-ms',
+    'wtv',
+    'nut',
+    'nsv',
+    'fli',
+    'flc',
+    'roq',
+    'bik',
+    'smk',
+    'tod',
+    'dv',
+    'vob',
+    'y4m',
+    'yuv',
+  };
+  static const Set<String> _playlistExtensions = {
+    'm3u8',
+    'm3u',
+    'pls',
   };
 
   SMBService._();
@@ -196,6 +258,21 @@ class SMBService {
     String path,
   ) async {
     final normalizedConnection = _normalizeConnection(connection);
+
+    if (Smb2NativeService.instance.isSupported) {
+      try {
+        final files = await Smb2NativeService.instance.listDirectory(
+          normalizedConnection,
+          path,
+        );
+        return files
+            .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
+            .toList();
+      } catch (e) {
+        debugPrint('libsmb2 列目录失败，回退 smb_connect: $e');
+      }
+    }
+
     final client = await _createClient(normalizedConnection);
     try {
       if (path.isEmpty || path == '/' || path == '\\') {
@@ -227,6 +304,7 @@ class SMBService {
               size: file.size > 0 ? file.size : null,
             ),
           )
+          .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
           .toList();
     } finally {
       await client.close();
@@ -234,6 +312,16 @@ class SMBService {
   }
 
   Future<bool> _testConnection(SMBConnection connection) async {
+    if (Smb2NativeService.instance.isSupported) {
+      try {
+        await Smb2NativeService.instance.listDirectory(connection, '/');
+        return true;
+      } catch (e) {
+        print('测试SMB连接失败(libsmb2): $e');
+        return false;
+      }
+    }
+
     SmbConnect? client;
     try {
       client = await _createClient(connection);
@@ -258,16 +346,56 @@ class SMBService {
   }
 
   SMBConnection _normalizeConnection(SMBConnection connection) {
-    final trimmedHost = connection.host.trim();
+    var trimmedHost = connection.host.trim();
+    var port = connection.port;
+    final parsedHostPort = _tryParseHostPort(trimmedHost);
+    if (parsedHostPort != null) {
+      trimmedHost = parsedHostPort.$1;
+      port = parsedHostPort.$2;
+    }
+    if (port <= 0 || port > 65535) {
+      port = 445;
+    }
     final normalizedName =
         connection.name.trim().isEmpty ? trimmedHost : connection.name.trim();
     return connection.copyWith(
       name: normalizedName,
       host: trimmedHost,
+      port: port,
       username: connection.username.trim(),
       password: connection.password,
       domain: connection.domain.trim(),
     );
+  }
+
+  (String, int)? _tryParseHostPort(String rawHost) {
+    final trimmed = rawHost.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    // Bracketed IPv6: [fe80::1]:445
+    final bracketMatch = RegExp(r'^\[([^\]]+)\]:(\d{1,5})$').firstMatch(trimmed);
+    if (bracketMatch != null) {
+      final host = bracketMatch.group(1) ?? '';
+      final port = int.tryParse(bracketMatch.group(2) ?? '');
+      if (host.isNotEmpty && port != null) {
+        return (host, port);
+      }
+      return null;
+    }
+
+    // IPv4/hostname: host:445 (avoid parsing plain IPv6)
+    final parts = trimmed.split(':');
+    if (parts.length != 2) {
+      return null;
+    }
+    final host = parts.first.trim();
+    final port = int.tryParse(parts.last.trim());
+    if (host.isEmpty || port == null) {
+      return null;
+    }
+    return (host, port);
   }
 
   String buildFileUrl(SMBConnection connection, String smbPath) {
@@ -284,6 +412,7 @@ class SMBService {
     final uri = Uri(
       scheme: 'smb',
       host: normalized.host,
+      port: normalized.port,
       path: '/$encodedSegments',
       userInfo: hasAuth
           ? '${Uri.encodeComponent(normalized.username)}:${Uri.encodeComponent(normalized.password)}'
@@ -327,5 +456,18 @@ class SMBService {
       'xyz',
     };
     return urlLikeExtensions.contains(extension);
+  }
+
+  bool isPlayableFile(String filename) {
+    final lower = filename.toLowerCase();
+    final dotIndex = lower.lastIndexOf('.');
+    if (dotIndex == -1 || dotIndex == lower.length - 1) {
+      return false;
+    }
+    final extension = lower.substring(dotIndex + 1);
+    if (_playlistExtensions.contains(extension)) {
+      return true;
+    }
+    return isVideoFile(filename);
   }
 }

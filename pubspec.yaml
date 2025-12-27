@@ -98,7 +98,10 @@ dependencies:
   hotkey_manager: ^0.2.3
   fluent_ui: ^4.12.0
   adaptive_platform_ui: ^0.1.98
+  ffi: ^2.1.3
   smb_connect: ^0.0.9
+  nipaplay_smb2:
+    path: packages/nipaplay_smb2
 
 dev_dependencies:
   flutter_test:

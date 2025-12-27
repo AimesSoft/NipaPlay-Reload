@@ -67,6 +67,7 @@ import 'utils/hotkey_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'constants/settings_keys.dart';
@@ -453,6 +454,12 @@ void main(List<String> args) async {
       AutoSyncService.instance.initialize()
     else
       Future.value(),
+
+    // SMB 本地代理（用于 SMB 文件按 HTTP/Range 播放与匹配）
+    if (!kIsWeb)
+      SMBProxyService.instance.initialize()
+    else
+      Future.value(),
   ]).then((results) async {
     // BangumiService初始化完成后，检查并刷新缺少标签的缓存
     Future.microtask(() async {
@@ -803,6 +810,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
             isPhone: globals.isPhone,
             isWeb: kIsWeb,
             isIOS: !kIsWeb && Platform.isIOS,
+            isTablet: globals.isTablet,
           );
           final overlayBuilder = (Widget child) => Stack(
                 children: [

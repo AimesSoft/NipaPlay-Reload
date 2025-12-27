@@ -122,6 +122,10 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                 final episodeId = match['episodeId'].toString();
                 final animeId = match['animeId'] as int;
 
+                // 保存当前匹配到的弹幕ID，供后续流程/发送弹幕使用
+                _episodeId = int.tryParse(episodeId);
+                _animeId = animeId;
+
                 // 从缓存加载弹幕
                 //debugPrint('检查弹幕缓存...');
                 final cachedDanmakuRaw =
@@ -134,8 +138,10 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                   _isInFinalLoadingPhase = true;
                   notifyListeners();
 
-                  _danmakuList = await compute(parseDanmakuListInBackground,
-                      cachedDanmakuRaw as List<dynamic>?);
+                  _danmakuList = await compute(
+                    parseDanmakuListInBackground,
+                    cachedDanmakuRaw as List<dynamic>?,
+                  );
 
                   // Sort the list immediately after parsing
                   _danmakuList.sort((a, b) {
@@ -144,6 +150,17 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                     return timeA.compareTo(timeB);
                   });
                   //debugPrint('缓存弹幕解析并排序完成');
+
+                  // 同步到多轨道弹幕结构，避免后续合并（如时间轴轨道）覆盖弹幕列表
+                  _danmakuTracks['dandanplay'] = {
+                    'name': '弹弹play',
+                    'source': 'dandanplay',
+                    'episodeId': episodeId,
+                    'animeId': animeId.toString(),
+                    'danmakuList': _danmakuList,
+                    'count': _danmakuList.length,
+                  };
+                  _danmakuTrackEnabled['dandanplay'] = true;
 
                   notifyListeners();
                   _setStatus(PlayerStatus.recognizing,
@@ -168,8 +185,10 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                 if (danmakuData['comments'] != null &&
                     danmakuData['comments'] is List) {
                   // Use compute for parsing network danmaku, using the imported function
-                  _danmakuList = await compute(parseDanmakuListInBackground,
-                      danmakuData['comments'] as List<dynamic>?);
+                  _danmakuList = await compute(
+                    parseDanmakuListInBackground,
+                    danmakuData['comments'] as List<dynamic>?,
+                  );
 
                   // Sort the list immediately after parsing
                   _danmakuList.sort((a, b) {
@@ -178,6 +197,17 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                     return timeA.compareTo(timeB);
                   });
                   //debugPrint('网络弹幕解析并排序完成');
+
+                  // 同步到多轨道弹幕结构，避免后续合并（如时间轴轨道）覆盖弹幕列表
+                  _danmakuTracks['dandanplay'] = {
+                    'name': '弹弹play',
+                    'source': 'dandanplay',
+                    'episodeId': episodeId,
+                    'animeId': animeId.toString(),
+                    'danmakuList': _danmakuList,
+                    'count': _danmakuList.length,
+                  };
+                  _danmakuTrackEnabled['dandanplay'] = true;
                 } else {
                   _danmakuList = [];
                   _danmakuTracks.clear();

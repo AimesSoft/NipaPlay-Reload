@@ -222,10 +222,18 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                         width: double.infinity,
                         child: FilledButton(
                           onPressed: () async {
+                            final videoState = widget.videoState;
+                            final initialVideoPath = videoState.currentVideoPath;
                             final result = await ManualDanmakuMatcher.instance
                                 .showManualMatchDialog(context);
 
                             if (result != null) {
+                              if (videoState.isDisposed ||
+                                  videoState.currentVideoPath != initialVideoPath) {
+                                debugPrint('视频已切换或播放器已销毁，取消加载弹幕');
+                                return;
+                              }
+
                               final episodeId =
                                   result['episodeId']?.toString() ?? '';
                               final animeId =
@@ -234,7 +242,7 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                               if (episodeId.isNotEmpty && animeId.isNotEmpty) {
                                 try {
                                   final currentVideoPath =
-                                      widget.videoState.currentVideoPath;
+                                      videoState.currentVideoPath;
                                   if (currentVideoPath != null) {
                                     await DanmakuHistorySync
                                         .updateHistoryWithDanmakuInfo(
@@ -247,17 +255,16 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                                           result['episodeTitle']?.toString(),
                                     );
 
-                                    widget.videoState.setAnimeTitle(
+                                    videoState.setAnimeTitle(
                                         result['animeTitle']?.toString());
-                                    widget.videoState.setEpisodeTitle(
+                                    videoState.setEpisodeTitle(
                                         result['episodeTitle']?.toString());
                                   }
                                 } catch (e) {
                                   // 继续加载弹幕
                                 }
 
-                                widget.videoState
-                                    .loadDanmaku(episodeId, animeId);
+                                videoState.loadDanmaku(episodeId, animeId);
                               }
                             }
                           },

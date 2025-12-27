@@ -52,15 +52,16 @@ class RemoteMediaFetcher {
         final headStreamed = await client.send(headRequest).timeout(defaultTimeout);
         final headResponse = await http.Response.fromStream(headStreamed);
 
-        if (headResponse.statusCode >= 200 && headResponse.statusCode < 400) {
-          fileSize = _parseContentLength(headResponse.headers);
-          resolvedFileName ??= _parseContentDispositionFileName(headResponse.headers);
-        } else {
-          debugPrint('RemoteMediaFetcher: HEAD 请求失败 (HTTP ${headResponse.statusCode})');
+          if (headResponse.statusCode >= 200 && headResponse.statusCode < 400) {
+            final parsed = _parseContentLength(headResponse.headers);
+            fileSize = (parsed != null && parsed > 0) ? parsed : null;
+            resolvedFileName ??= _parseContentDispositionFileName(headResponse.headers);
+          } else {
+            debugPrint('RemoteMediaFetcher: HEAD 请求失败 (HTTP ${headResponse.statusCode})');
+          }
+        } catch (e) {
+          debugPrint('RemoteMediaFetcher: HEAD 请求异常: $e');
         }
-      } catch (e) {
-        debugPrint('RemoteMediaFetcher: HEAD 请求异常: $e');
-      }
 
       // 使用 Range=0-16MB 拉取首段
       Uint8List headBytes = Uint8List(0);
@@ -80,7 +81,11 @@ class RemoteMediaFetcher {
           debugPrint('RemoteMediaFetcher: Range 请求返回 ${rangeStreamed.statusCode}，尝试读取但可能不完整');
         }
 
-        fileSize ??= _parseContentRange(rangeStreamed.headers) ?? rangeStreamed.contentLength;
+        final sizeFromRange =
+            _parseContentRange(rangeStreamed.headers) ?? rangeStreamed.contentLength;
+        if (fileSize == null || fileSize <= 0) {
+          fileSize = (sizeFromRange != null && sizeFromRange > 0) ? sizeFromRange : null;
+        }
         resolvedFileName ??= _parseContentDispositionFileName(rangeStreamed.headers);
         headBytes = await _readLimitedBytes(rangeStreamed.stream, maxHashLength);
       } catch (e) {

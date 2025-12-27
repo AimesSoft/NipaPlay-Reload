@@ -71,6 +71,29 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
   }
 
   @override
+  void didUpdateWidget(covariant BlurDropdown<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final selectedFromProps = _findSelectedValue();
+    if (selectedFromProps != null &&
+        selectedFromProps != _currentSelectedValue) {
+      setState(() {
+        _currentSelectedValue = selectedFromProps;
+      });
+      return;
+    }
+
+    final currentValue = _currentSelectedValue;
+    if (currentValue != null &&
+        !widget.items.any((item) => item.value == currentValue)) {
+      setState(() {
+        _currentSelectedValue =
+            widget.items.isNotEmpty ? widget.items.first.value : null;
+      });
+    }
+  }
+
+  @override
   void dispose() {
     // Ensure overlay is removed first if it exists
     _removeOverlay();
@@ -94,6 +117,15 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       }
     }
     return widget.items.isNotEmpty ? widget.items.first.value : null;
+  }
+
+  T? _findSelectedValue() {
+    for (final DropdownMenuItemData<T> item in widget.items) {
+      if (item.isSelected) {
+        return item.value;
+      }
+    }
+    return null;
   }
 
   @override

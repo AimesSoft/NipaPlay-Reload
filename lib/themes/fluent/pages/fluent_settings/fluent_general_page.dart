@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/themes/fluent/widgets/fluent_info_bar.dart';
+import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -20,6 +21,7 @@ class FluentGeneralPage extends StatefulWidget {
 class _FluentGeneralPageState extends State<FluentGeneralPage> {
   bool _filterAdultContent = true;
   int _defaultPageIndex = 0;
+  DesktopExitBehavior _desktopExitBehavior = DesktopExitBehavior.askEveryTime;
   bool _isLoading = true;
 
   // 根据平台生成页面名称列表
@@ -48,6 +50,7 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
   Future<void> _loadPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final desktopExitBehavior = await DesktopExitPreferences.load();
       if (!mounted) return;
       setState(() {
         _filterAdultContent = prefs.getBool(globalFilterAdultContentKey) ?? true;
@@ -59,6 +62,7 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
         }
 
         _defaultPageIndex = storedIndex;
+        _desktopExitBehavior = desktopExitBehavior;
         _isLoading = false;
       });
     } catch (_) {
@@ -77,6 +81,10 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
   Future<void> _saveDefaultPagePreference(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(defaultPageIndexKey, index);
+  }
+
+  Future<void> _saveDesktopExitBehavior(DesktopExitBehavior behavior) async {
+    await DesktopExitPreferences.save(behavior);
   }
 
   Future<void> _clearImageCache() async {
@@ -168,6 +176,64 @@ class _FluentGeneralPageState extends State<FluentGeneralPage> {
                   ),
                 ),
               ),
+              if (globals.isDesktop) ...[
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '关闭行为',
+                          style: FluentTheme.of(context).typography.subtitle,
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('关闭窗口时'),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: ComboBox<DesktopExitBehavior>(
+                                value: _desktopExitBehavior,
+                                items: const [
+                                  ComboBoxItem<DesktopExitBehavior>(
+                                    value: DesktopExitBehavior.askEveryTime,
+                                    child: Text('每次询问'),
+                                  ),
+                                  ComboBoxItem<DesktopExitBehavior>(
+                                    value: DesktopExitBehavior
+                                        .minimizeToTrayOrTaskbar,
+                                    child: Text('最小化到系统托盘'),
+                                  ),
+                                  ComboBoxItem<DesktopExitBehavior>(
+                                    value: DesktopExitBehavior.closePlayer,
+                                    child: Text('直接退出'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _desktopExitBehavior = value;
+                                  });
+                                  _saveDesktopExitBehavior(value);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '用于修改此前“记住我的选择”的退出方式。',
+                          style: FluentTheme.of(context).typography.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Card(
                 child: Padding(
