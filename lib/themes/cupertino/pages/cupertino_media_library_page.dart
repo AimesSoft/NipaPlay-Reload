@@ -43,6 +43,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_dandanplay_connectio
 import 'package:nipaplay/themes/cupertino/pages/network_media/cupertino_dandanplay_library_page.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 
@@ -3601,7 +3602,9 @@ class _CupertinoLibraryManagementSheetState
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          connection.host,
+                          connection.port != 445
+                              ? '${connection.host}:${connection.port}'
+                              : connection.host,
                           style: TextStyle(fontSize: 12, color: subtitleColor),
                         ),
                         if (connection.username.isNotEmpty)
@@ -4062,7 +4065,7 @@ class _CupertinoLibraryManagementSheetState
       }
 
       for (final file in files) {
-        final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+        final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
         final historyItem = WatchHistoryItem(
           filePath: fileUrl,
           animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
@@ -4112,7 +4115,7 @@ class _CupertinoLibraryManagementSheetState
     SMBFileEntry file,
   ) async {
     try {
-      final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+      final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
       final historyItem = WatchHistoryItem(
         filePath: fileUrl,
         animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),

@@ -67,6 +67,7 @@ import 'utils/hotkey_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'constants/settings_keys.dart';
@@ -451,6 +452,12 @@ void main(List<String> args) async {
     // 初始化自动同步服务（仅桌面端）
     if (globals.isDesktop)
       AutoSyncService.instance.initialize()
+    else
+      Future.value(),
+
+    // SMB 本地代理（用于 SMB 文件按 HTTP/Range 播放与匹配）
+    if (!kIsWeb)
+      SMBProxyService.instance.initialize()
     else
       Future.value(),
   ]).then((results) async {

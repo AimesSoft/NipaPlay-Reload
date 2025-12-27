@@ -17,6 +17,7 @@ import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -730,7 +731,7 @@ class _FluentLibraryManagementTabState
       initialized: _smbInitialized,
       errorMessage: _smbErrorMessage,
       nameBuilder: (c) => c.name,
-      subtitleBuilder: (c) => c.host,
+      subtitleBuilder: (c) => c.port != 445 ? '${c.host}:${c.port}' : c.host,
       extraSubtitleBuilder: (c) => c.username.isNotEmpty
           ? '用户：${c.username}${c.domain.isNotEmpty ? " @${c.domain}" : ''}'
           : null,
@@ -1611,7 +1612,7 @@ class _FluentLibraryManagementTabState
       }
 
       for (final file in files) {
-        final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+        final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
         final historyItem = WatchHistoryItem(
           filePath: fileUrl,
           animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
@@ -1662,7 +1663,7 @@ class _FluentLibraryManagementTabState
     SMBFileEntry file,
   ) async {
     try {
-      final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+      final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
       final historyItem = WatchHistoryItem(
         filePath: fileUrl,
         animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),

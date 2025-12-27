@@ -23,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPre
 import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动弹幕匹配器
 import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'; // 导入WebDAV连接对话框
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 
@@ -1156,7 +1157,7 @@ style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
                   const Text("媒体文件夹", locale:Locale("zh-Hans","zh"),
 style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 16),
-                  // 切换开关：本地文件夹 / WebDAV
+                  // 切换开关：本地文件夹 / WebDAV / SMB
                   _buildSourceToggle(),
                 ],
               ),
@@ -1243,7 +1244,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Row(
             children: [
-              // 左侧按钮：添加本地文件夹
+              // 添加本地文件夹
               Expanded(
                 child: GlassmorphicContainer(
                   width: double.infinity,
@@ -1275,24 +1276,31 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                       borderRadius: BorderRadius.circular(12),
                       child: Center(
                         child: FutureBuilder<bool>(
-                          future: io.Platform.isAndroid ? _isAndroid13Plus() : Future.value(false),
+                          future: io.Platform.isAndroid
+                              ? _isAndroid13Plus()
+                              : Future.value(false),
                           builder: (context, snapshot) {
-                            String buttonText = '添加本地文件夹'; // 默认文本
-                            
+                            String buttonText = '添加本地文件夹';
+
                             if (io.Platform.isIOS) {
                               buttonText = '扫描NipaPlay文件夹';
                             } else if (io.Platform.isAndroid) {
-                              // 如果future完成且为true，说明是Android 13+
                               if (snapshot.hasData && snapshot.data == true) {
                                 buttonText = '扫描视频文件夹';
                               } else {
                                 buttonText = '添加本地文件夹';
                               }
                             }
-                            
-                            return Text(
-                              buttonText,
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
+
+                            return FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                buttonText,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                              ),
                             );
                           },
                         ),
@@ -1301,10 +1309,10 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                   ),
                 ),
               ),
-              
-              const SizedBox(width: 12), // 间距
-              
-              // 右侧按钮：添加WebDAV服务器
+
+              const SizedBox(width: 12),
+
+              // 添加 WebDAV 服务器
               Expanded(
                 child: GlassmorphicContainer(
                   width: double.infinity,
@@ -1335,9 +1343,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                       onTap: scanService.isScanning ? null : _showWebDAVConnectionDialog,
                       borderRadius: BorderRadius.circular(12),
                       child: const Center(
-                        child: Text(
-                          '添加WebDAV服务器',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '添加WebDAV服务器',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
                         ),
                       ),
                     ),
@@ -1345,6 +1356,51 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                 ),
               ),
 
+              const SizedBox(width: 12),
+
+              // 添加 SMB 服务器
+              Expanded(
+                child: GlassmorphicContainer(
+                  width: double.infinity,
+                  height: 50,
+                  borderRadius: 12,
+                  blur: enableBlur ? 10 : 0,
+                  alignment: Alignment.center,
+                  border: 1,
+                  linearGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.15),
+                      Colors.white.withOpacity(0.05),
+                    ],
+                  ),
+                  borderGradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.3),
+                      Colors.white.withOpacity(0.1),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: scanService.isScanning ? null : _showSMBConnectionDialog,
+                      borderRadius: BorderRadius.circular(12),
+                      child: const Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '添加SMB服务器',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -2000,6 +2056,8 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           _buildSourceToggleItem('本地', _LibrarySource.local),
           const SizedBox(width: 4),
           _buildSourceToggleItem('WebDAV', _LibrarySource.webdav),
+          const SizedBox(width: 4),
+          _buildSourceToggleItem('SMB', _LibrarySource.smb),
         ],
       ),
     );
@@ -2184,6 +2242,8 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   }
 
   Widget _buildSMBConnectionTile(SMBConnection connection) {
+    final hostLabel =
+        connection.port != 445 ? '${connection.host}:${connection.port}' : connection.host;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -2225,7 +2285,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4.0),
           child: Text(
-            connection.host,
+            hostLabel,
             style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
             overflow: TextOverflow.ellipsis,
           ),
@@ -2601,7 +2661,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       try {
         final files = await _getSMBVideoFiles(connection, folderPath);
         for (final file in files) {
-          final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+          final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
           final historyItem = WatchHistoryItem(
             filePath: fileUrl,
             animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
@@ -2645,7 +2705,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   }
 
   void _playSMBFile(SMBConnection connection, SMBFileEntry file) {
-    final fileUrl = SMBService.instance.buildFileUrl(connection, file.path);
+    final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
     final historyItem = WatchHistoryItem(
       filePath: fileUrl,
       animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
