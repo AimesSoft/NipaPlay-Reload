@@ -12,16 +12,30 @@ set(ENABLE_EXAMPLES OFF CACHE BOOL "Build example programs" FORCE)
 set(ENABLE_LIBKRB5 OFF CACHE BOOL "Enable libkrb5 support" FORCE)
 set(ENABLE_GSSAPI OFF CACHE BOOL "Enable gssapi support" FORCE)
 
+# We link libsmb2 (static) into the plugin shared library; ensure PIC on
+# platforms that require it (e.g. Linux).
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 if(WIN32)
   # libsmb2 headers use _WINDOWS to determine SOCKET types.
   # Avoid Windows SDK winsock.h/winsock2.h redefinition conflicts.
   add_definitions(-D_WINDOWS -D_WINSOCKAPI_ -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
 endif()
 
+# libsmb2 is a vendored dependency; Flutter builds run an "install" step and
+# libsmb2's upstream install() rules are not needed here and may fail on CI.
+set(_np_saved_skip_install_rules "${CMAKE_SKIP_INSTALL_RULES}")
+set(CMAKE_SKIP_INSTALL_RULES ON)
 add_subdirectory(
   "${CMAKE_CURRENT_LIST_DIR}/../third_party/libsmb2"
   "${CMAKE_CURRENT_BINARY_DIR}/libsmb2"
 )
+set(CMAKE_SKIP_INSTALL_RULES "${_np_saved_skip_install_rules}")
+unset(_np_saved_skip_install_rules)
+
+if(TARGET smb2)
+  set_target_properties(smb2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 
 add_library(nipaplay_smb2 SHARED
   "nipaplay_smb2.c"
