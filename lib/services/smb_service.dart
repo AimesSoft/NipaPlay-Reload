@@ -92,24 +92,74 @@ class SMBFileEntry {
 class SMBService {
   static const String _connectionsKey = 'smb_connections';
   static const Set<String> _videoExtensions = {
+    '264',
+    '265',
+    '3g2',
     'mp4',
+    'mp4v',
     'mkv',
+    'mk3d',
     'avi',
+    'divx',
     'mov',
+    'qt',
     'wmv',
+    'asf',
     'flv',
+    'f4v',
     'webm',
     'm4v',
     'ts',
+    'trp',
+    'tp',
+    'm2t',
     'm2ts',
+    'mts',
     'mpg',
     'mpeg',
+    'mpe',
+    'm2p',
+    'm2v',
+    'm1v',
+    'mpv',
+    'mp2v',
     '3gp',
     '3gpp',
+    'amv',
     'rmvb',
     'rm',
     'ogv',
-    'asf',
+    'ogm',
+    'ogx',
+    'ivf',
+    'mjpg',
+    'mjpeg',
+    'h264',
+    'h265',
+    'hevc',
+    'avc',
+    'mxf',
+    'gxf',
+    'drc',
+    'dvr-ms',
+    'wtv',
+    'nut',
+    'nsv',
+    'fli',
+    'flc',
+    'roq',
+    'bik',
+    'smk',
+    'tod',
+    'dv',
+    'vob',
+    'y4m',
+    'yuv',
+  };
+  static const Set<String> _playlistExtensions = {
+    'm3u8',
+    'm3u',
+    'pls',
   };
 
   SMBService._();
@@ -211,8 +261,13 @@ class SMBService {
 
     if (Smb2NativeService.instance.isSupported) {
       try {
-        return await Smb2NativeService.instance
-            .listDirectory(normalizedConnection, path);
+        final files = await Smb2NativeService.instance.listDirectory(
+          normalizedConnection,
+          path,
+        );
+        return files
+            .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
+            .toList();
       } catch (e) {
         debugPrint('libsmb2 列目录失败，回退 smb_connect: $e');
       }
@@ -249,7 +304,7 @@ class SMBService {
               size: file.size > 0 ? file.size : null,
             ),
           )
-          .where((entry) => entry.isDirectory || isVideoFile(entry.name))
+          .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
           .toList();
     } finally {
       await client.close();
@@ -401,5 +456,18 @@ class SMBService {
       'xyz',
     };
     return urlLikeExtensions.contains(extension);
+  }
+
+  bool isPlayableFile(String filename) {
+    final lower = filename.toLowerCase();
+    final dotIndex = lower.lastIndexOf('.');
+    if (dotIndex == -1 || dotIndex == lower.length - 1) {
+      return false;
+    }
+    final extension = lower.substring(dotIndex + 1);
+    if (_playlistExtensions.contains(extension)) {
+      return true;
+    }
+    return isVideoFile(filename);
   }
 }
