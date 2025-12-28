@@ -80,7 +80,8 @@ class _CupertinoSharedAnimeDetailPageState
   int _currentSegment = _infoSegment;
   List<SharedRemoteEpisode>? _episodes;
   bool _isLoadingEpisodes = false;
-  
+  bool _isEpisodeListReversed = false;
+
   // Bangumi详细信息
   BangumiAnime? _bangumiAnime;
   bool _isLoadingBangumiAnime = false;
@@ -203,7 +204,8 @@ class _CupertinoSharedAnimeDetailPageState
     });
 
     try {
-      final anime = await BangumiService.instance.getAnimeDetails(widget.anime.animeId);
+      final anime =
+          await BangumiService.instance.getAnimeDetails(widget.anime.animeId);
       if (!mounted) return;
       setState(() {
         _bangumiAnime = anime;
@@ -227,7 +229,8 @@ class _CupertinoSharedAnimeDetailPageState
 
   Future<void> _loadWatchStatus() async {
     final bangumiAnime = _bangumiAnime;
-    if (bangumiAnime?.episodeList == null || bangumiAnime!.episodeList!.isEmpty) {
+    if (bangumiAnime?.episodeList == null ||
+        bangumiAnime!.episodeList!.isEmpty) {
       return;
     }
 
@@ -238,9 +241,8 @@ class _CupertinoSharedAnimeDetailPageState
 
     try {
       // 获取所有剧集的ID
-      final episodeIds = bangumiAnime.episodeList!
-          .map((episode) => episode.id)
-          .toList();
+      final episodeIds =
+          bangumiAnime.episodeList!.map((episode) => episode.id).toList();
 
       final results = await Future.wait([
         DandanplayService.getEpisodesWatchStatus(episodeIds),
@@ -805,8 +807,7 @@ class _CupertinoSharedAnimeDetailPageState
       setState(() {
         _isSubmittingRating = false;
       });
-      _showSnack('评分提交失败: ${e.toString()}',
-          type: AdaptiveSnackBarType.error);
+      _showSnack('评分提交失败: ${e.toString()}', type: AdaptiveSnackBarType.error);
       return false;
     }
   }
@@ -877,8 +878,8 @@ class _CupertinoSharedAnimeDetailPageState
     String? coverUrl;
     try {
       BangumiAnime? animeDetail = _bangumiAnime;
-      animeDetail ??= await BangumiService.instance
-          .getAnimeDetails(widget.anime.animeId);
+      animeDetail ??=
+          await BangumiService.instance.getAnimeDetails(widget.anime.animeId);
 
       final bangumiId = _parseBangumiIdFromUrl(animeDetail?.bangumiUrl);
       if (bangumiId != null) {
@@ -1045,8 +1046,8 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   Widget _buildSubPageOverlay(BuildContext context) {
-    final bool showOverlay =
-        _activeSubPage != _CupertinoDetailSubPage.detail && _bangumiAnime != null;
+    final bool showOverlay = _activeSubPage != _CupertinoDetailSubPage.detail &&
+        _bangumiAnime != null;
     final Widget child = showOverlay
         ? _buildOverlayContent(context)
         : const SizedBox.shrink(key: ValueKey('overlay-hidden'));
@@ -1217,13 +1218,11 @@ class _CupertinoSharedAnimeDetailPageState
                 const SizedBox(height: 6),
                 Text(
                   metaParts.join(' · '),
-                  style: CupertinoTheme.of(context)
-                      .textTheme
-                      .textStyle
-                      .copyWith(
-                        fontSize: 13,
-                        color: detailColor,
-                      ),
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 13,
+                            color: detailColor,
+                          ),
                 ),
               ],
             ),
@@ -1240,8 +1239,7 @@ class _CupertinoSharedAnimeDetailPageState
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
       child: CupertinoButton.filled(
-        onPressed:
-            isEnabled ? () => _playEpisode(playableEpisode!) : null,
+        onPressed: isEnabled ? () => _playEpisode(playableEpisode!) : null,
         padding: const EdgeInsets.symmetric(vertical: 14),
         borderRadius: BorderRadius.circular(16),
         child: Row(
@@ -1250,7 +1248,8 @@ class _CupertinoSharedAnimeDetailPageState
           children: const [
             Icon(CupertinoIcons.play_fill, size: 20),
             SizedBox(width: 8),
-            Text('播放', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            Text('播放',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -1263,10 +1262,8 @@ class _CupertinoSharedAnimeDetailPageState
         .textTheme
         .textStyle
         .copyWith(fontSize: 17, fontWeight: FontWeight.w600);
-    final bodyStyle = CupertinoTheme.of(context)
-        .textTheme
-        .textStyle
-        .copyWith(fontSize: 14, height: 1.45, color: CupertinoColors.secondaryLabel);
+    final bodyStyle = CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+        fontSize: 14, height: 1.45, color: CupertinoColors.secondaryLabel);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -1358,7 +1355,8 @@ class _CupertinoSharedAnimeDetailPageState
                 const SizedBox(height: 18),
                 CupertinoButton.filled(
                   onPressed: () => _loadBangumiAnime(force: true),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                   child: const Text('重新加载'),
                 ),
               ],
@@ -1400,16 +1398,52 @@ class _CupertinoSharedAnimeDetailPageState
       }
     }
 
+    final episodes = bangumiAnime.episodeList!;
+    final displayEpisodes =
+        _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
+
     return [
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: Text(
-            '剧集',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '剧集',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .textStyle
+                        .copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '共${displayEpisodes.length}集',
+                    style:
+                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                              fontSize: 13,
+                              color: CupertinoColors.secondaryLabel,
+                            ),
+                  ),
+                ],
+              ),
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minSize: 0,
+                onPressed: () {
+                  setState(() {
+                    _isEpisodeListReversed = !_isEpisodeListReversed;
+                  });
+                },
+                child: Text(
+                  _isEpisodeListReversed ? '倒序' : '正序',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1419,10 +1453,10 @@ class _CupertinoSharedAnimeDetailPageState
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             scrollDirection: Axis.horizontal,
-            itemCount: bangumiAnime.episodeList!.length,
+            itemCount: displayEpisodes.length,
             separatorBuilder: (_, __) => const SizedBox(width: 16),
             itemBuilder: (context, index) {
-              final episode = bangumiAnime.episodeList![index];
+              final episode = displayEpisodes[index];
               final sharedEpisode = sharedEpisodesMap[episode.id];
               final hasSharedFile =
                   sharedEpisode != null && sharedEpisode.fileExists;
@@ -1505,7 +1539,8 @@ class _CupertinoSharedAnimeDetailPageState
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 4),
                           decoration: BoxDecoration(
-                            color: CupertinoColors.systemGreen.withOpacity(0.85),
+                            color:
+                                CupertinoColors.systemGreen.withOpacity(0.85),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Icon(
@@ -1574,8 +1609,7 @@ class _CupertinoSharedAnimeDetailPageState
     final Widget actionButton = CupertinoButton.filled(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       borderRadius: BorderRadius.circular(10),
-      onPressed:
-          (bangumiAnime == null || isBusy) ? null : _openRatingEditor,
+      onPressed: (bangumiAnime == null || isBusy) ? null : _openRatingEditor,
       child: isBusy
           ? const SizedBox(
               width: 16,
@@ -2025,8 +2059,7 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   Widget _buildAdaptiveSegmentedControl(BuildContext context) {
-    final Color resolvedTextColor =
-        CupertinoDynamicColor.resolve(
+    final Color resolvedTextColor = CupertinoDynamicColor.resolve(
       const CupertinoDynamicColor.withBrightness(
         color: CupertinoColors.black,
         darkColor: CupertinoColors.white,
@@ -2080,8 +2113,7 @@ class _CupertinoSharedAnimeDetailPageState
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final secondaryColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-    final imageUrl =
-        _resolveImageUrl(_maybeReadProvider());
+    final imageUrl = _resolveImageUrl(_maybeReadProvider());
     final cleanSummary = _cleanSummary;
     final ratingSection = _buildRatingSection(context);
 
@@ -2215,7 +2247,8 @@ class _CupertinoSharedAnimeDetailPageState
                   )
                 else if (_bangumiAnime != null) ...[
                   // 制作信息
-                  if (_bangumiAnime!.metadata != null && _bangumiAnime!.metadata!.isNotEmpty) ...[
+                  if (_bangumiAnime!.metadata != null &&
+                      _bangumiAnime!.metadata!.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Text(
                       '制作信息',
@@ -2228,7 +2261,8 @@ class _CupertinoSharedAnimeDetailPageState
                     const SizedBox(height: 8),
                     ..._bangumiAnime!.metadata!.where((item) {
                       final trimmed = item.trim();
-                      return !trimmed.startsWith('别名:') && !trimmed.startsWith('别名：');
+                      return !trimmed.startsWith('别名:') &&
+                          !trimmed.startsWith('别名：');
                     }).map((item) {
                       final parts = item.split(RegExp(r'[:：]'));
                       if (parts.length == 2) {
@@ -2271,7 +2305,8 @@ class _CupertinoSharedAnimeDetailPageState
                   ],
 
                   // 标签
-                  if (_bangumiAnime!.tags != null && _bangumiAnime!.tags!.isNotEmpty) ...[
+                  if (_bangumiAnime!.tags != null &&
+                      _bangumiAnime!.tags!.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Text(
                       '标签',
@@ -2287,7 +2322,8 @@ class _CupertinoSharedAnimeDetailPageState
                       runSpacing: 8,
                       children: _bangumiAnime!.tags!.map((tag) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
                             color: CupertinoDynamicColor.resolve(
                               CupertinoColors.systemFill,
@@ -2506,7 +2542,9 @@ class _CupertinoSharedAnimeDetailPageState
 
     // 检查是否有BangumiAnime数据
     final bangumiAnime = _bangumiAnime;
-    if (bangumiAnime == null || bangumiAnime.episodeList == null || bangumiAnime.episodeList!.isEmpty) {
+    if (bangumiAnime == null ||
+        bangumiAnime.episodeList == null ||
+        bangumiAnime.episodeList!.isEmpty) {
       return [
         const SliverToBoxAdapter(
           child: Padding(
@@ -2545,7 +2583,42 @@ class _CupertinoSharedAnimeDetailPageState
       }
     }
 
+    final episodes = bangumiAnime.episodeList!;
+    final displayEpisodes =
+        _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
+
     return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(
+            children: [
+              Text(
+                '共${displayEpisodes.length}集',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ),
+              const Spacer(),
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minSize: 0,
+                onPressed: () {
+                  setState(() {
+                    _isEpisodeListReversed = !_isEpisodeListReversed;
+                  });
+                },
+                child: Text(
+                  _isEpisodeListReversed ? '倒序' : '正序',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         sliver: SliverList(
@@ -2555,9 +2628,10 @@ class _CupertinoSharedAnimeDetailPageState
                 return const SizedBox(height: 10);
               }
               final episodeIndex = index ~/ 2;
-              final bangumiEpisode = bangumiAnime.episodeList![episodeIndex];
+              final bangumiEpisode = displayEpisodes[episodeIndex];
               final sharedEpisode = sharedEpisodesMap[bangumiEpisode.id];
-              final hasSharedFile = sharedEpisode != null && sharedEpisode.fileExists;
+              final hasSharedFile =
+                  sharedEpisode != null && sharedEpisode.fileExists;
 
               return _buildEpisodeTile(
                 context,
@@ -2567,7 +2641,7 @@ class _CupertinoSharedAnimeDetailPageState
                 isWatched: _episodeWatchStatus[bangumiEpisode.id] ?? false,
               );
             },
-            childCount: bangumiAnime.episodeList!.length * 2 - 1,
+            childCount: displayEpisodes.length * 2 - 1,
           ),
         ),
       ),
@@ -2687,7 +2761,8 @@ class _CupertinoSharedAnimeDetailPageState
               children: [
                 if (isWatched && hasSharedFile) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                     decoration: BoxDecoration(
                       color: CupertinoColors.systemGreen.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(8),
@@ -2716,7 +2791,8 @@ class _CupertinoSharedAnimeDetailPageState
                 ],
                 if (hasSharedFile)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: CupertinoColors.activeBlue.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(8),

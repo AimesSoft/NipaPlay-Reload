@@ -65,6 +65,7 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
   String? _error;
   int _currentTabIndex = 0;
   material.TabController? _tabController;
+  bool _isEpisodeListReversed = false;
 
   // 弹弹play观看状态相关
   Map<int, bool> _dandanplayWatchStatus = {};
@@ -616,7 +617,8 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
                           width: 130,
                           height: 195,
                           fit: BoxFit.cover,
-                          loadMode: CachedImageLoadMode.legacy))), // 番剧详情页面统一使用legacy模式，避免海报突然切换
+                          loadMode: CachedImageLoadMode
+                              .legacy))), // 番剧详情页面统一使用legacy模式，避免海报突然切换
             Expanded(
               child: SizedBox(
                 height: 195,
@@ -987,154 +989,215 @@ class _FluentAnimeDetailPageState extends State<FluentAnimeDetailPage>
         child: Text('暂无剧集信息', style: FluentTheme.of(context).typography.body),
       ));
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-      itemCount: anime.episodeList!.length,
-      itemBuilder: (context, index) {
-        final episode = anime.episodeList![index];
 
-        return FutureBuilder<WatchHistoryItem?>(
-          future:
-              WatchHistoryManager.getHistoryItemByEpisode(anime.id, episode.id),
-          builder: (context, historySnapshot) {
-            Widget leadingIcon = const SizedBox(width: 20);
-            String? progressText;
-            double progress = 0.0;
+    final episodes = anime.episodeList!;
+    final displayEpisodes =
+        _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
 
-            if (historySnapshot.connectionState == ConnectionState.done) {
-              if (historySnapshot.hasData && historySnapshot.data != null) {
-                final historyItem = historySnapshot.data!;
-                progress = historyItem.watchProgress;
-                if (progress > 0.95) {
-                  leadingIcon = Icon(FluentIcons.check_mark,
-                      color: material.Colors.greenAccent.withOpacity(0.8),
-                      size: 16);
-                  progressText = '已看完';
-                } else if (progress > 0.01) {
-                  leadingIcon = Icon(FluentIcons.play,
-                      color: material.Colors.orangeAccent.withOpacity(0.8),
-                      size: 16);
-                  progressText = '${(progress * 100).toStringAsFixed(0)}%';
-                } else if (historyItem.isFromScan) {
-                  leadingIcon = Icon(FluentIcons.play,
-                      color: material.Colors.greenAccent.withOpacity(0.8),
-                      size: 16);
-                  progressText = '未播放';
-                } else {
-                  leadingIcon = Icon(FluentIcons.play,
-                      color: FluentTheme.of(context).inactiveColor, size: 16);
-                  progressText = '未找到';
-                }
-              } else {
-                leadingIcon = Icon(FluentIcons.play,
-                    color: FluentTheme.of(context).inactiveColor, size: 16);
-                progressText = '未找到';
-              }
-            }
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 4),
-              child: ListTile(
-                leading: leadingIcon,
-                title: Row(
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+          child: Row(
+            children: [
+              Text(
+                '共${displayEpisodes.length}集',
+                locale: const Locale('zh-Hans', 'zh'),
+                style: FluentTheme.of(context)
+                    .typography
+                    .caption
+                    ?.copyWith(color: FluentTheme.of(context).inactiveColor),
+              ),
+              const Spacer(),
+              Button(
+                onPressed: () {
+                  setState(() {
+                    _isEpisodeListReversed = !_isEpisodeListReversed;
+                  });
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Text(episode.title,
-                          style: FluentTheme.of(context)
-                              .typography
-                              .body
-                              ?.copyWith(fontSize: 13),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
+                    Icon(
+                      _isEpisodeListReversed
+                          ? FluentIcons.sort_up
+                          : FluentIcons.sort_down,
+                      size: 16,
                     ),
-                    // 显示弹弹play观看状态标注
-                    if (DandanplayService.isLoggedIn &&
-                        _dandanplayWatchStatus.containsKey(episode.id))
-                      Container(
-                        margin: const EdgeInsets.only(left: 8),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _dandanplayWatchStatus[episode.id] == true
-                              ? material.Colors.green.withOpacity(0.2)
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: _dandanplayWatchStatus[episode.id] == true
-                                ? material.Colors.green.withOpacity(0.6)
-                                : Colors.transparent,
-                            width: 1,
-                          ),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: Text(
-                          _dandanplayWatchStatus[episode.id] == true
-                              ? '已看'
-                              : '',
-                          locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(
-                            color: material.Colors.green.withOpacity(0.9),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isEpisodeListReversed ? '倒序' : '正序',
+                      locale: const Locale('zh-Hans', 'zh'),
+                    ),
                   ],
                 ),
-                trailing: progressText != null
-                    ? Text(progressText,
-                        locale: Locale("zh-Hans", "zh"),
-                        style: TextStyle(
-                            color: progress > 0.95
-                                ? material.Colors.greenAccent.withOpacity(0.9)
-                                : (progress > 0.01
-                                    ? material.Colors.orangeAccent
-                                    : (progressText == '未播放'
-                                        ? material.Colors.greenAccent
-                                            .withOpacity(0.9)
-                                        : FluentTheme.of(context)
-                                            .inactiveColor)),
-                            fontSize: 11))
-                    : null,
-                onPressed: () async {
-                  final WatchHistoryItem? historyItemToPlay;
-                  if (historySnapshot.connectionState == ConnectionState.done &&
-                      historySnapshot.data != null) {
-                    historyItemToPlay = historySnapshot.data!;
-                  } else {
-                    MessageHelper.showMessage(context, '媒体库中找不到此剧集的视频文件',
-                        isError: true);
-                    return;
-                  }
-
-                  if (historyItemToPlay.filePath.isNotEmpty) {
-                    final file = File(historyItemToPlay.filePath);
-                    if (await file.exists()) {
-                      final playableItem = PlayableItem(
-                        videoPath: historyItemToPlay.filePath,
-                        title: anime.nameCn,
-                        subtitle: episode.title,
-                        animeId: anime.id,
-                        episodeId: episode.id,
-                        historyItem: historyItemToPlay,
-                      );
-                      await PlaybackService().play(playableItem);
-
-                      if (mounted) Navigator.pop(context);
-                    } else {
-                      MessageHelper.showMessage(
-                          context, '文件已不存在于: ${historyItemToPlay.filePath}',
-                          isError: true);
-                    }
-                  } else {
-                    MessageHelper.showMessage(context, '该剧集记录缺少文件路径',
-                        isError: true);
-                  }
-                },
               ),
-            );
-          },
-        );
-      },
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: ListView.builder(
+            key: ValueKey(_isEpisodeListReversed),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+            itemCount: displayEpisodes.length,
+            itemBuilder: (context, index) {
+              final episode = displayEpisodes[index];
+
+              return FutureBuilder<WatchHistoryItem?>(
+                future: WatchHistoryManager.getHistoryItemByEpisode(
+                    anime.id, episode.id),
+                builder: (context, historySnapshot) {
+                  Widget leadingIcon = const SizedBox(width: 20);
+                  String? progressText;
+                  double progress = 0.0;
+
+                  if (historySnapshot.connectionState == ConnectionState.done) {
+                    if (historySnapshot.hasData &&
+                        historySnapshot.data != null) {
+                      final historyItem = historySnapshot.data!;
+                      progress = historyItem.watchProgress;
+                      if (progress > 0.95) {
+                        leadingIcon = Icon(FluentIcons.check_mark,
+                            color: material.Colors.greenAccent.withOpacity(0.8),
+                            size: 16);
+                        progressText = '已看完';
+                      } else if (progress > 0.01) {
+                        leadingIcon = Icon(FluentIcons.play,
+                            color:
+                                material.Colors.orangeAccent.withOpacity(0.8),
+                            size: 16);
+                        progressText =
+                            '${(progress * 100).toStringAsFixed(0)}%';
+                      } else if (historyItem.isFromScan) {
+                        leadingIcon = Icon(FluentIcons.play,
+                            color: material.Colors.greenAccent.withOpacity(0.8),
+                            size: 16);
+                        progressText = '未播放';
+                      } else {
+                        leadingIcon = Icon(FluentIcons.play,
+                            color: FluentTheme.of(context).inactiveColor,
+                            size: 16);
+                        progressText = '未找到';
+                      }
+                    } else {
+                      leadingIcon = Icon(FluentIcons.play,
+                          color: FluentTheme.of(context).inactiveColor,
+                          size: 16);
+                      progressText = '未找到';
+                    }
+                  }
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    child: ListTile(
+                      leading: leadingIcon,
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(episode.title,
+                                style: FluentTheme.of(context)
+                                    .typography
+                                    .body
+                                    ?.copyWith(fontSize: 13),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                          // 显示弹弹play观看状态标注
+                          if (DandanplayService.isLoggedIn &&
+                              _dandanplayWatchStatus.containsKey(episode.id))
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color:
+                                    _dandanplayWatchStatus[episode.id] == true
+                                        ? material.Colors.green.withOpacity(0.2)
+                                        : Colors.transparent,
+                                border: Border.all(
+                                  color: _dandanplayWatchStatus[episode.id] ==
+                                          true
+                                      ? material.Colors.green.withOpacity(0.6)
+                                      : Colors.transparent,
+                                  width: 1,
+                                ),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                              child: Text(
+                                _dandanplayWatchStatus[episode.id] == true
+                                    ? '已看'
+                                    : '',
+                                locale: Locale("zh-Hans", "zh"),
+                                style: TextStyle(
+                                  color: material.Colors.green.withOpacity(0.9),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      trailing: progressText != null
+                          ? Text(progressText,
+                              locale: Locale("zh-Hans", "zh"),
+                              style: TextStyle(
+                                  color: progress > 0.95
+                                      ? material.Colors.greenAccent
+                                          .withOpacity(0.9)
+                                      : (progress > 0.01
+                                          ? material.Colors.orangeAccent
+                                          : (progressText == '未播放'
+                                              ? material.Colors.greenAccent
+                                                  .withOpacity(0.9)
+                                              : FluentTheme.of(context)
+                                                  .inactiveColor)),
+                                  fontSize: 11))
+                          : null,
+                      onPressed: () async {
+                        final WatchHistoryItem? historyItemToPlay;
+                        if (historySnapshot.connectionState ==
+                                ConnectionState.done &&
+                            historySnapshot.data != null) {
+                          historyItemToPlay = historySnapshot.data!;
+                        } else {
+                          MessageHelper.showMessage(context, '媒体库中找不到此剧集的视频文件',
+                              isError: true);
+                          return;
+                        }
+
+                        if (historyItemToPlay.filePath.isNotEmpty) {
+                          final file = File(historyItemToPlay.filePath);
+                          if (await file.exists()) {
+                            final playableItem = PlayableItem(
+                              videoPath: historyItemToPlay.filePath,
+                              title: anime.nameCn,
+                              subtitle: episode.title,
+                              animeId: anime.id,
+                              episodeId: episode.id,
+                              historyItem: historyItemToPlay,
+                            );
+                            await PlaybackService().play(playableItem);
+
+                            if (mounted) Navigator.pop(context);
+                          } else {
+                            MessageHelper.showMessage(context,
+                                '文件已不存在于: ${historyItemToPlay.filePath}',
+                                isError: true);
+                          }
+                        } else {
+                          MessageHelper.showMessage(context, '该剧集记录缺少文件路径',
+                              isError: true);
+                        }
+                      },
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
