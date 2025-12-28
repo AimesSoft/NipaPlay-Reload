@@ -23,7 +23,7 @@ if(WIN32)
 endif()
 
 # libsmb2 is a vendored dependency; Flutter builds run an "install" step and
-# libsmb2's upstream install() rules are not needed here and may fail on CI.
+# libsmb2's upstream install() rules are not needed here and can fail on CI.
 set(_np_saved_skip_install_rules "${CMAKE_SKIP_INSTALL_RULES}")
 set(CMAKE_SKIP_INSTALL_RULES ON)
 add_subdirectory(
@@ -32,6 +32,15 @@ add_subdirectory(
 )
 set(CMAKE_SKIP_INSTALL_RULES "${_np_saved_skip_install_rules}")
 unset(_np_saved_skip_install_rules)
+
+# When install rules are skipped, CMake may not generate the per-directory
+# install script, but the parent install script will still try to include it.
+set(_np_libsmb2_install_script "${CMAKE_CURRENT_BINARY_DIR}/libsmb2/cmake_install.cmake")
+if(NOT EXISTS "${_np_libsmb2_install_script}")
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/libsmb2")
+  file(WRITE "${_np_libsmb2_install_script}" "# Stub install script for vendored libsmb2\n")
+endif()
+unset(_np_libsmb2_install_script)
 
 if(TARGET smb2)
   set_target_properties(smb2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
