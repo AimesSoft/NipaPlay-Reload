@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:flutter/foundation.dart';
@@ -19,6 +20,7 @@ class _FluentSubtitleTracksMenuState extends State<FluentSubtitleTracksMenu> {
   final SubtitleService _subtitleService = SubtitleService();
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
+  bool _didAutoLoadLastActive = false;
 
   @override
   void initState() {
@@ -43,7 +45,10 @@ class _FluentSubtitleTracksMenuState extends State<FluentSubtitleTracksMenu> {
         });
         
         // 检查是否有上次激活的字幕需要自动加载
-        await _autoLoadLastActiveSubtitle();
+        if (!_didAutoLoadLastActive) {
+          _didAutoLoadLastActive = true;
+          await _autoLoadLastActiveSubtitle();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -121,6 +126,121 @@ class _FluentSubtitleTracksMenuState extends State<FluentSubtitleTracksMenu> {
     } catch (e) {
       setState(() => _isLoading = false);
       _showErrorInfo('加载字幕文件失败: $e');
+    }
+  }
+
+  Future<void> _loadRemoteSubtitleFile() async {
+    if (kIsWeb) {
+      _showErrorInfo('Web平台不支持加载远程字幕');
+      return;
+    }
+
+    final videoPath = widget.videoState.currentVideoPath;
+    if (videoPath == null || videoPath.isEmpty) {
+      _showErrorInfo('没有正在播放的视频文件');
+      return;
+    }
+
+    try {
+      setState(() => _isLoading = true);
+      final candidates =
+          await RemoteSubtitleService.instance.listCandidatesForVideo(videoPath);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      if (candidates.isEmpty) {
+        _showErrorInfo('当前远程目录未找到字幕文件');
+        return;
+      }
+
+      final selected = await showDialog<RemoteSubtitleCandidate>(
+        context: context,
+        builder: (context) => ContentDialog(
+          title: const Text('选择远程字幕'),
+          content: SizedBox(
+            width: 420,
+            height: 360,
+            child: ListView.separated(
+              itemCount: candidates.length,
+              separatorBuilder: (_, __) => const Divider(size: 1),
+              itemBuilder: (context, index) {
+                final candidate = candidates[index];
+                return ListTile(
+                  title: Text(candidate.name),
+                  subtitle: Text(candidate.sourceLabel),
+                  onPressed: () => Navigator.of(context).pop(candidate),
+                );
+              },
+            ),
+          ),
+          actions: [
+            Button(
+              child: const Text('取消'),
+              onPressed: () => Navigator.of(context).pop(null),
+            ),
+          ],
+        ),
+      );
+
+      if (selected == null) return;
+
+      setState(() => _isLoading = true);
+      final cachedPath =
+          await RemoteSubtitleService.instance.ensureSubtitleCached(selected);
+      if (!mounted) return;
+
+      final subtitleInfo = <String, dynamic>{
+        'path': cachedPath,
+        'name': selected.name,
+        'type': selected.extension.substring(1),
+        'addTime': DateTime.now().millisecondsSinceEpoch,
+        'isActive': false,
+        'remoteSource': selected.sourceLabel,
+        if (selected is WebDavRemoteSubtitleCandidate) ...{
+          'remoteType': 'webdav',
+          'remoteConn': selected.connection.name,
+          'remotePath': selected.remotePath,
+        },
+        if (selected is SmbRemoteSubtitleCandidate) ...{
+          'remoteType': 'smb',
+          'remoteConn': selected.connection.name,
+          'remotePath': selected.smbPath,
+        },
+      };
+
+      final existingIndex =
+          _externalSubtitles.indexWhere((s) => s['path'] == cachedPath);
+      if (existingIndex >= 0) {
+        await _applyExternalSubtitle(cachedPath, existingIndex);
+        _showSuccessInfo('已切换到字幕: ${selected.name}');
+        return;
+      }
+
+      final success = await _subtitleService.addExternalSubtitle(
+        videoPath,
+        subtitleInfo,
+      );
+      if (!success) {
+        _showErrorInfo('添加字幕文件失败');
+        return;
+      }
+
+      await _loadExternalSubtitles();
+
+      final newIndex =
+          _externalSubtitles.indexWhere((s) => s['path'] == cachedPath);
+      if (newIndex >= 0) {
+        await _applyExternalSubtitle(cachedPath, newIndex);
+      } else {
+        widget.videoState.forceSetExternalSubtitle(cachedPath);
+      }
+
+      _showSuccessInfo('已加载远程字幕: ${selected.name}');
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+      _showErrorInfo('加载远程字幕失败: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -216,6 +336,10 @@ class _FluentSubtitleTracksMenuState extends State<FluentSubtitleTracksMenu> {
   Widget build(BuildContext context) {
     final subtitleTracks = widget.videoState.player.mediaInfo.subtitle;
     final hasEmbeddedSubtitles = subtitleTracks != null && subtitleTracks.isNotEmpty;
+    final canLoadRemote = !kIsWeb &&
+        widget.videoState.currentVideoPath != null &&
+        RemoteSubtitleService.instance
+            .isPotentialRemoteVideoPath(widget.videoState.currentVideoPath!);
     
     return Column(
       children: [
@@ -246,33 +370,45 @@ class _FluentSubtitleTracksMenuState extends State<FluentSubtitleTracksMenu> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _isLoading 
-              ? FilledButton(
-                  onPressed: null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilledButton(
+                  onPressed: _isLoading ? null : _loadExternalSubtitleFile,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: ProgressRing(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text('加载中...'),
-                    ],
-                  ),
-                )
-              : FilledButton(
-                  onPressed: _loadExternalSubtitleFile,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(FluentIcons.add, size: 16),
-                      const SizedBox(width: 8),
-                      const Text('加载本地字幕文件'),
+                      if (_isLoading) ...[
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: ProgressRing(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 8),
+                      ] else ...[
+                        const Icon(FluentIcons.add, size: 16),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(_isLoading ? '加载中...' : '加载本地字幕文件'),
                     ],
                   ),
                 ),
+                if (canLoadRemote) ...[
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: _isLoading ? null : _loadRemoteSubtitleFile,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(FluentIcons.cloud_download, size: 16),
+                        const SizedBox(width: 8),
+                        const Text('从远程媒体库加载字幕'),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
           const SizedBox(height: 16),
         ],

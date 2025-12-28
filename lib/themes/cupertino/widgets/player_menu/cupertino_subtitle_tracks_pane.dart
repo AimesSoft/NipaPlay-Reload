@@ -5,6 +5,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 
 class CupertinoSubtitleTracksPane extends StatefulWidget {
@@ -27,6 +28,7 @@ class _CupertinoSubtitleTracksPaneState
   final SubtitleService _subtitleService = SubtitleService();
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
+  bool _didAutoLoadLastActive = false;
 
   @override
   void initState() {
@@ -47,7 +49,10 @@ class _CupertinoSubtitleTracksPaneState
       setState(() {
         _externalSubtitles = subtitles;
       });
-      await _autoLoadLastActiveSubtitle();
+      if (!_didAutoLoadLastActive) {
+        _didAutoLoadLastActive = true;
+        await _autoLoadLastActiveSubtitle();
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -117,6 +122,103 @@ class _CupertinoSubtitleTracksPaneState
     }
   }
 
+  Future<void> _loadRemoteSubtitleFile() async {
+    if (kIsWeb) {
+      _showMessage('当前平台暂不支持加载远程字幕');
+      return;
+    }
+
+    final videoPath = widget.videoState.currentVideoPath;
+    if (videoPath == null) {
+      _showMessage('请先开始播放视频再加载字幕');
+      return;
+    }
+
+    try {
+      setState(() => _isLoading = true);
+      final candidates =
+          await RemoteSubtitleService.instance.listCandidatesForVideo(videoPath);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      if (candidates.isEmpty) {
+        _showMessage('当前远程目录未找到字幕文件');
+        return;
+      }
+
+      final selected = await CupertinoBottomSheet.show<RemoteSubtitleCandidate>(
+        context: context,
+        title: '选择远程字幕',
+        child: ListView(
+          children: [
+            CupertinoListSection.insetGrouped(
+              children: candidates
+                  .map(
+                    (candidate) => CupertinoListTile(
+                      title: Text(candidate.name),
+                      subtitle: Text(candidate.sourceLabel),
+                      onTap: () => Navigator.of(context).pop(candidate),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      );
+
+      if (selected == null) return;
+
+      setState(() => _isLoading = true);
+      final cachedPath =
+          await RemoteSubtitleService.instance.ensureSubtitleCached(selected);
+      if (!mounted) return;
+
+      final subtitleInfo = <String, dynamic>{
+        'path': cachedPath,
+        'name': selected.name,
+        'type': selected.extension.substring(1),
+        'addTime': DateTime.now().millisecondsSinceEpoch,
+        'isActive': false,
+        'remoteSource': selected.sourceLabel,
+        if (selected is WebDavRemoteSubtitleCandidate) ...{
+          'remoteType': 'webdav',
+          'remoteConn': selected.connection.name,
+          'remotePath': selected.remotePath,
+        },
+        if (selected is SmbRemoteSubtitleCandidate) ...{
+          'remoteType': 'smb',
+          'remoteConn': selected.connection.name,
+          'remotePath': selected.smbPath,
+        },
+      };
+
+      final existingIndex =
+          _externalSubtitles.indexWhere((s) => s['path'] == cachedPath);
+      if (existingIndex >= 0) {
+        await _applyExternalSubtitle(cachedPath, existingIndex);
+        _showMessage('已切换到字幕：${selected.name}');
+        return;
+      }
+
+      await _subtitleService.addExternalSubtitle(videoPath, subtitleInfo);
+      await _loadExternalSubtitles();
+
+      final newIndex =
+          _externalSubtitles.indexWhere((s) => s['path'] == cachedPath);
+      if (newIndex >= 0) {
+        await _applyExternalSubtitle(cachedPath, newIndex);
+      } else {
+        widget.videoState.forceSetExternalSubtitle(cachedPath);
+      }
+
+      _showMessage('已加载远程字幕：${selected.name}');
+    } catch (error) {
+      _showMessage('加载远程字幕失败：$error');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _applyExternalSubtitle(String filePath, int index) async {
     final path = widget.videoState.currentVideoPath;
     if (path == null) return;
@@ -165,6 +267,10 @@ class _CupertinoSubtitleTracksPaneState
   @override
   Widget build(BuildContext context) {
     final embeddedTracks = widget.videoState.player.mediaInfo.subtitle;
+    final canLoadRemote = !kIsWeb &&
+        widget.videoState.currentVideoPath != null &&
+        RemoteSubtitleService.instance
+            .isPotentialRemoteVideoPath(widget.videoState.currentVideoPath!);
 
     final children = <Widget>[
       CupertinoListSection.insetGrouped(
@@ -214,6 +320,25 @@ class _CupertinoSubtitleTracksPaneState
           ),
         ),
       );
+
+      if (canLoadRemote) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: CupertinoButton.filled(
+              onPressed: _isLoading ? null : _loadRemoteSubtitleFile,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(CupertinoIcons.cloud_download),
+                  SizedBox(width: 6),
+                  Text('从远程媒体库加载字幕'),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
     }
 
     if (_externalSubtitles.isNotEmpty) {

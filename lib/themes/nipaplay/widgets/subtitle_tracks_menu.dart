@@ -7,10 +7,13 @@ import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'blur_button.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:flutter/foundation.dart';
 
 class SubtitleTracksMenu extends StatefulWidget {
@@ -115,7 +118,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       final name = p.basename(videoPath);
       return '$name-$size';
     }
-    return p.basename(videoPath);
+    return sha1.convert(utf8.encode(videoPath)).toString();
   }
   
   // 保存外部字幕信息到SharedPreferences
@@ -193,9 +196,10 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       if (!filePath.toLowerCase().endsWith('.srt') && 
           !filePath.toLowerCase().endsWith('.ass') && 
           !filePath.toLowerCase().endsWith('.ssa') &&
-          !filePath.toLowerCase().endsWith('.sub')) {
+          !filePath.toLowerCase().endsWith('.sub') &&
+          !filePath.toLowerCase().endsWith('.sup')) {
         if (context.mounted) {
-          BlurSnackBar.show(context, '不支持的字幕格式，请选择 .srt, .ass, .ssa 或 .sub 文件');
+          BlurSnackBar.show(context, '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub 或 .sup 文件');
           setState(() => _isLoading = false);
         }
         return;
@@ -241,6 +245,121 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       if (context.mounted) {
         BlurSnackBar.show(context, '加载字幕文件失败: $e');
       }
+    }
+  }
+
+  Future<void> _loadRemoteSubtitle(BuildContext context) async {
+    if (kIsWeb) {
+      BlurSnackBar.show(context, 'Web平台不支持加载远程字幕');
+      return;
+    }
+
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    final videoPath = videoState.currentVideoPath;
+    if (videoPath == null || videoPath.isEmpty) {
+      BlurSnackBar.show(context, '没有正在播放的视频文件');
+      return;
+    }
+
+    try {
+      setState(() => _isLoading = true);
+
+      final candidates =
+          await RemoteSubtitleService.instance.listCandidatesForVideo(videoPath);
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      if (candidates.isEmpty) {
+        BlurSnackBar.show(context, '当前远程目录未找到字幕文件');
+        return;
+      }
+
+      final selected = await BlurDialog.show<RemoteSubtitleCandidate>(
+        context: context,
+        title: '选择远程字幕',
+        contentWidget: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+            maxWidth: 520,
+          ),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: candidates.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final candidate = candidates[index];
+              return ListTile(
+                title: Text(candidate.name),
+                subtitle: Text(candidate.sourceLabel),
+                onTap: () => Navigator.of(context).pop(candidate),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('取消', style: TextStyle(color: Colors.white70)),
+            onPressed: () => Navigator.of(context).pop(null),
+          ),
+        ],
+      );
+
+      if (selected == null) return;
+
+      setState(() => _isLoading = true);
+      final cachedPath =
+          await RemoteSubtitleService.instance.ensureSubtitleCached(selected);
+      if (!mounted) return;
+
+      final existingIndex =
+          _externalSubtitles.indexWhere((s) => s['path'] == cachedPath);
+      if (existingIndex >= 0) {
+        _applyExternalSubtitle(cachedPath, existingIndex);
+        if (context.mounted) {
+          await _saveExternalSubtitles(context);
+          BlurSnackBar.show(context, '已切换到字幕: ${selected.name}');
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final subtitleInfo = <String, dynamic>{
+        'path': cachedPath,
+        'name': selected.name,
+        'type': selected.extension.substring(1),
+        'addTime': DateTime.now().millisecondsSinceEpoch,
+        'isActive': false,
+        'remoteSource': selected.sourceLabel,
+        if (selected is WebDavRemoteSubtitleCandidate) ...{
+          'remoteType': 'webdav',
+          'remoteConn': selected.connection.name,
+          'remotePath': selected.remotePath,
+        },
+        if (selected is SmbRemoteSubtitleCandidate) ...{
+          'remoteType': 'smb',
+          'remoteConn': selected.connection.name,
+          'remotePath': selected.smbPath,
+        },
+      };
+
+      setState(() {
+        _externalSubtitles.add(subtitleInfo);
+      });
+
+      _applyExternalSubtitle(cachedPath, _externalSubtitles.length - 1);
+
+      if (context.mounted) {
+        await _saveExternalSubtitles(context);
+        BlurSnackBar.show(context, '已加载远程字幕: ${selected.name}');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+      if (context.mounted) {
+        BlurSnackBar.show(context, '加载远程字幕失败: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
   
@@ -505,7 +624,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
             children: [
               // 添加加载本地字幕文件的按钮
               if (!kIsWeb) ...[
-                _isLoading 
+                _isLoading
                   ? const Center(
                       child: SizedBox(
                         width: 24,
@@ -516,14 +635,35 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                         ),
                       ),
                     )
-                  : BlurButton(
-                      icon: Icons.add_circle_outline,
-                      text: "加载本地字幕文件",
-                      onTap: () => _loadExternalSubtitle(context),
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                      margin: const EdgeInsets.symmetric(horizontal: 0),
-                      expandHorizontally: true,
-                      borderRadius: BorderRadius.zero,
+                  : Column(
+                      children: [
+                        BlurButton(
+                          icon: Icons.add_circle_outline,
+                          text: "加载本地字幕文件",
+                          onTap: () => _loadExternalSubtitle(context),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12, horizontal: 16),
+                          margin: const EdgeInsets.symmetric(horizontal: 0),
+                          expandHorizontally: true,
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        if (videoState.currentVideoPath != null &&
+                            RemoteSubtitleService.instance
+                                .isPotentialRemoteVideoPath(
+                                    videoState.currentVideoPath!)) ...[
+                          const SizedBox(height: 8),
+                          BlurButton(
+                            icon: Icons.cloud_download_outlined,
+                            text: "从远程媒体库加载字幕",
+                            onTap: () => _loadRemoteSubtitle(context),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 16),
+                            margin: const EdgeInsets.symmetric(horizontal: 0),
+                            expandHorizontally: true,
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ],
+                      ],
                     ),
                 const SizedBox(height: 16),
               ],

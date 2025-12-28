@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -305,6 +304,60 @@ class SMBService {
             ),
           )
           .where((entry) => entry.isDirectory || isPlayableFile(entry.name))
+          .toList();
+    } finally {
+      await client.close();
+    }
+  }
+
+  Future<List<SMBFileEntry>> listDirectoryAll(
+    SMBConnection connection,
+    String path,
+  ) async {
+    final normalizedConnection = _normalizeConnection(connection);
+
+    if (Smb2NativeService.instance.isSupported) {
+      try {
+        return await Smb2NativeService.instance.listDirectory(
+          normalizedConnection,
+          path,
+        );
+      } catch (e) {
+        debugPrint('libsmb2 列目录失败，回退 smb_connect: $e');
+      }
+    }
+
+    final client = await _createClient(normalizedConnection);
+    try {
+      if (path.isEmpty || path == '/' || path == '\\') {
+        final shares = await client.listShares();
+        return shares
+            .where((share) => share.isDirectory())
+            .map(
+              (share) => SMBFileEntry(
+                name: share.name,
+                path: _normalizePath(share.path),
+                isDirectory: true,
+                isShare: true,
+              ),
+            )
+            .toList();
+      }
+
+      final normalizedPath = _normalizePath(path);
+      final directoryFile = await client.file(
+          normalizedPath.endsWith('/') ? normalizedPath : '$normalizedPath/');
+      final files = await client.listFiles(directoryFile);
+
+      return files
+          .map(
+            (file) => SMBFileEntry(
+              name: file.name,
+              path: _normalizePath(file.path),
+              isDirectory: file.isDirectory(),
+              size: file.size > 0 ? file.size : null,
+            ),
+          )
           .toList();
     } finally {
       await client.close();

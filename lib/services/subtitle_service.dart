@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -24,7 +25,7 @@ class SubtitleService {
       final name = p.basename(videoPath);
       return '$name-$size';
     }
-    return p.basename(videoPath);
+    return sha1.convert(utf8.encode(videoPath)).toString();
   }
 
   /// 加载指定视频的外部字幕列表

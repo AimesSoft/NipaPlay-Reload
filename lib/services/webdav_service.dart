@@ -76,6 +76,16 @@ class WebDAVFile {
   });
 }
 
+class WebDAVResolvedFile {
+  final WebDAVConnection connection;
+  final String relativePath;
+
+  const WebDAVResolvedFile({
+    required this.connection,
+    required this.relativePath,
+  });
+}
+
 class WebDAVService {
   static const String _connectionsKey = 'webdav_connections';
   static const String _userAgent = 'WebDAVFS/3.0 (NipaPlay)';
@@ -306,6 +316,51 @@ class WebDAVService {
     }
   }
 
+  Future<List<WebDAVFile>> listDirectoryAll(
+    WebDAVConnection connection,
+    String path,
+  ) async {
+    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedPath = _normalizeDirectoryPath(path);
+    final client = _createClient(normalizedConnection);
+
+    try {
+      final remoteFiles = await client.readDir(normalizedPath);
+      final result = <WebDAVFile>[];
+
+      for (final remote in remoteFiles) {
+        final converted = _toWebDAVFile(remote, normalizedPath);
+        if (converted == null) {
+          continue;
+        }
+        result.add(converted);
+      }
+
+      return result;
+    } on DioException catch (e) {
+      if (_shouldFallbackOnDioException(e)) {
+        print(
+            '🔁 webdav_client 列目录失败 (状态码: ${e.response?.statusCode ?? 'unknown'})，尝试兼容模式...');
+        return await _legacyListDirectory(
+          normalizedConnection,
+          normalizedPath,
+          includeAllFiles: true,
+        );
+      }
+      print('❌ 获取WebDAV目录内容失败: $e');
+      print('📍 堆栈: ${e.stackTrace}');
+      rethrow;
+    } catch (e, stackTrace) {
+      print('❌ 获取WebDAV目录内容失败: $e');
+      print('📍 堆栈: $stackTrace');
+      return await _legacyListDirectory(
+        normalizedConnection,
+        normalizedPath,
+        includeAllFiles: true,
+      );
+    }
+  }
+
   bool isVideoFile(String filename) {
     final lower = filename.toLowerCase();
     final dotIndex = lower.lastIndexOf('.');
@@ -365,6 +420,47 @@ class WebDAVService {
     );
 
     return uri.toString();
+  }
+
+  WebDAVResolvedFile? resolveFileUrl(String fileUrl) {
+    final trimmed = fileUrl.trim();
+    if (trimmed.isEmpty) return null;
+
+    final fileUri = Uri.tryParse(trimmed);
+    if (fileUri == null || fileUri.scheme.isEmpty || fileUri.host.isEmpty) {
+      return null;
+    }
+
+    WebDAVConnection? bestConnection;
+    int bestScore = -1;
+
+    for (final conn in _connections) {
+      final normalized = _normalizeConnection(conn);
+      final baseUri = Uri.tryParse(normalized.url);
+      if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
+        continue;
+      }
+
+      if (baseUri.scheme != fileUri.scheme) continue;
+      if (baseUri.host != fileUri.host) continue;
+      if (_effectivePort(baseUri) != _effectivePort(fileUri)) continue;
+
+      final basePath =
+          _ensureTrailingSlash(_collapseSlashes(baseUri.path.isEmpty ? '/' : baseUri.path));
+      final filePath = _collapseSlashes(fileUri.path.isEmpty ? '/' : fileUri.path);
+      if (!filePath.startsWith(basePath)) continue;
+
+      final score = basePath.length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestConnection = normalized;
+      }
+    }
+
+    if (bestConnection == null) return null;
+
+    final normalizedPath = _normalizeFilePath(fileUri.path, false);
+    return WebDAVResolvedFile(connection: bestConnection, relativePath: normalizedPath);
   }
 
   Future<void> updateConnectionStatus(String name) async {
@@ -795,6 +891,7 @@ class WebDAVService {
   Future<List<WebDAVFile>> _legacyListDirectory(
     WebDAVConnection connection,
     String path,
+    {bool includeAllFiles = false}
   ) async {
     try {
       print('📂 使用兼容模式获取WebDAV目录内容: ${connection.name}:$path');
@@ -864,7 +961,11 @@ class WebDAVService {
         throw Exception('WebDAV PROPFIND failed: ${response.statusCode}');
       }
 
-      final files = _parseWebDAVResponse(responseBody, path);
+      final files = _parseWebDAVResponse(
+        responseBody,
+        path,
+        includeAllFiles: includeAllFiles,
+      );
       print('📁 兼容模式解析到 ${files.length} 个项目');
 
       return files;
@@ -875,7 +976,11 @@ class WebDAVService {
     }
   }
 
-  List<WebDAVFile> _parseWebDAVResponse(String xmlResponse, String basePath) {
+  List<WebDAVFile> _parseWebDAVResponse(
+    String xmlResponse,
+    String basePath, {
+    bool includeAllFiles = false,
+  }) {
     final List<WebDAVFile> files = [];
 
     try {
@@ -1124,7 +1229,7 @@ class WebDAVService {
             lastModified: lastModified,
           );
 
-          if (isDirectory || isVideoFile(displayName)) {
+          if (isDirectory || includeAllFiles || isVideoFile(displayName)) {
             files.add(webDavFile);
           }
         } catch (e) {
@@ -1140,6 +1245,13 @@ class WebDAVService {
     }
 
     return files;
+  }
+
+  int _effectivePort(Uri uri) {
+    if (uri.hasPort) return uri.port;
+    if (uri.scheme == 'https') return 443;
+    if (uri.scheme == 'http') return 80;
+    return 0;
   }
 
   Future<http.Response> _sendRequest(
