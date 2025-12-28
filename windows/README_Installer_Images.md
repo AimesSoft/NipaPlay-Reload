@@ -1,4 +1,6 @@
-# NipaPlay Windows 安装程序图片配置说明
+# NipaPlay Windows 安装程序图片配置说明（历史 NSIS 方案）
+
+当前 GitHub Actions 已切换为 Inno Setup 6（modern wizard style），默认不再使用本文档中的 NSIS 横幅/位图资源。本文件保留用于参考旧的 NSIS 安装器方案。
 
 ## 图片文件列表
 

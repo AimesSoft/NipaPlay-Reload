@@ -33,20 +33,6 @@ runs:
         yes | sdkmanager --licenses >/dev/null
         set -o pipefail
 
-    - name: Free workspace disk
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "=== Disk usage before cleanup ==="
-        df -h
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/lib/android/sdk/system-images
-        sudo rm -rf /usr/local/lib/android/sdk/emulator
-        sudo rm -rf /usr/local/lib/android/sdk/ndk/*
-        echo "=== Disk usage after cleanup ==="
-        df -h
-
     - name: Install 7zip dependency
       shell: bash
       run: |

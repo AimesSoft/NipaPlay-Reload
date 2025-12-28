@@ -135,152 +135,164 @@ runs:
         Compress-Archive -Path $DestDir -DestinationPath $zipPath -Force
         echo "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
 
-    - name: Prepare Windows installer assets
+    - name: Install Inno Setup
       shell: pwsh
       run: |
-        # Install ImageMagick for image processing
-        choco install imagemagick -y
-        
-        $arch = "x64"
-        $version = "${{ inputs.app-version }}"
-        $BuildDir = "build\windows\x64\runner\Release"
-        
-        # Create installer assets directory
-        New-Item -Path "installer_assets" -ItemType Directory -Force
-        
-        # Copy installer script and assets to build directory
-        Copy-Item -Path "windows\nipaplay_installer.nsi" -Destination "$BuildDir\"
-        Copy-Item -Path "installer_assets\*" -Destination "$BuildDir\" -Recurse -Force
-        Copy-Item -Path "LICENSE" -Destination "$BuildDir\" -ErrorAction SilentlyContinue
+        choco install innosetup --no-progress -y
 
-    - name: Create Windows installer with NSIS
+    - name: Ensure Inno Setup Chinese language file
+      shell: pwsh
+      run: |
+        $langFile = Join-Path "${env:ProgramFiles(x86)}" "Inno Setup 6\Languages\ChineseSimplified.isl"
+        if (-not (Test-Path $langFile)) {
+          Write-Host "ChineseSimplified.isl 缺失，尝试下载..."
+          $langDir = Split-Path $langFile -Parent
+          New-Item -ItemType Directory -Path $langDir -Force | Out-Null
+          $urls = @(
+            "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl",
+            "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl",
+            "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/ChineseSimplified.isl",
+            "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/Unofficial/ChineseSimplified.isl"
+          )
+          foreach ($u in $urls) {
+            try {
+              Invoke-WebRequest -Uri $u -OutFile $langFile -UseBasicParsing -ErrorAction Stop
+              Write-Host "下载成功：$u"
+              break
+            } catch {
+              Write-Warning "下载失败：$u -- $($_.Exception.Message)"
+            }
+          }
+          if (-not (Test-Path $langFile)) {
+            $defaultLang = Join-Path (Split-Path $langDir -Parent) "Default.isl"
+            if (-not (Test-Path $defaultLang)) {
+              Write-Error "未找到 Default.isl，无法生成语言文件"
+            }
+            Copy-Item $defaultLang $langFile -Force
+            Write-Warning "使用 Default.isl 作为占位，安装器语言将 fallback 为英文。"
+          }
+        } else {
+          Write-Host "ChineseSimplified.isl 已存在：$langFile"
+        }
+
+    - name: Create Windows installer with Inno Setup
       id: installer
       shell: pwsh
       run: |
-        # Force reinstall NSIS to ensure clean state
-        choco install nsis --force --yes
-        
         $arch = "x64"
         $version = "${{ inputs.app-version }}"
-        $BuildDir = "build\windows\x64\runner\Release"
-        
-        # Read NSIS script with proper encoding
-        $nsiContent = Get-Content "$BuildDir\nipaplay_installer.nsi" -Raw -Encoding UTF8
-        
-        # Ensure version is in 4-part format for NSIS (X.Y.Z.W)
-        $versionParts = $version.Split('.')
-        if ($versionParts.Length -eq 3) {
-          $nsiVersion = "${version}.0"
-        } elseif ($versionParts.Length -eq 4) {
-          $nsiVersion = $version
-        } else {
-          $nsiVersion = "1.0.0.0"
+        $buildDir = "build\windows\x64\runner\Release"
+        if (-not (Test-Path $buildDir)) {
+          throw "未找到 Windows 构建输出：$buildDir"
         }
-        Write-Host "Using version: $version, NSIS version: $nsiVersion"
-        
-        # Update version information with proper escaping
-        $nsiContent = $nsiContent -replace 'VIProductVersion "1\.0\.0\.0"', "VIProductVersion `"${nsiVersion}`""
-        $nsiContent = $nsiContent -replace 'VIAddVersionKey "FileVersion" "1\.0\.0\.0"', "VIAddVersionKey `"FileVersion`" `"${nsiVersion}`""
-        $nsiContent = $nsiContent -replace 'VIAddVersionKey "ProductVersion" "1\.0\.0\.0"', "VIAddVersionKey `"ProductVersion`" `"${nsiVersion}`""
-        
-        # Update output filename
-        $nsiContent = $nsiContent -replace 'OutFile "NipaPlay_Setup\.exe"', "OutFile `"NipaPlay_${version}_Windows_x64_Setup.exe`""
-        
-        # Write file with UTF8 BOM to ensure proper encoding for NSIS
-        $utf8BOM = New-Object System.Text.UTF8Encoding $true
-        [System.IO.File]::WriteAllText("$BuildDir\nipaplay_installer.nsi", $nsiContent, $utf8BOM)
-        
-        # Download FileAssociation plugin for NSIS with multiple fallback URLs
-        $pluginUrls = @(
-          "https://nsis.sourceforge.io/mediawiki/images/7/7f/FileAssociation.nsh",
-          "https://raw.githubusercontent.com/NSIS-Dev/Documentation/master/Reference/FileAssociation.nsh",
-          "https://raw.githubusercontent.com/nsis-dev/nsis/master/Contrib/FileAssociation/FileAssociation.nsh"
-        )
-        
-        $pluginPath = "$BuildDir\FileAssociation.nsh"
-        $downloadSuccess = $false
-        
-        foreach ($url in $pluginUrls) {
-          try {
-            Write-Host "Attempting to download FileAssociation.nsh from $url"
-            Invoke-WebRequest -Uri $url -OutFile $pluginPath -UseBasicParsing -ErrorAction Stop
-            if (Test-Path $pluginPath) {
-              $content = Get-Content $pluginPath -Raw
-              if ($content -match "FileAssociation") {
-                $downloadSuccess = $true
-                Write-Host "Successfully downloaded FileAssociation.nsh from $url"
-                break
-              }
-            }
-          } catch {
-            Write-Host "Failed to download from $url"
-            continue
-          }
+
+        $artifactDir = "build\windows"
+        New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
+
+        $buildDir = (Resolve-Path $buildDir).Path
+        $artifactDir = (Resolve-Path $artifactDir).Path
+
+        $iconPath = "windows\runner\resources\app_icon.ico"
+        if (-not (Test-Path $iconPath)) {
+          throw "未找到安装器图标：$iconPath"
         }
-        
-        if (-not $downloadSuccess) {
-          Write-Host "All download attempts failed, creating basic FileAssociation.nsh"
-          $lines = @()
-          $lines += "!ifndef FileAssociation_INCLUDED"
-          $lines += "!define FileAssociation_INCLUDED"
-          $lines += ""
-          $lines += "!macro RegisterExtension executable extension description"
-          $lines += "  WriteRegStr HKCR `".`${extension}`" `"`" `"`${description}`""
-          $lines += "  WriteRegStr HKCR `"`${description}`" `"`" `"`${description}`""
-          $lines += "  WriteRegStr HKCR `"`${description}\DefaultIcon`" `"`" `"`${executable},0`""
-          $lines += "  WriteRegStr HKCR `"`${description}\shell`" `"`" `"open`""
-          $lines += "  WriteRegStr HKCR `"`${description}\shell\open`" `"`" `"`""
-          $lines += "  WriteRegStr HKCR `"`${description}\shell\open\command`" `"`" '`"`${executable}`" `"%1`"'"
-          $lines += "!macroend"
-          $lines += ""
-          $lines += "!macro UnRegisterExtension extension description"
-          $lines += "  DeleteRegKey HKCR `".`${extension}`""
-          $lines += "  DeleteRegKey HKCR `"`${description}`""
-          $lines += "!macroend"
-          $lines += ""
-          $lines += "!endif # !FileAssociation_INCLUDED"
-          Set-Content -Path $pluginPath -Value ($lines -join "`r`n") -Encoding UTF8
+        $iconPath = (Resolve-Path $iconPath).Path
+
+        $licensePath = "LICENSE"
+        if (-not (Test-Path $licensePath)) {
+          throw "未找到 LICENSE 文件：$licensePath"
         }
-        
-        # Ensure NSIS can find the plugin
-        $nsisIncludeDir = "C:\\Program Files (x86)\NSIS\Include"
-        if (-not (Test-Path $nsisIncludeDir)) {
-          New-Item -ItemType Directory -Force -Path $nsisIncludeDir
+        $licensePath = (Resolve-Path $licensePath).Path
+
+        $installerScript = Join-Path $env:RUNNER_TEMP "NipaPlayInstaller.iss"
+        $outputBaseName = "NipaPlay_${version}_Windows_${arch}_Setup"
+
+        $assocId = "NipaPlay.VideoFile"
+        $publisher = "MCDFSteve"
+
+        @"
+        #define MyAppName "NipaPlay"
+        #define MyAppVersion "${version}"
+        #define MyAppPublisher "${publisher}"
+        #define MyAppExeName "NipaPlay.exe"
+        #define MyAssocId "${assocId}"
+
+        [Setup]
+        AppId={{4A33C13F-61E9-4AB0-9F9F-4A2A6E9A6C55}}
+        AppName={#MyAppName}
+        AppVersion={#MyAppVersion}
+        AppPublisher={#MyAppPublisher}
+        DefaultDirName={code:GetAppDir}
+        DefaultGroupName={#MyAppName}
+        OutputDir="$artifactDir"
+        OutputBaseFilename="$outputBaseName"
+        SetupIconFile="$iconPath"
+        UninstallDisplayIcon={app}\{#MyAppExeName}
+        Compression=lzma
+        SolidCompression=yes
+        ArchitecturesAllowed=x64
+        ArchitecturesInstallIn64BitMode=x64
+        DisableWelcomePage=yes
+        WizardStyle=modern
+        PrivilegesRequired=lowest
+        PrivilegesRequiredOverridesAllowed=dialog
+        UsePreviousPrivileges=yes
+        LicenseFile="$licensePath"
+
+        [Languages]
+        Name: "english"; MessagesFile: "compiler:Default.isl"
+        Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+
+        [Tasks]
+        Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+        Name: "fileassoc"; Description: "将常见视频格式与 NipaPlay 关联"; Flags: unchecked
+
+        [Files]
+        Source: "$buildDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+        [Icons]
+        Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+        Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+        [Registry]
+        Root: HKCU; Subkey: "Software\Classes\.mp4"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+        Root: HKCU; Subkey: "Software\Classes\.mkv"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+        Root: HKCU; Subkey: "Software\Classes\.avi"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+        Root: HKCU; Subkey: "Software\Classes\.flv"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+        Root: HKCU; Subkey: "Software\Classes\.mov"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+        Root: HKCU; Subkey: "Software\Classes\.wmv"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+        Root: HKCU; Subkey: "Software\Classes\.m4v"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+        Root: HKCU; Subkey: "Software\Classes\.ts"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+        Root: HKCU; Subkey: "Software\Classes\.webm"; ValueType: string; ValueName: ""; ValueData: "{#MyAssocId}"; Tasks: fileassoc; Flags: uninsdeletevalue
+
+        Root: HKCU; Subkey: "Software\Classes\{#MyAssocId}"; ValueType: string; ValueName: ""; ValueData: "NipaPlay 视频文件"; Tasks: fileassoc; Flags: uninsdeletekey
+        Root: HKCU; Subkey: "Software\Classes\{#MyAssocId}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: fileassoc
+        Root: HKCU; Subkey: "Software\Classes\{#MyAssocId}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: fileassoc
+
+        [Run]
+        Filename: "{app}\{#MyAppExeName}"; Description: "启动 NipaPlay"; Flags: nowait postinstall skipifsilent
+
+        [Code]
+        function GetAppDir(Default: string): string;
+        begin
+          if IsAdminInstallMode then
+            Result := ExpandConstant('{pf}\NipaPlay')
+          else
+            Result := ExpandConstant('{localappdata}\Programs\NipaPlay');
+        end;
+        "@ | Set-Content -Path $installerScript -Encoding utf8BOM
+
+        $isccPath = Join-Path -Path "${env:ProgramFiles(x86)}" -ChildPath "Inno Setup 6\\ISCC.exe"
+        if (-not (Test-Path $isccPath)) {
+          throw "未找到 ISCC 可执行文件：$isccPath"
         }
-        Copy-Item $pluginPath $nsisIncludeDir -Force
-        
-        # Compile installer with NSIS
-        Push-Location $BuildDir
-        $nsisPath = "C:\\Program Files (x86)\NSIS\makensis.exe"
-        if (!(Test-Path $nsisPath)) {
-          throw "NSIS compiler not found at $nsisPath"
-        }
-        
-        Write-Host "Compiling installer with NSIS..."
-        & $nsisPath "/V4" "nipaplay_installer.nsi"
-        $exitCode = $LASTEXITCODE
-        Pop-Location
-        
-        if ($exitCode -ne 0) {
-          throw "NSIS compilation failed with exit code $exitCode"
-        }
-        
-        # Move and verify installer
-        $installerName = "NipaPlay_${version}_Windows_x64_Setup.exe"
-        $installerPath = "$BuildDir\$installerName"
+        & $isccPath $installerScript
+
+        $installerName = "${outputBaseName}.exe"
         $finalPath = "build\windows\$installerName"
-        
-        if (!(Test-Path $installerPath)) {
-          throw "Installer file was not created: $installerPath"
+        if (-not (Test-Path $finalPath)) {
+          throw "Installer file was not created: $finalPath"
         }
-        
-        Move-Item $installerPath "build\windows\" -Force
-        
-        if (!(Test-Path $finalPath)) {
-          throw "Failed to move installer to final location: $finalPath"
-        }
-        
-        Write-Host "NSIS installer created successfully at: $finalPath"
         echo "installer_path=$finalPath" >> $env:GITHUB_OUTPUT
 
     - name: List Windows build artifacts
