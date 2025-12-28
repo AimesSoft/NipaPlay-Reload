@@ -95,6 +95,8 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
                 const SizedBox(height: 12),
                 _buildInfoCard('音频信息', _getAudioInfo(videoState)),
                 const SizedBox(height: 12),
+                _buildInfoCard('弹幕信息', _getDanmakuInfo(videoState)),
+                const SizedBox(height: 12),
                 _buildInfoCard('网络信息', _getNetworkInfo(videoState)),
                 if (_serverMeta != null && _serverMeta!.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -470,6 +472,65 @@ style: TextStyle(
         InfoItem('码率', bitRate),
       ];
     }
+  }
+
+  List<InfoItem> _getDanmakuInfo(VideoPlayerState videoState) {
+    final tracks = videoState.danmakuTracks;
+    final enabledMap = videoState.danmakuTrackEnabled;
+    final mergedCount = videoState.danmakuList.length;
+
+    final enabledCount = tracks.keys
+        .where((trackId) => enabledMap[trackId] == true)
+        .length;
+
+    Map<String, dynamic>? dandanTrack;
+    for (final entry in tracks.entries) {
+      final source = entry.value['source']?.toString();
+      if (entry.key == 'dandanplay' || source == 'dandanplay') {
+        dandanTrack = entry.value;
+        break;
+      }
+    }
+
+    final animeTitle = (videoState.animeTitle ?? '').trim();
+    final episodeTitle = (videoState.episodeTitle ?? '').trim();
+    final matchedTitle = _joinNonEmpty(
+      [
+        animeTitle.isNotEmpty ? animeTitle : null,
+        episodeTitle.isNotEmpty ? episodeTitle : null,
+      ],
+      sep: ' - ',
+    );
+
+    final trackAnimeId = dandanTrack?['animeId']?.toString();
+    final trackEpisodeId = dandanTrack?['episodeId']?.toString();
+
+    final animeId = trackAnimeId ??
+        (videoState.animeId != null ? videoState.animeId.toString() : null);
+    final episodeId = trackEpisodeId ??
+        (videoState.episodeId != null ? videoState.episodeId.toString() : null);
+
+    final matchLines = <String>[
+      matchedTitle.isNotEmpty ? matchedTitle : '未知',
+      if (animeId != null || episodeId != null)
+        'animeId=${animeId ?? '-'}, episodeId=${episodeId ?? '-'}',
+      if (dandanTrack?['count'] != null)
+        '弹弹play条数: ${dandanTrack!['count']}',
+    ];
+
+    return [
+      InfoItem(
+        '状态',
+        tracks.isEmpty ? '未加载' : '已加载 ($enabledCount/${tracks.length}轨道启用)',
+        tracks.isNotEmpty,
+      ),
+      InfoItem('合并条数', '$mergedCount'),
+      InfoItem(
+        '匹配',
+        matchLines.join('\n'),
+        (animeId != null && episodeId != null),
+      ),
+    ];
   }
 
   List<InfoItem> _getNetworkInfo(VideoPlayerState videoState) {

@@ -25,6 +25,7 @@ class CupertinoAboutPage extends StatefulWidget {
 class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
   String _version = '加载中…';
   UpdateInfo? _updateInfo;
+  bool _isCheckingUpdate = false;
 
   @override
   void initState() {
@@ -58,6 +59,130 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     } catch (_) {
       // ignore silently
     }
+  }
+
+  String _formatPublishedAt(String publishedAt) {
+    if (publishedAt.trim().isEmpty) return '';
+    try {
+      final dt = DateTime.parse(publishedAt).toLocal();
+      final y = dt.year.toString().padLeft(4, '0');
+      final m = dt.month.toString().padLeft(2, '0');
+      final d = dt.day.toString().padLeft(2, '0');
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      return '$y-$m-$d $hh:$mm';
+    } catch (_) {
+      return publishedAt;
+    }
+  }
+
+  Future<void> _showUpdateDialog(UpdateInfo info) async {
+    final notes = info.releaseNotes.trim().isNotEmpty
+        ? info.releaseNotes.trim()
+        : '暂无更新内容';
+    final publishedAt = _formatPublishedAt(info.publishedAt);
+
+    await BlurDialog.show(
+      context: context,
+      title: info.hasUpdate ? '发现新版本 ${info.latestVersion}' : '当前已是最新版本',
+      contentWidget: SizedBox(
+        width: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('当前版本: ${info.currentVersion}'),
+            Text('最新版本: ${info.latestVersion}'),
+            if (info.releaseName.trim().isNotEmpty)
+              Text('版本名称: ${info.releaseName.trim()}'),
+            if (publishedAt.isNotEmpty) Text('发布时间: $publishedAt'),
+            if (info.error != null && info.error!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                info.error!.trim(),
+                style: const TextStyle(
+                  color: CupertinoColors.systemRed,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            const Text(
+              '更新内容',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGrey6,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: SizedBox(
+                height: 220,
+                child: SingleChildScrollView(
+                  child: Text(notes),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        if (info.releaseUrl.trim().isNotEmpty)
+          CupertinoDialogAction(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _launchURL(info.releaseUrl);
+            },
+            child: const Text('跳转'),
+          ),
+        CupertinoDialogAction(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _manualCheckForUpdates() async {
+    if (_isCheckingUpdate) return;
+    setState(() {
+      _isCheckingUpdate = true;
+    });
+
+    UpdateInfo? info;
+    try {
+      info = await UpdateService.checkForUpdates();
+    } catch (_) {
+      info = null;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isCheckingUpdate = false;
+      if (info != null) {
+        _updateInfo = info;
+      }
+    });
+
+    if (info == null) {
+      await BlurDialog.show(
+        context: context,
+        title: '检查更新失败',
+        content: '请稍后再试',
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      );
+      return;
+    }
+
+    await _showUpdateDialog(info);
   }
 
   Future<void> _launchURL(String urlString) async {
@@ -329,6 +454,21 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
               ],
             ),
           ),
+        ),
+        const SizedBox(height: 12),
+        CupertinoButton.filled(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          onPressed: _isCheckingUpdate ? null : _manualCheckForUpdates,
+          child: _isCheckingUpdate
+              ? const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CupertinoActivityIndicator(radius: 8),
+                    SizedBox(width: 8),
+                    Text('检测中…'),
+                  ],
+                )
+              : const Text('检测更新'),
         ),
       ],
     );

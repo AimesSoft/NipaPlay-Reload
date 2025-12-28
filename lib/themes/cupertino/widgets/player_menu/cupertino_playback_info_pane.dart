@@ -15,9 +15,43 @@ class CupertinoPlaybackInfoPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tracks = videoState.danmakuTracks;
+    final enabledCount = tracks.keys
+        .where((trackId) => videoState.danmakuTrackEnabled[trackId] == true)
+        .length;
+
+    Map<String, dynamic>? dandanTrack;
+    for (final entry in tracks.entries) {
+      final source = entry.value['source']?.toString();
+      if (entry.key == 'dandanplay' || source == 'dandanplay') {
+        dandanTrack = entry.value;
+        break;
+      }
+    }
+
+    final String? danmakuAnimeId = dandanTrack?['animeId']?.toString() ??
+        (videoState.animeId != null ? videoState.animeId.toString() : null);
+    final String? danmakuEpisodeId = dandanTrack?['episodeId']?.toString() ??
+        (videoState.episodeId != null ? videoState.episodeId.toString() : null);
+
     final List<_InfoRow> rows = [
       _InfoRow('作品标题', videoState.animeTitle ?? '未知'),
       _InfoRow('剧集标题', videoState.episodeTitle ?? '未知'),
+      _InfoRow(
+        '弹幕轨道',
+        tracks.isEmpty ? '无' : '$enabledCount/${tracks.length} 启用',
+      ),
+      _InfoRow('弹幕合并条数', '${videoState.danmakuList.length}'),
+      _InfoRow(
+        '弹幕ID',
+        (danmakuAnimeId == null && danmakuEpisodeId == null)
+            ? '未知'
+            : 'animeId=${danmakuAnimeId ?? '-'}, episodeId=${danmakuEpisodeId ?? '-'}',
+      ),
+      _InfoRow(
+        '弹弹play条数',
+        dandanTrack?['count'] != null ? '${dandanTrack!['count']}' : '未加载',
+      ),
       _InfoRow('当前位置', _formatDuration(videoState.position)),
       _InfoRow('总时长', _formatDuration(videoState.duration)),
       _InfoRow('播放速度', '${videoState.playbackRate}x'),

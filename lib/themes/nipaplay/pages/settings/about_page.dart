@@ -20,6 +20,7 @@ class AboutPage extends StatefulWidget {
 class _AboutPageState extends State<AboutPage> {
   String _version = '加载中...';
   UpdateInfo? _updateInfo;
+  bool _isCheckingUpdate = false;
 
   @override
   void initState() {
@@ -67,6 +68,155 @@ class _AboutPageState extends State<AboutPage> {
       // 静默处理错误，不影响用户体验
       debugPrint('检查更新失败: $e');
     }
+  }
+
+  String _formatPublishedAt(String publishedAt) {
+    if (publishedAt.trim().isEmpty) return '';
+    try {
+      final dt = DateTime.parse(publishedAt).toLocal();
+      final y = dt.year.toString().padLeft(4, '0');
+      final m = dt.month.toString().padLeft(2, '0');
+      final d = dt.day.toString().padLeft(2, '0');
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      return '$y-$m-$d $hh:$mm';
+    } catch (_) {
+      return publishedAt;
+    }
+  }
+
+  Future<void> _showUpdateDialog(UpdateInfo info) async {
+    final notes = info.releaseNotes.trim().isNotEmpty
+        ? info.releaseNotes.trim()
+        : '暂无更新内容';
+    final publishedAt = _formatPublishedAt(info.publishedAt);
+
+    await BlurDialog.show(
+      context: context,
+      title: info.hasUpdate ? '发现新版本 ${info.latestVersion}' : '当前已是最新版本',
+      contentWidget: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '当前版本: ${info.currentVersion}',
+              style: TextStyle(color: Colors.white.withOpacity(0.9)),
+            ),
+            Text(
+              '最新版本: ${info.latestVersion}',
+              style: TextStyle(color: Colors.white.withOpacity(0.9)),
+            ),
+            if (info.releaseName.trim().isNotEmpty)
+              Text(
+                '版本名称: ${info.releaseName.trim()}',
+                style: TextStyle(color: Colors.white.withOpacity(0.9)),
+              ),
+            if (publishedAt.isNotEmpty)
+              Text(
+                '发布时间: $publishedAt',
+                style: TextStyle(color: Colors.white.withOpacity(0.9)),
+              ),
+            if (info.error != null && info.error!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                info.error!.trim(),
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ],
+            const SizedBox(height: 12),
+            const Text(
+              '更新内容',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 280),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withOpacity(0.12)),
+              ),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  notes,
+                  style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        if (info.releaseUrl.trim().isNotEmpty)
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _launchURL(info.releaseUrl);
+            },
+            child: const Text(
+              '查看发布页',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text(
+            '关闭',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _manualCheckForUpdates() async {
+    if (_isCheckingUpdate) return;
+    setState(() {
+      _isCheckingUpdate = true;
+    });
+
+    UpdateInfo? info;
+    try {
+      info = await UpdateService.checkForUpdates();
+    } catch (e) {
+      info = null;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isCheckingUpdate = false;
+      if (info != null) {
+        _updateInfo = info;
+      }
+    });
+
+    if (info == null) {
+      await BlurDialog.show(
+        context: context,
+        title: '检查更新失败',
+        content: '请稍后再试',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              '关闭',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      );
+      return;
+    }
+
+    await _showUpdateDialog(info);
   }
 
   Future<void> _launchURL(String urlString) async {
@@ -221,6 +371,32 @@ style: TextStyle(
                     ),
                 ],
               ),
+            ),
+            const SizedBox(height: 20),
+            TextButton.icon(
+              onPressed: _isCheckingUpdate ? null : _manualCheckForUpdates,
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: Colors.white.withOpacity(0.08),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: BorderSide(color: Colors.white.withOpacity(0.12)),
+                ),
+              ),
+              icon: _isCheckingUpdate
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.white70),
+                      ),
+                    )
+                  : const Icon(Icons.system_update_alt, size: 18),
+              label: Text(_isCheckingUpdate ? '检测中...' : '检测更新'),
             ),
             const SizedBox(height: 20),
 

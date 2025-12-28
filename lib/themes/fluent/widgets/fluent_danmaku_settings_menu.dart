@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
+import 'package:path/path.dart' as p;
 
 class FluentDanmakuSettingsMenu extends StatefulWidget {
   final VideoPlayerState videoState;
@@ -224,8 +225,20 @@ class _FluentDanmakuSettingsMenuState extends State<FluentDanmakuSettingsMenu> {
                           onPressed: () async {
                             final videoState = widget.videoState;
                             final initialVideoPath = videoState.currentVideoPath;
+                            final String? initialSearchKeyword =
+                                initialVideoPath == null
+                                    ? null
+                                    : (initialVideoPath.startsWith('jellyfin://') ||
+                                            initialVideoPath.startsWith('emby://'))
+                                        ? (videoState.animeTitle?.trim().isNotEmpty == true
+                                            ? videoState.animeTitle!.trim()
+                                            : null)
+                                        : p.basenameWithoutExtension(initialVideoPath);
                             final result = await ManualDanmakuMatcher.instance
-                                .showManualMatchDialog(context);
+                                .showManualMatchDialog(
+                              context,
+                              initialVideoTitle: initialSearchKeyword,
+                            );
 
                             if (result != null) {
                               if (videoState.isDisposed ||

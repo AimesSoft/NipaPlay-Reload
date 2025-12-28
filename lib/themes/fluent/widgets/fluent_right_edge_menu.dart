@@ -11,6 +11,7 @@ import 'fluent_danmaku_settings_menu.dart';
 import 'fluent_danmaku_tracks_menu.dart';
 import 'fluent_danmaku_list_menu.dart';
 import 'fluent_danmaku_offset_menu.dart';
+import 'fluent_playback_info_menu.dart';
 import 'fluent_playlist_menu.dart';
 import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
@@ -46,6 +47,7 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
     PlayerMenuPaneId.danmakuTracks,
     PlayerMenuPaneId.danmakuList,
     PlayerMenuPaneId.danmakuOffset,
+    PlayerMenuPaneId.playbackInfo,
     PlayerMenuPaneId.playlist,
   };
 
@@ -340,6 +342,8 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
         return _buildDanmakuListMenu(videoState);
       case PlayerMenuPaneId.danmakuOffset:
         return _buildDanmakuOffsetMenu(videoState);
+      case PlayerMenuPaneId.playbackInfo:
+        return _buildPlaybackInfoMenu(videoState);
       case PlayerMenuPaneId.playlist:
         return _buildPlaylistMenu(videoState);
       default:
@@ -432,6 +436,10 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
 
   Widget _buildDanmakuOffsetMenu(VideoPlayerState videoState) {
     return FluentDanmakuOffsetMenu(videoState: videoState);
+  }
+
+  Widget _buildPlaybackInfoMenu(VideoPlayerState videoState) {
+    return FluentPlaybackInfoMenu(videoState: videoState);
   }
 
   Widget _buildSeekStepMenu(VideoPlayerState videoState) {

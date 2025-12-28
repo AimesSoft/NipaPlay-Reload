@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_s
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:path/path.dart' as p;
 
 class CupertinoDanmakuSettingsPane extends StatefulWidget {
   const CupertinoDanmakuSettingsPane({
@@ -56,8 +57,18 @@ class _CupertinoDanmakuSettingsPaneState
   Future<void> _handleManualMatch() async {
     final videoState = widget.videoState;
     final initialVideoPath = videoState.currentVideoPath;
-    final result =
-        await ManualDanmakuMatcher.instance.showManualMatchDialog(context);
+    final String? initialSearchKeyword = initialVideoPath == null
+        ? null
+        : (initialVideoPath.startsWith('jellyfin://') ||
+                initialVideoPath.startsWith('emby://'))
+            ? (videoState.animeTitle?.trim().isNotEmpty == true
+                ? videoState.animeTitle!.trim()
+                : null)
+            : p.basenameWithoutExtension(initialVideoPath);
+    final result = await ManualDanmakuMatcher.instance.showManualMatchDialog(
+      context,
+      initialVideoTitle: initialSearchKeyword,
+    );
     if (result == null) return;
 
     if (videoState.isDisposed || videoState.currentVideoPath != initialVideoPath) {

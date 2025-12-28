@@ -9,6 +9,7 @@ import 'blur_button.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:path/path.dart' as p;
 
 class DanmakuSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -221,8 +222,20 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                         print('=== 强制输出：手动匹配弹幕按钮被点击！ ===');
                         final videoState = widget.videoState;
                         final initialVideoPath = videoState.currentVideoPath;
+                        final String? initialSearchKeyword = initialVideoPath == null
+                            ? null
+                            : (initialVideoPath.startsWith('jellyfin://') ||
+                                    initialVideoPath.startsWith('emby://'))
+                                ? (videoState.animeTitle?.trim().isNotEmpty ==
+                                        true
+                                    ? videoState.animeTitle!.trim()
+                                    : null)
+                                : p.basenameWithoutExtension(initialVideoPath);
                         final result = await ManualDanmakuMatcher.instance
-                            .showManualMatchDialog(context);
+                            .showManualMatchDialog(
+                          context,
+                          initialVideoTitle: initialSearchKeyword,
+                        );
 
                         if (result != null) {
                           if (videoState.isDisposed ||

@@ -7,6 +7,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/themes/fluent/widgets/fluent_info_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/services/update_service.dart';
 
 class FluentAboutPage extends StatefulWidget {
   const FluentAboutPage({super.key});
@@ -17,6 +18,7 @@ class FluentAboutPage extends StatefulWidget {
 
 class _FluentAboutPageState extends State<FluentAboutPage> {
   String _version = '加载中...';
+  bool _isCheckingUpdate = false;
 
   @override
   void initState() {
@@ -53,6 +55,133 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
         );
       }
     }
+  }
+
+  String _formatPublishedAt(String publishedAt) {
+    if (publishedAt.trim().isEmpty) return '';
+    try {
+      final dt = DateTime.parse(publishedAt).toLocal();
+      final y = dt.year.toString().padLeft(4, '0');
+      final m = dt.month.toString().padLeft(2, '0');
+      final d = dt.day.toString().padLeft(2, '0');
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      return '$y-$m-$d $hh:$mm';
+    } catch (_) {
+      return publishedAt;
+    }
+  }
+
+  Future<void> _showUpdateDialog(UpdateInfo info) async {
+    final notes = info.releaseNotes.trim().isNotEmpty
+        ? info.releaseNotes.trim()
+        : '暂无更新内容';
+    final publishedAt = _formatPublishedAt(info.publishedAt);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return ContentDialog(
+          title:
+              Text(info.hasUpdate ? '发现新版本 ${info.latestVersion}' : '当前已是最新版本'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('当前版本: ${info.currentVersion}'),
+                Text('最新版本: ${info.latestVersion}'),
+                if (info.releaseName.trim().isNotEmpty)
+                  Text('版本名称: ${info.releaseName.trim()}'),
+                if (publishedAt.isNotEmpty) Text('发布时间: $publishedAt'),
+                if (info.error != null && info.error!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    info.error!.trim(),
+                    style: const TextStyle(
+                      color: material.Colors.redAccent,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                const Text(
+                  '更新内容',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                  ),
+                  child: SizedBox(
+                    height: 260,
+                    child: SingleChildScrollView(
+                      child: material.SelectableText(notes),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (info.releaseUrl.trim().isNotEmpty)
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _launchURL(info.releaseUrl);
+                },
+                child: const Text('跳转'),
+              ),
+            Button(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _manualCheckForUpdates() async {
+    if (_isCheckingUpdate) return;
+    setState(() {
+      _isCheckingUpdate = true;
+    });
+
+    UpdateInfo? info;
+    try {
+      info = await UpdateService.checkForUpdates();
+    } catch (_) {
+      info = null;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isCheckingUpdate = false;
+    });
+
+    if (info == null) {
+      await BlurDialog.show(
+        context: context,
+        title: '检查更新失败',
+        content: '请稍后再试',
+        actions: [
+          material.TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const material.Text('关闭'),
+          ),
+        ],
+      );
+      return;
+    }
+
+    await _showUpdateDialog(info);
   }
 
   void _showAppreciationQR() {
@@ -100,10 +229,10 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
         ),
       ),
       actions: [
-        Button(
+        material.TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
+          child: const material.Text('关闭'),
+        )
       ],
     );
   }
@@ -166,6 +295,38 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                                     Text(
                                       '当前版本: $_version',
                                       style: FluentTheme.of(context).typography.subtitle,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: FilledButton(
+                                        onPressed: _isCheckingUpdate
+                                            ? null
+                                            : _manualCheckForUpdates,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (_isCheckingUpdate) ...[
+                                              const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child: ProgressRing(
+                                                  strokeWidth: 2,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              const Text('检测中...'),
+                                            ] else ...[
+                                              const Icon(
+                                                FluentIcons.sync,
+                                                size: 16,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              const Text('检测更新'),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
