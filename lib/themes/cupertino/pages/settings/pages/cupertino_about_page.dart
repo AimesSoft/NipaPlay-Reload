@@ -14,6 +14,7 @@ import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
+import 'package:nipaplay/widgets/adaptive_markdown.dart';
 
 class CupertinoAboutPage extends StatefulWidget {
   const CupertinoAboutPage({super.key});
@@ -81,6 +82,23 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         ? info.releaseNotes.trim()
         : '暂无更新内容';
     final publishedAt = _formatPublishedAt(info.publishedAt);
+    final brightness = CupertinoTheme.brightnessOf(context);
+    final notesBackground = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGrey6,
+      context,
+    );
+    final notesBorder = CupertinoDynamicColor.resolve(
+      CupertinoColors.separator,
+      context,
+    );
+    final notesTextColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    final linkColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.activeBlue,
+      context,
+    );
 
     await BlurDialog.show(
       context: context,
@@ -116,13 +134,27 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: CupertinoColors.systemGrey6,
+                color: notesBackground,
                 borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: notesBorder),
               ),
               child: SizedBox(
                 height: 220,
                 child: SingleChildScrollView(
-                  child: Text(notes),
+                  child: AdaptiveMarkdown(
+                    data: notes,
+                    brightness: brightness,
+                    baseTextStyle:
+                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: notesTextColor,
+                            ),
+                    linkColor: linkColor,
+                    onTapLink: (href) {
+                      _launchURL(href);
+                    },
+                  ),
                 ),
               ),
             ),
@@ -358,7 +390,8 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                               spacing: 10,
                               runSpacing: 10,
                               children: kAcknowledgementNames
-                                  .map((name) => _buildAcknowledgementPill(context, name))
+                                  .map((name) =>
+                                      _buildAcknowledgementPill(context, name))
                                   .toList(),
                             ),
                           ],
@@ -403,8 +436,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         ),
         const SizedBox(height: 18),
         GestureDetector(
-          onTap:
-              hasUpdate ? () => _launchURL(_updateInfo!.releaseUrl) : null,
+          onTap: hasUpdate ? () => _launchURL(_updateInfo!.releaseUrl) : null,
           child: MouseRegion(
             cursor:
                 hasUpdate ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -480,10 +512,8 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     required List<TextSpan> content,
     Widget? trailing,
   }) {
-    final base = CupertinoTheme.of(context)
-        .textTheme
-        .textStyle
-        .copyWith(height: 1.6);
+    final base =
+        CupertinoTheme.of(context).textTheme.textStyle.copyWith(height: 1.6);
 
     return CupertinoSettingsGroupCard(
       margin: EdgeInsets.zero,
@@ -553,10 +583,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
         child: Text(
           '开源与社区',
-          style: CupertinoTheme.of(context)
-              .textTheme
-              .textStyle
-              .copyWith(
+          style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -596,10 +623,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Text(
           '欢迎贡献代码，或将应用发布到更多平台。不会 Dart 也没关系，借助 AI 编程同样可以。',
-          style: CupertinoTheme.of(context)
-              .textTheme
-              .textStyle
-              .copyWith(
+          style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                 fontSize: 13,
                 color: CupertinoDynamicColor.resolve(
                   CupertinoColors.secondaryLabel,
@@ -628,10 +652,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
             '赞助支持',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -641,10 +662,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Text(
             '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 14,
                   color: CupertinoDynamicColor.resolve(
                     CupertinoColors.label,
@@ -658,10 +676,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Text(
             '赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 14,
                   color: CupertinoDynamicColor.resolve(
                     CupertinoColors.label,

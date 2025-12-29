@@ -91,6 +91,7 @@ dependencies:
       path: ./libs/universal/media_kit_libs_video
   qr_flutter: ^4.1.0  # 用于生成二维码
   flutter_svg: ^2.0.14  # 用于显示SVG图标
+  flutter_markdown: ^0.7.1
   desktop_drop: ^0.6.1
   cupertino_icons: ^1.0.8
   charset_converter: ^2.1.1

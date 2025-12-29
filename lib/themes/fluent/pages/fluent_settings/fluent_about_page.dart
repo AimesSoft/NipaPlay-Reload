@@ -8,6 +8,7 @@ import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/themes/fluent/widgets/fluent_info_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/services/update_service.dart';
+import 'package:nipaplay/widgets/adaptive_markdown.dart';
 
 class FluentAboutPage extends StatefulWidget {
   const FluentAboutPage({super.key});
@@ -81,6 +82,9 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
     await showDialog<void>(
       context: context,
       builder: (context) {
+        final theme = FluentTheme.of(context);
+        final notesBackground = theme.resources.subtleFillColorSecondary;
+        final notesBorder = theme.resources.controlStrokeColorDefault;
         return ContentDialog(
           title:
               Text(info.hasUpdate ? '发现新版本 ${info.latestVersion}' : '当前已是最新版本'),
@@ -115,14 +119,22 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.08),
+                    color: notesBackground,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                    border: Border.all(color: notesBorder),
                   ),
                   child: SizedBox(
                     height: 260,
                     child: SingleChildScrollView(
-                      child: material.SelectableText(notes),
+                      child: AdaptiveMarkdown(
+                        data: notes,
+                        brightness: theme.brightness,
+                        baseTextStyle: theme.typography.body,
+                        linkColor: theme.accentColor,
+                        onTapLink: (href) {
+                          _launchURL(href);
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -251,7 +263,7 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
             child: Column(
               children: [
                 const SizedBox(height: 40),
-                
+
                 // 应用logo和名称
                 Card(
                   child: Padding(
@@ -264,7 +276,6 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                           style: FluentTheme.of(context).typography.subtitle,
                         ),
                         const SizedBox(height: 16),
-                        
                         IntrinsicHeight(
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -276,12 +287,13 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                                   width: 120,
                                   fit: BoxFit.fitWidth,
                                   errorBuilder: (context, error, stackTrace) {
-                                    return const Icon(FluentIcons.app_icon_default, size: 120);
+                                    return const Icon(
+                                        FluentIcons.app_icon_default,
+                                        size: 120);
                                   },
                                 ),
                               ),
                               const SizedBox(width: 16),
-                              
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,12 +301,16 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                                   children: [
                                     Text(
                                       'NipaPlay Reload',
-                                      style: FluentTheme.of(context).typography.title,
+                                      style: FluentTheme.of(context)
+                                          .typography
+                                          .title,
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
                                       '当前版本: $_version',
-                                      style: FluentTheme.of(context).typography.subtitle,
+                                      style: FluentTheme.of(context)
+                                          .typography
+                                          .subtitle,
                                     ),
                                     const SizedBox(height: 12),
                                     Align(
@@ -331,12 +347,16 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                                     const SizedBox(height: 8),
                                     Text(
                                       '一个现代化的跨平台视频播放应用',
-                                      style: FluentTheme.of(context).typography.caption,
+                                      style: FluentTheme.of(context)
+                                          .typography
+                                          .caption,
                                     ),
                                     const SizedBox(height: 12),
                                     Text(
                                       '基于Flutter开发，支持Windows、macOS、Linux、Android、iOS等多平台',
-                                      style: FluentTheme.of(context).typography.caption,
+                                      style: FluentTheme.of(context)
+                                          .typography
+                                          .caption,
                                     ),
                                   ],
                                 ),
@@ -348,9 +368,9 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // 应用介绍
                 Card(
                   child: Padding(
@@ -367,17 +387,21 @@ class _FluentAboutPageState extends State<FluentAboutPage> {
                           text: TextSpan(
                             style: FluentTheme.of(context).typography.body,
                             children: [
-                              const TextSpan(text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
+                              const TextSpan(
+                                  text:
+                                      'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
                               TextSpan(
                                 text: 'にぱ〜☆',
-                                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                                locale: Locale("zh-Hans", "zh"),
+                                style: TextStyle(
                                   color: material.Colors.pinkAccent[100],
                                   fontWeight: FontWeight.bold,
                                   fontStyle: FontStyle.italic,
                                 ),
                               ),
-                              const TextSpan(text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
+                              const TextSpan(
+                                  text:
+                                      '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
                             ],
                           ),
                         ),
@@ -385,9 +409,9 @@ style: TextStyle(
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // 致谢
                 Card(
                   child: Padding(
@@ -404,16 +428,18 @@ style: TextStyle(
                           text: TextSpan(
                             style: FluentTheme.of(context).typography.body,
                             children: [
-                              const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
+                              const TextSpan(
+                                  text: '感谢弹弹play (DandanPlay) 和开发者 '),
                               TextSpan(
                                 text: 'Kaedei',
-                                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                                locale: Locale("zh-Hans", "zh"),
+                                style: TextStyle(
                                   color: material.Colors.lightBlueAccent[100],
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
+                              const TextSpan(
+                                  text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
                             ],
                           ),
                         ),
@@ -425,8 +451,8 @@ style: TextStyle(
                               const TextSpan(text: '感谢开发者 '),
                               TextSpan(
                                 text: 'Sakiko',
-                                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                                locale: Locale("zh-Hans", "zh"),
+                                style: TextStyle(
                                   color: material.Colors.lightBlueAccent[100],
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -445,7 +471,8 @@ style: TextStyle(
                           spacing: 12,
                           runSpacing: 12,
                           children: kAcknowledgementNames
-                              .map((name) => _buildAcknowledgementBadge(context, name))
+                              .map((name) =>
+                                  _buildAcknowledgementBadge(context, name))
                               .toList(),
                         ),
                       ],
@@ -476,11 +503,13 @@ style: TextStyle(
                         ),
                         const SizedBox(height: 16),
                         FilledButton(
-                          onPressed: () => _launchURL('https://afdian.com/a/irigas'),
+                          onPressed: () =>
+                              _launchURL('https://afdian.com/a/irigas'),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(FluentIcons.heart_fill, color: material.Colors.pink),
+                              Icon(FluentIcons.heart_fill,
+                                  color: material.Colors.pink),
                               SizedBox(width: 8),
                               Text('爱发电赞助页面'),
                             ],
@@ -492,7 +521,8 @@ style: TextStyle(
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Ionicons.qr_code, color: material.Colors.orange),
+                              Icon(Ionicons.qr_code,
+                                  color: material.Colors.orange),
                               SizedBox(width: 8),
                               Text('赞赏码'),
                             ],
@@ -522,7 +552,8 @@ style: TextStyle(
                         ),
                         const SizedBox(height: 16),
                         HyperlinkButton(
-                          onPressed: () => _launchURL('https://www.github.com/MCDFsteve/NipaPlay-Reload'),
+                          onPressed: () => _launchURL(
+                              'https://www.github.com/MCDFsteve/NipaPlay-Reload'),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -536,7 +567,8 @@ style: TextStyle(
                         HyperlinkButton(
                           onPressed: () {
                             // 复制群号到剪贴板并提示用户
-                            Clipboard.setData(const ClipboardData(text: '961207150'));
+                            Clipboard.setData(
+                                const ClipboardData(text: '961207150'));
                             FluentInfoBar.show(
                               context,
                               '群号已复制',
@@ -554,7 +586,8 @@ style: TextStyle(
                           ),
                         ),
                         FilledButton(
-                          onPressed: () => _launchURL('https://nipaplay.aimes-soft.com'),
+                          onPressed: () =>
+                              _launchURL('https://nipaplay.aimes-soft.com'),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -583,7 +616,8 @@ style: TextStyle(
           color: FluentTheme.of(context).resources.textFillColorPrimary,
           fontWeight: FontWeight.w600,
         );
-    final borderColor = FluentTheme.of(context).resources.dividerStrokeColorDefault;
+    final borderColor =
+        FluentTheme.of(context).resources.dividerStrokeColorDefault;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(

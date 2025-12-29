@@ -9,6 +9,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/services/update_service.dart';
+import 'package:nipaplay/widgets/adaptive_markdown.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -52,9 +53,11 @@ class _AboutPageState extends State<AboutPage> {
     debugPrint('开始检查更新...');
     try {
       final updateInfo = await UpdateService.checkForUpdates();
-      debugPrint('检查更新完成: 当前版本=${updateInfo.currentVersion}, 最新版本=${updateInfo.latestVersion}, 有更新=${updateInfo.hasUpdate}');
+      debugPrint(
+          '检查更新完成: 当前版本=${updateInfo.currentVersion}, 最新版本=${updateInfo.latestVersion}, 有更新=${updateInfo.hasUpdate}');
       if (updateInfo.hasUpdate) {
-        debugPrint('发现新版本: ${updateInfo.latestVersion}, 下载链接: ${updateInfo.releaseUrl}');
+        debugPrint(
+            '发现新版本: ${updateInfo.latestVersion}, 下载链接: ${updateInfo.releaseUrl}');
       }
       if (updateInfo.error != null) {
         debugPrint('检查更新时出现错误: ${updateInfo.error}');
@@ -145,9 +148,15 @@ class _AboutPageState extends State<AboutPage> {
                 border: Border.all(color: Colors.white.withOpacity(0.12)),
               ),
               child: SingleChildScrollView(
-                child: SelectableText(
-                  notes,
-                  style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                child: AdaptiveMarkdown(
+                  data: notes,
+                  brightness: Brightness.dark,
+                  baseTextStyle:
+                      TextStyle(color: Colors.white.withOpacity(0.9)),
+                  linkColor: Colors.lightBlueAccent,
+                  onTapLink: (href) {
+                    _launchURL(href);
+                  },
                 ),
               ),
             ),
@@ -288,19 +297,20 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Using a dark theme context for text styles as an example, 
+    // Using a dark theme context for text styles as an example,
     // assuming the page is shown over a dark-ish blurred background from TabBarView
     final textTheme = Theme.of(context).textTheme.apply(
-      bodyColor: Colors.white,
-      displayColor: Colors.white,
-    );
+          bodyColor: Colors.white,
+          displayColor: Colors.white,
+        );
     // Use getTextStyle if it provides better themed styles
     // final baseTextStyle = getTextStyle(context);
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(24.0),
-      child: ConstrainedBox( // Limit max width for better readability on wide screens
+      child: ConstrainedBox(
+        // Limit max width for better readability on wide screens
         constraints: const BoxConstraints(maxWidth: 600),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start, // Change to start
@@ -311,7 +321,9 @@ class _AboutPageState extends State<AboutPage> {
               'assets/logo.png', // Ensure this path is correct
               height: 120, // Adjust size as needed
               errorBuilder: (context, error, stackTrace) {
-                return const Icon(Ionicons.image_outline, size: 100, color: Colors.white70); // Placeholder if logo fails
+                return const Icon(Ionicons.image_outline,
+                    size: 100,
+                    color: Colors.white70); // Placeholder if logo fails
               },
             ),
             const SizedBox(height: 24),
@@ -322,12 +334,12 @@ class _AboutPageState extends State<AboutPage> {
                 clipBehavior: Clip.none,
                 children: [
                   GestureDetector(
-                    onTap: _updateInfo?.hasUpdate == true 
-                        ? () => _launchURL(_updateInfo!.releaseUrl) 
+                    onTap: _updateInfo?.hasUpdate == true
+                        ? () => _launchURL(_updateInfo!.releaseUrl)
                         : null,
                     child: MouseRegion(
-                      cursor: _updateInfo?.hasUpdate == true 
-                          ? SystemMouseCursors.click 
+                      cursor: _updateInfo?.hasUpdate == true
+                          ? SystemMouseCursors.click
                           : SystemMouseCursors.basic,
                       child: Text(
                         'NipaPlay Reload 当前版本: $_version',
@@ -345,7 +357,8 @@ class _AboutPageState extends State<AboutPage> {
                       top: -8,
                       right: -8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(10),
@@ -359,8 +372,8 @@ class _AboutPageState extends State<AboutPage> {
                         ),
                         child: const Text(
                           'NEW',
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                          locale: Locale("zh-Hans", "zh"),
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -406,10 +419,17 @@ style: TextStyle(
                 _buildRichText(
                   context,
                   [
-                    const TextSpan(text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
-                    TextSpan(text: 'にぱ〜☆', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
-                    const TextSpan(text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
+                    const TextSpan(
+                        text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
+                    TextSpan(
+                        text: 'にぱ〜☆',
+                        locale: Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                            color: Colors.pinkAccent[100],
+                            fontWeight: FontWeight.bold,
+                            fontStyle: FontStyle.italic)),
+                    const TextSpan(
+                        text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
                   ],
                 ),
               ],
@@ -420,24 +440,26 @@ style: TextStyle(color: Colors.pinkAccent[100], fontWeight: FontWeight.bold, fon
               context: context,
               title: '致谢',
               children: [
-                 _buildRichText(
-                  context,
-                  [
-                    const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
-                    TextSpan(text: 'Kaedei', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
-                    const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
-                  ]
-                ),
-                _buildRichText(
-                  context,
-                  [
-                    const TextSpan(text: '感谢开发者 '),
-                    TextSpan(text: 'Sakiko', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold)),
-                    const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
-                  ]
-                ),
+                _buildRichText(context, [
+                  const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
+                  TextSpan(
+                      text: 'Kaedei',
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                          color: Colors.lightBlueAccent[100],
+                          fontWeight: FontWeight.bold)),
+                  const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
+                ]),
+                _buildRichText(context, [
+                  const TextSpan(text: '感谢开发者 '),
+                  TextSpan(
+                      text: 'Sakiko',
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                          color: Colors.lightBlueAccent[100],
+                          fontWeight: FontWeight.bold)),
+                  const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
+                ]),
                 const SizedBox(height: 12),
                 _buildRichText(
                   context,
@@ -456,34 +478,36 @@ style: TextStyle(color: Colors.lightBlueAccent[100], fontWeight: FontWeight.bold
               ],
             ),
             const SizedBox(height: 20),
-            
+
             _buildInfoCard(
               context: context,
               title: '开源与社区',
               children: [
-                _buildRichText(
-                  context,
-                  [
-                    const TextSpan(text: '欢迎贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
-                  ]
-                ),
+                _buildRichText(context, [
+                  const TextSpan(
+                      text:
+                          '欢迎贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
+                ]),
                 const SizedBox(height: 16),
                 GestureDetector(
-                  onTap: () => _launchURL('https://www.github.com/MCDFsteve/NipaPlay-Reload'),
+                  onTap: () => _launchURL(
+                      'https://www.github.com/MCDFsteve/NipaPlay-Reload'),
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Ionicons.logo_github, color: Colors.white.withOpacity(0.8), size: 20),
+                        Icon(Ionicons.logo_github,
+                            color: Colors.white.withOpacity(0.8), size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'MCDFsteve/NipaPlay-Reload',
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                          locale: Locale("zh-Hans", "zh"),
+                          style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
-                            decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
+                            decorationColor:
+                                Colors.cyanAccent[100]?.withOpacity(0.7),
                           ),
                         ),
                       ],
@@ -498,15 +522,17 @@ style: TextStyle(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Ionicons.chatbubbles_outline, color: Colors.white.withOpacity(0.8), size: 20),
+                        Icon(Ionicons.chatbubbles_outline,
+                            color: Colors.white.withOpacity(0.8), size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'QQ群: 961207150',
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                          locale: Locale("zh-Hans", "zh"),
+                          style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
-                            decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
+                            decorationColor:
+                                Colors.cyanAccent[100]?.withOpacity(0.7),
                           ),
                         ),
                       ],
@@ -521,15 +547,17 @@ style: TextStyle(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Ionicons.globe_outline, color: Colors.white.withOpacity(0.8), size: 20),
+                        Icon(Ionicons.globe_outline,
+                            color: Colors.white.withOpacity(0.8), size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'NipaPlay 官方网站',
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                          locale: Locale("zh-Hans", "zh"),
+                          style: TextStyle(
                             color: Colors.cyanAccent[100],
                             decoration: TextDecoration.underline,
-                            decorationColor: Colors.cyanAccent[100]?.withOpacity(0.7),
+                            decorationColor:
+                                Colors.cyanAccent[100]?.withOpacity(0.7),
                           ),
                         ),
                       ],
@@ -544,12 +572,11 @@ style: TextStyle(
               context: context,
               title: '赞助支持',
               children: [
-                _buildRichText(
-                  context,
-                  [
-                    const TextSpan(text: '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。'),
-                  ]
-                ),
+                _buildRichText(context, [
+                  const TextSpan(
+                      text:
+                          '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。'),
+                ]),
                 const SizedBox(height: 16),
                 GestureDetector(
                   onTap: () => _launchURL('https://afdian.com/a/irigas'),
@@ -558,14 +585,16 @@ style: TextStyle(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Ionicons.heart, color: Colors.pinkAccent[100], size: 20),
+                        Icon(Ionicons.heart,
+                            color: Colors.pinkAccent[100], size: 20),
                         const SizedBox(width: 8),
                         Text(
                           '爱发电赞助页面',
                           style: TextStyle(
                             color: Colors.pinkAccent[100],
                             decoration: TextDecoration.underline,
-                            decorationColor: Colors.pinkAccent[100]?.withOpacity(0.7),
+                            decorationColor:
+                                Colors.pinkAccent[100]?.withOpacity(0.7),
                           ),
                         ),
                       ],
@@ -580,14 +609,16 @@ style: TextStyle(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Ionicons.qr_code, color: Colors.orangeAccent[100], size: 20),
+                        Icon(Ionicons.qr_code,
+                            color: Colors.orangeAccent[100], size: 20),
                         const SizedBox(width: 8),
                         Text(
                           '赞赏码',
                           style: TextStyle(
                             color: Colors.orangeAccent[100],
                             decoration: TextDecoration.underline,
-                            decorationColor: Colors.orangeAccent[100]?.withOpacity(0.7),
+                            decorationColor:
+                                Colors.orangeAccent[100]?.withOpacity(0.7),
                           ),
                         ),
                       ],
@@ -597,7 +628,6 @@ style: TextStyle(
               ],
             ),
             const SizedBox(height: 30),
-
           ],
         ),
       ),
@@ -634,7 +664,10 @@ style: TextStyle(
     );
   }
 
-  Widget _buildInfoCard({required BuildContext context, String? title, required List<Widget> children}) {
+  Widget _buildInfoCard(
+      {required BuildContext context,
+      String? title,
+      required List<Widget> children}) {
     return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -644,9 +677,9 @@ style: TextStyle(
             Text(
               title,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Colors.white, 
-                fontWeight: FontWeight.bold,
-              ),
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
             ),
             const SizedBox(height: 12),
           ],
@@ -661,9 +694,9 @@ style: TextStyle(
       textAlign: TextAlign.start, // Or TextAlign.justify if preferred
       text: TextSpan(
         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-          color: Colors.white.withOpacity(0.9), 
-          height: 1.6, // Improved line spacing
-        ), // Default text style for spans
+              color: Colors.white.withOpacity(0.9),
+              height: 1.6, // Improved line spacing
+            ), // Default text style for spans
         children: spans,
       ),
     );

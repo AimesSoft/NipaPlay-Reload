@@ -126,7 +126,7 @@ jobs:
 
           # Call the AI API and save the response
           echo "Sending request to AI for changelog summary..."
-          AI_RESPONSE=$(curl -s -X POST https://ffmpeg.dfsteve.top/ffmpeg.php \
+          AI_RESPONSE=$(curl -s -X POST https://ffmpeg.dfsteve.top/git.php \
             -H "Content-Type: application/json; charset=utf-8" \
             -d "$JSON_PAYLOAD")
 

@@ -11,6 +11,6 @@ mkdir -p /tmp/artifacts/changelog
 echo "# NipaPlay $VERSION 更新日志" > /tmp/artifacts/changelog/changelog.md
 
 # Call AI to generate changelog
-curl -X POST https://ffmpeg.dfsteve.top/ffmpeg.php \
+curl -X POST https://ffmpeg.dfsteve.top/git.php \
   -H "Content-Type: application/json" \
   -d "{\"model\":\"gpt-5\",\"temperature\":0.5,\"messages\":[{\"role\":\"user\",\"content\":\"请将以下Git提交记录整理成优雅的中文Markdown更新日志：$COMMITS\"}]}" >> /tmp/artifacts/changelog/changelog.md
