@@ -1,6 +1,254 @@
 part of video_player_state;
 
+class _LocalDanmakuCandidate {
+  final String filePath;
+  final String fileName;
+  final int score;
+
+  const _LocalDanmakuCandidate({
+    required this.filePath,
+    required this.fileName,
+    required this.score,
+  });
+}
+
 extension VideoPlayerStateDanmaku on VideoPlayerState {
+  Future<void> _autoDetectAndLoadLocalDanmakuFromVideoDirectory(
+      String videoPath) async {
+    if (_isDisposed || kIsWeb) return;
+
+    if (videoPath.startsWith('http://') ||
+        videoPath.startsWith('https://') ||
+        videoPath.startsWith('jellyfin://') ||
+        videoPath.startsWith('emby://') ||
+        SharedRemoteHistoryHelper.isSharedRemoteStreamPath(videoPath)) {
+      return;
+    }
+
+    final targetVideoPath = _currentVideoPath;
+    bool canContinue() =>
+        !_isDisposed && _currentVideoPath == targetVideoPath;
+
+    try {
+      final dirPath = p.dirname(videoPath);
+      final dir = Directory(dirPath);
+      if (!await dir.exists()) return;
+
+      final videoBaseName =
+          p.basenameWithoutExtension(videoPath).toLowerCase();
+
+      final candidates = <_LocalDanmakuCandidate>[];
+      await for (final entity in dir.list(followLinks: false)) {
+        if (!canContinue()) return;
+        if (entity is! File) continue;
+
+        final filePath = entity.path;
+        final fileName = p.basename(filePath);
+        final lowerName = fileName.toLowerCase();
+        final ext = p.extension(lowerName);
+        if (ext != '.json' && ext != '.xml') continue;
+
+        // 很多目录会带有配置/元数据 JSON/XML，做个简单打分再尝试解析。
+        final nameNoExt = p.basenameWithoutExtension(lowerName);
+        int score = 0;
+        if (nameNoExt == videoBaseName) {
+          score += 100;
+        } else if (nameNoExt.startsWith(videoBaseName)) {
+          score += 80;
+        } else if (nameNoExt.contains(videoBaseName)) {
+          score += 60;
+        }
+
+        if (lowerName.contains('danmaku') ||
+            lowerName.contains('barrage') ||
+            lowerName.contains('comment') ||
+            lowerName.contains('弹幕')) {
+          score += 20;
+        }
+
+        // 轻微偏好 XML（更常见的B站格式）
+        if (ext == '.xml') score += 3;
+
+        candidates.add(_LocalDanmakuCandidate(
+          filePath: filePath,
+          fileName: fileName,
+          score: score,
+        ));
+      }
+
+      if (!canContinue()) return;
+      if (candidates.isEmpty) return;
+
+      candidates.sort((a, b) {
+        final scoreCompare = b.score.compareTo(a.score);
+        if (scoreCompare != 0) return scoreCompare;
+        return a.fileName.compareTo(b.fileName);
+      });
+
+      const maxTryCount = 8;
+      for (final candidate in candidates.take(maxTryCount)) {
+        if (!canContinue()) return;
+        final filePath = candidate.filePath;
+
+        // 避免同一文件在一次初始化里被重复加载
+        final alreadyLoaded = _danmakuTracks.values.any((track) =>
+            track['source'] == 'local' && track['filePath'] == filePath);
+        if (alreadyLoaded) continue;
+
+        Map<String, dynamic> jsonData;
+        try {
+          jsonData = await _readLocalDanmakuFileAsJsonData(filePath);
+        } catch (e) {
+          debugPrint('自动识别本地弹幕：解析失败，跳过 $filePath: $e');
+          continue;
+        }
+
+        final commentCount = _countLocalDanmakuComments(jsonData);
+        if (commentCount <= 0) continue;
+
+        final baseTrackName = p.basenameWithoutExtension(filePath);
+        final trackName = _dedupeLocalTrackName(baseTrackName);
+
+        try {
+          await loadDanmakuFromLocal(
+            jsonData,
+            trackName: trackName,
+            sourceFilePath: filePath,
+            setStatusMessage: false,
+          );
+          debugPrint('自动识别本地弹幕：已加载 $filePath -> $trackName');
+          return; // 只自动加载最匹配的一份，避免重复弹幕
+        } catch (e) {
+          debugPrint('自动识别本地弹幕：加载失败，跳过 $filePath: $e');
+          continue;
+        }
+      }
+    } catch (e) {
+      // 自动加载不应影响正常播放
+      debugPrint('自动识别本地弹幕出错: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> _readLocalDanmakuFileAsJsonData(
+      String filePath) async {
+    final file = File(filePath);
+    final bytes = await file.readAsBytes();
+    final content = utf8.decode(bytes, allowMalformed: true);
+    final lowerPath = filePath.toLowerCase();
+
+    if (lowerPath.endsWith('.xml')) {
+      return _convertBilibiliXmlDanmakuToJson(content);
+    }
+
+    if (lowerPath.endsWith('.json')) {
+      final decoded = json.decode(content);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded.cast<String, dynamic>());
+      }
+      if (decoded is List) {
+        return <String, dynamic>{'comments': decoded};
+      }
+      throw Exception('JSON根节点必须是对象或数组');
+    }
+
+    throw Exception('不支持的文件格式: $filePath');
+  }
+
+  Map<String, dynamic> _convertBilibiliXmlDanmakuToJson(String xmlContent) {
+    final List<Map<String, dynamic>> comments = [];
+
+    final RegExp danmakuRegex = RegExp(r'<d p="([^"]+)">([^<]+)</d>');
+    final Iterable<RegExpMatch> matches = danmakuRegex.allMatches(xmlContent);
+
+    for (final match in matches) {
+      try {
+        final String pAttr = match.group(1) ?? '';
+        final String textContent = match.group(2) ?? '';
+
+        if (textContent.isEmpty) continue;
+
+        final List<String> pParams = pAttr.split(',');
+        if (pParams.length < 4) continue;
+
+        // XML弹幕格式参数：时间,类型,字号,颜色,时间戳,池,用户id,弹幕id
+        final double time = double.tryParse(pParams[0]) ?? 0.0;
+        final int typeCode = int.tryParse(pParams[1]) ?? 1;
+        final int fontSize = int.tryParse(pParams[2]) ?? 25;
+        final int colorCode = int.tryParse(pParams[3]) ?? 16777215;
+
+        String danmakuType;
+        switch (typeCode) {
+          case 4:
+            danmakuType = 'bottom';
+            break;
+          case 5:
+            danmakuType = 'top';
+            break;
+          case 1:
+          case 6:
+          default:
+            danmakuType = 'scroll';
+            break;
+        }
+
+        final int r = (colorCode >> 16) & 0xFF;
+        final int g = (colorCode >> 8) & 0xFF;
+        final int b = colorCode & 0xFF;
+        final String color = 'rgb($r,$g,$b)';
+
+        comments.add({
+          't': time,
+          'c': textContent,
+          'y': danmakuType,
+          'r': color,
+          'fontSize': fontSize,
+          'originalType': typeCode,
+        });
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return {
+      'count': comments.length,
+      'comments': comments,
+    };
+  }
+
+  int _countLocalDanmakuComments(Map<String, dynamic> jsonData) {
+    final comments = jsonData['comments'];
+    if (comments is List) return comments.length;
+
+    final data = jsonData['data'];
+    if (data is List) return data.length;
+    if (data is String) {
+      try {
+        final parsed = json.decode(data);
+        if (parsed is List) return parsed.length;
+      } catch (_) {
+        return 0;
+      }
+    }
+
+    return 0;
+  }
+
+  String _dedupeLocalTrackName(String baseName) {
+    final reservedIds = {'dandanplay', 'timeline'};
+    String candidate = baseName.trim().isEmpty ? '本地弹幕' : baseName.trim();
+    if (reservedIds.contains(candidate)) {
+      candidate = '本地_$candidate';
+    }
+
+    if (!_danmakuTracks.containsKey(candidate)) return candidate;
+
+    var index = 2;
+    while (_danmakuTracks.containsKey('$candidate ($index)')) {
+      index++;
+    }
+    return '$candidate ($index)';
+  }
+
   Future<void> loadDanmaku(String episodeId, String animeIdStr) async {
     if (_isDisposed) return;
     final targetVideoPath = _currentVideoPath;
@@ -161,7 +409,9 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
   // 从本地JSON数据加载弹幕（多轨道模式）
   Future<void> loadDanmakuFromLocal(Map<String, dynamic> jsonData,
-      {String? trackName}) async {
+      {String? trackName,
+      String? sourceFilePath,
+      bool setStatusMessage = true}) async {
     if (_isDisposed) return;
     final targetVideoPath = _currentVideoPath;
     bool canContinue() =>
@@ -219,6 +469,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _danmakuTracks[finalTrackName] = {
         'name': trackName ?? '本地轨道${_danmakuTracks.length}',
         'source': 'local',
+        if (sourceFilePath != null) 'filePath': sourceFilePath,
         'danmakuList': parsedDanmaku,
         'count': parsedDanmaku.length,
         'loadTime': DateTime.now(),
@@ -231,15 +482,23 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
       debugPrint('本地弹幕轨道添加完成: $finalTrackName，共${comments.length}条');
       if (canContinue()) {
-        _setStatus(PlayerStatus.playing,
-            message: '本地弹幕轨道添加完成 (${comments.length}条)');
+        if (setStatusMessage) {
+          _setStatus(PlayerStatus.playing,
+              message: '本地弹幕轨道添加完成 (${comments.length}条)');
+        } else {
+          _addStatusMessage('已自动加载本地弹幕 (${comments.length}条)');
+        }
         notifyListeners();
       }
     } catch (e, st) {
       if (!canContinue()) return;
       debugPrint('加载本地弹幕失败: $e');
       debugPrintStack(stackTrace: st);
-      _setStatus(PlayerStatus.playing, message: '本地弹幕加载失败');
+      if (setStatusMessage) {
+        _setStatus(PlayerStatus.playing, message: '本地弹幕加载失败');
+      } else {
+        _addStatusMessage('本地弹幕自动加载失败');
+      }
       rethrow;
     }
   }

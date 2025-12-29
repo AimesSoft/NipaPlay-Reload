@@ -510,6 +510,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
 
+      // 自动检测并加载视频同目录下的本地弹幕（JSON/XML）
+      await _autoDetectAndLoadLocalDanmakuFromVideoDirectory(videoPath);
+
       // 应用时间轴告知弹幕轨道：避免开关默认开启但轨道未生成导致“无效”
       _applyTimelineDanmakuTrackForCurrentVideo();
       _updateMergedDanmakuList();
