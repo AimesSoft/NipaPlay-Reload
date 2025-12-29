@@ -29,6 +29,7 @@ class DanmakuSettingsMenu extends StatefulWidget {
 
 class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   static const List<double> _danmakuDisplayAreaOptions = <double>[
+    0.0, // 单行显示
     0.125, // 1/8
     0.25, // 1/4
     0.33, // 1/3
@@ -37,6 +38,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   ];
 
   static final Map<double, String> _danmakuDisplayAreaLabels = <double, String>{
+    0.0: '单行显示',
     0.125: '1/8 屏幕',
     0.25: '1/4 屏幕',
     0.33: '1/3 屏幕',

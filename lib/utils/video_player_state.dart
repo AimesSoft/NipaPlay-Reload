@@ -292,7 +292,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕轨道显示区域设置
   final String _danmakuDisplayAreaKey = 'danmaku_display_area';
   double _danmakuDisplayArea =
-      1.0; // 默认全屏显示（1.0=全屏，0.67=2/3，0.33=1/3，0.25=1/4，0.125=1/8）
+      1.0; // 默认全屏显示（0.0=单行，1.0=全屏，0.67=2/3，0.33=1/3，0.25=1/4，0.125=1/8）
 
   // 弹幕速度设置
   final String _danmakuSpeedMultiplierKey = 'danmaku_speed_multiplier';

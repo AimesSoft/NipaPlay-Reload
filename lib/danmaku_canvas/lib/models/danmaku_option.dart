@@ -5,7 +5,7 @@ class DanmakuOption {
   /// 字体粗细
   final int fontWeight;
 
-  /// 显示区域，0.1-1.0
+  /// 显示区域：0.0=单行显示，(0.0, 1.0]=按比例
   final double area;
 
   /// 滚动弹幕运行时间，秒

@@ -286,6 +286,10 @@ class _DanmakuContainerState extends State<DanmakuContainer> {
     if (widget.fontSize != oldWidget.fontSize) {
       _invalidateLayoutCaches();
     }
+
+    if (widget.displayArea != oldWidget.displayArea) {
+      _invalidateLayoutCaches();
+    }
   }
 
   void _invalidateLayoutCaches() {

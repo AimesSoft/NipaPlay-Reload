@@ -522,12 +522,20 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         _viewWidth = constraints.maxWidth;
       }
 
-      _trackCount =
-          (constraints.maxHeight * _option.area / _danmakuHeight).floor();
+      if (_option.area <= 0 || _option.area.isNaN || _option.area.isInfinite) {
+        // 0.0 表示“单行显示”
+        _trackCount = 1;
+      } else {
+        _trackCount =
+            (constraints.maxHeight * _option.area / _danmakuHeight).floor();
+      }
 
       /// 为字幕留出余量
       if (_option.safeArea && _option.area == 1.0) {
         _trackCount = _trackCount - 1;
+      }
+      if (_trackCount < 1) {
+        _trackCount = 1;
       }
 
       _trackYPositions.clear();
