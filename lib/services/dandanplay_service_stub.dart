@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/utils/network_settings.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -16,6 +15,19 @@ class DandanplayService {
 
   // Web版本API基础URL
   static String _baseUrl = '';
+
+  static String _resolveWebApiBaseUrl() {
+    final uri = Uri.base;
+    final rawBaseUrl = uri.queryParameters['api'] ??
+        uri.queryParameters['apiBase'] ??
+        uri.queryParameters['baseUrl'];
+    final normalizedBaseUrl = rawBaseUrl?.trim();
+    if (normalizedBaseUrl != null && normalizedBaseUrl.isNotEmpty) {
+      return normalizedBaseUrl.replaceAll(RegExp(r'/+$'), '');
+    }
+
+    return uri.origin;
+  }
   
   static Future<void> initialize() async {
     // 从localStorage加载登录状态
@@ -24,20 +36,9 @@ class DandanplayService {
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
     
-    // 优先使用网络设置中的服务器地址
-    _baseUrl = await NetworkSettings.getDandanplayServer();
-    
-    // 如果尚未保存自定义服务器，则回退到当前主机
-    if (_baseUrl.isEmpty) {
-      final currentUrl = Uri.base.toString();
-      final uri = Uri.parse(currentUrl);
-      _baseUrl = '${uri.scheme}://${uri.host}';
-      
-      if (uri.port != 80 && uri.port != 443) {
-        _baseUrl += ':${uri.port}';
-      }
-      await NetworkSettings.setDandanplayServer(_baseUrl);
-    }
+    // Web 平台默认使用同源的 NipaPlay Web API（避免浏览器 CORS 限制）。
+    // 若需要指定服务端地址，可通过 `?api=` / `?apiBase=` / `?baseUrl=` 覆盖。
+    _baseUrl = _resolveWebApiBaseUrl();
     
     // 在初始化时获取最新的登录状态
     if (kIsWeb) {
@@ -96,10 +97,10 @@ class DandanplayService {
     return;
   }
 
-  /// 获取当前弹弹play API基础URL（Web版本使用网络设置）
+  /// 获取当前弹弹play API基础URL（Web 版默认同源 `/api/`）
   static Future<String> getApiBaseUrl() async {
     if (_baseUrl.isNotEmpty) return _baseUrl;
-    _baseUrl = await NetworkSettings.getDandanplayServer();
+    _baseUrl = _resolveWebApiBaseUrl();
     return _baseUrl;
   }
   

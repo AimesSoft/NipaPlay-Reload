@@ -92,6 +92,7 @@ class LocalMediaShareService {
   final Map<String, SharedEpisodeInfo> _shareEpisodeMap = {};
   final Map<int, SharedAnimeBundle> _animeBundleMap = {};
   final Map<int, BangumiAnime?> _animeDetailCache = {};
+  final Set<int> _animeDetailFetching = <int>{};
   DateTime? _lastCacheUpdate;
   bool _isListeningWatchHistory = false;
 
@@ -173,9 +174,14 @@ class LocalMediaShareService {
     final bundles = _animeBundleMap.values.toList()
       ..sort((a, b) => b.latestWatchTime.compareTo(a.latestWatchTime));
 
+    // 预取部分番剧详情（异步，不阻塞 API），避免一次性触发过多请求
+    for (final bundle in bundles.take(24)) {
+      _prefetchAnimeDetail(bundle.animeId);
+    }
+
     final List<Map<String, dynamic>> summaries = [];
     for (final bundle in bundles) {
-      final detail = await _getAnimeDetail(bundle.animeId);
+      final detail = _peekAnimeDetail(bundle.animeId);
       final fallbackName = bundle.episodes.first.historyItem.animeName;
       summaries.add({
         'animeId': bundle.animeId,
@@ -202,7 +208,8 @@ class LocalMediaShareService {
       return null;
     }
 
-    final detail = await _getAnimeDetail(animeId);
+    final detail = _peekAnimeDetail(animeId);
+    _prefetchAnimeDetail(animeId);
     final fallbackName = bundle.episodes.first.historyItem.animeName;
 
     final episodeJsonList = <Map<String, dynamic>>[];
@@ -241,11 +248,19 @@ class LocalMediaShareService {
     final episodes = _shareEpisodeMap.values.toList()
       ..sort((a, b) => b.historyItem.lastWatchTime.compareTo(a.historyItem.lastWatchTime));
 
+    // 预取部分番剧详情（异步，不阻塞 API）
+    for (final entry in episodes.take(sanitizedLimit).take(24)) {
+      final animeId = entry.historyItem.animeId;
+      if (animeId != null) {
+        _prefetchAnimeDetail(animeId);
+      }
+    }
+
     final List<Map<String, dynamic>> items = [];
     for (final entry in episodes.take(sanitizedLimit)) {
       final baseJson = await entry.toJson();
       final animeId = entry.historyItem.animeId;
-      final detail = animeId != null ? await _getAnimeDetail(animeId) : null;
+      final detail = animeId != null ? _peekAnimeDetail(animeId) : null;
 
       final resolvedName = (detail?.nameCn ?? '').trim().isNotEmpty
           ? detail!.nameCn
@@ -265,19 +280,27 @@ class LocalMediaShareService {
     return _shareEpisodeMap[shareId];
   }
 
-  Future<BangumiAnime?> _getAnimeDetail(int animeId) async {
+  BangumiAnime? _peekAnimeDetail(int animeId) {
+    if (!_animeDetailCache.containsKey(animeId)) return null;
+    return _animeDetailCache[animeId];
+  }
+
+  void _prefetchAnimeDetail(int animeId) {
     if (_animeDetailCache.containsKey(animeId)) {
-      return _animeDetailCache[animeId];
+      return;
+    }
+    if (_animeDetailFetching.contains(animeId)) {
+      return;
     }
 
-    try {
-      final detail = await BangumiService.instance.getAnimeDetails(animeId);
+    _animeDetailFetching.add(animeId);
+    BangumiService.instance.getAnimeDetails(animeId).then((detail) {
       _animeDetailCache[animeId] = detail;
-      return detail;
-    } catch (e) {
+    }).catchError((_) {
       _animeDetailCache[animeId] = null;
-      return null;
-    }
+    }).whenComplete(() {
+      _animeDetailFetching.remove(animeId);
+    });
   }
 
   String determineContentType(String filePath) {
@@ -380,9 +403,23 @@ class LocalMediaShareService {
   }
 
   String _buildContentDispositionHeader(String fileName) {
-    final safeName = fileName.replaceAll('"', '\\"');
+    String sanitizeAsciiFallback(String value) {
+      if (value.isEmpty) return 'file';
+      final buffer = StringBuffer();
+      for (final codeUnit in value.codeUnits) {
+        final bool isAsciiPrintable = codeUnit >= 0x20 && codeUnit <= 0x7E;
+        final bool isForbidden = codeUnit == 0x22 /* " */ || codeUnit == 0x5C /* \\ */;
+        buffer.writeCharCode(
+          isAsciiPrintable && !isForbidden ? codeUnit : 0x5F /* _ */,
+        );
+      }
+      final sanitized = buffer.toString().trim();
+      return sanitized.isEmpty ? 'file' : sanitized;
+    }
+
+    final fallbackName = sanitizeAsciiFallback(fileName);
     final encodedName = Uri.encodeComponent(fileName);
-    return 'inline; filename="$safeName"; filename*=UTF-8\'\'$encodedName';
+    return 'inline; filename="$fallbackName"; filename*=UTF-8\'\'$encodedName';
   }
 
   Future<WatchHistoryItem?> updateEpisodeProgress({

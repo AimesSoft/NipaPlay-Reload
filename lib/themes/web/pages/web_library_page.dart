@@ -2,18 +2,20 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay/themes/web/models/web_playback_item.dart';
 import 'package:nipaplay/themes/web/services/web_remote_api_client.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class WebLibraryPage extends StatefulWidget {
   const WebLibraryPage({
     super.key,
     required this.api,
     required this.searchQuery,
+    required this.onPlay,
   });
 
   final WebRemoteApiClient api;
   final String searchQuery;
+  final ValueChanged<WebPlaybackItem> onPlay;
 
   @override
   State<WebLibraryPage> createState() => _WebLibraryPageState();
@@ -136,7 +138,11 @@ class _WebLibraryPageState extends State<WebLibraryPage> {
           insetPadding: const EdgeInsets.all(16),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 980, maxHeight: 720),
-            child: _AnimeDetailDialog(api: widget.api, animeId: anime.animeId),
+            child: _AnimeDetailDialog(
+              api: widget.api,
+              animeId: anime.animeId,
+              onPlay: widget.onPlay,
+            ),
           ),
         );
       },
@@ -259,10 +265,12 @@ class _AnimeDetailDialog extends StatefulWidget {
   const _AnimeDetailDialog({
     required this.api,
     required this.animeId,
+    required this.onPlay,
   });
 
   final WebRemoteApiClient api;
   final int animeId;
+  final ValueChanged<WebPlaybackItem> onPlay;
 
   @override
   State<_AnimeDetailDialog> createState() => _AnimeDetailDialogState();
@@ -389,12 +397,21 @@ class _AnimeDetailDialogState extends State<_AnimeDetailDialog> {
                             ),
                           const SizedBox(width: 8),
                           TextButton(
-                            onPressed: () async {
-                              final uri =
-                                  widget.api.resolveExternal(ep.streamPath);
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                            },
-                            child: const Text('打开'),
+                            onPressed: ep.fileExists == false
+                                ? null
+                                : () {
+                                    final uri = widget.api
+                                        .resolveExternal(ep.streamPath);
+                                    widget.onPlay(
+                                      WebPlaybackItem(
+                                        uri: uri,
+                                        title: ep.title,
+                                        subtitle: detail.title,
+                                      ),
+                                    );
+                                    Navigator.of(context).pop();
+                                  },
+                            child: const Text('播放'),
                           ),
                         ],
                       ),
@@ -450,4 +467,3 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
-

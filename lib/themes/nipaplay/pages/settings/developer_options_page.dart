@@ -12,6 +12,8 @@ import 'package:provider/provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:flutter/services.dart';
+import 'package:nipaplay/providers/service_provider.dart';
 // 证书相关的主机快捷信任按钮应用户要求移除，仅保留全局开关
 
 /// 开发者选项设置页面
@@ -84,6 +86,18 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
+            const Divider(color: Colors.white12, height: 1),
+
+            SettingsItem.button(
+              title: '开发模式远程访问端口',
+              subtitle: devOptions.devRemoteAccessWebUiPort > 0
+                  ? '将 Web UI 代理到本机端口：${devOptions.devRemoteAccessWebUiPort}'
+                  : '未设置（默认使用内置 Web UI 资源）',
+              icon: Ionicons.globe_outline,
+              trailingIcon: Ionicons.chevron_forward_outline,
+              onTap: () => _showDevRemoteAccessWebUiPortDialog(context, devOptions),
+            ),
+
             const Divider(color: Colors.white12, height: 1),
             
             // Linux存储迁移选项（仅Linux平台显示，Web环境下不显示）
@@ -274,6 +288,75 @@ style: TextStyle(
         );
       },
     );
+  }
+
+  Future<void> _showDevRemoteAccessWebUiPortDialog(
+    BuildContext context,
+    DeveloperOptionsProvider devOptions,
+  ) async {
+    final portController = TextEditingController(
+      text: devOptions.devRemoteAccessWebUiPort > 0
+          ? devOptions.devRemoteAccessWebUiPort.toString()
+          : '',
+    );
+    final newPort = await BlurDialog.show<int>(
+      context: context,
+      title: '开发模式远程访问端口',
+      contentWidget: TextField(
+        controller: portController,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: const InputDecoration(
+          labelText: '端口 (1-65535)，留空/0 关闭',
+          labelStyle: TextStyle(color: Colors.white70),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: Colors.white),
+          ),
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: Colors.white38),
+          ),
+        ),
+        style: const TextStyle(color: Colors.white),
+      ),
+      actions: [
+        TextButton(
+          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        TextButton(
+          child: const Text('确定', style: TextStyle(color: Colors.white)),
+          onPressed: () {
+            final raw = portController.text.trim();
+            final parsed = raw.isEmpty ? 0 : int.tryParse(raw);
+            final isValid = parsed != null && (parsed == 0 || (parsed > 0 && parsed < 65536));
+            if (isValid) {
+              Navigator.of(context).pop(parsed);
+            } else {
+              BlurSnackBar.show(context, '请输入有效的端口号 (1-65535)，或留空/0 关闭');
+            }
+          },
+        ),
+      ],
+    );
+
+    portController.dispose();
+    if (newPort == null) return;
+    await devOptions.setDevRemoteAccessWebUiPort(newPort);
+
+    final server = ServiceProvider.webServer;
+    if (server.isRunning) {
+      final currentPort = server.port;
+      await server.stopServer();
+      final restarted = await server.startServer(port: currentPort);
+      if (!context.mounted) return;
+      BlurSnackBar.show(
+        context,
+        restarted ? '已保存，远程访问服务已重启生效' : '已保存，但远程访问服务重启失败',
+      );
+    } else {
+      if (!context.mounted) return;
+      BlurSnackBar.show(context, '已保存，下次开启远程访问时生效');
+    }
   }
 
   // 检查Linux存储迁移状态
