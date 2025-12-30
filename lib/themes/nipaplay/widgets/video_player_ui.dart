@@ -23,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'loading_overlay.dart';
 import 'vertical_indicator.dart';
 import 'video_upload_ui.dart';
+import 'playback_info_menu.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -37,6 +38,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   final bool _isIndicatorHovered = false;
   Timer? _doubleTapTimer;
   Timer? _mouseMoveTimer;
+  OverlayEntry? _playbackInfoOverlay;
   int _tapCount = 0;
   static const _phoneDoubleTapTimeout = Duration(milliseconds: 360);
   static const _desktopDoubleTapTimeout = Duration(milliseconds: 220);
@@ -331,6 +333,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     // <<< ADDED: Clear the callback to prevent memory leaks
     _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop = null;
     _contextMenuController.dispose();
+    _hidePlaybackInfoOverlay();
 
     // 确保清理所有资源
     _focusNode.dispose();
@@ -395,6 +398,117 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     }
   }
 
+  void _showPlaybackInfoOverlay() {
+    if (_playbackInfoOverlay != null) return;
+
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+
+    _playbackInfoOverlay = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _hidePlaybackInfoOverlay,
+              onSecondaryTap: _hidePlaybackInfoOverlay,
+            ),
+          ),
+          PlaybackInfoMenu(onClose: _hidePlaybackInfoOverlay),
+        ],
+      ),
+    );
+
+    overlay.insert(_playbackInfoOverlay!);
+  }
+
+  void _hidePlaybackInfoOverlay() {
+    _playbackInfoOverlay?.remove();
+    _playbackInfoOverlay = null;
+  }
+
+  List<ContextMenuAction> _buildContextMenuActions(VideoPlayerState videoState) {
+    final actions = <ContextMenuAction>[
+      ContextMenuAction(
+        icon: Icons.skip_previous_rounded,
+        label: '上一话',
+        enabled: videoState.canPlayPreviousEpisode,
+        onPressed: () => unawaited(videoState.playPreviousEpisode()),
+      ),
+      ContextMenuAction(
+        icon: Icons.skip_next_rounded,
+        label: '下一话',
+        enabled: videoState.canPlayNextEpisode,
+        onPressed: () => unawaited(videoState.playNextEpisode()),
+      ),
+      ContextMenuAction(
+        icon: Icons.fast_forward_rounded,
+        label: '快进 ${videoState.seekStepSeconds} 秒',
+        enabled: videoState.hasVideo,
+        onPressed: () {
+          final newPosition = videoState.position +
+              Duration(seconds: videoState.seekStepSeconds);
+          videoState.seekTo(newPosition);
+        },
+      ),
+      ContextMenuAction(
+        icon: Icons.fast_rewind_rounded,
+        label: '快退 ${videoState.seekStepSeconds} 秒',
+        enabled: videoState.hasVideo,
+        onPressed: () {
+          final newPosition = videoState.position -
+              Duration(seconds: videoState.seekStepSeconds);
+          videoState.seekTo(newPosition);
+        },
+      ),
+      ContextMenuAction(
+        icon: Icons.chat_bubble_outline_rounded,
+        label: '发送弹幕',
+        enabled: videoState.episodeId != null,
+        onPressed: () => unawaited(videoState.showSendDanmakuDialog()),
+      ),
+      ContextMenuAction(
+        icon: Icons.double_arrow_rounded,
+        label: '跳过',
+        enabled: videoState.hasVideo,
+        onPressed: videoState.skip,
+      ),
+      ContextMenuAction(
+        icon: videoState.isFullscreen
+            ? Icons.fullscreen_exit_rounded
+            : Icons.fullscreen_rounded,
+        label: videoState.isFullscreen ? '窗口化' : '全屏',
+        enabled: globals.isDesktop,
+        onPressed: () => unawaited(videoState.toggleFullscreen()),
+      ),
+      ContextMenuAction(
+        icon: Icons.close_rounded,
+        label: '关闭播放',
+        enabled: videoState.hasVideo,
+        onPressed: () => unawaited(videoState.resetPlayer()),
+      ),
+      ContextMenuAction(
+        icon: Icons.info_outline_rounded,
+        label: '播放信息',
+        enabled: videoState.hasVideo,
+        onPressed: _showPlaybackInfoOverlay,
+      ),
+    ];
+
+    if (SystemShareService.isSupported) {
+      actions.add(
+        ContextMenuAction(
+          icon: Icons.share_rounded,
+          label: '分享',
+          enabled: videoState.hasVideo,
+          onPressed: () => unawaited(_shareCurrentMedia(videoState)),
+        ),
+      );
+    }
+
+    return actions;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
@@ -454,21 +568,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                   onSecondaryTapDown: globals.isDesktop
                       ? (details) {
                           if (!videoState.hasVideo) return;
-                          if (!SystemShareService.isSupported) return;
+                          _hidePlaybackInfoOverlay();
 
                           _contextMenuController.showActionsMenu(
                             context: context,
                             globalPosition: details.globalPosition,
                             style: ContextMenuStyles.glass(context),
-                            actions: [
-                              ContextMenuAction(
-                                icon: Icons.share_rounded,
-                                label: '分享',
-                                onPressed: () {
-                                  unawaited(_shareCurrentMedia(videoState));
-                                },
-                              ),
-                            ],
+                            actions: _buildContextMenuActions(videoState),
                           );
                         }
                       : null,
@@ -702,9 +808,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                   ),
 
                                 // 右边缘悬浮菜单（仅桌面版）
-                                uiThemeProvider.isFluentUITheme
-                                    ? const FluentRightEdgeMenu()
-                                    : const RightEdgeHoverMenu(),
+                                if (uiThemeProvider.isFluentUITheme)
+                                  FluentRightEdgeMenu(
+                                    enableHoverToOpen:
+                                        videoState.desktopHoverSettingsMenuEnabled,
+                                  )
+                                else if (videoState.desktopHoverSettingsMenuEnabled)
+                                  const RightEdgeHoverMenu(),
 
                                 // 底部1像素白色进度条
                                 const MinimalProgressBar(),

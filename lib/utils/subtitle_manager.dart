@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'subtitle_parser.dart';
@@ -57,21 +59,19 @@ class SubtitleManager extends ChangeNotifier {
 
   // 获取当前活跃的外部字幕文件路径
   String? getActiveExternalSubtitlePath() {
-    if (_player.activeSubtitleTracks.isEmpty) {
-      return null;
-    }
-
     // 检查是否是外部字幕
-    final activeTrack = _player.activeSubtitleTracks.first;
-    // 查找外部字幕信息
-    if (_subtitleTrackInfo.containsKey('external_subtitle') &&
-        _subtitleTrackInfo['external_subtitle']?['isActive'] == true) {
-      // 返回外部字幕文件路径
-      return _subtitleTrackInfo['external_subtitle']?['path'];
+    final externalInfo = _subtitleTrackInfo['external_subtitle'];
+    if (externalInfo is Map<String, dynamic> &&
+        externalInfo['isActive'] == true) {
+      final path = externalInfo['path'];
+      if (path is String && path.isNotEmpty) {
+        return path;
+      }
     }
 
-    // 特殊处理：当轨道索引为0，可能是外部字幕
-    if (activeTrack == 0 && _currentExternalSubtitlePath != null) {
+    // 回退：使用当前记录的外部字幕路径
+    if (_currentExternalSubtitlePath != null &&
+        _currentExternalSubtitlePath!.isNotEmpty) {
       return _currentExternalSubtitlePath;
     }
 
@@ -208,6 +208,76 @@ class SubtitleManager extends ChangeNotifier {
     debugPrint('SubtitleManager: 设置当前外部字幕路径: $path');
   }
 
+  String _getVideoHashKey(String videoPath) {
+    final file = File(videoPath);
+    if (file.existsSync()) {
+      final size = file.lengthSync();
+      final name = p.basename(videoPath);
+      return '$name-$size';
+    }
+    return sha1.convert(utf8.encode(videoPath)).toString();
+  }
+
+  Future<void> _persistExternalSubtitleSelection({
+    required String videoPath,
+    required String subtitlePath,
+    required bool isActive,
+  }) async {
+    try {
+      if (subtitlePath.isEmpty) return;
+      if (!File(subtitlePath).existsSync()) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      final videoHashKey = _getVideoHashKey(videoPath);
+      final subtitlesKey = 'external_subtitles_$videoHashKey';
+
+      final existingJson = prefs.getString(subtitlesKey);
+      final List<Map<String, dynamic>> subtitles = [];
+      if (existingJson != null && existingJson.isNotEmpty) {
+        try {
+          final decoded = json.decode(existingJson);
+          if (decoded is List) {
+            for (final item in decoded) {
+              if (item is Map) {
+                subtitles.add(Map<String, dynamic>.from(item));
+              }
+            }
+          }
+        } catch (_) {
+          // 忽略解析错误，回退为空列表
+        }
+      }
+
+      // 移除同路径条目，并把当前字幕置顶（方便选择）
+      subtitles.removeWhere((s) => s['path'] == subtitlePath);
+
+      // 将所有字幕设为非激活
+      for (final s in subtitles) {
+        s['isActive'] = false;
+      }
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      subtitles.insert(0, <String, dynamic>{
+        'path': subtitlePath,
+        'name': p.basename(subtitlePath),
+        'type': p.extension(subtitlePath).toLowerCase().replaceFirst('.', ''),
+        'addTime': now,
+        'isActive': isActive,
+      });
+
+      await prefs.setString(subtitlesKey, json.encode(subtitles));
+
+      final lastActiveKey = 'last_active_subtitle_$videoHashKey';
+      if (isActive) {
+        await prefs.setInt(lastActiveKey, 0);
+      } else {
+        await prefs.remove(lastActiveKey);
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 持久化外部字幕选择失败: $e');
+    }
+  }
+
   // 清空外部字幕状态，同时通知播放器关闭外挂轨道
   void _clearExternalSubtitleState({bool resetManualFlag = true}) {
     try {
@@ -293,6 +363,14 @@ class SubtitleManager extends ChangeNotifier {
           saveVideoSubtitleMapping(_currentVideoPath!, path);
         }
 
+        if (_currentVideoPath != null && _currentVideoPath!.isNotEmpty) {
+          unawaited(_persistExternalSubtitleSelection(
+            videoPath: _currentVideoPath!,
+            subtitlePath: path,
+            isActive: true,
+          ));
+        }
+
         debugPrint('SubtitleManager: 外部字幕设置成功');
       } else if (path.isEmpty) {
         _clearExternalSubtitleState();
@@ -351,33 +429,7 @@ class SubtitleManager extends ChangeNotifier {
         }
       }
 
-      // 检查视频是否有内嵌字幕
-      bool hasEmbeddedSubtitles = _player.mediaInfo.subtitle != null &&
-          _player.mediaInfo.subtitle!.isNotEmpty;
-
-      // 检查是否已激活内嵌字幕轨道
-      bool hasActiveEmbeddedTrack = false;
-      if (_player.activeSubtitleTracks.isNotEmpty) {
-        // 排除轨道0（外部字幕轨道）
-        hasActiveEmbeddedTrack =
-            _player.activeSubtitleTracks.any((track) => track > 0);
-      }
-
-      // 如果以前手动设置过外部字幕，则始终尝试加载
-      bool wasManuallySet = false;
-      if (_subtitleTrackInfo.containsKey('external_subtitle')) {
-        wasManuallySet =
-            _subtitleTrackInfo['external_subtitle']?['isManualSet'] == true;
-      }
-
-      // 如果是第一次检查，并且有内嵌字幕，跳过自动加载
-      // 注意：现在我们已经检查了保存的字幕路径，所以只有在未找到保存记录的情况下才会跳过
-      if (hasEmbeddedSubtitles &&
-          !wasManuallySet &&
-          savedSubtitlePath == null) {
-        debugPrint('SubtitleManager: 检测到内嵌字幕且无手动设置记录，跳过自动加载外部字幕');
-        return;
-      }
+      // 需求：即使存在内嵌字幕，也应优先尝试自动加载外挂字幕。
 
       // 检查视频文件是否存在
       final videoFile = File(videoPath);

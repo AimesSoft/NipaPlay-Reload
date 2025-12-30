@@ -233,6 +233,74 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
             _danmakuList = [];
             _danmakuTracks.clear();
             _danmakuTrackEnabled.clear();
+            if (_context != null &&
+                _context!.mounted &&
+                !_isDisposed &&
+                _currentVideoPath == videoPath) {
+              final initialKeyword = (() {
+                final rawName = videoInfo['fileName']?.toString().trim() ?? '';
+                if (rawName.isNotEmpty) {
+                  return p.basenameWithoutExtension(rawName);
+                }
+                return p.basenameWithoutExtension(videoPath);
+              })();
+
+              try {
+                final result =
+                    await ManualDanmakuMatcher.instance.showManualMatchDialog(
+                  _context!,
+                  initialVideoTitle: initialKeyword,
+                );
+
+                if (result != null &&
+                    !_isDisposed &&
+                    _currentVideoPath == videoPath) {
+                  final episodeIdStr = result['episodeId']?.toString() ?? '';
+                  final animeIdStr = result['animeId']?.toString() ?? '';
+
+                  if (episodeIdStr.isNotEmpty && animeIdStr.isNotEmpty) {
+                    final episodeIdInt = int.tryParse(episodeIdStr) ?? 0;
+                    final animeIdInt = int.tryParse(animeIdStr) ?? 0;
+                    if (episodeIdInt <= 0 || animeIdInt <= 0) {
+                      _setStatus(PlayerStatus.recognizing,
+                          message: '无效的弹幕ID，跳过加载');
+                      return;
+                    }
+
+                    _episodeId = episodeIdInt;
+                    _animeId = animeIdInt;
+                    _animeTitle = result['animeTitle']?.toString();
+                    _episodeTitle = result['episodeTitle']?.toString();
+
+                    final manualVideoInfo = <String, dynamic>{
+                      'isMatched': true,
+                      'animeTitle': _animeTitle,
+                      'episodeTitle': _episodeTitle,
+                      'matches': [
+                        {
+                          'animeId': animeIdInt,
+                          'episodeId': episodeIdInt,
+                          'animeTitle': _animeTitle,
+                          'episodeTitle': _episodeTitle,
+                          'shift': 0,
+                        }
+                      ],
+                    };
+                    await _updateWatchHistoryWithVideoInfo(
+                      videoPath,
+                      manualVideoInfo,
+                    );
+
+                    _setStatus(PlayerStatus.recognizing, message: '正在加载弹幕...');
+                    await loadDanmaku(episodeIdStr, animeIdStr);
+                    return;
+                  }
+                }
+              } catch (e) {
+                debugPrint('自动弹出手动匹配弹幕对话框失败: $e');
+              }
+            }
+
             _setStatus(PlayerStatus.recognizing, message: '未匹配到视频信息，跳过弹幕');
           }
         }

@@ -12,6 +12,8 @@ import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:provider/provider.dart';
 
 /// 负责将Emby媒体与DandanPlay的内容匹配，以获取弹幕和元数据
 class EmbyDandanplayMatcher {
@@ -282,6 +284,7 @@ class EmbyDandanplayMatcher {
 
       // 如果有视频信息，尝试使用哈希值、文件名和文件大小进行匹配
       final info = videoInfo;
+      bool hashMatchFailed = false;
       if (info != null) {
         final hasHash = info['hash']?.toString().isNotEmpty ?? false;
         final fileSize = info['fileSize'];
@@ -305,6 +308,7 @@ class EmbyDandanplayMatcher {
           } catch (e) {
             debugPrint('使用match API匹配时出错: $e，尝试fallback搜索');
           }
+          hashMatchFailed = true;
         } else {
           final reason = hasBasicInfo ? '缺少有效哈希值' : '没有可用的精确信息';
           debugPrint('$reason，使用标题搜索匹配');
@@ -314,11 +318,30 @@ class EmbyDandanplayMatcher {
       }
 
       // 为弹窗预搜索一些候选项，但不依赖搜索结果
-      debugPrint('为弹窗预搜索候选动画: "$queryTitle"');
+      String extractSearchKeywordFromFileName(String rawName) {
+        if (rawName.trim().isEmpty) return '';
+        var name = rawName.split(RegExp(r'[\\/]')).last.trim();
+        name = name.replaceAll(RegExp(r'\.[^\.]+$'), '').trim();
+        return name;
+      }
+
+      String searchTitle = queryTitle;
+      if (hashMatchFailed) {
+        final rawFileName = (info?['fileName'] ?? '').toString();
+        final fileNameKeyword = extractSearchKeywordFromFileName(rawFileName);
+        if (fileNameKeyword.isNotEmpty) {
+          searchTitle = fileNameKeyword;
+        }
+      }
+
+      debugPrint('为弹窗预搜索候选动画: "$searchTitle"');
       List<Map<String, dynamic>> animeMatches = [];
 
       try {
-        animeMatches = await _searchAnime(queryTitle);
+        animeMatches = await _searchAnime(searchTitle);
+        if (animeMatches.isEmpty && searchTitle != queryTitle) {
+          animeMatches = await _searchAnime(queryTitle);
+        }
         debugPrint('预搜索找到 ${animeMatches.length} 个候选项');
 
         // 如果通过标题搜索没找到匹配，尝试使用季名称搜索
@@ -341,8 +364,16 @@ class EmbyDandanplayMatcher {
       Map<String, dynamic>? selectedMatch; // This will hold the chosen anime
       Map<String, dynamic>?
           matchedEpisode; // This will hold the chosen episode, if selected directly in dialog
+      bool autoPickEnabled = true;
+      try {
+        autoPickEnabled = context
+            .read<SettingsProvider>()
+            .autoMatchDanmakuFirstSearchResultOnHashFail;
+      } catch (_) {}
+      final bool autoPickOnHashFail =
+          showMatchDialog && hashMatchFailed && autoPickEnabled;
 
-      if (showMatchDialog) {
+      if (showMatchDialog && !autoPickOnHashFail) {
         // 显示匹配对话框，让用户手动选择
         debugPrint(
             '显示选择对话框 (有  [38;5;246m [48;5;236m${animeMatches.length} [0m 个预搜索候选项)');
@@ -373,45 +404,115 @@ class EmbyDandanplayMatcher {
           debugPrint('用户选择了动画: ${dialogResult['animeTitle']}，但没有选择具体剧集');
         }
       } else {
-        // 预匹配模式：尝试自动选择最佳匹配项
-        debugPrint('预匹配模式：尝试自动选择最佳匹配');
-        if (animeMatches.isNotEmpty) {
-          selectedMatch = animeMatches.first; // 选择第一个匹配项
-          debugPrint('自动选择第一个动画: ${selectedMatch['animeTitle']}');
-
-          // 尝试自动匹配剧集
-          final episodesList = await _getAnimeEpisodes(
-              selectedMatch['animeId'], selectedMatch['animeTitle']);
-          if (episodesList.isNotEmpty && episode.indexNumber != null) {
-            // 尝试通过集数匹配
-            final targetEpisode = episodesList.firstWhere(
-              (ep) {
-                final episodeIndex = ep['episodeIndex'];
-                int epIndex = 0;
-                if (episodeIndex is int) {
-                  epIndex = episodeIndex;
-                } else if (episodeIndex is String) {
-                  epIndex = int.tryParse(episodeIndex) ?? 0;
+        if (autoPickOnHashFail) {
+          debugPrint('哈希匹配失败：自动选择文件名搜索的第一个结果（跳过弹窗）');
+          if (animeMatches.isNotEmpty) {
+            selectedMatch = animeMatches.first;
+            debugPrint('自动选择第一个动画: ${selectedMatch['animeTitle']}');
+            try {
+              final episodesList = await _getAnimeEpisodes(
+                selectedMatch['animeId'],
+                selectedMatch['animeTitle'],
+              );
+              if (episodesList.isNotEmpty && episode.indexNumber != null) {
+                final targetEpisode = episodesList.firstWhere(
+                  (ep) {
+                    final episodeIndex = ep['episodeIndex'];
+                    int epIndex = 0;
+                    if (episodeIndex is int) {
+                      epIndex = episodeIndex;
+                    } else if (episodeIndex is String) {
+                      epIndex = int.tryParse(episodeIndex) ?? 0;
+                    }
+                    return epIndex == episode.indexNumber;
+                  },
+                  orElse: () => {},
+                );
+                if (targetEpisode.isNotEmpty) {
+                  matchedEpisode = targetEpisode;
+                  debugPrint(
+                      '自动匹配到剧集: ${matchedEpisode['episodeTitle']}, episodeId=${matchedEpisode['episodeId']}');
+                } else {
+                  debugPrint('自动匹配剧集未命中，将交由后续逻辑继续尝试');
                 }
-                return epIndex == episode.indexNumber;
-              },
-              orElse: () => {},
-            );
+              }
+            } catch (e) {
+              debugPrint('自动匹配剧集时出错: $e，将交由后续逻辑继续尝试');
+            }
+          } else {
+            debugPrint('自动选择失败：没有找到候选动画');
+          }
+        } else {
+          // 预匹配模式：尝试自动选择最佳匹配项
+          debugPrint('预匹配模式：尝试自动选择最佳匹配');
+          if (animeMatches.isNotEmpty) {
+            selectedMatch = animeMatches.first; // 选择第一个匹配项
+            debugPrint('自动选择第一个动画: ${selectedMatch['animeTitle']}');
 
-            if (targetEpisode.isNotEmpty) {
-              matchedEpisode = targetEpisode;
-              debugPrint(
-                  '自动匹配到剧集: ${matchedEpisode['episodeTitle']}, episodeId=${matchedEpisode['episodeId']}');
+            // 尝试自动匹配剧集
+            final episodesList = await _getAnimeEpisodes(
+                selectedMatch['animeId'], selectedMatch['animeTitle']);
+            if (episodesList.isNotEmpty && episode.indexNumber != null) {
+              // 尝试通过集数匹配
+              final targetEpisode = episodesList.firstWhere(
+                (ep) {
+                  final episodeIndex = ep['episodeIndex'];
+                  int epIndex = 0;
+                  if (episodeIndex is int) {
+                    epIndex = episodeIndex;
+                  } else if (episodeIndex is String) {
+                    epIndex = int.tryParse(episodeIndex) ?? 0;
+                  }
+                  return epIndex == episode.indexNumber;
+                },
+                orElse: () => {},
+              );
+
+              if (targetEpisode.isNotEmpty) {
+                matchedEpisode = targetEpisode;
+                debugPrint(
+                    '自动匹配到剧集: ${matchedEpisode['episodeTitle']}, episodeId=${matchedEpisode['episodeId']}');
+              } else {
+                debugPrint('无法自动匹配剧集，预匹配失败');
+                selectedMatch = null; // 预匹配失败
+              }
             } else {
-              debugPrint('无法自动匹配剧集，预匹配失败');
+              debugPrint('无法获取剧集列表或没有集数信息，预匹配失败');
               selectedMatch = null; // 预匹配失败
             }
           } else {
-            debugPrint('无法获取剧集列表或没有集数信息，预匹配失败');
-            selectedMatch = null; // 预匹配失败
+            debugPrint('预匹配：没有找到候选动画');
           }
+        }
+      }
+
+      // 自动选择模式下，如果预搜索为空，则回退弹窗让用户手动搜索
+      if (selectedMatch == null && showMatchDialog && autoPickOnHashFail) {
+        debugPrint('自动选择失败（无候选项），回退弹幕匹配弹窗');
+        final dialogResult = await showDialog<Map<String, dynamic>>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AnimeMatchDialog(
+            matches: animeMatches,
+            episodeInfo: episode,
+          ),
+        );
+        if (dialogResult?['__cancel__'] == true) {
+          debugPrint('用户关闭了弹幕匹配弹窗，彻底中断匹配流程');
+          return {'__cancel__': true};
+        }
+        if (dialogResult == null) {
+          debugPrint('用户跳过了匹配对话框');
+          return {};
+        }
+        selectedMatch = dialogResult;
+        if (dialogResult.containsKey('episodeId') &&
+            dialogResult['episodeId'] != null) {
+          matchedEpisode = dialogResult;
+          debugPrint(
+              '用户选择了动画和剧集: ${dialogResult['animeTitle']} - ${dialogResult['episodeTitle']}');
         } else {
-          debugPrint('预匹配：没有找到候选动画');
+          debugPrint('用户选择了动画: ${dialogResult['animeTitle']}，但没有选择具体剧集');
         }
       }
 

@@ -147,6 +147,30 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadDesktopHoverSettingsMenuEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resolved = prefs.getBool(_desktopHoverSettingsMenuEnabledKey) ?? false;
+    if (_desktopHoverSettingsMenuEnabled != resolved) {
+      _desktopHoverSettingsMenuEnabled = resolved;
+      notifyListeners();
+    } else {
+      _desktopHoverSettingsMenuEnabled = resolved;
+    }
+  }
+
+  Future<void> setDesktopHoverSettingsMenuEnabled(bool enabled) async {
+    if (_desktopHoverSettingsMenuEnabled == enabled) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_desktopHoverSettingsMenuEnabledKey, enabled);
+    _desktopHoverSettingsMenuEnabled = enabled;
+    if (!enabled) {
+      setShowRightMenu(false);
+    }
+    notifyListeners();
+  }
+
   // 保存控制栏高度
   Future<void> setControlBarHeight(double height) async {
     _controlBarHeight = height;

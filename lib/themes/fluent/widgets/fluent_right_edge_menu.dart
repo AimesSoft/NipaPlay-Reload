@@ -19,7 +19,12 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 
 class FluentRightEdgeMenu extends StatefulWidget {
-  const FluentRightEdgeMenu({super.key});
+  final bool enableHoverToOpen;
+
+  const FluentRightEdgeMenu({
+    super.key,
+    this.enableHoverToOpen = false,
+  });
 
   @override
   State<FluentRightEdgeMenu> createState() => _FluentRightEdgeMenuState();
@@ -130,6 +135,10 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
           return const SizedBox.shrink();
         }
 
+        if (!widget.enableHoverToOpen && !videoState.showRightMenu && !_isMenuVisible) {
+          return const SizedBox.shrink();
+        }
+
         // 使用WidgetsBinding.instance.addPostFrameCallback来延迟执行setState
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -178,8 +187,7 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
               setState(() {
                 _isHovered = true;
               });
-              // 鼠标悬浮时如果菜单未显示，则显示菜单并更新状态
-              if (!videoState.showRightMenu) {
+              if (widget.enableHoverToOpen && !videoState.showRightMenu) {
                 videoState.setShowRightMenu(true);
               }
             },
@@ -192,20 +200,23 @@ class _FluentRightEdgeMenuState extends State<FluentRightEdgeMenu>
             },
             child: Stack(
               children: [
-                // 触发区域 - 始终存在的细条
-                Container(
-                  width: 8,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.transparent,
-                        Colors.white.withValues(alpha: _isHovered || videoState.showRightMenu ? 0.15 : 0.05),
-                      ],
+                if (widget.enableHoverToOpen)
+                  // 触发区域 - 始终存在的细条
+                  Container(
+                    width: 8,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withValues(
+                            alpha: _isHovered || videoState.showRightMenu ? 0.15 : 0.05,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 // 菜单内容 - FluentUI风格，贴边显示
                 if (_isMenuVisible)
                   AnimatedBuilder(

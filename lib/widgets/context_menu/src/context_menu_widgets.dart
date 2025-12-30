@@ -79,11 +79,12 @@ class ContextMenu extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final action in actions)
+            for (int i = 0; i < actions.length; i++)
               _ContextMenuActionTile(
                 style: style,
-                action: action,
+                action: actions[i],
                 onDismiss: onDismiss,
+                showDivider: i != actions.length - 1,
               ),
           ],
         ),
@@ -98,11 +99,13 @@ class _ContextMenuActionTile extends StatelessWidget {
   final ContextMenuStyle style;
   final ContextMenuAction action;
   final VoidCallback? onDismiss;
+  final bool showDivider;
 
   const _ContextMenuActionTile({
     required this.style,
     required this.action,
     required this.onDismiss,
+    required this.showDivider,
   });
 
   @override
@@ -114,37 +117,53 @@ class _ContextMenuActionTile extends StatelessWidget {
         ? style.labelStyle
         : style.labelStyle.copyWith(color: foregroundColor);
 
-    return SizedBox(
-      width: double.infinity,
-      height: style.itemHeight,
-      child: InkWell(
-        onTap: action.enabled
-            ? () {
-                onDismiss?.call();
-                action.onPressed();
-              }
-            : null,
-        hoverColor: style.hoverColor,
-        highlightColor: style.highlightColor,
-        child: Padding(
-          padding: style.itemPadding,
-          child: Row(
-            children: [
-              Icon(action.icon, size: style.iconSize, color: iconColor),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  action.label,
-                  style: textStyle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    final Color baseDividerColor = style.labelStyle.color ?? Colors.black;
+    final Color dividerColor = baseDividerColor.withValues(
+      alpha: (baseDividerColor.a * 0.16).clamp(0.0, 1.0),
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: showDivider
+            ? Border(
+                bottom: BorderSide(
+                  color: dividerColor,
+                  width: 0.6,
                 ),
-              ),
-            ],
+              )
+            : null,
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        height: style.itemHeight,
+        child: InkWell(
+          onTap: action.enabled
+              ? () {
+                  onDismiss?.call();
+                  action.onPressed();
+                }
+              : null,
+          hoverColor: style.hoverColor,
+          highlightColor: style.highlightColor,
+          child: Padding(
+            padding: style.itemPadding,
+            child: Row(
+              children: [
+                Icon(action.icon, size: style.iconSize, color: iconColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    action.label,
+                    style: textStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 }
-

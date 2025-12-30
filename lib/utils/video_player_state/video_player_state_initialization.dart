@@ -51,6 +51,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadPlaybackEndAction();
     await _loadAutoNextCountdownSeconds();
     await _loadPauseOnBackgroundSetting();
+    await _loadDesktopHoverSettingsMenuEnabled();
 
     // 订阅内核切换事件
     _subscribeToKernelChanges();

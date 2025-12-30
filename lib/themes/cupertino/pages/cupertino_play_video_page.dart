@@ -12,6 +12,7 @@ import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/volume_gesture_area.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/playback_info_menu.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
@@ -30,6 +31,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   bool _isDragging = false;
   final OverlayContextMenuController _contextMenuController =
       OverlayContextMenuController();
+  OverlayEntry? _playbackInfoOverlay;
 
   @override
   void initState() {
@@ -44,6 +46,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   @override
   void dispose() {
     _contextMenuController.dispose();
+    _hidePlaybackInfoOverlay();
     super.dispose();
   }
 
@@ -116,6 +119,124 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
   }
 
+  void _showPlaybackInfoOverlay() {
+    if (_playbackInfoOverlay != null) return;
+
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+
+    _playbackInfoOverlay = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _hidePlaybackInfoOverlay,
+              onSecondaryTap: _hidePlaybackInfoOverlay,
+            ),
+          ),
+          PlaybackInfoMenu(onClose: _hidePlaybackInfoOverlay),
+        ],
+      ),
+    );
+
+    overlay.insert(_playbackInfoOverlay!);
+  }
+
+  void _hidePlaybackInfoOverlay() {
+    _playbackInfoOverlay?.remove();
+    _playbackInfoOverlay = null;
+  }
+
+  Future<void> _closePlayback(VideoPlayerState videoState) async {
+    final shouldPop = await _requestExit(videoState);
+    if (shouldPop && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  List<ContextMenuAction> _buildContextMenuActions(VideoPlayerState videoState) {
+    final actions = <ContextMenuAction>[
+      ContextMenuAction(
+        icon: Icons.skip_previous_rounded,
+        label: '上一话',
+        enabled: videoState.canPlayPreviousEpisode,
+        onPressed: () => unawaited(videoState.playPreviousEpisode()),
+      ),
+      ContextMenuAction(
+        icon: Icons.skip_next_rounded,
+        label: '下一话',
+        enabled: videoState.canPlayNextEpisode,
+        onPressed: () => unawaited(videoState.playNextEpisode()),
+      ),
+      ContextMenuAction(
+        icon: Icons.fast_forward_rounded,
+        label: '快进 ${videoState.seekStepSeconds} 秒',
+        enabled: videoState.hasVideo,
+        onPressed: () {
+          final newPosition = videoState.position +
+              Duration(seconds: videoState.seekStepSeconds);
+          videoState.seekTo(newPosition);
+        },
+      ),
+      ContextMenuAction(
+        icon: Icons.fast_rewind_rounded,
+        label: '快退 ${videoState.seekStepSeconds} 秒',
+        enabled: videoState.hasVideo,
+        onPressed: () {
+          final newPosition = videoState.position -
+              Duration(seconds: videoState.seekStepSeconds);
+          videoState.seekTo(newPosition);
+        },
+      ),
+      ContextMenuAction(
+        icon: Icons.chat_bubble_outline_rounded,
+        label: '发送弹幕',
+        enabled: videoState.episodeId != null,
+        onPressed: () => unawaited(videoState.showSendDanmakuDialog()),
+      ),
+      ContextMenuAction(
+        icon: Icons.double_arrow_rounded,
+        label: '跳过',
+        enabled: videoState.hasVideo,
+        onPressed: videoState.skip,
+      ),
+      ContextMenuAction(
+        icon: videoState.isFullscreen
+            ? Icons.fullscreen_exit_rounded
+            : Icons.fullscreen_rounded,
+        label: videoState.isFullscreen ? '窗口化' : '全屏',
+        enabled: globals.isDesktop,
+        onPressed: () => unawaited(videoState.toggleFullscreen()),
+      ),
+      ContextMenuAction(
+        icon: Icons.close_rounded,
+        label: '关闭播放',
+        enabled: videoState.hasVideo,
+        onPressed: () => unawaited(_closePlayback(videoState)),
+      ),
+      ContextMenuAction(
+        icon: Icons.info_outline_rounded,
+        label: '播放信息',
+        enabled: videoState.hasVideo,
+        onPressed: _showPlaybackInfoOverlay,
+      ),
+    ];
+
+    if (SystemShareService.isSupported) {
+      actions.add(
+        ContextMenuAction(
+          icon: Icons.share_rounded,
+          label: '分享',
+          enabled: videoState.hasVideo,
+          onPressed: () => unawaited(_shareCurrentMedia(videoState)),
+        ),
+      );
+    }
+
+    return actions;
+  }
+
   Future<void> _showAirPlayPickerSheet(VideoPlayerState videoState) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
 
@@ -185,21 +306,13 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       onSecondaryTapDown: globals.isDesktop
           ? (details) {
               if (!videoState.hasVideo) return;
-              if (!SystemShareService.isSupported) return;
+              _hidePlaybackInfoOverlay();
 
               _contextMenuController.showActionsMenu(
                 context: context,
                 globalPosition: details.globalPosition,
                 style: ContextMenuStyles.solidDark(),
-                actions: [
-                  ContextMenuAction(
-                    icon: Icons.share_rounded,
-                    label: '分享',
-                    onPressed: () {
-                      unawaited(_shareCurrentMedia(videoState));
-                    },
-                  ),
-                ],
+                actions: _buildContextMenuActions(videoState),
               );
             }
           : null,

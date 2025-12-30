@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 
 class SettingsProvider with ChangeNotifier {
   late SharedPreferences _prefs;
@@ -12,6 +13,9 @@ class SettingsProvider with ChangeNotifier {
   // 弹幕转换简体中文设置
   bool _danmakuConvertToSimplified = true; // 默认开启
   static const String _danmakuConvertKey = 'danmaku_convert_to_simplified';
+
+  // 哈希匹配失败后自动选择搜索第一个结果（避免弹窗）
+  bool _autoMatchDanmakuFirstSearchResultOnHashFail = true; // 默认开启
   
   // 弹幕时间偏移设置
   double _danmakuTimeOffset = 0.0; // 默认无偏移，单位为秒
@@ -21,6 +25,8 @@ class SettingsProvider with ChangeNotifier {
   double get blurPower => _blurPower;
   bool get isBlurEnabled => _blurPower > 0;
   bool get danmakuConvertToSimplified => _danmakuConvertToSimplified;
+  bool get autoMatchDanmakuFirstSearchResultOnHashFail =>
+      _autoMatchDanmakuFirstSearchResultOnHashFail;
   double get danmakuTimeOffset => _danmakuTimeOffset;
 
   SettingsProvider() {
@@ -33,6 +39,9 @@ class SettingsProvider with ChangeNotifier {
     _blurPower = _prefs.getDouble(_blurPowerKey) ?? _defaultBlur;
     // Load danmaku convert setting, defaulting to true if not set
     _danmakuConvertToSimplified = _prefs.getBool(_danmakuConvertKey) ?? true;
+    _autoMatchDanmakuFirstSearchResultOnHashFail =
+        _prefs.getBool(SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail) ??
+            true;
     // Load danmaku time offset setting, defaulting to 0.0 if not set
     _danmakuTimeOffset = _prefs.getDouble(_danmakuTimeOffsetKey) ?? 0.0;
     notifyListeners();
@@ -61,6 +70,16 @@ class SettingsProvider with ChangeNotifier {
   Future<void> setDanmakuConvertToSimplified(bool enable) async {
     _danmakuConvertToSimplified = enable;
     await _prefs.setBool(_danmakuConvertKey, _danmakuConvertToSimplified);
+    notifyListeners();
+  }
+
+  Future<void> setAutoMatchDanmakuFirstSearchResultOnHashFail(
+      bool enable) async {
+    _autoMatchDanmakuFirstSearchResultOnHashFail = enable;
+    await _prefs.setBool(
+      SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail,
+      _autoMatchDanmakuFirstSearchResultOnHashFail,
+    );
     notifyListeners();
   }
 

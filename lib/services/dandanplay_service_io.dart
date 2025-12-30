@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'danmaku_cache_manager.dart';
 import 'debug_log_service.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
@@ -707,12 +708,262 @@ class DandanplayService {
 
         return data;
       } else {
-        throw Exception('无法识别该视频');
+        final bool autoMatchEnabled = prefs.getBool(
+              SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail,
+            ) ??
+            true;
+
+        if (autoMatchEnabled) {
+          try {
+            final fallback = await _tryMatchByFileNameFirstResult(
+              fileName: fileName,
+              fileHash: fileHash,
+              fileSize: fileSize,
+            );
+            if (fallback != null && fallback['isMatched'] == true) {
+              _ensureVideoInfoTitles(fallback);
+              await saveVideoInfoToCache(fileHash, fallback);
+
+              if (fallback['matches'] != null &&
+                  fallback['matches'] is List &&
+                  fallback['matches'].isNotEmpty) {
+                final match = fallback['matches'][0];
+                if (match is Map &&
+                    match['episodeId'] != null &&
+                    match['animeId'] != null) {
+                  try {
+                    final episodeId = match['episodeId'].toString();
+                    final animeId = match['animeId'] as int;
+                    final danmakuData = await getDanmaku(episodeId, animeId);
+                    fallback['comments'] = danmakuData['comments'];
+                  } catch (e) {
+                    debugPrint('fallback 获取弹幕失败: $e');
+                  }
+                }
+              }
+
+              return fallback;
+            }
+          } catch (e) {
+            debugPrint('文件名 fallback 匹配失败: $e');
+          }
+        }
+
+        return {
+          'isMatched': false,
+          'fileName': fileName,
+          'fileHash': fileHash,
+          'fileSize': fileSize,
+          'matches': [],
+        };
       }
     } else {
       final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
       throw Exception('获取视频信息失败: $errorMessage');
     }
+  }
+
+  static int? _tryParsePositiveInt(dynamic value) {
+    if (value is int) {
+      return value > 0 ? value : null;
+    }
+    if (value is double) {
+      final intValue = value.toInt();
+      return intValue > 0 ? intValue : null;
+    }
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      return parsed != null && parsed > 0 ? parsed : null;
+    }
+    return null;
+  }
+
+  static String _extractSearchKeywordFromFileName(String fileName) {
+    if (fileName.trim().isEmpty) return '';
+    var name = fileName.split(RegExp(r'[\\/]')).last.trim();
+    name = name.replaceAll(RegExp(r'\.[^\.]+$'), '').trim();
+    return name;
+  }
+
+  static int? _tryExtractEpisodeNumberFromFileName(String fileName) {
+    final baseName = _extractSearchKeywordFromFileName(fileName);
+    if (baseName.isEmpty) return null;
+
+    final patterns = <RegExp>[
+      RegExp(r'第\s*(\d{1,3})\s*[话集]'),
+      RegExp(r'\bS\d{1,2}E(\d{1,3})\b', caseSensitive: false),
+      RegExp(r'\b(?:EP|Ep|ep)\s*(\d{1,3})\b'),
+      RegExp(r'\bE(\d{1,3})\b', caseSensitive: false),
+      RegExp(r'\[(\d{1,3})\]'),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(baseName);
+      if (match != null) {
+        final parsed = int.tryParse(match.group(1) ?? '');
+        if (parsed != null && parsed > 0 && parsed <= 300) {
+          return parsed;
+        }
+      }
+    }
+
+    // 兜底：抓取所有 1~3 位数字，取最后一个合理值（过滤分辨率等常见干扰）
+    final allNumbers = RegExp(r'(\d{1,4})').allMatches(baseName);
+    int? candidate;
+    for (final m in allNumbers) {
+      final parsed = int.tryParse(m.group(1) ?? '');
+      if (parsed == null) continue;
+      if (parsed == 480 ||
+          parsed == 720 ||
+          parsed == 1080 ||
+          parsed == 2160 ||
+          parsed == 4) {
+        continue;
+      }
+      if (parsed <= 0 || parsed > 300) continue;
+      candidate = parsed;
+    }
+    return candidate;
+  }
+
+  static Future<List<Map<String, dynamic>>> _searchAnimeByKeyword(
+      String keyword) async {
+    if (keyword.trim().isEmpty) return [];
+
+    final appSecret = await getAppSecret();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    const apiPath = '/api/v2/search/anime';
+    final baseUrl = await getApiBaseUrl();
+    final url =
+        '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword.trim())}';
+
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': userAgent,
+        'X-AppId': appId,
+        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+        'X-Timestamp': '$timestamp',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      return [];
+    }
+
+    final data = json.decode(response.body);
+    if (data is! Map<String, dynamic>) return [];
+    final animes = data['animes'];
+    if (animes is! List) return [];
+
+    return animes
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> _getBangumiEpisodes(
+      int animeId) async {
+    final appSecret = await getAppSecret();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+    final apiPath = '/api/v2/bangumi/$animeId';
+    final baseUrl = await getApiBaseUrl();
+    final url = '$baseUrl$apiPath';
+
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': userAgent,
+        'X-AppId': appId,
+        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+        'X-Timestamp': '$timestamp',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      return [];
+    }
+
+    final data = json.decode(response.body);
+    if (data is! Map<String, dynamic>) return [];
+
+    final dynamic rawEpisodes = (data['bangumi'] is Map<String, dynamic>)
+        ? (data['bangumi'] as Map<String, dynamic>)['episodes']
+        : data['episodes'];
+    if (rawEpisodes is! List) return [];
+
+    return rawEpisodes.whereType<Map>().map((episode) {
+      final map = Map<String, dynamic>.from(episode);
+      return {
+        'episodeId': map['episodeId'],
+        'episodeTitle': map['episodeTitle'],
+        'episodeNumber': map['episodeNumber'],
+      };
+    }).toList();
+  }
+
+  static Future<Map<String, dynamic>?> _tryMatchByFileNameFirstResult({
+    required String fileName,
+    required String fileHash,
+    required int fileSize,
+  }) async {
+    final keyword = _extractSearchKeywordFromFileName(fileName);
+    if (keyword.isEmpty) return null;
+
+    final animes = await _searchAnimeByKeyword(keyword);
+    if (animes.isEmpty) return null;
+
+    final firstAnime = animes.first;
+    final animeId = _tryParsePositiveInt(firstAnime['animeId']);
+    final animeTitle = firstAnime['animeTitle']?.toString() ?? '';
+    if (animeId == null || animeTitle.trim().isEmpty) return null;
+
+    final episodes = await _getBangumiEpisodes(animeId);
+    if (episodes.isEmpty) return null;
+
+    final episodeNumber = _tryExtractEpisodeNumberFromFileName(fileName);
+    Map<String, dynamic>? selectedEpisode;
+    if (episodeNumber != null) {
+      selectedEpisode = episodes.cast<Map<String, dynamic>>().firstWhere(
+            (ep) => _tryParsePositiveInt(ep['episodeNumber']) == episodeNumber,
+            orElse: () => <String, dynamic>{},
+          );
+      if (selectedEpisode.isEmpty) {
+        selectedEpisode = null;
+      }
+    }
+    selectedEpisode ??= episodes.first;
+
+    final episodeId = _tryParsePositiveInt(selectedEpisode['episodeId']);
+    final episodeTitle = selectedEpisode['episodeTitle']?.toString() ?? '';
+    if (episodeId == null) return null;
+
+    final match = <String, dynamic>{
+      'animeId': animeId,
+      'animeTitle': animeTitle,
+      'episodeId': episodeId,
+      'episodeTitle': episodeTitle,
+      'shift': 0,
+    };
+
+    return <String, dynamic>{
+      'isMatched': true,
+      'animeId': animeId,
+      'animeTitle': animeTitle,
+      'episodeId': episodeId,
+      'episodeTitle': episodeTitle,
+      'matches': [match],
+      'fileHash': fileHash,
+      'fileName': fileName,
+      'fileSize': fileSize,
+      'matchMode': 'fileNameFirstResult',
+    };
   }
 
   static Future<String> _d(File file) async {

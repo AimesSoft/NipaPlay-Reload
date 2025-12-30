@@ -691,6 +691,50 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                               ),
                             ],
                           ),
+
+                          const SizedBox(height: 16),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('哈希匹配失败自动匹配弹幕'),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '哈希匹配失败时默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单',
+                                      style: FluentTheme.of(context)
+                                          .typography
+                                          .caption,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              ToggleSwitch(
+                                checked: settingsProvider
+                                    .autoMatchDanmakuFirstSearchResultOnHashFail,
+                                onChanged: (value) {
+                                  settingsProvider
+                                      .setAutoMatchDanmakuFirstSearchResultOnHashFail(
+                                          value);
+                                  if (context.mounted) {
+                                    displayInfoBar(
+                                      context,
+                                      builder: (context, close) {
+                                        return InfoBar(
+                                          title: Text(value
+                                              ? '已开启匹配失败自动匹配'
+                                              : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）'),
+                                          severity: InfoBarSeverity.success,
+                                        );
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),

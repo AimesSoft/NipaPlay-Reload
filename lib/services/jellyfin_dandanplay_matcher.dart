@@ -12,6 +12,8 @@ import 'package:flutter/rendering.dart';
 import 'dart:ui';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:provider/provider.dart';
 
 /// 负责将Jellyfin媒体与DandanPlay的内容匹配，以获取弹幕和元数据
 class JellyfinDandanplayMatcher {
@@ -274,6 +276,7 @@ class JellyfinDandanplayMatcher {
           (info?['fileName']?.toString().isNotEmpty ?? false) ||
               (fileSize is int && fileSize > 0);
 
+      bool hashMatchFailed = false;
       if (hasHash && hasVideoInfo) {
         final nonNullInfo = info!;
         debugPrint(
@@ -292,6 +295,7 @@ class JellyfinDandanplayMatcher {
         } catch (e) {
           debugPrint('精确匹配过程中出错: $e，回退到搜索匹配');
         }
+        hashMatchFailed = true;
       } else {
         final reason = hasVideoInfo && hasBasicInfo
             ? '缺少有效哈希值'
@@ -299,8 +303,28 @@ class JellyfinDandanplayMatcher {
         debugPrint('$reason，使用标题搜索匹配');
       }
 
+      String extractSearchKeywordFromFileName(String rawName) {
+        if (rawName.trim().isEmpty) return '';
+        var name = rawName.split(RegExp(r'[\\/]')).last.trim();
+        name = name.replaceAll(RegExp(r'\.[^\.]+$'), '').trim();
+        return name;
+      }
+
       // 使用DandanPlay的API搜索动画
-      List<Map<String, dynamic>> animeMatches = await _searchAnime(queryTitle);
+      String searchTitle = queryTitle;
+      if (hashMatchFailed && hasVideoInfo) {
+        final fileNameKeyword = extractSearchKeywordFromFileName(
+          (info['fileName'] ?? '').toString(),
+        );
+        if (fileNameKeyword.isNotEmpty) {
+          searchTitle = fileNameKeyword;
+        }
+      }
+
+      List<Map<String, dynamic>> animeMatches = await _searchAnime(searchTitle);
+      if (animeMatches.isEmpty && searchTitle != queryTitle) {
+        animeMatches = await _searchAnime(queryTitle);
+      }
 
       // 如果通过标题搜索没找到匹配，尝试使用季名称搜索
       if (animeMatches.isEmpty) {
@@ -322,7 +346,16 @@ class JellyfinDandanplayMatcher {
       // 无论是否找到匹配结果，声明变量用于存储用户选择
       Map<String, dynamic>? selectedMatch;
 
-      if (showMatchDialog) {
+      bool autoPickEnabled = true;
+      try {
+        autoPickEnabled = context
+            .read<SettingsProvider>()
+            .autoMatchDanmakuFirstSearchResultOnHashFail;
+      } catch (_) {}
+      final bool autoPickOnHashFail =
+          showMatchDialog && hashMatchFailed && autoPickEnabled;
+
+      if (showMatchDialog && !autoPickOnHashFail) {
         // 总是显示对话框让用户选择或跳过，使其成为阻塞操作
         // 即使没有找到匹配，也要显示对话框，让用户能手动搜索
         final result = await showDialog<Map<String, dynamic>>(
@@ -353,6 +386,27 @@ class JellyfinDandanplayMatcher {
         } else {
           debugPrint('没有找到匹配项，且不显示对话框，无法自动选择');
         }
+      }
+
+      // 自动选择模式下，如果预搜索为空，则回退弹窗让用户手动搜索
+      if (selectedMatch == null && showMatchDialog && autoPickOnHashFail) {
+        debugPrint('自动选择失败（无候选项），回退弹幕匹配弹窗');
+        final result = await showDialog<Map<String, dynamic>>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AnimeMatchDialog(
+            matches: animeMatches,
+            episodeInfo: episode,
+          ),
+        );
+        if (result?['__cancel__'] == true) {
+          return {'__cancel__': true};
+        }
+        if (result == null) {
+          return {};
+        }
+        selectedMatch = result;
+        debugPrint('用户选择了匹配项: ${selectedMatch['animeTitle']}');
       }
 
       // 如果用户从对话框中选择了"跳过匹配"(selectedMatch 为 null)

@@ -605,6 +605,45 @@ class _CupertinoPlayerSettingsPageState
                 },
                 backgroundColor: tileBackground,
               ),
+              CupertinoSettingsTile(
+                leading: Icon(
+                  CupertinoIcons.search,
+                  color: resolveSettingsIconColor(context),
+                ),
+                title: const Text('哈希匹配失败自动匹配弹幕'),
+                subtitle: const Text('哈希匹配失败时默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单。'),
+                trailing: AdaptiveSwitch(
+                  value:
+                      settingsProvider.autoMatchDanmakuFirstSearchResultOnHashFail,
+                  onChanged: (value) {
+                    settingsProvider
+                        .setAutoMatchDanmakuFirstSearchResultOnHashFail(value);
+                    if (mounted) {
+                      AdaptiveSnackBar.show(
+                        context,
+                        message:
+                            value ? '已开启匹配失败自动匹配' : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）',
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    }
+                  },
+                ),
+                onTap: () {
+                  final bool newValue = !settingsProvider
+                      .autoMatchDanmakuFirstSearchResultOnHashFail;
+                  settingsProvider
+                      .setAutoMatchDanmakuFirstSearchResultOnHashFail(newValue);
+                  if (mounted) {
+                    AdaptiveSnackBar.show(
+                      context,
+                      message:
+                          newValue ? '已开启匹配失败自动匹配' : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）',
+                      type: AdaptiveSnackBarType.success,
+                    );
+                  }
+                },
+                backgroundColor: tileBackground,
+              ),
             ],
           );
         },

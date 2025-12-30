@@ -17,6 +17,7 @@ import 'package:http/http.dart' as http;
 import 'globals.dart' as globals;
 import 'dart:convert';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/services/auto_sync_service.dart'; // 导入自动云同步服务
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -180,6 +181,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
   bool _showControls = true;
   bool _showRightMenu = false; // 控制右侧菜单显示状态
+  final String _desktopHoverSettingsMenuEnabledKey =
+      'desktop_hover_settings_menu_enabled';
+  bool _desktopHoverSettingsMenuEnabled = false; // 默认关闭（桌面端）
   bool _isFullscreen = false;
   double _progress = 0.0;
   Duration _duration = Duration.zero;
@@ -496,6 +500,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get showControls => _showControls;
   bool get isDisposed => _isDisposed;
   bool get showRightMenu => _showRightMenu;
+  bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
   bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
   Duration get duration => _duration;

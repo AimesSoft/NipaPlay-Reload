@@ -378,6 +378,28 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         const Divider(color: Colors.white12, height: 1),
 
+        if (globals.isDesktop) ...[
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.toggle(
+                title: '右侧悬浮设置菜单',
+                subtitle: '鼠标移到播放器最右侧显示设置菜单（桌面端）',
+                icon: Ionicons.settings_outline,
+                value: videoState.desktopHoverSettingsMenuEnabled,
+                onChanged: (bool value) async {
+                  await videoState.setDesktopHoverSettingsMenuEnabled(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启右侧悬浮设置菜单' : '已关闭右侧悬浮设置菜单',
+                  );
+                },
+              );
+            },
+          ),
+          const Divider(color: Colors.white12, height: 1),
+        ],
+
         if (globals.isPhone) ...[
           Consumer<VideoPlayerState>(
             builder: (context, videoState, child) {
@@ -565,6 +587,29 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 if (context.mounted) {
                   BlurSnackBar.show(
                       context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
+                }
+              },
+            );
+          },
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
+        Consumer<SettingsProvider>(
+          builder: (context, settingsProvider, child) {
+            return SettingsItem.toggle(
+              title: "哈希匹配失败自动匹配弹幕",
+              subtitle: "哈希匹配失败时，默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单",
+              icon: Ionicons.search_outline,
+              value: settingsProvider.autoMatchDanmakuFirstSearchResultOnHashFail,
+              onChanged: (bool value) {
+                settingsProvider
+                    .setAutoMatchDanmakuFirstSearchResultOnHashFail(value);
+                if (context.mounted) {
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启匹配失败自动匹配' : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）',
+                  );
                 }
               },
             );
