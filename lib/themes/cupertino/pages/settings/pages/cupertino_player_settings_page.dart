@@ -14,6 +14,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -171,7 +172,7 @@ class _CupertinoPlayerSettingsPageState
   String _getPlayerKernelDescription(PlayerKernelType type) {
     switch (type) {
       case PlayerKernelType.mdk:
-        return 'MDK 多媒体开发套件，基于 FFmpeg，性能优秀。';
+        return 'MDK 多媒体开发套件，支持硬件解码（默认优先；不支持时回落软件解码）。';
       case PlayerKernelType.videoPlayer:
         return 'Flutter 官方 Video Player，兼容性好。';
       case PlayerKernelType.mediaKit:
@@ -460,6 +461,43 @@ class _CupertinoPlayerSettingsPageState
                         : null,
                   ),
                 ),
+                backgroundColor: tileBackground,
+              ),
+            ],
+          );
+        },
+      ),
+      const SizedBox(height: 16),
+      Consumer<VideoPlayerState>(
+        builder: (context, videoState, child) {
+          final currentPath = (videoState.screenshotSaveDirectory ?? '').trim();
+          return CupertinoSettingsGroupCard(
+            margin: EdgeInsets.zero,
+            backgroundColor: sectionBackground,
+            addDividers: true,
+            dividerIndent: 16,
+            children: [
+              CupertinoSettingsTile(
+                leading: Icon(
+                  CupertinoIcons.camera,
+                  color: resolveSettingsIconColor(context),
+                ),
+                title: const Text('截图保存位置'),
+                subtitle: Text(currentPath.isEmpty ? '默认：下载目录' : currentPath),
+                showChevron: true,
+                onTap: () async {
+                  final selected = await FilePickerService().pickDirectory(
+                    initialDirectory: currentPath.isEmpty ? null : currentPath,
+                  );
+                  if (selected == null || selected.trim().isEmpty) return;
+                  await videoState.setScreenshotSaveDirectory(selected);
+                  if (!mounted) return;
+                  AdaptiveSnackBar.show(
+                    context,
+                    message: '截图保存位置已更新',
+                    type: AdaptiveSnackBarType.success,
+                  );
+                },
                 backgroundColor: tileBackground,
               ),
             ],

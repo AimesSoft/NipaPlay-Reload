@@ -3,12 +3,14 @@ import 'package:nipaplay/themes/fluent/fluent_theme.dart';
 import 'package:nipaplay/themes/nipaplay/nipaplay_theme.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
+import 'package:nipaplay/themes/web/web_theme.dart';
 
 class ThemeRegistry {
   static final Map<String, ThemeDescriptor> _themes = {
     ThemeIds.nipaplay: const NipaplayThemeDescriptor(),
     ThemeIds.fluent: const FluentThemeDescriptor(),
     ThemeIds.cupertino: const CupertinoThemeDescriptor(),
+    ThemeIds.webRemote: const WebRemoteThemeDescriptor(),
   };
 
   static String get defaultThemeId => ThemeIds.nipaplay;

@@ -285,12 +285,16 @@ class DecoderManager {
       }
 
       // 尝试从播放器获取当前正在使用的解码器名称
-      final activeDecoderName = player.getProperty("video.decoder");
+      // MDK: 通过 MediaEvent("decoder.video") 缓存到 "decoder.video"
+      // Libmpv: 通常使用 hwdec/hwdec-current 进行判断
+      final activeDecoderName =
+          player.getProperty("decoder.video") ?? player.getProperty("video.decoder");
       
       if (activeDecoderName != null && activeDecoderName.isNotEmpty) {
         // 判断是硬解还是软解
-        // 一般来说，非FFmpeg的解码器认为是硬解
-        if (activeDecoderName.toLowerCase().contains("ffmpeg")) {
+        final lower = activeDecoderName.toLowerCase();
+        // 一般来说，FFmpeg/auto/dav1d 属于软件解码；其余多数为硬件或平台解码器
+        if (lower.contains("ffmpeg") || lower == "auto" || lower.contains("dav1d")) {
           _currentDecoder = "软解 - $activeDecoderName";
         } else {
           _currentDecoder = "硬解 - $activeDecoderName";

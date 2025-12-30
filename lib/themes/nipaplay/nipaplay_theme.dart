@@ -21,7 +21,7 @@ class NipaplayThemeDescriptor extends ThemeDescriptor {
           ),
           supportsDesktop: true,
           supportsPhone: true,
-          supportsWeb: true,
+          supportsWeb: false,
           appBuilder: _buildApp,
         );
 

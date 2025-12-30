@@ -33,12 +33,9 @@ class UIThemeProvider extends ChangeNotifier {
 
   List<ThemeDescriptor> get availableThemes {
     final env = _currentEnvironment;
-    final supported = ThemeRegistry.supportedThemes(env);
-    final containsCurrent =
-        supported.any((theme) => theme.id == currentThemeId);
-    if (!containsCurrent) {
-      return [...supported, currentThemeDescriptor];
-    }
+    final supported = ThemeRegistry.supportedThemes(env)
+        .where((theme) => !theme.hiddenFromThemeOptions)
+        .toList();
     return supported;
   }
 

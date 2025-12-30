@@ -18,6 +18,7 @@ import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -285,7 +286,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   String _getPlayerKernelDescription(PlayerKernelType type) {
     switch (type) {
       case PlayerKernelType.mdk:
-        return 'MDK 多媒体开发套件\n基于FFmpeg，CPU解码视频，性能优秀';
+        return 'MDK 多媒体开发套件\n支持硬件解码（默认优先；不支持时回落软件解码）';
       case PlayerKernelType.videoPlayer:
         return 'Video Player 官方播放器\n适用于简单视频播放，兼容性良好';
       case PlayerKernelType.mediaKit:
@@ -374,6 +375,28 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             _savePlayerKernelSettings(kernelType);
           },
           dropdownKey: _playerKernelDropdownKey,
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final currentPath = (videoState.screenshotSaveDirectory ?? '').trim();
+            return SettingsItem.button(
+              title: '截图保存位置',
+              subtitle: currentPath.isEmpty ? '默认：下载目录' : currentPath,
+              icon: Icons.camera_alt_outlined,
+              onTap: () async {
+                final selected = await FilePickerService().pickDirectory(
+                  initialDirectory: currentPath.isEmpty ? null : currentPath,
+                );
+                if (selected == null || selected.trim().isEmpty) return;
+                await videoState.setScreenshotSaveDirectory(selected);
+                if (!context.mounted) return;
+                BlurSnackBar.show(context, '截图保存位置已更新');
+              },
+            );
+          },
         ),
 
         const Divider(color: Colors.white12, height: 1),

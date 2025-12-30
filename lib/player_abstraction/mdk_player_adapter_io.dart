@@ -168,15 +168,51 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
 class MdkPlayerAdapter implements AbstractPlayer {
   late mdk.Player _mdkPlayer;
   double _playbackRate = 1.0;
+  List<String> _videoDecoders = const [];
+  List<String> _audioDecoders = const [];
+  final Map<String, String> _stickyProperties = {};
+  String? _activeVideoDecoder;
+  String? _activeAudioDecoder;
 
   MdkPlayerAdapter() {
     _mdkPlayer = mdk.Player();
+    _attachMdkEventListeners();
     _applyInitialSettings();
+  }
+
+  void _attachMdkEventListeners() {
+    try {
+      _mdkPlayer.onEvent((e) {
+        switch (e.category) {
+          case 'decoder.video':
+            _activeVideoDecoder = e.detail;
+            break;
+          case 'decoder.audio':
+            _activeAudioDecoder = e.detail;
+            break;
+        }
+      });
+    } catch (e) {
+      debugPrint('MDK: 注册事件监听失败: $e');
+    }
+  }
+
+  void _setStickyProperty(String key, String value) {
+    _stickyProperties[key] = value;
+    _mdkPlayer.setProperty(key, value);
+  }
+
+  void _reapplyStickyProperties() {
+    for (final entry in _stickyProperties.entries) {
+      try {
+        _mdkPlayer.setProperty(entry.key, entry.value);
+      } catch (_) {}
+    }
   }
 
   void _applyInitialSettings() {
     try {
-      _mdkPlayer.setProperty('auto_load', '0');
+      _setStickyProperty('auto_load', '0');
       // 重新应用播放速度设置
       if (_playbackRate != 1.0) {
         _mdkPlayer.playbackRate = _playbackRate;
@@ -270,21 +306,25 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   set media(String value) {
     if (value.isNotEmpty && _mdkPlayer.media != value) {
-      List<String> videoDecoders = [];
-      List<String> audioDecoders = [];
-      try {
-        videoDecoders = getDecoders(PlayerMediaType.video);
-        audioDecoders = getDecoders(PlayerMediaType.audio);
-      } catch (e) {}
+      _activeVideoDecoder = null;
+      _activeAudioDecoder = null;
+      final videoDecoders = _videoDecoders.isNotEmpty
+          ? List<String>.from(_videoDecoders)
+          : List<String>.from(_mdkPlayer.videoDecoders);
+      final audioDecoders = _audioDecoders.isNotEmpty
+          ? List<String>.from(_audioDecoders)
+          : List<String>.from(_mdkPlayer.audioDecoders);
 
       try {
         _mdkPlayer.dispose();
       } catch (e) {}
 
       _mdkPlayer = mdk.Player();
+      _attachMdkEventListeners();
       _applyInitialSettings();
 
       try {
+        _reapplyStickyProperties();
         if (videoDecoders.isNotEmpty) {
           setDecoders(PlayerMediaType.video, videoDecoders);
         }
@@ -383,33 +423,51 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   void setDecoders(PlayerMediaType type, List<String> decoders) {
+    switch (type) {
+      case PlayerMediaType.video:
+        _videoDecoders = List<String>.from(decoders);
+        break;
+      case PlayerMediaType.audio:
+        _audioDecoders = List<String>.from(decoders);
+        break;
+      default:
+        break;
+    }
     _mdkPlayer.setDecoders(_fromPlayerMediaType(type), decoders);
   }
 
   @override
   List<String> getDecoders(PlayerMediaType type) {
-    String decodersString = "";
-    if (type == PlayerMediaType.video) {
-      decodersString = _mdkPlayer.getProperty("video.decoders") ?? "";
-    } else if (type == PlayerMediaType.audio) {
-      decodersString = _mdkPlayer.getProperty("audio.decoders") ?? "";
+    switch (type) {
+      case PlayerMediaType.video:
+        if (_videoDecoders.isNotEmpty) return List<String>.from(_videoDecoders);
+        return List<String>.from(_mdkPlayer.videoDecoders);
+      case PlayerMediaType.audio:
+        if (_audioDecoders.isNotEmpty) return List<String>.from(_audioDecoders);
+        return List<String>.from(_mdkPlayer.audioDecoders);
+      default:
+        return const [];
     }
-    if (decodersString.isEmpty) return [];
-    return decodersString
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
   }
 
   @override
   String? getProperty(String key) {
+    switch (key) {
+      case 'decoder.video':
+        return _activeVideoDecoder;
+      case 'decoder.audio':
+        return _activeAudioDecoder;
+    }
     return _mdkPlayer.getProperty(key);
   }
 
   @override
   void setProperty(String key, String value) {
-    _mdkPlayer.setProperty(key, value);
+    try {
+      _setStickyProperty(key, value);
+    } catch (e) {
+      debugPrint('MDK: 设置属性失败: $e');
+    }
   }
 
   @override

@@ -69,6 +69,8 @@ class ThemeDescriptor {
   final String id;
   final String displayName;
   final ThemePreview preview;
+  /// 是否在“主题选择/主题选项”中隐藏（例如：仅用于特定环境的内部主题）。
+  final bool hiddenFromThemeOptions;
   final bool supportsDesktop;
   final bool supportsPhone;
   final bool supportsWeb;
@@ -80,6 +82,7 @@ class ThemeDescriptor {
     required this.displayName,
     required this.preview,
     required this.appBuilder,
+    this.hiddenFromThemeOptions = false,
     this.supportsDesktop = true,
     this.supportsPhone = true,
     this.supportsWeb = true,

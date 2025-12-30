@@ -253,4 +253,124 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       return null;
     }
   }
+
+  Future<String?> captureScreenshot() async {
+    if (kIsWeb) return null;
+    if (!hasVideo) return null;
+
+    if (_isCapturingScreenshot) {
+      return null;
+    }
+
+    final boundaryContext = screenshotBoundaryKey.currentContext;
+    if (boundaryContext == null) {
+      debugPrint('截图失败: screenshotBoundaryKey 未挂载到组件树');
+      return null;
+    }
+
+    final renderObject = boundaryContext.findRenderObject();
+    if (renderObject is! RenderRepaintBoundary) {
+      debugPrint('截图失败: RenderObject 不是 RenderRepaintBoundary');
+      return null;
+    }
+
+    _isCapturingScreenshot = true;
+    try {
+      // 确保当前帧已渲染完成
+      await SchedulerBinding.instance.endOfFrame;
+
+      final devicePixelRatio =
+          MediaQuery.maybeOf(boundaryContext)?.devicePixelRatio ?? 1.0;
+      // 过高的 pixelRatio 可能导致超大图片占用内存，做一个上限
+      final pixelRatio = devicePixelRatio.clamp(1.0, 2.0);
+
+      final image = await renderObject.toImage(pixelRatio: pixelRatio);
+      final byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+
+      if (byteData == null) {
+        debugPrint('截图失败: image.toByteData 返回 null');
+        return null;
+      }
+
+      final bytes = byteData.buffer.asUint8List();
+      final directoryPath = await _resolveScreenshotSaveDirectoryPath();
+      final fileName = _buildScreenshotFileName();
+      final file = File(p.join(directoryPath, fileName));
+      await file.writeAsBytes(bytes, flush: true);
+      return file.path;
+    } catch (e) {
+      debugPrint('截图失败: $e');
+      return null;
+    } finally {
+      _isCapturingScreenshot = false;
+    }
+  }
+
+  Future<String> _resolveScreenshotSaveDirectoryPath() async {
+    String path = (_screenshotSaveDirectory ?? '').trim();
+    if (path.isEmpty) {
+      path = (await _getDefaultScreenshotSaveDirectory()).path;
+      _screenshotSaveDirectory = path;
+    }
+
+    if (Platform.isMacOS) {
+      final resolved = await SecurityBookmarkService.resolveBookmark(path);
+      if (resolved != null && resolved.isNotEmpty) {
+        path = resolved;
+        _screenshotSaveDirectory = resolved;
+      }
+    }
+
+    final directory = Directory(path);
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    return directory.path;
+  }
+
+  String _buildScreenshotFileName() {
+    String baseName;
+
+    final titleParts = <String>[
+      if ((animeTitle ?? '').trim().isNotEmpty) animeTitle!.trim(),
+      if ((episodeTitle ?? '').trim().isNotEmpty) episodeTitle!.trim(),
+    ];
+
+    if (titleParts.isNotEmpty) {
+      baseName = titleParts.join(' - ');
+    } else if ((_currentVideoPath ?? '').trim().isNotEmpty) {
+      baseName = p.basenameWithoutExtension(_currentVideoPath!);
+    } else {
+      baseName = 'screenshot';
+    }
+
+    baseName = _sanitizeFileName(baseName);
+
+    final now = DateTime.now();
+    final timestamp = _formatTimestamp(now);
+    return '${baseName}_$timestamp.png';
+  }
+
+  String _formatTimestamp(DateTime time) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    String threeDigits(int n) => n.toString().padLeft(3, '0');
+    return '${time.year}${twoDigits(time.month)}${twoDigits(time.day)}_'
+        '${twoDigits(time.hour)}${twoDigits(time.minute)}${twoDigits(time.second)}_'
+        '${threeDigits(time.millisecond)}';
+  }
+
+  String _sanitizeFileName(String input) {
+    final sanitized = input
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (sanitized.isEmpty) {
+      return 'screenshot';
+    }
+    // 避免文件名过长导致某些文件系统写入失败
+    const maxLength = 80;
+    return sanitized.length > maxLength ? sanitized.substring(0, maxLength) : sanitized;
+  }
 }

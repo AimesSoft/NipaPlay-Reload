@@ -231,6 +231,36 @@ class LocalMediaShareService {
     };
   }
 
+  Future<List<Map<String, dynamic>>> getWatchHistory({int limit = 100}) async {
+    if (_shareEpisodeMap.isEmpty) {
+      _rebuildCache();
+    }
+
+    final int sanitizedLimit = limit.clamp(1, 500);
+
+    final episodes = _shareEpisodeMap.values.toList()
+      ..sort((a, b) => b.historyItem.lastWatchTime.compareTo(a.historyItem.lastWatchTime));
+
+    final List<Map<String, dynamic>> items = [];
+    for (final entry in episodes.take(sanitizedLimit)) {
+      final baseJson = await entry.toJson();
+      final animeId = entry.historyItem.animeId;
+      final detail = animeId != null ? await _getAnimeDetail(animeId) : null;
+
+      final resolvedName = (detail?.nameCn ?? '').trim().isNotEmpty
+          ? detail!.nameCn
+          : (detail?.name ?? entry.historyItem.animeName);
+
+      items.add({
+        ...baseJson,
+        'animeName': resolvedName,
+        'imageUrl': detail?.imageUrl ?? entry.historyItem.thumbnailPath,
+      });
+    }
+
+    return items;
+  }
+
   SharedEpisodeInfo? getEpisodeByShareId(String shareId) {
     return _shareEpisodeMap[shareId];
   }

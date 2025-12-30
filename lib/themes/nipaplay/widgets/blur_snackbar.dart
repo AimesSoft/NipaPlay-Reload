@@ -7,7 +7,13 @@ class BlurSnackBar {
   static OverlayEntry? _currentOverlayEntry;
   static AnimationController? _controller; // 防止泄漏：保存当前动画控制器
 
-  static void show(BuildContext context, String content) {
+  static void show(
+    BuildContext context,
+    String content, {
+    String? actionText,
+    VoidCallback? onAction,
+    Duration? duration,
+  }) {
     if (_currentOverlayEntry != null) {
       _currentOverlayEntry!.remove();
       _currentOverlayEntry = null;
@@ -16,6 +22,17 @@ class BlurSnackBar {
     final overlay = Overlay.of(context);
     late final OverlayEntry overlayEntry;
     late final Animation<double> animation;
+
+    void dismiss() {
+      _controller?.reverse().then((_) {
+        overlayEntry.remove();
+        if (_currentOverlayEntry == overlayEntry) {
+          _currentOverlayEntry = null;
+          _controller?.dispose();
+          _controller = null;
+        }
+      });
+    }
     
     // 如有旧控制器，先释放
     _controller?.dispose();
@@ -64,17 +81,29 @@ class BlurSnackBar {
                           ),
                         ),
                       ),
+                      if (actionText != null && onAction != null) ...[
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () {
+                            dismiss();
+                            onAction();
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            minimumSize: const Size(0, 0),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(actionText),
+                        ),
+                      ],
                       IconButton(
                         icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                         onPressed: () {
-              _controller?.reverse().then((_) {
-                            overlayEntry.remove();
-                            if (_currentOverlayEntry == overlayEntry) {
-                              _currentOverlayEntry = null;
-                _controller?.dispose();
-                _controller = null;
-                            }
-                          });
+                          dismiss();
                         },
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -93,16 +122,14 @@ class BlurSnackBar {
     _currentOverlayEntry = overlayEntry;
   _controller!.forward();
 
-    Future.delayed(const Duration(seconds: 2), () {
+    final resolvedDuration = duration ??
+        (actionText != null && onAction != null
+            ? const Duration(seconds: 4)
+            : const Duration(seconds: 2));
+
+    Future.delayed(resolvedDuration, () {
       if (overlayEntry.mounted) {
-    _controller?.reverse().then((_) {
-          overlayEntry.remove();
-          if (_currentOverlayEntry == overlayEntry) {
-            _currentOverlayEntry = null;
-      _controller?.dispose();
-      _controller = null;
-          }
-        });
+        dismiss();
       }
     });
   }

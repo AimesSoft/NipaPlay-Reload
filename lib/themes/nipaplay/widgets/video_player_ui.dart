@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
@@ -24,6 +25,7 @@ import 'loading_overlay.dart';
 import 'vertical_indicator.dart';
 import 'video_upload_ui.dart';
 import 'playback_info_menu.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   const VideoPlayerUI({super.key});
@@ -427,6 +429,39 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     _playbackInfoOverlay = null;
   }
 
+  Future<void> _captureScreenshot(VideoPlayerState videoState) async {
+    try {
+      final path = await videoState.captureScreenshot();
+      if (!mounted) return;
+      if (path == null || path.isEmpty) {
+        BlurSnackBar.show(context, '截图失败');
+        return;
+      }
+      final isMac = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+      if (isMac) {
+        BlurSnackBar.show(
+          context,
+          '截图已保存',
+          actionText: '打开',
+          onAction: () => unawaited(_openScreenshot(path)),
+        );
+      } else {
+        BlurSnackBar.show(context, '截图已保存: $path');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '截图失败: $e');
+    }
+  }
+
+  Future<void> _openScreenshot(String path) async {
+    final uri = Uri.file(path);
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      BlurSnackBar.show(context, '无法打开截图文件');
+    }
+  }
+
   List<ContextMenuAction> _buildContextMenuActions(VideoPlayerState videoState) {
     final actions = <ContextMenuAction>[
       ContextMenuAction(
@@ -466,6 +501,12 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         label: '发送弹幕',
         enabled: videoState.episodeId != null,
         onPressed: () => unawaited(videoState.showSendDanmakuDialog()),
+      ),
+      ContextMenuAction(
+        icon: Icons.camera_alt_outlined,
+        label: '截图',
+        enabled: videoState.hasVideo,
+        onPressed: () => unawaited(_captureScreenshot(videoState)),
       ),
       ContextMenuAction(
         icon: Icons.double_arrow_rounded,
@@ -598,9 +639,11 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                   child: FocusScope(
                     node: FocusScopeNode(),
                     child: globals.isPhone
-                        ? Stack(
-                            fit: StackFit.expand,
-                            children: [
+                        ? RepaintBoundary(
+                            key: videoState.screenshotBoundaryKey,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
                               Positioned.fill(
                                 child: RepaintBoundary(
                                   child: ColoredBox(
@@ -701,15 +744,18 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
                               // 弹幕密度曲线
                               const DanmakuDensityBar(),
-                            ],
+                              ],
+                            ),
                           )
                         : Focus(
                             focusNode: _focusNode,
                             autofocus: true,
                             canRequestFocus: true,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
+                            child: RepaintBoundary(
+                              key: videoState.screenshotBoundaryKey,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
                                 Positioned.fill(
                                   child: RepaintBoundary(
                                     child: ColoredBox(
@@ -821,7 +867,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
                                 // 弹幕密度曲线
                                 const DanmakuDensityBar(),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                   ),

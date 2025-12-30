@@ -13,6 +13,7 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 
 class FluentPlayerSettingsPage extends StatefulWidget {
   const FluentPlayerSettingsPage({super.key});
@@ -165,7 +166,7 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
   String _getPlayerKernelDescription(PlayerKernelType type) {
     switch (type) {
       case PlayerKernelType.mdk:
-        return 'MDK 多媒体开发套件，基于FFmpeg，CPU解码视频，性能优秀';
+        return 'MDK 多媒体开发套件，支持硬件解码（默认优先；不支持时回落软件解码）';
       case PlayerKernelType.videoPlayer:
         return 'Video Player 官方播放器，适用于简单视频播放，兼容性良好';
       case PlayerKernelType.mediaKit:
@@ -487,6 +488,65 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                                 ? '调整播放结束到下一话自动播放之间的等待时间'
                                 : '需先把“播放结束操作”设为“自动播放下一话”才能调节倒计时',
                             style: FluentTheme.of(context).typography.caption,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '截图',
+                        style: FluentTheme.of(context).typography.subtitle,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '截图文件默认保存到下载目录，可在此修改保存位置',
+                        style: FluentTheme.of(context).typography.caption,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              (videoState.screenshotSaveDirectory ?? '')
+                                      .trim()
+                                      .isEmpty
+                                  ? '默认：下载目录'
+                                  : videoState.screenshotSaveDirectory!,
+                              style: FluentTheme.of(context).typography.caption,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Button(
+                            child: const Text('选择文件夹'),
+                            onPressed: () async {
+                              final currentPath =
+                                  (videoState.screenshotSaveDirectory ?? '')
+                                      .trim();
+                              final selected = await FilePickerService()
+                                  .pickDirectory(
+                                      initialDirectory: currentPath.isEmpty
+                                          ? null
+                                          : currentPath);
+                              if (selected == null || selected.trim().isEmpty) {
+                                return;
+                              }
+                              await videoState
+                                  .setScreenshotSaveDirectory(selected);
+                              if (!mounted) return;
+                              _showSuccessInfoBar('截图保存位置已更新');
+                            },
                           ),
                         ],
                       ),

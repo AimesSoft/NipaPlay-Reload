@@ -148,6 +148,33 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     _playbackInfoOverlay = null;
   }
 
+  Future<void> _captureScreenshot(VideoPlayerState videoState) async {
+    try {
+      final path = await videoState.captureScreenshot();
+      if (!mounted) return;
+      if (path == null || path.isEmpty) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '截图失败',
+          type: AdaptiveSnackBarType.error,
+        );
+        return;
+      }
+      AdaptiveSnackBar.show(
+        context,
+        message: '截图已保存: $path',
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '截图失败: $e',
+        type: AdaptiveSnackBarType.error,
+      );
+    }
+  }
+
   Future<void> _closePlayback(VideoPlayerState videoState) async {
     final shouldPop = await _requestExit(videoState);
     if (shouldPop && mounted) {
@@ -194,6 +221,12 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
         label: '发送弹幕',
         enabled: videoState.episodeId != null,
         onPressed: () => unawaited(videoState.showSendDanmakuDialog()),
+      ),
+      ContextMenuAction(
+        icon: Icons.camera_alt_outlined,
+        label: '截图',
+        enabled: videoState.hasVideo,
+        onPressed: () => unawaited(_captureScreenshot(videoState)),
       ),
       ContextMenuAction(
         icon: Icons.double_arrow_rounded,
@@ -341,51 +374,55 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
               videoState.endSeekDrag();
             }
           : null,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned.fill(
-            child: Container(
-              color: CupertinoColors.black,
-              child: hasVideo
-                  ? Center(
-                      child: AspectRatio(
-                        aspectRatio: videoState.aspectRatio,
-                        child: Texture(
-                          textureId: textureId,
-                        ),
-                      ),
-                    )
-                  : _buildPlaceholder(videoState),
-            ),
-          ),
-          if (videoState.hasVideo && videoState.danmakuVisible)
+      child: RepaintBoundary(
+        key: videoState.screenshotBoundaryKey,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
             Positioned.fill(
-              child: IgnorePointer(
-                ignoring: true,
-                child: ValueListenableBuilder<double>(
-                  valueListenable: videoState.playbackTimeMs,
-                  builder: (context, posMs, __) {
-                    return DanmakuOverlay(
-                      key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
-                      currentPosition: posMs,
-                      videoDuration:
-                          videoState.duration.inMilliseconds.toDouble(),
-                      isPlaying: videoState.status == PlayerStatus.playing,
-                      fontSize: videoState.actualDanmakuFontSize,
-                      isVisible: videoState.danmakuVisible,
-                      opacity: videoState.mappedDanmakuOpacity,
-                    );
-                  },
-                ),
+              child: Container(
+                color: CupertinoColors.black,
+                child: hasVideo
+                    ? Center(
+                        child: AspectRatio(
+                          aspectRatio: videoState.aspectRatio,
+                          child: Texture(
+                            textureId: textureId,
+                          ),
+                        ),
+                      )
+                    : _buildPlaceholder(videoState),
               ),
             ),
-          _buildTopBar(videoState),
-          if (hasVideo) _buildBottomControls(videoState, progressValue),
-          if (globals.isPhone && videoState.hasVideo)
-            const BrightnessGestureArea(),
-          if (globals.isPhone && videoState.hasVideo) const VolumeGestureArea(),
-        ],
+            if (videoState.hasVideo && videoState.danmakuVisible)
+              Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: true,
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: videoState.playbackTimeMs,
+                    builder: (context, posMs, __) {
+                      return DanmakuOverlay(
+                        key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
+                        currentPosition: posMs,
+                        videoDuration:
+                            videoState.duration.inMilliseconds.toDouble(),
+                        isPlaying: videoState.status == PlayerStatus.playing,
+                        fontSize: videoState.actualDanmakuFontSize,
+                        isVisible: videoState.danmakuVisible,
+                        opacity: videoState.mappedDanmakuOpacity,
+                      );
+                    },
+                  ),
+                ),
+              ),
+            _buildTopBar(videoState),
+            if (hasVideo) _buildBottomControls(videoState, progressValue),
+            if (globals.isPhone && videoState.hasVideo)
+              const BrightnessGestureArea(),
+            if (globals.isPhone && videoState.hasVideo)
+              const VolumeGestureArea(),
+          ],
+        ),
       ),
     );
   }

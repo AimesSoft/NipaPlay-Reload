@@ -833,4 +833,93 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await _updateCurrentActiveDecoder();
     }
   }
+
+  Future<Directory> _getDefaultScreenshotSaveDirectory() async {
+    if (!kIsWeb && Platform.isMacOS) {
+      // macOS 沙盒默认使用应用内部 downloads 目录，避免权限/签名问题。
+      return StorageService.getDownloadsDirectory();
+    }
+
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+      try {
+        final dir = await path_provider.getDownloadsDirectory();
+        if (dir != null) return dir;
+      } catch (e) {
+        debugPrint('获取系统下载目录失败，将回退到应用下载目录: $e');
+      }
+    }
+
+    return StorageService.getDownloadsDirectory();
+  }
+
+  Future<void> _loadScreenshotSaveDirectory() async {
+    if (kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_screenshotSaveDirectoryKey)?.trim();
+
+      String? resolved = saved;
+      if (resolved != null && resolved.isNotEmpty && Platform.isMacOS) {
+        resolved = await SecurityBookmarkService.resolveBookmark(resolved) ??
+            resolved;
+      }
+
+      if (resolved == null || resolved.isEmpty) {
+        final defaultDir = await _getDefaultScreenshotSaveDirectory();
+        resolved = defaultDir.path;
+      }
+
+      try {
+        final directory = Directory(resolved);
+        if (!await directory.exists()) {
+          await directory.create(recursive: true);
+        }
+      } catch (e) {
+        debugPrint('创建截图目录失败，将回退到默认下载目录: $e');
+        resolved = (await StorageService.getDownloadsDirectory()).path;
+      }
+
+      _screenshotSaveDirectory = resolved;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('加载截图保存位置失败: $e');
+    }
+  }
+
+  Future<void> setScreenshotSaveDirectory(String? directoryPath) async {
+    if (kIsWeb) return;
+
+    final String? trimmed = directoryPath?.trim();
+    final prefs = await SharedPreferences.getInstance();
+
+    if (trimmed == null || trimmed.isEmpty) {
+      await prefs.remove(_screenshotSaveDirectoryKey);
+      final defaultDir = await _getDefaultScreenshotSaveDirectory();
+      _screenshotSaveDirectory = defaultDir.path;
+      notifyListeners();
+      return;
+    }
+
+    String resolvedPath = trimmed;
+    if (Platform.isMacOS) {
+      // 确保创建书签，且当前会话开始访问该目录
+      await SecurityBookmarkService.createBookmark(resolvedPath);
+      resolvedPath =
+          await SecurityBookmarkService.resolveBookmark(resolvedPath) ??
+              resolvedPath;
+    }
+
+    try {
+      final directory = Directory(resolvedPath);
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+    } catch (e) {
+      debugPrint('创建截图目录失败: $e');
+    }
+
+    await prefs.setString(_screenshotSaveDirectoryKey, resolvedPath);
+    _screenshotSaveDirectory = resolvedPath;
+    notifyListeners();
+  }
 }

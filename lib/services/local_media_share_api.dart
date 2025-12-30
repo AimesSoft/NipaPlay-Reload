@@ -9,6 +9,7 @@ class LocalMediaShareApi {
   LocalMediaShareApi() {
     router.get('/animes', _handleListAnimes);
     router.get('/animes/<animeId|[0-9]+>', _handleAnimeDetail);
+    router.get('/history', _handleWatchHistory);
     router.get('/episodes/<shareId>/stream', _handleEpisodeStream);
     router.add('HEAD', '/episodes/<shareId>/stream', _handleEpisodeStreamHead);
     router.post('/episodes/<shareId>/progress', _handleUpdateEpisodeProgress);
@@ -47,6 +48,27 @@ class LocalMediaShareApi {
       );
     } catch (e) {
       return Response.internalServerError(body: 'Error loading shared anime detail: $e');
+    }
+  }
+
+  Future<Response> _handleWatchHistory(Request request) async {
+    int limit = 100;
+    final rawLimit = request.url.queryParameters['limit'];
+    if (rawLimit != null) {
+      limit = int.tryParse(rawLimit) ?? limit;
+    }
+    limit = limit.clamp(1, 500);
+
+    try {
+      final items = await _service.getWatchHistory(limit: limit);
+      return Response.ok(
+        json.encode({'success': true, 'items': items}),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error listing shared watch history: $e',
+      );
     }
   }
 

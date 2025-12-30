@@ -3,6 +3,7 @@ library video_player_state;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import '../player_abstraction/player_factory.dart';
@@ -12,6 +13,7 @@ import 'package:flutter/services.dart';
 // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;
 
 import 'globals.dart' as globals;
@@ -35,9 +37,11 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 
 import 'package:path/path.dart' as p; // Added import for path package
+import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 // Added for getTemporaryDirectory
 import 'package:crypto/crypto.dart';
+import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/watch_history_provider.dart';
 import 'danmaku_parser.dart';
@@ -217,6 +221,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _isControlsHovered = false;
   bool _isSeeking = false;
   final FocusNode _focusNode = FocusNode();
+  final GlobalKey screenshotBoundaryKey =
+      GlobalKey(debugLabel: 'player_screenshot_boundary');
+  bool _isCapturingScreenshot = false;
 
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
@@ -225,6 +232,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _videoPositionsKey = 'video_positions';
   final String _playbackEndActionKey = 'playback_end_action';
   final String _autoNextCountdownSecondsKey = 'auto_next_countdown_seconds';
+  final String _screenshotSaveDirectoryKey = 'screenshot_save_directory';
+  String? _screenshotSaveDirectory;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -515,6 +524,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   FocusNode get focusNode => _focusNode;
   PlaybackEndAction get playbackEndAction => _playbackEndAction;
   int get autoNextCountdownSeconds => _autoNextCountdownSeconds;
+  String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
