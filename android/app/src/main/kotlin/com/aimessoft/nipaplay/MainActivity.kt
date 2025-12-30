@@ -24,11 +24,13 @@ import android.view.View
 import android.app.ActivityManager
 import android.graphics.SurfaceTexture
 import android.view.WindowManager
+import android.webkit.MimeTypeMap
 
 class MainActivity: FlutterActivity() {
     private val STORAGE_CHANNEL = "custom_storage_channel"
     private val FILE_SELECTOR_CHANNEL = "plugins.flutter.io/file_selector"
     private val FILE_ASSOCIATION_CHANNEL = "file_association_channel"
+    private val SYSTEM_SHARE_CHANNEL = "nipaplay/system_share"
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -224,6 +226,73 @@ class MainActivity: FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // 系统分享通道 - iOS AirDrop / Android share sheet
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SYSTEM_SHARE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "share" -> {
+                    val args = call.arguments as? Map<*, *>
+                    if (args == null) {
+                        result.error("INVALID_ARGUMENTS", "Arguments are required", null)
+                        return@setMethodCallHandler
+                    }
+
+                    val text = args["text"] as? String
+                    val url = args["url"] as? String
+                    val filePath = args["filePath"] as? String
+                    val explicitMimeType = args["mimeType"] as? String
+                    val subject = args["subject"] as? String
+
+                    val combinedText = listOfNotNull(
+                        text?.takeIf { it.isNotBlank() },
+                        url?.takeIf { it.isNotBlank() }
+                    ).joinToString("\n")
+
+                    val intent = Intent(Intent.ACTION_SEND)
+
+                    var resolvedMimeType = explicitMimeType ?: "text/plain"
+                    if (!filePath.isNullOrEmpty()) {
+                        val file = File(filePath)
+                        if (file.exists()) {
+                            val uri = FileProvider.getUriForFile(
+                                this@MainActivity,
+                                "${BuildConfig.APPLICATION_ID}.fileprovider",
+                                file
+                            )
+                            intent.putExtra(Intent.EXTRA_STREAM, uri)
+                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+                            if (explicitMimeType == null) {
+                                resolvedMimeType = guessMimeTypeFromPath(filePath) ?: "application/octet-stream"
+                            }
+                        }
+                    }
+
+                    if (combinedText.isNotBlank()) {
+                        intent.putExtra(Intent.EXTRA_TEXT, combinedText)
+                    }
+                    if (!subject.isNullOrBlank()) {
+                        intent.putExtra(Intent.EXTRA_SUBJECT, subject)
+                    }
+
+                    intent.type = resolvedMimeType
+
+                    try {
+                        startActivity(Intent.createChooser(intent, "分享"))
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SHARE_FAILED", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun guessMimeTypeFromPath(path: String): String? {
+        val ext = path.substringAfterLast('.', "").lowercase()
+        if (ext.isEmpty()) return null
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
     }
     
     // 覆盖onCreate以添加额外的配置，解决黑屏问题

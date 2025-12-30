@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/services/system_share_service.dart';
+import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_player_widget.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/themes/fluent/widgets/fluent_send_danmaku_dialog.dart';
@@ -12,6 +15,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/nipaplay/widgets/video_controls_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/glass_action_button.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
@@ -25,7 +29,7 @@ import 'package:nipaplay/utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
-  
+
   const PlayVideoPage({super.key, this.videoPath});
 
   @override
@@ -36,7 +40,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _isHoveringAnimeInfo = false;
   bool _isHoveringBackButton = false;
   double _horizontalDragDistance = 0.0;
-  final GlobalKey<SendDanmakuDialogContentState> _danmakuDialogKey = GlobalKey();
+  final GlobalKey<SendDanmakuDialogContentState> _danmakuDialogKey =
+      GlobalKey();
   bool _isUiLocked = false;
   bool _showUiLockButton = false;
   Timer? _uiLockButtonTimer;
@@ -51,7 +56,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     _uiLockButtonTimer?.cancel();
     super.dispose();
   }
-  
+
   // 处理系统返回键事件
   Future<bool> _handleWillPop() async {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
@@ -85,23 +90,24 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     //debugPrint("[PlayVideoPage] Drag Velocity: ${details.primaryVelocity}");
 
     // 先检查是否存在DefaultTabController，避免异常
-    final TabController? tabController = 
+    final TabController? tabController =
         context.findAncestorWidgetOfExactType<DefaultTabController>() != null
-        ? DefaultTabController.of(context)
-        : null;
-        
+            ? DefaultTabController.of(context)
+            : null;
+
     if (tabController == null) {
       // 如果不存在TabController，直接返回
       _horizontalDragDistance = 0.0;
       return;
     }
-    
-    final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+
+    final tabChangeNotifier =
+        Provider.of<TabChangeNotifier>(context, listen: false);
 
     final currentIndex = tabController.index;
     final tabCount = tabController.length;
     int newIndex = currentIndex;
-    
+
     final double dragThreshold = MediaQuery.of(context).size.width / 15;
     //debugPrint("[PlayVideoPage] Drag Threshold: $dragThreshold");
 
@@ -116,7 +122,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         newIndex = currentIndex - 1;
       }
     } else {
-       //debugPrint("[PlayVideoPage] Drag distance not enough for side swipe.");
+      //debugPrint("[PlayVideoPage] Drag distance not enough for side swipe.");
     }
 
     if (newIndex != currentIndex) {
@@ -151,7 +157,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
-  void _showUiLockButtonTemporarily([Duration duration = const Duration(seconds: 3)]) {
+  void _showUiLockButtonTemporarily(
+      [Duration duration = const Duration(seconds: 3)]) {
     if (!mounted) return;
     if (!globals.isPhone) return;
     if (!_isUiLocked) return;
@@ -167,6 +174,93 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         _showUiLockButton = false;
       });
     });
+  }
+
+  Future<void> _shareCurrentMedia(VideoPlayerState videoState) async {
+    if (!SystemShareService.isSupported) return;
+
+    final currentVideoPath = videoState.currentVideoPath;
+    final currentActualUrl = videoState.currentActualPlayUrl;
+
+    String? filePath;
+    String? url;
+
+    if (currentVideoPath != null && currentVideoPath.isNotEmpty) {
+      final uri = Uri.tryParse(currentVideoPath);
+      final scheme = uri?.scheme.toLowerCase();
+      if (scheme == 'http' || scheme == 'https') {
+        url = currentVideoPath;
+      } else if (scheme == 'jellyfin' || scheme == 'emby') {
+        url = currentActualUrl;
+      } else if (scheme == 'smb' || scheme == 'webdav' || scheme == 'dav') {
+        url = currentVideoPath;
+      } else {
+        filePath = currentVideoPath;
+      }
+    } else {
+      url = currentActualUrl;
+    }
+
+    final titleParts = <String>[
+      if ((videoState.animeTitle ?? '').trim().isNotEmpty)
+        videoState.animeTitle!.trim(),
+      if ((videoState.episodeTitle ?? '').trim().isNotEmpty)
+        videoState.episodeTitle!.trim(),
+    ];
+    final subject = titleParts.isEmpty ? null : titleParts.join(' · ');
+
+    if ((filePath == null || filePath.isEmpty) &&
+        (url == null || url.isEmpty)) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '没有可分享的内容');
+      return;
+    }
+
+    try {
+      await SystemShareService.share(
+        text: subject,
+        url: url,
+        filePath: filePath,
+        subject: subject,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '分享失败: $e');
+    }
+  }
+
+  Future<void> _showAirPlayPicker() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+
+    await BlurDialog.show(
+      context: context,
+      title: '投屏',
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(height: 8),
+          Text(
+            '点击下方 AirPlay 图标选择设备',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 16),
+          Center(child: AirPlayRoutePicker(size: 44)),
+          SizedBox(height: 12),
+          Text(
+            '如未发现设备，请确认与接收端在同一局域网。',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
   }
 
   @override
@@ -206,6 +300,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     final bool uiLocked = globals.isPhone ? _isUiLocked : false;
     final bool showLockButton = globals.isPhone &&
         (videoState.showControls || (uiLocked && _showUiLockButton));
+    final bool showShareButton = SystemShareService.isSupported && !globals.isDesktop;
 
     return Stack(
       children: [
@@ -227,19 +322,78 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 child: Row(
                   children: [
                     MouseRegion(
-                      cursor: _isHoveringBackButton ? SystemMouseCursors.click : SystemMouseCursors.basic,
-                      onEnter: (_) => setState(() => _isHoveringBackButton = true),
-                      onExit: (_) => setState(() => _isHoveringBackButton = false),
+                      cursor: _isHoveringBackButton
+                          ? SystemMouseCursors.click
+                          : SystemMouseCursors.basic,
+                      onEnter: (_) =>
+                          setState(() => _isHoveringBackButton = true),
+                      onExit: (_) =>
+                          setState(() => _isHoveringBackButton = false),
                       child: BackButtonWidget(videoState: videoState),
                     ),
                     const SizedBox(width: 10.0),
                     MouseRegion(
-                      cursor: _isHoveringAnimeInfo ? SystemMouseCursors.click : SystemMouseCursors.basic,
-                      onEnter: (_) => setState(() => _isHoveringAnimeInfo = true),
-                      onExit: (_) => setState(() => _isHoveringAnimeInfo = false),
+                      cursor: _isHoveringAnimeInfo
+                          ? SystemMouseCursors.click
+                          : SystemMouseCursors.basic,
+                      onEnter: (_) =>
+                          setState(() => _isHoveringAnimeInfo = true),
+                      onExit: (_) =>
+                          setState(() => _isHoveringAnimeInfo = false),
                       child: AnimeInfoWidget(videoState: videoState),
                     ),
                   ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 16.0,
+          right: 16.0,
+          child: AnimatedOpacity(
+            opacity: videoState.showControls ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 150),
+            child: IgnorePointer(
+              ignoring: !videoState.showControls,
+              child: Padding(
+                padding: EdgeInsets.only(right: globals.isPhone ? 24.0 : 0.0),
+                child: MouseRegion(
+                  onEnter: (_) => videoState.setControlsHovered(true),
+                  onExit: (_) => videoState.setControlsHovered(false),
+                  child: Row(
+                    children: [
+                      if (!kIsWeb &&
+                          defaultTargetPlatform == TargetPlatform.iOS)
+                        GlassActionButton(
+                          tooltip: '投屏 (AirPlay)',
+                          icon: Icons.airplay_rounded,
+                          onPressed: () {
+                            videoState.resetHideControlsTimer();
+                            _showAirPlayPicker();
+                          },
+                        ),
+                      if (showShareButton) ...[
+                        if (!kIsWeb &&
+                            defaultTargetPlatform == TargetPlatform.iOS)
+                          const SizedBox(width: 12),
+                        GlassActionButton(
+                          tooltip: (!kIsWeb &&
+                                  defaultTargetPlatform == TargetPlatform.iOS)
+                              ? '分享 / AirDrop'
+                              : '分享',
+                          icon: (!kIsWeb &&
+                                  defaultTargetPlatform == TargetPlatform.iOS)
+                              ? Icons.ios_share_rounded
+                              : Icons.share_rounded,
+                          onPressed: () {
+                            videoState.resetHideControlsTimer();
+                            _shareCurrentMedia(videoState);
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -348,7 +502,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
     hotkeyService.unregisterHotkeys();
 
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    final uiThemeProvider =
+        Provider.of<UIThemeProvider>(context, listen: false);
     if (uiThemeProvider.isFluentUITheme) {
       await showDialog(
         context: context,
@@ -365,8 +520,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       final window = WidgetsBinding.instance.window;
       final size = window.physicalSize / window.devicePixelRatio;
       final shortestSide = size.width < size.height ? size.width : size.height;
-      final bool isRealPhone = Platform.isIOS || Platform.isAndroid && shortestSide < 600;
-      
+      final bool isRealPhone =
+          Platform.isIOS || Platform.isAndroid && shortestSide < 600;
+
       await BlurDialog.show(
         context: context,
         title: isRealPhone ? '' : '发送弹幕', // 手机设备不显示标题
@@ -387,4 +543,4 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       await videoState.player.playDirectly();
     }
   }
-} 
+}

@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/themes/fluent/widgets/fluent_loading_overlay.dart';
 import 'package:nipaplay/themes/fluent/widgets/fluent_right_edge_menu.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:provider/provider.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
+import 'blur_snackbar.dart';
 import 'right_edge_hover_menu.dart';
 import 'minimal_progress_bar.dart';
 import 'danmaku_density_bar.dart';
@@ -43,6 +46,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   bool _isProcessingTap = false;
   bool _isMouseVisible = true;
   bool _isHorizontalDragging = false;
+  final OverlayContextMenuController _contextMenuController =
+      OverlayContextMenuController();
 
   // <<< ADDED: Hold a reference to VideoPlayerState for managing the callback
   VideoPlayerState? _videoPlayerStateInstance;
@@ -325,6 +330,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     WidgetsBinding.instance.removeObserver(this);
     // <<< ADDED: Clear the callback to prevent memory leaks
     _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop = null;
+    _contextMenuController.dispose();
 
     // 确保清理所有资源
     _focusNode.dispose();
@@ -336,6 +342,58 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   // 移除键盘事件处理方法
   // KeyEventResult _handleKeyEvent(FocusNode node, RawKeyEvent event) { ... }
+
+  Future<void> _shareCurrentMedia(VideoPlayerState videoState) async {
+    if (!SystemShareService.isSupported) return;
+
+    final currentVideoPath = videoState.currentVideoPath;
+    final currentActualUrl = videoState.currentActualPlayUrl;
+
+    String? filePath;
+    String? url;
+
+    if (currentVideoPath != null && currentVideoPath.isNotEmpty) {
+      final uri = Uri.tryParse(currentVideoPath);
+      final scheme = uri?.scheme.toLowerCase();
+      if (scheme == 'http' || scheme == 'https') {
+        url = currentVideoPath;
+      } else if (scheme == 'jellyfin' || scheme == 'emby') {
+        url = currentActualUrl;
+      } else if (scheme == 'smb' || scheme == 'webdav' || scheme == 'dav') {
+        url = currentVideoPath;
+      } else {
+        filePath = currentVideoPath;
+      }
+    } else {
+      url = currentActualUrl;
+    }
+
+    final titleParts = <String>[
+      if ((videoState.animeTitle ?? '').trim().isNotEmpty)
+        videoState.animeTitle!.trim(),
+      if ((videoState.episodeTitle ?? '').trim().isNotEmpty)
+        videoState.episodeTitle!.trim(),
+    ];
+    final subject = titleParts.isEmpty ? null : titleParts.join(' · ');
+
+    if ((filePath == null || filePath.isEmpty) && (url == null || url.isEmpty)) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '没有可分享的内容');
+      return;
+    }
+
+    try {
+      await SystemShareService.share(
+        text: subject,
+        url: url,
+        filePath: filePath,
+        subject: subject,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '分享失败: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -393,6 +451,27 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: _handleTap,
+                  onSecondaryTapDown: globals.isDesktop
+                      ? (details) {
+                          if (!videoState.hasVideo) return;
+                          if (!SystemShareService.isSupported) return;
+
+                          _contextMenuController.showActionsMenu(
+                            context: context,
+                            globalPosition: details.globalPosition,
+                            style: ContextMenuStyles.glass(context),
+                            actions: [
+                              ContextMenuAction(
+                                icon: Icons.share_rounded,
+                                label: '分享',
+                                onPressed: () {
+                                  unawaited(_shareCurrentMedia(videoState));
+                                },
+                              ),
+                            ],
+                          );
+                        }
+                      : null,
                   onLongPressStart: globals.isPhone
                       ? (details) => _handleLongPressStart(videoState)
                       : null,

@@ -44,5 +44,16 @@ post_install do |installer|
     target.build_configurations.each do |config|
       config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '11.0'
     end
+
+    # Xcode 15+/16: 某些 Pod 会把 *.xcprivacy 当作源文件编译，导致 "no rule to process" 警告。
+    # 这里将其从 Sources 移到 Resources，保持隐私清单仍会被打包进产物。
+    if target.respond_to?(:source_build_phase) && target.respond_to?(:resources_build_phase)
+      target.source_build_phase.files
+        .select { |f| f.file_ref&.path&.end_with?('.xcprivacy') }
+        .each do |build_file|
+          target.resources_build_phase.add_file_reference(build_file.file_ref)
+          build_file.remove_from_project
+        end
+    end
   end
 end

@@ -1,14 +1,20 @@
+import 'dart:async';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/volume_gesture_area.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/widgets/airplay_route_picker.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -22,21 +28,119 @@ class CupertinoPlayVideoPage extends StatefulWidget {
 class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   double? _dragProgress;
   bool _isDragging = false;
+  final OverlayContextMenuController _contextMenuController =
+      OverlayContextMenuController();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final videoState =
-          Provider.of<VideoPlayerState>(context, listen: false);
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       videoState.setContext(context);
     });
   }
 
   @override
   void dispose() {
+    _contextMenuController.dispose();
     super.dispose();
+  }
+
+  Future<void> _showMessage(String message) async {
+    if (!mounted) return;
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('提示'),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _shareCurrentMedia(VideoPlayerState videoState) async {
+    if (!SystemShareService.isSupported) return;
+
+    final currentVideoPath = videoState.currentVideoPath;
+    final currentActualUrl = videoState.currentActualPlayUrl;
+
+    String? filePath;
+    String? url;
+
+    if (currentVideoPath != null && currentVideoPath.isNotEmpty) {
+      final uri = Uri.tryParse(currentVideoPath);
+      final scheme = uri?.scheme.toLowerCase();
+      if (scheme == 'http' || scheme == 'https') {
+        url = currentVideoPath;
+      } else if (scheme == 'jellyfin' || scheme == 'emby') {
+        url = currentActualUrl;
+      } else if (scheme == 'smb' || scheme == 'webdav' || scheme == 'dav') {
+        url = currentVideoPath;
+      } else {
+        filePath = currentVideoPath;
+      }
+    } else {
+      url = currentActualUrl;
+    }
+
+    final titleParts = <String>[
+      if ((videoState.animeTitle ?? '').trim().isNotEmpty)
+        videoState.animeTitle!.trim(),
+      if ((videoState.episodeTitle ?? '').trim().isNotEmpty)
+        videoState.episodeTitle!.trim(),
+    ];
+    final subject = titleParts.isEmpty ? null : titleParts.join(' · ');
+
+    if ((filePath == null || filePath.isEmpty) &&
+        (url == null || url.isEmpty)) {
+      await _showMessage('没有可分享的内容');
+      return;
+    }
+
+    try {
+      await SystemShareService.share(
+        text: subject,
+        url: url,
+        filePath: filePath,
+        subject: subject,
+      );
+    } catch (e) {
+      await _showMessage('分享失败: $e');
+    }
+  }
+
+  Future<void> _showAirPlayPickerSheet(VideoPlayerState videoState) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+
+    videoState.resetHideControlsTimer();
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '投屏 (AirPlay)',
+      heightRatio: 0.5,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                '点击下方 AirPlay 图标选择设备',
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 20),
+              AirPlayRoutePicker(size: 56),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -78,6 +182,27 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           videoState.toggleControls();
         }
       },
+      onSecondaryTapDown: globals.isDesktop
+          ? (details) {
+              if (!videoState.hasVideo) return;
+              if (!SystemShareService.isSupported) return;
+
+              _contextMenuController.showActionsMenu(
+                context: context,
+                globalPosition: details.globalPosition,
+                style: ContextMenuStyles.solidDark(),
+                actions: [
+                  ContextMenuAction(
+                    icon: Icons.share_rounded,
+                    label: '分享',
+                    onPressed: () {
+                      unawaited(_shareCurrentMedia(videoState));
+                    },
+                  ),
+                ],
+              );
+            }
+          : null,
       onDoubleTap: () {
         if (videoState.hasVideo) {
           videoState.togglePlayPause();
@@ -146,8 +271,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           if (hasVideo) _buildBottomControls(videoState, progressValue),
           if (globals.isPhone && videoState.hasVideo)
             const BrightnessGestureArea(),
-          if (globals.isPhone && videoState.hasVideo)
-            const VolumeGestureArea(),
+          if (globals.isPhone && videoState.hasVideo) const VolumeGestureArea(),
         ],
       ),
     );
@@ -166,7 +290,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
                 messages.last,
-                style: const TextStyle(color: CupertinoColors.white, fontSize: 14),
+                style:
+                    const TextStyle(color: CupertinoColors.white, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -195,6 +320,40 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                   _buildBackButton(videoState),
                   const SizedBox(width: 12),
                   Expanded(child: _buildTitleButton(context, videoState)),
+                  if (!kIsWeb &&
+                      defaultTargetPlatform == TargetPlatform.iOS) ...[
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: AdaptiveButton.sfSymbol(
+                        onPressed: () => _showAirPlayPickerSheet(videoState),
+                        sfSymbol: const SFSymbol('airplayvideo',
+                            size: 18, color: CupertinoColors.white),
+                        style: AdaptiveButtonStyle.glass,
+                        size: AdaptiveButtonSize.large,
+                        useSmoothRectangleBorder: false,
+                      ),
+                    ),
+                  ],
+                  if (SystemShareService.isSupported && !globals.isDesktop) ...[
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: AdaptiveButton.sfSymbol(
+                        onPressed: () {
+                          videoState.resetHideControlsTimer();
+                          _shareCurrentMedia(videoState);
+                        },
+                        sfSymbol: const SFSymbol('square.and.arrow.up',
+                            size: 18, color: CupertinoColors.white),
+                        style: AdaptiveButtonStyle.glass,
+                        size: AdaptiveButtonSize.large,
+                        useSmoothRectangleBorder: false,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -216,7 +375,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     if (PlatformInfo.isIOS26OrHigher()) {
       button = AdaptiveButton.sfSymbol(
         onPressed: handlePress,
-        sfSymbol: const SFSymbol('chevron.backward', size: 18, color: CupertinoColors.white),
+        sfSymbol: const SFSymbol('chevron.backward',
+            size: 18, color: CupertinoColors.white),
         style: AdaptiveButtonStyle.glass,
         size: AdaptiveButtonSize.large,
         useSmoothRectangleBorder: false,
@@ -267,7 +427,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
   }
 
-  Widget _buildBottomControls(VideoPlayerState videoState, double progressValue) {
+  Widget _buildBottomControls(
+      VideoPlayerState videoState, double progressValue) {
     final duration = videoState.duration;
     final position = videoState.position;
     final totalMillis = duration.inMilliseconds;
@@ -324,8 +485,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           onChangeEnd: totalMillis > 0
                               ? (value) {
                                   final target = Duration(
-                                    milliseconds:
-                                        (value * totalMillis).round(),
+                                    milliseconds: (value * totalMillis).round(),
                                   );
                                   videoState.seekTo(target);
                                   videoState.resetHideControlsTimer();

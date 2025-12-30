@@ -112,6 +112,7 @@ class MainFlutterWindow: NSWindow {
     
     // 注册自定义安全书签插件
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))
+    SystemSharePlugin.register(with: flutterViewController.registrar(forPlugin: "SystemSharePlugin"))
 
     super.awakeFromNib()
   }
