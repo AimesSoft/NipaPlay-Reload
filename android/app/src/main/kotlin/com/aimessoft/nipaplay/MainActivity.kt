@@ -256,7 +256,7 @@ class MainActivity: FlutterActivity() {
                         if (file.exists()) {
                             val uri = FileProvider.getUriForFile(
                                 this@MainActivity,
-                                "${BuildConfig.APPLICATION_ID}.fileprovider",
+                                "${this@MainActivity.packageName}.fileprovider",
                                 file
                             )
                             intent.putExtra(Intent.EXTRA_STREAM, uri)
