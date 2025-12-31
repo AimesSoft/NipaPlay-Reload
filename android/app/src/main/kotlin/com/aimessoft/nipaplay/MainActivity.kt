@@ -383,8 +383,9 @@ class MainActivity: FlutterActivity() {
                     
                     // 处理SD卡和其他外部存储
                     val externalDirs = ContextCompat.getExternalFilesDirs(context, null)
-                    if (externalDirs.isNotEmpty() && externalDirs[0] != null) {
-                        val storagePath = externalDirs[0].absolutePath
+                    val firstExternalDir = externalDirs.firstOrNull()
+                    if (firstExternalDir != null) {
+                        val storagePath = firstExternalDir.absolutePath
                         val storageId = storagePath.substringBefore("/Android")
                         return "$storageId/${split[1]}"
                     }
