@@ -1,18 +1,20 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:nipaplay/themes/web/models/web_playback_item.dart';
 import 'package:nipaplay/themes/web/services/web_remote_api_client.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class WebHistoryPage extends StatefulWidget {
   const WebHistoryPage({
     super.key,
     required this.api,
     required this.searchQuery,
+    required this.onPlay,
   });
 
   final WebRemoteApiClient api;
   final String searchQuery;
+  final ValueChanged<WebPlaybackItem> onPlay;
 
   @override
   State<WebHistoryPage> createState() => _WebHistoryPageState();
@@ -90,11 +92,17 @@ class _WebHistoryPageState extends State<WebHistoryPage> {
                   itemBuilder: (context, index) {
                     return _HistoryCard(
                       entry: filtered[index],
-                      onOpen: () async {
+                      onPlay: () {
                         final uri = widget.api.resolveExternal(
                           filtered[index].episode.streamPath,
                         );
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        widget.onPlay(
+                          WebPlaybackItem(
+                            uri: uri,
+                            title: filtered[index].episode.title,
+                            subtitle: filtered[index].animeName,
+                          ),
+                        );
                       },
                     );
                   },
@@ -124,11 +132,11 @@ class _WebHistoryPageState extends State<WebHistoryPage> {
 class _HistoryCard extends StatelessWidget {
   const _HistoryCard({
     required this.entry,
-    required this.onOpen,
+    required this.onPlay,
   });
 
   final WebRemoteHistoryEntry entry;
-  final VoidCallback onOpen;
+  final VoidCallback onPlay;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +183,7 @@ class _HistoryCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            TextButton(onPressed: onOpen, child: const Text('打开')),
+            TextButton(onPressed: onPlay, child: const Text('播放')),
           ],
         ),
       ),
@@ -253,4 +261,3 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
-

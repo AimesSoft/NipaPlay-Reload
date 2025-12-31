@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay/themes/web/models/web_playback_item.dart';
 import 'package:nipaplay/themes/web/services/web_remote_api_client.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class WebManagementPage extends StatefulWidget {
   const WebManagementPage({
     super.key,
     required this.api,
+    required this.onPlay,
   });
 
   final WebRemoteApiClient api;
+  final ValueChanged<WebPlaybackItem> onPlay;
 
   @override
   State<WebManagementPage> createState() => _WebManagementPageState();
@@ -113,6 +115,7 @@ class _WebManagementPageState extends State<WebManagementPage> {
                                 child: _RemoteBrowser(
                                   api: widget.api,
                                   initialPath: path,
+                                  onPlay: widget.onPlay,
                                 ),
                               ),
                             ),
@@ -316,10 +319,12 @@ class _RemoteBrowser extends StatefulWidget {
   const _RemoteBrowser({
     required this.api,
     required this.initialPath,
+    required this.onPlay,
   });
 
   final WebRemoteApiClient api;
   final String initialPath;
+  final ValueChanged<WebPlaybackItem> onPlay;
 
   @override
   State<_RemoteBrowser> createState() => _RemoteBrowserState();
@@ -418,15 +423,19 @@ class _RemoteBrowserState extends State<_RemoteBrowser> {
                       trailing: entry.isDirectory
                           ? const Icon(Icons.chevron_right)
                           : TextButton(
-                              onPressed: () async {
+                              onPressed: () {
                                 final uri =
                                     widget.api.resolveManageStream(entry.path);
-                                await launchUrl(
-                                  uri,
-                                  mode: LaunchMode.externalApplication,
+                                widget.onPlay(
+                                  WebPlaybackItem(
+                                    uri: uri,
+                                    title: entry.name,
+                                    subtitle: entry.path,
+                                  ),
                                 );
+                                Navigator.of(context).pop();
                               },
-                              child: const Text('打开'),
+                              child: const Text('播放'),
                             ),
                     );
                   },
@@ -480,4 +489,3 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
-

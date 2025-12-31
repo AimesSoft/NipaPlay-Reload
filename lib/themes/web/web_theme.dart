@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter/material.dart' show ThemeMode, Icons;
+import 'package:flutter/widgets.dart';
 
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
@@ -26,39 +28,13 @@ class WebRemoteThemeDescriptor extends ThemeDescriptor {
           appBuilder: _buildApp,
         );
 
-  static const Color _bilibiliBlue = Color(0xFF00A1D6);
-
   static Widget _buildApp(ThemeBuildContext context) {
-    return MaterialApp(
+    return fluent.FluentApp(
       title: 'NipaPlay Web',
       debugShowCheckedModeBanner: false,
       themeMode: context.themeNotifier.themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: _bilibiliBlue,
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF6F7F8),
-        appBarTheme: const AppBarTheme(
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-        ),
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          color: Colors.white,
-          margin: EdgeInsets.zero,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: _bilibiliBlue,
-          brightness: Brightness.dark,
-        ),
-      ),
+      theme: fluent.FluentThemeData.light(),
+      darkTheme: fluent.FluentThemeData.dark(),
       navigatorKey: context.navigatorKey,
       home: const WebHomePage(),
       builder: (buildContext, appChild) {

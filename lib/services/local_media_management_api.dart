@@ -494,8 +494,22 @@ class LocalMediaManagementApi {
   }
 
   String _buildContentDispositionHeader(String fileName) {
-    final safeName = fileName.replaceAll('"', '\\"');
+    String sanitizeAsciiFallback(String value) {
+      if (value.isEmpty) return 'file';
+      final buffer = StringBuffer();
+      for (final codeUnit in value.codeUnits) {
+        final bool isAsciiPrintable = codeUnit >= 0x20 && codeUnit <= 0x7E;
+        final bool isForbidden = codeUnit == 0x22 /* " */ || codeUnit == 0x5C /* \\ */;
+        buffer.writeCharCode(
+          isAsciiPrintable && !isForbidden ? codeUnit : 0x5F /* _ */,
+        );
+      }
+      final sanitized = buffer.toString().trim();
+      return sanitized.isEmpty ? 'file' : sanitized;
+    }
+
+    final fallbackName = sanitizeAsciiFallback(fileName);
     final encodedName = Uri.encodeComponent(fileName);
-    return 'inline; filename="$safeName"; filename*=UTF-8\'\'$encodedName';
+    return 'inline; filename="$fallbackName"; filename*=UTF-8\'\'$encodedName';
   }
 }

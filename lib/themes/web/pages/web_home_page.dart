@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/themes/web/models/web_playback_item.dart';
 import 'package:nipaplay/themes/web/pages/web_history_page.dart';
 import 'package:nipaplay/themes/web/pages/web_library_page.dart';
 import 'package:nipaplay/themes/web/pages/web_management_page.dart';
+import 'package:nipaplay/themes/web/pages/web_player_page.dart';
 import 'package:nipaplay/themes/web/services/web_remote_api_client.dart';
 
 class WebHomePage extends StatefulWidget {
@@ -12,10 +14,40 @@ class WebHomePage extends StatefulWidget {
 }
 
 class _WebHomePageState extends State<WebHomePage> {
-  int _index = 0;
+  int _index = 1;
   final TextEditingController _searchController = TextEditingController();
+  WebPlaybackItem? _nowPlaying;
 
-  final WebRemoteApiClient _api = const WebRemoteApiClient();
+  late final WebRemoteApiClient _api =
+      WebRemoteApiClient(baseUrl: _resolveApiBaseUrl());
+
+  void _play(WebPlaybackItem item) {
+    setState(() {
+      _nowPlaying = item;
+      _index = 0;
+    });
+  }
+
+  String? _resolveApiBaseUrl() {
+    final uri = Uri.base;
+    final rawBaseUrl = uri.queryParameters['api'] ??
+        uri.queryParameters['apiBase'] ??
+        uri.queryParameters['baseUrl'];
+    final normalizedBaseUrl = rawBaseUrl?.trim();
+    if (normalizedBaseUrl != null && normalizedBaseUrl.isNotEmpty) {
+      return normalizedBaseUrl;
+    }
+
+    final rawPort = uri.queryParameters['apiPort']?.trim();
+    final port = int.tryParse(rawPort ?? '');
+    if (port != null && port > 0 && port < 65536) {
+      final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
+      final host = uri.host.isNotEmpty ? uri.host : 'localhost';
+      return '$scheme://$host:$port';
+    }
+
+    return null;
+  }
 
   @override
   void dispose() {
@@ -32,10 +64,11 @@ class _WebHomePageState extends State<WebHomePage> {
     final String searchQuery = _searchController.text;
 
     final page = switch (_index) {
-      0 => WebLibraryPage(api: _api, searchQuery: searchQuery),
-      1 => WebManagementPage(api: _api),
-      2 => WebHistoryPage(api: _api, searchQuery: searchQuery),
-      _ => WebLibraryPage(api: _api, searchQuery: searchQuery),
+      0 => WebPlayerPage(item: _nowPlaying),
+      1 => WebLibraryPage(api: _api, searchQuery: searchQuery, onPlay: _play),
+      2 => WebManagementPage(api: _api, onPlay: _play),
+      3 => WebHistoryPage(api: _api, searchQuery: searchQuery, onPlay: _play),
+      _ => WebLibraryPage(api: _api, searchQuery: searchQuery, onPlay: _play),
     };
 
     return Scaffold(
@@ -105,6 +138,11 @@ class _WebHomePageState extends State<WebHomePage> {
                 });
               },
               destinations: const [
+                NavigationRailDestination(
+                  icon: Icon(Icons.play_circle_outline),
+                  selectedIcon: Icon(Icons.play_circle),
+                  label: Text('播放'),
+                ),
                 NavigationRailDestination(
                   icon: Icon(Icons.video_library_outlined),
                   selectedIcon: Icon(Icons.video_library),
@@ -200,20 +238,27 @@ class _NavList extends StatelessWidget {
         _navTile(
           context,
           index: 0,
+          icon: Icons.play_circle_outline,
+          selectedIcon: Icons.play_circle,
+          label: '播放',
+        ),
+        _navTile(
+          context,
+          index: 1,
           icon: Icons.video_library_outlined,
           selectedIcon: Icons.video_library,
           label: '媒体库',
         ),
         _navTile(
           context,
-          index: 1,
+          index: 2,
           icon: Icons.folder_open_outlined,
           selectedIcon: Icons.folder_open,
           label: '库管理',
         ),
         _navTile(
           context,
-          index: 2,
+          index: 3,
           icon: Icons.history_outlined,
           selectedIcon: Icons.history,
           label: '观看记录',
@@ -238,4 +283,3 @@ class _NavList extends StatelessWidget {
     );
   }
 }
-

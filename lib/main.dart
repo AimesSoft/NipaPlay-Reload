@@ -71,6 +71,7 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'constants/settings_keys.dart';
+import 'package:nipaplay/themes/web/web_entry_app.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
@@ -83,6 +84,17 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey =
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Web 端仅提供远程访问 Web UI，避免触发桌面/IO 相关初始化导致灰屏。
+  if (kIsWeb) {
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('应用发生错误: ${details.exception}');
+      debugPrint('错误堆栈: ${details.stack}');
+    };
+    runApp(const NipaPlayWebEntryApp());
+    return;
+  }
 
   // 安装 HTTP 客户端覆盖（自签名证书信任规则），尽早生效
   await HttpClientInitializer.install();
@@ -497,8 +509,12 @@ void main(List<String> args) async {
     SystemResourceMonitor.initialize();
 
     if (globals.isDesktop) {
-      windowManager.ensureInitialized();
-      windowManager.setIcon('assets/images/logo512.png');
+      await windowManager.ensureInitialized();
+      try {
+        await windowManager.setIcon('assets/images/logo512.png');
+      } catch (e) {
+        debugPrint('windowManager.setIcon 失败: $e');
+      }
       WindowOptions windowOptions = const WindowOptions(
         skipTaskbar: false,
         titleBarStyle: TitleBarStyle.hidden,

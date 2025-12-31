@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/services/certificate_trust_service.dart';
 
@@ -25,6 +26,9 @@ class DeveloperOptionsProvider extends ChangeNotifier {
 
   // 是否全局允许无效/自签名证书（仅 IO 平台生效）
   bool _allowInvalidCertsGlobal = false;
+
+  // 开发调试：Web 远程访问使用外部 Web UI（反向代理端口，0 表示关闭）
+  int _devRemoteAccessWebUiPort = 0;
   
   // 获取显示系统资源监控状态
   bool get showSystemResources => _showSystemResources;
@@ -46,6 +50,9 @@ class DeveloperOptionsProvider extends ChangeNotifier {
 
   // 获取是否全局允许无效/自签名证书（仅 IO 平台生效）
   bool get allowInvalidCertsGlobal => _allowInvalidCertsGlobal;
+
+  // 获取开发模式远程访问 Web UI 端口（0 表示关闭）
+  int get devRemoteAccessWebUiPort => _devRemoteAccessWebUiPort;
   
   // 构造函数
   DeveloperOptionsProvider() {
@@ -86,6 +93,11 @@ class DeveloperOptionsProvider extends ChangeNotifier {
 
     // 从证书信任服务加载全局允许开关（服务自身已持久化到 SharedPreferences）
     _allowInvalidCertsGlobal = CertificateTrustService.instance.globalAllow;
+
+    _devRemoteAccessWebUiPort = await SettingsStorage.loadInt(
+      SettingsKeys.devRemoteAccessWebUiPort,
+      defaultValue: 0,
+    );
     
     notifyListeners();
   }
@@ -156,6 +168,18 @@ class DeveloperOptionsProvider extends ChangeNotifier {
     if (_allowInvalidCertsGlobal != value) {
       _allowInvalidCertsGlobal = value;
       await CertificateTrustService.instance.setGlobalAllow(value);
+      notifyListeners();
+    }
+  }
+
+  Future<void> setDevRemoteAccessWebUiPort(int port) async {
+    final normalized = (port > 0 && port < 65536) ? port : 0;
+    if (_devRemoteAccessWebUiPort != normalized) {
+      _devRemoteAccessWebUiPort = normalized;
+      await SettingsStorage.saveInt(
+        SettingsKeys.devRemoteAccessWebUiPort,
+        normalized,
+      );
       notifyListeners();
     }
   }

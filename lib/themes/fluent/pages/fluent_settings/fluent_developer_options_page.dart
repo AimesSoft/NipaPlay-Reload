@@ -1,6 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
+import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/fluent/pages/fluent_settings/fluent_debug_log_viewer_page.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
@@ -129,10 +131,118 @@ class FluentDeveloperOptionsPage extends StatelessWidget {
               onPressed: () => _openDebugLogViewer(context),
               child: const Text('查看终端输出'),
             ),
+            const SizedBox(height: 12),
+            InfoLabel(
+              label: '开发模式远程访问端口',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      devOptions.devRemoteAccessWebUiPort > 0
+                          ? '${devOptions.devRemoteAccessWebUiPort}'
+                          : '未设置',
+                    ),
+                  ),
+                  Button(
+                    onPressed: () => _showDevRemoteAccessWebUiPortDialog(context, devOptions),
+                    child: const Text('设置'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '设置后，远程访问将把 Web UI 请求反向代理到本机端口（用于联调 Web UI）。留空/0 关闭。',
+              style: theme.typography.caption,
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _showDevRemoteAccessWebUiPortDialog(
+    BuildContext context,
+    DeveloperOptionsProvider devOptions,
+  ) async {
+    final controller = TextEditingController(
+      text: devOptions.devRemoteAccessWebUiPort > 0
+          ? devOptions.devRemoteAccessWebUiPort.toString()
+          : '',
+    );
+
+    final newPort = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return ContentDialog(
+          title: const Text('开发模式远程访问端口'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextBox(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                placeholder: '留空/0 关闭',
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '远程访问将把除 /api 以外的请求代理到 http://127.0.0.1:<端口>。',
+                style: FluentTheme.of(context).typography.caption,
+              ),
+            ],
+          ),
+          actions: [
+            Button(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final raw = controller.text.trim();
+                final parsed = raw.isEmpty ? 0 : int.tryParse(raw);
+                final isValid =
+                    parsed != null && (parsed == 0 || (parsed > 0 && parsed < 65536));
+                if (isValid) {
+                  Navigator.pop(context, parsed);
+                } else {
+                  _showInfoBar(
+                    context,
+                    '请输入有效端口 (1-65535)，或留空/0 关闭。',
+                    severity: InfoBarSeverity.warning,
+                  );
+                }
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+    if (newPort == null) return;
+
+    await devOptions.setDevRemoteAccessWebUiPort(newPort);
+
+    final server = ServiceProvider.webServer;
+    if (server.isRunning) {
+      final currentPort = server.port;
+      await server.stopServer();
+      final restarted = await server.startServer(port: currentPort);
+      if (context.mounted) {
+        _showInfoBar(
+          context,
+          restarted ? '已保存，远程访问服务已重启生效。' : '已保存，但远程访问服务重启失败。',
+          severity: restarted ? InfoBarSeverity.success : InfoBarSeverity.error,
+        );
+      }
+      return;
+    }
+
+    if (context.mounted) {
+      _showInfoBar(context, '已保存，下次开启远程访问时生效。', severity: InfoBarSeverity.success);
+    }
   }
 
   Widget _buildLinuxToolsSection(BuildContext context) {
