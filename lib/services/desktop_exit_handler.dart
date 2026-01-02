@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -34,7 +35,7 @@ class DesktopExitDecision {
 }
 
 class DesktopExitHandler
-    with WindowListener, TrayListener, material.WidgetsBindingObserver {
+    with TrayListener, material.WidgetsBindingObserver {
   DesktopExitHandler._();
 
   static final DesktopExitHandler instance = DesktopExitHandler._();
@@ -42,11 +43,10 @@ class DesktopExitHandler
   material.GlobalKey<material.NavigatorState>? _navigatorKey;
 
   bool _bindingHooked = false;
-  bool _windowHooked = false;
   bool _trayReady = false;
-  bool _handlingWindowClose = false;
   bool _handlingExitRequest = false;
   bool _quitting = false;
+  bool _hardExitScheduled = false;
 
   Future<void> initialize(
     material.GlobalKey<material.NavigatorState> navigatorKey,
@@ -58,45 +58,6 @@ class DesktopExitHandler
       material.WidgetsBinding.instance.addObserver(this);
       _bindingHooked = true;
     }
-
-    if (_windowHooked) return;
-    try {
-      await windowManager.setPreventClose(true);
-      windowManager.addListener(this);
-      _windowHooked = true;
-    } catch (e) {
-      debugPrint('[DesktopExitHandler] 初始化窗口关闭拦截失败: $e');
-    }
-  }
-
-  @override
-  void onWindowClose() async {
-    if (kIsWeb || !globals.isDesktop) return;
-    if (_quitting) {
-      await windowManager.destroy();
-      return;
-    }
-
-    if (_handlingWindowClose) return;
-    _handlingWindowClose = true;
-    try {
-      final isPreventClose = await windowManager.isPreventClose();
-      if (!isPreventClose) return;
-
-      final action = await _resolveExitAction();
-      switch (action) {
-        case DesktopExitAction.cancelAndReturn:
-          return;
-        case DesktopExitAction.minimizeToTrayOrTaskbar:
-          await _minimizeToTrayOrTaskbar();
-          return;
-        case DesktopExitAction.closePlayer:
-          await _exitApp();
-          return;
-      }
-    } finally {
-      _handlingWindowClose = false;
-    }
   }
 
   @override
@@ -104,7 +65,7 @@ class DesktopExitHandler
     if (kIsWeb || !globals.isDesktop) return ui.AppExitResponse.exit;
     if (_quitting) return ui.AppExitResponse.exit;
 
-    if (_handlingWindowClose || _handlingExitRequest) {
+    if (_handlingExitRequest) {
       return ui.AppExitResponse.cancel;
     }
 
@@ -118,7 +79,9 @@ class DesktopExitHandler
           await _minimizeToTrayOrTaskbar();
           return ui.AppExitResponse.cancel;
         case DesktopExitAction.closePlayer:
-          await _exitApp();
+          _quitting = true;
+          _scheduleHardExitFallback();
+          await _prepareForExit();
           return ui.AppExitResponse.exit;
       }
     } finally {
@@ -315,11 +278,44 @@ class DesktopExitHandler
 
   Future<void> _exitApp() async {
     _quitting = true;
-    await windowManager.setPreventClose(false);
-    await windowManager.destroy();
+    _scheduleHardExitFallback();
+    await _prepareForExit();
+
+    try {
+      await windowManager.close();
+    } catch (_) {}
     if (Platform.isMacOS) {
       exit(0);
     }
+  }
+
+  Future<void> _prepareForExit() async {
+    try {
+      await ServiceProvider.webServer.stopServer();
+    } catch (_) {}
+
+    try {
+      ServiceProvider.serverHistorySyncService.dispose();
+    } catch (_) {}
+
+    if (_trayReady) {
+      try {
+        trayManager.removeListener(this);
+      } catch (_) {}
+      _trayReady = false;
+    }
+  }
+
+  void _scheduleHardExitFallback() {
+    if (_hardExitScheduled) return;
+    if (!globals.isDesktop) return;
+    if (!(Platform.isWindows || Platform.isLinux)) return;
+    _hardExitScheduled = true;
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!_quitting) return;
+      exit(0);
+    });
   }
 
   Future<bool> _ensureTray() async {
