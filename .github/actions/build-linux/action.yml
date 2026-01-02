@@ -98,13 +98,16 @@ runs:
         echo "Copying application files to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
         cp -r "${BUILD_OUTPUT_DIR}/"* "${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
         
-        # Copy system libmpv libraries to ensure availability
-        echo "Copying system libmpv libraries to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
+        # Copy system libmpv libraries only when not already bundled (avoid overwriting media_kit_libs_* shipped libs)
         mkdir -p "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib"
-        # Copy system libmpv and create compatibility symlinks
-        find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
-          cp "$mpv_lib" "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" 2>/dev/null || true
-        done
+        if find "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib" -maxdepth 1 -name "libmpv*.so*" -type f | grep -q .; then
+          echo "Bundled libmpv detected in build output; skipping system libmpv copy."
+        else
+          echo "No bundled libmpv found; copying system libmpv libraries to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
+          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+            cp -n "$mpv_lib" "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" 2>/dev/null || true
+          done
+        fi
         # Create compatibility symlinks for libmpv.so.1 if needed
         cd "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib"
         if [ ! -f "libmpv.so.1" ] && [ -f "libmpv.so.2" ]; then
@@ -159,11 +162,15 @@ runs:
         echo "Copying data/* to AppDir/data/"
         cp -r "${BUILD_OUTPUT_DIR}/data/." "${APPDIR}/data/"
         
-        # Copy system libmpv libraries to AppImage
-        echo "Copying system libmpv libraries to AppImage"
-        find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
-          cp "$mpv_lib" "${APPDIR}/lib/" 2>/dev/null || true
-        done
+        # Copy system libmpv libraries only when not already bundled (avoid overwriting media_kit_libs_* shipped libs)
+        if find "${APPDIR}/lib" -maxdepth 1 -name "libmpv*.so*" -type f | grep -q .; then
+          echo "Bundled libmpv detected in build output; skipping system libmpv copy."
+        else
+          echo "No bundled libmpv found; copying system libmpv libraries to AppImage"
+          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+            cp -n "$mpv_lib" "${APPDIR}/lib/" 2>/dev/null || true
+          done
+        fi
         # Create compatibility symlinks for libmpv.so.1 if needed
         cd "${APPDIR}/lib"
         if [ ! -f "libmpv.so.1" ] && [ -f "libmpv.so.2" ]; then
@@ -184,23 +191,42 @@ runs:
         # Run linuxdeployqt
         echo "Running linuxdeployqt..."
         export LD_LIBRARY_PATH="${APPDIR}/lib:${LD_LIBRARY_PATH}"
-        # Newer glib-based desktops will load their own gio/rsvg modules, so exclude bundled copies
-        export LINUXDEPLOYQT_EXCLUDE_LIBS="libgio-2.0.so*;libglib-2.0.so*;libgobject-2.0.so*;libgmodule-2.0.so*;libgthread-2.0.so*;libgdk_pixbuf-2.0.so*;librsvg-2.so*"
+        # Exclude host-sensitive libraries (GLib/GIO + GPU stack); rely on host to provide compatible versions
+        export LINUXDEPLOYQT_EXCLUDE_LIBS="libgio-2.0.so*;libglib-2.0.so*;libgobject-2.0.so*;libgmodule-2.0.so*;libgthread-2.0.so*;libgdk_pixbuf-2.0.so*;librsvg-2.so*;libEGL.so*;libGL.so*;libGLESv2.so*;libGLX.so*;libOpenGL.so*;libGLdispatch.so*;libgbm.so*;libdrm.so*;libvulkan.so*"
         chmod +x "${APPDIR}/${APP_NAME}"
         
         ./linuxdeployqt "${APPDIR}/${APP_NAME}" -unsupported-allow-new-glibc -appimage -bundle-non-qt-libs
 
-        echo "Removing bundled GNOME/GTK libraries that break on newer distros..."
-        find "${APPDIR}" -maxdepth 2 -type f \( \
+        echo "Removing bundled host-sensitive libraries (avoid mixing with host modules/drivers)..."
+        find "${APPDIR}" -type f \( \
           -name "libgio-2.0.so*" -o \
           -name "libglib-2.0.so*" -o \
           -name "libgobject-2.0.so*" -o \
           -name "libgmodule-2.0.so*" -o \
           -name "libgthread-2.0.so*" -o \
           -name "libgdk_pixbuf-2.0.so*" -o \
-          -name "librsvg-2.so*" \
+          -name "librsvg-2.so*" -o \
+          -name "libEGL.so*" -o \
+          -name "libGL.so*" -o \
+          -name "libGLESv2.so*" -o \
+          -name "libGLX.so*" -o \
+          -name "libOpenGL.so*" -o \
+          -name "libGLdispatch.so*" -o \
+          -name "libgbm.so*" -o \
+          -name "libdrm.so*" -o \
+          -name "libvulkan.so*" \
         \) -print -delete
-        rm -rf "${APPDIR}/usr/lib/gio" "${APPDIR}/lib/gio" "${APPDIR}/usr/lib/gdk-pixbuf-2.0" "${APPDIR}/lib/gdk-pixbuf-2.0" || true
+        # Remove bundled module directories so the host system provides matching modules
+        find "${APPDIR}" -type d \( -path "*/gio/modules" -o -path "*/gdk-pixbuf-2.0" \) -prune -print -exec rm -rf {} + || true
+        # If linuxdeployqt generated a shell AppRun, remove any env pinning to deleted GTK/GIO module paths
+        if [ -f "${APPDIR}/AppRun" ] && head -n 1 "${APPDIR}/AppRun" | grep -q "^#!"; then
+          sed -i \
+            -e '/GDK_PIXBUF_MODULE_FILE/d' \
+            -e '/GDK_PIXBUF_MODULEDIR/d' \
+            -e '/GIO_MODULE_DIR/d' \
+            -e '/GIO_EXTRA_MODULES/d' \
+            "${APPDIR}/AppRun" || true
+        fi
 
         echo "Listing *.AppImage files in current directory after linuxdeployqt:"
         ls -la *.AppImage || echo "No AppImage found in current directory."
@@ -226,12 +252,16 @@ runs:
         echo "Copying application files to archive directory"
         cp -r "${BUILD_OUTPUT_DIR}/"* "${ARCHIVE_CONTENT_DIR}/"
         
-        # Copy system libmpv libraries to tar.gz archive
-        echo "Copying system libmpv libraries to tar.gz archive"
         mkdir -p "${ARCHIVE_CONTENT_DIR}/lib"
-        find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
-          cp "$mpv_lib" "${ARCHIVE_CONTENT_DIR}/lib/" 2>/dev/null || true
-        done
+        # Copy system libmpv libraries only when not already bundled (avoid overwriting media_kit_libs_* shipped libs)
+        if find "${ARCHIVE_CONTENT_DIR}/lib" -maxdepth 1 -name "libmpv*.so*" -type f | grep -q .; then
+          echo "Bundled libmpv detected in build output; skipping system libmpv copy for tar.gz."
+        else
+          echo "No bundled libmpv found; copying system libmpv libraries to tar.gz archive"
+          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+            cp -n "$mpv_lib" "${ARCHIVE_CONTENT_DIR}/lib/" 2>/dev/null || true
+          done
+        fi
         # Create compatibility symlinks for libmpv.so.1 if needed
         cd "${ARCHIVE_CONTENT_DIR}/lib"
         if [ ! -f "libmpv.so.1" ] && [ -f "libmpv.so.2" ]; then
