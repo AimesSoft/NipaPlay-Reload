@@ -26,6 +26,7 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'; // 导入WebDAV连接对话框
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
+import 'package:nipaplay/utils/media_filename_parser.dart';
 
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -1611,15 +1612,8 @@ style: TextStyle(color: Colors.white70),
       if (historyItem != null && historyItem.animeName.isNotEmpty) {
         initialSearchKeyword = historyItem.animeName;
       } else {
-        // 从文件名中提取可能的动画名称（去掉扩展名和可能的集数信息）
-        String baseName = p.basenameWithoutExtension(fileName);
-        // 简单的清理逻辑：移除可能的集数标识
-        baseName = baseName.replaceAll(RegExp(r'第?\d+[话集期]?'), '').trim();
-        baseName = baseName.replaceAll(RegExp(r'[Ee]\d+'), '').trim();
-        baseName = baseName.replaceAll(RegExp(r'[Ss]\d+[Ee]\d+'), '').trim();
-        if (baseName.isNotEmpty) {
-          initialSearchKeyword = baseName;
-        }
+        final keyword = MediaFilenameParser.extractAnimeTitleKeyword(fileName);
+        if (keyword.isNotEmpty) initialSearchKeyword = keyword;
       }
       
       debugPrint('准备显示手动匹配弹幕对话框：$fileName');

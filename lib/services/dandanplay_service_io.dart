@@ -10,6 +10,7 @@ import 'package:nipaplay/constants/settings_keys.dart';
 import 'danmaku_cache_manager.dart';
 import 'debug_log_service.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
+import 'package:nipaplay/utils/media_filename_parser.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -778,15 +779,17 @@ class DandanplayService {
     return null;
   }
 
-  static String _extractSearchKeywordFromFileName(String fileName) {
-    if (fileName.trim().isEmpty) return '';
-    var name = fileName.split(RegExp(r'[\\/]')).last.trim();
-    name = name.replaceAll(RegExp(r'\.[^\.]+$'), '').trim();
-    return name;
+  static String _extractRawBaseNameFromFileName(String fileName) {
+    return MediaFilenameParser.baseNameWithoutExtension(fileName);
+  }
+
+  static String _extractAnimeTitleKeywordFromFileName(String fileName) {
+    final keyword = MediaFilenameParser.extractAnimeTitleKeyword(fileName);
+    return keyword.isNotEmpty ? keyword : _extractRawBaseNameFromFileName(fileName);
   }
 
   static int? _tryExtractEpisodeNumberFromFileName(String fileName) {
-    final baseName = _extractSearchKeywordFromFileName(fileName);
+    final baseName = _extractRawBaseNameFromFileName(fileName);
     if (baseName.isEmpty) return null;
 
     final patterns = <RegExp>[
@@ -813,7 +816,9 @@ class DandanplayService {
     for (final m in allNumbers) {
       final parsed = int.tryParse(m.group(1) ?? '');
       if (parsed == null) continue;
-      if (parsed == 480 ||
+      if (parsed == 264 ||
+          parsed == 265 ||
+          parsed == 480 ||
           parsed == 720 ||
           parsed == 1080 ||
           parsed == 2160 ||
@@ -913,10 +918,19 @@ class DandanplayService {
     required String fileHash,
     required int fileSize,
   }) async {
-    final keyword = _extractSearchKeywordFromFileName(fileName);
-    if (keyword.isEmpty) return null;
+    final keywordCandidates = <String>[
+      _extractAnimeTitleKeywordFromFileName(fileName),
+      _extractRawBaseNameFromFileName(fileName),
+    ].where((e) => e.trim().isNotEmpty).toSet().toList();
 
-    final animes = await _searchAnimeByKeyword(keyword);
+    List<Map<String, dynamic>> animes = const [];
+    for (final keyword in keywordCandidates) {
+      final result = await _searchAnimeByKeyword(keyword);
+      if (result.isNotEmpty) {
+        animes = result;
+        break;
+      }
+    }
     if (animes.isEmpty) return null;
 
     final firstAnime = animes.first;
