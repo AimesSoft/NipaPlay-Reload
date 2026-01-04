@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import AVKit
+import Photos
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -73,6 +74,110 @@ import AVKit
           }
           controller?.present(activity, animated: true)
           result(true)
+        }
+      }
+
+      let photoChannel = FlutterMethodChannel(
+        name: "nipaplay/photo_library",
+        binaryMessenger: controller.binaryMessenger
+      )
+
+      photoChannel.setMethodCallHandler { call, result in
+        guard call.method == "saveImage" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+
+        guard
+          let args = call.arguments as? [String: Any],
+          let typedData = args["bytes"] as? FlutterStandardTypedData
+        else {
+          result(
+            FlutterError(
+              code: "INVALID_ARGUMENTS",
+              message: "Image bytes are required",
+              details: nil
+            )
+          )
+          return
+        }
+
+        let data = typedData.data
+        guard let image = UIImage(data: data) else {
+          result(
+            FlutterError(
+              code: "INVALID_IMAGE",
+              message: "Unable to decode image bytes",
+              details: nil
+            )
+          )
+          return
+        }
+
+        let saveBlock = {
+          PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.creationRequestForAsset(from: image)
+          }) { success, error in
+            DispatchQueue.main.async {
+              if success {
+                result(true)
+              } else {
+                result(
+                  FlutterError(
+                    code: "SAVE_FAILED",
+                    message: error?.localizedDescription ?? "Failed to save image",
+                    details: nil
+                  )
+                )
+              }
+            }
+          }
+        }
+
+        if #available(iOS 14, *) {
+          let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+          if status == .authorized {
+            saveBlock()
+            return
+          }
+
+          PHPhotoLibrary.requestAuthorization(for: .addOnly) { newStatus in
+            DispatchQueue.main.async {
+              if newStatus == .authorized {
+                saveBlock()
+              } else {
+                result(
+                  FlutterError(
+                    code: "PERMISSION_DENIED",
+                    message: "Photo library permission denied",
+                    details: nil
+                  )
+                )
+              }
+            }
+          }
+        } else {
+          let status = PHPhotoLibrary.authorizationStatus()
+          if status == .authorized {
+            saveBlock()
+            return
+          }
+
+          PHPhotoLibrary.requestAuthorization { newStatus in
+            DispatchQueue.main.async {
+              if newStatus == .authorized {
+                saveBlock()
+              } else {
+                result(
+                  FlutterError(
+                    code: "PERMISSION_DENIED",
+                    message: "Photo library permission denied",
+                    details: nil
+                  )
+                )
+              }
+            }
+          }
         }
       }
     }

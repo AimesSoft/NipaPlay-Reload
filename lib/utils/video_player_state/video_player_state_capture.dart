@@ -255,6 +255,34 @@ extension VideoPlayerStateCapture on VideoPlayerState {
   }
 
   Future<String?> captureScreenshot() async {
+    final bytes = await _captureScreenshotPngBytes();
+    if (bytes == null || bytes.isEmpty) return null;
+
+    try {
+      final directoryPath = await _resolveScreenshotSaveDirectoryPath();
+      final fileName = _buildScreenshotFileName();
+      final file = File(p.join(directoryPath, fileName));
+      await file.writeAsBytes(bytes, flush: true);
+      return file.path;
+    } catch (e) {
+      debugPrint('截图失败: $e');
+      return null;
+    }
+  }
+
+  Future<bool> captureScreenshotToPhotos() async {
+    if (kIsWeb) return false;
+    if (!Platform.isIOS) return false;
+    if (!hasVideo) return false;
+
+    final bytes = await _captureScreenshotPngBytes();
+    if (bytes == null || bytes.isEmpty) return false;
+
+    await PhotoLibraryService.saveImageToPhotos(bytes);
+    return true;
+  }
+
+  Future<Uint8List?> _captureScreenshotPngBytes() async {
     if (kIsWeb) return null;
     if (!hasVideo) return null;
 
@@ -285,8 +313,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       final pixelRatio = devicePixelRatio.clamp(1.0, 2.0);
 
       final image = await renderObject.toImage(pixelRatio: pixelRatio);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
 
       if (byteData == null) {
@@ -294,12 +321,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         return null;
       }
 
-      final bytes = byteData.buffer.asUint8List();
-      final directoryPath = await _resolveScreenshotSaveDirectoryPath();
-      final fileName = _buildScreenshotFileName();
-      final file = File(p.join(directoryPath, fileName));
-      await file.writeAsBytes(bytes, flush: true);
-      return file.path;
+      return byteData.buffer.asUint8List();
     } catch (e) {
       debugPrint('截图失败: $e');
       return null;

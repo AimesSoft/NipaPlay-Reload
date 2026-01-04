@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;
 
@@ -42,6 +43,7 @@ import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 // Added for getTemporaryDirectory
 import 'package:crypto/crypto.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
+import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/watch_history_provider.dart';
 import 'danmaku_parser.dart';

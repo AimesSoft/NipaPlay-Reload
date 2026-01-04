@@ -229,6 +229,69 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
+  Future<void> _captureScreenshot(VideoPlayerState videoState) async {
+    if (kIsWeb) return;
+    if (!videoState.hasVideo) return;
+
+    try {
+      if (Platform.isIOS) {
+        final destination = await BlurDialog.show<String>(
+          context: context,
+          title: '保存截图',
+          content: '请选择保存位置',
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('photos'),
+              child: const Text(
+                '相册',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('file'),
+              child: const Text(
+                '文件',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                '取消',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          ],
+        );
+
+        if (!mounted) return;
+        if (destination == null) return;
+
+        if (destination == 'photos') {
+          final ok = await videoState.captureScreenshotToPhotos();
+          if (!mounted) return;
+          if (ok) {
+            BlurSnackBar.show(context, '截图已保存到相册');
+          } else {
+            BlurSnackBar.show(context, '截图失败');
+          }
+          return;
+        }
+      }
+
+      final path = await videoState.captureScreenshot();
+      if (!mounted) return;
+      if (path == null || path.isEmpty) {
+        BlurSnackBar.show(context, '截图失败');
+        return;
+      }
+      BlurSnackBar.show(context, '截图已保存: $path');
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '截图失败: $e');
+    }
+  }
+
   Future<void> _showAirPlayPicker() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
 
@@ -301,6 +364,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     final bool showLockButton = globals.isPhone &&
         (videoState.showControls || (uiLocked && _showUiLockButton));
     final bool showShareButton = SystemShareService.isSupported && !globals.isDesktop;
+    final bool showScreenshotButton = !kIsWeb && globals.isPhone;
 
     return Stack(
       children: [
@@ -373,10 +437,21 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                             _showAirPlayPicker();
                           },
                         ),
-                      if (showShareButton) ...[
+                      if (showScreenshotButton) ...[
                         if (!kIsWeb &&
                             defaultTargetPlatform == TargetPlatform.iOS)
                           const SizedBox(width: 12),
+                        GlassActionButton(
+                          tooltip: '截图',
+                          icon: Icons.camera_alt_outlined,
+                          onPressed: () {
+                            videoState.resetHideControlsTimer();
+                            _captureScreenshot(videoState);
+                          },
+                        ),
+                      ],
+                      if (showShareButton) ...[
+                        const SizedBox(width: 12),
                         GlassActionButton(
                           tooltip: (!kIsWeb &&
                                   defaultTargetPlatform == TargetPlatform.iOS)

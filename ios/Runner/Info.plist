@@ -206,6 +206,8 @@
 	<string>需要访问本地网络以获取新番更新和弹幕信息</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>NipaPlay需要访问您的相册以上传和选择视频文件。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>NipaPlay 需要将截图保存到相册。</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIFileSharingEnabled</key>

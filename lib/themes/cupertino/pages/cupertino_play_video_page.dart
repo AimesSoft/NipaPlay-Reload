@@ -150,6 +150,47 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
   Future<void> _captureScreenshot(VideoPlayerState videoState) async {
     try {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        final destination = await showCupertinoModalPopup<String>(
+          context: context,
+          builder: (ctx) => CupertinoActionSheet(
+            title: const Text('保存截图'),
+            message: const Text('请选择保存位置'),
+            actions: [
+              CupertinoActionSheetAction(
+                onPressed: () => Navigator.of(ctx).pop('photos'),
+                child: const Text('相册'),
+              ),
+              CupertinoActionSheetAction(
+                onPressed: () => Navigator.of(ctx).pop('file'),
+                child: const Text('文件'),
+              ),
+            ],
+            cancelButton: CupertinoActionSheetAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('取消'),
+            ),
+          ),
+        );
+
+        if (!mounted) return;
+        if (destination == null) return;
+
+        if (destination == 'photos') {
+          final ok = await videoState.captureScreenshotToPhotos();
+          if (!mounted) return;
+          AdaptiveSnackBar.show(
+            context,
+            message: ok ? '截图已保存到相册' : '截图失败',
+            type: ok
+                ? AdaptiveSnackBarType.success
+                : AdaptiveSnackBarType.error,
+          );
+          return;
+        }
+      }
+
       final path = await videoState.captureScreenshot();
       if (!mounted) return;
       if (path == null || path.isEmpty) {
@@ -497,6 +538,24 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           _shareCurrentMedia(videoState);
                         },
                         sfSymbol: const SFSymbol('square.and.arrow.up',
+                            size: 18, color: CupertinoColors.white),
+                        style: AdaptiveButtonStyle.glass,
+                        size: AdaptiveButtonSize.large,
+                        useSmoothRectangleBorder: false,
+                      ),
+                    ),
+                  ],
+                  if (!kIsWeb && videoState.hasVideo) ...[
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: AdaptiveButton.sfSymbol(
+                        onPressed: () {
+                          videoState.resetHideControlsTimer();
+                          _captureScreenshot(videoState);
+                        },
+                        sfSymbol: const SFSymbol('camera',
                             size: 18, color: CupertinoColors.white),
                         style: AdaptiveButtonStyle.glass,
                         size: AdaptiveButtonSize.large,
