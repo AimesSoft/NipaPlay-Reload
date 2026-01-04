@@ -93,7 +93,11 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
     try {
       _currentTimeMs = widget.videoState.position.inMilliseconds;
 
-      if (widget.videoState.player.activeSubtitleTracks.isEmpty) {
+      final activeExternalSubtitlePath =
+          widget.videoState.getActiveExternalSubtitlePath();
+      if (widget.videoState.player.activeSubtitleTracks.isEmpty &&
+          (activeExternalSubtitlePath == null ||
+              activeExternalSubtitlePath.isEmpty)) {
         setState(() {
           _isLoading = false;
           _errorMessage = '没有激活的字幕轨道';
@@ -101,7 +105,7 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
         return;
       }
 
-      String? subtitlePath = widget.videoState.getActiveExternalSubtitlePath();
+      String? subtitlePath = activeExternalSubtitlePath;
 
       if (subtitlePath == null || subtitlePath.isEmpty) {
         // 尝试查找默认字幕文件
@@ -274,11 +278,10 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
     final currentPositionMs = widget.videoState.position.inMilliseconds;
     _currentTimeMs = currentPositionMs;
 
-    final hasActiveSubtitles =
-        widget.videoState.player.activeSubtitleTracks.isNotEmpty;
     final subtitlePath = widget.videoState.getActiveExternalSubtitlePath();
 
-    if (hasActiveSubtitles && subtitlePath == null) {
+    if (widget.videoState.player.activeSubtitleTracks.isNotEmpty &&
+        (subtitlePath == null || subtitlePath.isEmpty)) {
       final newSubtitleText = widget.videoState.getCurrentSubtitleText();
 
       if (newSubtitleText.isNotEmpty) {
@@ -338,8 +341,10 @@ class _FluentSubtitleListMenuState extends State<FluentSubtitleListMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final subtitlePath = widget.videoState.getActiveExternalSubtitlePath();
     final hasActiveSubtitles =
-        widget.videoState.player.activeSubtitleTracks.isNotEmpty;
+        widget.videoState.player.activeSubtitleTracks.isNotEmpty ||
+            (subtitlePath != null && subtitlePath.isNotEmpty);
 
     return Column(
       children: [

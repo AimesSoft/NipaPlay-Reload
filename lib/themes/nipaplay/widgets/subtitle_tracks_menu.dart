@@ -83,22 +83,6 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       if (subtitlesJson != null) {
         final List<dynamic> decoded = json.decode(subtitlesJson);
         _externalSubtitles = decoded.map((item) => Map<String, dynamic>.from(item)).toList();
-        
-        // 自动加载上次使用的外部字幕
-        final lastActiveIndex = prefs.getInt('last_active_subtitle_$videoHashKey');
-        if (lastActiveIndex != null && lastActiveIndex >= 0) {
-          if (lastActiveIndex < _externalSubtitles.length) {
-            final subtitleInfo = _externalSubtitles[lastActiveIndex];
-            final path = subtitleInfo['path'] as String;
-            if (File(path).existsSync()) {
-              // 延迟加载，避免初始化冲突
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (!mounted) return; // Add mounted check
-                _applyExternalSubtitle(path, lastActiveIndex);
-              });
-            }
-          }
-        }
       }
     } catch (e) {
       // print('加载外部字幕失败: $e');
@@ -149,27 +133,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
   
   // 获取当前激活的外部字幕索引
   int _getActiveExternalSubtitleIndex() {
-    // 检查哪个外部字幕是激活的
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    
-    // 如果没有激活的字幕轨道，返回-1
-    if (videoState.player.activeSubtitleTracks.isEmpty) {
-      return -1;
-    }
-    
-    // 检查当前激活的字幕是否是外部字幕
-    for (int i = 0; i < _externalSubtitles.length; i++) {
-      // 如果当前有激活的字幕轨道，并且是索引0（外部字幕总是索引0）
-      if (videoState.player.activeSubtitleTracks.contains(0)) {
-        final currentPath = _externalSubtitles[i]['path'];
-        // 检查这个字幕是否已经被加载
-        if (_externalSubtitles[i]['isActive'] == true) {
-          return i;
-        }
-      }
-    }
-    
-    return -1;
+    return _externalSubtitles.indexWhere((s) => s['isActive'] == true);
   }
   
   // 加载外部字幕文件

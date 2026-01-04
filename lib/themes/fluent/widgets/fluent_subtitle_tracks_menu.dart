@@ -20,7 +20,6 @@ class _FluentSubtitleTracksMenuState extends State<FluentSubtitleTracksMenu> {
   final SubtitleService _subtitleService = SubtitleService();
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
-  bool _didAutoLoadLastActive = false;
 
   @override
   void initState() {
@@ -43,36 +42,12 @@ class _FluentSubtitleTracksMenuState extends State<FluentSubtitleTracksMenu> {
           _externalSubtitles = subtitles;
           _isLoading = false;
         });
-        
-        // 检查是否有上次激活的字幕需要自动加载
-        if (!_didAutoLoadLastActive) {
-          _didAutoLoadLastActive = true;
-          await _autoLoadLastActiveSubtitle();
-        }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         _showErrorInfo('加载外部字幕失败: $e');
       }
-    }
-  }
-
-  Future<void> _autoLoadLastActiveSubtitle() async {
-    if (widget.videoState.currentVideoPath == null) return;
-    
-    final lastActiveIndex = await _subtitleService.getLastActiveSubtitleIndex(widget.videoState.currentVideoPath!);
-    
-    if (lastActiveIndex != null && lastActiveIndex >= 0 && lastActiveIndex < _externalSubtitles.length) {
-      final subtitleInfo = _externalSubtitles[lastActiveIndex];
-      final path = subtitleInfo['path'] as String;
-      
-      // 延迟加载，避免初始化冲突
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _applyExternalSubtitle(path, lastActiveIndex);
-        }
-      });
     }
   }
 

@@ -111,8 +111,11 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       _currentTimeMs = videoState.position.inMilliseconds;
 
-      // 检查是否有活跃的字幕
-      if (videoState.player.activeSubtitleTracks.isEmpty) {
+      // 检查是否有活跃的字幕（外部字幕在 media_kit 内核下可能不会体现在 activeSubtitleTracks 中）
+      final activeExternalSubtitlePath = videoState.getActiveExternalSubtitlePath();
+      if (videoState.player.activeSubtitleTracks.isEmpty &&
+          (activeExternalSubtitlePath == null ||
+              activeExternalSubtitlePath.isEmpty)) {
         debugPrint('SubtitleListMenu: 没有活跃的字幕轨道');
         setState(() {
           _isLoading = false;
@@ -122,7 +125,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
       }
 
       // 获取字幕文件路径
-      String? subtitlePath = videoState.getActiveExternalSubtitlePath();
+      String? subtitlePath = activeExternalSubtitlePath;
 
       // 打印详细调试信息
       debugPrint('SubtitleListMenu: 字幕路径: $subtitlePath');
@@ -364,12 +367,11 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     _currentTimeMs = currentPositionMs;
 
     // 如果是内嵌字幕且没有外部字幕文件
-    final hasActiveSubtitles =
-        videoState.player.activeSubtitleTracks.isNotEmpty;
     final subtitlePath = videoState.getActiveExternalSubtitlePath();
 
     // 对于内嵌字幕，需要定期更新内容
-    if (hasActiveSubtitles && subtitlePath == null) {
+    if (videoState.player.activeSubtitleTracks.isNotEmpty &&
+        (subtitlePath == null || subtitlePath.isEmpty)) {
       final newSubtitleText = videoState.getCurrentSubtitleText();
 
       if (newSubtitleText.isNotEmpty) {
@@ -448,8 +450,10 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         // 当前是否有字幕轨道激活
+        final subtitlePath = videoState.getActiveExternalSubtitlePath();
         final hasActiveSubtitles =
-            videoState.player.activeSubtitleTracks.isNotEmpty;
+            videoState.player.activeSubtitleTracks.isNotEmpty ||
+                (subtitlePath != null && subtitlePath.isNotEmpty);
 
         // 计算字幕列表的适当高度
         final screenHeight = MediaQuery.of(context).size.height;

@@ -130,22 +130,8 @@ class SubtitleManager extends ChangeNotifier {
   // 获取当前显示的字幕文本
   String getCurrentSubtitleText() {
     try {
-      // 如果没有播放器或没有激活的字幕轨道
-      if (_player.activeSubtitleTracks.isEmpty) {
-        debugPrint('SubtitleManager: getCurrentSubtitleText - 没有激活的字幕轨道');
-        return '';
-      }
-
-      // 检查是否是外部字幕
-      String? externalSubtitlePath = _currentExternalSubtitlePath;
-      if (externalSubtitlePath == null || externalSubtitlePath.isEmpty) {
-        // 再次尝试从subtitleTrackInfo中获取
-        if (subtitleTrackInfo.containsKey('external_subtitle') &&
-            subtitleTrackInfo['external_subtitle']?['isActive'] == true) {
-          externalSubtitlePath =
-              subtitleTrackInfo['external_subtitle']?['path'] as String?;
-        }
-      }
+      // 检查是否是外部字幕（外部字幕在 media_kit 内核下可能不会体现在 activeSubtitleTracks 中）
+      String? externalSubtitlePath = getActiveExternalSubtitlePath();
 
       // 输出详细调试信息
       debugPrint(
@@ -157,6 +143,12 @@ class SubtitleManager extends ChangeNotifier {
       if (externalSubtitlePath != null && externalSubtitlePath.isNotEmpty) {
         final fileName = externalSubtitlePath.split('/').last;
         return "正在使用外部字幕文件 - $fileName";
+      }
+
+      // 如果没有外部字幕且没有激活的字幕轨道
+      if (_player.activeSubtitleTracks.isEmpty) {
+        debugPrint('SubtitleManager: getCurrentSubtitleText - 没有激活的字幕轨道');
+        return '';
       }
 
       // 如果是内嵌字幕
@@ -340,9 +332,6 @@ class SubtitleManager extends ChangeNotifier {
       if (path.isNotEmpty && File(path).existsSync()) {
         // 设置外部字幕文件
         _player.setMedia(path, MediaType.subtitle);
-
-        // 更新字幕轨道
-        _player.activeSubtitleTracks = [0];
 
         // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
         _currentExternalSubtitlePath = path;

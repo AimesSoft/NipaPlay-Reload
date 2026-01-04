@@ -28,7 +28,6 @@ class _CupertinoSubtitleTracksPaneState
   final SubtitleService _subtitleService = SubtitleService();
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
-  bool _didAutoLoadLastActive = false;
 
   @override
   void initState() {
@@ -49,34 +48,11 @@ class _CupertinoSubtitleTracksPaneState
       setState(() {
         _externalSubtitles = subtitles;
       });
-      if (!_didAutoLoadLastActive) {
-        _didAutoLoadLastActive = true;
-        await _autoLoadLastActiveSubtitle();
-      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
-  }
-
-  Future<void> _autoLoadLastActiveSubtitle() async {
-    final path = widget.videoState.currentVideoPath;
-    if (path == null) return;
-
-    final lastIndex =
-        await _subtitleService.getLastActiveSubtitleIndex(path) ?? -1;
-    if (lastIndex < 0 || lastIndex >= _externalSubtitles.length) return;
-
-    final subtitleInfo = _externalSubtitles[lastIndex];
-    final filePath = subtitleInfo['path'] as String?;
-    if (filePath == null) return;
-
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        _applyExternalSubtitle(filePath, lastIndex);
-      }
-    });
   }
 
   Future<void> _loadExternalSubtitleFile() async {
