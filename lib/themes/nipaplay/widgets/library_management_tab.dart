@@ -24,6 +24,7 @@ import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动�
 import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'; // 导入WebDAV连接对话框
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
@@ -52,6 +53,20 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   // 排序相关状态
   int _sortOption = 0; // 0: 文件名升序, 1: 文件名降序, 2: 修改时间升序, 3: 修改时间降序, 4: 大小升序, 5: 大小降序
+
+  static const Set<String> _batchMatchVideoExtensions = {
+    '.mp4',
+    '.mkv',
+    '.avi',
+    '.mov',
+    '.wmv',
+    '.flv',
+    '.webm',
+    '.m4v',
+    '.3gp',
+    '.ts',
+    '.m2ts',
+  };
 
   // 网络资源相关状态
   _LibrarySource _activeSource = _LibrarySource.local;
@@ -557,7 +572,17 @@ style: TextStyle(color: Colors.white54)),
             },
             children: _loadingFolders.contains(dirPath)
                 ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
-                : _buildFileSystemNodes(_expandedFolderContents[dirPath] ?? [], dirPath, depth + 1),
+                : [
+                    _buildBatchDanmakuMatchFolderAction(
+                      dirPath,
+                      _expandedFolderContents[dirPath] ?? const [],
+                    ),
+                    ..._buildFileSystemNodes(
+                      _expandedFolderContents[dirPath] ?? const [],
+                      dirPath,
+                      depth + 1,
+                    ),
+                  ],
           ),
         );
       } else if (entity is io.File) {
@@ -656,6 +681,42 @@ style: TextStyle(
       }
       return const SizedBox.shrink();
     }).toList();
+  }
+
+  Widget _buildBatchDanmakuMatchFolderAction(
+    String folderPath,
+    List<io.FileSystemEntity> folderChildren,
+  ) {
+    final candidateFiles = folderChildren
+        .whereType<io.File>()
+        .map((e) => e.path)
+        .where(_isBatchMatchVideoFilePath)
+        .toList(growable: false);
+
+    if (candidateFiles.length < 2) {
+      return const SizedBox.shrink();
+    }
+
+    return ListTile(
+      leading: const Icon(Icons.playlist_add_check, color: Colors.white70),
+      title: const Text(
+        '批量匹配弹幕（本文件夹）',
+        locale: Locale("zh-Hans", "zh"),
+        style: TextStyle(color: Colors.white),
+      ),
+      subtitle: Text(
+        '对齐左侧文件顺序与右侧剧集顺序，一键匹配 ${candidateFiles.length} 个文件',
+        locale: const Locale("zh-Hans", "zh"),
+        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () => _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
+    );
+  }
+
+  bool _isBatchMatchVideoFilePath(String filePath) {
+    return _batchMatchVideoExtensions.contains(p.extension(filePath).toLowerCase());
   }
 
   // 显示排序选择对话框
@@ -1600,6 +1661,87 @@ style: TextStyle(color: Colors.white70),
         ),
       ],
     );
+  }
+
+  Future<void> _showBatchDanmakuMatchDialog(
+    String folderPath,
+    List<String> filePaths,
+  ) async {
+    if (filePaths.isEmpty) {
+      BlurSnackBar.show(context, '未找到可匹配的视频文件');
+      return;
+    }
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => BatchDanmakuMatchDialog(
+        filePaths: filePaths,
+        initialSearchKeyword: p.basename(folderPath),
+      ),
+    );
+
+    if (!mounted || result == null) return;
+
+    final animeId = result['animeId'];
+    final animeTitle = result['animeTitle']?.toString() ?? '';
+    final rawMappings = result['mappings'];
+
+    if (animeId is! int || animeId <= 0 || rawMappings is! List) {
+      BlurSnackBar.show(context, '批量匹配结果无效');
+      return;
+    }
+
+    final mappings = rawMappings
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
+
+    if (mappings.isEmpty) {
+      BlurSnackBar.show(context, '没有需要更新的匹配项');
+      return;
+    }
+
+    int successCount = 0;
+    for (final mapping in mappings) {
+      final filePath = mapping['filePath']?.toString() ?? '';
+      final fileName = mapping['fileName']?.toString() ?? p.basename(filePath);
+      final episodeId = mapping['episodeId'];
+      final episodeTitle = mapping['episodeTitle']?.toString() ?? '';
+
+      if (filePath.isEmpty || episodeId is! int || episodeId <= 0) continue;
+
+      try {
+        final existingHistory = await WatchHistoryManager.getHistoryItem(filePath);
+        final updatedHistory = WatchHistoryItem(
+          filePath: filePath,
+          animeName: animeTitle.isNotEmpty
+              ? animeTitle
+              : (existingHistory?.animeName ?? p.basenameWithoutExtension(fileName)),
+          episodeTitle:
+              episodeTitle.isNotEmpty ? episodeTitle : existingHistory?.episodeTitle,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: existingHistory?.watchProgress ?? 0.0,
+          lastPosition: existingHistory?.lastPosition ?? 0,
+          duration: existingHistory?.duration ?? 0,
+          lastWatchTime: DateTime.now(),
+          thumbnailPath: existingHistory?.thumbnailPath,
+          isFromScan: existingHistory?.isFromScan ?? false,
+          videoHash: existingHistory?.videoHash,
+        );
+        await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        successCount++;
+      } catch (e) {
+        debugPrint('批量更新匹配失败: $filePath -> $episodeId ($e)');
+      }
+    }
+
+    if (!mounted) return;
+    BlurSnackBar.show(context, '批量匹配完成：成功更新 $successCount/${mappings.length} 个文件');
+    setState(() {
+      _expandedFolderContents.clear();
+    });
   }
 
   // 显示手动匹配弹幕对话框
