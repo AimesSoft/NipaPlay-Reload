@@ -247,7 +247,17 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
                 _manageHotkeys(); // 初始状态检查
               }
             });
-            
+
+            final bool isVideoFullscreen =
+                _selectedIndex == 1 && videoState.isFullscreen;
+
+            if (isVideoFullscreen) {
+              return material.ColoredBox(
+                color: material.Colors.black,
+                child: _pages[1],
+              );
+            }
+
             return NavigationView(
           appBar: NavigationAppBar(
             title: Text(_pageNames[_selectedIndex]),
@@ -329,19 +339,26 @@ class _FluentMainPageState extends State<FluentMainPage> with SingleTickerProvid
         
         // 可拖拽区域 (桌面端)
         if (globals.winLinDesktop)
-          material.Positioned(
-            top: 0,
-            left: 0,
-            right: 120,
-            child: material.SizedBox(
-              height: 40,
-              child: material.GestureDetector(
-                onDoubleTap: _toggleWindowSize,
-                onPanStart: (details) async {
-                  await windowManager.startDragging();
-                },
-              ),
-            ),
+          Selector<VideoPlayerState, bool>(
+            selector: (context, videoState) =>
+                _selectedIndex == 1 && videoState.isFullscreen,
+            builder: (context, isVideoFullscreen, child) {
+              if (isVideoFullscreen) return const material.SizedBox.shrink();
+              return material.Positioned(
+                top: 0,
+                left: 0,
+                right: 120,
+                child: material.SizedBox(
+                  height: 40,
+                  child: material.GestureDetector(
+                    onDoubleTap: _toggleWindowSize,
+                    onPanStart: (details) async {
+                      await windowManager.startDragging();
+                    },
+                  ),
+                ),
+              );
+            },
           ),
       ],
     );
