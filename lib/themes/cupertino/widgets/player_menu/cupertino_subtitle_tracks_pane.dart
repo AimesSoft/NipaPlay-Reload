@@ -406,65 +406,58 @@ class _CupertinoSubtitleTracksPaneState
 
     return CupertinoBottomSheetContentLayout(
       sliversBuilder: (context, topSpacing) {
-        if (noSubtitles) {
         return [
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    CupertinoIcons.textformat,
-                    size: 44,
-                    color:
-                        CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '没有可用的字幕轨道',
-                    style: CupertinoTheme.of(context)
-                        .textTheme
-                        .textStyle
-                        .copyWith(
-                          fontSize: 16,
-                          color: CupertinoColors.secondaryLabel
-                              .resolveFrom(context),
-                        ),
-                  ),
-                  if (!kIsWeb)
+          SliverPadding(
+            padding: EdgeInsets.only(top: topSpacing, bottom: 24),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate(children),
+            ),
+          ),
+          if (noSubtitles)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.textformat,
+                      size: 44,
+                      color:
+                          CupertinoColors.secondaryLabel.resolveFrom(context),
+                    ),
+                    const SizedBox(height: 8),
                     Text(
-                      '点击上方按钮加载本地字幕',
+                      '没有可用的字幕轨道',
                       style: CupertinoTheme.of(context)
                           .textTheme
                           .textStyle
                           .copyWith(
-                            fontSize: 13,
-                            color: CupertinoColors.tertiaryLabel
+                            fontSize: 16,
+                            color: CupertinoColors.secondaryLabel
                                 .resolveFrom(context),
                           ),
                     ),
-                ],
+                    if (!kIsWeb)
+                      Text(
+                        '点击上方按钮可加载外部字幕文件',
+                        style: CupertinoTheme.of(context)
+                            .textTheme
+                            .textStyle
+                            .copyWith(
+                              fontSize: 13,
+                              color: CupertinoColors.tertiaryLabel
+                                  .resolveFrom(context),
+                            ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
           SliverToBoxAdapter(
             child: CupertinoPaneBackButton(onPressed: widget.onBack),
           ),
         ];
-      }
-
-      return [
-        SliverPadding(
-          padding: EdgeInsets.only(top: topSpacing, bottom: 24),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate(children),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: CupertinoPaneBackButton(onPressed: widget.onBack),
-        ),
-      ];
       },
     );
   }
