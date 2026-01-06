@@ -12,6 +12,8 @@ import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/volume_gesture_area.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/danmaku_density_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/minimal_progress_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/playback_info_menu.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
@@ -456,6 +458,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                   ),
                 ),
               ),
+            const MinimalProgressBar(),
+            const DanmakuDensityBar(),
             _buildTopBar(videoState),
             if (hasVideo) _buildBottomControls(videoState, progressValue),
             if (globals.isPhone && videoState.hasVideo)
