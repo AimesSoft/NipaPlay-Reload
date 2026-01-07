@@ -10,37 +10,24 @@ class BrightnessGestureArea extends StatefulWidget {
 }
 
 class _BrightnessGestureAreaState extends State<BrightnessGestureArea> {
-  bool _isVerticalDrag = false;
-
-  void _onPanStart(BuildContext context, DragStartDetails details) {
-    _isVerticalDrag = false; // Reset at the start of a new pan
-    // No need to call startBrightnessDrag here, wait for predominant vertical movement
-  }
-
-  void _onPanUpdate(BuildContext context, DragUpdateDetails details) {
+  void _onVerticalDragStart(BuildContext context, DragStartDetails details) {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    if (!_isVerticalDrag) {
-      // First update after start, determine dominant direction
-      if (details.delta.dy.abs() > details.delta.dx.abs()) {
-        _isVerticalDrag = true;
-        videoState.startBrightnessDrag(); // Start drag only when confirmed vertical
-      } else {
-        // It's a horizontal drag or ambiguous, do nothing for brightness
-        return; 
-      }
-    }
-
-    if (_isVerticalDrag) {
-      videoState.updateBrightnessOnDrag(details.delta.dy, context);
-    }
+    videoState.startBrightnessDrag();
   }
 
-  void _onPanEnd(BuildContext context, DragEndDetails details) {
-    if (_isVerticalDrag) {
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      videoState.endBrightnessDrag();
-    }
-    _isVerticalDrag = false; // Reset for next gesture
+  void _onVerticalDragUpdate(BuildContext context, DragUpdateDetails details) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    videoState.updateBrightnessOnDrag(details.delta.dy, context);
+  }
+
+  void _onVerticalDragEnd(BuildContext context, DragEndDetails details) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    videoState.endBrightnessDrag();
+  }
+
+  void _onVerticalDragCancel(BuildContext context) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    videoState.endBrightnessDrag();
   }
 
   @override
@@ -49,14 +36,18 @@ class _BrightnessGestureAreaState extends State<BrightnessGestureArea> {
       left: 0,
       top: 0,
       bottom: 0,
-      width: MediaQuery.of(context).size.width / 2.2, // Consistent with original width
+      width: MediaQuery.of(context).size.width /
+          2.2, // Consistent with original width
       child: GestureDetector(
-        onPanStart: (details) => _onPanStart(context, details),
-        onPanUpdate: (details) => _onPanUpdate(context, details),
-        onPanEnd: (details) => _onPanEnd(context, details),
+        onVerticalDragStart: (details) =>
+            _onVerticalDragStart(context, details),
+        onVerticalDragUpdate: (details) =>
+            _onVerticalDragUpdate(context, details),
+        onVerticalDragEnd: (details) => _onVerticalDragEnd(context, details),
+        onVerticalDragCancel: () => _onVerticalDragCancel(context),
         behavior: HitTestBehavior.translucent,
         child: Container(), // Empty container, purely for gesture detection
       ),
     );
   }
-} 
+}

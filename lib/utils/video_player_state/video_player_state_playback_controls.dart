@@ -715,10 +715,14 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     if (!globals.isPhone) return;
 
     final screenHeight = MediaQuery.of(context).size.height;
-    final sensitivityFactor =
-        screenHeight * 0.3; // Same sensitivity as brightness for now
+    // 拖动约 60% 屏幕高度对应 0~100% 音量变化，便于慢速微调。
+    final sensitivityFactor = screenHeight * 0.6;
 
-    double change = -verticalDragDelta / sensitivityFactor;
+    // 防止系统事件合并导致单次跳变过大。
+    const double maxChangePerUpdate = 0.25;
+    final double change = (-verticalDragDelta / sensitivityFactor)
+        .clamp(-maxChangePerUpdate, maxChangePerUpdate)
+        .toDouble();
     double newVolume = _initialDragVolume + change;
     newVolume = newVolume.clamp(0.0, 1.0);
 
