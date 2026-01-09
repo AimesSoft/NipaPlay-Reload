@@ -718,27 +718,25 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     // 拖动约 60% 屏幕高度对应 0~100% 音量变化，便于慢速微调。
     final sensitivityFactor = screenHeight * 0.6;
 
-    // 防止系统事件合并导致单次跳变过大。
-    const double maxChangePerUpdate = 0.25;
-    final double change = (-verticalDragDelta / sensitivityFactor)
-        .clamp(-maxChangePerUpdate, maxChangePerUpdate)
-        .toDouble();
+    final double change = -verticalDragDelta / sensitivityFactor;
     double newVolume = _initialDragVolume + change;
     newVolume = newVolume.clamp(0.0, 1.0);
+
+    // 先更新前端状态，避免系统音量设置慢导致手势“粘滞/阻尼”。
+    _currentVolume = newVolume;
+    _initialDragVolume = newVolume;
+    _showVolumeIndicator();
+    _scheduleVolumePersistence();
+    notifyListeners();
 
     try {
       if (_useSystemVolume) {
         _ensurePlayerVolumeMatchesPlatformPolicy();
-        await _setSystemVolume(newVolume);
+        _queueSystemVolumeUpdate(newVolume);
       } else {
         // Web 等不支持系统音量时：使用播放器内部音量
         player.volume = newVolume;
       }
-      _currentVolume = newVolume;
-      _initialDragVolume = newVolume;
-      _showVolumeIndicator();
-      _scheduleVolumePersistence();
-      notifyListeners();
     } catch (e) {
       //debugPrint("Failed to set system volume via player: $e");
     }

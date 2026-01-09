@@ -376,8 +376,36 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   VolumeController? _systemVolumeController;
   StreamSubscription<double>? _systemVolumeSubscription;
   bool _isSystemVolumeUpdating = false;
+  double? _pendingSystemVolume;
+  bool _isDrainingSystemVolumeQueue = false;
 
   bool get _useSystemVolume => globals.isPhone && !kIsWeb;
+
+  void _queueSystemVolumeUpdate(double volume) {
+    if (!_useSystemVolume) return;
+    if (_systemVolumeController == null) return;
+    _pendingSystemVolume = volume.clamp(0.0, 1.0);
+    if (_isDrainingSystemVolumeQueue) return;
+    _isDrainingSystemVolumeQueue = true;
+    unawaited(_drainSystemVolumeQueue());
+  }
+
+  Future<void> _drainSystemVolumeQueue() async {
+    try {
+      while (true) {
+        final double? target = _pendingSystemVolume;
+        if (target == null) return;
+        _pendingSystemVolume = null;
+        await _setSystemVolume(target);
+      }
+    } finally {
+      _isDrainingSystemVolumeQueue = false;
+      final double? remaining = _pendingSystemVolume;
+      if (remaining != null) {
+        _queueSystemVolumeUpdate(remaining);
+      }
+    }
+  }
 
   void _ensurePlayerVolumeMatchesPlatformPolicy() {
     if (!_useSystemVolume) return;
