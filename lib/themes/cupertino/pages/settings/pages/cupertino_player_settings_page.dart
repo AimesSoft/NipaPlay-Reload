@@ -15,6 +15,7 @@ import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -40,15 +41,42 @@ class _CupertinoPlayerSettingsPageState
   bool _initialized = false;
   bool _initializing = false;
 
+  final TextEditingController _spoilerAiUrlController = TextEditingController();
+  final TextEditingController _spoilerAiModelController =
+      TextEditingController();
+  final TextEditingController _spoilerAiApiKeyController =
+      TextEditingController();
+  bool _spoilerAiControllersInitialized = false;
+  bool _isSavingSpoilerAiSettings = false;
+  SpoilerAiApiFormat _spoilerAiApiFormatDraft = SpoilerAiApiFormat.openai;
+  double _spoilerAiTemperatureDraft = 0.5;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_initialized || kIsWeb) return;
-    _decoderManager =
-        Provider.of<VideoPlayerState>(context, listen: false).decoderManager;
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    _decoderManager = videoState.decoderManager;
     _initializing = true;
     _loadSettings();
+
+    if (!_spoilerAiControllersInitialized) {
+      _spoilerAiApiFormatDraft = videoState.spoilerAiApiFormat;
+      _spoilerAiTemperatureDraft = videoState.spoilerAiTemperature;
+      _spoilerAiUrlController.text = videoState.spoilerAiApiUrl;
+      _spoilerAiModelController.text = videoState.spoilerAiModel;
+      _spoilerAiControllersInitialized = true;
+    }
+
     _initialized = true;
+  }
+
+  @override
+  void dispose() {
+    _spoilerAiUrlController.dispose();
+    _spoilerAiModelController.dispose();
+    _spoilerAiApiKeyController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSettings() async {
@@ -156,6 +184,73 @@ class _CupertinoPlayerSettingsPageState
     setState(() {
       _selectedDanmakuRenderEngine = engine;
     });
+  }
+
+  Future<void> _saveSpoilerAiSettings(VideoPlayerState videoState) async {
+    if (_isSavingSpoilerAiSettings) return;
+
+    final url = _spoilerAiUrlController.text.trim();
+    final model = _spoilerAiModelController.text.trim();
+    final apiKeyInput = _spoilerAiApiKeyController.text.trim();
+
+    if (url.isEmpty) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '请输入 AI 接口 URL',
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+    if (model.isEmpty) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '请输入模型名称',
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+    if (!videoState.spoilerAiHasApiKey && apiKeyInput.isEmpty) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '请输入 API Key',
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingSpoilerAiSettings = true;
+    });
+
+    try {
+      await videoState.updateSpoilerAiSettings(
+        apiFormat: _spoilerAiApiFormatDraft,
+        apiUrl: url,
+        model: model,
+        temperature: _spoilerAiTemperatureDraft,
+        apiKey: apiKeyInput.isEmpty ? null : apiKeyInput,
+      );
+      _spoilerAiApiKeyController.clear();
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '防剧透 AI 设置已保存',
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '保存失败: $e',
+        type: AdaptiveSnackBarType.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingSpoilerAiSettings = false;
+        });
+      }
+    }
   }
 
   String _kernelDisplayName(PlayerKernelType type) {
@@ -270,6 +365,28 @@ class _CupertinoPlayerSettingsPageState
           ),
         )
         .toList();
+  }
+
+  String _spoilerAiFormatTitle(SpoilerAiApiFormat format) {
+    switch (format) {
+      case SpoilerAiApiFormat.openai:
+        return 'OpenAI 兼容';
+      case SpoilerAiApiFormat.gemini:
+        return 'Gemini';
+    }
+  }
+
+  List<AdaptivePopupMenuEntry> _spoilerAiFormatMenuItems() {
+    return const [
+      AdaptivePopupMenuItem<SpoilerAiApiFormat>(
+        label: 'OpenAI 兼容',
+        value: SpoilerAiApiFormat.openai,
+      ),
+      AdaptivePopupMenuItem<SpoilerAiApiFormat>(
+        label: 'Gemini',
+        value: SpoilerAiApiFormat.gemini,
+      ),
+    ];
   }
 
   Widget _buildMenuChip(BuildContext context, String label) {
@@ -643,6 +760,133 @@ class _CupertinoPlayerSettingsPageState
                 },
                 backgroundColor: tileBackground,
               ),
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  return CupertinoSettingsTile(
+                    leading: Icon(
+                      CupertinoIcons.eye_slash,
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: const Text('防剧透模式'),
+                    subtitle: const Text('开启后，加载弹幕后将通过 AI 识别并屏蔽疑似剧透弹幕。'),
+                    trailing: AdaptiveSwitch(
+                      value: videoState.spoilerPreventionEnabled,
+                      onChanged: (value) async {
+                        await videoState.setSpoilerPreventionEnabled(value);
+                        if (!mounted) return;
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: value ? '已开启防剧透模式' : '已关闭防剧透模式',
+                          type: AdaptiveSnackBarType.success,
+                        );
+                      },
+                    ),
+                    onTap: () async {
+                      final bool newValue = !videoState.spoilerPreventionEnabled;
+                      await videoState.setSpoilerPreventionEnabled(newValue);
+                      if (!mounted) return;
+                      AdaptiveSnackBar.show(
+                        context,
+                        message: newValue ? '已开启防剧透模式' : '已关闭防剧透模式',
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                    backgroundColor: tileBackground,
+                  );
+                },
+              ),
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  final enabled = videoState.spoilerPreventionEnabled;
+                  return CupertinoSettingsTile(
+                    leading: Icon(
+                      CupertinoIcons.lock,
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: const Text('使用自定义 AI Key'),
+                    subtitle:
+                        const Text('开启后将使用你填写的 URL/Key（支持 OpenAI 兼容 / Gemini）。'),
+                    trailing: AdaptiveSwitch(
+                      value: videoState.spoilerAiUseCustomKey,
+                      onChanged: enabled
+                          ? (value) async {
+                              await videoState.setSpoilerAiUseCustomKey(value);
+                              if (!mounted) return;
+                              AdaptiveSnackBar.show(
+                                context,
+                                message:
+                                    value ? '已开启自定义 AI Key' : '已关闭自定义 AI Key',
+                                type: AdaptiveSnackBarType.success,
+                              );
+                            }
+                          : null,
+                    ),
+                    onTap: enabled
+                        ? () async {
+                            final bool newValue =
+                                !videoState.spoilerAiUseCustomKey;
+                            await videoState.setSpoilerAiUseCustomKey(newValue);
+                            if (!mounted) return;
+                            AdaptiveSnackBar.show(
+                              context,
+                              message: newValue
+                                  ? '已开启自定义 AI Key'
+                                  : '已关闭自定义 AI Key',
+                              type: AdaptiveSnackBarType.success,
+                            );
+                          }
+                        : null,
+                    backgroundColor: tileBackground,
+                  );
+                },
+              ),
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  final enabled = videoState.spoilerPreventionEnabled;
+                  return CupertinoSettingsTile(
+                    leading: Icon(
+                      CupertinoIcons.info_circle,
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: const Text('调试：打印 AI 返回内容'),
+                    subtitle: const Text('开启后会在日志里打印 AI 返回的原始文本与命中弹幕。'),
+                    trailing: AdaptiveSwitch(
+                      value: videoState.spoilerAiDebugPrintResponse,
+                      onChanged: enabled
+                          ? (value) async {
+                              await videoState.setSpoilerAiDebugPrintResponse(
+                                  value);
+                              if (!mounted) return;
+                              AdaptiveSnackBar.show(
+                                context,
+                                message: value
+                                    ? '已开启 AI 调试打印'
+                                    : '已关闭 AI 调试打印',
+                                type: AdaptiveSnackBarType.success,
+                              );
+                            }
+                          : null,
+                    ),
+                    onTap: enabled
+                        ? () async {
+                            final bool newValue =
+                                !videoState.spoilerAiDebugPrintResponse;
+                            await videoState
+                                .setSpoilerAiDebugPrintResponse(newValue);
+                            if (!mounted) return;
+                            AdaptiveSnackBar.show(
+                              context,
+                              message: newValue
+                                  ? '已开启 AI 调试打印'
+                                  : '已关闭 AI 调试打印',
+                              type: AdaptiveSnackBarType.success,
+                            );
+                          }
+                        : null,
+                    backgroundColor: tileBackground,
+                  );
+                },
+              ),
               CupertinoSettingsTile(
                 leading: Icon(
                   CupertinoIcons.search,
@@ -681,6 +925,185 @@ class _CupertinoPlayerSettingsPageState
                   }
                 },
                 backgroundColor: tileBackground,
+              ),
+            ],
+          );
+        },
+      ),
+      Consumer<VideoPlayerState>(
+        builder: (context, videoState, child) {
+          if (!videoState.spoilerPreventionEnabled ||
+              !videoState.spoilerAiUseCustomKey) {
+            return const SizedBox.shrink();
+          }
+
+          final bool isGemini =
+              _spoilerAiApiFormatDraft == SpoilerAiApiFormat.gemini;
+          final urlHint = isGemini
+              ? 'https://generativelanguage.googleapis.com/v1beta/models'
+              : 'https://api.openai.com/v1/chat/completions';
+          final modelHint = isGemini ? 'gemini-1.5-flash' : 'gpt-5';
+
+          final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
+          final Color subtitleColor = resolveSettingsSecondaryTextColor(context);
+          final Color iconColor = resolveSettingsIconColor(context);
+
+          return Column(
+            children: [
+              const SizedBox(height: 16),
+              CupertinoSettingsGroupCard(
+                margin: EdgeInsets.zero,
+                backgroundColor: sectionBackground,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(CupertinoIcons.settings,
+                                size: 18, color: iconColor),
+                            const SizedBox(width: 8),
+                            Text(
+                              '防剧透 AI 设置',
+                              style: textTheme.copyWith(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          isGemini
+                              ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
+                              : 'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。',
+                          style: textTheme.copyWith(
+                            fontSize: 13,
+                            color: subtitleColor,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Text(
+                              '接口格式',
+                              style: textTheme.copyWith(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const Spacer(),
+                            AdaptivePopupMenuButton.widget<SpoilerAiApiFormat>(
+                              items: _spoilerAiFormatMenuItems(),
+                              buttonStyle: PopupButtonStyle.gray,
+                              child: _buildMenuChip(
+                                context,
+                                _spoilerAiFormatTitle(_spoilerAiApiFormatDraft),
+                              ),
+                              onSelected: (index, entry) {
+                                final format = entry.value ??
+                                    SpoilerAiApiFormat.values[index];
+                                setState(() {
+                                  _spoilerAiApiFormatDraft = format;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        CupertinoTextField(
+                          controller: _spoilerAiUrlController,
+                          placeholder: urlHint,
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.tertiarySystemFill,
+                              context,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        CupertinoTextField(
+                          controller: _spoilerAiModelController,
+                          placeholder: modelHint,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.tertiarySystemFill,
+                              context,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        CupertinoTextField(
+                          controller: _spoilerAiApiKeyController,
+                          placeholder: videoState.spoilerAiHasApiKey
+                              ? '已保存，留空表示不修改'
+                              : '请输入你的 API Key',
+                          obscureText: true,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.tertiarySystemFill,
+                              context,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
+                          style: textTheme.copyWith(
+                            fontSize: 13,
+                            color: subtitleColor,
+                          ),
+                        ),
+                        CupertinoSlider(
+                          min: 0.0,
+                          max: 2.0,
+                          divisions: 40,
+                          value: _spoilerAiTemperatureDraft.clamp(0.0, 2.0),
+                          onChanged: (value) {
+                            setState(() {
+                              _spoilerAiTemperatureDraft = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: SizedBox(
+                            height: 36,
+                            child: CupertinoButton.filled(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 0),
+                              onPressed: _isSavingSpoilerAiSettings
+                                  ? null
+                                  : () => _saveSpoilerAiSettings(videoState),
+                              child: _isSavingSpoilerAiSettings
+                                  ? const CupertinoActivityIndicator(radius: 8)
+                                  : const Text('保存配置'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           );

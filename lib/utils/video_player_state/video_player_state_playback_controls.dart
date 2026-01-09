@@ -114,6 +114,16 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _danmakuList = []; // 清除弹幕列表
       _danmakuTracks.clear();
       _danmakuTrackEnabled.clear();
+      _isSpoilerDanmakuAnalyzing = false;
+      _spoilerDanmakuAnalysisHash = null;
+      _spoilerDanmakuRunningAnalysisHash = null;
+      _spoilerDanmakuTexts = <String>{};
+      _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+      _spoilerDanmakuAnalysisDebounceTimer = null;
+      _spoilerDanmakuPendingAnalysisHash = null;
+      _spoilerDanmakuPendingRequestConfig = null;
+      _spoilerDanmakuPendingTexts = null;
+      _spoilerDanmakuPendingTargetVideoPath = null;
       _subtitleManager.clearSubtitleTrackInfo();
       _isAppBarHidden = false; // 重置平板设备菜单栏隐藏状态
 
@@ -407,6 +417,16 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _danmakuList.clear();
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
+    _isSpoilerDanmakuAnalyzing = false;
+    _spoilerDanmakuAnalysisHash = null;
+    _spoilerDanmakuRunningAnalysisHash = null;
+    _spoilerDanmakuTexts = <String>{};
+    _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer = null;
+    _spoilerDanmakuPendingAnalysisHash = null;
+    _spoilerDanmakuPendingRequestConfig = null;
+    _spoilerDanmakuPendingTexts = null;
+    _spoilerDanmakuPendingTargetVideoPath = null;
     _subtitleManager.clearSubtitleTrackInfo();
     danmakuController
         ?.dispose(); // Assuming danmakuController has a dispose method
@@ -448,6 +468,16 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _danmakuList.clear();
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
+    _isSpoilerDanmakuAnalyzing = false;
+    _spoilerDanmakuAnalysisHash = null;
+    _spoilerDanmakuRunningAnalysisHash = null;
+    _spoilerDanmakuTexts = <String>{};
+    _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer = null;
+    _spoilerDanmakuPendingAnalysisHash = null;
+    _spoilerDanmakuPendingRequestConfig = null;
+    _spoilerDanmakuPendingTexts = null;
+    _spoilerDanmakuPendingTargetVideoPath = null;
     _subtitleManager.clearSubtitleTrackInfo();
     danmakuController
         ?.dispose(); // Assuming danmakuController has a dispose method

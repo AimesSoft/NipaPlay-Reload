@@ -29,6 +29,8 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载弹幕屏蔽词
     await _loadDanmakuBlockWords();
+    await _loadSpoilerPreventionEnabled();
+    await _loadSpoilerAiSettings();
 
     // 加载弹幕字体大小和显示区域
     await _loadDanmakuFontSize();

@@ -12,6 +12,8 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
@@ -19,6 +21,7 @@ import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -42,10 +45,29 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();
   final GlobalKey _danmakuRenderEngineDropdownKey = GlobalKey();
+  final GlobalKey _spoilerAiApiFormatDropdownKey = GlobalKey();
+
+  final TextEditingController _spoilerAiUrlController = TextEditingController();
+  final TextEditingController _spoilerAiModelController =
+      TextEditingController();
+  final TextEditingController _spoilerAiApiKeyController =
+      TextEditingController();
+  bool _spoilerAiControllersInitialized = false;
+  bool _isSavingSpoilerAiSettings = false;
+  SpoilerAiApiFormat _spoilerAiApiFormatDraft = SpoilerAiApiFormat.openai;
+  double _spoilerAiTemperatureDraft = 0.5;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _spoilerAiUrlController.dispose();
+    _spoilerAiModelController.dispose();
+    _spoilerAiApiKeyController.dispose();
+    super.dispose();
   }
 
   @override
@@ -62,6 +84,14 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _loadDecoderSettings();
     _loadPlayerKernelSettings();
     _loadDanmakuRenderEngineSettings();
+
+    if (!_spoilerAiControllersInitialized) {
+      _spoilerAiApiFormatDraft = playerState.spoilerAiApiFormat;
+      _spoilerAiTemperatureDraft = playerState.spoilerAiTemperature;
+      _spoilerAiUrlController.text = playerState.spoilerAiApiUrl;
+      _spoilerAiModelController.text = playerState.spoilerAiModel;
+      _spoilerAiControllersInitialized = true;
+    }
   }
 
   Future<void> _loadCurrentPlayerKernelName() async {
@@ -281,6 +311,53 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         ),
       ],
     );
+  }
+
+  Future<void> _saveSpoilerAiSettings(VideoPlayerState videoState) async {
+    if (_isSavingSpoilerAiSettings) return;
+
+    final url = _spoilerAiUrlController.text.trim();
+    final model = _spoilerAiModelController.text.trim();
+    final apiKeyInput = _spoilerAiApiKeyController.text.trim();
+
+    if (url.isEmpty) {
+      BlurSnackBar.show(context, '请输入 AI 接口 URL');
+      return;
+    }
+    if (model.isEmpty) {
+      BlurSnackBar.show(context, '请输入模型名称');
+      return;
+    }
+    if (!videoState.spoilerAiHasApiKey && apiKeyInput.isEmpty) {
+      BlurSnackBar.show(context, '请输入 API Key');
+      return;
+    }
+
+    setState(() {
+      _isSavingSpoilerAiSettings = true;
+    });
+
+    try {
+      await videoState.updateSpoilerAiSettings(
+        apiFormat: _spoilerAiApiFormatDraft,
+        apiUrl: url,
+        model: model,
+        temperature: _spoilerAiTemperatureDraft,
+        apiKey: apiKeyInput.isEmpty ? null : apiKeyInput,
+      );
+      _spoilerAiApiKeyController.clear();
+      if (!mounted) return;
+      BlurSnackBar.show(context, '防剧透 AI 设置已保存');
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '保存失败: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingSpoilerAiSettings = false;
+        });
+      }
+    }
   }
 
   String _getPlayerKernelDescription(PlayerKernelType type) {
@@ -612,6 +689,254 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                       context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
                 }
               },
+            );
+          },
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return SettingsItem.toggle(
+              title: "防剧透模式",
+              subtitle: "开启后，加载弹幕后将通过 AI 识别并屏蔽疑似剧透弹幕",
+              icon: Ionicons.shield_outline,
+              value: videoState.spoilerPreventionEnabled,
+              onChanged: (bool value) async {
+                await videoState.setSpoilerPreventionEnabled(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value ? '已开启防剧透模式' : '已关闭防剧透模式',
+                );
+              },
+            );
+          },
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return SettingsItem.toggle(
+              title: "使用自定义 AI Key",
+              subtitle: "开启后将使用你填写的 URL/Key（支持 OpenAI 兼容 / Gemini）",
+              icon: Ionicons.key_outline,
+              enabled: videoState.spoilerPreventionEnabled,
+              value: videoState.spoilerAiUseCustomKey,
+              onChanged: (bool value) async {
+                await videoState.setSpoilerAiUseCustomKey(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value ? '已开启自定义 AI Key' : '已关闭自定义 AI Key',
+                );
+              },
+            );
+          },
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return SettingsItem.toggle(
+              title: "调试：打印 AI 返回内容",
+              subtitle: "开启后会在日志里打印 AI 返回的原始文本与命中弹幕",
+              icon: Ionicons.information_circle_outline,
+              enabled: videoState.spoilerPreventionEnabled,
+              value: videoState.spoilerAiDebugPrintResponse,
+              onChanged: (bool value) async {
+                await videoState.setSpoilerAiDebugPrintResponse(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value ? '已开启 AI 调试打印' : '已关闭 AI 调试打印',
+                );
+              },
+            );
+          },
+        ),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            if (!videoState.spoilerPreventionEnabled ||
+                !videoState.spoilerAiUseCustomKey) {
+              return const SizedBox.shrink();
+            }
+
+            final bool isGemini =
+                _spoilerAiApiFormatDraft == SpoilerAiApiFormat.gemini;
+            final urlHint = isGemini
+                ? 'https://generativelanguage.googleapis.com/v1beta/models'
+                : 'https://api.openai.com/v1/chat/completions';
+            final modelHint =
+                isGemini ? 'gemini-1.5-flash' : 'gpt-5';
+
+            return Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: SettingsCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Ionicons.settings_outline,
+                            color: Colors.white, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          '防剧透 AI 设置',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isGemini
+                          ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
+                          : 'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text(
+                          '接口格式',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        BlurDropdown<SpoilerAiApiFormat>(
+                          dropdownKey: _spoilerAiApiFormatDropdownKey,
+                          items: [
+                            DropdownMenuItemData(
+                              title: 'OpenAI 兼容',
+                              value: SpoilerAiApiFormat.openai,
+                              isSelected: _spoilerAiApiFormatDraft ==
+                                  SpoilerAiApiFormat.openai,
+                            ),
+                            DropdownMenuItemData(
+                              title: 'Gemini',
+                              value: SpoilerAiApiFormat.gemini,
+                              isSelected: _spoilerAiApiFormatDraft ==
+                                  SpoilerAiApiFormat.gemini,
+                            ),
+                          ],
+                          onItemSelected: (format) {
+                            setState(() {
+                              _spoilerAiApiFormatDraft = format;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _spoilerAiUrlController,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: InputDecoration(
+                        labelText: '接口 URL',
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        hintText: urlHint,
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: Colors.white10,
+                        border: const OutlineInputBorder(
+                          borderSide: BorderSide.none,
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        ),
+                      ),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _spoilerAiModelController,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: InputDecoration(
+                        labelText: '模型',
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        hintText: modelHint,
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: Colors.white10,
+                        border: const OutlineInputBorder(
+                          borderSide: BorderSide.none,
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        ),
+                      ),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _spoilerAiApiKeyController,
+                      obscureText: true,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: InputDecoration(
+                        labelText: 'API Key',
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        hintText: videoState.spoilerAiHasApiKey
+                            ? '已保存，留空表示不修改'
+                            : '请输入你的 API Key',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: Colors.white10,
+                        border: const OutlineInputBorder(
+                          borderSide: BorderSide.none,
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        ),
+                      ),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    Slider(
+                      min: 0.0,
+                      max: 2.0,
+                      divisions: 40,
+                      value: _spoilerAiTemperatureDraft.clamp(0.0, 2.0),
+                      onChanged: (value) {
+                        setState(() {
+                          _spoilerAiTemperatureDraft = value;
+                        });
+                      },
+                      activeColor: Colors.white,
+                      inactiveColor: Colors.white24,
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: BlurButton(
+                        icon: _isSavingSpoilerAiSettings
+                            ? null
+                            : Ionicons.checkmark_outline,
+                        text: _isSavingSpoilerAiSettings ? '保存中...' : '保存配置',
+                        onTap: _isSavingSpoilerAiSettings
+                            ? () {}
+                            : () => _saveSpoilerAiSettings(videoState),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        fontSize: 13,
+                        iconSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           },
         ),

@@ -12,6 +12,22 @@ class _LocalDanmakuCandidate {
   });
 }
 
+class _SpoilerAiRequestConfig {
+  final SpoilerAiApiFormat apiFormat;
+  final String apiUrl;
+  final String apiKey;
+  final String model;
+  final double temperature;
+
+  const _SpoilerAiRequestConfig({
+    required this.apiFormat,
+    required this.apiUrl,
+    required this.apiKey,
+    required this.model,
+    required this.temperature,
+  });
+}
+
 extension VideoPlayerStateDanmaku on VideoPlayerState {
   Future<void> _autoDetectAndLoadLocalDanmakuFromVideoDirectory(
       String videoPath) async {
@@ -525,6 +541,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     });
 
     _totalDanmakuCount = mergedList.length;
+    _maybeStartSpoilerDanmakuAnalysis(mergedList);
     final filteredList =
         mergedList.where((d) => !shouldBlockDanmaku(d)).toList();
     _danmakuList = filteredList;
@@ -537,6 +554,259 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
     debugPrint('弹幕轨道合并及过滤完成，显示${_danmakuList.length}条，总计${mergedList.length}条');
     notifyListeners(); // 确保通知UI更新
+  }
+
+  void _maybeStartSpoilerDanmakuAnalysis(List<Map<String, dynamic>> mergedList) {
+    if (!_spoilerPreventionEnabled) {
+      return;
+    }
+
+    final requestConfig = _resolveSpoilerAiRequestConfig();
+    if (requestConfig == null) {
+      return;
+    }
+
+    if (mergedList.isEmpty) {
+      _isSpoilerDanmakuAnalyzing = false;
+      _spoilerDanmakuAnalysisHash = null;
+      _spoilerDanmakuRunningAnalysisHash = null;
+      _spoilerDanmakuTexts = <String>{};
+      _clearPendingSpoilerDanmakuAnalysis();
+      return;
+    }
+
+    final danmakuTexts = _collectSpoilerAnalysisDanmakuTexts(mergedList);
+    if (danmakuTexts.isEmpty) {
+      _isSpoilerDanmakuAnalyzing = false;
+      _spoilerDanmakuAnalysisHash = null;
+      _spoilerDanmakuRunningAnalysisHash = null;
+      _spoilerDanmakuTexts = <String>{};
+      _clearPendingSpoilerDanmakuAnalysis();
+      return;
+    }
+
+    final analysisHash =
+        _computeSpoilerDanmakuAnalysisHash(danmakuTexts, requestConfig);
+    if (_spoilerDanmakuAnalysisHash == analysisHash) {
+      return;
+    }
+
+    _spoilerDanmakuAnalysisHash = analysisHash;
+    _spoilerDanmakuPendingAnalysisHash = analysisHash;
+    _spoilerDanmakuPendingRequestConfig = requestConfig;
+    _spoilerDanmakuPendingTexts = danmakuTexts;
+    _spoilerDanmakuPendingTargetVideoPath = _currentVideoPath;
+
+    if (_isSpoilerDanmakuAnalyzing) {
+      return;
+    }
+
+    _scheduleSpoilerDanmakuAnalysisDebounced();
+  }
+
+  void _scheduleSpoilerDanmakuAnalysisDebounced() {
+    _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer =
+        Timer(const Duration(milliseconds: 650), () {
+      if (_isDisposed) return;
+      _tryStartPendingSpoilerDanmakuAnalysis();
+    });
+  }
+
+  void _clearPendingSpoilerDanmakuAnalysis() {
+    _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer = null;
+    _spoilerDanmakuPendingAnalysisHash = null;
+    _spoilerDanmakuPendingRequestConfig = null;
+    _spoilerDanmakuPendingTexts = null;
+    _spoilerDanmakuPendingTargetVideoPath = null;
+  }
+
+  void _tryStartPendingSpoilerDanmakuAnalysis() {
+    if (_isDisposed) return;
+    if (!_spoilerPreventionEnabled) {
+      _clearPendingSpoilerDanmakuAnalysis();
+      return;
+    }
+    if (_isSpoilerDanmakuAnalyzing) return;
+
+    final analysisHash = _spoilerDanmakuPendingAnalysisHash;
+    final requestConfig = _spoilerDanmakuPendingRequestConfig;
+    final danmakuTexts = _spoilerDanmakuPendingTexts;
+    final targetVideoPath = _spoilerDanmakuPendingTargetVideoPath;
+
+    if (analysisHash == null ||
+        requestConfig == null ||
+        danmakuTexts == null ||
+        danmakuTexts.isEmpty) {
+      return;
+    }
+
+    if (_currentVideoPath != targetVideoPath) {
+      _clearPendingSpoilerDanmakuAnalysis();
+      return;
+    }
+
+    _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer = null;
+    _spoilerDanmakuPendingAnalysisHash = null;
+    _spoilerDanmakuPendingRequestConfig = null;
+    _spoilerDanmakuPendingTexts = null;
+    _spoilerDanmakuPendingTargetVideoPath = null;
+
+    _isSpoilerDanmakuAnalyzing = true;
+    _spoilerDanmakuRunningAnalysisHash = analysisHash;
+
+    unawaited(_runSpoilerDanmakuAnalysis(
+      analysisHash: analysisHash,
+      targetVideoPath: targetVideoPath,
+      requestConfig: requestConfig,
+      danmakuTexts: danmakuTexts,
+    ));
+  }
+
+  List<String> _collectSpoilerAnalysisDanmakuTexts(
+      List<Map<String, dynamic>> mergedList) {
+    const int maxUniqueTexts = 1200;
+    final results = <String>[];
+    final seen = <String>{};
+
+    for (final danmaku in mergedList) {
+      final content = danmaku['content']?.toString() ?? '';
+      final normalized = _normalizeSpoilerMatchText(content);
+      if (normalized.isEmpty) continue;
+
+      if (!seen.add(normalized)) continue;
+      results.add(normalized);
+      if (results.length >= maxUniqueTexts) {
+        break;
+      }
+    }
+
+    return results;
+  }
+
+  _SpoilerAiRequestConfig? _resolveSpoilerAiRequestConfig() {
+    if (!_spoilerAiUseCustomKey) {
+      return const _SpoilerAiRequestConfig(
+        apiFormat: SpoilerAiApiFormat.openai,
+        apiUrl: DanmakuSpoilerFilterService.defaultEndpoint,
+        apiKey: '',
+        model: 'gpt-5',
+        temperature: 0.5,
+      );
+    }
+
+    final resolvedModel = _spoilerAiModel.trim();
+    final resolvedTemperature = _spoilerAiTemperature.clamp(0.0, 2.0).toDouble();
+    final apiUrl = _spoilerAiApiUrl.trim();
+    final apiKey = _spoilerAiApiKey.trim();
+    if (apiUrl.isEmpty || apiKey.isEmpty || resolvedModel.isEmpty) {
+      return null;
+    }
+
+    return _SpoilerAiRequestConfig(
+      apiFormat: _spoilerAiApiFormat,
+      apiUrl: apiUrl,
+      apiKey: apiKey,
+      model: resolvedModel,
+      temperature: resolvedTemperature,
+    );
+  }
+
+  String _computeSpoilerDanmakuAnalysisHash(
+    List<String> danmakuTexts,
+    _SpoilerAiRequestConfig requestConfig,
+  ) {
+    final buffer = StringBuffer();
+    buffer.write(_currentVideoPath ?? '');
+    buffer.write('|');
+    buffer.write(_animeId?.toString() ?? '');
+    buffer.write('|');
+    buffer.write(_episodeId?.toString() ?? '');
+    buffer.write('|');
+    buffer.write(_spoilerAiUseCustomKey ? 'custom' : 'builtin');
+    buffer.write('|');
+    buffer.write(requestConfig.apiFormat.name);
+    buffer.write('|');
+    buffer.write(requestConfig.apiUrl);
+    buffer.write('|');
+    buffer.write(requestConfig.model);
+    buffer.write('|');
+    buffer.write(requestConfig.temperature.toStringAsFixed(3));
+    buffer.write('\n');
+    for (final text in danmakuTexts) {
+      buffer.write(text);
+      buffer.write('\u0000');
+    }
+    return sha1.convert(utf8.encode(buffer.toString())).toString();
+  }
+
+  Future<void> _runSpoilerDanmakuAnalysis({
+    required String analysisHash,
+    required String? targetVideoPath,
+    required _SpoilerAiRequestConfig requestConfig,
+    required List<String> danmakuTexts,
+  }) async {
+    try {
+      debugPrint('[防剧透] 开始AI分析弹幕，样本=${danmakuTexts.length}');
+      final spoilerTexts =
+          await DanmakuSpoilerFilterService.detectSpoilerDanmakuTexts(
+        danmakuTexts: danmakuTexts,
+        apiFormat: requestConfig.apiFormat,
+        apiUrl: requestConfig.apiUrl,
+        apiKey: requestConfig.apiKey,
+        model: requestConfig.model,
+        temperature: requestConfig.temperature,
+        debugPrintResponse: _spoilerAiDebugPrintResponse,
+      );
+
+      if (_isDisposed) return;
+      if (!_spoilerPreventionEnabled) return;
+      if (_spoilerDanmakuRunningAnalysisHash != analysisHash) return;
+      if (_currentVideoPath != targetVideoPath) return;
+
+      final normalizedSet = <String>{};
+      for (final text in spoilerTexts) {
+        final normalized = _normalizeSpoilerMatchText(text);
+        if (normalized.isNotEmpty) {
+          normalizedSet.add(normalized);
+        }
+      }
+      _spoilerDanmakuTexts = normalizedSet;
+      debugPrint('[防剧透] AI分析完成，返回=${spoilerTexts.length} 命中=${normalizedSet.length}');
+      if (_spoilerAiDebugPrintResponse && normalizedSet.isNotEmpty) {
+        final previewList = normalizedSet.take(200).toList();
+        debugPrint(
+          '[防剧透] 命中文本预览(${previewList.length}/${normalizedSet.length}): ${previewList.join('||')}',
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[防剧透] AI分析失败: $e');
+      debugPrintStack(stackTrace: st);
+      // 失败时保留现有命中集合，避免反复清空导致过滤闪烁/失效
+      if (_isDisposed) return;
+      if (!_spoilerPreventionEnabled) return;
+      if (_spoilerDanmakuRunningAnalysisHash != analysisHash) return;
+      if (_currentVideoPath != targetVideoPath) return;
+    } finally {
+      if (_isDisposed) return;
+
+      final isCurrentRun = _spoilerDanmakuRunningAnalysisHash == analysisHash;
+      if (isCurrentRun) {
+        _spoilerDanmakuRunningAnalysisHash = null;
+        _isSpoilerDanmakuAnalyzing = false;
+      }
+
+      if (isCurrentRun && _spoilerPreventionEnabled && _currentVideoPath == targetVideoPath) {
+        _updateMergedDanmakuList();
+        unawaited(_prebuildGPUDanmakuCharsetIfNeeded());
+      }
+
+      if (isCurrentRun) {
+        _tryStartPendingSpoilerDanmakuAnalysis();
+      }
+    }
   }
 
   // GPU弹幕字符集预构建（如果需要）

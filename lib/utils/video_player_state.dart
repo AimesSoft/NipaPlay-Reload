@@ -28,6 +28,7 @@ import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/shared_remote_playback_sync_service.dart';
 import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
+import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -68,12 +69,10 @@ import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
 import 'anime4k_shader_manager.dart';
 // 导入MediaKitPlayerAdapter
-import '../player_abstraction/player_factory.dart'; // 播放器工厂
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 弹幕内核工厂
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
 import 'package:flutter/scheduler.dart'; // 添加Ticker导入
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
-import 'hotkey_service.dart'; // Added import for HotkeyService
 import 'player_kernel_manager.dart'; // 导入播放器内核管理器
 import 'shared_remote_history_helper.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
@@ -299,6 +298,36 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _danmakuBlockWordsKey = 'danmaku_block_words';
   List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
   int _totalDanmakuCount = 0; // 添加一个字段来存储总弹幕数
+
+  // 防剧透模式
+  final String _spoilerPreventionEnabledKey = 'spoiler_prevention_enabled';
+  bool _spoilerPreventionEnabled = false;
+  bool _isSpoilerDanmakuAnalyzing = false;
+  String? _spoilerDanmakuAnalysisHash;
+  String? _spoilerDanmakuRunningAnalysisHash;
+  Set<String> _spoilerDanmakuTexts = <String>{};
+  Timer? _spoilerDanmakuAnalysisDebounceTimer;
+  String? _spoilerDanmakuPendingAnalysisHash;
+  _SpoilerAiRequestConfig? _spoilerDanmakuPendingRequestConfig;
+  List<String>? _spoilerDanmakuPendingTexts;
+  String? _spoilerDanmakuPendingTargetVideoPath;
+
+  // 防剧透 AI 设置
+  final String _spoilerAiUseCustomKeyKey = 'spoiler_ai_use_custom_key';
+  bool _spoilerAiUseCustomKey = false;
+  final String _spoilerAiApiFormatKey = 'spoiler_ai_api_format';
+  SpoilerAiApiFormat _spoilerAiApiFormat = SpoilerAiApiFormat.openai;
+  final String _spoilerAiApiUrlKey = 'spoiler_ai_api_url';
+  String _spoilerAiApiUrl = '';
+  final String _spoilerAiApiKeyKey = 'spoiler_ai_api_key';
+  String _spoilerAiApiKey = '';
+  final String _spoilerAiModelKey = 'spoiler_ai_model';
+  String _spoilerAiModel = 'gpt-5';
+  final String _spoilerAiTemperatureKey = 'spoiler_ai_temperature';
+  double _spoilerAiTemperature = 0.5;
+  final String _spoilerAiDebugPrintResponseKey =
+      'spoiler_ai_debug_print_response';
+  bool _spoilerAiDebugPrintResponse = false;
 
   // 弹幕字体大小设置
   final String _danmakuFontSizeKey = 'danmaku_font_size';
@@ -589,6 +618,15 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 获取时间轴告知弹幕轨道状态
   bool get isTimelineDanmakuEnabled => _isTimelineDanmakuEnabled;
 
+  bool get spoilerPreventionEnabled => _spoilerPreventionEnabled;
+  bool get spoilerAiUseCustomKey => _spoilerAiUseCustomKey;
+  SpoilerAiApiFormat get spoilerAiApiFormat => _spoilerAiApiFormat;
+  String get spoilerAiApiUrl => _spoilerAiApiUrl;
+  bool get spoilerAiHasApiKey => _spoilerAiApiKey.trim().isNotEmpty;
+  String get spoilerAiModel => _spoilerAiModel;
+  double get spoilerAiTemperature => _spoilerAiTemperature;
+  bool get spoilerAiDebugPrintResponse => _spoilerAiDebugPrintResponse;
+
   // 字幕管理器相关的getter
   SubtitleManager get subtitleManager => _subtitleManager;
   String? get currentExternalSubtitlePath =>
@@ -720,6 +758,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _hideMouseTimer?.cancel();
     _autoHideTimer?.cancel();
     _screenshotTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer = null;
+    _spoilerDanmakuPendingAnalysisHash = null;
+    _spoilerDanmakuPendingRequestConfig = null;
+    _spoilerDanmakuPendingTexts = null;
+    _spoilerDanmakuPendingTargetVideoPath = null;
+    _spoilerDanmakuRunningAnalysisHash = null;
     _brightnessIndicatorTimer
         ?.cancel(); // Already cancelled here or in _hideBrightnessIndicator
     if (_brightnessOverlayEntry != null) {

@@ -268,6 +268,200 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     notifyListeners();
   }
 
+  String _normalizeSpoilerMatchText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return '';
+    return trimmed.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  Future<void> _loadSpoilerPreventionEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    _spoilerPreventionEnabled =
+        prefs.getBool(_spoilerPreventionEnabledKey) ?? false;
+    notifyListeners();
+  }
+
+  Future<void> setSpoilerPreventionEnabled(bool enabled) async {
+    if (_spoilerPreventionEnabled == enabled) {
+      return;
+    }
+    _spoilerPreventionEnabled = enabled;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_spoilerPreventionEnabledKey, enabled);
+
+    _isSpoilerDanmakuAnalyzing = false;
+    _spoilerDanmakuAnalysisHash = null;
+    _spoilerDanmakuRunningAnalysisHash = null;
+    _spoilerDanmakuTexts = <String>{};
+    _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer = null;
+    _spoilerDanmakuPendingAnalysisHash = null;
+    _spoilerDanmakuPendingRequestConfig = null;
+    _spoilerDanmakuPendingTexts = null;
+    _spoilerDanmakuPendingTargetVideoPath = null;
+
+    _updateMergedDanmakuList();
+  }
+
+  SpoilerAiApiFormat _parseSpoilerAiApiFormat(String? raw) {
+    switch ((raw ?? '').trim().toLowerCase()) {
+      case 'gemini':
+        return SpoilerAiApiFormat.gemini;
+      case 'openai':
+      default:
+        return SpoilerAiApiFormat.openai;
+    }
+  }
+
+  String _spoilerAiApiFormatToPrefs(SpoilerAiApiFormat format) {
+    switch (format) {
+      case SpoilerAiApiFormat.gemini:
+        return 'gemini';
+      case SpoilerAiApiFormat.openai:
+        return 'openai';
+    }
+  }
+
+  void _resetSpoilerDanmakuAnalysisForConfigChange() {
+    _isSpoilerDanmakuAnalyzing = false;
+    _spoilerDanmakuAnalysisHash = null;
+    _spoilerDanmakuRunningAnalysisHash = null;
+    _spoilerDanmakuTexts = <String>{};
+    _spoilerDanmakuAnalysisDebounceTimer?.cancel();
+    _spoilerDanmakuAnalysisDebounceTimer = null;
+    _spoilerDanmakuPendingAnalysisHash = null;
+    _spoilerDanmakuPendingRequestConfig = null;
+    _spoilerDanmakuPendingTexts = null;
+    _spoilerDanmakuPendingTargetVideoPath = null;
+  }
+
+  Future<void> _loadSpoilerAiSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _spoilerAiUseCustomKey = prefs.getBool(_spoilerAiUseCustomKeyKey) ?? false;
+    _spoilerAiApiFormat =
+        _parseSpoilerAiApiFormat(prefs.getString(_spoilerAiApiFormatKey));
+    _spoilerAiApiUrl = prefs.getString(_spoilerAiApiUrlKey) ?? '';
+    _spoilerAiApiKey = prefs.getString(_spoilerAiApiKeyKey) ?? '';
+    _spoilerAiModel = prefs.getString(_spoilerAiModelKey) ?? 'gpt-5';
+    final temp = prefs.getDouble(_spoilerAiTemperatureKey) ?? 0.5;
+    _spoilerAiTemperature = temp.clamp(0.0, 2.0).toDouble();
+    _spoilerAiDebugPrintResponse =
+        prefs.getBool(_spoilerAiDebugPrintResponseKey) ?? false;
+    notifyListeners();
+  }
+
+  Future<void> updateSpoilerAiSettings({
+    bool? useCustomKey,
+    SpoilerAiApiFormat? apiFormat,
+    String? apiUrl,
+    String? apiKey,
+    String? model,
+    double? temperature,
+    bool? debugPrintResponse,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    bool shouldRestartAnalysis = false;
+    bool changed = false;
+
+    if (useCustomKey != null && _spoilerAiUseCustomKey != useCustomKey) {
+      _spoilerAiUseCustomKey = useCustomKey;
+      await prefs.setBool(_spoilerAiUseCustomKeyKey, useCustomKey);
+      changed = true;
+      shouldRestartAnalysis = true;
+    }
+
+    if (apiFormat != null && _spoilerAiApiFormat != apiFormat) {
+      _spoilerAiApiFormat = apiFormat;
+      await prefs.setString(
+        _spoilerAiApiFormatKey,
+        _spoilerAiApiFormatToPrefs(apiFormat),
+      );
+      changed = true;
+      shouldRestartAnalysis = true;
+    }
+
+    if (apiUrl != null && _spoilerAiApiUrl != apiUrl) {
+      _spoilerAiApiUrl = apiUrl;
+      await prefs.setString(_spoilerAiApiUrlKey, apiUrl);
+      changed = true;
+      shouldRestartAnalysis = true;
+    }
+
+    if (apiKey != null && _spoilerAiApiKey != apiKey) {
+      _spoilerAiApiKey = apiKey;
+      await prefs.setString(_spoilerAiApiKeyKey, apiKey);
+      changed = true;
+      shouldRestartAnalysis = true;
+    }
+
+    if (model != null && _spoilerAiModel != model) {
+      _spoilerAiModel = model;
+      await prefs.setString(_spoilerAiModelKey, model);
+      changed = true;
+      shouldRestartAnalysis = true;
+    }
+
+    if (temperature != null) {
+      final resolved = temperature.clamp(0.0, 2.0).toDouble();
+      if ((_spoilerAiTemperature - resolved).abs() > 0.0001) {
+        _spoilerAiTemperature = resolved;
+        await prefs.setDouble(_spoilerAiTemperatureKey, resolved);
+        changed = true;
+        shouldRestartAnalysis = true;
+      }
+    }
+
+    if (debugPrintResponse != null &&
+        _spoilerAiDebugPrintResponse != debugPrintResponse) {
+      _spoilerAiDebugPrintResponse = debugPrintResponse;
+      await prefs.setBool(_spoilerAiDebugPrintResponseKey, debugPrintResponse);
+      changed = true;
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    if (shouldRestartAnalysis) {
+      _resetSpoilerDanmakuAnalysisForConfigChange();
+      if (_spoilerPreventionEnabled) {
+        _updateMergedDanmakuList();
+        return;
+      }
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> setSpoilerAiUseCustomKey(bool enabled) async {
+    await updateSpoilerAiSettings(useCustomKey: enabled);
+  }
+
+  Future<void> setSpoilerAiApiFormat(SpoilerAiApiFormat format) async {
+    await updateSpoilerAiSettings(apiFormat: format);
+  }
+
+  Future<void> setSpoilerAiApiUrl(String url) async {
+    await updateSpoilerAiSettings(apiUrl: url);
+  }
+
+  Future<void> setSpoilerAiApiKey(String apiKey) async {
+    await updateSpoilerAiSettings(apiKey: apiKey);
+  }
+
+  Future<void> setSpoilerAiModel(String model) async {
+    await updateSpoilerAiSettings(model: model);
+  }
+
+  Future<void> setSpoilerAiTemperature(double temperature) async {
+    await updateSpoilerAiSettings(temperature: temperature);
+  }
+
+  Future<void> setSpoilerAiDebugPrintResponse(bool enabled) async {
+    await updateSpoilerAiSettings(debugPrintResponse: enabled);
+  }
+
   // 添加弹幕屏蔽词
   Future<void> addDanmakuBlockWord(String word) async {
     if (word.isNotEmpty && !_danmakuBlockWords.contains(word)) {
@@ -301,6 +495,14 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (_blockTopDanmaku && type == 'top') return true;
     if (_blockBottomDanmaku && type == 'bottom') return true;
     if (_blockScrollDanmaku && type == 'scroll') return true;
+
+    if (_spoilerPreventionEnabled && _spoilerDanmakuTexts.isNotEmpty) {
+      final normalizedContent = _normalizeSpoilerMatchText(content);
+      if (normalizedContent.isNotEmpty &&
+          _spoilerDanmakuTexts.contains(normalizedContent)) {
+        return true;
+      }
+    }
 
     for (final word in _danmakuBlockWords) {
       if (content.contains(word)) {
