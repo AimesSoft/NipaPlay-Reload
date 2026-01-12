@@ -455,7 +455,12 @@ static char *np_list_dir_json(const char *host, int port, const char *username,
     return NULL;
   }
 
-  struct smb2dir *dir = smb2_opendir(ctx, inner_path);
+  const char *libsmb2_path = inner_path;
+  if (libsmb2_path[0] == '/') {
+    libsmb2_path++;
+  }
+
+  struct smb2dir *dir = smb2_opendir(ctx, libsmb2_path);
   if (dir == NULL) {
     np_set_err(err_buf, err_len, "SMB opendir failed: %s", smb2_get_error(ctx));
     smb2_destroy_context(ctx);
@@ -621,7 +626,11 @@ FFI_PLUGIN_EXPORT int np_smb2_stat(const char *host, int port,
 
   struct smb2_stat_64 st;
   memset(&st, 0, sizeof(st));
-  rc = smb2_stat(ctx, inner_path, &st);
+  const char *libsmb2_path = inner_path;
+  if (libsmb2_path[0] == '/') {
+    libsmb2_path++;
+  }
+  rc = smb2_stat(ctx, libsmb2_path, &st);
   if (rc != 0) {
     np_set_err(err_buf, err_len, "SMB stat failed: %s", smb2_get_error(ctx));
     smb2_destroy_context(ctx);
@@ -690,7 +699,12 @@ FFI_PLUGIN_EXPORT intptr_t np_smb2_reader_open(
     return (intptr_t)0;
   }
 
-  struct smb2fh *fh = smb2_open(ctx, inner_path, O_RDONLY);
+  const char *libsmb2_path = inner_path;
+  if (libsmb2_path[0] == '/') {
+    libsmb2_path++;
+  }
+
+  struct smb2fh *fh = smb2_open(ctx, libsmb2_path, O_RDONLY);
   if (fh == NULL) {
     np_set_err(err_buf, err_len, "SMB open failed: %s", smb2_get_error(ctx));
     smb2_destroy_context(ctx);
