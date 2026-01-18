@@ -85,6 +85,34 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             useNativeBottomBar: bottomBarProvider.useNativeBottomBar,
             selectedItemColor: activeColor,
             unselectedItemColor: inactiveColor,
+            cupertinoTabBar: CupertinoTabBar(
+              currentIndex: _selectedIndex,
+              onTap: _selectTab,
+              activeColor: activeColor,
+              inactiveColor: inactiveColor,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.house),
+                  activeIcon: Icon(CupertinoIcons.house_fill),
+                  label: '主页',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.play_rectangle),
+                  activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
+                  label: '媒体库',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.person_crop_circle),
+                  activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
+                  label: '账户',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.gear_alt),
+                  activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                  label: '设置',
+                ),
+              ],
+            ),
             items: const [
               AdaptiveNavigationDestination(
                 icon: 'house.fill',
