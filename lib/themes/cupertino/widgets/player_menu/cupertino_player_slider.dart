@@ -22,16 +22,23 @@ class CupertinoPlayerSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double clampedValue = value.clamp(min, max);
-    return SizedBox(
-      height: 44,
-      child: AdaptiveSlider(
-        value: clampedValue,
-        min: min,
-        max: max,
-        divisions: divisions,
-        activeColor: activeColor ?? CupertinoTheme.of(context).primaryColor,
-        onChanged: onChanged,
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double? width =
+            constraints.maxWidth.isFinite ? constraints.maxWidth : null;
+        return SizedBox(
+          height: 44,
+          width: width,
+          child: AdaptiveSlider(
+            value: clampedValue,
+            min: min,
+            max: max,
+            divisions: divisions,
+            activeColor: activeColor ?? CupertinoTheme.of(context).primaryColor,
+            onChanged: onChanged,
+          ),
+        );
+      },
     );
   }
 }

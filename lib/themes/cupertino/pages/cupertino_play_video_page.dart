@@ -521,14 +521,28 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     SizedBox(
                       width: 44,
                       height: 44,
-                      child: AdaptiveButton.sfSymbol(
-                        onPressed: () => _showAirPlayPickerSheet(videoState),
-                        sfSymbol: const SFSymbol('airplayvideo',
-                            size: 18, color: CupertinoColors.white),
-                        style: AdaptiveButtonStyle.glass,
-                        size: AdaptiveButtonSize.large,
-                        useSmoothRectangleBorder: false,
-                      ),
+                      child: PlatformInfo.isIOS26OrHigher()
+                          ? AdaptiveButton.sfSymbol(
+                              onPressed: () =>
+                                  _showAirPlayPickerSheet(videoState),
+                              sfSymbol: const SFSymbol('airplayvideo',
+                                  size: 18, color: CupertinoColors.white),
+                              style: AdaptiveButtonStyle.glass,
+                              size: AdaptiveButtonSize.large,
+                              useSmoothRectangleBorder: false,
+                            )
+                          : AdaptiveButton.child(
+                              onPressed: () =>
+                                  _showAirPlayPickerSheet(videoState),
+                              style: AdaptiveButtonStyle.glass,
+                              size: AdaptiveButtonSize.large,
+                              useSmoothRectangleBorder: false,
+                              child: const Icon(
+                                Icons.airplay_rounded,
+                                size: 18,
+                                color: CupertinoColors.white,
+                              ),
+                            ),
                     ),
                   ],
                   if (SystemShareService.isSupported && !globals.isDesktop) ...[
@@ -536,17 +550,32 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     SizedBox(
                       width: 44,
                       height: 44,
-                      child: AdaptiveButton.sfSymbol(
-                        onPressed: () {
-                          videoState.resetHideControlsTimer();
-                          _shareCurrentMedia(videoState);
-                        },
-                        sfSymbol: const SFSymbol('square.and.arrow.up',
-                            size: 18, color: CupertinoColors.white),
-                        style: AdaptiveButtonStyle.glass,
-                        size: AdaptiveButtonSize.large,
-                        useSmoothRectangleBorder: false,
-                      ),
+                      child: PlatformInfo.isIOS26OrHigher()
+                          ? AdaptiveButton.sfSymbol(
+                              onPressed: () {
+                                videoState.resetHideControlsTimer();
+                                _shareCurrentMedia(videoState);
+                              },
+                              sfSymbol: const SFSymbol('square.and.arrow.up',
+                                  size: 18, color: CupertinoColors.white),
+                              style: AdaptiveButtonStyle.glass,
+                              size: AdaptiveButtonSize.large,
+                              useSmoothRectangleBorder: false,
+                            )
+                          : AdaptiveButton.child(
+                              onPressed: () {
+                                videoState.resetHideControlsTimer();
+                                _shareCurrentMedia(videoState);
+                              },
+                              style: AdaptiveButtonStyle.glass,
+                              size: AdaptiveButtonSize.large,
+                              useSmoothRectangleBorder: false,
+                              child: const Icon(
+                                CupertinoIcons.share,
+                                size: 18,
+                                color: CupertinoColors.white,
+                              ),
+                            ),
                     ),
                   ],
                   if (!kIsWeb && videoState.hasVideo) ...[
@@ -554,17 +583,32 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     SizedBox(
                       width: 44,
                       height: 44,
-                      child: AdaptiveButton.sfSymbol(
-                        onPressed: () {
-                          videoState.resetHideControlsTimer();
-                          _captureScreenshot(videoState);
-                        },
-                        sfSymbol: const SFSymbol('camera',
-                            size: 18, color: CupertinoColors.white),
-                        style: AdaptiveButtonStyle.glass,
-                        size: AdaptiveButtonSize.large,
-                        useSmoothRectangleBorder: false,
-                      ),
+                      child: PlatformInfo.isIOS26OrHigher()
+                          ? AdaptiveButton.sfSymbol(
+                              onPressed: () {
+                                videoState.resetHideControlsTimer();
+                                _captureScreenshot(videoState);
+                              },
+                              sfSymbol: const SFSymbol('camera',
+                                  size: 18, color: CupertinoColors.white),
+                              style: AdaptiveButtonStyle.glass,
+                              size: AdaptiveButtonSize.large,
+                              useSmoothRectangleBorder: false,
+                            )
+                          : AdaptiveButton.child(
+                              onPressed: () {
+                                videoState.resetHideControlsTimer();
+                                _captureScreenshot(videoState);
+                              },
+                              style: AdaptiveButtonStyle.glass,
+                              size: AdaptiveButtonSize.large,
+                              useSmoothRectangleBorder: false,
+                              child: const Icon(
+                                CupertinoIcons.camera,
+                                size: 18,
+                                color: CupertinoColors.white,
+                              ),
+                            ),
                     ),
                   ],
                 ],
@@ -714,15 +758,29 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                       SizedBox(
                         width: kMinInteractiveDimensionCupertino,
                         height: kMinInteractiveDimensionCupertino,
-                        child: AdaptiveButton.sfSymbol(
-                          onPressed: () {
-                            videoState.resetHideControlsTimer();
-                            _showSettingsMenu(context);
-                          },
-                          sfSymbol: const SFSymbol('gearshape.fill'),
-                          style: AdaptiveButtonStyle.glass,
-                          size: AdaptiveButtonSize.large,
-                        ),
+                        child: PlatformInfo.isIOS26OrHigher()
+                            ? AdaptiveButton.sfSymbol(
+                                onPressed: () {
+                                  videoState.resetHideControlsTimer();
+                                  _showSettingsMenu(context);
+                                },
+                                sfSymbol: const SFSymbol('gearshape.fill'),
+                                style: AdaptiveButtonStyle.glass,
+                                size: AdaptiveButtonSize.large,
+                              )
+                            : AdaptiveButton.child(
+                                onPressed: () {
+                                  videoState.resetHideControlsTimer();
+                                  _showSettingsMenu(context);
+                                },
+                                style: AdaptiveButtonStyle.glass,
+                                size: AdaptiveButtonSize.large,
+                                child: const Icon(
+                                  CupertinoIcons.settings,
+                                  size: 22,
+                                  color: CupertinoColors.white,
+                                ),
+                              ),
                       ),
                     ],
                   ),

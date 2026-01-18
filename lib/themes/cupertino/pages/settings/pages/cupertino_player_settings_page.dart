@@ -50,6 +50,7 @@ class _CupertinoPlayerSettingsPageState
   bool _isSavingSpoilerAiSettings = false;
   SpoilerAiApiFormat _spoilerAiApiFormatDraft = SpoilerAiApiFormat.openai;
   double _spoilerAiTemperatureDraft = 0.5;
+  Anime4KProfile? _anime4kSelectionOverride;
 
   @override
   void didChangeDependencies() {
@@ -628,7 +629,18 @@ class _CupertinoPlayerSettingsPageState
             if (!supportsAnime4K) {
               return const SizedBox.shrink();
             }
-            final Anime4KProfile currentProfile = videoState.anime4kProfile;
+            final Anime4KProfile providerProfile = videoState.anime4kProfile;
+            if (_anime4kSelectionOverride != null &&
+                _anime4kSelectionOverride == providerProfile) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                setState(() {
+                  _anime4kSelectionOverride = null;
+                });
+              });
+            }
+            final Anime4KProfile currentProfile =
+                _anime4kSelectionOverride ?? providerProfile;
             return Column(
               children: [
                 const SizedBox(height: 16),
@@ -640,11 +652,8 @@ class _CupertinoPlayerSettingsPageState
                   children: [
                     CupertinoSettingsTile(
                       leading: Icon(
-                        CupertinoIcons.sparkles,
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.systemYellow,
-                          context,
-                        ),
+                        CupertinoIcons.tv,
+                        color: resolveSettingsIconColor(context),
                       ),
                       title: const Text('Anime4K 超分辨率（实验性）'),
                       subtitle: Text(
@@ -661,6 +670,9 @@ class _CupertinoPlayerSettingsPageState
                           final profile =
                               entry.value ?? Anime4KProfile.values[index];
                           if (profile == currentProfile) return;
+                          setState(() {
+                            _anime4kSelectionOverride = profile;
+                          });
                           videoState.setAnime4KProfile(profile).then((_) {
                             if (!mounted) return;
                             final option = _getAnime4KProfileTitle(profile);

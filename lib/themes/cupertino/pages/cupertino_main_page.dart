@@ -62,6 +62,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     final Color activeColor = cupertinoTheme.primaryColor;
     final Color inactiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
+    final double bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final double tabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
 
     return Consumer<BottomBarProvider>(
       builder: (context, bottomBarProvider, _) {
@@ -85,6 +87,35 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             useNativeBottomBar: bottomBarProvider.useNativeBottomBar,
             selectedItemColor: activeColor,
             unselectedItemColor: inactiveColor,
+            cupertinoTabBar: CupertinoTabBar(
+              currentIndex: _selectedIndex,
+              onTap: _selectTab,
+              activeColor: activeColor,
+              inactiveColor: inactiveColor,
+              height: tabBarHeight,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.house),
+                  activeIcon: Icon(CupertinoIcons.house_fill),
+                  label: '主页',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.play_rectangle),
+                  activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
+                  label: '媒体库',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.person_crop_circle),
+                  activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
+                  label: '账户',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.gear_alt),
+                  activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                  label: '设置',
+                ),
+              ],
+            ),
             items: const [
               AdaptiveNavigationDestination(
                 icon: 'house.fill',

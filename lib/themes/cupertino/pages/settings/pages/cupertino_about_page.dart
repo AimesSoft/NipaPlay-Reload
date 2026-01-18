@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, SystemMouseCursors;
+import 'package:flutter/material.dart' show SystemMouseCursors;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,6 +12,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/constants/acknowledgements.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
@@ -230,55 +231,70 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
   }
 
   void _showAppreciationQR() {
-    BlurDialog.show(
+    CupertinoBottomSheet.show(
       context: context,
       title: '赞赏码',
-      contentWidget: Container(
-        constraints: const BoxConstraints(
-          maxWidth: 300,
-          maxHeight: 400,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.asset(
-            'others/赞赏码.jpg',
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+      heightRatio: 0.82,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final errorTextColor = CupertinoDynamicColor.resolve(
+              CupertinoColors.secondaryLabel,
+              context,
+            );
+            final errorIconColor = CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGrey,
+              context,
+            );
+            final errorBackgroundColor = CupertinoDynamicColor.resolve(
+              CupertinoColors.secondarySystemBackground,
+              context,
+            );
+
+            return Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  child: Image.asset(
+                    'others/赞赏码.jpg',
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: errorBackgroundColor,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Ionicons.image_outline,
+                              size: 60,
+                              color: errorIconColor,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '赞赏码图片加载失败',
+                              style: TextStyle(
+                                color: errorTextColor,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
-                child: const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Ionicons.image_outline,
-                      size: 60,
-                      color: Colors.white70,
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      '赞赏码图片加载失败',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
-      actions: [
-        CupertinoDialogAction(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
-      ],
     );
   }
 
