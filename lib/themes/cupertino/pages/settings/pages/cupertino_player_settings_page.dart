@@ -652,11 +652,8 @@ class _CupertinoPlayerSettingsPageState
                   children: [
                     CupertinoSettingsTile(
                       leading: Icon(
-                        CupertinoIcons.sparkles,
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.systemYellow,
-                          context,
-                        ),
+                        CupertinoIcons.tv,
+                        color: resolveSettingsIconColor(context),
                       ),
                       title: const Text('Anime4K 超分辨率（实验性）'),
                       subtitle: Text(

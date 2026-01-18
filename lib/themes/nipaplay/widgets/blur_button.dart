@@ -92,27 +92,38 @@ class _BlurButtonState extends State<BlurButton> {
                 fontSize: widget.fontSize,
                 fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
               ),
-              child: InkWell(
-                onTap: widget.onTap,
-                child: Row(
-                  mainAxisSize: widget.expandHorizontally ? MainAxisSize.max : MainAxisSize.min,
-                  mainAxisAlignment: widget.expandHorizontally ? MainAxisAlignment.center : MainAxisAlignment.start,
-                  children: [
-                    if (widget.icon != null) ...[
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        child: Icon(
-                          widget.icon,
-                          size: _isHovered ? widget.iconSize + 1 : widget.iconSize,
-                          color: _isHovered
-                              ? Colors.white
-                              : Colors.white.withOpacity(0.8),
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: widget.onTap,
+                  borderRadius:
+                      widget.borderRadius ?? BorderRadius.circular(8),
+                  child: Row(
+                    mainAxisSize: widget.expandHorizontally
+                        ? MainAxisSize.max
+                        : MainAxisSize.min,
+                    mainAxisAlignment: widget.expandHorizontally
+                        ? MainAxisAlignment.center
+                        : MainAxisAlignment.start,
+                    children: [
+                      if (widget.icon != null) ...[
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: Icon(
+                            widget.icon,
+                            size: _isHovered
+                                ? widget.iconSize + 1
+                                : widget.iconSize,
+                            color: _isHovered
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.8),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
+                        const SizedBox(width: 4),
+                      ],
+                      Text(widget.text),
                     ],
-                    Text(widget.text),
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -17,6 +17,7 @@ import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_remote_lan_scan_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_anime_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_glass_media_server_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_anime_detail_page.dart';
@@ -443,18 +444,52 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                 const SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: CupertinoButton(
-                    onPressed: () => _openAddHostDialog(provider),
-                    color: CupertinoDynamicColor.resolve(
-                        CupertinoColors.activeBlue, context),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    borderRadius: BorderRadius.circular(14),
-                    child: const Text(
-                      '添加共享客户端',
-                      style:
-                          TextStyle(fontSize: 15, color: CupertinoColors.white),
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CupertinoButton(
+                        onPressed: () => _openAddHostDialog(provider),
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.activeBlue, context),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        borderRadius: BorderRadius.circular(14),
+                        child: const Text(
+                          '添加共享客户端',
+                          style: TextStyle(
+                              fontSize: 15, color: CupertinoColors.white),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      CupertinoButton(
+                        onPressed: () => _openLanScanDialog(provider),
+                        color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.systemGrey5, context),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CupertinoIcons.wifi,
+                              size: 18,
+                              color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.label, context),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '扫描局域网',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.label, context),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -560,6 +595,12 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                       label: '添加客户端',
                       icon: CupertinoIcons.add,
                       onPressed: () => _openAddHostDialog(provider),
+                    ),
+                    _buildActionButton(
+                      context,
+                      label: '扫描局域网',
+                      icon: CupertinoIcons.wifi,
+                      onPressed: () => _openLanScanDialog(provider),
                     ),
                   ],
                 ),
@@ -1151,6 +1192,13 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
         }
       }
     }
+  }
+
+  Future<void> _openLanScanDialog(SharedRemoteLibraryProvider provider) async {
+    await CupertinoSharedRemoteLanScanDialog.show(
+      context,
+      provider: provider,
+    );
   }
 }
 
