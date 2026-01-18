@@ -4,7 +4,6 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart'; // 导入背景图和模糊效果控件
 import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 
@@ -12,6 +11,7 @@ class CustomScaffold extends StatefulWidget {
   final List<Widget> pages;
   final List<Widget> tabPage;
   final bool pageIsHome;
+  final bool shouldShowAppBar;
   final TabController? tabController;
 
   const CustomScaffold(
@@ -19,6 +19,7 @@ class CustomScaffold extends StatefulWidget {
       required this.pages,
       required this.tabPage,
       required this.pageIsHome,
+      required this.shouldShowAppBar,
       this.tabController});
 
   @override
@@ -41,86 +42,80 @@ class _CustomScaffoldState extends State<CustomScaffold> {
           child: Text("Error: TabController not provided to CustomScaffold"));
     }
 
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
-        final appearanceSettings =
-            Provider.of<AppearanceSettingsProvider>(context);
-        final enableAnimation = appearanceSettings.enablePageAnimation;
+    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
+    final enableAnimation = appearanceSettings.enablePageAnimation;
 
-        final currentIndex = widget.tabController!.index;
-        final preloadIndices = widget.pageIsHome
-            ? List<int>.generate(widget.pages.length, (i) => i)
-                .where((i) => i != 1)
-                .toList()
-            : const <int>[];
+    final currentIndex = widget.tabController!.index;
+    final preloadIndices = widget.pageIsHome
+        ? List<int>.generate(widget.pages.length, (i) => i)
+            .where((i) => i != 1)
+            .toList()
+        : const <int>[];
 
-        return BackgroundWithBlur(
-          child: Scaffold(
-            primary: false,
-            backgroundColor: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.7)
-                : Colors.black.withOpacity(0.2),
-            extendBodyBehindAppBar: false,
-            appBar: videoState.shouldShowAppBar() && widget.tabPage.isNotEmpty
-                ? AppBar(
-                    toolbarHeight: !widget.pageIsHome && !globals.isDesktop
-                        ? 100
-                        : globals.isDesktop
-                            ? 20
-                            : globals.isTablet
-                                ? 30
-                                : 60,
-                    leading: widget.pageIsHome
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Ionicons.chevron_back_outline),
-                            color: Colors.white,
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                          ),
-                    backgroundColor: Colors.transparent,
-                    elevation: 0,
-                    bottom: TabBar(
-                      controller: widget.tabController,
-                      isScrollable: true,
-                      tabs: widget.tabPage,
-                      labelColor: Colors.white,
-                      unselectedLabelColor: Colors.white60,
-                      labelPadding: const EdgeInsets.only(bottom: 15.0),
-                      tabAlignment: TabAlignment.start,
-                      // 恢复灰色背景条，并使用自定义指示器
-                      dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                      dividerHeight: 3.0,
-                      indicator: const _CustomTabIndicator(
-                        indicatorHeight: 3.0,
-                        indicatorColor: Colors.white,
-                        radius: 30.0, // 使用大圆角形成药丸形状
+    return BackgroundWithBlur(
+      child: Scaffold(
+        primary: false,
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? Colors.black.withOpacity(0.7)
+            : Colors.black.withOpacity(0.2),
+        extendBodyBehindAppBar: false,
+        appBar: widget.shouldShowAppBar && widget.tabPage.isNotEmpty
+            ? AppBar(
+                toolbarHeight: !widget.pageIsHome && !globals.isDesktop
+                    ? 100
+                    : globals.isDesktop
+                        ? 20
+                        : globals.isTablet
+                            ? 30
+                            : 60,
+                leading: widget.pageIsHome
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Ionicons.chevron_back_outline),
+                        color: Colors.white,
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
                       ),
-                      indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
-                    ),
-                  )
-                : null,
-            body: TabControllerScope(
-              controller: widget.tabController!,
-              enabled: true,
-              child: SwitchableView(
-                enableAnimation: enableAnimation,
-                keepAlive: true,
-                preloadIndices: preloadIndices,
-                currentIndex: currentIndex,
-                physics: enableAnimation
-                    ? const PageScrollPhysics()
-                    : const NeverScrollableScrollPhysics(),
-                onPageChanged: _handlePageChangedBySwitchableView,
-                children: widget.pages
-                    .map((page) => RepaintBoundary(child: page))
-                    .toList(),
-              ),
-            ),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                bottom: TabBar(
+                  controller: widget.tabController,
+                  isScrollable: true,
+                  tabs: widget.tabPage,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white60,
+                  labelPadding: const EdgeInsets.only(bottom: 15.0),
+                  tabAlignment: TabAlignment.start,
+                  // 恢复灰色背景条，并使用自定义指示器
+                  dividerColor: const Color.fromARGB(59, 255, 255, 255),
+                  dividerHeight: 3.0,
+                  indicator: const _CustomTabIndicator(
+                    indicatorHeight: 3.0,
+                    indicatorColor: Colors.white,
+                    radius: 30.0, // 使用大圆角形成药丸形状
+                  ),
+                  indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
+                ),
+              )
+            : null,
+        body: TabControllerScope(
+          controller: widget.tabController!,
+          enabled: true,
+          child: SwitchableView(
+            enableAnimation: enableAnimation,
+            keepAlive: true,
+            preloadIndices: preloadIndices,
+            currentIndex: currentIndex,
+            physics: enableAnimation
+                ? const PageScrollPhysics()
+                : const NeverScrollableScrollPhysics(),
+            onPageChanged: _handlePageChangedBySwitchableView,
+            children:
+                widget.pages.map((page) => RepaintBoundary(child: page)).toList(),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

@@ -401,6 +401,9 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         source: 'Bangumi',
         rating: anime.rating,
         ratingDetails: anime.ratingDetails,
+        enableBackdropImage: false,
+        enableBackgroundBlur: false,
+        enableShadow: false,
         onTap: () => _showAnimeDetail(anime),
       );
     }

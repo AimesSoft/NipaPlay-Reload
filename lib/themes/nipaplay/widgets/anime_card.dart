@@ -21,6 +21,7 @@ class AnimeCard extends StatefulWidget {
   final bool enableBackgroundBlur; // 新增：是否启用卡片背景模糊
   final bool enableShadow; // 新增：是否启用阴影
   final double backgroundBlurSigma; // 新增：背景模糊强度（sigma）
+  final bool enableBackdropImage; // 新增：是否启用背景图层
 
   const AnimeCard({
     super.key,
@@ -36,6 +37,7 @@ class AnimeCard extends StatefulWidget {
     this.enableBackgroundBlur = true,
     this.enableShadow = true,
     this.backgroundBlurSigma = 20.0,
+    this.enableBackdropImage = true,
   });
 
   // 根据filePath获取来源信息
@@ -200,17 +202,26 @@ class _AnimeCardState extends State<AnimeCard> {
           child: Stack(
             children: [
               // 底层：模糊的封面图背景
-              Positioned.fill(
-                child: Transform.rotate(
-                  angle: 3.14159, // 180度（π弧度）
-                  child: (enableBlur && widget.enableBackgroundBlur)
-                      ? ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: widget.backgroundBlurSigma, sigmaY: widget.backgroundBlurSigma),
-                          child: _buildImage(context, true),
-                        )
-                      : _buildImage(context, true),
+              if (widget.enableBackdropImage)
+                Positioned.fill(
+                  child: Transform.rotate(
+                    angle: 3.14159, // 180度（π弧度）
+                    child: (enableBlur && widget.enableBackgroundBlur)
+                        ? ImageFiltered(
+                            imageFilter: ImageFilter.blur(
+                                sigmaX: widget.backgroundBlurSigma,
+                                sigmaY: widget.backgroundBlurSigma),
+                            child: _buildImage(context, true),
+                          )
+                        : _buildImage(context, true),
+                  ),
+                )
+              else
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.15),
+                  ),
                 ),
-              ),
               
               // 中间层：半透明遮罩，提高可读性
               Positioned.fill(

@@ -1346,6 +1346,7 @@ class MainPageState extends State<MainPage>
               pages: widget.pages,
               tabPage: createTabLabels(),
               pageIsHome: true,
+              shouldShowAppBar: shouldShowAppBar,
               tabController: globalTabController,
             );
           },

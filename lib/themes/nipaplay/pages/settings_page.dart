@@ -21,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart'
 import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -83,11 +84,18 @@ class _SettingsPageState extends State<SettingsPage>
       Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (context) => CustomScaffold(
-                  pages: pages,
-                  tabPage: settingsTabLabels(),
-                  pageIsHome: false,
-                  tabController: _tabController,
+            builder: (context) => Selector<VideoPlayerState, bool>(
+                  selector: (context, videoState) =>
+                      videoState.shouldShowAppBar(),
+                  builder: (context, shouldShowAppBar, child) {
+                    return CustomScaffold(
+                      pages: pages,
+                      tabPage: settingsTabLabels(),
+                      pageIsHome: false,
+                      shouldShowAppBar: shouldShowAppBar,
+                      tabController: _tabController,
+                    );
+                  },
                 )),
       );
     }

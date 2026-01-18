@@ -451,7 +451,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           ),
         ];
         
-        if (currentSharedState) {
+        if (_hasSharedRemoteHosts) {
           pageChildren.add(
             RepaintBoundary(
               child: SharedRemoteLibraryView(
@@ -461,7 +461,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           );
         }
 
-        if (currentDandanState) {
+        if (_isDandanConnected) {
           pageChildren.add(
             RepaintBoundary(
               child: DandanplayRemoteLibraryView(
@@ -499,11 +499,11 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           const Tab(text: "库管理"),
         ];
         
-        if (currentSharedState) {
+        if (_hasSharedRemoteHosts) {
           tabs.add(const Tab(text: "共享媒体"));
         }
 
-        if (currentDandanState) {
+        if (_isDandanConnected) {
           tabs.add(const Tab(text: "弹弹play"));
         }
 
