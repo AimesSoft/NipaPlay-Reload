@@ -62,6 +62,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     final Color activeColor = cupertinoTheme.primaryColor;
     final Color inactiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
+    final double bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final double tabBarHeight = bottomInset > 0 ? 56.0 : 50.0;
 
     return Consumer<BottomBarProvider>(
       builder: (context, bottomBarProvider, _) {
@@ -90,6 +92,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
               onTap: _selectTab,
               activeColor: activeColor,
               inactiveColor: inactiveColor,
+              height: tabBarHeight,
               items: const [
                 BottomNavigationBarItem(
                   icon: Icon(CupertinoIcons.house),
