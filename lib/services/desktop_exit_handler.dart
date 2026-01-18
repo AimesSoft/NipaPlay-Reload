@@ -35,7 +35,7 @@ class DesktopExitDecision {
 }
 
 class DesktopExitHandler
-    with TrayListener, material.WidgetsBindingObserver {
+    with TrayListener, material.WidgetsBindingObserver, WindowListener {
   DesktopExitHandler._();
 
   static final DesktopExitHandler instance = DesktopExitHandler._();
@@ -43,6 +43,9 @@ class DesktopExitHandler
   material.GlobalKey<material.NavigatorState>? _navigatorKey;
 
   bool _bindingHooked = false;
+  bool _windowListenerHooked = false;
+  bool _preventCloseEnabled = false;
+  bool _closingWindow = false;
   bool _trayReady = false;
   bool _handlingExitRequest = false;
   bool _quitting = false;
@@ -57,6 +60,17 @@ class DesktopExitHandler
     if (!_bindingHooked) {
       material.WidgetsBinding.instance.addObserver(this);
       _bindingHooked = true;
+    }
+
+    if (Platform.isMacOS && !_windowListenerHooked) {
+      try {
+        await windowManager.setPreventClose(true);
+        _preventCloseEnabled = true;
+      } catch (e) {
+        debugPrint('[DesktopExitHandler] 设置关闭拦截失败: $e');
+      }
+      windowManager.addListener(this);
+      _windowListenerHooked = true;
     }
   }
 
@@ -82,7 +96,38 @@ class DesktopExitHandler
           _quitting = true;
           _scheduleHardExitFallback();
           await _prepareForExit();
+          await _closeWindowSafely();
           return ui.AppExitResponse.exit;
+      }
+    } finally {
+      _handlingExitRequest = false;
+    }
+  }
+
+  @override
+  void onWindowClose() async {
+    if (!Platform.isMacOS) return;
+    if (_closingWindow) return;
+    if (_quitting) {
+      await _closeWindowSafely();
+      return;
+    }
+    if (_handlingExitRequest) {
+      return;
+    }
+
+    _handlingExitRequest = true;
+    try {
+      final action = await _resolveExitAction();
+      switch (action) {
+        case DesktopExitAction.cancelAndReturn:
+          return;
+        case DesktopExitAction.minimizeToTrayOrTaskbar:
+          await _minimizeToTrayOrTaskbar();
+          return;
+        case DesktopExitAction.closePlayer:
+          await _exitApp();
+          return;
       }
     } finally {
       _handlingExitRequest = false;
@@ -276,13 +321,33 @@ class DesktopExitHandler
     }
   }
 
+  Future<void> _allowWindowClose() async {
+    if (!_preventCloseEnabled) return;
+    try {
+      await windowManager.setPreventClose(false);
+    } catch (_) {}
+    _preventCloseEnabled = false;
+  }
+
+  Future<void> _closeWindowSafely() async {
+    if (_closingWindow) return;
+    _closingWindow = true;
+    try {
+      await _allowWindowClose();
+      await windowManager.close();
+    } catch (_) {
+    } finally {
+      _closingWindow = false;
+    }
+  }
+
   Future<void> _exitApp() async {
     _quitting = true;
     _scheduleHardExitFallback();
     await _prepareForExit();
 
     try {
-      await windowManager.close();
+      await _closeWindowSafely();
     } catch (_) {}
     if (Platform.isMacOS) {
       exit(0);
