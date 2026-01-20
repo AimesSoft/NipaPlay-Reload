@@ -12,8 +12,6 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
-import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
-import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
@@ -666,7 +664,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           subtitle: item.isFolder
               ? null
               : const Text(
-                  '点击播放',
+                  '点击查看详情',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
           onTap: () => _openMediaDetail(item),
@@ -1305,31 +1303,27 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   // 打开媒体详情
   Future<void> _openMediaDetail(NetworkMediaItem item) async {
-    if (_isFolderNavigation) {
-      if (item.isFolder) {
-        _enterFolder(item);
-      } else {
-        await _playMediaItem(item);
-      }
+    if (_isFolderNavigation && item.isFolder) {
+      _enterFolder(item);
       return;
     }
 
     switch (widget.serverType) {
       case NetworkMediaServerType.jellyfin:
         final jellyfinItem = (item as JellyfinMediaItemAdapter).originalItem;
-        MediaServerDetailPage.showJellyfin(context, jellyfinItem.id).then((WatchHistoryItem? result) {
-          if (result != null && result.filePath.isNotEmpty) {
-            widget.onPlayEpisode?.call(result);
-          }
-        });
+        final result =
+            await MediaServerDetailPage.showJellyfin(context, jellyfinItem.id);
+        if (result != null && result.filePath.isNotEmpty) {
+          widget.onPlayEpisode?.call(result);
+        }
         break;
       case NetworkMediaServerType.emby:
         final embyItem = (item as EmbyMediaItemAdapter).originalItem;
-        MediaServerDetailPage.showEmby(context, embyItem.id).then((WatchHistoryItem? result) {
-          if (result != null && result.filePath.isNotEmpty) {
-            widget.onPlayEpisode?.call(result);
-          }
-        });
+        final result =
+            await MediaServerDetailPage.showEmby(context, embyItem.id);
+        if (result != null && result.filePath.isNotEmpty) {
+          widget.onPlayEpisode?.call(result);
+        }
         break;
     }
   }
@@ -1348,104 +1342,6 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     _loadFolderItems(item.id);
   }
 
-  Future<void> _playMediaItem(NetworkMediaItem item) async {
-    final callback = widget.onPlayEpisode;
-    if (callback == null) {
-      return;
-    }
-
-    WatchHistoryItem? historyItem;
-    try {
-      switch (widget.serverType) {
-        case NetworkMediaServerType.jellyfin:
-          final jellyfinItem = (item as JellyfinMediaItemAdapter).originalItem;
-          historyItem = await _createJellyfinPlayableHistoryItem(jellyfinItem);
-          break;
-        case NetworkMediaServerType.emby:
-          final embyItem = (item as EmbyMediaItemAdapter).originalItem;
-          historyItem = await _createEmbyPlayableHistoryItem(embyItem);
-          break;
-      }
-    } catch (e) {
-      debugPrint('[$_serverName] 自动匹配失败: $e');
-    }
-
-    if (!mounted || historyItem == null) {
-      return;
-    }
-
-    callback(historyItem);
-  }
-
-  Future<String> _resolveJellyfinItemType(JellyfinMediaItem item) async {
-    final rawType = item.type?.trim();
-    if (rawType != null && rawType.isNotEmpty) {
-      return rawType.toLowerCase();
-    }
-    try {
-      final detail =
-          await JellyfinService.instance.getMediaItemDetails(item.id);
-      return detail.type.toLowerCase();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Future<String> _resolveEmbyItemType(EmbyMediaItem item) async {
-    final rawType = item.type?.trim();
-    if (rawType != null && rawType.isNotEmpty) {
-      return rawType.toLowerCase();
-    }
-    try {
-      final detail = await EmbyService.instance.getMediaItemDetails(item.id);
-      return detail.type.toLowerCase();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Future<WatchHistoryItem?> _createJellyfinPlayableHistoryItem(
-    JellyfinMediaItem item,
-  ) async {
-    final type = await _resolveJellyfinItemType(item);
-    final matcher = JellyfinDandanplayMatcher.instance;
-
-    if (type == 'episode') {
-      final episode =
-          await JellyfinService.instance.getEpisodeDetails(item.id);
-      if (episode != null) {
-        return await matcher.createPlayableHistoryItem(context, episode);
-      }
-    } else if (type == 'movie' || type == 'video') {
-      final movie = await JellyfinService.instance.getMovieDetails(item.id);
-      if (movie != null) {
-        return await matcher.createPlayableHistoryItemFromMovie(context, movie);
-      }
-    }
-
-    return item.toWatchHistoryItem();
-  }
-
-  Future<WatchHistoryItem?> _createEmbyPlayableHistoryItem(
-    EmbyMediaItem item,
-  ) async {
-    final type = await _resolveEmbyItemType(item);
-    final matcher = EmbyDandanplayMatcher.instance;
-
-    if (type == 'episode') {
-      final episode = await EmbyService.instance.getEpisodeDetails(item.id);
-      if (episode != null) {
-        return await matcher.createPlayableHistoryItem(context, episode);
-      }
-    } else if (type == 'movie' || type == 'video') {
-      final movie = await EmbyService.instance.getMovieDetails(item.id);
-      if (movie != null) {
-        return await matcher.createPlayableHistoryItemFromMovie(context, movie);
-      }
-    }
-
-    return item.toWatchHistoryItem();
-  }
 
   // 显示服务器设置对话框
   Future<void> _showServerDialog() async {

@@ -3,16 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/providers/watch_history_provider.dart';
-import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
-import 'package:nipaplay/services/emby_service.dart';
-import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
-import 'package:nipaplay/services/jellyfin_service.dart';
-import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_sort_sheet.dart';
 
@@ -261,7 +253,7 @@ class _CupertinoNetworkLibraryItemsPageState
                 (item) => _NetworkMediaGridItem(
                   id: item.id,
                   title: item.name,
-                  subtitle: item.isFolder ? '文件夹' : '点击播放',
+                  subtitle: item.isFolder ? '文件夹' : '点击查看详情',
                   imageUrl: null,
                   isFolder: item.isFolder,
                   type: item.type,
@@ -288,7 +280,7 @@ class _CupertinoNetworkLibraryItemsPageState
                 (item) => _NetworkMediaGridItem(
                   id: item.id,
                   title: item.name,
-                  subtitle: item.isFolder ? '文件夹' : '点击播放',
+                  subtitle: item.isFolder ? '文件夹' : '点击查看详情',
                   imageUrl: null,
                   isFolder: item.isFolder,
                   type: item.type,
@@ -378,156 +370,6 @@ class _CupertinoNetworkLibraryItemsPageState
     });
     final parentId = _currentFolderId ?? widget.libraryId;
     _loadFolderItems(parentId);
-  }
-
-  Future<void> _playMediaItem(_NetworkMediaGridItem item) async {
-    String? actualPlayUrl;
-    WatchHistoryItem? historyItem;
-
-    try {
-      if (widget.serverType == MediaServerType.jellyfin) {
-        final provider = context.read<JellyfinProvider>();
-        if (!provider.isConnected) {
-          AdaptiveSnackBar.show(
-            context,
-            message: '未连接到 Jellyfin 服务器',
-            type: AdaptiveSnackBarType.warning,
-          );
-          return;
-        }
-        historyItem = await _createJellyfinPlayableHistoryItem(item);
-        if (historyItem == null) {
-          return;
-        }
-        actualPlayUrl = provider.getStreamUrl(item.id);
-      } else {
-        final provider = context.read<EmbyProvider>();
-        if (!provider.isConnected) {
-          AdaptiveSnackBar.show(
-            context,
-            message: '未连接到 Emby 服务器',
-            type: AdaptiveSnackBarType.warning,
-          );
-          return;
-        }
-        historyItem = await _createEmbyPlayableHistoryItem(item);
-        if (historyItem == null) {
-          return;
-        }
-        actualPlayUrl = await provider.getStreamUrl(item.id);
-      }
-    } catch (e) {
-      AdaptiveSnackBar.show(
-        context,
-        message: '获取播放地址失败：$e',
-        type: AdaptiveSnackBarType.error,
-      );
-      return;
-    }
-
-    if (!mounted || historyItem == null) {
-      return;
-    }
-
-    final playable = PlayableItem(
-      videoPath: historyItem.filePath,
-      title: historyItem.animeName,
-      subtitle: historyItem.episodeTitle,
-      animeId: historyItem.animeId,
-      episodeId: historyItem.episodeId,
-      historyItem: historyItem,
-      actualPlayUrl: actualPlayUrl,
-    );
-
-    await PlaybackService().play(playable);
-    await context.read<WatchHistoryProvider>().refresh();
-  }
-
-  Future<String> _resolveJellyfinItemType(_NetworkMediaGridItem item) async {
-    final rawType = item.type?.trim();
-    if (rawType != null && rawType.isNotEmpty) {
-      return rawType.toLowerCase();
-    }
-    final service = JellyfinService.instance;
-    final detail = await service.getMediaItemDetails(item.id);
-    return detail.type.toLowerCase();
-  }
-
-  Future<String> _resolveEmbyItemType(_NetworkMediaGridItem item) async {
-    final rawType = item.type?.trim();
-    if (rawType != null && rawType.isNotEmpty) {
-      return rawType.toLowerCase();
-    }
-    final service = EmbyService.instance;
-    final detail = await service.getMediaItemDetails(item.id);
-    return detail.type.toLowerCase();
-  }
-
-  WatchHistoryItem _fallbackHistoryItem(_NetworkMediaGridItem item) {
-    if (widget.serverType == MediaServerType.jellyfin) {
-      return WatchHistoryItem(
-        filePath: 'jellyfin://${item.id}',
-        animeName: item.title,
-        episodeTitle: null,
-        watchProgress: 0.0,
-        lastPosition: 0,
-        duration: 0,
-        lastWatchTime: DateTime.now(),
-      );
-    }
-    return WatchHistoryItem(
-      filePath: 'emby://${item.id}',
-      animeName: item.title,
-      episodeTitle: null,
-      watchProgress: 0.0,
-      lastPosition: 0,
-      duration: 0,
-      lastWatchTime: DateTime.now(),
-    );
-  }
-
-  Future<WatchHistoryItem?> _createJellyfinPlayableHistoryItem(
-    _NetworkMediaGridItem item,
-  ) async {
-    final type = await _resolveJellyfinItemType(item);
-    final matcher = JellyfinDandanplayMatcher.instance;
-    final service = JellyfinService.instance;
-
-    if (type == 'episode') {
-      final episode = await service.getEpisodeDetails(item.id);
-      if (episode != null) {
-        return await matcher.createPlayableHistoryItem(context, episode);
-      }
-    } else if (type == 'movie' || type == 'video') {
-      final movie = await service.getMovieDetails(item.id);
-      if (movie != null) {
-        return await matcher.createPlayableHistoryItemFromMovie(context, movie);
-      }
-    }
-
-    return _fallbackHistoryItem(item);
-  }
-
-  Future<WatchHistoryItem?> _createEmbyPlayableHistoryItem(
-    _NetworkMediaGridItem item,
-  ) async {
-    final type = await _resolveEmbyItemType(item);
-    final matcher = EmbyDandanplayMatcher.instance;
-    final service = EmbyService.instance;
-
-    if (type == 'episode') {
-      final episode = await service.getEpisodeDetails(item.id);
-      if (episode != null) {
-        return await matcher.createPlayableHistoryItem(context, episode);
-      }
-    } else if (type == 'movie' || type == 'video') {
-      final movie = await service.getMovieDetails(item.id);
-      if (movie != null) {
-        return await matcher.createPlayableHistoryItemFromMovie(context, movie);
-      }
-    }
-
-    return _fallbackHistoryItem(item);
   }
 
   @override
@@ -682,15 +524,15 @@ class _CupertinoNetworkLibraryItemsPageState
       child: AdaptiveListTile(
         leading: Icon(icon, size: 20),
         title: Text(item.title),
-        subtitle: isFolder ? const Text('文件夹') : const Text('点击播放'),
+        subtitle: isFolder ? const Text('文件夹') : const Text('点击查看详情'),
         trailing:
             trailingIcon == null ? null : Icon(trailingIcon, size: 16),
         onTap: () {
           if (isFolder) {
             _enterFolder(item);
-          } else {
-            _playMediaItem(item);
+            return;
           }
+          widget.onOpenDetail(widget.serverType, item.id);
         },
       ),
     );
