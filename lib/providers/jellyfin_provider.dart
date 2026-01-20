@@ -386,6 +386,14 @@ class JellyfinProvider extends ChangeNotifier {
     );
   }
 
+  /// 获取指定媒体库或文件夹下的子项（用于混合库文件夹导航）。
+  Future<List<JellyfinMediaItem>> fetchFolderItems(
+    String parentId, {
+    int limit = 99999,
+  }) async {
+    return await _jellyfinService.getFolderItems(parentId, limit: limit);
+  }
+
   /// 查找媒体库信息。
   JellyfinLibrary? findLibrary(String libraryId) {
     for (final library in availableLibraries) {

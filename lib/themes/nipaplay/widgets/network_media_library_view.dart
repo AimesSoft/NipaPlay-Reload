@@ -12,6 +12,8 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
+import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
@@ -32,6 +34,7 @@ abstract class NetworkMediaItem {
   int? get episodeCount;
   int? get watchedEpisodeCount;
   double? get userRating;
+  bool get isFolder;
 }
 
 // 通用媒体库接口
@@ -60,6 +63,8 @@ class JellyfinMediaItemAdapter implements NetworkMediaItem {
   int? get watchedEpisodeCount => null; // Jellyfin doesn't have this field directly
   @override
   double? get userRating => null; // Convert from string if needed
+  @override
+  bool get isFolder => _item.isFolder;
   
   JellyfinMediaItem get originalItem => _item;
 }
@@ -97,6 +102,8 @@ class EmbyMediaItemAdapter implements NetworkMediaItem {
   int? get watchedEpisodeCount => null; // Emby doesn't have this field directly
   @override
   double? get userRating => null; // Convert from string if needed
+  @override
+  bool get isFolder => _item.isFolder;
   
   EmbyMediaItem get originalItem => _item;
 }
@@ -141,6 +148,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   String? _selectedLibraryId;
   bool _isShowingLibraryContent = false;
   bool _isLoadingLibraryContent = false;
+  bool _isFolderNavigation = false;
+  final List<_FolderNode> _folderStack = [];
   
   // 搜索状态
   final TextEditingController _searchController = TextEditingController();
@@ -215,6 +224,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         return 'Emby';
     }
   }
+
+  String? get _currentFolderId =>
+      _folderStack.isNotEmpty ? _folderStack.last.id : null;
+
+  bool get _isAtFolderRoot => _folderStack.length <= 1;
 
   @override
   Widget build(BuildContext context) {
@@ -366,13 +380,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                   BlurButton(
                     icon: Icons.refresh,
                     text: '重试',
-                    onTap: () => _loadLibraryContent(_selectedLibraryId!),
+                    onTap: _retryCurrentView,
                   ),
                   const SizedBox(width: 16),
                   BlurButton(
                     icon: Icons.arrow_back,
                     text: '返回',
-                    onTap: _backToLibraries,
+                    onTap: _handleBackNavigation,
                   ),
                 ],
               ),
@@ -397,16 +411,18 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text(
-                          '该媒体库为空。',
+                        Text(
+                          _isFolderNavigation ? '该文件夹为空。' : '该媒体库为空。',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey, fontSize: 16),
                         ),
                         const SizedBox(height: 16),
                         BlurButton(
                           icon: Icons.arrow_back,
-                          text: '返回媒体库列表',
-                          onTap: _backToLibraries,
+                          text: _isFolderNavigation && !_isAtFolderRoot
+                              ? '返回上级文件夹'
+                              : '返回媒体库列表',
+                          onTap: _handleBackNavigation,
                         ),
                       ],
                     ),
@@ -428,33 +444,35 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
             _buildTopNavigationBar(provider),
             // 搜索栏（在媒体库内容视图中显示）
             if (_isShowingLibraryContent) _buildSearchBar(),
-            // 媒体内容网格
+            // 媒体内容网格/文件夹列表
             Expanded(
               child: RepaintBoundary(
                 child: Scrollbar(
                   controller: _gridScrollController,
                   thickness: 4,
                   radius: const Radius.circular(2),
-                  child: GridView.builder(
-                    controller: _gridScrollController,
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 150,
-                      childAspectRatio: 7/12,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    cacheExtent: 800,
-                    clipBehavior: Clip.hardEdge,
-                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: true,
-                    itemCount: _isSearching ? _searchResults.length : _mediaItems.length,
-                    itemBuilder: (context, index) {
-                      final item = _isSearching ? _searchResults[index] : _mediaItems[index];
-                      return _buildMediaCard(item);
-                    },
-                  ),
+                  child: _isFolderNavigation
+                      ? _buildFolderListView()
+                      : GridView.builder(
+                          controller: _gridScrollController,
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 150,
+                            childAspectRatio: 7/12,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          cacheExtent: 800,
+                          clipBehavior: Clip.hardEdge,
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          addAutomaticKeepAlives: false,
+                          addRepaintBoundaries: true,
+                          itemCount: _isSearching ? _searchResults.length : _mediaItems.length,
+                          itemBuilder: (context, index) {
+                            final item = _isSearching ? _searchResults[index] : _mediaItems[index];
+                            return _buildMediaCard(item);
+                          },
+                        ),
                 ),
               ),
             ),
@@ -489,7 +507,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                   color: Colors.transparent,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(24), // 圆形
-                    onTap: _backToLibraries,
+                    onTap: _handleBackNavigation,
                     child: const Center(
                       child: Icon(
                         Icons.chevron_left,
@@ -505,7 +523,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           const SizedBox(width: 16),
           Expanded(
             child: Text(
-              _getSelectedLibraryName(provider),
+              _getCurrentViewTitle(provider),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -530,6 +548,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     return library.first.name;
   }
 
+  String _getCurrentViewTitle(dynamic provider) {
+    if (_isFolderNavigation && _folderStack.isNotEmpty) {
+      return _folderStack.last.name;
+    }
+    return _getSelectedLibraryName(provider);
+  }
+
   Widget _buildFloatingActionButtons() {
     return Positioned(
       right: 16,
@@ -538,7 +563,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         mainAxisSize: MainAxisSize.min,
         children: [
           // 排序按钮（仅在显示库内容且未在搜索时显示）
-          if (_isShowingLibraryContent && !_isSearching) ...[
+          if (_isShowingLibraryContent && !_isSearching && !_isFolderNavigation) ...[
             FloatingActionGlassButton(
               iconData: Ionicons.swap_vertical_outline,
               onPressed: _showSortDialog,
@@ -612,6 +637,44 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     );
   }
 
+  Widget _buildFolderListView() {
+    final items = _isSearching ? _searchResults : _mediaItems;
+
+    return ListView.separated(
+      controller: _gridScrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: items.length,
+      separatorBuilder: (context, index) => const Divider(
+        height: 1,
+        color: Colors.white12,
+      ),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final icon = item.isFolder
+            ? Ionicons.folder_outline
+            : Ionicons.play_circle_outline;
+
+        return ListTile(
+          dense: true,
+          leading: Icon(icon, color: Colors.white70, size: 20),
+          title: Text(
+            item.title,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: item.isFolder
+              ? null
+              : const Text(
+                  '点击播放',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+          onTap: () => _openMediaDetail(item),
+        );
+      },
+    );
+  }
+
   // 获取选中的媒体库列表
   List<NetworkMediaLibrary> _getSelectedLibraries(dynamic provider) {
     switch (widget.serverType) {
@@ -643,6 +706,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _error = null;
           _selectedLibraryId = null;
           _isShowingLibraryContent = false;
+          _isFolderNavigation = false;
+          _folderStack.clear();
         });
       }
       return;
@@ -701,9 +766,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     return Consumer<UIThemeProvider>(
       builder: (context, uiThemeProvider, child) {
         if (uiThemeProvider.isFluentUITheme) {
-          return _buildFluentSearchBar('搜索 ${_getSelectedLibraryName(_provider)} 中的内容...', _onSearchChanged);
+          return _buildFluentSearchBar('搜索 ${_getCurrentViewTitle(_provider)} 中的内容...', _onSearchChanged);
         } else {
-          return _buildMaterialSearchBar('搜索 ${_getSelectedLibraryName(_provider)} 中的内容...', _onSearchChanged);
+          return _buildMaterialSearchBar('搜索 ${_getCurrentViewTitle(_provider)} 中的内容...', _onSearchChanged);
         }
       },
     );
@@ -812,6 +877,29 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     // 取消之前的搜索定时器
     _searchDebounceTimer?.cancel();
     
+    if (_isFolderNavigation) {
+      if (query.isEmpty) {
+        setState(() {
+          _isSearching = false;
+          _searchResults.clear();
+          _isSearchLoading = false;
+        });
+        return;
+      }
+
+      final keyword = query.trim().toLowerCase();
+      final results = _mediaItems
+          .where((item) => item.title.toLowerCase().contains(keyword))
+          .toList();
+
+      setState(() {
+        _isSearching = true;
+        _searchResults = results;
+        _isSearchLoading = false;
+      });
+      return;
+    }
+
     if (query.isEmpty) {
       setState(() {
         _isSearching = false;
@@ -926,6 +1014,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
       // 遍历所有选中的媒体库
       for (final library in selectedLibraries) {
+        if (library.type.toLowerCase() == 'mixed') {
+          continue;
+        }
         try {
           List<dynamic> libraryResults = [];
           
@@ -985,6 +1076,54 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     });
   }
 
+  void _handleBackNavigation() {
+    if (_isFolderNavigation && !_isAtFolderRoot) {
+      _navigateUpFolder();
+      return;
+    }
+    _backToLibraries();
+  }
+
+  void _navigateUpFolder() {
+    if (_folderStack.length <= 1) {
+      _backToLibraries();
+      return;
+    }
+
+    _clearSearch();
+
+    if (mounted) {
+      setState(() {
+        _folderStack.removeLast();
+        _isLoadingLibraryContent = true;
+        _error = null;
+      });
+    }
+
+    final parentId = _currentFolderId;
+    if (parentId != null) {
+      _loadFolderItems(parentId);
+    }
+  }
+
+  void _retryCurrentView() {
+    if (_isFolderNavigation) {
+      final folderId = _currentFolderId;
+      if (folderId != null) {
+        setState(() {
+          _isLoadingLibraryContent = true;
+          _error = null;
+        });
+        _loadFolderItems(folderId);
+      }
+      return;
+    }
+
+    if (_selectedLibraryId != null) {
+      _loadLibraryContent(_selectedLibraryId!);
+    }
+  }
+
   // 返回媒体库列表
   void _backToLibraries() {
     _clearSearch();
@@ -993,6 +1132,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       setState(() {
         _selectedLibraryId = null;
         _isShowingLibraryContent = false;
+        _isFolderNavigation = false;
+        _folderStack.clear();
         _mediaItems.clear(); // 清空当前媒体项
         _error = null;
       });
@@ -1005,22 +1146,38 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   // 选择媒体库
   void _selectLibrary(NetworkMediaLibrary library) {
     _clearSearch();
-    
+
+    final isMixedLibrary = library.type.toLowerCase() == 'mixed';
     setState(() {
       _selectedLibraryId = library.id;
       _isShowingLibraryContent = true;
       _isLoadingLibraryContent = true;
+      _isFolderNavigation = isMixedLibrary;
       _mediaItems.clear();
       _error = null;
+      _folderStack
+        ..clear();
+      if (isMixedLibrary) {
+        _folderStack.add(_FolderNode(id: library.id, name: library.name));
+      }
     });
-    
-    _loadLibraryContent(library.id);
+
+    if (isMixedLibrary) {
+      _loadFolderItems(library.id);
+    } else {
+      _loadLibraryContent(library.id);
+    }
   }
 
   // 加载媒体库内容
   Future<void> _loadLibraryContent(String libraryId) async {
     if (!mounted) return;
-    
+
+    if (_isFolderNavigation) {
+      await _loadFolderItems(libraryId);
+      return;
+    }
+
     try {
       final service = _service;
       final provider = _provider;
@@ -1066,12 +1223,66 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
+  Future<void> _loadFolderItems(String parentId) async {
+    if (!mounted) return;
+
+    if (mounted) {
+      setState(() {
+        _isLoadingLibraryContent = true;
+        _error = null;
+      });
+    }
+
+    try {
+      final service = _service;
+      List<dynamic> items;
+
+      switch (widget.serverType) {
+        case NetworkMediaServerType.jellyfin:
+          items = await (service as JellyfinService).getFolderItems(
+            parentId,
+            limit: 99999,
+          );
+          break;
+        case NetworkMediaServerType.emby:
+          items = await (service as EmbyService).getFolderItems(
+            parentId,
+            limit: 99999,
+          );
+          break;
+      }
+
+      if (mounted) {
+        setState(() {
+          _mediaItems = _convertToNetworkMediaItems(items);
+          _isLoadingLibraryContent = false;
+          _error = null;
+        });
+      }
+      _setupRefreshTimer();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoadingLibraryContent = false;
+        });
+      }
+    }
+  }
+
   // 设置刷新定时器
   void _setupRefreshTimer() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(minutes: 60), (timer) {
-      if (_isShowingLibraryContent && _selectedLibraryId != null) {
-        _loadLibraryContent(_selectedLibraryId!);
+      if (_isShowingLibraryContent) {
+        if (_isFolderNavigation) {
+          final folderId = _currentFolderId ?? _selectedLibraryId;
+          if (folderId != null) {
+            _loadFolderItems(folderId);
+          }
+        } else if (_selectedLibraryId != null) {
+          _loadLibraryContent(_selectedLibraryId!);
+        }
       } else {
         _loadData();
       }
@@ -1093,7 +1304,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   }
 
   // 打开媒体详情
-  void _openMediaDetail(NetworkMediaItem item) {
+  Future<void> _openMediaDetail(NetworkMediaItem item) async {
+    if (_isFolderNavigation) {
+      if (item.isFolder) {
+        _enterFolder(item);
+      } else {
+        await _playMediaItem(item);
+      }
+      return;
+    }
+
     switch (widget.serverType) {
       case NetworkMediaServerType.jellyfin:
         final jellyfinItem = (item as JellyfinMediaItemAdapter).originalItem;
@@ -1112,6 +1332,119 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         });
         break;
     }
+  }
+
+  void _enterFolder(NetworkMediaItem item) {
+    _clearSearch();
+
+    if (mounted) {
+      setState(() {
+        _isLoadingLibraryContent = true;
+        _error = null;
+        _folderStack.add(_FolderNode(id: item.id, name: item.title));
+      });
+    }
+
+    _loadFolderItems(item.id);
+  }
+
+  Future<void> _playMediaItem(NetworkMediaItem item) async {
+    final callback = widget.onPlayEpisode;
+    if (callback == null) {
+      return;
+    }
+
+    WatchHistoryItem? historyItem;
+    try {
+      switch (widget.serverType) {
+        case NetworkMediaServerType.jellyfin:
+          final jellyfinItem = (item as JellyfinMediaItemAdapter).originalItem;
+          historyItem = await _createJellyfinPlayableHistoryItem(jellyfinItem);
+          break;
+        case NetworkMediaServerType.emby:
+          final embyItem = (item as EmbyMediaItemAdapter).originalItem;
+          historyItem = await _createEmbyPlayableHistoryItem(embyItem);
+          break;
+      }
+    } catch (e) {
+      debugPrint('[$_serverName] 自动匹配失败: $e');
+    }
+
+    if (!mounted || historyItem == null) {
+      return;
+    }
+
+    callback(historyItem);
+  }
+
+  Future<String> _resolveJellyfinItemType(JellyfinMediaItem item) async {
+    final rawType = item.type?.trim();
+    if (rawType != null && rawType.isNotEmpty) {
+      return rawType.toLowerCase();
+    }
+    try {
+      final detail =
+          await JellyfinService.instance.getMediaItemDetails(item.id);
+      return detail.type.toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<String> _resolveEmbyItemType(EmbyMediaItem item) async {
+    final rawType = item.type?.trim();
+    if (rawType != null && rawType.isNotEmpty) {
+      return rawType.toLowerCase();
+    }
+    try {
+      final detail = await EmbyService.instance.getMediaItemDetails(item.id);
+      return detail.type.toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<WatchHistoryItem?> _createJellyfinPlayableHistoryItem(
+    JellyfinMediaItem item,
+  ) async {
+    final type = await _resolveJellyfinItemType(item);
+    final matcher = JellyfinDandanplayMatcher.instance;
+
+    if (type == 'episode') {
+      final episode =
+          await JellyfinService.instance.getEpisodeDetails(item.id);
+      if (episode != null) {
+        return await matcher.createPlayableHistoryItem(context, episode);
+      }
+    } else if (type == 'movie' || type == 'video') {
+      final movie = await JellyfinService.instance.getMovieDetails(item.id);
+      if (movie != null) {
+        return await matcher.createPlayableHistoryItemFromMovie(context, movie);
+      }
+    }
+
+    return item.toWatchHistoryItem();
+  }
+
+  Future<WatchHistoryItem?> _createEmbyPlayableHistoryItem(
+    EmbyMediaItem item,
+  ) async {
+    final type = await _resolveEmbyItemType(item);
+    final matcher = EmbyDandanplayMatcher.instance;
+
+    if (type == 'episode') {
+      final episode = await EmbyService.instance.getEpisodeDetails(item.id);
+      if (episode != null) {
+        return await matcher.createPlayableHistoryItem(context, episode);
+      }
+    } else if (type == 'movie' || type == 'video') {
+      final movie = await EmbyService.instance.getMovieDetails(item.id);
+      if (movie != null) {
+        return await matcher.createPlayableHistoryItemFromMovie(context, movie);
+      }
+    }
+
+    return item.toWatchHistoryItem();
   }
 
   // 显示服务器设置对话框
@@ -1175,4 +1508,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   }
 
 
+}
+
+class _FolderNode {
+  final String id;
+  final String name;
+
+  const _FolderNode({
+    required this.id,
+    required this.name,
+  });
 }

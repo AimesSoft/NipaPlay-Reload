@@ -354,6 +354,8 @@ class _CupertinoNetworkServerLibrariesPageState
         return '剧集库';
       case 'movies':
         return '电影库';
+      case 'mixed':
+        return '混合库';
       case 'boxsets':
         return '合集';
       default:

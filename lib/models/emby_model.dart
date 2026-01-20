@@ -39,6 +39,8 @@ class EmbyMediaItem {
   final DateTime dateAdded;
   final String? premiereDate;
   final String? communityRating;
+  final String? type;
+  final bool isFolder;
   
   EmbyMediaItem({
     required this.id,
@@ -51,9 +53,16 @@ class EmbyMediaItem {
     required this.dateAdded,
     this.premiereDate,
     this.communityRating,
+    this.type,
+    this.isFolder = false,
   });
   
   factory EmbyMediaItem.fromJson(Map<String, dynamic> json) {
+    final type = json['Type'];
+    final isFolderValue = json['IsFolder'];
+    final resolvedIsFolder = isFolderValue is bool
+        ? isFolderValue
+        : _isFolderType(type?.toString());
     return EmbyMediaItem(
       id: json['Id'],
       name: json['Name'],
@@ -65,7 +74,23 @@ class EmbyMediaItem {
       dateAdded: DateTime.parse(json['DateCreated'] ?? DateTime.now().toIso8601String()),
       premiereDate: json['PremiereDate'],
       communityRating: json['CommunityRating']?.toString(),
+      type: type?.toString(),
+      isFolder: resolvedIsFolder,
     );
+  }
+
+  static bool _isFolderType(String? type) {
+    if (type == null) return false;
+    switch (type.toLowerCase()) {
+      case 'folder':
+      case 'collectionfolder':
+      case 'series':
+      case 'season':
+      case 'boxset':
+        return true;
+      default:
+        return false;
+    }
   }
   
   // 将EmbyMediaItem转换为WatchHistoryItem，用于与现有系统兼容
