@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'subtitle_parser.dart';
 import '../../player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/services/remote_subtitle_service.dart';
 
 /// 字幕管理器类，负责处理与字幕相关的所有功能
 class SubtitleManager extends ChangeNotifier {
@@ -418,6 +420,47 @@ class SubtitleManager extends ChangeNotifier {
         }
       }
 
+      // 远程媒体库字幕（含弹弹play远程流）
+      if (!kIsWeb &&
+          RemoteSubtitleService.instance
+              .isPotentialRemoteVideoPath(videoPath)) {
+        try {
+          final candidates = await RemoteSubtitleService.instance
+              .listCandidatesForVideo(videoPath);
+          if (candidates.isNotEmpty) {
+            final selected = _pickRemoteSubtitleCandidate(
+              candidates,
+              videoPath,
+            );
+            final cachedPath = await RemoteSubtitleService.instance
+                .ensureSubtitleCached(selected);
+
+            // 等待一段时间确保播放器准备好
+            await Future.delayed(const Duration(milliseconds: 500));
+
+            // 设置外部字幕（不标记为手动设置，因为是自动检测的）
+            setExternalSubtitle(cachedPath, isManualSetting: false);
+
+            // 保存这个自动找到的字幕路径，下次可以直接使用
+            saveVideoSubtitleMapping(videoPath, cachedPath);
+
+            // 设置完成后强制刷新状态
+            await Future.delayed(const Duration(milliseconds: 300));
+
+            // 触发自动加载字幕回调
+            if (onExternalSubtitleAutoLoaded != null) {
+              onExternalSubtitleAutoLoaded!(cachedPath, selected.name);
+            }
+
+            return;
+          } else {
+            debugPrint('SubtitleManager: 远程目录未找到字幕文件');
+          }
+        } catch (e) {
+          debugPrint('SubtitleManager: 远程字幕检测失败: $e');
+        }
+      }
+
       // 需求：即使存在内嵌字幕，也应优先尝试自动加载外挂字幕。
 
       // 检查视频文件是否存在
@@ -673,6 +716,49 @@ class SubtitleManager extends ChangeNotifier {
     } catch (e) {
       debugPrint('SubtitleManager: 自动检测字幕文件失败: $e');
     }
+  }
+
+  RemoteSubtitleCandidate _pickRemoteSubtitleCandidate(
+    List<RemoteSubtitleCandidate> candidates,
+    String videoPath,
+  ) {
+    String? baseName;
+    try {
+      final uri = Uri.tryParse(videoPath);
+      if (uri != null && uri.pathSegments.isNotEmpty) {
+        baseName = p.basenameWithoutExtension(uri.pathSegments.last);
+      }
+    } catch (_) {}
+
+    int scoreCandidate(RemoteSubtitleCandidate candidate) {
+      final ext = candidate.extension.toLowerCase();
+      int score = switch (ext) {
+        '.ass' => 40,
+        '.ssa' => 35,
+        '.srt' => 30,
+        '.sub' => 20,
+        '.sup' => 10,
+        _ => 0,
+      };
+
+      if (baseName != null && baseName.isNotEmpty) {
+        final lowerName = candidate.name.toLowerCase();
+        if (lowerName.contains(baseName.toLowerCase())) {
+          score += 15;
+        }
+      }
+      return score;
+    }
+
+    final sorted = List<RemoteSubtitleCandidate>.from(candidates)
+      ..sort((a, b) {
+        final scoreCompare =
+            scoreCandidate(b).compareTo(scoreCandidate(a));
+        if (scoreCompare != 0) return scoreCompare;
+        return a.name.compareTo(b.name);
+      });
+
+    return sorted.first;
   }
 
   // 获取语言名称
