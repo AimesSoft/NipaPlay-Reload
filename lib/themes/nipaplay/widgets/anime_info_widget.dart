@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 // import 'package:nipaplay/utils/globals.dart' as globals; // globals is not used in this snippet
 
@@ -20,11 +21,28 @@ class AnimeInfoWidget extends StatefulWidget {
 class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
   bool _isEpisodeHovered = false;
 
+  String? _resolveTitle(String? value) {
+    final trimmed = value?.trim() ?? '';
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  String? _resolveFileName(String? path) {
+    final trimmed = path?.trim() ?? '';
+    if (trimmed.isEmpty) return null;
+    return _resolveTitle(p.basenameWithoutExtension(trimmed));
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!(widget.videoState.hasVideo &&
-        widget.videoState.animeTitle != null &&
-        widget.videoState.episodeTitle != null)) {
+    if (!widget.videoState.hasVideo) {
+      return const SizedBox.shrink();
+    }
+
+    final animeTitle = _resolveTitle(widget.videoState.animeTitle);
+    final episodeTitle = _resolveTitle(widget.videoState.episodeTitle);
+    final fileTitle = _resolveFileName(widget.videoState.currentVideoPath);
+    final displayTitle = animeTitle ?? fileTitle ?? episodeTitle;
+    if (displayTitle == null) {
       return const SizedBox.shrink();
     }
 
@@ -77,7 +95,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                     children: [
                       Flexible(
                         child: Text(
-                          widget.videoState.animeTitle!,
+                          displayTitle,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -87,31 +105,34 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: MouseRegion(
-                          onEnter: (_) {
-                            setState(() => _isEpisodeHovered = true);
-                          },
-                          onExit: (_) {
-                            setState(() => _isEpisodeHovered = false);
-                          },
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 200),
-                            style: TextStyle(
-                              color: _isEpisodeHovered
-                                  ? Colors.white
-                                  : Colors.white70,
-                              fontSize: 14,
-                            ),
-                            child: Text(
-                              widget.videoState.episodeTitle!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                      if (episodeTitle != null &&
+                          episodeTitle != displayTitle) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: MouseRegion(
+                            onEnter: (_) {
+                              setState(() => _isEpisodeHovered = true);
+                            },
+                            onExit: (_) {
+                              setState(() => _isEpisodeHovered = false);
+                            },
+                            child: AnimatedDefaultTextStyle(
+                              duration: const Duration(milliseconds: 200),
+                              style: TextStyle(
+                                color: _isEpisodeHovered
+                                    ? Colors.white
+                                    : Colors.white70,
+                                fontSize: 14,
+                              ),
+                              child: Text(
+                                episodeTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
