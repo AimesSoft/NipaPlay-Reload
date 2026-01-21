@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -32,11 +33,13 @@ class _DandanplayRemoteLibraryViewState
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   final ScrollController _gridScrollController = ScrollController();
+  Timer? _searchDebounce;
   final Map<int, String?> _coverCache = {}; // 复用本地缓存的番剧封面
   final Map<int, Future<String?>> _coverLoadingTasks = {};
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _gridScrollController.dispose();
     super.dispose();
@@ -59,10 +62,6 @@ class _DandanplayRemoteLibraryViewState
 
         if (provider.animeGroups.isEmpty && !provider.isLoading) {
           return _buildEmptyState(provider);
-        }
-
-        if (groups.isEmpty) {
-          return _buildEmptyState(provider, isSearchResult: true);
         }
 
         return Column(
@@ -127,14 +126,43 @@ class _DandanplayRemoteLibraryViewState
     if (_searchQuery.isEmpty) {
       return List.unmodifiable(source);
     }
-    final query = _searchQuery.toLowerCase();
     return source.where((group) {
-      final titleMatch = group.title.toLowerCase().contains(query);
+      final titleMatch = _matchesQuery(group.title, _searchQuery);
       final episodeMatch = group.episodes.any(
-        (episode) => episode.episodeTitle.toLowerCase().contains(query),
+        (episode) => _matchesQuery(episode.episodeTitle, _searchQuery),
       );
       return titleMatch || episodeMatch;
     }).toList();
+  }
+
+  bool _matchesQuery(String source, String query) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return true;
+
+    final lowerSource = source.toLowerCase();
+    final lowerQuery = trimmed.toLowerCase();
+    if (lowerSource.contains(lowerQuery)) return true;
+
+    final normalizedSource = _normalizeSearchText(lowerSource);
+    final normalizedQuery = _normalizeSearchText(lowerQuery);
+    if (normalizedSource.contains(normalizedQuery)) return true;
+
+    final tokens = trimmed
+        .split(RegExp(r'\s+'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    if (tokens.length <= 1) return false;
+
+    final tokenMatch = tokens.every(
+      (token) => _normalizeSearchText(lowerSource)
+          .contains(_normalizeSearchText(token.toLowerCase())),
+    );
+    return tokenMatch;
+  }
+
+  String _normalizeSearchText(String input) {
+    return input.replaceAll(RegExp(r'[\s\p{P}\p{S}]', unicode: true), '');
   }
 
   Widget _buildMediaGrid(
@@ -190,6 +218,7 @@ class _DandanplayRemoteLibraryViewState
                   : IconButton(
                       icon: const Icon(Icons.clear, color: Colors.white70),
                       onPressed: () {
+                        _searchDebounce?.cancel();
                         setState(() {
                           _searchQuery = '';
                           _searchController.clear();
@@ -204,6 +233,16 @@ class _DandanplayRemoteLibraryViewState
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
             onChanged: (value) {
+              _searchDebounce?.cancel();
+              _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                if (!mounted) return;
+                setState(() {
+                  _searchQuery = value.trim();
+                });
+              });
+            },
+            onSubmitted: (value) {
+              _searchDebounce?.cancel();
               setState(() {
                 _searchQuery = value.trim();
               });
@@ -527,14 +566,9 @@ class _DandanplayRemoteLibraryViewState
     );
   }
 
-  Widget _buildEmptyState(
-    DandanplayRemoteProvider provider, {
-    bool isSearchResult = false,
-  }) {
-    final title = isSearchResult ? '没有找到匹配的番剧' : '远程媒体库为空';
-    final subtitle = isSearchResult
-        ? '请尝试调整搜索关键词或清空搜索框。'
-        : '请确认弹弹play 远程访问已同步媒体，稍候片刻即可自动更新列表。';
+  Widget _buildEmptyState(DandanplayRemoteProvider provider) {
+    final title = '远程媒体库为空';
+    final subtitle = '请确认弹弹play 远程访问已同步媒体，稍候片刻即可自动更新列表。';
 
     return Center(
       child: Padding(
@@ -543,9 +577,7 @@ class _DandanplayRemoteLibraryViewState
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isSearchResult
-                  ? Ionicons.search_outline
-                  : Ionicons.tv_outline,
+              Ionicons.tv_outline,
               color: Colors.white54,
               size: 48,
             ),

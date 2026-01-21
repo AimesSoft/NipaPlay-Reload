@@ -37,6 +37,22 @@ class DandanplayRemoteService {
   List<DandanplayRemoteEpisode> get cachedEpisodes =>
       List.unmodifiable(_cachedEpisodes);
 
+  bool isDandanplayStreamUrl(String videoPath) {
+    if (videoPath.trim().isEmpty) return false;
+    if (videoPath.startsWith('dandanplay://')) return true;
+    if (_baseUrl == null || _baseUrl!.isEmpty) return false;
+    final uri = Uri.tryParse(videoPath);
+    if (uri == null) return false;
+
+    final baseUri = Uri.parse(_baseUrl!);
+    final sameHost = uri.scheme == baseUri.scheme &&
+        uri.host == baseUri.host &&
+        (uri.port == baseUri.port);
+    if (!sameHost) return false;
+
+    return uri.path.contains('/api/v1/stream/');
+  }
+
   Future<void> loadSavedSettings({bool backgroundRefresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final savedBase = prefs.getString(_baseUrlKey);
@@ -207,6 +223,88 @@ class DandanplayRemoteService {
     return null;
   }
 
+  Future<String?> resolveEntryIdForStreamUrl(String videoPath) async {
+    final identifier = _extractDandanplayIdentifier(videoPath);
+    if (identifier.entryId?.isNotEmpty == true) {
+      return identifier.entryId;
+    }
+
+    final hash = identifier.hash;
+    if (hash == null || hash.isEmpty) return null;
+
+    String? match = _findEntryIdByHash(hash, _cachedEpisodes);
+    if (match != null && match.isNotEmpty) return match;
+
+    try {
+      final refreshed = await refreshLibrary(force: true);
+      match = _findEntryIdByHash(hash, refreshed);
+      if (match != null && match.isNotEmpty) return match;
+    } catch (_) {
+      // ignore refresh error and fall through
+    }
+    return null;
+  }
+
+  Future<List<DandanplayRemoteSubtitleItem>> getSubtitleList(
+      String entryId) async {
+    if (_baseUrl == null || _baseUrl!.isEmpty) {
+      throw Exception('尚未配置弹弹play远程访问地址');
+    }
+    if (entryId.trim().isEmpty) return const [];
+
+    final response = await _getClient()
+        .get(
+          _buildUri('/api/v1/subtitle/info/$entryId'),
+          headers: _buildHeaders(),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 401) {
+      throw Exception('API密钥无效或缺失，无法访问该服务器');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('获取远程字幕列表失败: HTTP ${response.statusCode}');
+    }
+
+    final decoded = json.decode(utf8.decode(response.bodyBytes));
+    if (decoded is! Map<String, dynamic>) return const [];
+    final list = decoded['subtitles'];
+    if (list is! List) return const [];
+
+    return list
+        .whereType<Map>()
+        .map((item) => DandanplayRemoteSubtitleItem.fromJson(
+            item.cast<String, dynamic>()))
+        .toList();
+  }
+
+  Future<List<int>> downloadSubtitleFileBytes(
+      String entryId, String fileName) async {
+    if (_baseUrl == null || _baseUrl!.isEmpty) {
+      throw Exception('尚未配置弹弹play远程访问地址');
+    }
+    if (entryId.trim().isEmpty || fileName.trim().isEmpty) {
+      throw Exception('字幕参数为空');
+    }
+
+    final response = await _getClient()
+        .get(
+          _buildUri('/api/v1/subtitle/file/$entryId',
+              queryParameters: {'fileName': fileName}),
+          headers: _buildHeaders(),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode == 401) {
+      throw Exception('API密钥无效或缺失，无法访问该服务器');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('下载字幕失败: HTTP ${response.statusCode}');
+    }
+
+    return response.bodyBytes;
+  }
+
   Uri _buildUri(String path, {Map<String, String>? queryParameters}) {
     final resolved = _baseUrl!;
     final uri = Uri.parse('$resolved$path');
@@ -296,6 +394,71 @@ class DandanplayRemoteService {
       } catch (_) {}
     }
   }
+
+  _DandanplayStreamIdentifier _extractDandanplayIdentifier(String filePath) {
+    String normalized = filePath.trim();
+    String? hash;
+    String? entryId;
+
+    if (normalized.startsWith('dandanplay://')) {
+      normalized = normalized.substring('dandanplay://'.length);
+      if (normalized.startsWith('id/')) {
+        entryId = normalized.substring(3);
+      } else if (normalized.startsWith('stream/')) {
+        final parts = normalized.split('/');
+        if (parts.length >= 3 && parts[1] == 'id') {
+          entryId = parts[2];
+        } else if (parts.length >= 2) {
+          hash = parts[1];
+        }
+      } else {
+        hash = normalized;
+      }
+
+      return _DandanplayStreamIdentifier(
+        hash: _normalizeRemoteKey(hash),
+        entryId: _normalizeRemoteKey(entryId),
+      );
+    }
+
+    final uri = Uri.tryParse(normalized);
+    final segments = (uri?.pathSegments ?? normalized.split('/'))
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+
+    final streamIndex = segments.indexOf('stream');
+    if (streamIndex != -1 && streamIndex + 1 < segments.length) {
+      final nextSegment = segments[streamIndex + 1];
+      if (nextSegment == 'id' && streamIndex + 2 < segments.length) {
+        entryId = Uri.decodeComponent(segments[streamIndex + 2]);
+      } else if (nextSegment != 'id') {
+        hash = Uri.decodeComponent(nextSegment);
+      }
+    }
+
+    return _DandanplayStreamIdentifier(
+      hash: _normalizeRemoteKey(hash),
+      entryId: _normalizeRemoteKey(entryId),
+    );
+  }
+
+  String? _normalizeRemoteKey(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return trimmed;
+  }
+
+  String? _findEntryIdByHash(
+      String hash, List<DandanplayRemoteEpisode> source) {
+    final target = hash.toLowerCase();
+    for (final episode in source) {
+      if (episode.hash.toLowerCase() == target) {
+        return episode.entryId;
+      }
+    }
+    return null;
+  }
 }
 
 class _WelcomeInfo {
@@ -303,4 +466,27 @@ class _WelcomeInfo {
 
   final String version;
   final bool tokenRequired;
+}
+
+class _DandanplayStreamIdentifier {
+  const _DandanplayStreamIdentifier({this.hash, this.entryId});
+
+  final String? hash;
+  final String? entryId;
+}
+
+class DandanplayRemoteSubtitleItem {
+  const DandanplayRemoteSubtitleItem({required this.fileName, this.fileSize});
+
+  final String fileName;
+  final int? fileSize;
+
+  factory DandanplayRemoteSubtitleItem.fromJson(Map<String, dynamic> json) {
+    return DandanplayRemoteSubtitleItem(
+      fileName: json['fileName']?.toString() ?? '',
+      fileSize: json['fileSize'] is int
+          ? json['fileSize'] as int
+          : int.tryParse(json['fileSize']?.toString() ?? ''),
+    );
+  }
 }

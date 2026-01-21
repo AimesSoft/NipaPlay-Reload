@@ -29,6 +29,7 @@ class _CupertinoDandanplayLibraryPageState
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String _searchQuery = '';
+  Timer? _searchDebounce;
   final Map<int, String?> _coverCache = {};
   final Map<int, Future<String?>> _coverLoadingTasks = {};
 
@@ -46,6 +47,7 @@ class _CupertinoDandanplayLibraryPageState
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -108,8 +110,6 @@ class _CupertinoDandanplayLibraryPageState
         (provider.errorMessage?.isNotEmpty ?? false) && !provider.isLoading;
     final bool showEmptyLibrary =
         provider.animeGroups.isEmpty && !provider.isLoading;
-    final bool showEmptySearch =
-        provider.animeGroups.isNotEmpty && filtered.isEmpty;
 
     final slivers = <Widget>[
       CupertinoSliverRefreshControl(
@@ -143,14 +143,6 @@ class _CupertinoDandanplayLibraryPageState
           icon: CupertinoIcons.tv,
           title: '远程媒体库为空',
           message: '请确认弹弹play 已同步媒体，稍候片刻即可自动更新列表。',
-        ),
-      );
-    } else if (showEmptySearch) {
-      slivers.add(
-        _buildPlaceholderSliver(
-          icon: CupertinoIcons.search,
-          title: '没有找到匹配内容',
-          message: '请尝试调整或清空搜索关键词。',
         ),
       );
     } else {
@@ -195,11 +187,22 @@ class _CupertinoDandanplayLibraryPageState
         controller: _searchController,
         placeholder: '搜索番剧或剧集',
         onChanged: (value) {
+          _searchDebounce?.cancel();
+          _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+            if (!mounted) return;
+            setState(() {
+              _searchQuery = value.trim();
+            });
+          });
+        },
+        onSubmitted: (value) {
+          _searchDebounce?.cancel();
           setState(() {
             _searchQuery = value.trim();
           });
         },
         onSuffixTap: () {
+          _searchDebounce?.cancel();
           setState(() {
             _searchQuery = '';
             _searchController.clear();
@@ -330,14 +333,43 @@ class _CupertinoDandanplayLibraryPageState
     if (_searchQuery.isEmpty) {
       return List.unmodifiable(source);
     }
-    final query = _searchQuery.toLowerCase();
     return source.where((group) {
-      final titleMatch = group.title.toLowerCase().contains(query);
+      final titleMatch = _matchesQuery(group.title, _searchQuery);
       final episodeMatch = group.episodes.any(
-        (episode) => episode.episodeTitle.toLowerCase().contains(query),
+        (episode) => _matchesQuery(episode.episodeTitle, _searchQuery),
       );
       return titleMatch || episodeMatch;
     }).toList();
+  }
+
+  bool _matchesQuery(String source, String query) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return true;
+
+    final lowerSource = source.toLowerCase();
+    final lowerQuery = trimmed.toLowerCase();
+    if (lowerSource.contains(lowerQuery)) return true;
+
+    final normalizedSource = _normalizeSearchText(lowerSource);
+    final normalizedQuery = _normalizeSearchText(lowerQuery);
+    if (normalizedSource.contains(normalizedQuery)) return true;
+
+    final tokens = trimmed
+        .split(RegExp(r'\s+'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    if (tokens.length <= 1) return false;
+
+    final tokenMatch = tokens.every(
+      (token) => _normalizeSearchText(lowerSource)
+          .contains(_normalizeSearchText(token.toLowerCase())),
+    );
+    return tokenMatch;
+  }
+
+  String _normalizeSearchText(String input) {
+    return input.replaceAll(RegExp(r'[\s\p{P}\p{S}]', unicode: true), '');
   }
 
   Future<void> _refreshLibrary(

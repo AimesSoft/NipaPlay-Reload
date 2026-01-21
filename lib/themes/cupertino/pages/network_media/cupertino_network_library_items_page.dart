@@ -53,12 +53,24 @@ class _CupertinoNetworkLibraryItemsPageState
   String? _error;
   List<_NetworkMediaGridItem> _items = const [];
   _LibrarySort _currentSort = _LibrarySort.recentlyAdded;
+  bool _isFolderNavigation = false;
+  final List<_FolderNode> _folderStack = [];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadItems());
   }
+
+  String? get _currentFolderId =>
+      _folderStack.isNotEmpty ? _folderStack.last.id : null;
+
+  bool get _isAtFolderRoot => _folderStack.length <= 1;
+
+  String get _currentTitle =>
+      _isFolderNavigation && _folderStack.isNotEmpty
+          ? _folderStack.last.name
+          : widget.libraryName;
 
   _SortOption _resolveSortOption(_LibrarySort sort) {
     switch (sort) {
@@ -77,7 +89,39 @@ class _CupertinoNetworkLibraryItemsPageState
     }
   }
 
+  bool _isMixedLibrary() {
+    switch (widget.serverType) {
+      case MediaServerType.jellyfin:
+        final provider = context.read<JellyfinProvider>();
+        final library = provider.findLibrary(widget.libraryId);
+        return library?.type?.toLowerCase() == 'mixed';
+      case MediaServerType.emby:
+        final provider = context.read<EmbyProvider>();
+        final library = provider.findLibrary(widget.libraryId);
+        return library?.type?.toLowerCase() == 'mixed';
+    }
+  }
+
   Future<void> _loadItems({_LibrarySort? nextSort}) async {
+    if (_isMixedLibrary()) {
+      if (!_isFolderNavigation) {
+        _folderStack.clear();
+      }
+      _isFolderNavigation = true;
+      if (_folderStack.isEmpty) {
+        _folderStack.add(
+          _FolderNode(id: widget.libraryId, name: widget.libraryName),
+        );
+      }
+      await _loadFolderItems(_currentFolderId ?? widget.libraryId);
+      return;
+    }
+
+    if (_isFolderNavigation) {
+      _isFolderNavigation = false;
+      _folderStack.clear();
+    }
+
     final _LibrarySort targetSort = nextSort ?? _currentSort;
     final _SortOption option = _resolveSortOption(targetSort);
 
@@ -118,6 +162,8 @@ class _CupertinoNetworkLibraryItemsPageState
                           quality: 90,
                         )
                       : null,
+                  isFolder: item.isFolder,
+                  type: item.type,
                 ),
               )
               .toList();
@@ -156,6 +202,88 @@ class _CupertinoNetworkLibraryItemsPageState
                           quality: 90,
                         )
                       : null,
+                  isFolder: item.isFolder,
+                  type: item.type,
+                ),
+              )
+              .toList();
+          if (mounted) {
+            setState(() {
+              _items = mapped;
+            });
+          }
+          break;
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadFolderItems(String parentId) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      switch (widget.serverType) {
+        case MediaServerType.jellyfin:
+          final provider = context.read<JellyfinProvider>();
+          if (!provider.isConnected) {
+            throw Exception('尚未连接 Jellyfin 服务器');
+          }
+          final items = await provider.fetchFolderItems(
+            parentId,
+            limit: 99999,
+          );
+          final mapped = items
+              .map(
+                (item) => _NetworkMediaGridItem(
+                  id: item.id,
+                  title: item.name,
+                  subtitle: item.isFolder ? '文件夹' : '点击查看详情',
+                  imageUrl: null,
+                  isFolder: item.isFolder,
+                  type: item.type,
+                ),
+              )
+              .toList();
+          if (mounted) {
+            setState(() {
+              _items = mapped;
+            });
+          }
+          break;
+        case MediaServerType.emby:
+          final provider = context.read<EmbyProvider>();
+          if (!provider.isConnected) {
+            throw Exception('尚未连接 Emby 服务器');
+          }
+          final items = await provider.fetchFolderItems(
+            parentId,
+            limit: 99999,
+          );
+          final mapped = items
+              .map(
+                (item) => _NetworkMediaGridItem(
+                  id: item.id,
+                  title: item.name,
+                  subtitle: item.isFolder ? '文件夹' : '点击查看详情',
+                  imageUrl: null,
+                  isFolder: item.isFolder,
+                  type: item.type,
                 ),
               )
               .toList();
@@ -202,6 +330,9 @@ class _CupertinoNetworkLibraryItemsPageState
   Future<void> _handleRefresh() => _loadItems();
 
   Future<void> _showSortDialog() async {
+    if (_isFolderNavigation) {
+      return;
+    }
     await Navigator.of(context).push(
       CupertinoPageRoute(
         fullscreenDialog: true,
@@ -222,6 +353,23 @@ class _CupertinoNetworkLibraryItemsPageState
         ),
       ),
     );
+  }
+
+  void _enterFolder(_NetworkMediaGridItem item) {
+    if (!item.isFolder) return;
+    setState(() {
+      _folderStack.add(_FolderNode(id: item.id, name: item.title));
+    });
+    _loadFolderItems(item.id);
+  }
+
+  void _navigateUpFolder() {
+    if (_folderStack.length <= 1) return;
+    setState(() {
+      _folderStack.removeLast();
+    });
+    final parentId = _currentFolderId ?? widget.libraryId;
+    _loadFolderItems(parentId);
   }
 
   @override
@@ -250,21 +398,38 @@ class _CupertinoNetworkLibraryItemsPageState
       slivers.add(_buildErrorPlaceholder(context, _error!));
     } else if (_items.isEmpty) {
       slivers.add(_buildEmptyPlaceholder(context));
+    } else if (_isFolderNavigation) {
+      slivers.add(_buildFolderList());
     } else {
       slivers.add(_buildGrid());
     }
 
+    final actions = <AdaptiveAppBarAction>[];
+    if (_isFolderNavigation) {
+      if (!_isAtFolderRoot) {
+        actions.add(
+          AdaptiveAppBarAction(
+            iosSymbol: 'chevron.up',
+            icon: CupertinoIcons.chevron_up,
+            onPressed: _navigateUpFolder,
+          ),
+        );
+      }
+    } else {
+      actions.add(
+        AdaptiveAppBarAction(
+          iosSymbol: 'line.horizontal.3.decrease',
+          icon: CupertinoIcons.line_horizontal_3_decrease,
+          onPressed: _showSortDialog,
+        ),
+      );
+    }
+
     return AdaptiveScaffold(
       appBar: AdaptiveAppBar(
-        title: widget.libraryName,
+        title: _currentTitle,
         useNativeToolbar: true,
-        actions: [
-          AdaptiveAppBarAction(
-            iosSymbol: 'line.horizontal.3.decrease',
-            icon: CupertinoIcons.line_horizontal_3_decrease,
-            onPressed: _showSortDialog,
-          ),
-        ],
+        actions: actions.isEmpty ? null : actions,
       ),
       body: ColoredBox(
         color: backgroundColor,
@@ -305,6 +470,70 @@ class _CupertinoNetworkLibraryItemsPageState
           },
           childCount: _items.length,
         ),
+      ),
+    );
+  }
+
+  Widget _buildFolderList() {
+    final hasParent = !_isAtFolderRoot;
+    final totalCount = _items.length + (hasParent ? 1 : 0);
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            if (hasParent && index == 0) {
+              return _buildFolderUpTile(context);
+            }
+            final itemIndex = hasParent ? index - 1 : index;
+            final item = _items[itemIndex];
+            return _buildFolderItemTile(context, item);
+          },
+          childCount: totalCount,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFolderUpTile(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AdaptiveListTile(
+        leading: const Icon(CupertinoIcons.chevron_up, size: 20),
+        title: const Text('返回上级文件夹'),
+        trailing: const Icon(CupertinoIcons.chevron_forward, size: 16),
+        onTap: _navigateUpFolder,
+      ),
+    );
+  }
+
+  Widget _buildFolderItemTile(
+    BuildContext context,
+    _NetworkMediaGridItem item,
+  ) {
+    final isFolder = item.isFolder;
+    final IconData icon = isFolder
+        ? CupertinoIcons.folder
+        : CupertinoIcons.play_circle;
+    final IconData? trailingIcon =
+        isFolder ? CupertinoIcons.chevron_forward : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AdaptiveListTile(
+        leading: Icon(icon, size: 20),
+        title: Text(item.title),
+        subtitle: isFolder ? const Text('文件夹') : const Text('点击查看详情'),
+        trailing:
+            trailingIcon == null ? null : Icon(trailingIcon, size: 16),
+        onTap: () {
+          if (isFolder) {
+            _enterFolder(item);
+            return;
+          }
+          widget.onOpenDetail(widget.serverType, item.id);
+        },
       ),
     );
   }
@@ -351,6 +580,12 @@ class _CupertinoNetworkLibraryItemsPageState
   }
 
   Widget _buildEmptyPlaceholder(BuildContext context) {
+    final bool canNavigateUp = _isFolderNavigation && !_isAtFolderRoot;
+    final String title = _isFolderNavigation ? '当前文件夹暂无内容' : '当前媒体库暂无内容';
+    final String message = _isFolderNavigation
+        ? '可以返回上级文件夹继续浏览。'
+        : '请登录 Jellyfin/Emby 管理后台确认该媒体库是否包含内容。';
+
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -367,19 +602,26 @@ class _CupertinoNetworkLibraryItemsPageState
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              '当前媒体库暂无内容',
+            Text(
+              title,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              '请登录 Jellyfin/Emby 管理后台确认该媒体库是否包含内容。',
+            Text(
+              message,
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, height: 1.35),
             ),
+            if (canNavigateUp) ...[
+              const SizedBox(height: 16),
+              CupertinoButton(
+                onPressed: _navigateUpFolder,
+                child: const Text('返回上级文件夹'),
+              ),
+            ],
           ],
         ),
       ),
@@ -393,12 +635,16 @@ class _NetworkMediaGridItem {
     required this.title,
     required this.subtitle,
     this.imageUrl,
+    this.isFolder = false,
+    this.type,
   });
 
   final String id;
   final String title;
   final String subtitle;
   final String? imageUrl;
+  final bool isFolder;
+  final String? type;
 }
 
 class _NetworkMediaPoster extends StatelessWidget {
@@ -501,4 +747,14 @@ class _NetworkMediaPoster extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FolderNode {
+  final String id;
+  final String name;
+
+  const _FolderNode({
+    required this.id,
+    required this.name,
+  });
 }

@@ -10,6 +10,7 @@ import 'package:smb_connect/smb_connect.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 
@@ -71,6 +72,27 @@ class SmbRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
   String get sourceLabel => 'SMB: ${connection.name}';
 }
 
+class DandanplayRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
+  final String entryId;
+  final String fileName;
+
+  @override
+  final String name;
+
+  @override
+  final String extension;
+
+  const DandanplayRemoteSubtitleCandidate({
+    required this.entryId,
+    required this.fileName,
+    required this.name,
+    required this.extension,
+  });
+
+  @override
+  String get sourceLabel => '弹弹play 远程媒体库';
+}
+
 class RemoteSubtitleService {
   RemoteSubtitleService._();
 
@@ -87,6 +109,10 @@ class RemoteSubtitleService {
   Future<List<RemoteSubtitleCandidate>> listCandidatesForVideo(
       String videoPath) async {
     if (kIsWeb || videoPath.isEmpty) return const [];
+
+    if (DandanplayRemoteService.instance.isDandanplayStreamUrl(videoPath)) {
+      return _listDandanplayCandidates(videoPath);
+    }
 
     if (MediaSourceUtils.isSmbPath(videoPath)) {
       return _listSmbCandidates(videoPath);
@@ -119,6 +145,8 @@ class RemoteSubtitleService {
         'webdav:${candidate.connection.name}:${candidate.remotePath}',
       SmbRemoteSubtitleCandidate() =>
         'smb:${candidate.connection.name}:${candidate.smbPath}',
+      DandanplayRemoteSubtitleCandidate() =>
+        'dandanplay:${candidate.entryId}:${candidate.fileName}',
     };
 
     final hash = sha1.convert(utf8.encode(cacheKey)).toString();
@@ -161,7 +189,42 @@ class RemoteSubtitleService {
       await _downloadSmbSubtitle(candidate, destination);
       return;
     }
+    if (candidate is DandanplayRemoteSubtitleCandidate) {
+      await _downloadDandanplaySubtitle(candidate, destination);
+      return;
+    }
     throw UnsupportedError('不支持的远程字幕来源');
+  }
+
+  Future<List<RemoteSubtitleCandidate>> _listDandanplayCandidates(
+      String videoUrl) async {
+    final entryId =
+        await DandanplayRemoteService.instance.resolveEntryIdForStreamUrl(
+      videoUrl,
+    );
+    if (entryId == null || entryId.isEmpty) return const [];
+
+    final subtitles =
+        await DandanplayRemoteService.instance.getSubtitleList(entryId);
+
+    final candidates = <RemoteSubtitleCandidate>[];
+    for (final item in subtitles) {
+      final name = item.fileName.trim();
+      if (name.isEmpty) continue;
+      final ext = p.extension(name).toLowerCase();
+      if (!_subtitleExtensions.contains(ext)) continue;
+      candidates.add(
+        DandanplayRemoteSubtitleCandidate(
+          entryId: entryId,
+          fileName: name,
+          name: name,
+          extension: ext,
+        ),
+      );
+    }
+
+    candidates.sort((a, b) => a.name.compareTo(b.name));
+    return candidates;
   }
 
   Future<List<RemoteSubtitleCandidate>> _listWebDavCandidates(
@@ -312,6 +375,18 @@ class RemoteSubtitleService {
     } finally {
       await client?.close();
     }
+  }
+
+  Future<void> _downloadDandanplaySubtitle(
+      DandanplayRemoteSubtitleCandidate candidate, File destination) async {
+    final data = await DandanplayRemoteService.instance.downloadSubtitleFileBytes(
+      candidate.entryId,
+      candidate.fileName,
+    );
+    if (data.isEmpty) {
+      throw Exception('弹弹play 返回空字幕内容');
+    }
+    await destination.writeAsBytes(data, flush: true);
   }
 
   Future<void> _writeStreamToFile(

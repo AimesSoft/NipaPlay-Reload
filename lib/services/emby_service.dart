@@ -840,15 +840,23 @@ class EmbyService {
         final List<EmbyLibrary> tempLibraries = [];
 
         for (var item in items) {
-          // 处理电视剧和电影媒体库
-          if (item['CollectionType'] == 'tvshows' ||
-              item['CollectionType'] == 'movies') {
+          final String collectionType =
+              _resolveCollectionType(item['CollectionType']);
+          // 处理电视剧、电影与混合媒体库
+          if (collectionType == 'tvshows' ||
+              collectionType == 'movies' ||
+              collectionType == 'mixed') {
             final String libraryId = item['Id'];
-            final String collectionType = item['CollectionType'];
 
             // 根据媒体库类型选择不同的IncludeItemTypes
-            String includeItemTypes =
-                collectionType == 'tvshows' ? 'Series' : 'Movie';
+            String includeItemTypes;
+            if (collectionType == 'tvshows') {
+              includeItemTypes = 'Series';
+            } else if (collectionType == 'movies') {
+              includeItemTypes = 'Movie';
+            } else {
+              includeItemTypes = 'Movie,Episode,Video';
+            }
 
             // 获取该库的项目数量
             final countResponse = await _makeAuthenticatedRequest(
@@ -863,7 +871,7 @@ class EmbyService {
             tempLibraries.add(EmbyLibrary(
               id: item['Id'],
               name: item['Name'],
-              type: item['CollectionType'],
+              type: collectionType,
               imageTagsPrimary: item['ImageTags']?['Primary'],
               totalItems: itemCount,
             ));
@@ -885,6 +893,58 @@ class EmbyService {
     // 保存选择的媒体库到SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('emby_selected_libraries', libraryIds);
+  }
+
+  // 获取媒体库或文件夹下的子项（用于混合类型文件夹导航）
+  Future<List<EmbyMediaItem>> getFolderItems(
+    String parentId, {
+    int limit = 99999,
+  }) async {
+    if (kIsWeb) return [];
+    if (!_isConnected || _userId == null) {
+      return [];
+    }
+
+    try {
+      final queryParams = <String, String>{
+        'ParentId': parentId,
+        'Recursive': 'false',
+        'SortBy': 'SortName',
+        'SortOrder': 'Ascending',
+        'Limit': limit.toString(),
+        'IncludeItemTypes': 'Folder,Series,Season,Episode,Movie,Video',
+        'Fields': 'Overview,DateCreated,ImageTags,IsFolder,ParentId',
+      };
+
+      final queryString = queryParams.entries
+          .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+          .join('&');
+
+      final response = await _makeAuthenticatedRequest(
+          '/emby/Users/$_userId/Items?$queryString');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> items = data['Items'] ?? [];
+
+        final results = items
+            .map((item) => EmbyMediaItem.fromJson(item))
+            .toList();
+
+        results.sort((a, b) {
+          if (a.isFolder != b.isFolder) {
+            return a.isFolder ? -1 : 1;
+          }
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
+
+        return results;
+      }
+    } catch (e) {
+      debugPrint('Error fetching folder items for parent $parentId: $e');
+    }
+
+    return [];
   }
 
   // 按特定媒体库获取最新内容
@@ -913,11 +973,18 @@ class EmbyService {
       }
 
       final libraryData = json.decode(libraryResponse.body);
-      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      final String collectionType =
+          _resolveCollectionType(libraryData['CollectionType']);
 
       // 根据媒体库类型选择不同的IncludeItemTypes
-      String includeItemTypes =
-          collectionType == 'tvshows' ? 'Series' : 'Movie';
+      String includeItemTypes;
+      if (collectionType == 'tvshows') {
+        includeItemTypes = 'Series';
+      } else if (collectionType == 'movies') {
+        includeItemTypes = 'Movie';
+      } else {
+        includeItemTypes = 'Movie,Episode,Video';
+      }
 
       final response = await _makeAuthenticatedRequest(
           '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit');
@@ -955,11 +1022,18 @@ class EmbyService {
       }
 
       final libraryData = json.decode(libraryResponse.body);
-      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      final String collectionType =
+          _resolveCollectionType(libraryData['CollectionType']);
 
       // 根据媒体库类型选择不同的IncludeItemTypes
-      String includeItemTypes =
-          collectionType == 'tvshows' ? 'Series' : 'Movie';
+      String includeItemTypes;
+      if (collectionType == 'tvshows') {
+        includeItemTypes = 'Series';
+      } else if (collectionType == 'movies') {
+        includeItemTypes = 'Movie';
+      } else {
+        includeItemTypes = 'Movie,Episode,Video';
+      }
 
       // 使用Emby的随机排序获取随机内容，并请求Overview字段
       final response = await _makeAuthenticatedRequest(
@@ -1008,11 +1082,17 @@ class EmbyService {
           if (libraryResponse.statusCode == 200) {
             final libraryData = json.decode(libraryResponse.body);
             final String collectionType =
-                libraryData['CollectionType'] ?? 'tvshows';
+                _resolveCollectionType(libraryData['CollectionType']);
 
             // 根据媒体库类型选择不同的IncludeItemTypes
-            String includeItemTypes =
-                collectionType == 'tvshows' ? 'Series' : 'Movie';
+            String includeItemTypes;
+            if (collectionType == 'tvshows') {
+              includeItemTypes = 'Series';
+            } else if (collectionType == 'movies') {
+              includeItemTypes = 'Movie';
+            } else {
+              includeItemTypes = 'Movie,Episode,Video';
+            }
 
             final String path = '/emby/Users/$_userId/Items';
             final Map<String, String> queryParameters = {
@@ -1868,15 +1948,24 @@ class EmbyService {
       }
 
       final libraryData = json.decode(libraryResponse.body);
-      final String collectionType = libraryData['CollectionType'] ?? 'tvshows';
+      final String collectionType =
+          _resolveCollectionType(libraryData['CollectionType']);
 
       // 根据媒体库类型选择不同的IncludeItemTypes
-      String includeItemTypes =
-          collectionType == 'tvshows' ? 'Series' : 'Movie';
+      List<String> includeItemTypes;
+      if (collectionType == 'tvshows') {
+        includeItemTypes = ['Series'];
+      } else if (collectionType == 'movies') {
+        includeItemTypes = ['Movie'];
+      } else if (collectionType == 'mixed') {
+        includeItemTypes = ['Folder', 'Series', 'Season', 'Episode', 'Movie', 'Video'];
+      } else {
+        includeItemTypes = ['Folder', 'Series', 'Season', 'Episode', 'Movie', 'Video'];
+      }
 
       return await searchMediaItems(
         searchTerm,
-        includeItemTypes: [includeItemTypes],
+        includeItemTypes: includeItemTypes,
         limit: limit,
         parentId: libraryId,
       );
@@ -1980,6 +2069,14 @@ class EmbyService {
       return _currentProfile!.addresses;
     }
     return [];
+  }
+
+  String _resolveCollectionType(dynamic rawType) {
+    final value = rawType?.toString().trim();
+    if (value == null || value.isEmpty) {
+      return 'mixed';
+    }
+    return value.toLowerCase();
   }
 
   /// 由 Provider 调用：在运行时更新本地转码缓存（避免在 getStreamUrl 中做异步 IO）
