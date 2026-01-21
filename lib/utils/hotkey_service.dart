@@ -33,7 +33,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 长按检测
   Timer? _longPressTimer;
-  bool _isRightArrowPressed = false;
+  bool _isForwardKeyPressed = false;
   bool _isSpeedBoostActive = false;
   
   // 初始化热键服务
@@ -142,8 +142,8 @@ class HotkeyService extends ChangeNotifier {
     // 注册快退热键
     await _registerHotkey('rewind', '快退', _handleRewind);
     
-    // 注册长按检测的右方向键（替代原来的快进热键）
-    await _registerLongPressRightArrow();
+    // 注册快进热键（支持长按倍速）
+    await _registerForwardHotkeyWithLongPress();
     
     // 注册弹幕开关热键
     await _registerHotkey('toggle_danmaku', '弹幕开关', _handleToggleDanmaku);
@@ -565,46 +565,57 @@ class HotkeyService extends ChangeNotifier {
     }
   }
   
-  // 注册长按右方向键检测
-  Future<void> _registerLongPressRightArrow() async {
+  // 注册快进热键，支持长按倍速
+  Future<void> _registerForwardHotkeyWithLongPress() async {
+    final keyString = _shortcuts['forward'];
+    if (keyString == null || keyString.isEmpty) {
+      return;
+    }
+
+    final keyInfo = _parseKeyString(keyString);
+    if (keyInfo == null) {
+      return;
+    }
+
     try {
       final hotKey = HotKey(
-        key: PhysicalKeyboardKey.arrowRight,
+        key: keyInfo.keyCode,
+        modifiers: keyInfo.modifiers,
         scope: HotKeyScope.inapp,
       );
       
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
-          _handleRightArrowDown();
+          _handleForwardKeyDown();
         },
         keyUpHandler: (HotKey hotKey) {
-          _handleRightArrowUp();
+          _handleForwardKeyUp();
         },
       );
       
       _registeredHotkeys.add(hotKey);
     } catch (e) {
-      ////debugPrint('[HotkeyService] 注册长按右方向键失败: $e');
+      ////debugPrint('[HotkeyService] 注册快进热键失败: $e');
     }
   }
   
-  void _handleRightArrowDown() {
-    _isRightArrowPressed = true;
+  void _handleForwardKeyDown() {
+    _isForwardKeyPressed = true;
     
     // 取消之前的计时器
     _longPressTimer?.cancel();
     
     // 启动长按检测计时器
     _longPressTimer = Timer(Duration(milliseconds: _longPressThreshold), () {
-      if (_isRightArrowPressed && !_isSpeedBoostActive) {
+      if (_isForwardKeyPressed && !_isSpeedBoostActive) {
         _startSpeedBoost();
       }
     });
   }
   
-  void _handleRightArrowUp() {
-    _isRightArrowPressed = false;
+  void _handleForwardKeyUp() {
+    _isForwardKeyPressed = false;
     
     // 取消长按计时器
     _longPressTimer?.cancel();

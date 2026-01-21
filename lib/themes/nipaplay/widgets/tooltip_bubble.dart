@@ -138,6 +138,17 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   }
 
   @override
+  void didUpdateWidget(covariant TooltipBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.text != oldWidget.text && _isHovered) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _updateOverlay(context);
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MouseRegion(
       onHover: (event) {

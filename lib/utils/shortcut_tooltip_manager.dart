@@ -29,6 +29,11 @@ class ShortcutTooltipManager extends ChangeNotifier {
   Future<void> _initialize() async {
     if (_isInitialized) return;
     
+    // 确保快捷键配置已加载
+    if (_hotkeyService.allShortcuts.isEmpty) {
+      await _hotkeyService.loadShortcuts();
+    }
+    
     // 从HotkeyService加载快捷键
     _updateShortcuts();
     

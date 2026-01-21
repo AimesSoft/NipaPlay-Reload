@@ -192,32 +192,35 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
-        // 移除颜色随模式变化的逻辑，直接使用统一的毛玻璃效果
-        final backgroundColor = Colors.white.withOpacity(0.15);
-        final borderColor = Colors.white.withOpacity(0.3);
+    return AnimatedBuilder(
+      animation: _tooltipManager,
+      builder: (context, child) {
+        return Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            // 移除颜色随模式变化的逻辑，直接使用统一的毛玻璃效果
+            final backgroundColor = Colors.white.withOpacity(0.15);
+            final borderColor = Colors.white.withOpacity(0.3);
 
-        return Focus(
-          canRequestFocus: true,
-          autofocus: true,
-          child: Container(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _handleTap,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        bottom: videoState.controlBarHeight,
-                        left:20,
-                        right:20,
-                      ),
-                      child: MouseRegion(
-                        onEnter: (_) => videoState.setControlsHovered(true),
+            return Focus(
+              canRequestFocus: true,
+              autofocus: true,
+              child: Container(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _handleTap,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            bottom: videoState.controlBarHeight,
+                            left:20,
+                            right:20,
+                          ),
+                          child: MouseRegion(
+                            onEnter: (_) => videoState.setControlsHovered(true),
                         onExit: (_) => videoState.setControlsHovered(false),
                         child: ClipRRect(
                           borderRadius: const BorderRadius.horizontal(
