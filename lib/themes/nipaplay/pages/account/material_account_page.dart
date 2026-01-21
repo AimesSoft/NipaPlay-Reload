@@ -364,6 +364,9 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
                     ),
                     const SizedBox(height: 4),
                     const Text(

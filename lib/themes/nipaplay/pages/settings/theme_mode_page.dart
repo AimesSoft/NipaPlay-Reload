@@ -15,6 +15,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 
@@ -45,19 +46,31 @@ class _ThemeModePageState extends State<ThemeModePage> {
 
   Future<void> _pickCustomBackground(BuildContext context) async {
     if (Platform.isAndroid) { // 只在 Android 上使用 permission_handler
-      PermissionStatus status = await Permission.photos.request();
+      final sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
       if (!mounted) return;
 
-      if (status.isGranted) {
+      final bool usePhotosPermission = sdkVersion >= 33;
+      final PermissionStatus status = usePhotosPermission
+          ? await Permission.photos.request()
+          : await Permission.storage.request();
+      if (!mounted) return;
+
+      final bool canPick =
+          status.isGranted || (usePhotosPermission && status.isLimited);
+
+      if (canPick) {
         await _pickImageFromGalleryForBackground(context); // 传递 context
       } else {
         // Android 权限被拒绝
-        print("Android photos permission denied for custom background. Status: $status");
+        print(
+            "Android permission denied for custom background. Status: $status");
         if (status.isPermanentlyDenied) {
           BlurDialog.show(
             context: context,
             title: '权限已被永久拒绝',
-            content: '相册权限已被永久拒绝。请前往系统设置开启。',
+            content: usePhotosPermission
+                ? '媒体访问权限已被永久拒绝。请前往系统设置开启。'
+                : '存储权限已被永久拒绝。请前往系统设置开启。',
             actions: [
               TextButton(
                 onPressed: () {
@@ -73,7 +86,10 @@ class _ThemeModePageState extends State<ThemeModePage> {
             ],
           );
         } else {
-          BlurSnackBar.show(context, '需要相册权限才能选择背景图片');
+          BlurSnackBar.show(
+            context,
+            usePhotosPermission ? '需要媒体权限才能选择背景图片' : '需要存储权限才能选择背景图片',
+          );
         }
       }
     } else if (Platform.isIOS) { // 在 iOS 上直接尝试选择

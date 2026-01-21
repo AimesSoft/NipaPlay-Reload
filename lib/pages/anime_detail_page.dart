@@ -2206,73 +2206,57 @@ class _HoverableTagState extends State<_HoverableTag> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          child: IntrinsicWidth(
-            child: IntrinsicHeight(
-              child: GlassmorphicContainer(
-                width: double.infinity,
-                height: double.infinity,
-                borderRadius: 20,
-                blur: 20,
-                alignment: Alignment.center,
-                border: 1,
-                linearGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: _isHovered
-                      ? [
-                          Colors.white.withOpacity(0.25),
-                          Colors.white.withOpacity(0.15),
-                        ]
-                      : [
-                          Colors.white.withOpacity(0.1),
-                          Colors.white.withOpacity(0.05),
-                        ],
-                ),
-                borderGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: _isHovered
-                      ? [
-                          Colors.white.withOpacity(0.8),
-                          Colors.white.withOpacity(0.4),
-                        ]
-                      : [
-                          Colors.white.withOpacity(0.5),
-                          Colors.white.withOpacity(0.2),
-                        ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  child: Text(
-                    widget.tag,
-                    locale: Locale("zh-Hans", "zh"),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _isHovered
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.9),
-                      fontWeight:
-                          _isHovered ? FontWeight.w600 : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+    final bool enableHover = !globals.isTouch;
+    final bool isHovered = enableHover && _isHovered;
+    final Color borderColor = isHovered
+        ? Colors.white.withOpacity(0.6)
+        : Colors.white.withOpacity(0.25);
+    final List<Color> backgroundColors = isHovered
+        ? [
+            Colors.white.withOpacity(0.22),
+            Colors.white.withOpacity(0.12),
+          ]
+        : [
+            Colors.white.withOpacity(0.12),
+            Colors.white.withOpacity(0.06),
+          ];
+
+    Widget chip = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: backgroundColors,
+        ),
+        border: Border.all(color: borderColor, width: 0.8),
+      ),
+      child: Text(
+        widget.tag,
+        locale: const Locale("zh-Hans", "zh"),
+        style: TextStyle(
+          fontSize: 12,
+          color: isHovered ? Colors.white : Colors.white.withOpacity(0.9),
+          fontWeight: isHovered ? FontWeight.w600 : FontWeight.w500,
         ),
       ),
+    );
+
+    if (enableHover) {
+      chip = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: chip,
+      );
+    }
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: chip,
     );
   }
 }
