@@ -513,6 +513,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
             ),
           ),
         );
+          },
+        );
       },
     );
   }

@@ -10,6 +10,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
+import 'package:nipaplay/widgets/crt_effect.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/volume_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/danmaku_density_bar.dart';
@@ -429,8 +430,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     ? Center(
                         child: AspectRatio(
                           aspectRatio: videoState.aspectRatio,
-                          child: Texture(
-                            textureId: textureId,
+                          child: CrtEffect(
+                            enabled: videoState.crtEffectEnabled,
+                            child: Texture(
+                              textureId: textureId,
+                            ),
                           ),
                         ),
                       )

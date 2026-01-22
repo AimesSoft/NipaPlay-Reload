@@ -120,6 +120,22 @@ class _CupertinoSeekStepPaneState extends State<CupertinoSeekStepPane> {
                   ),
                 ],
               ),
+              CupertinoListSection.insetGrouped(
+                header: const Text('画面效果'),
+                children: [
+                  CupertinoListTile(
+                    title: const Text('CRT显示效果'),
+                    subtitle: const Text('为视频添加扫描线和暗角'),
+                    trailing: CupertinoSwitch(
+                      value: _controller.crtEffectEnabled,
+                      onChanged: (value) =>
+                          _controller.setCrtEffectEnabled(value),
+                    ),
+                    onTap: () => _controller
+                        .setCrtEffectEnabled(!_controller.crtEffectEnabled),
+                  ),
+                ],
+              ),
             ]),
           ),
         ),

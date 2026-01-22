@@ -508,6 +508,27 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
   }
 
+  Future<void> _loadCrtEffectEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resolved = prefs.getBool(_crtEffectEnabledKey) ?? false;
+    if (_crtEffectEnabled != resolved) {
+      _crtEffectEnabled = resolved;
+      notifyListeners();
+    } else {
+      _crtEffectEnabled = resolved;
+    }
+  }
+
+  Future<void> setCrtEffectEnabled(bool enabled) async {
+    if (_crtEffectEnabled == enabled) {
+      return;
+    }
+    _crtEffectEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_crtEffectEnabledKey, enabled);
+    notifyListeners();
+  }
+
   bool _supportsAnime4KForCurrentPlayer() {
     if (kIsWeb) {
       return false;

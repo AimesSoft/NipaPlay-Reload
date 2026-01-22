@@ -363,6 +363,46 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                   ],
                 ),
               ),
+
+              const Divider(color: Colors.white24, height: 1),
+
+              // CRT 显示效果
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'CRT显示效果',
+                          locale: Locale("zh", "CN"),
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Switch(
+                          value: controller.crtEffectEnabled,
+                          onChanged: (value) {
+                            controller.setCrtEffectEnabled(value);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '为视频添加扫描线和暗角，模拟CRT显示器观感',
+                      locale: Locale("zh", "CN"),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         );

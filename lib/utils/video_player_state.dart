@@ -281,6 +281,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     'deband': 'no',
     'scale-antiring': '0.0',
   };
+  final String _crtEffectEnabledKey = 'crt_effect_enabled';
+  bool _crtEffectEnabled = false;
 
   // 弹幕类型屏蔽
   final String _blockTopDanmakuKey = 'block_top_danmaku';
@@ -606,6 +608,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isAnime4KEnabled => _anime4kProfile != Anime4KProfile.off;
   bool get isAnime4KSupported => _supportsAnime4KForCurrentPlayer();
   List<String> get anime4kShaderPaths => List.unmodifiable(_anime4kShaderPaths);
+  bool get crtEffectEnabled => _crtEffectEnabled;
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
