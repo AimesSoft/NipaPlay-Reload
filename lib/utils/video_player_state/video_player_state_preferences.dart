@@ -459,74 +459,110 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadCrtProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int stored = prefs.getInt(_crtProfileKey) ?? CrtProfile.off.index;
+      if (stored >= 0 && stored < CrtProfile.values.length) {
+        _crtProfile = CrtProfile.values[stored];
+      } else {
+        _crtProfile = CrtProfile.off;
+      }
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 读取 CRT 设置失败: $e');
+      _crtProfile = CrtProfile.off;
+    }
+
+    await applyAnime4KProfileToCurrentPlayer();
+    notifyListeners();
+  }
+
+  Future<void> setCrtProfile(CrtProfile profile) async {
+    if (_crtProfile == profile) {
+      await applyAnime4KProfileToCurrentPlayer();
+      return;
+    }
+
+    _crtProfile = profile;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_crtProfileKey, profile.index);
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 保存 CRT 设置失败: $e');
+    }
+
+    await applyAnime4KProfileToCurrentPlayer();
+    notifyListeners();
+  }
+
   Future<void> applyAnime4KProfileToCurrentPlayer() async {
     if (!_supportsAnime4KForCurrentPlayer()) {
       _anime4kShaderPaths = const <String>[];
+      _crtShaderPaths = const <String>[];
       return;
     }
 
-    if (_anime4kProfile == Anime4KProfile.off) {
-      _anime4kShaderPaths = const <String>[];
-      _applyAnime4KMpvTuning(enable: false);
-      try {
-        player.setProperty('glsl-shaders', '');
-      } catch (e) {
-        debugPrint('[VideoPlayerState] 清除 Anime4K 着色器失败: $e');
-      }
-      await _updateAnime4KSurfaceScale(enable: false);
-      await _logCurrentVideoDimensions(context: 'Anime4K off');
-      return;
-    }
+    final bool anime4kEnabled = _anime4kProfile != Anime4KProfile.off;
+    final bool crtEnabled = _crtProfile != CrtProfile.off;
 
     try {
-      final List<String> shaderPaths =
-          await Anime4KShaderManager.getShaderPathsForProfile(
-        _anime4kProfile,
-      );
-      _anime4kShaderPaths = List.unmodifiable(shaderPaths);
+      final List<String> shaderPaths = <String>[];
+      if (anime4kEnabled) {
+        final List<String> anime4kPaths =
+            await Anime4KShaderManager.getShaderPathsForProfile(
+          _anime4kProfile,
+        );
+        _anime4kShaderPaths = List.unmodifiable(anime4kPaths);
+        shaderPaths.addAll(anime4kPaths);
+      } else {
+        _anime4kShaderPaths = const <String>[];
+      }
+
+      if (crtEnabled) {
+        final List<String> crtPaths =
+            await CrtShaderManager.getShaderPathsForProfile(_crtProfile);
+        _crtShaderPaths = List.unmodifiable(crtPaths);
+        shaderPaths.addAll(crtPaths);
+      } else {
+        _crtShaderPaths = const <String>[];
+      }
+
+      if (shaderPaths.isEmpty) {
+        _applyAnime4KMpvTuning(enable: false);
+        try {
+          player.setProperty('glsl-shaders', '');
+        } catch (e) {
+          debugPrint('[VideoPlayerState] 清除着色器失败: $e');
+        }
+        await _updateAnime4KSurfaceScale(enable: false);
+        await _logCurrentVideoDimensions(context: 'Shaders off');
+        return;
+      }
+
       final String propertyValue =
           Anime4KShaderManager.buildMpvShaderList(shaderPaths);
-      _applyAnime4KMpvTuning(enable: true);
+      _applyAnime4KMpvTuning(enable: anime4kEnabled);
       player.setProperty('glsl-shaders', propertyValue);
       debugPrint(
-        '[VideoPlayerState] Anime4K 着色器已应用: $propertyValue',
+        '[VideoPlayerState] mpv 着色器已应用: $propertyValue',
       );
       try {
         final String? currentValue = player.getProperty('glsl-shaders');
         debugPrint(
-          '[VideoPlayerState] Anime4K 当前播放器属性: ${currentValue ?? '<null>'}',
+          '[VideoPlayerState] mpv 当前播放器属性: ${currentValue ?? '<null>'}',
         );
       } catch (e) {
-        debugPrint('[VideoPlayerState] 读取 Anime4K 属性失败: $e');
+        debugPrint('[VideoPlayerState] 读取 mpv 属性失败: $e');
       }
-      await _updateAnime4KSurfaceScale(enable: true);
-      await _logCurrentVideoDimensions(
-        context: 'Anime4K ${_anime4kProfile.name}',
-      );
+      await _updateAnime4KSurfaceScale(enable: anime4kEnabled);
+      if (anime4kEnabled) {
+        await _logCurrentVideoDimensions(
+          context: 'Anime4K ${_anime4kProfile.name}',
+        );
+      }
     } catch (e) {
-      debugPrint('[VideoPlayerState] 应用 Anime4K 着色器失败: $e');
+      debugPrint('[VideoPlayerState] 应用着色器失败: $e');
     }
-  }
-
-  Future<void> _loadCrtEffectEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    final resolved = prefs.getBool(_crtEffectEnabledKey) ?? false;
-    if (_crtEffectEnabled != resolved) {
-      _crtEffectEnabled = resolved;
-      notifyListeners();
-    } else {
-      _crtEffectEnabled = resolved;
-    }
-  }
-
-  Future<void> setCrtEffectEnabled(bool enabled) async {
-    if (_crtEffectEnabled == enabled) {
-      return;
-    }
-    _crtEffectEnabled = enabled;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_crtEffectEnabledKey, enabled);
-    notifyListeners();
   }
 
   bool _supportsAnime4KForCurrentPlayer() {

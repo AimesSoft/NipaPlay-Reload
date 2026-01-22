@@ -18,6 +18,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
+import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -408,6 +409,32 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
   }
 
+  String _getCrtProfileTitle(CrtProfile profile) {
+    switch (profile) {
+      case CrtProfile.off:
+        return '关闭';
+      case CrtProfile.lite:
+        return '轻量';
+      case CrtProfile.standard:
+        return '标准';
+      case CrtProfile.high:
+        return '高质量';
+    }
+  }
+
+  String _getCrtProfileDescription(CrtProfile profile) {
+    switch (profile) {
+      case CrtProfile.off:
+        return '关闭 CRT 着色器，保持原始画面';
+      case CrtProfile.lite:
+        return '扫描线 + 暗角，性能开销较小';
+      case CrtProfile.standard:
+        return '增加曲面与栅格，画面更接近 CRT';
+      case CrtProfile.high:
+        return '加入辉光与色散，效果最佳但性能开销更高';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Web 平台不显示此页面内容，或者显示一个提示信息
@@ -559,6 +586,50 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 final String message = value == Anime4KProfile.off
                     ? '已关闭 Anime4K'
                     : 'Anime4K 已切换为$option';
+                BlurSnackBar.show(context, message);
+              },
+            );
+          },
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final CrtProfile currentProfile = videoState.crtProfile;
+            final bool supportsCrt = videoState.isCrtSupported;
+
+            if (_selectedKernelType != PlayerKernelType.mediaKit) {
+              return const SizedBox.shrink();
+            }
+
+            if (!supportsCrt) {
+              return const SizedBox.shrink();
+            }
+
+            final items = CrtProfile.values
+                .map(
+                  (profile) => DropdownMenuItemData(
+                    title: _getCrtProfileTitle(profile),
+                    value: profile,
+                    isSelected: profile == currentProfile,
+                    description: _getCrtProfileDescription(profile),
+                  ),
+                )
+                .toList();
+
+            return SettingsItem.dropdown(
+              title: 'CRT 显示效果',
+              subtitle: '使用 CRT GLSL 着色器模拟显示器质感（可与 Anime4K 叠加）',
+              icon: Ionicons.tv_outline,
+              items: items,
+              onChanged: (dynamic value) async {
+                if (value is! CrtProfile) return;
+                await videoState.setCrtProfile(value);
+                if (!context.mounted) return;
+                final String option = _getCrtProfileTitle(value);
+                final String message =
+                    value == CrtProfile.off ? '已关闭 CRT' : 'CRT 已切换为$option';
                 BlurSnackBar.show(context, message);
               },
             );

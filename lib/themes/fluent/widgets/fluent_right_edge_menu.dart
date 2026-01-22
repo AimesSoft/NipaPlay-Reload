@@ -624,41 +624,6 @@ class _FluentSeekStepPane extends StatelessWidget {
             ),
           );
         }),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CRT显示效果',
-                        style: theme.typography.body,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '为视频添加扫描线和暗角',
-                        style: theme.typography.caption?.copyWith(
-                          color: theme.resources.textFillColorSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ToggleSwitch(
-                  checked: controller.crtEffectEnabled,
-                  onChanged: (value) {
-                    controller.setCrtEffectEnabled(value);
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }

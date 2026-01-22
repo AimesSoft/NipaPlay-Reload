@@ -11,7 +11,6 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
-import 'package:nipaplay/widgets/crt_effect.dart';
 import 'package:provider/provider.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
@@ -652,13 +651,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     child: Center(
                                       child: AspectRatio(
                                         aspectRatio: videoState.aspectRatio,
-                                        child: CrtEffect(
-                                          enabled: videoState.crtEffectEnabled,
-                                          child: Texture(
-                                            textureId: textureId,
-                                            filterQuality:
-                                                FilterQuality.medium,
-                                          ),
+                                        child: Texture(
+                                          textureId: textureId,
+                                          filterQuality: FilterQuality.medium,
                                         ),
                                       ),
                                     ),
@@ -768,14 +763,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       child: Center(
                                         child: AspectRatio(
                                           aspectRatio: videoState.aspectRatio,
-                                          child: CrtEffect(
-                                            enabled:
-                                                videoState.crtEffectEnabled,
-                                            child: Texture(
-                                              textureId: textureId,
-                                              filterQuality:
-                                                  FilterQuality.medium,
-                                            ),
+                                          child: Texture(
+                                            textureId: textureId,
+                                            filterQuality: FilterQuality.medium,
                                           ),
                                         ),
                                       ),

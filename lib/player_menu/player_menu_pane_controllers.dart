@@ -86,7 +86,6 @@ class SeekStepPaneController extends PlayerMenuPaneController {
   double get speedBoostRate => videoState.speedBoostRate;
 
   int get skipSeconds => videoState.skipSeconds;
-  bool get crtEffectEnabled => videoState.crtEffectEnabled;
 
   Future<void> setSeekStepSeconds(int seconds) =>
       videoState.setSeekStepSeconds(seconds);
@@ -96,8 +95,6 @@ class SeekStepPaneController extends PlayerMenuPaneController {
 
   Future<void> setSkipSeconds(int seconds) =>
       videoState.setSkipSeconds(_clampSkipSeconds(seconds));
-  Future<void> setCrtEffectEnabled(bool enabled) =>
-      videoState.setCrtEffectEnabled(enabled);
 
   Future<void> increaseSkipSeconds([int delta = 10]) =>
       setSkipSeconds(skipSeconds + delta);

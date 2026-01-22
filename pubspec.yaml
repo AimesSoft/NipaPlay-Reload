@@ -164,6 +164,7 @@ flutter:
     - assets/images/
     - others/赞赏码.jpg
     - assets/shaders/anime4k/
+    - assets/shaders/crt/
     # --- Web UI Assets ---
     - assets/web/
     - assets/web/assets/

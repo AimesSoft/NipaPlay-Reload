@@ -48,7 +48,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载 Anime4K 设置并尝试立即应用
     await _loadAnime4KProfile();
-    await _loadCrtEffectEnabled();
+    await _loadCrtProfile();
 
     // 加载播放结束行为设置
     await _loadPlaybackEndAction();

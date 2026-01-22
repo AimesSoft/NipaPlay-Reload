@@ -68,6 +68,7 @@ import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
 import 'anime4k_shader_manager.dart';
+import 'crt_shader_manager.dart';
 // 导入MediaKitPlayerAdapter
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 弹幕内核工厂
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层
@@ -281,8 +282,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     'deband': 'no',
     'scale-antiring': '0.0',
   };
-  final String _crtEffectEnabledKey = 'crt_effect_enabled';
-  bool _crtEffectEnabled = false;
+  final String _crtProfileKey = 'crt_profile';
+  CrtProfile _crtProfile = CrtProfile.off;
+  List<String> _crtShaderPaths = const <String>[];
 
   // 弹幕类型屏蔽
   final String _blockTopDanmakuKey = 'block_top_danmaku';
@@ -608,7 +610,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isAnime4KEnabled => _anime4kProfile != Anime4KProfile.off;
   bool get isAnime4KSupported => _supportsAnime4KForCurrentPlayer();
   List<String> get anime4kShaderPaths => List.unmodifiable(_anime4kShaderPaths);
-  bool get crtEffectEnabled => _crtEffectEnabled;
+  CrtProfile get crtProfile => _crtProfile;
+  bool get isCrtEnabled => _crtProfile != CrtProfile.off;
+  bool get isCrtSupported => _supportsAnime4KForCurrentPlayer();
+  List<String> get crtShaderPaths => List.unmodifiable(_crtShaderPaths);
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL

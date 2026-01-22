@@ -11,6 +11,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/fluent/widgets/fluent_info_bar.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
+import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -33,6 +34,7 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
   DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
   bool _isLoading = true;
   Anime4KProfile? _anime4kSelectionOverride;
+  CrtProfile? _crtSelectionOverride;
 
   @override
   void initState() {
@@ -211,6 +213,32 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
     }
   }
 
+  String _getCrtProfileTitle(CrtProfile profile) {
+    switch (profile) {
+      case CrtProfile.off:
+        return '关闭';
+      case CrtProfile.lite:
+        return '轻量';
+      case CrtProfile.standard:
+        return '标准';
+      case CrtProfile.high:
+        return '高质量';
+    }
+  }
+
+  String _getCrtProfileDescription(CrtProfile profile) {
+    switch (profile) {
+      case CrtProfile.off:
+        return '关闭 CRT 着色器，保持原始画质';
+      case CrtProfile.lite:
+        return '扫描线 + 暗角，性能开销较小';
+      case CrtProfile.standard:
+        return '增加曲面与栅格，画面更接近 CRT';
+      case CrtProfile.high:
+        return '加入辉光与色散，效果最佳但性能开销更高';
+    }
+  }
+
   void _showSuccessInfoBar(String message) {
     FluentInfoBar.show(
       context,
@@ -253,6 +281,8 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
     final videoState = context.watch<VideoPlayerState>();
     final bool supportsAnime4K = videoState.isAnime4KSupported;
     final Anime4KProfile providerAnime4KProfile = videoState.anime4kProfile;
+    final bool supportsCrt = videoState.isCrtSupported;
+    final CrtProfile providerCrtProfile = videoState.crtProfile;
 
     if (_anime4kSelectionOverride != null &&
         _anime4kSelectionOverride == providerAnime4KProfile) {
@@ -267,6 +297,20 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
 
     final Anime4KProfile currentAnime4KProfile =
         _anime4kSelectionOverride ?? providerAnime4KProfile;
+
+    if (_crtSelectionOverride != null &&
+        _crtSelectionOverride == providerCrtProfile) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _crtSelectionOverride = null;
+          });
+        }
+      });
+    }
+
+    final CrtProfile currentCrtProfile =
+        _crtSelectionOverride ?? providerCrtProfile;
 
     return ScaffoldPage(
       header: const PageHeader(
@@ -616,6 +660,72 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
                               _getAnime4KProfileDescription(
                                 currentAnime4KProfile,
                               ),
+                              style: FluentTheme.of(context).typography.caption,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+
+              if (supportsCrt && _selectedKernelType == PlayerKernelType.mediaKit)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'CRT 显示效果',
+                          style: FluentTheme.of(context).typography.subtitle,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '使用 CRT GLSL 着色器模拟显示器质感，可与 Anime4K 叠加',
+                          style: FluentTheme.of(context).typography.caption,
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('预设'),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: ComboBox<CrtProfile>(
+                                value: currentCrtProfile,
+                                items: CrtProfile.values
+                                    .map(
+                                      (profile) => ComboBoxItem<CrtProfile>(
+                                        value: profile,
+                                        child: Text(
+                                          _getCrtProfileTitle(profile),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) async {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _crtSelectionOverride = value;
+                                  });
+                                  await videoState.setCrtProfile(value);
+                                  if (!mounted) return;
+                                  final String option =
+                                      _getCrtProfileTitle(value);
+                                  final String message = value == CrtProfile.off
+                                      ? '已关闭 CRT'
+                                      : 'CRT 已切换为$option';
+                                  _showSuccessInfoBar(message);
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _getCrtProfileDescription(currentCrtProfile),
                               style: FluentTheme.of(context).typography.caption,
                             ),
                           ],

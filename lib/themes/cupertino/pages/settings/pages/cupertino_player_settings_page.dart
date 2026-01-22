@@ -12,6 +12,7 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
+import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -51,6 +52,7 @@ class _CupertinoPlayerSettingsPageState
   SpoilerAiApiFormat _spoilerAiApiFormatDraft = SpoilerAiApiFormat.openai;
   double _spoilerAiTemperatureDraft = 0.5;
   Anime4KProfile? _anime4kSelectionOverride;
+  CrtProfile? _crtSelectionOverride;
 
   @override
   void didChangeDependencies() {
@@ -310,6 +312,32 @@ class _CupertinoPlayerSettingsPageState
         return '画质与性能平衡的标准方案。';
       case Anime4KProfile.high:
         return '追求最佳画质，性能需求最高。';
+    }
+  }
+
+  String _getCrtProfileTitle(CrtProfile profile) {
+    switch (profile) {
+      case CrtProfile.off:
+        return '关闭';
+      case CrtProfile.lite:
+        return '轻量';
+      case CrtProfile.standard:
+        return '标准';
+      case CrtProfile.high:
+        return '高质量';
+    }
+  }
+
+  String _getCrtProfileDescription(CrtProfile profile) {
+    switch (profile) {
+      case CrtProfile.off:
+        return '保持原始画面，不启用 CRT 效果。';
+      case CrtProfile.lite:
+        return '扫描线 + 暗角，性能开销较小。';
+      case CrtProfile.standard:
+        return '增加曲面与栅格，画面更接近 CRT。';
+      case CrtProfile.high:
+        return '加入辉光与色散，效果最佳但性能开销更高。';
     }
   }
 
@@ -679,6 +707,86 @@ class _CupertinoPlayerSettingsPageState
                             final message = profile == Anime4KProfile.off
                                 ? '已关闭 Anime4K'
                                 : 'Anime4K 已切换为$option';
+                            AdaptiveSnackBar.show(
+                              context,
+                              message: message,
+                              type: AdaptiveSnackBarType.success,
+                            );
+                          });
+                        },
+                      ),
+                      backgroundColor: tileBackground,
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      if (_selectedKernelType == PlayerKernelType.mediaKit)
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final bool supportsCrt = videoState.isCrtSupported;
+            if (!supportsCrt) {
+              return const SizedBox.shrink();
+            }
+            final CrtProfile providerProfile = videoState.crtProfile;
+            if (_crtSelectionOverride != null &&
+                _crtSelectionOverride == providerProfile) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                setState(() {
+                  _crtSelectionOverride = null;
+                });
+              });
+            }
+            final CrtProfile currentProfile =
+                _crtSelectionOverride ?? providerProfile;
+            return Column(
+              children: [
+                const SizedBox(height: 16),
+                CupertinoSettingsGroupCard(
+                  margin: EdgeInsets.zero,
+                  backgroundColor: sectionBackground,
+                  addDividers: true,
+                  dividerIndent: 16,
+                  children: [
+                    CupertinoSettingsTile(
+                      leading: Icon(
+                        CupertinoIcons.tv,
+                        color: resolveSettingsIconColor(context),
+                      ),
+                      title: const Text('CRT 显示效果'),
+                      subtitle: Text(
+                        _getCrtProfileDescription(currentProfile),
+                      ),
+                      trailing: AdaptivePopupMenuButton.widget<CrtProfile>(
+                        items: CrtProfile.values
+                            .map(
+                              (profile) => AdaptivePopupMenuItem<CrtProfile>(
+                                label: _getCrtProfileTitle(profile),
+                                value: profile,
+                              ),
+                            )
+                            .toList(),
+                        buttonStyle: PopupButtonStyle.gray,
+                        child: _buildMenuChip(
+                          context,
+                          _getCrtProfileTitle(currentProfile),
+                        ),
+                        onSelected: (index, entry) {
+                          final profile =
+                              entry.value ?? CrtProfile.values[index];
+                          if (profile == currentProfile) return;
+                          setState(() {
+                            _crtSelectionOverride = profile;
+                          });
+                          videoState.setCrtProfile(profile).then((_) {
+                            if (!mounted) return;
+                            final option = _getCrtProfileTitle(profile);
+                            final message = profile == CrtProfile.off
+                                ? '已关闭 CRT'
+                                : 'CRT 已切换为$option';
                             AdaptiveSnackBar.show(
                               context,
                               message: message,
