@@ -105,6 +105,7 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
 
     // 初始化时处理弹幕
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       _processAndAddDanmaku(videoState.danmakuList, widget.currentTime);
     });
@@ -236,6 +237,7 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
     if (shouldProcessDanmaku) {
       // 获取最新的弹幕列表并处理
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         final videoState =
             Provider.of<VideoPlayerState>(context, listen: false);
         _processAndAddDanmaku(videoState.danmakuList, widget.currentTime);
