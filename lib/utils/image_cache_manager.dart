@@ -69,42 +69,54 @@ class ImageCacheManager {
     return File('${_cacheDir?.path ?? 'web_cache'}/$key.jpg');
   }
 
-  Future<ui.Image> loadImage(String url) async {
+  String _getCacheKeyWithDimensions(String url, int? width, int? height) {
+    if (width == null && height == null) return url;
+    return '${url}_w${width ?? 0}_h${height ?? 0}';
+  }
+
+  Future<ui.Image> loadImage(String url, {int? targetWidth, int? targetHeight}) async {
     if (!_isInitialized && !kIsWeb) {
       await _initCacheDir();
     }
+    
+    final cacheKey = _getCacheKeyWithDimensions(url, targetWidth, targetHeight);
+
     // 如果图片已经在内存缓存中，更新访问时间并增加引用计数
-    if (_cache.containsKey(url)) {
-      _lastAccessed[url] = DateTime.now();
-      _refCount[url] = (_refCount[url] ?? 0) + 1;
-      return _cache[url]!;
+    if (_cache.containsKey(cacheKey)) {
+      _lastAccessed[cacheKey] = DateTime.now();
+      _refCount[cacheKey] = (_refCount[cacheKey] ?? 0) + 1;
+      return _cache[cacheKey]!;
     }
 
     // 如果图片正在加载中，等待加载完成
-    if (_loading.containsKey(url)) {
-      return _loading[url]!.future;
+    if (_loading.containsKey(cacheKey)) {
+      return _loading[cacheKey]!.future;
     }
 
     // 创建新的加载任务
     final completer = Completer<ui.Image>();
-    _loading[url] = completer;
+    _loading[cacheKey] = completer;
 
     // 使用一个异步的IIFE（立即执行的函数表达式）来执行加载逻辑
-    // 这样可以更容易地使用try/catch/finally结构
     () async {
       try {
-        // 检查本地缓存
+        // 检查本地缓存 (本地缓存文件本身不区分尺寸，只存原图数据)
+        // 我们从本地读取原图数据，然后按需解码
         if (!kIsWeb) {
-          final cacheFile = await _getCacheFile(url);
+          final cacheFile = await _getCacheFile(url); // 文件名只跟URL有关
           if (await cacheFile.exists()) {
             final bytes = await cacheFile.readAsBytes();
-            final codec = await ui.instantiateImageCodec(bytes);
+            final codec = await ui.instantiateImageCodec(
+              bytes,
+              targetWidth: targetWidth,
+              targetHeight: targetHeight,
+            );
             final frame = await codec.getNextFrame();
             final image = frame.image;
             
-            _cache[url] = image;
-            _refCount[url] = 1;
-            _lastAccessed[url] = DateTime.now();
+            _cache[cacheKey] = image;
+            _refCount[cacheKey] = 1;
+            _lastAccessed[cacheKey] = DateTime.now();
             completer.complete(image);
             return; // 加载成功，退出IIFE
           }
@@ -119,21 +131,25 @@ class ImageCacheManager {
         // 在单独的 isolate 中处理图片
         final processedBytes = await compute(_processImageInIsolate, response.bodyBytes);
 
-        // 保存到本地缓存
+        // 保存到本地缓存 (只保存原图)
         if (!kIsWeb) {
           final cacheFile = await _getCacheFile(url);
           await cacheFile.writeAsBytes(processedBytes);
         }
 
         // 解码图片数据
-        final codec = await ui.instantiateImageCodec(processedBytes);
+        final codec = await ui.instantiateImageCodec(
+          processedBytes,
+          targetWidth: targetWidth,
+          targetHeight: targetHeight,
+        );
         final frame = await codec.getNextFrame();
         final uiImage = frame.image;
 
         // 存入内存缓存
-        _cache[url] = uiImage;
-        _refCount[url] = 1;
-        _lastAccessed[url] = DateTime.now();
+        _cache[cacheKey] = uiImage;
+        _refCount[cacheKey] = 1;
+        _lastAccessed[cacheKey] = DateTime.now();
         completer.complete(uiImage);
 
       } catch (e) {
@@ -141,7 +157,7 @@ class ImageCacheManager {
         completer.completeError(e);
       } finally {
         // 无论成功或失败，都从_loading中移除
-        _loading.remove(url);
+        _loading.remove(cacheKey);
       }
     }();
 

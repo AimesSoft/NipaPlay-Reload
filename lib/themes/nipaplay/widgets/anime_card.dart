@@ -173,122 +173,120 @@ class _AnimeCardState extends State<AnimeCard> {
 
   @override
   Widget build(BuildContext context) {
-  final settings = context.watch<AppearanceSettingsProvider>();
-  final bool enableBlur = settings.enableWidgetBlurEffect;
+    final settings = context.watch<AppearanceSettingsProvider>();
+    final bool enableBlur = settings.enableWidgetBlurEffect;
 
-  final Widget card = RepaintBoundary(
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.2),
-              width: 0.5,
-            ),
-            boxShadow: widget.enableShadow
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : null,
-          ),
-          // 使用硬裁剪避免昂贵的抗锯齿裁剪
-          clipBehavior: Clip.hardEdge,
-          child: Stack(
-            children: [
-              // 底层：模糊的封面图背景
-              if (widget.enableBackdropImage)
-                Positioned.fill(
-                  child: Transform.rotate(
-                    angle: 3.14159, // 180度（π弧度）
-                    child: (enableBlur && widget.enableBackgroundBlur)
-                        ? ImageFiltered(
-                            imageFilter: ImageFilter.blur(
-                                sigmaX: widget.backgroundBlurSigma,
-                                sigmaY: widget.backgroundBlurSigma),
-                            child: _buildImage(context, true),
-                          )
-                        : _buildImage(context, true),
-                  ),
-                )
-              else
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.15),
-                  ),
-                ),
-              
-              // 中间层：半透明遮罩，提高可读性
-              Positioned.fill(
-                child: Container(
-                  color: const Color.fromARGB(255, 252, 252, 252)
-                      .withValues(alpha: 0.1),
-                ),
-              ),
-              
-              // 顶层：内容
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 图片部分
-                  Expanded(
-                    flex: 8,
-                    child: _buildImage(context, false),
-                  ),
-                  // 标题部分
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.1),
-                            Colors.black.withValues(alpha: 0.3),
-                          ],
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(6.0),
-                      child: Center(
-                        child: Text(
-                          widget.name,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontSize: 12,
-                                height: 1.2,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // 状态图标
-                  if (widget.isOnAir)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4.0, right: 4.0),
-                      child: Align(
-                        alignment: Alignment.bottomRight,
-                        child: Icon(
-                          Ionicons.time_outline,
-                          color: Colors.greenAccent.withValues(alpha: 0.8),
-                          size: 12,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
+    final Widget imageCard = Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12), // 加大圆角
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1), // 减淡边框
+          width: 0.5,
         ),
+        boxShadow: widget.enableShadow
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      clipBehavior: Clip.hardEdge,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 底层：模糊的封面图背景
+          if (widget.enableBackdropImage)
+            Positioned.fill(
+              child: Transform.rotate(
+                angle: 3.14159, // 180度（π弧度）
+                child: (enableBlur && widget.enableBackgroundBlur)
+                    ? ImageFiltered(
+                        imageFilter: ImageFilter.blur(
+                            sigmaX: widget.backgroundBlurSigma,
+                            sigmaY: widget.backgroundBlurSigma),
+                        child: _buildImage(context, true),
+                      )
+                    : _buildImage(context, true),
+              ),
+            )
+          else
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.15),
+              ),
+            ),
+
+          // 中间层：半透明遮罩
+          Positioned.fill(
+            child: Container(
+              color: const Color.fromARGB(255, 252, 252, 252)
+                  .withValues(alpha: 0.05), // 更淡的遮罩
+            ),
+          ),
+
+          // 顶层：图片
+          _buildImage(context, false),
+
+          // 状态图标 (移至右上角)
+          if (widget.isOnAir)
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: Colors.greenAccent.withValues(alpha: 0.3),
+                    width: 0.5,
+                  ),
+                ),
+                child: Icon(
+                  Ionicons.time_outline,
+                  color: Colors.greenAccent,
+                  size: 14,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final Widget card = GestureDetector(
+      onTap: widget.onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 图片部分 (占据大部分高度)
+          Expanded(
+            child: imageCard,
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // 标题部分
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2.0),
+            child: Text(
+              widget.name,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w500,
+                  ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.left,
+            ),
+          ),
+        ],
       ),
     );
 

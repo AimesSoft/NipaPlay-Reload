@@ -23,6 +23,7 @@ import 'package:nipaplay/main.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -187,19 +188,19 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
 
   SliverPadding _buildAnimeGridSliver(List<BangumiAnime> animes, int weekdayKey) {
     return SliverPadding(
-      padding: const EdgeInsets.only(top: 8.0, bottom: 16.0, left: 16.0, right: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       sliver: SliverGrid(
         key: ValueKey<String>('sliver_grid_for_weekday_$weekdayKey'),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 150,
-          childAspectRatio: 7 / 12,
-          crossAxisSpacing: 20,
-          mainAxisSpacing: 20,
+          maxCrossAxisExtent: 500,
+          mainAxisExtent: 140,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 16,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final anime = animes[index];
-            return _buildAnimeCard(context, anime, key: ValueKey(anime.id));
+            return _buildHorizontalAnimeCard(context, anime);
           },
           childCount: animes.length,
           addAutomaticKeepAlives: false,
@@ -502,6 +503,119 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         BlurSnackBar.show(context, '处理播放请求时出错: $e');
       }
     }
+  }
+
+  Widget _buildHorizontalAnimeCard(BuildContext context, BangumiAnime anime) {
+    return GestureDetector(
+      onTap: () => _showAnimeDetail(anime),
+      child: Container(
+        height: 140,
+        color: Colors.transparent, // Ensure hit test works
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cover Image
+            AspectRatio(
+              aspectRatio: 0.7,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.hardEdge,
+                child: CachedNetworkImageWidget(
+                  imageUrl: anime.imageUrl,
+                  fit: BoxFit.cover,
+                  loadMode: CachedImageLoadMode.legacy,
+                  memCacheWidth: 200,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title
+                  Text(
+                    anime.nameCn.isNotEmpty ? anime.nameCn : anime.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // Rating & Status Row
+                  Row(
+                    children: [
+                      if (anime.rating != null && anime.rating! > 0) ...[
+                        const Icon(Ionicons.star, size: 14, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          anime.rating!.toStringAsFixed(1),
+                          style: const TextStyle(
+                            color: Colors.amber,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      if (anime.isOnAir == true)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.green.withValues(alpha: 0.5), width: 0.5),
+                          ),
+                          child: const Text(
+                            '放送中',
+                            style: TextStyle(color: Colors.green, fontSize: 10),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Summary (Async)
+                  Expanded(
+                    child: FutureBuilder<BangumiAnime>(
+                      future: _bangumiService.getAnimeDetails(anime.id),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData && snapshot.data!.summary != null) {
+                          return Text(
+                            snapshot.data!.summary!,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          );
+                        }
+                        // Loading or no data
+                        return const SizedBox(); 
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildWeekdayHeader(

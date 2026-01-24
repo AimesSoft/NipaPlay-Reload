@@ -23,6 +23,8 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final bool shouldCompress;  // 新增参数，控制是否压缩图片
   final bool delayLoad;  // 新增参数，控制是否延迟加载（避免与HEAD验证竞争）
   final CachedImageLoadMode loadMode; // 新增：加载模式（hybrid/legacy）
+  final int? memCacheWidth; // 新增：指定内存缓存宽度（用于解码降采样）
+  final int? memCacheHeight; // 新增：指定内存缓存高度（用于解码降采样）
 
   const CachedNetworkImageWidget({
     super.key,
@@ -36,6 +38,8 @@ class CachedNetworkImageWidget extends StatefulWidget {
     this.shouldCompress = true,  // 默认为true，保持原有行为
     this.delayLoad = false,  // 默认false，不延迟加载
     this.loadMode = CachedImageLoadMode.hybrid, // 默认使用混合模式
+    this.memCacheWidth,
+    this.memCacheHeight,
   });
 
   @override
@@ -80,7 +84,11 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     
     // 旧版：仅使用缓存管理器单通道加载
     if (widget.loadMode == CachedImageLoadMode.legacy) {
-      _imageFuture = ImageCacheManager.instance.loadImage(widget.imageUrl);
+      _imageFuture = ImageCacheManager.instance.loadImage(
+        widget.imageUrl,
+        targetWidth: widget.memCacheWidth,
+        targetHeight: widget.memCacheHeight,
+      );
       return;
     }
 
@@ -89,7 +97,11 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     
     // 异步加载高清图片
     if (widget.shouldCompress) {
-      _imageFuture = ImageCacheManager.instance.loadImage(widget.imageUrl);
+      _imageFuture = ImageCacheManager.instance.loadImage(
+        widget.imageUrl,
+        targetWidth: widget.memCacheWidth,
+        targetHeight: widget.memCacheHeight,
+      );
     } else {
       _imageFuture = _loadOriginalImage(widget.imageUrl);
     }
