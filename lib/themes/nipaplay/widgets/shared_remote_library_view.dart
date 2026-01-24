@@ -18,12 +18,17 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 
-enum _SharedRemoteViewMode { mediaLibrary, libraryManagement }
+enum SharedRemoteViewMode { mediaLibrary, libraryManagement }
 
 class SharedRemoteLibraryView extends StatefulWidget {
-  const SharedRemoteLibraryView({super.key, this.onPlayEpisode});
+  const SharedRemoteLibraryView({
+    super.key,
+    this.onPlayEpisode,
+    this.mode = SharedRemoteViewMode.mediaLibrary,
+  });
 
   final OnPlayEpisodeCallback? onPlayEpisode;
+  final SharedRemoteViewMode mode;
 
   @override
   State<SharedRemoteLibraryView> createState() => _SharedRemoteLibraryViewState();
@@ -33,7 +38,6 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _gridScrollController = ScrollController();
   final ScrollController _managementScrollController = ScrollController();
-  _SharedRemoteViewMode _mode = _SharedRemoteViewMode.mediaLibrary;
   String? _managementLoadedHostId;
   Timer? _scanStatusTimer;
   bool _scanStatusRequestInFlight = false;
@@ -64,21 +68,20 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildModeToggle(context, provider),
-                if (_mode == _SharedRemoteViewMode.mediaLibrary &&
+                if (widget.mode == SharedRemoteViewMode.mediaLibrary &&
                     provider.errorMessage != null)
                   _buildErrorChip(
                     provider.errorMessage!,
                     onClose: provider.clearError,
                   ),
-                if (_mode == _SharedRemoteViewMode.libraryManagement &&
+                if (widget.mode == SharedRemoteViewMode.libraryManagement &&
                     provider.managementErrorMessage != null)
                   _buildErrorChip(
                     provider.managementErrorMessage!,
                     onClose: provider.clearManagementError,
                   ),
                 Expanded(
-                  child: _mode == _SharedRemoteViewMode.mediaLibrary
+                  child: widget.mode == SharedRemoteViewMode.mediaLibrary
                       ? _buildMediaBody(
                           context,
                           provider,
@@ -148,90 +151,6 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     );
   }
 
-  Widget _buildModeToggle(
-    BuildContext context,
-    SharedRemoteLibraryProvider provider,
-  ) {
-    final bool isManagement = _mode == _SharedRemoteViewMode.libraryManagement;
-    final bool isMedia = _mode == _SharedRemoteViewMode.mediaLibrary;
-    final bool hasActiveHost = provider.hasActiveHost;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Container(
-        height: 40,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: _buildModeToggleItem(
-                label: '媒体库',
-                selected: isMedia,
-                onTap: () => _setMode(_SharedRemoteViewMode.mediaLibrary),
-              ),
-            ),
-            Expanded(
-              child: _buildModeToggleItem(
-                label: '库管理',
-                selected: isManagement,
-                onTap: () {
-                  _setMode(_SharedRemoteViewMode.libraryManagement);
-                  if (hasActiveHost) {
-                    _ensureManagementLoaded();
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModeToggleItem({
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Material(
-        color: selected ? Colors.white.withOpacity(0.18) : Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: Center(
-            child: Text(
-              label,
-              locale: const Locale('zh', 'CN'),
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.white70,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _setMode(_SharedRemoteViewMode mode) {
-    if (_mode == mode) return;
-    setState(() {
-      _mode = mode;
-    });
-    if (mode == _SharedRemoteViewMode.libraryManagement) {
-      _ensureManagementLoaded();
-    } else {
-      _scanStatusTimer?.cancel();
-      _scanStatusTimer = null;
-    }
-  }
-
   void _ensureManagementLoaded() {
     final provider = context.read<SharedRemoteLibraryProvider>();
     if (!provider.hasActiveHost) {
@@ -285,7 +204,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       }
 
       final provider = context.read<SharedRemoteLibraryProvider>();
-      if (_mode != _SharedRemoteViewMode.libraryManagement ||
+      if (widget.mode != SharedRemoteViewMode.libraryManagement ||
           !provider.hasActiveHost) {
         _scanStatusTimer?.cancel();
         _scanStatusTimer = null;
@@ -869,7 +788,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     BuildContext context,
     SharedRemoteLibraryProvider provider,
   ) {
-    final isManagement = _mode == _SharedRemoteViewMode.libraryManagement;
+    final isManagement = widget.mode == SharedRemoteViewMode.libraryManagement;
     final managementBusy =
         provider.isManagementLoading || provider.scanStatus?.isScanning == true;
 

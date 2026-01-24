@@ -274,8 +274,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   
   // 动态计算标签页数量
   int get _tabCount {
-    int count = 2; // 基础标签: 媒体库, 库管理
-    if (_hasSharedRemoteHosts) count++;
+    int count = 2; // 基础标签: 本地媒体库, 本地库管理
+    if (_hasSharedRemoteHosts) count += 2; // 共享媒体库, 共享库管理
     if (_isDandanConnected) count++;
     if (_isJellyfinConnected) count++;
     if (_isEmbyConnected) count++;
@@ -452,12 +452,23 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             ),
           ),
         ];
-        
+
         if (_hasSharedRemoteHosts) {
+          // 共享媒体库
           pageChildren.add(
             RepaintBoundary(
               child: SharedRemoteLibraryView(
                 onPlayEpisode: widget.onPlayEpisode,
+                mode: SharedRemoteViewMode.mediaLibrary,
+              ),
+            ),
+          );
+          // 共享库管理
+          pageChildren.add(
+            RepaintBoundary(
+              child: SharedRemoteLibraryView(
+                onPlayEpisode: widget.onPlayEpisode,
+                mode: SharedRemoteViewMode.libraryManagement,
               ),
             ),
           );
@@ -483,7 +494,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             ),
           );
         }
-        
+
         if (_isEmbyConnected) {
           pageChildren.add(
             RepaintBoundary(
@@ -494,7 +505,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             ),
           );
         }
-        
+
         // 动态生成标签
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
         final iconColor = isDarkMode ? Colors.white : Colors.black;
@@ -511,7 +522,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: HoverZoomTab(
-              text: "库管理",
+              text: "本地库管理",
               fontSize: 18,
               icon: Icon(Icons.folder_open_outlined,
                   size: 18, color: iconColor),
@@ -520,10 +531,11 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         ];
 
         if (_hasSharedRemoteHosts) {
+          // 共享媒体库
           tabs.add(Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: HoverZoomTab(
-              text: "共享媒体",
+              text: "共享媒体库",
               fontSize: 18,
               icon: Image.asset(
                 'assets/nipaplay.png',
@@ -531,6 +543,16 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 height: 18,
                 color: iconColor,
               ),
+            ),
+          ));
+          // 共享库管理
+          tabs.add(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "共享库管理",
+              fontSize: 18,
+              icon: Icon(Icons.settings_suggest_outlined,
+                  size: 18, color: iconColor),
             ),
           ));
         }
