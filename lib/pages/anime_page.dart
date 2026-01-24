@@ -34,6 +34,7 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -496,42 +497,89 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         
         // 动态生成标签
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        final iconColor = isDarkMode ? Colors.white : Colors.black;
+
         final List<Widget> tabs = [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(text: "本地媒体库", fontSize: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "本地媒体库",
+              fontSize: 18,
+              icon: Icon(Icons.tv_outlined, size: 18, color: iconColor),
+            ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(text: "库管理", fontSize: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "库管理",
+              fontSize: 18,
+              icon: Icon(Icons.folder_open_outlined,
+                  size: 18, color: iconColor),
+            ),
           ),
         ];
 
         if (_hasSharedRemoteHosts) {
-          tabs.add(const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(text: "共享媒体", fontSize: 18),
+          tabs.add(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "共享媒体",
+              fontSize: 18,
+              icon: Image.asset(
+                'assets/nipaplay.png',
+                width: 18,
+                height: 18,
+                color: iconColor,
+              ),
+            ),
           ));
         }
 
         if (_isDandanConnected) {
-          tabs.add(const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(text: "弹弹play", fontSize: 18),
+          tabs.add(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "弹弹play",
+              fontSize: 18,
+              icon: Image.asset(
+                'assets/dandanplay.png',
+                width: 18,
+                height: 18,
+                color: iconColor,
+              ),
+            ),
           ));
         }
 
         if (_isJellyfinConnected) {
-          tabs.add(const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(text: "Jellyfin", fontSize: 18),
+          tabs.add(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "Jellyfin",
+              fontSize: 18,
+              icon: SvgPicture.asset(
+                'assets/jellyfin.svg',
+                width: 18,
+                height: 18,
+                colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+              ),
+            ),
           ));
         }
 
         if (_isEmbyConnected) {
-          tabs.add(const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(text: "Emby", fontSize: 18),
+          tabs.add(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "Emby",
+              fontSize: 18,
+              icon: SvgPicture.asset(
+                'assets/emby.svg',
+                width: 18,
+                height: 18,
+                colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+              ),
+            ),
           ));
         }
 
