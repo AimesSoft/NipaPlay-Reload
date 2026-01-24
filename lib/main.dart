@@ -929,7 +929,6 @@ class MainPageState extends State<MainPage>
   bool _hotkeysAreRegistered = false;
   VideoPlayerState? _videoPlayerState;
   AppearanceSettingsProvider? _appearanceSettingsProvider;
-  bool? _mainTabAnimationEnabled;
 
   // Static method to find MainPageState from context
   static MainPageState? of(BuildContext context) {
@@ -955,15 +954,10 @@ class MainPageState extends State<MainPage>
         if (globalTabController!.index != index) {
           try {
             debugPrint('[MainPageState] 尝试切换到标签: $index');
-            final enablePageAnimation =
-                context.read<AppearanceSettingsProvider>().enablePageAnimation;
-            if (enablePageAnimation) {
-              globalTabController!.animateTo(index);
-            } else {
-              globalTabController!.index = index;
-            }
+            // 强制启用页面滑动动画
+            globalTabController!.animateTo(index);
             debugPrint(
-                '[MainPageState] 已切换到标签: $index (动画: $enablePageAnimation)');
+                '[MainPageState] 已切换到标签: $index');
           } catch (e) {
             debugPrint('[MainPageState] 切换标签失败: $e');
           }
@@ -1053,11 +1047,12 @@ class MainPageState extends State<MainPage>
   Future<void> _initializeController() async {
     final prefs = await SharedPreferences.getInstance();
     _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
-    final enablePageAnimationPref = prefs.getBool('enable_page_animation') ??
-        (!kIsWeb && (Platform.isIOS || Platform.isAndroid));
-    _mainTabAnimationEnabled ??= enablePageAnimationPref;
-    final enablePageAnimation =
-        _mainTabAnimationEnabled ?? enablePageAnimationPref;
+    
+    // 强制启用页面滑动动画
+    // final enablePageAnimationPref = prefs.getBool('enable_page_animation') ??
+    //     (!kIsWeb && (Platform.isIOS || Platform.isAndroid));
+    // _mainTabAnimationEnabled ??= enablePageAnimationPref;
+    // final enablePageAnimation = _mainTabAnimationEnabled ?? enablePageAnimationPref;
 
     // 在iOS平台上确保默认页面索引不会指向新番更新页面
     // iOS: 索引顺序为 0-主页, 1-视频播放, 2-媒体库, 3-设置
@@ -1080,7 +1075,7 @@ class MainPageState extends State<MainPage>
         length: tabLength,
         vsync: this,
         initialIndex: _defaultPageIndex,
-        animationDuration: enablePageAnimation ? null : Duration.zero,
+        // 强制开启动画，不传 animationDuration 默认就是开启的
       );
       debugPrint(
           '[MainPageState] TabController initialized with length: $tabLength, index: $_defaultPageIndex');
@@ -1194,12 +1189,7 @@ class MainPageState extends State<MainPage>
     final newAppearanceSettingsProvider =
         Provider.of<AppearanceSettingsProvider>(context, listen: false);
     if (newAppearanceSettingsProvider != _appearanceSettingsProvider) {
-      _appearanceSettingsProvider
-          ?.removeListener(_handleAppearanceSettingsChanged);
       _appearanceSettingsProvider = newAppearanceSettingsProvider;
-      _appearanceSettingsProvider
-          ?.addListener(_handleAppearanceSettingsChanged);
-      _handleAppearanceSettingsChanged();
     }
 
     // 初始化对话框尺寸管理器 - 只初始化一次
@@ -1223,43 +1213,10 @@ class MainPageState extends State<MainPage>
     _manageHotkeys(); // 初始状态检查
   }
 
-  void _handleAppearanceSettingsChanged() {
-    final enablePageAnimation =
-        _appearanceSettingsProvider?.enablePageAnimation;
-    if (enablePageAnimation == null) return;
-
-    if (_mainTabAnimationEnabled == enablePageAnimation) {
-      return;
-    }
-    _mainTabAnimationEnabled = enablePageAnimation;
-
-    final oldController = globalTabController;
-    if (oldController == null) return;
-
-    final currentIndex = oldController.index;
-    final length = oldController.length;
-    oldController.removeListener(_onTabChange);
-    oldController.dispose();
-
-    globalTabController = TabController(
-      length: length,
-      vsync: this,
-      initialIndex: currentIndex.clamp(0, length - 1),
-      animationDuration: enablePageAnimation ? null : Duration.zero,
-    );
-    globalTabController?.addListener(_onTabChange);
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   @override
   void dispose() {
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
-    _appearanceSettingsProvider
-        ?.removeListener(_handleAppearanceSettingsChanged);
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();

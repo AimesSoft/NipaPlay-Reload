@@ -333,20 +333,6 @@ class _ThemeModePageState extends State<ThemeModePage> {
               dropdownKey: _backgroundImageDropdownKey,
             ),
             const Divider(color: Colors.white12, height: 1),
-            SettingsItem.toggle(
-              title: "页面滑动动画",
-              subtitle: "关闭可提升在低性能设备上的流畅度",
-              icon: Ionicons.swap_horizontal_outline,
-              value: appearanceSettings.enablePageAnimation,
-              onChanged: (value) {
-                appearanceSettings.setEnablePageAnimation(value);
-                BlurSnackBar.show(
-                  context, 
-                  value ? '已启用页面滑动动画' : '已关闭页面滑动动画'
-                );
-              },
-            ),
-            const Divider(color: Colors.white12, height: 1),
           ],
         ),
       ),

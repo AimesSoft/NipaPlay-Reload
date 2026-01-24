@@ -4,46 +4,70 @@ import 'dart:io';
 
 List<Widget> createTabLabels() {
   List<Widget> tabs = [
-    const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.0),
-      child: Text("主页",
-          locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8.0),      child: HoverZoomTab(text: "主页"),
     ),
-    const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.0),
-      child: Text("视频播放",
-          locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8.0),      child: HoverZoomTab(text: "视频播放"),
     ),
-    const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.0),
-      child: Text("媒体库",
-          locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8.0),      child: HoverZoomTab(text: "媒体库"),
     ),
   ];
 
   // 仅在非iOS平台显示新番更新Tab
   if (!Platform.isIOS) {
     tabs.add(
-      const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16.0),
-        child: Text("新番更新",
-            locale:Locale("zh-Hans","zh"),
-  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8.0),        child: HoverZoomTab(text: "新番更新"),
       ),
     );
   }
 
   tabs.add(
-    const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.0),
-      child: Text("设置",
-          locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8.0),      child: HoverZoomTab(text: "设置"),
     ),
   );
 
   return tabs;
+}
+
+class HoverZoomTab extends StatefulWidget {
+  final String text;
+  const HoverZoomTab({super.key, required this.text});
+
+  @override
+  State<HoverZoomTab> createState() => _HoverZoomTabState();
+}
+
+class _HoverZoomTabState extends State<HoverZoomTab> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final highlightColor = isDarkMode ? Colors.white : Colors.black;
+    // 获取父级 TabBar 传递下来的样式（包含了选中/未选中颜色动画）
+    final defaultStyle = DefaultTextStyle.of(context).style;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedScale(
+        scale: _isHovered ? 1.2 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        child: AnimatedDefaultTextStyle(
+          style: defaultStyle.copyWith(
+            color: _isHovered ? highlightColor : defaultStyle.color,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+          duration: const Duration(milliseconds: 200),
+          child: Text(widget.text, locale: const Locale("zh-Hans", "zh")),
+        ),
+      ),
+    );
+  }
 }

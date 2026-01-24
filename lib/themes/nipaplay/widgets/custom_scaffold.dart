@@ -43,7 +43,8 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     }
 
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
-    final enableAnimation = appearanceSettings.enablePageAnimation;
+    // 强制启用动画
+    const enableAnimation = true;
 
     final currentIndex = widget.tabController!.index;
     final preloadIndices = widget.pageIsHome
