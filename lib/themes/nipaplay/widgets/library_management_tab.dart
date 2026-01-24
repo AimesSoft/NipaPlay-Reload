@@ -25,20 +25,26 @@ import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'; // 导入WebDAV连接对话框
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 
+enum LibraryManagementSection { local, webdav, smb }
+
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
+  final LibraryManagementSection section;
 
-  const LibraryManagementTab({super.key, required this.onPlayEpisode});
+  const LibraryManagementTab({
+    super.key,
+    required this.onPlayEpisode,
+    this.section = LibraryManagementSection.local,
+  });
 
   @override
   State<LibraryManagementTab> createState() => _LibraryManagementTabState();
 }
-
-enum _LibrarySource { local, webdav, smb }
 
 class _LibraryManagementTabState extends State<LibraryManagementTab> {
   static const String _lastScannedDirectoryPickerPathKey = 'last_scanned_dir_picker_path';
@@ -47,6 +53,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   final Map<String, List<io.FileSystemEntity>> _expandedFolderContents = {};
   final Set<String> _loadingFolders = {};
   final ScrollController _listScrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  bool _hasScanServiceListener = false;
   
   // 存储ScanService引用
   ScanService? _scanService;
@@ -69,7 +77,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   };
 
   // 网络资源相关状态
-  _LibrarySource _activeSource = _LibrarySource.local;
   List<WebDAVConnection> _webdavConnections = [];
   final Map<String, List<WebDAVFile>> _webdavFolderContents = {};
   final Set<String> _loadingWebDAVFolders = {};
@@ -82,14 +89,19 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     super.initState();
     
     // 延迟初始化，确保挂载完成
-    _initScanServiceListener();
+    if (widget.section == LibraryManagementSection.local) {
+      _initScanServiceListener();
+      // 加载保存的排序选项
+      _loadSortOption();
+    }
     
-    // 加载保存的排序选项
-    _loadSortOption();
+    if (widget.section == LibraryManagementSection.webdav) {
+      _initWebDAVService();
+    }
     
-    // 初始化WebDAV服务
-    _initWebDAVService();
-    _initSMBService();
+    if (widget.section == LibraryManagementSection.smb) {
+      _initSMBService();
+    }
   }
   
   // 提取为单独的方法，方便管理生命周期
@@ -104,6 +116,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         _scanService = scanService; // 保存引用
         print('初始化ScanService监听器开始');
         scanService.addListener(_checkScanResults);
+        _hasScanServiceListener = true;
         print('ScanService监听器添加成功');
       } catch (e) {
         print('初始化ScanService监听器失败: $e');
@@ -169,9 +182,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   @override
   void dispose() {
     // 安全移除监听器，使用保存的引用
-    if (_scanService != null) {
+    if (_hasScanServiceListener && _scanService != null) {
       _scanService!.removeListener(_checkScanResults);
     }
+    _searchController.dispose();
     _listScrollController.dispose();
     super.dispose();
   }
@@ -872,16 +886,16 @@ style: TextStyle(color: Colors.white54)),
       dialogContent += "1. 确保将视频文件存放在易于访问的文件夹中\n";
       dialogContent += "2. 您可以创建专门的文件夹，如「Movies」或「Anime」\n";
       dialogContent += "3. 确保文件夹权限设置正确，应用可以访问\n";
-      dialogContent += "4. 点击上方「添加并扫描文件夹」选择您的视频文件夹\n\n";
+      dialogContent += "4. 点击上方的添加文件夹按钮选择您的视频文件夹\n\n";
       dialogContent += "常见问题：\n";
       dialogContent += "- 如果无法选择某个文件夹，可能是权限问题\n";
       dialogContent += "- 建议使用标准的媒体文件夹如Pictures、Movies或Documents\n";
     }
     
     if (io.Platform.isIOS) {
-      dialogContent += "\n添加完文件后，点击上方的「扫描NipaPlay文件夹」按钮刷新媒体库。";
+      dialogContent += "\n添加完文件后，点击上方的添加文件夹按钮刷新媒体库。";
     } else {
-      dialogContent += "\n添加完文件后，点击上方的「添加并扫描文件夹」按钮选择您存放视频的文件夹。";
+      dialogContent += "\n添加完文件后，点击上方的添加文件夹按钮选择您存放视频的文件夹。";
     }
     
     BlurDialog.show<void>(
@@ -1182,6 +1196,184 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     }
   }
 
+  String get _normalizedSearchQuery => _searchController.text.toLowerCase().trim();
+
+  List<String> _filterFolderPaths(List<String> folderPaths) {
+    final query = _normalizedSearchQuery;
+    if (query.isEmpty) return folderPaths;
+    return folderPaths.where((path) {
+      final lowerPath = path.toLowerCase();
+      return lowerPath.contains(query) ||
+          p.basename(path).toLowerCase().contains(query);
+    }).toList();
+  }
+
+  List<WebDAVConnection> _filterWebDAVConnections() {
+    final query = _normalizedSearchQuery;
+    if (query.isEmpty) return _webdavConnections;
+    return _webdavConnections.where((connection) {
+      return connection.name.toLowerCase().contains(query) ||
+          connection.url.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  List<SMBConnection> _filterSMBConnections() {
+    final query = _normalizedSearchQuery;
+    if (query.isEmpty) return _smbConnections;
+    return _smbConnections.where((connection) {
+      return connection.name.toLowerCase().contains(query) ||
+          connection.host.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String message,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 64, color: Colors.white54),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionIcon({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    return IconButton(
+      icon: Icon(icon, size: 20),
+      color: Colors.white70,
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      onPressed: onPressed,
+    );
+  }
+
+  List<Widget> _buildControlBarActions(ScanService scanService) {
+    final bool isScanning = scanService.isScanning;
+    switch (widget.section) {
+      case LibraryManagementSection.webdav:
+        return [
+          _buildActionIcon(
+            icon: Icons.cloud_outlined,
+            tooltip: '添加WebDAV服务器',
+            onPressed: isScanning ? null : () => _showWebDAVConnectionDialog(),
+          ),
+        ];
+      case LibraryManagementSection.smb:
+        return [
+          _buildActionIcon(
+            icon: Icons.lan_outlined,
+            tooltip: '添加SMB服务器',
+            onPressed: isScanning ? null : () => _showSMBConnectionDialog(),
+          ),
+        ];
+      case LibraryManagementSection.local:
+      default:
+        return [
+          _buildActionIcon(
+            icon: Icons.create_new_folder_outlined,
+            tooltip: '添加本地文件夹',
+            onPressed: isScanning ? null : _pickAndScanDirectory,
+          ),
+          if (io.Platform.isAndroid)
+            _buildActionIcon(
+              icon: Icons.settings_backup_restore,
+              tooltip: '重置存储路径',
+              onPressed: isScanning ? null : _clearCustomStoragePath,
+            ),
+          if (io.Platform.isAndroid)
+            _buildActionIcon(
+              icon: Icons.security,
+              tooltip: '检查权限状态',
+              onPressed: isScanning ? null : _checkAndShowPermissionStatus,
+            ),
+          _buildActionIcon(
+            icon: Icons.cleaning_services,
+            tooltip: '清理智能扫描缓存',
+            onPressed: isScanning ? null : () async {
+              final confirm = await BlurDialog.show<bool>(
+                context: context,
+                title: '清理智能扫描缓存',
+                content:
+                    '这将清理所有文件夹的变化检测缓存，下次扫描时将重新检查所有文件夹。\n\n适用于：\n• 怀疑智能扫描遗漏了某些变化\n• 想要强制重新扫描所有文件夹\n\n确定要清理缓存吗？',
+                actions: <Widget>[
+                  TextButton(
+                    child: const Text('取消', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70)),
+                    onPressed: () => Navigator.of(context).pop(false),
+                  ),
+                  TextButton(
+                    child: const Text('清理', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.orangeAccent)),
+                    onPressed: () => Navigator.of(context).pop(true),
+                  ),
+                ],
+              );
+              if (confirm == true) {
+                await scanService.clearAllFolderHashCache();
+                if (mounted) {
+                  BlurSnackBar.show(context, '智能扫描缓存已清理');
+                }
+              }
+            },
+          ),
+          _buildActionIcon(
+            icon: Ionicons.refresh_outline,
+            tooltip: '智能刷新',
+            onPressed: isScanning
+                ? null
+                : () async {
+                    final confirm = await BlurDialog.show<bool>(
+                      context: context,
+                      title: '智能刷新确认',
+                      content: '将使用智能扫描技术重新检查所有已添加的媒体文件夹：\n\n• 自动检测文件夹内容变化\n• 只扫描有新增、删除或修改文件的文件夹\n• 跳过无变化的文件夹，大幅提升扫描速度\n• 可选择跳过已匹配且未观看的文件\n\n这可能需要一些时间，但比传统全量扫描快很多。',
+                      actions: <Widget>[
+                        TextButton(
+                          child: const Text('取消', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70)),
+                          onPressed: () => Navigator.of(context).pop(false),
+                        ),
+                        TextButton(
+                          child: const Text('智能刷新', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.lightBlueAccent)),
+                          onPressed: () => Navigator.of(context).pop(true),
+                        ),
+                      ],
+                    );
+                    if (confirm == true) {
+                      await scanService.rescanAllFolders();
+                    }
+                  },
+          ),
+        ];
+    }
+  }
+
+  Widget _buildManagementControlBar(ScanService scanService) {
+    return LocalLibraryControlBar(
+      searchController: _searchController,
+      onSearchChanged: (_) => setState(() {}),
+      onClearSearch: () => setState(() {}),
+      showSort: false,
+      trailingActions: _buildControlBarActions(scanService),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
@@ -1208,453 +1400,158 @@ style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Row(
+        _buildManagementControlBar(scanService),
+        if (widget.section == LibraryManagementSection.local) ...[
+          if (scanService.isScanning || scanService.scanMessage.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("媒体文件夹", locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 16),
-                  // 切换开关：本地文件夹 / WebDAV / SMB
-                  _buildSourceToggle(),
+                  Text(scanService.scanMessage, style: const TextStyle(color: Colors.white70)),
+                  if (scanService.isScanning && scanService.scanProgress > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: LinearProgressIndicator(
+                        value: scanService.scanProgress,
+                        backgroundColor: Colors.grey[700],
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
+                      ),
+                    ),
                 ],
               ),
-              Row(
-                children: [
-                  // 重置存储路径按钮 - 只在Android平台显示，macOS平台不支持自定义存储路径
-                  if (io.Platform.isAndroid)
-                    IconButton(
-                      icon: const Icon(Icons.settings_backup_restore),
-                      tooltip: '重置存储路径',
-                      color: Colors.white70,
-                      onPressed: scanService.isScanning ? null : _clearCustomStoragePath,
-                    ),
-                  if (io.Platform.isAndroid)
-                    IconButton(
-                      icon: const Icon(Icons.security),
-                      tooltip: '检查权限状态',
-                      color: Colors.white70,
-                      onPressed: scanService.isScanning ? null : _checkAndShowPermissionStatus,
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.cleaning_services),
-                    color: Colors.white70,
-                    onPressed: scanService.isScanning ? null : () async {
-                      final confirm = await BlurDialog.show<bool>(
-                        context: context,
-                        title: '清理智能扫描缓存',
-                        content: '这将清理所有文件夹的变化检测缓存，下次扫描时将重新检查所有文件夹。\n\n适用于：\n• 怀疑智能扫描遗漏了某些变化\n• 想要强制重新扫描所有文件夹\n\n确定要清理缓存吗？',
-                        actions: <Widget>[
-                          TextButton(
-                            child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
-                            onPressed: () => Navigator.of(context).pop(false),
-                          ),
-                          TextButton(
-                            child: const Text('清理', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.orangeAccent)),
-                            onPressed: () => Navigator.of(context).pop(true),
-                          ),
-                        ],
-                      );
-                      if (confirm == true) {
-                        await scanService.clearAllFolderHashCache();
-                        if (mounted) {
-                          BlurSnackBar.show(context, '智能扫描缓存已清理');
-                        }
-                      }
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Ionicons.refresh_outline),
-                    color: Colors.white70,
-                    onPressed: scanService.isScanning 
-                        ? null 
-                        : () async {
-                            final confirm = await BlurDialog.show<bool>(
-                              context: context,
-                              title: '智能刷新确认',
-                              content: '将使用智能扫描技术重新检查所有已添加的媒体文件夹：\n\n• 自动检测文件夹内容变化\n• 只扫描有新增、删除或修改文件的文件夹\n• 跳过无变化的文件夹，大幅提升扫描速度\n• 可选择跳过已匹配且未观看的文件\n\n这可能需要一些时间，但比传统全量扫描快很多。',
-                              actions: <Widget>[
-                                TextButton(
-                                  child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
-                                  onPressed: () => Navigator.of(context).pop(false),
-                                ),
-                                TextButton(
-                                  child: const Text('智能刷新', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
-                                  onPressed: () => Navigator.of(context).pop(true),
-                                ),
-                              ],
-                            );
-                            if (confirm == true) {
-                              await scanService.rescanAllFolders(); // skipPreviouslyMatchedUnwatched defaults to true
-                            }
-                          },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Row(
-            children: [
-              // 添加本地文件夹
-              Expanded(
-                child: GlassmorphicContainer(
-                  width: double.infinity,
-                  height: 50,
-                  borderRadius: 12,
-                  blur: enableBlur ? 10 : 0,
-                  alignment: Alignment.center,
-                  border: 1,
-                  linearGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.05),
-                    ],
-                  ),
-                  borderGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.3),
-                      Colors.white.withOpacity(0.1),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: scanService.isScanning ? null : _pickAndScanDirectory,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Center(
-                        child: FutureBuilder<bool>(
-                          future: io.Platform.isAndroid
-                              ? _isAndroid13Plus()
-                              : Future.value(false),
-                          builder: (context, snapshot) {
-                            String buttonText = '添加本地文件夹';
-
-                            if (io.Platform.isIOS) {
-                              buttonText = '扫描NipaPlay文件夹';
-                            } else if (io.Platform.isAndroid) {
-                              if (snapshot.hasData && snapshot.data == true) {
-                                buttonText = '扫描视频文件夹';
-                              } else {
-                                buttonText = '添加本地文件夹';
-                              }
-                            }
-
-                            return FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                buttonText,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
-              // 添加 WebDAV 服务器
-              Expanded(
-                child: GlassmorphicContainer(
-                  width: double.infinity,
-                  height: 50,
-                  borderRadius: 12,
-                  blur: enableBlur ? 10 : 0,
-                  alignment: Alignment.center,
-                  border: 1,
-                  linearGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.05),
-                    ],
-                  ),
-                  borderGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.3),
-                      Colors.white.withOpacity(0.1),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: scanService.isScanning ? null : _showWebDAVConnectionDialog,
-                      borderRadius: BorderRadius.circular(12),
-                      child: const Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            '添加WebDAV服务器',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
-              // 添加 SMB 服务器
-              Expanded(
-                child: GlassmorphicContainer(
-                  width: double.infinity,
-                  height: 50,
-                  borderRadius: 12,
-                  blur: enableBlur ? 10 : 0,
-                  alignment: Alignment.center,
-                  border: 1,
-                  linearGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.05),
-                    ],
-                  ),
-                  borderGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.3),
-                      Colors.white.withOpacity(0.1),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: scanService.isScanning ? null : _showSMBConnectionDialog,
-                      borderRadius: BorderRadius.circular(12),
-                      child: const Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            '添加SMB服务器',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (scanService.isScanning || scanService.scanMessage.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(scanService.scanMessage, style: const TextStyle(color: Colors.white70)),
-                if (scanService.isScanning && scanService.scanProgress > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: LinearProgressIndicator(
-                      value: scanService.scanProgress,
-                      backgroundColor: Colors.grey[700],
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
-                    ),
-                  ),
-              ],
             ),
-          ),
-        // 显示启动时检测到的变化
-        if (scanService.detectedChanges.isNotEmpty && !scanService.isScanning)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: GlassmorphicContainer(
-              width: double.infinity,
-              height: 50,
-              borderRadius: 12,
-              blur: enableBlur ? 10 : 0,
-              alignment: Alignment.centerLeft,
-              border: 1,
-              linearGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.orange.withOpacity(0.15),
-                  Colors.orange.withOpacity(0.05),
-                ],
-              ),
-              borderGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.orange.withOpacity(0.3),
-                  Colors.orange.withOpacity(0.1),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.notification_important, color: Colors.orange, size: 20),
-                        const SizedBox(width: 8),
-                        const Text(
-                          "检测到文件夹变化",
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => scanService.clearDetectedChanges(),
-                          child: const Text("忽略", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      scanService.getChangeDetectionSummary(),
-                      style: const TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                    const SizedBox(height: 12),
-                    ...scanService.detectedChanges.map((change) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  change.displayName,
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                                ),
-                                Text(
-                                  change.changeDescription,
-                                  style: const TextStyle(color: Colors.white60, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () async {
-                              // 扫描这个有变化的文件夹
-                              await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
-                              if (mounted) {
-                                BlurSnackBar.show(context, '已开始扫描: ${change.displayName}');
-                              }
-                            },
-                            child: const Text("扫描", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
-                          ),
-                        ],
-                      ),
-                    )),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              // 扫描所有有变化的文件夹
-                              for (final change in scanService.detectedChanges) {
-                                if (change.changeType != 'deleted') {
-                                  await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
-                                }
-                              }
-                              scanService.clearDetectedChanges();
-                              if (mounted) {
-                                BlurSnackBar.show(context, '已开始扫描所有有变化的文件夹');
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.lightBlueAccent.withOpacity(0.2),
-                              foregroundColor: Colors.lightBlueAccent,
-                            ),
-                            child: const Text("扫描所有变化"),
-                          ),
-                        ),
-                      ],
-                    ),
+          // 显示启动时检测到的变化
+          if (scanService.detectedChanges.isNotEmpty && !scanService.isScanning)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: GlassmorphicContainer(
+                width: double.infinity,
+                height: 50,
+                borderRadius: 12,
+                blur: enableBlur ? 10 : 0,
+                alignment: Alignment.centerLeft,
+                border: 1,
+                linearGradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.orange.withOpacity(0.15),
+                    Colors.orange.withOpacity(0.05),
                   ],
                 ),
-              ),
-            ),
-          ),
-        // 排序选项按钮
-        if (scanService.scannedFolders.isNotEmpty || scanService.isScanning)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              children: [
-                const Text('排序方式：', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: _showSortOptionsDialog,
-                  icon: const Icon(Icons.sort, color: Colors.white, size: 18),
-                  label: Text(
-                    [
-                      '文件名 (A→Z)',
-                      '文件名 (Z→A)',
-                      '修改时间 (旧→新)',
-                      '修改时间 (新→旧)',
-                      '文件大小 (小→大)',
-                      '文件大小 (大→小)',
-                    ][_sortOption],
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
+                borderGradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.orange.withOpacity(0.3),
+                    Colors.orange.withOpacity(0.1),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.notification_important, color: Colors.orange, size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            "检测到文件夹变化",
+                            locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => scanService.clearDetectedChanges(),
+                            child: const Text("忽略", locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        scanService.getChangeDetectionSummary(),
+                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      const SizedBox(height: 12),
+                      ...scanService.detectedChanges.map((change) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    change.displayName,
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    change.changeDescription,
+                                    style: const TextStyle(color: Colors.white60, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                // 扫描这个有变化的文件夹
+                                await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
+                                if (mounted) {
+                                  BlurSnackBar.show(context, '已开始扫描: ${change.displayName}');
+                                }
+                              },
+                              child: const Text("扫描", locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.lightBlueAccent)),
+                            ),
+                          ],
+                        ),
+                      )),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                // 扫描所有有变化的文件夹
+                                for (final change in scanService.detectedChanges) {
+                                  if (change.changeType != 'deleted') {
+                                    await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
+                                  }
+                                }
+                                scanService.clearDetectedChanges();
+                                if (mounted) {
+                                  BlurSnackBar.show(context, '已开始扫描所有有变化的文件夹');
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.lightBlueAccent.withOpacity(0.2),
+                                foregroundColor: Colors.lightBlueAccent,
+                              ),
+                              child: const Text("扫描所有变化"),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+        ],
         Expanded(
           child: Builder(
             builder: (_) {
-              switch (_activeSource) {
-                case _LibrarySource.webdav:
+              switch (widget.section) {
+                case LibraryManagementSection.webdav:
                   return _buildWebDAVFoldersList();
-                case _LibrarySource.smb:
+                case LibraryManagementSection.smb:
                   return _buildSMBFoldersList();
-                case _LibrarySource.local:
+                case LibraryManagementSection.local:
                 default:
-                  return (scanService.scannedFolders.isEmpty && !scanService.isScanning)
-                      ? const Center(
-                          child: Text(
-                            '尚未添加任何扫描文件夹。\n点击上方按钮添加。',
-                            textAlign: TextAlign.center,
-                            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-                          ),
-                        )
-                      : _buildResponsiveFolderList(scanService);
+                  return _buildLocalFoldersBody(scanService);
               }
             },
           ),
@@ -1922,9 +1819,9 @@ style: TextStyle(color: Colors.redAccent)),
   }
 
   // 响应式文件夹列表构建方法
-  Widget _buildResponsiveFolderList(ScanService scanService) {
+  Widget _buildResponsiveFolderList(ScanService scanService, List<String> folderPaths) {
     // 对根文件夹进行排序
-    final sortedFolders = _sortFolderPaths(scanService.scannedFolders);
+    final sortedFolders = _sortFolderPaths(folderPaths);
 
     // 检测是否为手机设备 - 手机设备始终使用单列布局
     if (isPhone) {
@@ -2171,88 +2068,44 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     );
   }
 
-  // 辅助方法：检查是否为Android 13+
-  Future<bool> _isAndroid13Plus() async {
-    if (!io.Platform.isAndroid) return false;
-    final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
-    return sdkVersion >= 33;
-  }
-
-  Widget _buildSourceToggle() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildSourceToggleItem('本地', _LibrarySource.local),
-          const SizedBox(width: 4),
-          _buildSourceToggleItem('WebDAV', _LibrarySource.webdav),
-          const SizedBox(width: 4),
-          _buildSourceToggleItem('SMB', _LibrarySource.smb),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSourceToggleItem(String text, _LibrarySource source) {
-    final bool isActive = _activeSource == source;
-    return GestureDetector(
-      onTap: () {
-        if (_activeSource != source) {
-          setState(() {
-            _activeSource = source;
-          });
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.white.withOpacity(0.3) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.white70,
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
+  Widget _buildLocalFoldersBody(ScanService scanService) {
+    final filteredFolders = _filterFolderPaths(scanService.scannedFolders);
+    if (scanService.scannedFolders.isEmpty && !scanService.isScanning) {
+      return _buildEmptyState(
+        icon: Icons.folder_open_outlined,
+        message: '尚未添加任何扫描文件夹。\n点击上方的添加按钮开始。',
+      );
+    }
+    if (scanService.scannedFolders.isNotEmpty &&
+        filteredFolders.isEmpty &&
+        _normalizedSearchQuery.isNotEmpty) {
+      return _buildEmptyState(
+        icon: Icons.search_off,
+        message: '未找到匹配的文件夹。',
+      );
+    }
+    return _buildResponsiveFolderList(scanService, filteredFolders);
   }
   
   // 构建WebDAV文件夹列表
   Widget _buildWebDAVFoldersList() {
     if (_webdavConnections.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.cloud_off, size: 64, color: Colors.white54),
-              SizedBox(height: 16),
-              Text(
-                '尚未添加任何WebDAV服务器。\n点击上方"添加WebDAV服务器"按钮开始。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
+      return _buildEmptyState(
+        icon: Icons.cloud_off,
+        message: '尚未添加任何WebDAV服务器。\n点击上方的添加按钮开始。',
       );
     }
-    
+    final filteredConnections = _filterWebDAVConnections();
+    if (filteredConnections.isEmpty && _normalizedSearchQuery.isNotEmpty) {
+      return _buildEmptyState(
+        icon: Icons.search_off,
+        message: '未找到匹配的WebDAV服务器。',
+      );
+    }
     return ListView.builder(
-      itemCount: _webdavConnections.length,
+      itemCount: filteredConnections.length,
       itemBuilder: (context, index) {
-        final connection = _webdavConnections[index];
+        final connection = filteredConnections[index];
         return _buildWebDAVConnectionTile(connection);
       },
     );
@@ -2260,29 +2113,22 @@ style: TextStyle(color: Colors.lightBlueAccent)),
 
   Widget _buildSMBFoldersList() {
     if (_smbConnections.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lan_outlined, size: 64, color: Colors.white54),
-              SizedBox(height: 16),
-              Text(
-                '尚未添加任何SMB服务器。\n点击上方"添加SMB服务器"按钮开始。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
+      return _buildEmptyState(
+        icon: Icons.lan_outlined,
+        message: '尚未添加任何SMB服务器。\n点击上方的添加按钮开始。',
       );
     }
-
+    final filteredConnections = _filterSMBConnections();
+    if (filteredConnections.isEmpty && _normalizedSearchQuery.isNotEmpty) {
+      return _buildEmptyState(
+        icon: Icons.search_off,
+        message: '未找到匹配的SMB服务器。',
+      );
+    }
     return ListView.builder(
-      itemCount: _smbConnections.length,
+      itemCount: filteredConnections.length,
       itemBuilder: (context, index) {
-        final connection = _smbConnections[index];
+        final connection = filteredConnections[index];
         return _buildSMBConnectionTile(connection);
       },
     );

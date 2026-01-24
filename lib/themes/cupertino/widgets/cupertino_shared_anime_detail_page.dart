@@ -20,6 +20,32 @@ import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dar
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_rating_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bangumi_collection_sheet.dart';
 
+class CupertinoDetailCastMember {
+  const CupertinoDetailCastMember({
+    required this.name,
+    this.imageUrl,
+    this.role,
+  });
+
+  final String name;
+  final String? imageUrl;
+  final String? role;
+}
+
+class CupertinoDetailSeason {
+  const CupertinoDetailSeason({
+    required this.id,
+    required this.name,
+  });
+
+  final String id;
+  final String name;
+}
+
+class CupertinoDetailMatchCancelled implements Exception {
+  const CupertinoDetailMatchCancelled();
+}
+
 class CupertinoSharedAnimeDetailPage extends StatefulWidget {
   const CupertinoSharedAnimeDetailPage({
     super.key,
@@ -30,6 +56,14 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
     this.customEpisodeLoader,
     this.customPlayableBuilder,
     this.sourceLabelOverride,
+    this.coverImageOverride,
+    this.backdropImageOverride,
+    this.cast,
+    this.seasons,
+    this.selectedSeasonId,
+    this.onSeasonChanged,
+    this.enableBangumiFeatures = true,
+    this.episodeImageResolver,
   });
 
   final SharedRemoteAnimeSummary anime;
@@ -41,6 +75,14 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
   final Future<PlayableItem> Function(
       BuildContext context, SharedRemoteEpisode episode)? customPlayableBuilder;
   final String? sourceLabelOverride;
+  final String? coverImageOverride;
+  final String? backdropImageOverride;
+  final List<CupertinoDetailCastMember>? cast;
+  final List<CupertinoDetailSeason>? seasons;
+  final String? selectedSeasonId;
+  final ValueChanged<String>? onSeasonChanged;
+  final bool enableBangumiFeatures;
+  final String? Function(SharedRemoteEpisode episode)? episodeImageResolver;
 
   @override
   State<CupertinoSharedAnimeDetailPage> createState() =>
@@ -132,7 +174,9 @@ class _CupertinoSharedAnimeDetailPageState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadEpisodes();
-      _loadBangumiAnime();
+      if (widget.enableBangumiFeatures) {
+        _loadBangumiAnime();
+      }
       _maybeLoadVividCover();
     });
   }
@@ -142,6 +186,15 @@ class _CupertinoSharedAnimeDetailPageState
     super.didUpdateWidget(oldWidget);
     if (oldWidget.anime.animeId != widget.anime.animeId ||
         oldWidget.displayModeOverride != widget.displayModeOverride) {
+      _vividCoverUrl = null;
+      _isLoadingCover = false;
+      _maybeLoadVividCover(force: true);
+    }
+    if (oldWidget.selectedSeasonId != widget.selectedSeasonId) {
+      _loadEpisodes(force: true);
+    }
+    if (oldWidget.coverImageOverride != widget.coverImageOverride ||
+        oldWidget.backdropImageOverride != widget.backdropImageOverride) {
       _vividCoverUrl = null;
       _isLoadingCover = false;
       _maybeLoadVividCover(force: true);
@@ -185,6 +238,7 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   Future<void> _loadBangumiAnime({bool force = false}) async {
+    if (!widget.enableBangumiFeatures) return;
     if (force && mounted) {
       setState(() {
         _bangumiAnime = null;
@@ -228,6 +282,7 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   Future<void> _loadWatchStatus() async {
+    if (!widget.enableBangumiFeatures) return;
     final bangumiAnime = _bangumiAnime;
     if (bangumiAnime?.episodeList == null ||
         bangumiAnime!.episodeList!.isEmpty) {
@@ -314,6 +369,7 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   Future<void> _loadBangumiUserData(BangumiAnime anime) async {
+    if (!widget.enableBangumiFeatures) return;
     if (!BangumiApiService.isLoggedIn) {
       try {
         await BangumiApiService.initialize();
@@ -489,6 +545,9 @@ class _CupertinoSharedAnimeDetailPageState
     String? comment,
     int? episodeStatus,
   }) async {
+    if (!widget.enableBangumiFeatures) {
+      return false;
+    }
     final bangumiAnime = _bangumiAnime;
     if (bangumiAnime == null) {
       return false;
@@ -579,6 +638,7 @@ class _CupertinoSharedAnimeDetailPageState
 
   Future<void> _syncBangumiEpisodeProgress(
       int subjectId, int desiredStatus) async {
+    if (!widget.enableBangumiFeatures) return;
     final bangumiAnime = _bangumiAnime;
     if (bangumiAnime == null) {
       return;
@@ -662,6 +722,9 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   void _openRatingEditor() {
+    if (!widget.enableBangumiFeatures) {
+      return;
+    }
     if (_bangumiAnime == null) {
       return;
     }
@@ -857,6 +920,24 @@ class _CupertinoSharedAnimeDetailPageState
       return;
     }
 
+    final overrideCover = (widget.backdropImageOverride != null &&
+            widget.backdropImageOverride!.isNotEmpty)
+        ? widget.backdropImageOverride
+        : widget.coverImageOverride;
+    if (overrideCover != null && overrideCover.isNotEmpty) {
+      if (_vividCoverUrl != overrideCover) {
+        setState(() {
+          _vividCoverUrl = overrideCover;
+          _isLoadingCover = false;
+        });
+      }
+      return;
+    }
+
+    if (!widget.enableBangumiFeatures) {
+      return;
+    }
+
     if (!force && _coverCache.containsKey(widget.anime.animeId)) {
       _vividCoverUrl = _coverCache[widget.anime.animeId];
       return;
@@ -870,6 +951,7 @@ class _CupertinoSharedAnimeDetailPageState
 
   Future<void> _fetchHighQualityCover() async {
     if (_isLoadingCover) return;
+    if (!widget.enableBangumiFeatures) return;
     debugPrint('[共享番剧详情] 开始获取高清封面 animeId=${widget.anime.animeId}');
     setState(() {
       _isLoadingCover = true;
@@ -911,7 +993,25 @@ class _CupertinoSharedAnimeDetailPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final backdropUrl = widget.backdropImageOverride;
     final children = <Widget>[
+      if (backdropUrl != null && backdropUrl.isNotEmpty)
+        Positioned.fill(
+          child: CachedNetworkImageWidget(
+            imageUrl: backdropUrl,
+            fit: BoxFit.cover,
+            shouldCompress: false,
+            delayLoad: true,
+            loadMode: CachedImageLoadMode.hybrid,
+            errorBuilder: (_, __) => Container(color: backgroundColor),
+          ),
+        ),
+      if (backdropUrl != null && backdropUrl.isNotEmpty)
+        Positioned.fill(
+          child: Container(
+            color: backgroundColor.withOpacity(0.85),
+          ),
+        ),
       CupertinoBottomSheetContentLayout(
         controller: _scrollController,
         backgroundColor: backgroundColor,
@@ -1152,7 +1252,8 @@ class _CupertinoSharedAnimeDetailPageState
       context,
     );
     final fallbackCover = _resolveImageUrl(_maybeReadProvider());
-    final imageUrl = _vividCoverUrl ?? fallbackCover;
+    final imageUrl =
+        widget.backdropImageOverride ?? _vividCoverUrl ?? fallbackCover;
     final title = widget.anime.nameCn?.isNotEmpty == true
         ? widget.anime.nameCn!
         : widget.anime.name;
@@ -1309,6 +1410,9 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   List<Widget> _buildVividEpisodeSlivers(BuildContext context) {
+    if (!widget.enableBangumiFeatures) {
+      return _buildVividSharedEpisodeSlivers(context);
+    }
     if (_isLoadingBangumiAnime || _isLoadingEpisodes) {
       return [
         const SliverToBoxAdapter(
@@ -1402,7 +1506,18 @@ class _CupertinoSharedAnimeDetailPageState
     final displayEpisodes =
         _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
 
+    final seasonSelectorSliver =
+        widget.seasons != null && widget.seasons!.isNotEmpty
+            ? SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: _buildSeasonSelector(context),
+                ),
+              )
+            : null;
+
     return [
+      if (seasonSelectorSliver != null) seasonSelectorSliver,
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -1476,6 +1591,122 @@ class _CupertinoSharedAnimeDetailPageState
     ];
   }
 
+  List<Widget> _buildVividSharedEpisodeSlivers(BuildContext context) {
+    if (_isLoadingEpisodes) {
+      return [
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CupertinoActivityIndicator()),
+          ),
+        ),
+      ];
+    }
+
+    final episodes = _episodes ?? const <SharedRemoteEpisode>[];
+    if (episodes.isEmpty) {
+      return [
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: Text(
+                '暂无剧集信息',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final displayEpisodes =
+        _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
+
+    final seasonSelectorSliver =
+        widget.seasons != null && widget.seasons!.isNotEmpty
+            ? SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: _buildSeasonSelector(context),
+                ),
+              )
+            : null;
+
+    return [
+      if (seasonSelectorSliver != null) seasonSelectorSliver,
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '剧集',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .textStyle
+                        .copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '共${displayEpisodes.length}集',
+                    style:
+                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                              fontSize: 13,
+                              color: CupertinoColors.secondaryLabel,
+                            ),
+                  ),
+                ],
+              ),
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minSize: 0,
+                onPressed: () {
+                  setState(() {
+                    _isEpisodeListReversed = !_isEpisodeListReversed;
+                  });
+                },
+                child: Text(
+                  _isEpisodeListReversed ? '倒序' : '正序',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            scrollDirection: Axis.horizontal,
+            itemCount: displayEpisodes.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 16),
+            itemBuilder: (context, index) {
+              final episode = displayEpisodes[index];
+              final hasSharedFile = episode.fileExists;
+              return _buildVividSharedEpisodeCard(
+                context,
+                index,
+                episode,
+                hasSharedFile: hasSharedFile,
+              );
+            },
+          ),
+        ),
+      ),
+    ];
+  }
+
   Widget _buildVividEpisodeCard(
     BuildContext context,
     int index,
@@ -1493,6 +1724,8 @@ class _CupertinoSharedAnimeDetailPageState
       context,
     );
 
+    final episodeImage = _resolveEpisodeImage(sharedEpisode);
+
     return GestureDetector(
       onTap: hasSharedFile ? () => _playEpisode(sharedEpisode!) : null,
       child: SizedBox(
@@ -1507,20 +1740,36 @@ class _CupertinoSharedAnimeDetailPageState
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Container(
-                      color: hasSharedFile
-                          ? CupertinoDynamicColor.resolve(
-                              CupertinoColors.systemGrey5,
-                              context,
-                            )
-                          : CupertinoDynamicColor.resolve(
-                              const CupertinoDynamicColor.withBrightness(
-                                color: CupertinoColors.white,
-                                darkColor: CupertinoColors.darkBackgroundGray,
+                    if (episodeImage != null)
+                      CachedNetworkImageWidget(
+                        imageUrl: episodeImage,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __) => Container(
+                          color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.systemGrey5,
+                            context,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        color: hasSharedFile
+                            ? CupertinoDynamicColor.resolve(
+                                CupertinoColors.systemGrey5,
+                                context,
+                              )
+                            : CupertinoDynamicColor.resolve(
+                                const CupertinoDynamicColor.withBrightness(
+                                  color: CupertinoColors.white,
+                                  darkColor: CupertinoColors.darkBackgroundGray,
+                                ),
+                                context,
                               ),
-                              context,
-                            ),
-                    ),
+                      ),
+                    if (!hasSharedFile)
+                      Container(
+                        color: CupertinoColors.black.withOpacity(0.2),
+                      ),
                     if (hasSharedFile)
                       Positioned(
                         top: 8,
@@ -1576,7 +1825,98 @@ class _CupertinoSharedAnimeDetailPageState
     );
   }
 
+  Widget _buildVividSharedEpisodeCard(
+    BuildContext context,
+    int index,
+    SharedRemoteEpisode episode, {
+    bool hasSharedFile = false,
+  }) {
+    final primaryColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    );
+    final subtitleColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final episodeImage = _resolveEpisodeImage(episode);
+
+    return GestureDetector(
+      onTap: hasSharedFile ? () => _playEpisode(episode) : null,
+      child: SizedBox(
+        width: 200,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (episodeImage != null)
+                      CachedNetworkImageWidget(
+                        imageUrl: episodeImage,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __) => Container(
+                          color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.systemGrey5,
+                            context,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.systemGrey5,
+                          context,
+                        ),
+                      ),
+                    if (!hasSharedFile)
+                      Container(
+                        color: CupertinoColors.black.withOpacity(0.2),
+                      ),
+                    if (hasSharedFile)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Icon(
+                          CupertinoIcons.play_circle_fill,
+                          size: 24,
+                          color: CupertinoTheme.of(context).primaryColor,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '第${index + 1}集',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: primaryColor,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              episode.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: subtitleColor, height: 1.3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget? _buildRatingSection(BuildContext context) {
+    if (!widget.enableBangumiFeatures) {
+      return null;
+    }
     final bangumiAnime = _bangumiAnime;
     if (bangumiAnime == null &&
         !_isLoadingBangumiAnime &&
@@ -2058,6 +2398,55 @@ class _CupertinoSharedAnimeDetailPageState
     );
   }
 
+  Widget _buildSeasonSelector(BuildContext context) {
+    final seasons = widget.seasons;
+    if (seasons == null || seasons.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final selectedId = widget.selectedSeasonId ?? seasons.first.id;
+    final selectedColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGrey5,
+      context,
+    );
+
+    return SizedBox(
+      height: 32,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: seasons.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final season = seasons[index];
+          final isSelected = season.id == selectedId;
+          return CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            minSize: 0,
+            color: isSelected
+                ? selectedColor.withOpacity(0.15)
+                : backgroundColor,
+            borderRadius: BorderRadius.circular(12),
+            onPressed: widget.onSeasonChanged == null
+                ? null
+                : () => widget.onSeasonChanged!(season.id),
+            child: Text(
+              season.name,
+              style: TextStyle(
+                fontSize: 12,
+                color: isSelected
+                    ? selectedColor
+                    : CupertinoDynamicColor.resolve(
+                        CupertinoColors.label, context),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildAdaptiveSegmentedControl(BuildContext context) {
     final Color resolvedTextColor = CupertinoDynamicColor.resolve(
       const CupertinoDynamicColor.withBrightness(
@@ -2231,6 +2620,75 @@ class _CupertinoSharedAnimeDetailPageState
                       fontSize: 14,
                     ),
                   ),
+                if (widget.cast != null && widget.cast!.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    '演职人员',
+                    style: TextStyle(
+                      color: primaryColor,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 96,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: widget.cast!.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        final member = widget.cast![index];
+                        return SizedBox(
+                          width: 72,
+                          child: Column(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(28),
+                                child: SizedBox(
+                                  width: 56,
+                                  height: 56,
+                                  child: member.imageUrl != null &&
+                                          member.imageUrl!.isNotEmpty
+                                      ? CachedNetworkImageWidget(
+                                          imageUrl: member.imageUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __) => Container(
+                                            color: resolvedCardColor,
+                                            child: const Icon(
+                                              CupertinoIcons.person,
+                                              color:
+                                                  CupertinoColors.secondaryLabel,
+                                            ),
+                                          ),
+                                        )
+                                      : Container(
+                                          color: resolvedCardColor,
+                                          child: const Icon(
+                                            CupertinoIcons.person,
+                                            color: CupertinoColors.secondaryLabel,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                member.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: secondaryColor,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
 
                 if (ratingSection != null) ...[
                   const SizedBox(height: 20),
@@ -2238,14 +2696,14 @@ class _CupertinoSharedAnimeDetailPageState
                 ],
 
                 // 显示Bangumi详细信息
-                if (_isLoadingBangumiAnime)
+                if (widget.enableBangumiFeatures && _isLoadingBangumiAnime)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     child: Center(
                       child: CupertinoActivityIndicator(),
                     ),
                   )
-                else if (_bangumiAnime != null) ...[
+                else if (widget.enableBangumiFeatures && _bangumiAnime != null) ...[
                   // 制作信息
                   if (_bangumiAnime!.metadata != null &&
                       _bangumiAnime!.metadata!.isNotEmpty) ...[
@@ -2466,6 +2924,9 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   List<Widget> _buildEpisodeSlivers(BuildContext context) {
+    if (!widget.enableBangumiFeatures) {
+      return _buildSharedEpisodeSlivers(context);
+    }
     // 如果正在加载Bangumi数据,显示加载状态
     if (_isLoadingBangumiAnime || _isLoadingEpisodes) {
       return [
@@ -2587,7 +3048,18 @@ class _CupertinoSharedAnimeDetailPageState
     final displayEpisodes =
         _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
 
+    final seasonSelectorSliver =
+        widget.seasons != null && widget.seasons!.isNotEmpty
+            ? SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: _buildSeasonSelector(context),
+                ),
+              )
+            : null;
+
     return [
+      if (seasonSelectorSliver != null) seasonSelectorSliver,
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -2648,6 +3120,125 @@ class _CupertinoSharedAnimeDetailPageState
     ];
   }
 
+  List<Widget> _buildSharedEpisodeSlivers(BuildContext context) {
+    if (_isLoadingEpisodes) {
+      return [
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CupertinoActivityIndicator(),
+                SizedBox(height: 12),
+                Text(
+                  '正在加载剧集...',
+                  style: TextStyle(
+                    color: CupertinoColors.secondaryLabel,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final episodes = _episodes ?? const <SharedRemoteEpisode>[];
+    if (episodes.isEmpty) {
+      return [
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  CupertinoIcons.tv,
+                  size: 44,
+                  color: CupertinoColors.inactiveGray,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  '暂无剧集信息',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final displayEpisodes =
+        _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
+
+    final seasonSelectorSliver =
+        widget.seasons != null && widget.seasons!.isNotEmpty
+            ? SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: _buildSeasonSelector(context),
+                ),
+              )
+            : null;
+
+    return [
+      if (seasonSelectorSliver != null) seasonSelectorSliver,
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(
+            children: [
+              Text(
+                '共${displayEpisodes.length}集',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ),
+              const Spacer(),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minSize: 0,
+                onPressed: () {
+                  setState(() {
+                    _isEpisodeListReversed = !_isEpisodeListReversed;
+                  });
+                },
+                child: Text(
+                  _isEpisodeListReversed ? '倒序' : '正序',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              if (index.isOdd) {
+                return const SizedBox(height: 10);
+              }
+              final episodeIndex = index ~/ 2;
+              final episode = displayEpisodes[episodeIndex];
+              return _buildSharedEpisodeTile(context, episode);
+            },
+            childCount: displayEpisodes.length * 2 - 1,
+          ),
+        ),
+      ),
+    ];
+  }
+
   Widget _buildEpisodeTile(
     BuildContext context,
     EpisodeData bangumiEpisode, {
@@ -2670,6 +3261,75 @@ class _CupertinoSharedAnimeDetailPageState
         : CupertinoDynamicColor.resolve(CupertinoColors.systemGrey, context);
 
     final isEnabled = hasSharedFile;
+    final episodeImage = _resolveEpisodeImage(sharedEpisode);
+
+    final Widget leadingWidget = episodeImage != null
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: 72,
+              height: 48,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImageWidget(
+                    imageUrl: episodeImage,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __) => Container(
+                      color: backgroundColor,
+                      child: const Icon(
+                        CupertinoIcons.film,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
+                    ),
+                  ),
+                  if (!hasSharedFile)
+                    Container(
+                      color: CupertinoColors.black.withOpacity(0.25),
+                    ),
+                  if (hasSharedFile)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Icon(
+                        CupertinoIcons.play_circle_fill,
+                        size: 18,
+                        color: CupertinoColors.white.withOpacity(0.85),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          )
+        : Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: hasSharedFile
+                  ? iconColor
+                  : CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemGrey5,
+                      context,
+                    ),
+              borderRadius: BorderRadius.circular(12),
+              border: hasSharedFile
+                  ? Border.all(
+                      color: CupertinoColors.white,
+                      width: 1.5,
+                    )
+                  : null,
+            ),
+            child: Icon(
+              CupertinoIcons.play_fill,
+              size: 16,
+              color: hasSharedFile
+                  ? CupertinoColors.white
+                  : CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemGrey2,
+                      context,
+                    ),
+            ),
+          );
 
     return GestureDetector(
       onTap: isEnabled ? () => _playEpisode(sharedEpisode!) : null,
@@ -2695,35 +3355,7 @@ class _CupertinoSharedAnimeDetailPageState
         ),
         child: Row(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: hasSharedFile
-                    ? iconColor
-                    : CupertinoDynamicColor.resolve(
-                        CupertinoColors.systemGrey5,
-                        context,
-                      ),
-                borderRadius: BorderRadius.circular(12),
-                border: hasSharedFile
-                    ? Border.all(
-                        color: CupertinoColors.white,
-                        width: 1.5,
-                      )
-                    : null,
-              ),
-              child: Icon(
-                CupertinoIcons.play_fill,
-                size: 16,
-                color: hasSharedFile
-                    ? CupertinoColors.white
-                    : CupertinoDynamicColor.resolve(
-                        CupertinoColors.systemGrey2,
-                        context,
-                      ),
-              ),
-            ),
+            leadingWidget,
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -2820,6 +3452,181 @@ class _CupertinoSharedAnimeDetailPageState
     );
   }
 
+  Widget _buildSharedEpisodeTile(
+    BuildContext context,
+    SharedRemoteEpisode episode,
+  ) {
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+    final hasSharedFile = episode.fileExists;
+    final isEnabled = hasSharedFile;
+    final episodeImage = _resolveEpisodeImage(episode);
+
+    final Widget leadingWidget = episodeImage != null
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: 72,
+              height: 48,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImageWidget(
+                    imageUrl: episodeImage,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __) => Container(
+                      color: backgroundColor,
+                      child: const Icon(
+                        CupertinoIcons.film,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
+                    ),
+                  ),
+                  if (!hasSharedFile)
+                    Container(
+                      color: CupertinoColors.black.withOpacity(0.25),
+                    ),
+                  if (hasSharedFile)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Icon(
+                        CupertinoIcons.play_circle_fill,
+                        size: 18,
+                        color: CupertinoColors.white.withOpacity(0.85),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          )
+        : Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: hasSharedFile
+                  ? CupertinoColors.activeBlue
+                  : CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemGrey5,
+                      context,
+                    ),
+              borderRadius: BorderRadius.circular(12),
+              border: hasSharedFile
+                  ? Border.all(
+                      color: CupertinoColors.white,
+                      width: 1.5,
+                    )
+                  : null,
+            ),
+            child: Icon(
+              CupertinoIcons.play_fill,
+              size: 16,
+              color: hasSharedFile
+                  ? CupertinoColors.white
+                  : CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemGrey2,
+                      context,
+                    ),
+            ),
+          );
+
+    return GestureDetector(
+      onTap: isEnabled ? () => _playEpisode(episode) : null,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: CupertinoDynamicColor.resolve(
+            const CupertinoDynamicColor.withBrightness(
+              color: CupertinoColors.white,
+              darkColor: CupertinoColors.darkBackgroundGray,
+            ),
+            context,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: CupertinoColors.black.withOpacity(0.07),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            leadingWidget,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    episode.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: hasSharedFile ? labelColor : subtitleColor,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (episode.fileName.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      episode.fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: subtitleColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasSharedFile)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.activeBlue.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '可观看',
+                      style: TextStyle(
+                        color: CupertinoColors.activeBlue,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                else
+                  Icon(
+                    CupertinoIcons.xmark,
+                    size: 16,
+                    color: subtitleColor,
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _playEpisode(SharedRemoteEpisode episode) async {
     try {
       PlayableItem playableItem;
@@ -2841,6 +3648,9 @@ class _CupertinoSharedAnimeDetailPageState
       await rootNavigator.maybePop();
       await PlaybackService().play(playableItem);
     } catch (e) {
+      if (e is CupertinoDetailMatchCancelled) {
+        return;
+      }
       AdaptiveSnackBar.show(
         context,
         message: '播放失败：$e',
@@ -2920,6 +3730,10 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   String? _resolveImageUrl([SharedRemoteLibraryProvider? provider]) {
+    final override = widget.coverImageOverride;
+    if (override != null && override.isNotEmpty) {
+      return override;
+    }
     final imageUrl = widget.anime.imageUrl;
     if (imageUrl == null || imageUrl.isEmpty) {
       return null;
@@ -2935,6 +3749,18 @@ class _CupertinoSharedAnimeDetailPageState
       return '$baseUrl$imageUrl';
     }
     return '$baseUrl/$imageUrl';
+  }
+
+  String? _resolveEpisodeImage(SharedRemoteEpisode? episode) {
+    final resolver = widget.episodeImageResolver;
+    if (resolver == null || episode == null) {
+      return null;
+    }
+    final url = resolver(episode);
+    if (url == null || url.isEmpty) {
+      return null;
+    }
+    return url;
   }
 
   @override

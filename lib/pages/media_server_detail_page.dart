@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -9,7 +8,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dar
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
@@ -18,6 +16,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
 
 class MediaServerDetailPage extends StatefulWidget {
   final String mediaId;
@@ -136,6 +135,23 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
     } else {
       final service = EmbyService.instance;
       return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300, tag: _mediaDetail!.imagePrimaryTag);
+    }
+  }
+
+  String _getBackdropUrl() {
+    if (_mediaDetail?.imageBackdropTag == null) return '';
+    if (widget.serverType == MediaServerType.jellyfin) {
+      final service = JellyfinService.instance;
+      return service.getImageUrl(_mediaDetail!.id,
+          type: 'Backdrop', width: 1920, height: 1080, quality: 95);
+    } else {
+      final service = EmbyService.instance;
+      return service.getImageUrl(_mediaDetail!.id,
+          type: 'Backdrop',
+          width: 1920,
+          height: 1080,
+          quality: 95,
+          tag: _mediaDetail!.imageBackdropTag);
     }
   }
 
@@ -449,6 +465,44 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
     }
   }
 
+  String? _formatPremiereDate(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      return value.split('T').first;
+    }
+    final month = parsed.month.toString().padLeft(2, '0');
+    final day = parsed.day.toString().padLeft(2, '0');
+    return '${parsed.year}-$month-$day';
+  }
+
+  Widget _buildRatingStars(double rating) {
+    if (rating < 0 || rating > 10) {
+      return Text('N/A',
+          style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13));
+    }
+
+    final stars = <Widget>[];
+    final fullStars = rating.floor();
+    final halfStar = (rating - fullStars) >= 0.5;
+
+    for (int i = 0; i < 10; i++) {
+      if (i < fullStars) {
+        stars.add(Icon(Ionicons.star, color: Colors.yellow[600], size: 16));
+      } else if (i == fullStars && halfStar) {
+        stars.add(
+            Icon(Ionicons.star_half, color: Colors.yellow[600], size: 16));
+      } else {
+        stars.add(Icon(Ionicons.star_outline,
+            color: Colors.yellow[600]?.withOpacity(0.7), size: 16));
+      }
+      if (i < 9) {
+        stars.add(const SizedBox(width: 1));
+      }
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: stars);
+  }
+
   Future<T?> _runDetailAutoMatchTask<T>(Future<T?> Function() task) async {
     if (_isDetailAutoMatching) {
       if (mounted) {
@@ -588,592 +642,254 @@ style: TextStyle(color: Colors.white70)),
 style: TextStyle(color: Colors.white70)));
     } else {
       // 成功加载，构建详情UI
-      final screenSize = MediaQuery.of(context).size;
-      final isPortrait = screenSize.height > screenSize.width;
       final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
       final enableAnimation = appearanceSettings.enablePageAnimation;
+      final subtitle = _mediaDetail!.originalTitle;
 
-      pageContent = Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    _mediaDetail!.name,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Ionicons.close_circle_outline,
-                      color: Colors.white70, size: 28),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-          ),
-          if (!_isMovie && _tabController != null) // 如果不是电影，才显示TabBar
-            TabBar(
-              controller: _tabController,
-              dividerColor: const Color.fromARGB(59, 255, 255, 255),
-              dividerHeight: 3.0,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicatorPadding: const EdgeInsets.only(top: 46, left: 15, right: 15), // 根据实际TabBar高度调整
-              indicator: BoxDecoration(
-                color: widget.serverType == MediaServerType.jellyfin 
-                    ? Colors.blueAccent // Jellyfin主题色
-                    : Colors.amberAccent, // Emby主题色
-                borderRadius: BorderRadius.circular(30),
-              ),
-              indicatorWeight: 3,
-              tabs: const [
-                Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.document_text_outline, size: 18), SizedBox(width: 8), Text('简介')])),
-                Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Ionicons.film_outline, size: 18), SizedBox(width: 8), Text('剧集')])),
-              ],
-            ),
-          Expanded(
-            child: _isMovie || _tabController == null
-              ? RepaintBoundary(child: _buildInfoView(isPortrait)) // 如果是电影，直接显示信息页
-              : SwitchableView(
-                  controller: _tabController,
-                  currentIndex: _tabController!.index,
-                  enableAnimation: enableAnimation,
-                  physics: enableAnimation
-                      ? const PageScrollPhysics()
-                      : const NeverScrollableScrollPhysics(),
-                  onPageChanged: (index) {
-                    if (_tabController!.index != index) {
-                      _tabController!.animateTo(index);
-                    }
-                  },
-                  children: [
-                    RepaintBoundary(child: _buildInfoView(isPortrait)), // 使用RepaintBoundary优化
-                    RepaintBoundary(child: _buildEpisodesView(isPortrait)), // 使用RepaintBoundary优化
-                  ],
-                ),
-          ),
-        ],
+      pageContent = NipaplayAnimeDetailLayout(
+        title: _mediaDetail!.name,
+        subtitle: subtitle,
+        sourceLabel: widget.serverType == MediaServerType.jellyfin
+            ? 'Jellyfin'
+            : 'Emby',
+        onClose: () => Navigator.of(context).pop(),
+        tabController: _tabController,
+        showTabs: !_isMovie,
+        enableAnimation: enableAnimation,
+        infoView: RepaintBoundary(child: _buildInfoView()),
+        episodesView: _isMovie
+            ? null
+            : RepaintBoundary(child: _buildEpisodesView()),
       );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.transparent, // Dialog背景由showGeneralDialog的barrierColor控制
-      body: Padding(
-        // 调整Padding以匹配AnimeDetailPage
-        padding: EdgeInsets.fromLTRB(
-            20, MediaQuery.of(context).padding.top + 20, 20, 20),
-        child: GlassmorphicContainer(
-          width: double.infinity,
-          height: double.infinity,
-          borderRadius: 15,
-          blur: 25, // 与AnimeDetailPage一致
-          alignment: Alignment.center,
-          border: 0.5, // 与AnimeDetailPage一致
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: widget.serverType == MediaServerType.jellyfin
-                ? [ // Jellyfin风格
-                    const Color.fromARGB(255, 60, 60, 80).withOpacity(0.2),
-                    const Color.fromARGB(255, 40, 40, 60).withOpacity(0.2),
-                  ]
-                : [ // Emby风格
-                    const Color.fromARGB(255, 50, 70, 50).withOpacity(0.2),
-                    const Color.fromARGB(255, 30, 50, 30).withOpacity(0.2),
-                  ],
-            stops: const [0.1, 1],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [ // 与AnimeDetailPage一致
-              Colors.white.withOpacity(0.15),
-              Colors.white.withOpacity(0.15),
-            ],
-          ),
-          child: pageContent,
-        ),
-      ),
+    return NipaplayAnimeDetailScaffold(
+      child: pageContent,
     );
   }
 
-  Widget _buildInfoView(bool isPortrait) {
+  Widget _buildInfoView() {
     if (_mediaDetail == null) return const SizedBox.shrink();
 
-    String backdropUrl = '';
-    if (_mediaDetail!.imageBackdropTag != null) {
-      if (widget.serverType == MediaServerType.jellyfin) {
-        final service = JellyfinService.instance;
-        backdropUrl = service.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95);
-      } else {
-        final service = EmbyService.instance;
-        // Emby需要传递tag参数
-        backdropUrl = service.getImageUrl(_mediaDetail!.id, type: 'Backdrop', width: 1920, height: 1080, quality: 95, tag: _mediaDetail!.imageBackdropTag);
-      }
-    }
+    final summaryText =
+        (_mediaDetail!.overview != null && _mediaDetail!.overview!.trim().isNotEmpty
+                ? _mediaDetail!.overview!
+                : '暂无简介')
+            .replaceAll('<br>', ' ')
+            .replaceAll('<br/>', ' ')
+            .replaceAll('<br />', ' ')
+            .replaceAll('```', '');
+    final posterUrl = _getPosterUrl();
+    final backdropUrl = _getBackdropUrl();
+    final ratingValue = double.tryParse(_mediaDetail!.communityRating ?? '');
 
-    // 注意：这里的返回按钮逻辑需要调整或移除，因为顶部已经有了全局关闭按钮
-    return Stack(
-      children: [
-        // 背景图 - 直接使用网络图片，跳过压缩缓存
-        if (backdropUrl.isNotEmpty)
-          Positioned.fill(
-            child: Image.network(
-              backdropUrl,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: Colors.grey[900],
-                  child: const Center(
-                    child: CircularProgressIndicator(color: Colors.white54),
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(color: Colors.grey[900]);
-              },
+    final valueStyle = TextStyle(
+      color: Colors.white.withOpacity(0.85),
+      fontSize: 13,
+      height: 1.5,
+    );
+    const boldWhiteKeyStyle = TextStyle(
+      color: Colors.white,
+      fontWeight: FontWeight.w600,
+      fontSize: 13,
+      height: 1.5,
+    );
+    final sectionTitleStyle = Theme.of(context)
+        .textTheme
+        .titleMedium
+        ?.copyWith(color: Colors.white, fontWeight: FontWeight.bold);
+
+    final infoRows = <Widget>[];
+    void addInfoRow(String label, String? value) {
+      if (value == null || value.trim().isEmpty) return;
+      infoRows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4.0),
+          child: RichText(
+            text: TextSpan(
+              style: valueStyle,
+              children: [
+                TextSpan(text: '$label: ', style: boldWhiteKeyStyle),
+                TextSpan(text: value.trim()),
+              ],
             ),
           ),
-
-        // 背景暗化层
-        Positioned.fill(
-          child: Container(
-            color: Colors.black.withOpacity(0.75), // 可以稍微调整透明度
-          ),
         ),
+      );
+    }
 
-        // 内容区域
-        // 移除原有的 Positioned 返回按钮
+    addInfoRow('首播', _formatPremiereDate(_mediaDetail!.premiereDate));
+    addInfoRow('年份', _mediaDetail!.productionYear?.toString());
+    addInfoRow('时长', _formatRuntime(_mediaDetail!.runTimeTicks));
+    addInfoRow('分级', _mediaDetail!.officialRating);
+    addInfoRow('制作', _mediaDetail!.seriesStudio);
+    if (_mediaDetail!.genres.isNotEmpty) {
+      addInfoRow('类型', _mediaDetail!.genres.join(' / '));
+    }
+
+    return Stack(
+      children: [
+        if (backdropUrl.isNotEmpty)
+          Positioned.fill(
+            child: CachedNetworkImageWidget(
+              imageUrl: backdropUrl,
+              fit: BoxFit.cover,
+              shouldCompress: false,
+              delayLoad: true,
+              loadMode: CachedImageLoadMode.hybrid,
+              errorBuilder: (_, __) => Container(color: Colors.grey[900]),
+            ),
+          ),
+        if (backdropUrl.isNotEmpty)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withOpacity(0.35),
+            ),
+          ),
         SingleChildScrollView(
-          // padding: const EdgeInsets.only(top: 16, bottom: 24, left:16, right: 16), // 调整内边距，因为顶部标题和TabBar已在外部处理
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 头部信息区域（海报 + 基本信息）
-              isPortrait
-                  ? _buildPortraitHeader() // 竖屏布局
-                  : _buildLandscapeHeader(), // 横屏布局
-              
-              const SizedBox(height: 24),
-              
-              // 剧情简介
-              if (_mediaDetail!.overview != null && _mediaDetail!.overview!.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '剧情简介',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+              if (_mediaDetail!.originalTitle != null &&
+                  _mediaDetail!.originalTitle!.isNotEmpty &&
+                  _mediaDetail!.originalTitle != _mediaDetail!.name)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    _mediaDetail!.originalTitle!,
+                    style: valueStyle.copyWith(
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _mediaDetail!.overview!
-                          .replaceAll('<br>', ' ')
-                          .replaceAll('<br/>', ' ')
-                          .replaceAll('<br />', ' '),
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                
-              const SizedBox(height: 24),
-              
-              // 演员信息
-              if (_mediaDetail!.cast.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '演员',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 100, // 根据内容调整或使其可滚动
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _mediaDetail!.cast.length,
-                        itemBuilder: (context, index) {
-                          final actor = _mediaDetail!.cast[index];
-                          
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 12),
-                            child: Column(
-                              children: [
-                                CircleAvatar(
-                                  radius: 30,
-                                  backgroundColor: Colors.grey.shade800,
-                                  backgroundImage: _getActorImageUrl(actor) != null
-                                      ? NetworkImage(_getActorImageUrl(actor)!)
-                                      : null,
-                                  child: (widget.serverType == MediaServerType.jellyfin && actor.primaryImageTag == null) ||
-                                         (widget.serverType == MediaServerType.emby && actor.imagePrimaryTag == null)
-                                      ? const Icon(Icons.person, color: Colors.white54)
-                                      : null,
-                                ),
-                                const SizedBox(height: 4),
-                                SizedBox(
-                                  width: 70,
-                                  child: Text(
-                                    actor.name,
-                                    style: const TextStyle(fontSize: 12, color: Colors.white70),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-  
-  // _buildPortraitHeader, _buildLandscapeHeader, _buildDetailInfo 方法中的文本颜色和样式也需要调整为白色或浅色系，以适应深色毛玻璃背景
-  // 例如：
-  Widget _buildPortraitHeader() {
-    if (_mediaDetail == null) return const SizedBox.shrink();
-    
-    final posterUrl = _getPosterUrl();
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center, // 竖屏时内容居中
-      children: [
-        Center( // 确保海报居中
-          child: Container(
-            width: 200,
-            height: 300,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.5),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: posterUrl.isNotEmpty
-                  ? CachedNetworkImageWidget(
-                      imageUrl: posterUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error) {
-                        return Container(
-                          color: Colors.grey[800],
-                          child: const Center(
-                            child: Icon(
-                              Ionicons.image_outline, // 使用 Ionicons
-                              size: 40,
-                              color: Colors.white30,
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                  : Container(
-                      color: Colors.grey[800],
-                      child: const Center(
-                        child: Icon(
-                          Ionicons.film_outline, // 使用 Ionicons
-                          size: 40,
-                          color: Colors.white30,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (posterUrl.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 16.0, bottom: 8.0),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImageWidget(
+                          imageUrl: posterUrl,
+                          width: 130,
+                          height: 195,
+                          fit: BoxFit.cover,
+                          loadMode: CachedImageLoadMode.legacy,
                         ),
                       ),
                     ),
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 24),
-        
-        Center( // 确保标题居中
-          child: Text(
-            _mediaDetail!.name,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.white, // 调整颜色
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        
-        if (_mediaDetail!.productionYear != null)
-          Center( // 确保年份居中
-            child: Text(
-              '(${_mediaDetail!.productionYear})',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[300], // 调整颜色
+                  Expanded(
+                    child: SizedBox(
+                      height: 195,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: Text(summaryText, style: valueStyle),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        
-        const SizedBox(height: 16),
-        
-        _buildDetailInfo(), // 这个方法内部的文本颜色也需要调整
-      ],
-    );
-  }
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white24),
+              const SizedBox(height: 8),
+              if (ratingValue != null && ratingValue > 0) ...[
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      const TextSpan(text: '评分: ', style: boldWhiteKeyStyle),
+                      WidgetSpan(child: _buildRatingStars(ratingValue)),
+                      TextSpan(
+                        text: ' ${ratingValue.toStringAsFixed(1)} ',
+                        style: TextStyle(
+                          color: Colors.yellow[600],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
+              ...infoRows,
+              if (_mediaDetail!.cast.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                if (sectionTitleStyle != null)
+                  Text('演员', style: sectionTitleStyle),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _mediaDetail!.cast.length,
+                    itemBuilder: (context, index) {
+                      final actor = _mediaDetail!.cast[index];
+                      final actorImage = _getActorImageUrl(actor);
 
-  Widget _buildLandscapeHeader() {
-    if (_mediaDetail == null) return const SizedBox.shrink();
-    
-    final posterUrl = _getPosterUrl();
-    
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 180, // 可以根据屏幕宽度动态调整
-          height: 270, // width * 1.5
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.5),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: posterUrl.isNotEmpty
-                ? CachedNetworkImageWidget(
-                    imageUrl: posterUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error) {
-                      return Container(
-                        color: Colors.grey[800],
-                        child: const Center(
-                          child: Icon(
-                            Ionicons.image_outline, // 使用 Ionicons
-                            size: 40,
-                            color: Colors.white30,
-                          ),
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 30,
+                              backgroundColor: Colors.grey.shade800,
+                              backgroundImage:
+                                  actorImage != null ? NetworkImage(actorImage) : null,
+                              child: actorImage == null
+                                  ? const Icon(Icons.person,
+                                      color: Colors.white54)
+                                  : null,
+                            ),
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: 70,
+                              child: Text(
+                                actor.name,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.white70),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     },
-                  )
-                : Container(
-                    color: Colors.grey[800],
-                    child: const Center(
-                      child: Icon(
-                        Ionicons.film_outline, // 使用 Ionicons
-                        size: 40,
-                        color: Colors.white30,
-                      ),
+                  ),
+                ),
+              ],
+              if (_isMovie) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    BlurButton(
+                      icon: Icons.play_arrow,
+                      text: '播放',
+                      onTap: () {
+                        if (_isDetailAutoMatching) {
+                          BlurSnackBar.show(context, '正在自动匹配，请稍候');
+                          return;
+                        }
+                        _playMovie();
+                      },
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      fontSize: 18,
                     ),
-                  ),
-          ),
-        ),
-        
-        const SizedBox(width: 24),
-        
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _mediaDetail!.name,
-                style: const TextStyle(
-                  fontSize: 24, // 可以适当调大
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white, // 调整颜色
+                  ],
                 ),
-              ),
-              
-              if (_mediaDetail!.productionYear != null)
-                Text(
-                  '(${_mediaDetail!.productionYear})',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey[300], // 调整颜色
-                  ),
-                ),
-              
-              const SizedBox(height: 16),
-              
-              _buildDetailInfo(), // 这个方法内部的文本颜色也需要调整
+              ],
             ],
           ),
         ),
       ],
     );
   }
-
-  Widget _buildDetailInfo() {
-    if (_mediaDetail == null) return const SizedBox.shrink();
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_mediaDetail!.communityRating != null)
-          Row(
-            children: [
-              const Icon(
-                Ionicons.star, // 使用 Ionicons
-                color: Colors.amber,
-                size: 20,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _mediaDetail!.communityRating!,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white, // 调整颜色
-                ),
-              ),
-              const SizedBox(width: 16),
-              
-              if (_mediaDetail!.officialRating != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white54),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    _mediaDetail!.officialRating!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.white70, // 调整颜色
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        
-        const SizedBox(height: 8),
-        
-        if (_mediaDetail!.runTimeTicks != null)
-          Row(
-            children: [
-              const Icon(
-                Ionicons.time_outline, // 使用 Ionicons
-                color: Colors.white54,
-                size: 16,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _formatRuntime(_mediaDetail!.runTimeTicks),
-                style: const TextStyle(
-                  color: Colors.white70, // 调整颜色
-                ),
-              ),
-            ],
-          ),
-        
-        const SizedBox(height: 8),
-        
-        if (_mediaDetail!.seriesStudio != null && _mediaDetail!.seriesStudio!.isNotEmpty)
-          Row(
-            children: [
-              const Icon(
-                Ionicons.business_outline, // 使用 Ionicons
-                color: Colors.white54,
-                size: 16,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  _mediaDetail!.seriesStudio!,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        
-        const SizedBox(height: 16),
-        
-        if (_mediaDetail!.genres.isNotEmpty)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _mediaDetail!.genres.map<Widget>((genre) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15), // 调整颜色
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  genre,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.white70, // 调整颜色
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        
-        // 如果是电影，在详情信息下方添加播放按钮
-        if (_isMovie) ...[
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              BlurButton(
-                icon: Icons.play_arrow,
-                text: '播放',
-                onTap: () {
-                  if (_isDetailAutoMatching) {
-                    BlurSnackBar.show(context, '正在自动匹配，请稍候');
-                    return;
-                  }
-                  _playMovie();
-                },
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                fontSize: 18,
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildEpisodesView(bool isPortrait) {
+  Widget _buildEpisodesView() {
     // 移除原有的 Positioned 返回按钮，因为顶部已经有了全局关闭按钮
     return Column( // 不再需要 Stack，因为返回按钮已全局处理
       children: [
@@ -1197,12 +913,15 @@ style: TextStyle(
                     child: OutlinedButton(
                       onPressed: () => _loadEpisodesForSeason(season.id),
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: isSelected ? Colors.blueAccent.withOpacity(0.3) : Colors.transparent,
+                        backgroundColor: isSelected
+                            ? Colors.white.withOpacity(0.2)
+                            : Colors.transparent,
                         foregroundColor: isSelected ? Colors.white : Colors.white70,
                         side: BorderSide(
-                          color: isSelected ? Colors.blueAccent : Colors.white30,
+                          color: isSelected ? Colors.white70 : Colors.white30,
                         ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
                       ),
                       child: Text(season.name),
                     ),
@@ -1353,7 +1072,7 @@ style: TextStyle(color: Colors.white70)));
                 Text(
                   _formatRuntime(episode.runTimeTicks),
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
+style: TextStyle(fontSize: 12, color: Colors.white70),
                 ),
               
               if (episode.overview != null && episode.overview!.isNotEmpty)
@@ -1367,7 +1086,7 @@ style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 12, color: Colors.grey[400]), // 调整颜色
+style: TextStyle(fontSize: 12, color: Colors.white70),
                   ),
                 ),
             ],

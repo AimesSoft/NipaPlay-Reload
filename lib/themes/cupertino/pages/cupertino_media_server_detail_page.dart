@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
+import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
@@ -20,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dar
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_anime_detail_page.dart';
 
 class CupertinoMediaServerDetailPage extends StatefulWidget {
   const CupertinoMediaServerDetailPage({
@@ -73,6 +75,7 @@ class _CupertinoMediaServerDetailPageState
   dynamic _mediaDetail;
   List<dynamic> _seasons = <dynamic>[];
   final Map<String, List<dynamic>> _episodesBySeasonId = {};
+  final Map<String, dynamic> _episodeDetailById = {};
   String? _selectedSeasonId;
   bool _isLoading = true;
   String? _error;
@@ -250,8 +253,6 @@ class _CupertinoMediaServerDetailPageState
     }
 
     setState(() {
-      _isLoading = true;
-      _error = null;
       _selectedSeasonId = seasonId;
     });
 
@@ -259,7 +260,6 @@ class _CupertinoMediaServerDetailPageState
       if (_mediaDetail?.id == null) {
         setState(() {
           _error = '无法获取剧集详情，无法加载剧集列表。';
-          _isLoading = false;
         });
         return;
       }
@@ -285,16 +285,12 @@ class _CupertinoMediaServerDetailPageState
 
       setState(() {
         _episodesBySeasonId[seasonId] = episodes;
-        _isLoading = false;
       });
     } catch (e) {
       if (!mounted) {
         return;
       }
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      debugPrint('加载剧集失败: $e');
     }
   }
 
@@ -476,8 +472,295 @@ class _CupertinoMediaServerDetailPageState
     return '$minutes分钟';
   }
 
+  SharedRemoteAnimeSummary _buildSummary() {
+    final title = _mediaDetail?.name ?? '未知番剧';
+    final overview = _mediaDetail?.overview;
+    final posterUrl = _getPosterUrl();
+    final episodeCount = _isMovie
+        ? 1
+        : _episodesBySeasonId.values.fold<int>(
+            0, (sum, list) => sum + list.length);
+
+    return SharedRemoteAnimeSummary(
+      animeId: widget.mediaId.hashCode,
+      name: title,
+      nameCn: title,
+      summary: overview,
+      imageUrl: posterUrl,
+      lastWatchTime: DateTime.now(),
+      episodeCount: episodeCount,
+      hasMissingFiles: false,
+    );
+  }
+
+  List<CupertinoDetailCastMember> _buildCastMembers() {
+    final cast = _mediaDetail?.cast;
+    if (cast is! List || cast.isEmpty) {
+      return const [];
+    }
+    return cast
+        .map((actor) => CupertinoDetailCastMember(
+              name: actor.name,
+              imageUrl: _getActorImageUrl(actor),
+            ))
+        .toList();
+  }
+
+  List<CupertinoDetailSeason> _buildSeasonOptions() {
+    if (_seasons.isEmpty) {
+      return const [];
+    }
+    return _seasons
+        .map((season) =>
+            CupertinoDetailSeason(id: season.id, name: season.name))
+        .toList();
+  }
+
+  void _handleSeasonChanged(String seasonId) {
+    if (seasonId == _selectedSeasonId) {
+      return;
+    }
+    setState(() {
+      _selectedSeasonId = seasonId;
+    });
+    _loadEpisodesForSeason(seasonId);
+  }
+
+  Future<List<SharedRemoteEpisode>> _loadSharedEpisodes(
+      {bool force = false}) async {
+    if (_mediaDetail == null) {
+      return const [];
+    }
+
+    if (_isMovie) {
+      final id = _mediaDetail!.id.toString();
+      _episodeDetailById[id] = _mediaDetail;
+      return [
+        SharedRemoteEpisode(
+          shareId: id,
+          title: _mediaDetail!.name,
+          fileName: _mediaDetail!.name,
+          streamPath:
+              '${widget.serverType == MediaServerType.jellyfin ? 'jellyfin' : 'emby'}://$id',
+          fileExists: true,
+          duration: _mediaDetail!.runTimeTicks != null
+              ? (_mediaDetail!.runTimeTicks! / 10000000).round()
+              : null,
+        ),
+      ];
+    }
+
+    final seasonId = _selectedSeasonId;
+    if (seasonId == null) {
+      return const [];
+    }
+
+    if (force || !_episodesBySeasonId.containsKey(seasonId)) {
+      await _loadEpisodesForSeason(seasonId);
+    }
+
+    final episodes = _episodesBySeasonId[seasonId] ?? const [];
+    return _mapEpisodesToShared(episodes);
+  }
+
+  List<SharedRemoteEpisode> _mapEpisodesToShared(List<dynamic> episodes) {
+    _episodeDetailById.clear();
+    final result = <SharedRemoteEpisode>[];
+    for (final episode in episodes) {
+      final id = episode.id?.toString();
+      if (id == null || id.isEmpty) {
+        continue;
+      }
+      _episodeDetailById[id] = episode;
+      result.add(
+        SharedRemoteEpisode(
+          shareId: id,
+          title: episode.indexNumber != null
+              ? '${episode.indexNumber}. ${episode.name}'
+              : episode.name,
+          fileName: episode.name ?? '未知剧集',
+          streamPath:
+              '${widget.serverType == MediaServerType.jellyfin ? 'jellyfin' : 'emby'}://$id',
+          fileExists: true,
+          duration: episode.runTimeTicks != null
+              ? (episode.runTimeTicks / 10000000).round()
+              : null,
+        ),
+      );
+    }
+    return result;
+  }
+
+  String? _resolveEpisodeImage(SharedRemoteEpisode episode) {
+    final detail = _episodeDetailById[episode.shareId];
+    if (detail == null || detail.imagePrimaryTag == null) {
+      return null;
+    }
+    if (widget.serverType == MediaServerType.jellyfin) {
+      return _getEpisodeImageUrl(detail, JellyfinService.instance);
+    }
+    return _getEpisodeImageUrl(detail, EmbyService.instance);
+  }
+
+  Future<PlayableItem> _buildPlayableItemForEpisode(
+    BuildContext context,
+    SharedRemoteEpisode episode,
+  ) async {
+    if (_isDetailAutoMatching) {
+      AdaptiveSnackBar.show(
+        context,
+        message: '正在自动匹配，请稍候',
+        type: AdaptiveSnackBarType.info,
+      );
+      throw const CupertinoDetailMatchCancelled();
+    }
+
+    if (_isMovie) {
+      final moviePlayable = await _buildPlayableItemForMovie();
+      if (moviePlayable == null) {
+        throw const CupertinoDetailMatchCancelled();
+      }
+      return moviePlayable;
+    }
+
+    final detail = _episodeDetailById[episode.shareId];
+    if (detail == null) {
+      throw '未找到剧集信息';
+    }
+
+    String streamUrl;
+    if (widget.serverType == MediaServerType.jellyfin) {
+      streamUrl = JellyfinDandanplayMatcher.instance.getPlayUrl(detail);
+    } else {
+      streamUrl = await EmbyDandanplayMatcher.instance.getPlayUrl(detail);
+    }
+
+    final historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(
+      () => _createWatchHistoryItem(detail),
+    );
+    if (historyItem == null) {
+      throw const CupertinoDetailMatchCancelled();
+    }
+
+    return PlayableItem(
+      videoPath: historyItem.filePath,
+      title: historyItem.animeName,
+      subtitle: historyItem.episodeTitle,
+      animeId: historyItem.animeId,
+      episodeId: historyItem.episodeId,
+      historyItem: historyItem,
+      actualPlayUrl: streamUrl,
+    );
+  }
+
+  Future<PlayableItem?> _buildPlayableItemForMovie() async {
+    if (_mediaDetail == null || !_isMovie) {
+      return null;
+    }
+
+    dynamic matcher;
+    WatchHistoryItem? historyItem;
+    String? streamUrl;
+
+    if (widget.serverType == MediaServerType.jellyfin) {
+      final movieInfo = JellyfinMovieInfo(
+        id: _mediaDetail!.id,
+        name: _mediaDetail!.name,
+        overview: _mediaDetail!.overview,
+        originalTitle: _mediaDetail!.originalTitle,
+        imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
+        imageBackdropTag: _mediaDetail!.imageBackdropTag,
+        productionYear: _mediaDetail!.productionYear,
+        dateAdded: _mediaDetail!.dateAdded,
+        premiereDate: _mediaDetail!.premiereDate,
+        communityRating: _mediaDetail!.communityRating,
+        genres: _mediaDetail!.genres,
+        officialRating: _mediaDetail!.officialRating,
+        cast: _mediaDetail!.cast,
+        directors: _mediaDetail!.directors,
+        runTimeTicks: _mediaDetail!.runTimeTicks,
+        studio: _mediaDetail!.seriesStudio,
+      );
+      matcher = JellyfinDandanplayMatcher.instance;
+      historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(
+        () => matcher.createPlayableHistoryItemFromMovie(
+          context,
+          movieInfo,
+        ),
+      );
+      if (historyItem != null) {
+        streamUrl = JellyfinService.instance.getStreamUrl(_mediaDetail!.id);
+      }
+    } else {
+      final movieInfo = EmbyMovieInfo(
+        id: _mediaDetail!.id,
+        name: _mediaDetail!.name,
+        overview: _mediaDetail!.overview,
+        originalTitle: _mediaDetail!.originalTitle,
+        imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
+        imageBackdropTag: _mediaDetail!.imageBackdropTag,
+        productionYear: _mediaDetail!.productionYear,
+        dateAdded: _mediaDetail!.dateAdded,
+        premiereDate: _mediaDetail!.premiereDate,
+        communityRating: _mediaDetail!.communityRating,
+        genres: _mediaDetail!.genres,
+        officialRating: _mediaDetail!.officialRating,
+        cast: _mediaDetail!.cast,
+        directors: _mediaDetail!.directors,
+        runTimeTicks: _mediaDetail!.runTimeTicks,
+        studio: _mediaDetail!.seriesStudio,
+      );
+      matcher = EmbyDandanplayMatcher.instance;
+      historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(
+        () => matcher.createPlayableHistoryItemFromMovie(
+          context,
+          movieInfo,
+        ),
+      );
+      if (historyItem != null) {
+        streamUrl = await EmbyService.instance.getStreamUrl(_mediaDetail!.id);
+      }
+    }
+
+    if (historyItem == null) {
+      return null;
+    }
+
+    return PlayableItem(
+      videoPath: historyItem.filePath,
+      title: historyItem.animeName,
+      subtitle: historyItem.episodeTitle,
+      animeId: historyItem.animeId,
+      episodeId: historyItem.episodeId,
+      historyItem: historyItem,
+      actualPlayUrl: streamUrl,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!_isLoading && _error == null && _mediaDetail != null) {
+      return CupertinoSharedAnimeDetailPage(
+        anime: _buildSummary(),
+        hideBackButton: false,
+        showCloseButton: true,
+        customEpisodeLoader: ({bool force = false}) =>
+            _loadSharedEpisodes(force: force),
+        customPlayableBuilder: _buildPlayableItemForEpisode,
+        sourceLabelOverride: widget.serverType == MediaServerType.jellyfin
+            ? 'Jellyfin'
+            : 'Emby',
+        coverImageOverride: _getPosterUrl(),
+        backdropImageOverride: _resolveBackdropUrl(),
+        cast: _buildCastMembers(),
+        seasons: _buildSeasonOptions(),
+        selectedSeasonId: _selectedSeasonId,
+        onSeasonChanged: _handleSeasonChanged,
+        enableBangumiFeatures: false,
+        episodeImageResolver: _resolveEpisodeImage,
+      );
+    }
+
     final title = _mediaDetail?.name ?? '详情';
 
     return AdaptiveScaffold(

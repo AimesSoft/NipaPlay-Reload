@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
@@ -16,7 +15,6 @@ import 'package:provider/provider.dart'; // 重新添加
 // import 'package:nipaplay/utils/video_player_state.dart'; // Removed from here
 import 'dart:io'; // Added for File operations
 // import 'package:nipaplay/utils/tab_change_notifier.dart'; // Removed from here
-import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart'; // 添加SwitchableView组件
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart'; // 添加标签搜索组件
 import 'package:nipaplay/themes/nipaplay/widgets/rating_dialog.dart'; // 添加评分对话框
 import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
@@ -29,6 +27,7 @@ import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:meta/meta.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -1748,186 +1747,49 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
     final bool isDesktopOrTablet = globals.isDesktopOrTablet;
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  displayTitle,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.white, fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (displaySubTitle != null &&
-                  displaySubTitle.isNotEmpty &&
-                  displaySubTitle != displayTitle)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: Text(
-                    displaySubTitle,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: Colors.white60),
-                    overflow: TextOverflow.ellipsis,
+    final headerActions = <Widget>[];
+    if (DandanplayService.isLoggedIn) {
+      headerActions.add(
+        IconButton(
+          icon: _isTogglingFavorite
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white70,
                   ),
+                )
+              : Icon(
+                  _isFavorited ? Ionicons.heart : Ionicons.heart_outline,
+                  color: _isFavorited ? Colors.red : Colors.white70,
+                  size: 24,
                 ),
-              if (_sharedSourceLabel != null)
-                Container(
-                  margin: const EdgeInsets.only(right: 8.0),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.18),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white24, width: 0.5),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Ionicons.cloud_outline,
-                          size: 14, color: Colors.white70),
-                      const SizedBox(width: 4),
-                      Text(
-                        _sharedSourceLabel!,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: Colors.white70),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // 收藏按钮（仅当登录弹弹play时显示）
-              if (DandanplayService.isLoggedIn) ...[
-                IconButton(
-                  icon: _isTogglingFavorite
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white70,
-                          ),
-                        )
-                      : Icon(
-                          _isFavorited
-                              ? Ionicons.heart
-                              : Ionicons.heart_outline,
-                          color: _isFavorited ? Colors.red : Colors.white70,
-                          size: 24,
-                        ),
-                  onPressed: _isTogglingFavorite ? null : _toggleFavorite,
-                ),
-              ],
-
-              IconButton(
-                icon: const Icon(Ionicons.close_circle_outline,
-                    color: Colors.white70, size: 28),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
+          onPressed: _isTogglingFavorite ? null : _toggleFavorite,
         ),
-        if (!isDesktopOrTablet)
-          TabBar(
-            controller: _tabController,
-            dividerColor: const Color.fromARGB(59, 255, 255, 255),
-            dividerHeight: 3.0,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicatorPadding:
-                const EdgeInsets.only(top: 46, left: 15, right: 15),
-            indicator: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(30),
-            ),
-            indicatorWeight: 3,
-            tabs: const [
-              Tab(
-                  child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                    Icon(Ionicons.document_text_outline, size: 18),
-                    SizedBox(width: 8),
-                    Text('简介')
-                  ])),
-              Tab(
-                  child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                    Icon(Ionicons.film_outline, size: 18),
-                    SizedBox(width: 8),
-                    Text('剧集')
-                  ])),
-            ],
-          ),
-        if (isDesktopOrTablet) const SizedBox(height: 8),
-        Expanded(
-          child: isDesktopOrTablet
-              ? _buildDesktopTabletLayout(anime)
-              : SwitchableView(
-                  enableAnimation: enableAnimation,
-                  currentIndex: _tabController?.index ?? 0,
-                  physics: enableAnimation
-                      ? const PageScrollPhysics()
-                      : const NeverScrollableScrollPhysics(),
-                  onPageChanged: (index) {
-                    if ((_tabController?.index ?? 0) != index) {
-                      _tabController?.animateTo(index);
-                    }
-                  },
-                  children: [
-                    RepaintBoundary(child: _buildSummaryView(anime)),
-                    RepaintBoundary(child: _buildEpisodesListView(anime)),
-                  ],
-                ),
-        ),
-      ],
+      );
+    }
+
+    return NipaplayAnimeDetailLayout(
+      title: displayTitle,
+      subtitle: displaySubTitle,
+      sourceLabel: _sharedSourceLabel,
+      headerActions: headerActions,
+      onClose: () => Navigator.of(context).pop(),
+      tabController: _tabController,
+      showTabs: !isDesktopOrTablet,
+      enableAnimation: enableAnimation,
+      isDesktopOrTablet: isDesktopOrTablet,
+      infoView: RepaintBoundary(child: _buildSummaryView(anime)),
+      episodesView: RepaintBoundary(child: _buildEpisodesListView(anime)),
+      desktopView: isDesktopOrTablet ? _buildDesktopTabletLayout(anime) : null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.3),
-      body: Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, MediaQuery.of(context).padding.top + 20, 20, 20),
-        child: GlassmorphicContainer(
-          width: double.infinity,
-          height: double.infinity,
-          borderRadius: 15,
-          blur: 25,
-          alignment: Alignment.center,
-          border: 0.5,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color.fromARGB(255, 219, 219, 219).withOpacity(0.2),
-              const Color.fromARGB(255, 208, 208, 208).withOpacity(0.2),
-            ],
-            stops: const [0.1, 1],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.15),
-              Colors.white.withOpacity(0.15),
-            ],
-          ),
-          child: _buildContent(),
-        ),
-      ),
+    return NipaplayAnimeDetailScaffold(
+      child: _buildContent(),
     );
   }
 

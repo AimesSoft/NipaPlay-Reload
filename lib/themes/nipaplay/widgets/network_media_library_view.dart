@@ -34,6 +34,7 @@ abstract class NetworkMediaItem {
   int? get watchedEpisodeCount;
   double? get userRating;
   bool get isFolder;
+  String? get progress; // 新增
 }
 
 // 通用媒体库接口
@@ -64,6 +65,13 @@ class JellyfinMediaItemAdapter implements NetworkMediaItem {
   double? get userRating => null; // Convert from string if needed
   @override
   bool get isFolder => _item.isFolder;
+  
+  @override
+  String? get progress {
+    if (_item.userData?.played == true) return '已看完';
+    // Jellyfin 列表接口可能不返回具体的播放进度集数，如果需要更详细的可以后续扩展
+    return null;
+  }
   
   JellyfinMediaItem get originalItem => _item;
 }
@@ -103,6 +111,12 @@ class EmbyMediaItemAdapter implements NetworkMediaItem {
   double? get userRating => null; // Convert from string if needed
   @override
   bool get isFolder => _item.isFolder;
+
+  @override
+  String? get progress {
+    if (_item.userData?.played == true) return '已看完';
+    return null;
+  }
   
   EmbyMediaItem get originalItem => _item;
 }
@@ -602,6 +616,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       rating: item.userRating,
       onTap: () => _openMediaDetail(item),
       summary: item.overview,
+      progress: item.progress,
     );
   }
 

@@ -11,24 +11,28 @@ enum LocalLibrarySortType {
 
 class LocalLibraryControlBar extends StatefulWidget {
   final Function(String) onSearchChanged;
-  final LocalLibrarySortType currentSort;
-  final Function(LocalLibrarySortType) onSortChanged;
+  final LocalLibrarySortType? currentSort;
+  final Function(LocalLibrarySortType)? onSortChanged;
   final VoidCallback? onClearSearch;
   final TextEditingController searchController;
   final bool showBackButton;
   final VoidCallback? onBack;
   final String? title;
+  final bool showSort;
+  final List<Widget>? trailingActions;
 
   LocalLibraryControlBar({
     super.key,
     required this.onSearchChanged,
-    required this.currentSort,
-    required this.onSortChanged,
+    this.currentSort,
+    this.onSortChanged,
     required this.searchController,
     this.onClearSearch,
     this.showBackButton = false,
     this.onBack,
     this.title,
+    this.showSort = true,
+    this.trailingActions,
   });
 
   @override
@@ -41,13 +45,17 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
 
   @override
   Widget build(BuildContext context) {
+    assert(!widget.showSort || (widget.currentSort != null && widget.onSortChanged != null));
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final currentSort = widget.currentSort ?? LocalLibrarySortType.dateAdded;
     
+    // 提高背景对比度，不再是几乎透明
     final bgColor = isDark 
-        ? Colors.white.withValues(alpha: 0.05) 
-        : Colors.black.withValues(alpha: 0.05);
+        ? Colors.white.withValues(alpha: 0.12) 
+        : Colors.black.withValues(alpha: 0.08);
     
-    final textColor = isDark ? Colors.white70 : Colors.black87;
+    final textColor = isDark ? Colors.white.withValues(alpha: 0.8) : Colors.black.withValues(alpha: 0.7);
     final primaryTextColor = isDark ? Colors.white : Colors.black;
 
     return Container(
@@ -102,12 +110,16 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
               height: 40,
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8), // 降低圆角以匹配下拉菜单
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+                  width: 1,
+                ),
               ),
               child: TextField(
                 controller: widget.searchController,
                 onChanged: widget.onSearchChanged,
-                style: TextStyle(color: textColor, fontSize: 14),
+                style: TextStyle(color: primaryTextColor, fontSize: 14),
                 cursorColor: Theme.of(context).primaryColor,
                 decoration: InputDecoration(
                   hintText: '搜索...',
@@ -129,35 +141,50 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          // 使用 BlurDropdown 替代 PopupMenuButton
-          Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(12),
+          if (widget.trailingActions != null && widget.trailingActions!.isNotEmpty) ...[
+            const SizedBox(width: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: widget.trailingActions!
+                  .expand((action) => [const SizedBox(width: 8), action])
+                  .skip(1)
+                  .toList(),
             ),
-            child: BlurDropdown<LocalLibrarySortType>(
-              dropdownKey: _dropdownKey,
-              onItemSelected: widget.onSortChanged,
-              items: [
+          ],
+          if (widget.showSort) ...[
+            const SizedBox(width: 12),
+            // 排序按钮容器
+            Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(8), // 降低圆角
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+                  width: 1,
+                ),
+              ),
+              child: BlurDropdown<LocalLibrarySortType>(
+                dropdownKey: _dropdownKey,
+                onItemSelected: widget.onSortChanged!,
+                items: [
                 DropdownMenuItemData(
                   title: '最近观看',
                   value: LocalLibrarySortType.dateAdded,
-                  isSelected: widget.currentSort == LocalLibrarySortType.dateAdded,
+                  isSelected: currentSort == LocalLibrarySortType.dateAdded,
                 ),
                 DropdownMenuItemData(
                   title: '名称排序',
                   value: LocalLibrarySortType.name,
-                  isSelected: widget.currentSort == LocalLibrarySortType.name,
+                  isSelected: currentSort == LocalLibrarySortType.name,
                 ),
               ],
             ),
           ),
+          ],
         ],
       ),
     );
   }
 }
-

@@ -41,6 +41,7 @@ class EmbyMediaItem {
   final String? communityRating;
   final String? type;
   final bool isFolder;
+  final EmbyUserData? userData; // 新增
   
   EmbyMediaItem({
     required this.id,
@@ -55,6 +56,7 @@ class EmbyMediaItem {
     this.communityRating,
     this.type,
     this.isFolder = false,
+    this.userData,
   });
   
   factory EmbyMediaItem.fromJson(Map<String, dynamic> json) {
@@ -76,6 +78,7 @@ class EmbyMediaItem {
       communityRating: json['CommunityRating']?.toString(),
       type: type?.toString(),
       isFolder: resolvedIsFolder,
+      userData: json['UserData'] != null ? EmbyUserData.fromJson(json['UserData']) : null,
     );
   }
 
@@ -417,6 +420,29 @@ class EmbyMovieInfo {
       animeId: null, // 初始值为null，但会通过EmbyDandanplayMatcher更新
       episodeId: null, // 初始值为null，但会通过EmbyDandanplayMatcher更新
       isFromScan: false,
+    );
+  }
+}
+
+class EmbyUserData {
+  final bool? played;
+  final double? playbackPositionTicks;
+  final bool? isFavorite;
+  final int? playCount;
+
+  EmbyUserData({
+    this.played,
+    this.playbackPositionTicks,
+    this.isFavorite,
+    this.playCount,
+  });
+
+  factory EmbyUserData.fromJson(Map<String, dynamic> json) {
+    return EmbyUserData(
+      played: json['Played'],
+      playbackPositionTicks: (json['PlaybackPositionTicks'] as num?)?.toDouble(),
+      isFavorite: json['IsFavorite'],
+      playCount: json['PlayCount'],
     );
   }
 }

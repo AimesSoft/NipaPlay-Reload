@@ -2569,6 +2569,55 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     );
   }
 
+  String? _getWatchProgressForDashboard(dynamic item) {
+    int? animeId;
+    int? totalEpisodes;
+    
+    if (item is JellyfinMediaItem) {
+      // 对于Jellyfin/Emby，优先使用其自带的UserData信息
+      if (item.userData?.played == true) return '已看完';
+      // 如果没有具体的集数信息，Jellyfin通常只给出一个已看标记
+      return null;
+    } else if (item is EmbyMediaItem) {
+      if (item.userData?.played == true) return '已看完';
+      return null;
+    } else if (item is WatchHistoryItem) {
+      animeId = item.animeId;
+    } else if (item is LocalAnimeItem) {
+      animeId = item.animeId;
+    } else if (item is DandanplayRemoteAnimeGroup) {
+      animeId = item.animeId;
+      totalEpisodes = item.episodeCount;
+    } else if (item is BangumiAnime) {
+      animeId = item.id;
+      totalEpisodes = item.totalEpisodes;
+    }
+
+    if (!_isValidAnimeId(animeId)) return null;
+
+    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+    final allHistory = watchHistoryProvider.history.where((h) => h.animeId == animeId).toList();
+    
+    if (allHistory.isEmpty) return '未观看';
+
+    final watchedIds = <int>{};
+    for (var h in allHistory) {
+      if (h.episodeId != null && h.episodeId! > 0) {
+        watchedIds.add(h.episodeId!);
+      }
+    }
+    
+    int watchedCount = watchedIds.length;
+    if (watchedCount == 0) watchedCount = allHistory.length;
+
+    if (totalEpisodes != null && totalEpisodes > 0) {
+      if (watchedCount >= totalEpisodes) return '已看完';
+      return '已看 $watchedCount / $totalEpisodes 集';
+    }
+    
+    return '已看 $watchedCount 集';
+  }
+
   Widget _buildMediaCard(dynamic item, Function(dynamic) onItemTap) {
     String name = '';
     String imageUrl = '';
@@ -2648,7 +2697,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     const double cardWidth = 320;
     const double cardHeight = 140;
 
-    Widget buildCard(String? summary) {
+    Widget buildCard(String? summary, {String? progress}) {
       return SizedBox(
         width: cardWidth,
         height: cardHeight,
@@ -2660,6 +2709,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           source: sourceLabel,
           rating: rating,
           summary: summary,
+          progress: progress ?? _getWatchProgressForDashboard(item),
         ),
       );
     }
@@ -2669,10 +2719,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         future: detailFuture,
         builder: (context, snapshot) {
           String? asyncSummary;
-          if (snapshot.hasData && snapshot.data!.summary != null) {
-            asyncSummary = snapshot.data!.summary;
+          String? asyncProgress;
+          if (snapshot.hasData) {
+            if (snapshot.data!.summary != null) {
+              asyncSummary = snapshot.data!.summary;
+            }
+            // 如果从详情中拿到了总集数，更新进度显示
+            if (snapshot.data!.totalEpisodes != null && snapshot.data!.totalEpisodes! > 0) {
+              asyncProgress = _getWatchProgressForDashboard(item);
+            }
           }
-          return buildCard(asyncSummary);
+          return buildCard(asyncSummary, progress: asyncProgress);
         },
       );
     }

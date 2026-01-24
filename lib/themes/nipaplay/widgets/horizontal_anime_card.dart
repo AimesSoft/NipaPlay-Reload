@@ -8,6 +8,7 @@ class HorizontalAnimeCard extends StatelessWidget {
   final double? rating;
   final String? source;
   final String? summary;
+  final String? progress; // 新增：观看进度
   final VoidCallback onTap;
 
   const HorizontalAnimeCard({
@@ -18,10 +19,12 @@ class HorizontalAnimeCard extends StatelessWidget {
     this.rating,
     this.source,
     this.summary,
+    this.progress,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -66,14 +69,24 @@ class HorizontalAnimeCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : Colors.black87,
+                      color: isDark ? Colors.white : Colors.black87,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 4),
+                  // Progress Row (New)
+                  if (progress != null && progress!.isNotEmpty) ...[
+                    Text(
+                      progress!,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                   // Rating & Status/Source Row
                   Row(
                     children: [
@@ -81,17 +94,13 @@ class HorizontalAnimeCard extends StatelessWidget {
                         Icon(
                           Ionicons.star,
                           size: 14,
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white
-                              : Colors.black,
+                          color: isDark ? Colors.white : Colors.black,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           rating!.toStringAsFixed(1),
                           style: TextStyle(
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white
-                                : Colors.black,
+                            color: isDark ? Colors.white : Colors.black,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
@@ -102,9 +111,7 @@ class HorizontalAnimeCard extends StatelessWidget {
                         Text(
                           source!,
                           style: TextStyle(
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white
-                                : Colors.black,
+                            color: isDark ? Colors.white : Colors.black,
                             fontSize: 10,
                           ),
                         ),
@@ -114,16 +121,18 @@ class HorizontalAnimeCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   // Summary
                   if (summary != null && summary!.isNotEmpty)
-                    Text(
-                      summary!,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white.withValues(alpha: 0.6)
-                            : Colors.black54,
-                        fontSize: 13,
-                        height: 1.4,
+                    Expanded(
+                      child: Text(
+                        summary!,
+                        maxLines: progress != null ? 2 : 3, // 如果有进度，减少一行简介空间
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.6)
+                              : Colors.black54,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
                       ),
                     ),
                 ],

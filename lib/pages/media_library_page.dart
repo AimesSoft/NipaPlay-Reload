@@ -631,6 +631,42 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     );
   }
   
+  String? _getWatchProgress(int? animeId) {
+    if (animeId == null) return null;
+    
+    final detail = _fetchedFullAnimeData[animeId];
+    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+    
+    // 获取该动画的所有历史记录并去重（按episodeId或标题，如果有的话）
+    final allHistory = watchHistoryProvider.history.where((h) => h.animeId == animeId).toList();
+    
+    // 如果没有历史记录（理论上不应该，因为这里是媒体库），显示未观看
+    if (allHistory.isEmpty) return '未观看';
+
+    // 统计已看完的集数
+    final watchedIds = <int>{};
+    for (var h in allHistory) {
+      if (h.episodeId != null && h.episodeId! > 0) {
+        watchedIds.add(h.episodeId!);
+      }
+    }
+    
+    int watchedCount = watchedIds.length;
+    if (watchedCount == 0) {
+      // 如果没有episodeId信息，按条目数估算（但不准确）
+      watchedCount = allHistory.length;
+    }
+
+    if (detail != null && detail.totalEpisodes != null && detail.totalEpisodes! > 0) {
+      if (watchedCount >= detail.totalEpisodes!) {
+        return '已看完';
+      }
+      return '已看 $watchedCount / ${detail.totalEpisodes} 集';
+    }
+    
+    return '已看 $watchedCount 集';
+  }
+
   Widget _buildLocalMediaLibrary() {
     if (_isLoadingInitial) {
       return const SizedBox(
@@ -761,6 +797,7 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                      rating: detailData.rating,
                      source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
                      summary: detailData.summary,
+                     progress: _getWatchProgress(animeId),
                      onTap: () {
                        if (animeId != null) {
                          _navigateToAnimeDetail(animeId);
@@ -797,6 +834,7 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                       rating: displayRating,
                       source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
                       summary: detail?.summary,
+                      progress: _getWatchProgress(animeId),
                       onTap: () {
                         if (animeId != null) {
                           _navigateToAnimeDetail(animeId);
