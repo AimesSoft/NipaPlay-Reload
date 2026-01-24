@@ -1936,13 +1936,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               ),
             ),
             
-            // 左上角服务商标识
-            Positioned(
-              top: 16,
-              left: 16,
-              child: _buildServiceIcon(item.source),
-            ),
-            
             // 右上角评分
             if (item.rating != null)
               Positioned(
@@ -2050,22 +2043,31 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // 媒体名字（加粗显示）
-                    Text(
-                      item.title,
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white,
-                        fontSize: compact ? 22 : 24, // 手机端调整为20px，比18px稍大
-                        fontWeight: FontWeight.bold,
-                        shadows: const [
-                          Shadow(
-                            color: Colors.black,
-                            blurRadius: 8,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildServiceIcon(item.source, size: compact ? 22 : 24),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            item.title,
+                            locale: const Locale("zh-Hans", "zh"),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: compact ? 22 : 24, // 手机端调整为20px，比18px稍大
+                              fontWeight: FontWeight.bold,
+                              shadows: const [
+                                Shadow(
+                                  color: Colors.black,
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            maxLines: compact ? 3 : 2, // 手机端可以显示更多行
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                      maxLines: compact ? 3 : 2, // 手机端可以显示更多行
-                      overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                     
                     // 桌面端显示间距和简介，手机端不显示
@@ -2164,13 +2166,6 @@ style: TextStyle(
               ),
             ),
             
-            // 左上角服务商标识
-            Positioned(
-              top: 8,
-              left: 8,
-              child: _buildServiceIcon(item.source),
-            ),
-            
             // 右上角评分
             if (item.rating != null)
               Positioned(
@@ -2267,28 +2262,30 @@ style: TextStyle(
               right: 8,
               bottom: 8,
               left: item.logoImageUrl != null ? 136 : 8, // 如果有Logo就避开它
-              child: Text(
-                item.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black,
-                      blurRadius: 8,
-                      offset: Offset(1, 1),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildServiceIcon(item.source, size: 12),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      item.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black,
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    Shadow(
-                      color: Colors.black,
-                      blurRadius: 4,
-                      offset: Offset(0, 0),
-                    ),
-                  ],
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
+                  ),
+                ],
               ),
             ),
           ],
@@ -2297,63 +2294,37 @@ style: TextStyle(
     );
   }
 
-  Widget _buildServiceIcon(RecommendedItemSource source) {
-    Widget iconWidget;
-    
+  Widget _buildServiceIcon(RecommendedItemSource source, {double size = 20}) {
     switch (source) {
       case RecommendedItemSource.jellyfin:
-        iconWidget = SvgPicture.asset(
+        return SvgPicture.asset(
           'assets/jellyfin.svg',
-          width: 20,
-          height: 20,
+          width: size,
+          height: size,
           colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         );
-        break;
       case RecommendedItemSource.emby:
-        iconWidget = SvgPicture.asset(
+        return SvgPicture.asset(
           'assets/emby.svg',
-          width: 20,
-          height: 20,
+          width: size,
+          height: size,
           colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         );
-        break;
       case RecommendedItemSource.local:
-        // 本地文件用一个文件夹图标
-        iconWidget = const Icon(
+        return Icon(
           Icons.folder,
           color: Colors.white,
-          size: 20,
+          size: size,
         );
-        break;
       case RecommendedItemSource.dandanplay:
-        iconWidget = const Icon(
+        return Icon(
           Icons.cloud_outlined,
           color: Colors.white,
-          size: 20,
+          size: size,
         );
-        break;
       default:
         return const SizedBox.shrink();
     }
-    
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white.withOpacity(1.0),
-              width: 1,
-            ),
-          ),
-          child: iconWidget,
-        ),
-      ),
-    );
   }
 
   Widget _buildContinueWatching({required bool isPhone}) {
@@ -2454,28 +2425,7 @@ style: TextStyle(
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // 背景缩略图
-                  _getVideoThumbnail(item),
-                  
-                  // 播放进度条（底部）
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: LinearProgressIndicator(
-                      value: item.watchProgress,
-                      backgroundColor: Colors.white24,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Theme.of(context).colorScheme.secondary,
-                      ),
-                      minHeight: 4,
-                    ),
-                  ),
-                ],
-              ),
+              child: _getVideoThumbnail(item),
             ),
             
             const SizedBox(height: 8),
@@ -2496,19 +2446,18 @@ style: TextStyle(
             
             const SizedBox(height: 4),
             
-            // 集数信息
-            if (item.episodeTitle != null)
-              Text(
-                item.episodeTitle!,
-                style: TextStyle(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white70
-                      : Colors.black87,
-                  fontSize: 14, // 增加字体大小
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            // 进度和集数信息
+            Text(
+              "${(item.watchProgress * 100).toInt()}%${item.episodeTitle != null ? ' · ${item.episodeTitle}' : ''}",
+              style: TextStyle(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white70
+                    : Colors.black87,
+                fontSize: 14, // 增加字体大小
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
