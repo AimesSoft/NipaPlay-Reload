@@ -27,6 +27,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.da
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'dart:ui' as ui;
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -657,10 +660,10 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
             child: GridView.builder(
               controller: _gridScrollController,
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 150,
-                childAspectRatio: 7/12,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
+                maxCrossAxisExtent: 500,
+                mainAxisExtent: 140,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
               ),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
               cacheExtent: 800,
@@ -704,18 +707,15 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                     }
                 }
 
-                // 🔥 CPU优化：构建卡片并缓存
-                final card = _buildAnimeCard(
-                  key: ValueKey(animeId ?? historyItem.filePath), 
-                  name: nameToDisplay, 
+                // 构建水平卡片
+                final card = HorizontalAnimeCard(
                   imageUrl: imageUrlToDisplay,
-                  source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
+                  title: nameToDisplay,
                   rating: animeId != null && _fetchedFullAnimeData.containsKey(animeId) 
                       ? _fetchedFullAnimeData[animeId]!.rating 
                       : null,
-                  ratingDetails: animeId != null && _fetchedFullAnimeData.containsKey(animeId) 
-                      ? _fetchedFullAnimeData[animeId]!.ratingDetails 
-                      : null,
+                  isOnAir: false, // Local items are generally not "on air" in this context unless we check fetched data
+                  source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
                   onTap: () {
                     if (animeId != null) {
                       _navigateToAnimeDetail(animeId);
@@ -723,9 +723,21 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                       BlurSnackBar.show(context, '无法打开详情，动画ID未知');
                     }
                   },
+                  summaryWidget: animeId != null && _fetchedFullAnimeData.containsKey(animeId) && _fetchedFullAnimeData[animeId]!.summary != null
+                      ? Text(
+                          _fetchedFullAnimeData[animeId]!.summary!,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        )
+                      : null,
                 );
                 
-                // 调试：打印详细的评分信息
+                // 🔥 CPU优化：缓存卡片Widget
                 if (animeId != null) {
                   //debugPrint('动画 $animeId 详细信息：');
                   //debugPrint('  名称: $nameToDisplay');
@@ -760,40 +772,4 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
       ],
     );
   }
-
-  Widget _buildAnimeCard({
-    required Key key,
-    required String name,
-    required String imageUrl,
-    required String? source,
-    required double? rating,
-    required Map<String, dynamic>? ratingDetails,
-    required VoidCallback onTap,
-  }) {
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
-    
-    if (uiThemeProvider.isFluentUITheme) {
-      return FluentAnimeCard(
-        key: key,
-        name: name,
-        imageUrl: imageUrl,
-        source: source,
-        rating: rating,
-        ratingDetails: ratingDetails,
-        onTap: onTap,
-      );
-    } else {
-      return AnimeCard(
-        key: key,
-        name: name,
-        imageUrl: imageUrl,
-        source: source,
-        rating: rating,
-        ratingDetails: ratingDetails,
-        onTap: onTap,
-      );
-    }
-  }
-
-
 }
