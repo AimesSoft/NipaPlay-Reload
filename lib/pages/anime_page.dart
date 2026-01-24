@@ -458,6 +458,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           pageChildren.add(
             RepaintBoundary(
               child: SharedRemoteLibraryView(
+                key: const ValueKey('shared_media_library'),
                 onPlayEpisode: widget.onPlayEpisode,
                 mode: SharedRemoteViewMode.mediaLibrary,
               ),
@@ -467,6 +468,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           pageChildren.add(
             RepaintBoundary(
               child: SharedRemoteLibraryView(
+                key: const ValueKey('shared_library_management'),
                 onPlayEpisode: widget.onPlayEpisode,
                 mode: SharedRemoteViewMode.libraryManagement,
               ),

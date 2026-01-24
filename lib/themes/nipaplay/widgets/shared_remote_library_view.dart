@@ -48,6 +48,19 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    // 如果是管理模式，确保在第一帧后触发加载
+    if (widget.mode == SharedRemoteViewMode.libraryManagement) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _ensureManagementLoaded();
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _scanStatusTimer?.cancel();
     _gridScrollController.dispose();
@@ -181,7 +194,6 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (provider.scannedFolders.isEmpty &&
-        provider.scanStatus == null &&
         !provider.isManagementLoading &&
         provider.managementErrorMessage == null) {
       provider.refreshManagement(userInitiated: true).then((_) {
