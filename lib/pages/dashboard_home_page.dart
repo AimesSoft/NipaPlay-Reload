@@ -2328,27 +2328,27 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      '继续播放',
-                      locale: const Locale("zh-Hans", "zh"),
-                      style: TextStyle(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white
-                            : Colors.black,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '继续播放',
+                    locale: const Locale("zh-Hans", "zh"),
+                    style: TextStyle(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-                if (!isPhone && validHistory.isNotEmpty)
-                  _buildScrollButtons(_continueWatchingScrollController, 292), // 桌面保留左右按钮
-              ],
+                  const SizedBox(width: 8),
+                  if (!isPhone && validHistory.isNotEmpty)
+                    _buildScrollButtons(_continueWatchingScrollController, 292),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             if (validHistory.isEmpty)
@@ -2460,26 +2460,26 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisSize: MainAxisSize.min, // 紧凑排列
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
-            if (!isPhone && items.isNotEmpty)
-              _buildScrollButtons(scrollController, 162), // 桌面保留左右按钮
-          ],
+              const SizedBox(width: 8),
+              if (!isPhone && items.isNotEmpty)
+                _buildScrollButtons(scrollController, 162), 
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         SizedBox(
@@ -3928,37 +3928,36 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   
   // 构建滚动按钮
   Widget _buildScrollButtons(ScrollController controller, double itemWidth) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 16),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedBuilder(
-            animation: controller,
-            builder: (context, child) {
-              final canScrollLeft = controller.hasClients && controller.offset > 0;
-              return _buildScrollButton(
-                icon: Icons.chevron_left,
-                onTap: canScrollLeft ? () => _scrollToPrevious(controller, itemWidth) : null,
-                enabled: canScrollLeft,
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-          AnimatedBuilder(
-            animation: controller,
-            builder: (context, child) {
-              final canScrollRight = controller.hasClients && 
-                  controller.offset < controller.position.maxScrollExtent;
-              return _buildScrollButton(
-                icon: Icons.chevron_right,
-                onTap: canScrollRight ? () => _scrollToNext(controller, itemWidth) : null,
-                enabled: canScrollRight,
-              );
-            },
-          ),
-        ],
-      ),
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, child) {
+        // 如果没有绑定或内容不足以滚动，直接不显示整个区域
+        if (!controller.hasClients || controller.position.maxScrollExtent <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        final canScrollLeft = controller.offset > 5; // 留一点余量避免浮点数精度问题
+        final canScrollRight = controller.offset < controller.position.maxScrollExtent - 5;
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (canScrollLeft)
+              _buildScrollButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: () => _scrollToPrevious(controller, itemWidth),
+                enabled: true,
+              ),
+            if (canScrollLeft && canScrollRight) const SizedBox(width: 12),
+            if (canScrollRight)
+              _buildScrollButton(
+                icon: Icons.arrow_forward_ios_rounded,
+                onTap: () => _scrollToNext(controller, itemWidth),
+                enabled: true,
+              ),
+          ],
+        );
+      },
     );
   }
   
@@ -3968,42 +3967,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     required VoidCallback? onTap,
     bool enabled = true,
   }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: enabled 
-                ? Colors.white.withOpacity(0.2)
-                : Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: enabled
-                  ? Colors.white.withOpacity(0.3)
-                  : Colors.white.withOpacity(0.15),
-              width: 1,
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: enabled ? onTap : null,
-              child: Center(
-                child: Icon(
-                  icon,
-                  color: enabled 
-                      ? Colors.white
-                      : Colors.white.withOpacity(0.5),
-                  size: 18,
-                ),
-              ),
-            ),
-          ),
-        ),
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final color = isDarkMode 
+        ? (enabled ? Colors.white : Colors.white24) 
+        : (enabled ? Colors.black : Colors.black26);
+
+    return _HoverScaleButton(
+      enabled: enabled,
+      onTap: onTap,
+      child: Icon(
+        icon,
+        color: color,
+        size: 24, // 与标题字体大小一致
       ),
     );
   }
@@ -4091,4 +4066,42 @@ class LocalAnimeItem {
     required this.addedTime, // 改为添加时间
     required this.latestEpisode,
   });
+}
+
+// 内部辅助类处理悬浮放大
+class _HoverScaleButton extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final bool enabled;
+
+  const _HoverScaleButton({
+    required this.child,
+    this.onTap,
+    this.enabled = true,
+  });
+
+  @override
+  State<_HoverScaleButton> createState() => _HoverScaleButtonState();
+}
+
+class _HoverScaleButtonState extends State<_HoverScaleButton> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: widget.enabled ? widget.onTap : null,
+        child: AnimatedScale(
+          scale: _isHovered && widget.enabled ? 1.3 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
 }
