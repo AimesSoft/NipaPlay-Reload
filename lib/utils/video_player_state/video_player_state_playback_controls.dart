@@ -103,6 +103,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       await Future.delayed(const Duration(milliseconds: 200));
 
       // 重置状态
+      await _clearTimelinePreviewFiles();
       _currentVideoPath = null;
       _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
       _position = Duration.zero;

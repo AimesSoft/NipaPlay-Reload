@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -62,7 +63,10 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
 
     final position = sliderBox.localToGlobal(Offset.zero);
     final size = sliderBox.size;
-    final hasPreview = thumbnailPath != null && thumbnailPath.isNotEmpty;
+    final hasPreview =
+        thumbnailPath != null && thumbnailPath.isNotEmpty && _isPreviewReady(thumbnailPath);
+    debugPrint(
+        'timeline preview overlay -> hasPreview=$hasPreview, thumb=$thumbnailPath');
     final previewWidth = globals.isPhone ? 140.0 : 200.0;
     final previewHeight = previewWidth * 9 / 16;
     final text = widget.formatDuration(displayTime ?? widget.videoState.position);
@@ -89,24 +93,24 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 0.5,
-                      ),
-                      boxShadow: [
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 0.5,
+                  ),
+                  boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.2),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
                       ],
-                    ),
-                    width: bubbleWidth,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (hasPreview)
+                ),
+                width: bubbleWidth,
+                child: hasPreview
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(6),
                             child: _buildPreviewImage(
@@ -115,24 +119,41 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                               previewHeight,
                             ),
                           ),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6, left: 4, right: 4, bottom: 2),
-                          child: Text(
-                            text,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                          Padding(
+                            padding: const EdgeInsets.only(
+                                top: 6, left: 4, right: 4, bottom: 2),
+                            child: Text(
+                              text,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.visible,
                             ),
                           ),
+                        ],
+                      )
+                    : Center(
+                        child: Text(
+                          text,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
                         ),
-                      ],
-                    ),
-                  ),
-                ),
+                      ),
               ),
             ),
-          ],
+          ),
+        ),
+      ],
         ),
       ),
     );
@@ -460,24 +481,28 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
     _hoverBucket = bucket;
 
     _previewDebounceTimer?.cancel();
-    _previewDebounceTimer = Timer(const Duration(milliseconds: 120), () async {
-      final resolvedBucket = widget.videoState.getTimelinePreviewBucket(time);
-      if (resolvedBucket == null || _hoverBucket != bucket) return;
-      final previewPath = await widget.videoState.getTimelinePreview(time);
-      if (!mounted) return;
-      if (_hoverBucket != bucket) return;
+      _previewDebounceTimer = Timer(const Duration(milliseconds: 120), () async {
+        final resolvedBucket = widget.videoState.getTimelinePreviewBucket(time);
+        if (resolvedBucket == null || _hoverBucket != bucket) return;
+        final previewPath = await widget.videoState.getTimelinePreview(time);
+        if (!mounted) return;
+        if (_hoverBucket != bucket) return;
+        final readyPath =
+            (previewPath != null && _isPreviewReady(previewPath)) ? previewPath : null;
+        debugPrint(
+            'timeline preview resolved bucket=$bucket path=$previewPath ready=$readyPath');
 
-      if (_hoverThumbnailPath != previewPath) {
-        setState(() {
-          _hoverThumbnailPath = previewPath;
-        });
-      }
+        if (_hoverThumbnailPath != readyPath) {
+          setState(() {
+            _hoverThumbnailPath = readyPath;
+          });
+        }
 
       _showOverlay(
         context,
         progress,
         displayTime: time,
-        thumbnailPath: previewPath,
+        thumbnailPath: readyPath,
       );
     });
   }
@@ -525,5 +550,10 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         ),
       ),
     );
+  }
+
+  bool _isPreviewReady(String path) {
+    final file = File(path);
+    return file.existsSync();
   }
 }

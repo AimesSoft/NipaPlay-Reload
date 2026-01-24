@@ -430,4 +430,21 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     }
     return false;
   }
+
+  Future<void> _clearTimelinePreviewFiles() async {
+    String? dirPath = _timelinePreviewDirectory;
+    try {
+      if (dirPath == null && _timelinePreviewVideoKey != null) {
+        final appDir = await StorageService.getAppStorageDirectory();
+        dirPath =
+            '${appDir.path}/timeline_thumbnails/${_timelinePreviewVideoKey}';
+      }
+      if (dirPath == null) return;
+      final dir = Directory(dirPath);
+      if (!dir.existsSync()) return;
+      await dir.delete(recursive: true);
+    } catch (e) {
+      debugPrint('清理时间轴缩略图失败: $e');
+    }
+  }
 }
