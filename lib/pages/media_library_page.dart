@@ -485,19 +485,19 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
             final animeDetail = await BangumiService.instance.getAnimeDetails(historyItem.animeId!);
             //debugPrint('[媒体库CPU] 获取到动画详情: ${historyItem.animeId} - ${animeDetail.name}');
             if (mounted) {
-              // 🔥 CPU优化：批量更新而不是单个setState
               _fetchedFullAnimeData[historyItem.animeId!] = animeDetail;
+              setState(() {});
               if (animeDetail.imageUrl.isNotEmpty) {
                 await prefs.setString('$_prefsKeyPrefix${historyItem.animeId!}', animeDetail.imageUrl);
                 if (mounted) {
-                  // 🔥 CPU优化：只更新数据，不立即setState
                   _persistedImageUrls[historyItem.animeId!] = animeDetail.imageUrl;
+                  setState(() {});
                 }
               } else {
                 await prefs.remove('$_prefsKeyPrefix${historyItem.animeId!}');
                 if(mounted && _persistedImageUrls.containsKey(historyItem.animeId!)){
-                  // 🔥 CPU优化：只更新数据，不立即setState
                   _persistedImageUrls.remove(historyItem.animeId!);
+                  setState(() {});
                 }
               }
             }

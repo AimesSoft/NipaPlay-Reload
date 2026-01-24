@@ -123,7 +123,7 @@ class HorizontalAnimeCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   // Summary
                   if (summaryWidget != null)
-                    Expanded(child: summaryWidget!),
+                    summaryWidget!,
                 ],
               ),
             ),
