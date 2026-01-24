@@ -139,6 +139,7 @@ flutter_launcher_icons:
   image_path: "icons/new-icon.png"
   adaptive_icon_background: "#ffffff"
   adaptive_icon_foreground: "icons/new-icon.png"
+  adaptive_icon_monochrome: "assets/nipaplay.png"
 
   # iOS 使用 new-icon-apple.png
   image_path_ios: "icons/new-icon-apple.png"
