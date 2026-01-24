@@ -1759,7 +1759,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         height: isPhone ? 220 : 400, // 保持一致的高度
         margin: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           color: Colors.white10,
         ),
         child: const Center(
@@ -1773,7 +1773,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         height: isPhone ? 220 : 400, // 保持一致的高度
         margin: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           color: Colors.white10,
         ),
         child: Center(
@@ -1886,7 +1886,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         key: ValueKey('hero_banner_${item.id}_${item.source.name}'), // 添加唯一key
         margin: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -2109,14 +2109,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         key: ValueKey('small_card_${item.id}_${item.source.name}_$index'), // 添加唯一key包含索引
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(4),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -2415,14 +2408,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             Container(
               height: compact ? 110 : 158, // 进一步减少手机端高度
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(4),
               ),
               clipBehavior: Clip.antiAlias,
               child: _getVideoThumbnail(item),
