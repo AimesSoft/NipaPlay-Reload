@@ -16,64 +16,75 @@ class NipaplayAnimeDetailScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.3),
-      body: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          MediaQuery.of(context).padding.top + 20,
-          20,
-          20,
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color bgColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color subTextColor = isDark ? Colors.white60 : Colors.black54;
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        textTheme: Theme.of(context).textTheme.apply(
+          bodyColor: textColor,
+          displayColor: textColor,
         ),
-        child: Stack(
-          children: [
-            if (backgroundImageUrl != null && backgroundImageUrl!.isNotEmpty)
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: CachedNetworkImageWidget(
-                    imageUrl: backgroundImageUrl!,
-                    fit: BoxFit.cover,
-                    shouldCompress: false,
-                    loadMode: CachedImageLoadMode.hybrid,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.black.withOpacity(0.4),
+        body: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            MediaQuery.of(context).padding.top + 20,
+            20,
+            20,
+          ),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(15),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                if (backgroundImageUrl != null && backgroundImageUrl!.isNotEmpty)
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: isDark ? 0.25 : 0.35, // 海报半透明叠加，日间模式稍微深一点
+                      child: CachedNetworkImageWidget(
+                        imageUrl: backgroundImageUrl!,
+                        fit: BoxFit.cover,
+                        shouldCompress: false,
+                        loadMode: CachedImageLoadMode.hybrid,
+                      ),
+                    ),
+                  ),
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          bgColor.withOpacity(0.1),
+                          bgColor.withOpacity(0.4),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  color: Colors.black.withOpacity(0.2),
+                DefaultTextStyle(
+                  style: TextStyle(color: textColor),
+                  child: child,
                 ),
-              ),
+              ],
             ),
-            GlassmorphicContainer(
-              width: double.infinity,
-              height: double.infinity,
-              borderRadius: 15,
-              blur: 25,
-              alignment: Alignment.center,
-              border: 0.5,
-              linearGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color.fromARGB(255, 219, 219, 219).withOpacity(0.1),
-                  const Color.fromARGB(255, 208, 208, 208).withOpacity(0.1),
-                ],
-                stops: const [0.1, 1],
-              ),
-              borderGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.15),
-                  Colors.white.withOpacity(0.15),
-                ],
-              ),
-              child: child,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -112,6 +123,11 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black87;
+    final Color tabDividerColor = isDark ? Colors.white24 : Colors.black12;
+
     final hasEpisodes = episodesView != null;
     final canShowTabs = !isDesktopOrTablet &&
         showTabs &&
@@ -129,7 +145,7 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
                 child: Text(
                   title,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
+                        color: textColor,
                         fontWeight: FontWeight.bold,
                       ),
                   overflow: TextOverflow.ellipsis,
@@ -145,7 +161,7 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: Colors.white60),
+                        ?.copyWith(color: isDark ? Colors.white60 : Colors.black54),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -155,31 +171,33 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.18),
+                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white24, width: 0.5),
+                    border: Border.all(
+                        color: (isDark ? Colors.white : Colors.black).withOpacity(0.12),
+                        width: 0.5),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Ionicons.cloud_outline,
-                          size: 14, color: Colors.white70),
+                      Icon(Ionicons.cloud_outline,
+                          size: 14, color: iconColor),
                       const SizedBox(width: 4),
                       Text(
                         sourceLabel!,
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall
-                            ?.copyWith(color: Colors.white70),
+                            ?.copyWith(color: iconColor),
                       ),
                     ],
                   ),
                 ),
               if (headerActions != null) ...headerActions!,
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Ionicons.close_circle_outline,
-                  color: Colors.white70,
+                  color: iconColor,
                   size: 28,
                 ),
                 onPressed: onClose,
@@ -190,15 +208,15 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
         if (canShowTabs)
           TabBar(
             controller: tabController,
-            dividerColor: const Color.fromARGB(59, 255, 255, 255),
-            dividerHeight: 3.0,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
+            dividerColor: tabDividerColor,
+            dividerHeight: 1.0,
+            labelColor: isDark ? Colors.white : Colors.black,
+            unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
             indicatorSize: TabBarIndicatorSize.tab,
             indicatorPadding:
                 const EdgeInsets.only(top: 46, left: 15, right: 15),
             indicator: BoxDecoration(
-              color: Colors.white,
+              color: isDark ? Colors.white : Colors.black,
               borderRadius: BorderRadius.circular(30),
             ),
             indicatorWeight: 3,

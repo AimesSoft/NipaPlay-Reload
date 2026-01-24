@@ -938,17 +938,21 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           '(${_ratingEvaluationMap[bangumiRatingValue.round()]!})';
     }
 
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+
     final valueStyle = TextStyle(
-        color: Colors.white.withOpacity(0.85), fontSize: 13, height: 1.5);
-    const boldWhiteKeyStyle = TextStyle(
-        color: Colors.white,
+        color: textColor.withOpacity(0.85), fontSize: 13, height: 1.5);
+    final boldWhiteKeyStyle = TextStyle(
+        color: textColor,
         fontWeight: FontWeight.w600,
         fontSize: 13,
         height: 1.5);
     final sectionTitleStyle = Theme.of(context)
         .textTheme
         .titleMedium
-        ?.copyWith(color: Colors.white, fontWeight: FontWeight.bold);
+        ?.copyWith(color: textColor, fontWeight: FontWeight.bold);
 
     List<Widget> metadataWidgets = [];
     if (anime.metadata != null && anime.metadata!.isNotEmpty) {
@@ -985,7 +989,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       titlesWidgets.add(Text('其他标题:', style: sectionTitleStyle));
       titlesWidgets.add(const SizedBox(height: 4));
       TextStyle aliasTextStyle =
-          TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12);
+          TextStyle(color: secondaryTextColor, fontSize: 12);
       for (var titleEntry in anime.titles!) {
         String titleText = titleEntry['title'] ?? '未知标题';
         String languageText = '';
@@ -1042,7 +1046,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           if (bangumiRatingValue is num && bangumiRatingValue > 0) ...[
             RichText(
                 text: TextSpan(children: [
-              const TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
+              TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
               WidgetSpan(
                   child: _buildRatingStars(bangumiRatingValue.toDouble())),
               TextSpan(
@@ -1258,39 +1262,55 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                     color: Colors.white.withOpacity(0.95)))
                           ]));
                     }).toList())),
-          Padding(
-              padding: const EdgeInsets.only(bottom: 4.0),
-              child: RichText(
-                  text: TextSpan(style: valueStyle, children: [
-                const TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
-                TextSpan(text: '${_formatDate(anime.airDate)} ($weekdayString)')
-              ]))),
-          if (anime.typeDescription != null)
-            Padding(
-                padding: const EdgeInsets.only(bottom: 4.0),
+            RichText(
+              text: TextSpan(
+                style: valueStyle,
+                children: [
+                  TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
+                  TextSpan(text: anime.airDate ?? '未知'),
+                ],
+              ),
+            ),
+            if (anime.typeDescription != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
                 child: RichText(
-                    text: TextSpan(style: valueStyle, children: [
-                  const TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
-                  TextSpan(text: anime.typeDescription)
-                ]))),
-          if ((sharedSummary?.episodeCount ?? anime.totalEpisodes) != null)
-            Padding(
-                padding: const EdgeInsets.only(bottom: 4.0),
+                  text: TextSpan(
+                    style: valueStyle,
+                    children: [
+                      TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
+                      TextSpan(text: anime.typeDescription!),
+                    ],
+                  ),
+                ),
+              ),
+            if (anime.totalEpisodes != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
                 child: RichText(
-                    text: TextSpan(style: valueStyle, children: [
-                  const TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
-                  TextSpan(
-                      text:
-                          '${(sharedSummary?.episodeCount ?? anime.totalEpisodes)}话')
-                ]))),
-          if (anime.isOnAir != null)
-            Padding(
-                padding: const EdgeInsets.only(bottom: 4.0),
+                  text: TextSpan(
+                    style: valueStyle,
+                    children: [
+                      TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
+                      TextSpan(text: '${anime.totalEpisodes}'),
+                    ],
+                  ),
+                ),
+              ),
+            if (anime.isOnAir != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
                 child: RichText(
-                    text: TextSpan(style: valueStyle, children: [
-                  const TextSpan(text: '状态: ', style: boldWhiteKeyStyle),
-                  TextSpan(text: anime.isOnAir! ? '连载中' : '已完结')
-                ]))),
+                  text: TextSpan(
+                    style: valueStyle,
+                    children: [
+                      TextSpan(text: '状态: ', style: boldWhiteKeyStyle),
+                      TextSpan(text: anime.isOnAir! ? '正连载' : '已完结'),
+                    ],
+                  ),
+                ),
+              ),
+
           Padding(
               padding: const EdgeInsets.only(bottom: 4.0),
               child: RichText(
@@ -1356,14 +1376,18 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   }
 
   Widget _buildEpisodesListView(BangumiAnime anime) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+
     final bool hasSharedEpisodes =
         _sharedEpisodeBuilder != null && _sharedEpisodeMap.isNotEmpty;
 
     if (_sharedEpisodeBuilder != null && _isLoadingSharedEpisodes) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(20.0),
-          child: CircularProgressIndicator(color: Colors.white),
+          padding: const EdgeInsets.all(20.0),
+          child: CircularProgressIndicator(color: textColor),
         ),
       );
     }
@@ -1380,19 +1404,19 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               const SizedBox(height: 12),
               Text(
                 _sharedEpisodesError!,
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(color: secondaryTextColor),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white.withOpacity(0.2),
+                  backgroundColor: textColor.withOpacity(0.1),
                 ),
                 onPressed: _loadSharedEpisodes,
-                child: const Text(
+                child: Text(
                   '重新加载',
-                  locale: Locale('zh', 'CN'),
-                  style: TextStyle(color: Colors.white),
+                  locale: const Locale('zh', 'CN'),
+                  style: TextStyle(color: textColor),
                 ),
               )
             ],
@@ -1402,13 +1426,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     }
 
     if (anime.episodeList == null || anime.episodeList!.isEmpty) {
-      return const Center(
-          child: Padding(
-        padding: EdgeInsets.all(20.0),
-        child: Text('暂无剧集信息',
-            locale: Locale('zh-Hans', 'zh'),
-            style: TextStyle(color: Colors.white70)),
-      ));
+      return Center(
+        child: Text(
+          '暂无剧集信息',
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(color: secondaryTextColor),
+        ),
+      );
     }
 
     final episodes = anime.episodeList!;
@@ -1425,7 +1449,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 '共${displayEpisodes.length}集',
                 locale: const Locale('zh-Hans', 'zh'),
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: secondaryTextColor,
                   fontSize: 12,
                 ),
               ),
@@ -1437,8 +1461,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   });
                 },
                 style: TextButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  backgroundColor: Colors.white.withOpacity(0.08),
+                  foregroundColor: secondaryTextColor,
+                  backgroundColor: textColor.withOpacity(0.08),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   shape: RoundedRectangleBorder(

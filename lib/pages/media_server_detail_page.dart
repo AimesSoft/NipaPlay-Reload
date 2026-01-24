@@ -670,7 +670,7 @@ style: TextStyle(color: Colors.white70)));
     }
 
     return NipaplayAnimeDetailScaffold(
-      backgroundImageUrl: _mediaDetail != null ? _getPosterUrl(width: 1000) : null,
+      backgroundImageUrl: _mediaDetail != null ? _getBackdropUrl() : null,
       child: pageContent,
     );
   }
@@ -690,13 +690,17 @@ style: TextStyle(color: Colors.white70)));
     final backdropUrl = _getBackdropUrl();
     final ratingValue = double.tryParse(_mediaDetail!.communityRating ?? '');
 
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+
     final valueStyle = TextStyle(
-      color: Colors.white.withOpacity(0.85),
+      color: textColor.withOpacity(0.85),
       fontSize: 13,
       height: 1.5,
     );
-    const boldWhiteKeyStyle = TextStyle(
-      color: Colors.white,
+    final boldWhiteKeyStyle = TextStyle(
+      color: textColor,
       fontWeight: FontWeight.w600,
       fontSize: 13,
       height: 1.5,
@@ -704,7 +708,7 @@ style: TextStyle(color: Colors.white70)));
     final sectionTitleStyle = Theme.of(context)
         .textTheme
         .titleMedium
-        ?.copyWith(color: Colors.white, fontWeight: FontWeight.bold);
+        ?.copyWith(color: textColor, fontWeight: FontWeight.bold);
 
     final infoRows = <Widget>[];
     void addInfoRow(String label, String? value) {
@@ -787,7 +791,7 @@ style: TextStyle(color: Colors.white70)));
                 RichText(
                   text: TextSpan(
                     children: [
-                      const TextSpan(text: '评分: ', style: boldWhiteKeyStyle),
+                      TextSpan(text: '评分: ', style: boldWhiteKeyStyle),
                       WidgetSpan(child: _buildRatingStars(ratingValue)),
                       TextSpan(
                         text: ' ${ratingValue.toStringAsFixed(1)} ',
@@ -827,8 +831,8 @@ style: TextStyle(color: Colors.white70)));
                               backgroundImage:
                                   actorImage != null ? NetworkImage(actorImage) : null,
                               child: actorImage == null
-                                  ? const Icon(Icons.person,
-                                      color: Colors.white54)
+                                  ? Icon(Icons.person,
+                                      color: secondaryTextColor)
                                   : null,
                             ),
                             const SizedBox(height: 4),
@@ -836,8 +840,8 @@ style: TextStyle(color: Colors.white70)));
                               width: 70,
                               child: Text(
                                 actor.name,
-                                style: const TextStyle(
-                                    fontSize: 12, color: Colors.white70),
+                                style: TextStyle(
+                                    fontSize: 12, color: secondaryTextColor),
                                 textAlign: TextAlign.center,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -898,6 +902,10 @@ style: TextStyle(color: Colors.white70)));
     );
   }
   Widget _buildEpisodesView() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+
     // 移除原有的 Positioned 返回按钮，因为顶部已经有了全局关闭按钮
     return Column( // 不再需要 Stack，因为返回按钮已全局处理
       children: [
@@ -922,11 +930,11 @@ style: TextStyle(color: Colors.white70)));
                       onPressed: () => _loadEpisodesForSeason(season.id),
                       style: OutlinedButton.styleFrom(
                         backgroundColor: isSelected
-                            ? Colors.white.withOpacity(0.2)
+                            ? textColor.withOpacity(0.2)
                             : Colors.transparent,
-                        foregroundColor: isSelected ? Colors.white : Colors.white70,
+                        foregroundColor: isSelected ? textColor : secondaryTextColor,
                         side: BorderSide(
-                          color: isSelected ? Colors.white70 : Colors.white30,
+                          color: isSelected ? secondaryTextColor : textColor.withOpacity(0.1),
                         ),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20)),
@@ -940,7 +948,7 @@ style: TextStyle(color: Colors.white70)));
           ),
         
         if (_seasons.isNotEmpty) // 仅当有季节选择器时显示分割线
-          const Divider(height: 1, thickness: 1, color: Colors.white12, indent: 16, endIndent: 16),
+          Divider(height: 1, thickness: 1, color: textColor.withOpacity(0.1), indent: 16, endIndent: 16),
         
         // 剧集列表
         Expanded(
@@ -951,22 +959,26 @@ style: TextStyle(color: Colors.white70)));
   }
   
   Widget _buildEpisodesListForSelectedSeason() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+
     if (_selectedSeasonId == null && _seasons.isNotEmpty) { // 如果有季但没有选择，提示选择
-      return const Center(
+      return Center(
         child: Text('请选择一个季', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+style: TextStyle(color: secondaryTextColor)),
       );
     }
     if (_selectedSeasonId == null && _seasons.isEmpty && !_isLoading) { // 如果没有季且不在加载中
-        return const Center(
+        return Center(
         child: Text('该剧集没有季节信息', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+style: TextStyle(color: secondaryTextColor)),
       );
     }
     
     if (_isLoading && (_episodesBySeasonId[_selectedSeasonId ?? ''] == null || _episodesBySeasonId[_selectedSeasonId ?? '']!.isEmpty)) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
+      return Center(
+        child: CircularProgressIndicator(color: textColor),
       );
     }
     
@@ -979,7 +991,7 @@ style: TextStyle(color: Colors.white70)),
             children: [
               const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
               const SizedBox(height: 16),
-              Text('加载剧集失败: $_error', style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+              Text('加载剧集失败: $_error', style: TextStyle(color: secondaryTextColor), textAlign: TextAlign.center),
               const SizedBox(height: 16),
               BlurButton(
                 icon: Icons.refresh,
@@ -997,17 +1009,17 @@ style: TextStyle(color: Colors.white70)),
     final episodes = _episodesBySeasonId[_selectedSeasonId] ?? [];
     
     if (episodes.isEmpty && !_isLoading && _selectedSeasonId != null) { // 确保不是在加载中，并且确实选择了季
-      return const Center(
+      return Center(
         child: Text('该季没有剧集', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+style: TextStyle(color: secondaryTextColor)),
       );
     }
      if (episodes.isEmpty && _isLoading) { // 如果仍在加载，显示加载指示器
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: textColor));
     }
     if (episodes.isEmpty && _selectedSeasonId == null && _seasons.isEmpty) { // 处理没有季的情况
-        return const Center(child: Text('没有可显示的剧集', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)));
+        return Center(child: Text('没有可显示的剧集', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: secondaryTextColor)));
     }
 
 
@@ -1042,24 +1054,24 @@ style: TextStyle(color: Colors.white70)));
                       fit: BoxFit.cover,
                       errorBuilder: (context, error) {
                         return Container(
-                          color: Colors.grey[800],
-                          child: const Center(
+                          color: isDark ? Colors.grey[800] : Colors.grey[300],
+                          child: Center(
                             child: Icon(
                               Ionicons.image_outline, // 使用 Ionicons
                               size: 24,
-                              color: Colors.white30,
+                              color: secondaryTextColor.withOpacity(0.5),
                             ),
                           ),
                         );
                       },
                     )
                   : Container(
-                      color: Colors.grey[800],
-                      child: const Center(
+                      color: isDark ? Colors.grey[800] : Colors.grey[300],
+                      child: Center(
                         child: Icon(
                           Ionicons.film_outline, // 使用 Ionicons
                           size: 24,
-                          color: Colors.white30,
+                          color: secondaryTextColor.withOpacity(0.5),
                         ),
                       ),
                     ),
@@ -1069,7 +1081,7 @@ style: TextStyle(color: Colors.white70)));
             episode.indexNumber != null
                 ? '${episode.indexNumber}. ${episode.name}'
                 : episode.name,
-            style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white), // 调整颜色
+            style: TextStyle(fontWeight: FontWeight.w500, color: textColor), // 调整颜色
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1080,7 +1092,7 @@ style: TextStyle(color: Colors.white70)));
                 Text(
                   _formatRuntime(episode.runTimeTicks),
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 12, color: Colors.white70),
+style: TextStyle(fontSize: 12, color: secondaryTextColor),
                 ),
               
               if (episode.overview != null && episode.overview!.isNotEmpty)
@@ -1094,12 +1106,12 @@ style: TextStyle(fontSize: 12, color: Colors.white70),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 12, color: Colors.white70),
+style: TextStyle(fontSize: 12, color: secondaryTextColor),
                   ),
                 ),
             ],
           ),
-          trailing: const Icon(Ionicons.play_circle_outline, color: Colors.white70, size: 22), // 添加播放按钮指示
+          trailing: Icon(Ionicons.play_circle_outline, color: secondaryTextColor, size: 22), // 添加播放按钮指示
           onTap: () async {
             if (_isDetailAutoMatching) {
               BlurSnackBar.show(context, '正在自动匹配，请稍候');
