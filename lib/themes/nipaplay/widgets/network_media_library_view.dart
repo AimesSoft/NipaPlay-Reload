@@ -13,6 +13,7 @@ import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
@@ -151,10 +152,38 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   
   // 搜索状态
   final TextEditingController _searchController = TextEditingController();
+  LocalLibrarySortType _currentSort = LocalLibrarySortType.dateAdded;
   bool _isSearching = false;
   bool _isSearchLoading = false;
   List<NetworkMediaItem> _searchResults = [];
+  List<NetworkMediaItem> _filteredMediaItems = [];
   Timer? _searchDebounceTimer;
+
+  void _applySortAndFilter() {
+    if (!mounted) return;
+    setState(() {
+      String query = _searchController.text.toLowerCase().trim();
+      
+      // 基础过滤
+      List<NetworkMediaItem> source = _mediaItems;
+      if (query.isNotEmpty) {
+        source = source.where((item) => item.title.toLowerCase().contains(query)).toList();
+      }
+      
+      // 排序
+      switch (_currentSort) {
+        case LocalLibrarySortType.name:
+          source.sort((a, b) => a.title.compareTo(b.title));
+          break;
+        case LocalLibrarySortType.dateAdded:
+          // 远程服务目前没有统一的添加日期，这里暂不做变动或使用原始顺序
+          break;
+        case LocalLibrarySortType.rating:
+          break;
+      }
+      _filteredMediaItems = source;
+    });
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -451,25 +480,26 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                   radius: const Radius.circular(2),
                   child: _isFolderNavigation
                       ? _buildFolderListView()
-                                                    : GridView.builder(
-                                                        controller: _gridScrollController,
-                                                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                                          maxCrossAxisExtent: 500,
-                                                          mainAxisExtent: 140,
-                                                          crossAxisSpacing: 16,
-                                                          mainAxisSpacing: 16,
-                                                        ),                          padding: const EdgeInsets.all(16),
-                          cacheExtent: 800,
-                          clipBehavior: Clip.hardEdge,
-                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                          addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: true,
-                          itemCount: _isSearching ? _searchResults.length : _mediaItems.length,
-                          itemBuilder: (context, index) {
-                            final item = _isSearching ? _searchResults[index] : _mediaItems[index];
-                            return _buildMediaCard(item);
-                          },
-                        ),
+                                                                                                        : GridView.builder(
+                                                                                                            controller: _gridScrollController,
+                                                                                                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                                                                                              maxCrossAxisExtent: 500,
+                                                                                                              mainAxisExtent: 140,
+                                                                                                              crossAxisSpacing: 16,
+                                                                                                              mainAxisSpacing: 16,
+                                                                                                            ),
+                                                                                                            padding: const EdgeInsets.all(16),
+                                                                                                            cacheExtent: 800,
+                                                                                                            clipBehavior: Clip.hardEdge,
+                                                                                                            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                                                                                                            addAutomaticKeepAlives: false,
+                                                                                                            addRepaintBoundaries: true,
+                                                                                                            itemCount: _isSearching ? _searchResults.length : _filteredMediaItems.length,
+                                                                                                            itemBuilder: (context, index) {
+                                                                                                              final item = _isSearching ? _searchResults[index] : _filteredMediaItems[index];
+                                                                                                              return _buildMediaCard(item);
+                                                                                                            },
+                                                                                                          ),
                 ),
               ),
             ),
@@ -743,6 +773,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       if (mounted && !_isShowingLibraryContent) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
+          _applySortAndFilter();
         });
       }
       _setupRefreshTimer();
@@ -757,112 +788,27 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   // 构建搜索栏（单个媒体库视图）
   Widget _buildSearchBar() {
-    return Consumer<UIThemeProvider>(
-      builder: (context, uiThemeProvider, child) {
-        if (uiThemeProvider.isFluentUITheme) {
-          return _buildFluentSearchBar('搜索 ${_getCurrentViewTitle(_provider)} 中的内容...', _onSearchChanged);
-        } else {
-          return _buildMaterialSearchBar('搜索 ${_getCurrentViewTitle(_provider)} 中的内容...', _onSearchChanged);
-        }
+    return LocalLibraryControlBar(
+      searchController: _searchController,
+      currentSort: _currentSort,
+      onSearchChanged: _onSearchChanged,
+      onSortChanged: (type) {
+        setState(() => _currentSort = type);
+        _applySortAndFilter();
       },
     );
   }
 
   // 构建主页面搜索栏（媒体库列表视图）
   Widget _buildMainSearchBar() {
-    return Consumer<UIThemeProvider>(
-      builder: (context, uiThemeProvider, child) {
-        if (uiThemeProvider.isFluentUITheme) {
-          return _buildFluentSearchBar('搜索所有媒体库中的内容...', _onMainSearchChanged);
-        } else {
-          return _buildMaterialSearchBar('搜索所有媒体库中的内容...', _onMainSearchChanged);
-        }
+    return LocalLibraryControlBar(
+      searchController: _searchController,
+      currentSort: _currentSort,
+      onSearchChanged: _onMainSearchChanged,
+      onSortChanged: (type) {
+        setState(() => _currentSort = type);
+        _applySortAndFilter();
       },
-    );
-  }
-
-  // 构建 Material Design 搜索栏
-  Widget _buildMaterialSearchBar(String hintText, Function(String) onChanged) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 16),
-                prefixIcon: _isSearchLoading
-                    ? Container(
-                        width: 20,
-                        height: 20,
-                        padding: const EdgeInsets.all(12),
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Icon(Icons.search, color: Colors.white.withValues(alpha: 0.7)),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear, color: Colors.white.withValues(alpha: 0.7)),
-                        onPressed: _clearSearch,
-                      )
-                    : null,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              onChanged: onChanged,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 构建 Fluent UI 搜索栏
-  Widget _buildFluentSearchBar(String hintText, Function(String) onChanged) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: fluent.TextBox(
-        controller: _searchController,
-        placeholder: hintText,
-        style: const TextStyle(fontSize: 16),
-        prefix: _isSearchLoading
-            ? Container(
-                width: 20,
-                height: 20,
-                padding: const EdgeInsets.all(8),
-                child: const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: fluent.ProgressRing(strokeWidth: 2),
-                ),
-              )
-            : const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(fluent.FluentIcons.search, size: 16),
-              ),
-        suffix: _searchController.text.isNotEmpty
-            ? fluent.IconButton(
-                icon: const Icon(fluent.FluentIcons.chrome_close, size: 16),
-                onPressed: _clearSearch,
-              )
-            : null,
-        onChanged: onChanged,
-      ),
     );
   }
 
@@ -1202,6 +1148,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       if (mounted) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
+          _applySortAndFilter();
           _isLoadingLibraryContent = false;
           _error = null;
         });
@@ -1249,6 +1196,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       if (mounted) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
+          _applySortAndFilter();
           _isLoadingLibraryContent = false;
           _error = null;
         });

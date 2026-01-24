@@ -824,6 +824,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       try {
         await _loadRecommendedContent(forceRefresh: true);
         await _loadRecentContent();
+        await _loadTodayAnimes(forceRefresh: true);
       } catch (e2) {
         debugPrint('DashboardHomePage: 串行加载数据也失败: $e2');
       }
@@ -875,14 +876,21 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       );
 
       final now = DateTime.now();
-      // Bangumi API: 1-6 为周一至周六, 7 为周日
-      // 这里的 weekday 逻辑需要根据 BangumiAnime 的 airWeekday 字段来匹配
-      final weekday = now.weekday;
+      // Bangumi API (Dandanplay): 0 为周日, 1-6 为周一至周六
+      // Flutter DateTime: 1-7 (周一至周日)
+      int weekday = now.weekday;
+      if (weekday == 7) weekday = 0; // 将周日从 7 转换为 0
 
       if (mounted) {
         setState(() {
-          _todayAnimes =
+          final List<BangumiAnime> todayList =
               allAnimes.where((a) => a.airWeekday == weekday).toList();
+          
+          // 如果今天确实没有（虽然不常见），但在 allAnimes 不为空的情况下，
+          // 我们可能不需要清空 _todayAnimes 如果它之前有数据？
+          // 但这里是 forceRefresh，所以我们应该信任最新的。
+          
+          _todayAnimes = todayList;
           _isLoadingTodayAnimes = false;
         });
       }
@@ -2477,13 +2485,20 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   Widget _buildTodaySeriesSection() {
+    // 只有当加载完成且确实没有数据时，才隐藏。
+    // 如果正在加载中，我们需要显示骨架屏。
     if (_todayAnimes.isEmpty && !_isLoadingTodayAnimes) {
+      // 检查是否是因为加载失败导致的空列表
+      // 如果我们希望在首页保持整洁，确实可以隐藏
       return const SizedBox.shrink();
     }
 
     final now = DateTime.now();
-    const weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    final weekdayStr = weekdayNames[now.weekday - 1];
+    const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    // Dandanplay weekday: 0-6 (Sun-Sat)
+    int weekdayIndex = now.weekday;
+    if (weekdayIndex == 7) weekdayIndex = 0;
+    final weekdayStr = weekdayNames[weekdayIndex];
 
     return _buildRecentSection(
       title: '今日新番 - $weekdayStr',
