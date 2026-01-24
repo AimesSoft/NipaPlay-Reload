@@ -23,6 +23,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_skeleton.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/loading_placeholder.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
@@ -2488,6 +2490,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       items: _todayAnimes,
       scrollController: _getTodayAnimesScrollController(),
       onItemTap: (item) => _showAnimeDetail(item as BangumiAnime),
+      isLoading: _isLoadingTodayAnimes,
     );
   }
 
@@ -2500,6 +2503,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     required List<dynamic> items,
     required ScrollController scrollController,
     required Function(dynamic) onItemTap,
+    bool isLoading = false,
   }) {
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
     return Column(
@@ -2521,7 +2525,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 ),
               ),
               const SizedBox(width: 8),
-              if (!isPhone && items.isNotEmpty)
+              if (!isPhone && (items.isNotEmpty || isLoading))
                 _buildScrollButtons(scrollController, 162), 
             ],
           ),
@@ -2533,8 +2537,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             controller: scrollController,
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: items.length,
+            itemCount: isLoading ? 3 : items.length,
             itemBuilder: (context, index) {
+              if (isLoading) {
+                return const HorizontalAnimeSkeleton();
+              }
               final item = items[index];
               return Padding(
                 padding: const EdgeInsets.only(right: 12),
