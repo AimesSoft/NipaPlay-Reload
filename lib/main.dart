@@ -897,14 +897,8 @@ class MainPage extends StatefulWidget {
       const DashboardHomePage(),
       const PlayVideoPage(),
       const AnimePage(),
+      const SettingsPage(),
     ];
-
-    // 仅在非iOS平台添加新番更新页面
-    if (!Platform.isIOS) {
-      pages.add(const NewSeriesPage());
-    }
-
-    pages.add(const SettingsPage());
     return pages;
   }
 
@@ -1049,36 +1043,18 @@ class MainPageState extends State<MainPage>
     _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
     
     // 强制启用页面滑动动画
-    // final enablePageAnimationPref = prefs.getBool('enable_page_animation') ??
-    //     (!kIsWeb && (Platform.isIOS || Platform.isAndroid));
-    // _mainTabAnimationEnabled ??= enablePageAnimationPref;
-    // final enablePageAnimation = _mainTabAnimationEnabled ?? enablePageAnimationPref;
-
-    // 在iOS平台上确保默认页面索引不会指向新番更新页面
-    // iOS: 索引顺序为 0-主页, 1-视频播放, 2-媒体库, 3-设置
-    // 其他平台: 索引顺序为 0-主页, 1-视频播放, 2-媒体库, 3-新番更新, 4-设置
-    if (Platform.isIOS && _defaultPageIndex >= 3) {
-      // 如果默认页面是新番更新页面(索引3)或设置页面(索引4)，在iOS上需要调整
-      if (_defaultPageIndex == 3) {
-        // 原来的新番更新页面，调整为设置页面
-        _defaultPageIndex = 3; // iOS上设置页面的索引
-      } else if (_defaultPageIndex == 4) {
-        // 原来的设置页面，调整为设置页面
-        _defaultPageIndex = 3; // iOS上设置页面的索引
-      }
-    }
+    // ... (注释省略)
 
     if (mounted) {
-      // 根据平台动态设置TabController长度
-      final tabLength = Platform.isIOS ? 4 : 5;
+      // 所有平台现在都是 4 个标签
+      const tabLength = 4;
       globalTabController = TabController(
         length: tabLength,
         vsync: this,
-        initialIndex: _defaultPageIndex,
-        // 强制开启动画，不传 animationDuration 默认就是开启的
+        initialIndex: _defaultPageIndex.clamp(0, tabLength - 1),
       );
       debugPrint(
-          '[MainPageState] TabController initialized with length: $tabLength, index: $_defaultPageIndex');
+          '[MainPageState] TabController initialized with length: $tabLength, index: ${globalTabController!.index}');
     }
   }
 

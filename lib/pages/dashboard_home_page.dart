@@ -105,6 +105,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   
   // 本地媒体库数据 - 使用番组信息而不是观看历史
   List<LocalAnimeItem> _localAnimeItems = [];
+  
+  // 今日新番数据
+  List<BangumiAnime> _todayAnimes = [];
+  bool _isLoadingTodayAnimes = false;
+  ScrollController? _todayAnimesScrollController;
+
   // 本地媒体库图片持久化缓存（与 MediaLibraryPage 复用同一前缀）
   final Map<int, String> _localImageCache = {};
   static const String _localPrefsKeyPrefix = 'media_library_image_url_';
@@ -200,6 +206,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   ScrollController _getDandanplayLibraryScrollController() {
     _dandanplayScrollController ??= ScrollController();
     return _dandanplayScrollController!;
+  }
+
+  ScrollController _getTodayAnimesScrollController() {
+    _todayAnimesScrollController ??= ScrollController();
+    return _todayAnimesScrollController!;
   }
   
   void _startAutoSwitch() {
@@ -798,11 +809,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     debugPrint('DashboardHomePage: 开始加载数据');
     
-    // 并行加载推荐内容和最近内容
+    // 并行加载推荐内容、最近内容和今日新番
     try {
       await Future.wait([
         _loadRecommendedContent(forceRefresh: true),
         _loadRecentContent(),
+        _loadTodayAnimes(forceRefresh: true),
       ]);
     } catch (e) {
       debugPrint('DashboardHomePage: 并行加载数据时发生错误: $e');
@@ -845,6 +857,36 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           debugPrint('DashboardHomePage: 播放器活跃中，跳过待处理的刷新请求');
         }
       });
+    }
+  }
+
+  Future<void> _loadTodayAnimes({bool forceRefresh = false}) async {
+    if (!mounted) return;
+    setState(() => _isLoadingTodayAnimes = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final bool filterAdultContentGlobally =
+          prefs.getBool('global_filter_adult_content') ?? true;
+      final allAnimes = await BangumiService.instance.getCalendar(
+        forceRefresh: forceRefresh,
+        filterAdultContent: filterAdultContentGlobally,
+      );
+
+      final now = DateTime.now();
+      // Bangumi API: 1-6 为周一至周六, 7 为周日
+      // 这里的 weekday 逻辑需要根据 BangumiAnime 的 airWeekday 字段来匹配
+      final weekday = now.weekday;
+
+      if (mounted) {
+        setState(() {
+          _todayAnimes =
+              allAnimes.where((a) => a.airWeekday == weekday).toList();
+          _isLoadingTodayAnimes = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('加载今日新番失败: $e');
+      if (mounted) setState(() => _isLoadingTodayAnimes = false);
     }
   }
 
@@ -1626,7 +1668,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   // 大海报推荐区域
                   _buildHeroBanner(isPhone: isPhone),
                   
-                  SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
+                  SizedBox(height: isPhone ? 16 : 32),
+
+                  // 今日新番区域
+                  _buildTodaySeriesSection(),
+
+                  if (_todayAnimes.isNotEmpty || _isLoadingTodayAnimes)
+                    SizedBox(height: isPhone ? 16 : 32),
                   
                   // 继续播放区域
                   _buildContinueWatching(isPhone: isPhone),
@@ -1725,33 +1773,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             );
         },
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 挂载本地媒体库按钮
-          FloatingActionGlassButton(
-            iconData: Icons.folder_open_rounded,
-            onPressed: _navigateToMediaLibraryManagement,
-            description: '挂载本地媒体库',
-          ),
-          const SizedBox(height: 16),
-          // 刷新按钮
-          _isLoadingRecommended 
-              ? FloatingActionGlassButton(
-                  iconData: Icons.refresh_rounded,
-                  onPressed: () {}, // 加载中时禁用
-                  description: '正在刷新...',
-                )
-              : FloatingActionGlassButton(
-                  iconData: Icons.refresh_rounded,
-                  onPressed: _handleManualRefresh,
-                  description: ' 刷新主页',
-                ),
-        ],
-      ),
-        ),
-      );
-  }
+    ),
+  );
+}
 
   Widget _buildHeroBanner({required bool isPhone}) {
     if (_isLoadingRecommended) {
@@ -2450,6 +2474,27 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     );
   }
 
+  Widget _buildTodaySeriesSection() {
+    if (_todayAnimes.isEmpty && !_isLoadingTodayAnimes) {
+      return const SizedBox.shrink();
+    }
+
+    final now = DateTime.now();
+    const weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    final weekdayStr = weekdayNames[now.weekday - 1];
+
+    return _buildRecentSection(
+      title: '今日新番 - $weekdayStr',
+      items: _todayAnimes,
+      scrollController: _getTodayAnimesScrollController(),
+      onItemTap: (item) => _showAnimeDetail(item as BangumiAnime),
+    );
+  }
+
+  void _showAnimeDetail(BangumiAnime anime) {
+    ThemedAnimeDetail.show(context, anime.id);
+  }
+
   Widget _buildRecentSection({
     required String title,
     required List<dynamic> items,
@@ -2568,6 +2613,14 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       if (_isValidAnimeId(item.animeId)) {
         detailFuture = BangumiService.instance.getAnimeDetails(item.animeId!);
       }
+    } else if (item is BangumiAnime) {
+      name = item.nameCn.isNotEmpty ? item.nameCn : item.name;
+      uniqueId = 'bangumi_${item.id}';
+      imageUrl = item.imageUrl;
+      sourceLabel = 'Bangumi';
+      rating = item.rating;
+      // 动画详情通常需要异步获取更详细的简介
+      detailFuture = BangumiService.instance.getAnimeDetails(item.id);
     }
 
     const double cardWidth = 320;

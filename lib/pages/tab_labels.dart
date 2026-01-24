@@ -1,34 +1,25 @@
 // tab_labels.dart
 import 'package:flutter/material.dart';
-import 'dart:io';
 
 List<Widget> createTabLabels() {
   List<Widget> tabs = [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.0),      child: HoverZoomTab(text: "主页"),
+    const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
+      child: HoverZoomTab(text: "主页"),
     ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.0),      child: HoverZoomTab(text: "视频播放"),
+    const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
+      child: HoverZoomTab(text: "视频播放"),
     ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.0),      child: HoverZoomTab(text: "媒体库"),
+    const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
+      child: HoverZoomTab(text: "媒体库"),
+    ),
+    const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
+      child: HoverZoomTab(text: "设置"),
     ),
   ];
-
-  // 仅在非iOS平台显示新番更新Tab
-  if (!Platform.isIOS) {
-    tabs.add(
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8.0),        child: HoverZoomTab(text: "新番更新"),
-      ),
-    );
-  }
-
-  tabs.add(
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.0),      child: HoverZoomTab(text: "设置"),
-    ),
-  );
 
   return tabs;
 }
