@@ -168,6 +168,12 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         if (persistedUrl != null && persistedUrl.isNotEmpty) {
           loadedPersistedUrls[item.animeId!] = persistedUrl;
         }
+        
+        // 尝试从BangumiService内存缓存中恢复详情数据
+        final cachedDetail = BangumiService.instance.getAnimeDetailsFromMemory(item.animeId!);
+        if (cachedDetail != null) {
+          _fetchedFullAnimeData[item.animeId!] = cachedDetail;
+        }
       }
     }
 
@@ -691,41 +697,80 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                     ? historyItem.animeName 
                     : (historyItem.episodeTitle ?? '未知动画');
 
-                if (animeId != null) {
-                    if (_fetchedFullAnimeData.containsKey(animeId)) {
-                        final fetchedData = _fetchedFullAnimeData[animeId]!;
-                        if (fetchedData.imageUrl.isNotEmpty) {
-                            imageUrlToDisplay = fetchedData.imageUrl;
-                        }
-                        if (fetchedData.nameCn.isNotEmpty) {
-                            nameToDisplay = fetchedData.nameCn;
-                        } else if (fetchedData.name.isNotEmpty) {
-                            nameToDisplay = fetchedData.name;
-                        }
-                    } else if (_persistedImageUrls.containsKey(animeId)) {
-                        imageUrlToDisplay = _persistedImageUrls[animeId]!;
-                    }
+                // 尝试从持久化缓存中获取图片（作为初始值）
+                if (animeId != null && _persistedImageUrls.containsKey(animeId)) {
+                    imageUrlToDisplay = _persistedImageUrls[animeId]!;
                 }
 
-                // 构建水平卡片
-                final card = HorizontalAnimeCard(
-                  imageUrl: imageUrlToDisplay,
-                  title: nameToDisplay,
-                  rating: animeId != null && _fetchedFullAnimeData.containsKey(animeId) 
-                      ? _fetchedFullAnimeData[animeId]!.rating 
-                      : null,
-                  isOnAir: false, // Local items are generally not "on air" in this context unless we check fetched data
-                  source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
-                  onTap: () {
-                    if (animeId != null) {
-                      _navigateToAnimeDetail(animeId);
-                    } else {
-                      BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                // 优先使用已获取的详情数据
+                BangumiAnime? detailData;
+                if (animeId != null && _fetchedFullAnimeData.containsKey(animeId)) {
+                  detailData = _fetchedFullAnimeData[animeId];
+                }
+
+                if (detailData != null) {
+                   // 有同步数据，直接构建
+                   String displayImage = imageUrlToDisplay;
+                   if (detailData.imageUrl.isNotEmpty) {
+                      displayImage = detailData.imageUrl;
+                   }
+                   
+                   Widget? summary;
+                   if (detailData.summary != null && detailData.summary!.isNotEmpty) {
+                      summary = Text(
+                         detailData.summary!,
+                         maxLines: 3,
+                         overflow: TextOverflow.ellipsis,
+                         style: TextStyle(
+                           color: Colors.white.withValues(alpha: 0.6),
+                           fontSize: 13,
+                           height: 1.4,
+                         ),
+                       );
+                   }
+
+                   final card = HorizontalAnimeCard(
+                     imageUrl: displayImage,
+                     title: nameToDisplay,
+                     rating: detailData.rating,
+                     source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
+                     summaryWidget: summary,
+                     onTap: () {
+                       if (animeId != null) {
+                         _navigateToAnimeDetail(animeId);
+                       } else {
+                         BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                       }
+                     },
+                   );
+                   
+                   if (_cardWidgetCache.length < 100) {
+                     _cardWidgetCache[cacheKey] = card;
+                   }
+                   return card;
+                }
+
+                // 没有同步数据，使用FutureBuilder来构建卡片
+                final card = FutureBuilder<BangumiAnime>(
+                  future: animeId != null ? BangumiService.instance.getAnimeDetails(animeId) : null,
+                  builder: (context, snapshot) {
+                    final detail = snapshot.data;
+                    
+                    // 图片：优先用 detail.imageUrl (高清)，其次用 persisted/thumbnail
+                    String displayImage = imageUrlToDisplay;
+                    if (detail != null && detail.imageUrl.isNotEmpty) {
+                       displayImage = detail.imageUrl;
                     }
-                  },
-                  summaryWidget: animeId != null && _fetchedFullAnimeData.containsKey(animeId) && _fetchedFullAnimeData[animeId]!.summary != null
-                      ? Text(
-                          _fetchedFullAnimeData[animeId]!.summary!,
+                    
+                    // 评分
+                    double? displayRating = detail?.rating;
+                    
+                    // 简介
+                    Widget? summary;
+                    final String? summaryText = detail?.summary;
+                    if (summaryText != null && summaryText.isNotEmpty) {
+                       summary = Text(
+                          summaryText,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -733,22 +778,25 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                             fontSize: 13,
                             height: 1.4,
                           ),
-                        )
-                      : null,
-                );
-                
-                // 🔥 CPU优化：缓存卡片Widget
-                if (animeId != null) {
-                  //debugPrint('动画 $animeId 详细信息：');
-                  //debugPrint('  名称: $nameToDisplay');
-                  //debugPrint('  是否存在于_fetchedFullAnimeData: ${_fetchedFullAnimeData.containsKey(animeId)}');
-                  
-                  if (_fetchedFullAnimeData.containsKey(animeId)) {
-                    final animeData = _fetchedFullAnimeData[animeId]!;
-                    //debugPrint('  通用评分: ${animeData.rating}');
-                    //debugPrint('  评分详情: ${animeData.ratingDetails}');
+                        );
+                    }
+                    
+                    return HorizontalAnimeCard(
+                      imageUrl: displayImage,
+                      title: nameToDisplay,
+                      rating: displayRating,
+                      source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
+                      summaryWidget: summary,
+                      onTap: () {
+                        if (animeId != null) {
+                          _navigateToAnimeDetail(animeId);
+                        } else {
+                          BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                        }
+                      },
+                    );
                   }
-                }
+                );
                 
                 // 🔥 CPU优化：缓存卡片Widget，限制缓存大小避免内存泄漏
                 if (_cardWidgetCache.length < 100) { // 限制最多缓存100个卡片

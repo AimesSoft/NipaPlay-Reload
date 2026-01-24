@@ -102,6 +102,15 @@ class BangumiService {
     }
   }
 
+  // 同步获取内存缓存中的番剧详情
+  BangumiAnime? getAnimeDetailsFromMemory(int animeId) {
+    if (_detailsCache.containsKey(animeId)) {
+      // 即使缓存过期也返回数据，优先保证显示
+      return _detailsCache[animeId];
+    }
+    return null;
+  }
+
   Future<void> loadData() async {
     try {
       //debugPrint('[新番-弹弹play] 开始加载新番数据');
