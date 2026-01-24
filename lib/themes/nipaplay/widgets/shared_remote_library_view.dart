@@ -12,6 +12,7 @@ import 'package:nipaplay/pages/media_library_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
@@ -125,21 +126,21 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           controller: _gridScrollController,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 150,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 7 / 12,
+            maxCrossAxisExtent: 500,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            mainAxisExtent: 140,
           ),
           itemCount: animeSummaries.length,
           itemBuilder: (context, index) {
             final anime = animeSummaries[index];
-            return AnimeCard(
+            return HorizontalAnimeCard(
               key: ValueKey('shared_${anime.animeId}'),
-              name: anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
+              title: anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
               imageUrl: anime.imageUrl ?? '',
               source: provider.activeHost?.displayName,
-              enableShadow: false,
-              backgroundBlurSigma: 10,
+              rating: null,
+              isOnAir: false,
               onTap: () => _openEpisodeSheet(context, provider, anime),
             );
           },

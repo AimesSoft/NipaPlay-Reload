@@ -7,10 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
+import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
@@ -181,10 +182,10 @@ class _DandanplayRemoteLibraryViewState
             parent: BouncingScrollPhysics(),
           ),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 150,
-            childAspectRatio: 7 / 12,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
+            maxCrossAxisExtent: 500,
+            mainAxisExtent: 140,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
           ),
           itemCount: groups.length,
           itemBuilder: (context, index) {
@@ -259,14 +260,34 @@ class _DandanplayRemoteLibraryViewState
   ) {
     final coverUrl = _resolveCoverUrlForGroup(group, provider);
 
-    return AnimeCard(
+    return HorizontalAnimeCard(
       key: ValueKey('dandan_${group.animeId ?? group.title}'),
-      name: group.title,
+      title: group.title,
       imageUrl: coverUrl,
       source: '弹弹play',
-      enableShadow: false,
-      backgroundBlurSigma: 12,
+      rating: null,
+      isOnAir: false,
       onTap: () => _openAnimeDetail(group, provider),
+      summaryWidget: group.animeId != null 
+          ? FutureBuilder<BangumiAnime>(
+              future: BangumiService.instance.getAnimeDetails(group.animeId!),
+              builder: (context, snapshot) {
+                if (snapshot.hasData && snapshot.data!.summary != null) {
+                  return Text(
+                    snapshot.data!.summary!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  );
+                }
+                return const SizedBox();
+              },
+            )
+          : null,
     );
   }
 

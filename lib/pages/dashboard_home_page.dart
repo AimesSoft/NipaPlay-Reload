@@ -22,6 +22,7 @@ import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
@@ -2522,7 +2523,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: isPhone ? 240 : 280,
+          height: 160,
           child: ListView.builder(
             controller: scrollController,
             scrollDirection: Axis.horizontal,
@@ -2545,10 +2546,14 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
     String name = '';
     String imageUrl = '';
     String uniqueId = '';
+    String? sourceLabel;
+    double? rating;
     
     if (item is JellyfinMediaItem) {
       name = item.name;
       uniqueId = 'jellyfin_${item.id}';
+      sourceLabel = 'Jellyfin';
+      rating = item.communityRating != null ? double.tryParse(item.communityRating!) : null;
       try {
         imageUrl = JellyfinService.instance.getImageUrl(item.id);
       } catch (e) {
@@ -2557,6 +2562,8 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
     } else if (item is EmbyMediaItem) {
       name = item.name;
       uniqueId = 'emby_${item.id}';
+      sourceLabel = 'Emby';
+      rating = item.communityRating != null ? double.tryParse(item.communityRating!) : null;
       try {
         imageUrl = EmbyService.instance.getImageUrl(item.id);
       } catch (e) {
@@ -2566,31 +2573,34 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
       name = item.animeName.isNotEmpty ? item.animeName : (item.episodeTitle ?? '未知动画');
       uniqueId = 'history_${item.animeId ?? 0}_${item.filePath.hashCode}';
       imageUrl = item.thumbnailPath ?? '';
+      sourceLabel = '本地';
     } else if (item is LocalAnimeItem) {
       name = item.animeName;
       uniqueId = 'local_${item.animeId}_${item.animeName}';
       imageUrl = item.imageUrl ?? '';
+      sourceLabel = '本地';
     } else if (item is DandanplayRemoteAnimeGroup) {
       name = item.title;
       uniqueId = 'dandan_${item.animeId ?? item.title.hashCode}_${item.episodeCount}';
       imageUrl = _getDandanGroupImage(item);
+      sourceLabel = '弹弹play';
+      rating = null;
     }
 
-    // 使用与其他页面相同的尺寸计算方式
-    // 基于 maxCrossAxisExtent: 150, childAspectRatio: 7/12
-    const double cardWidth = 160;
-    const double cardHeight = 200;
+    const double cardWidth = 320;
+    const double cardHeight = 140;
     
     return SizedBox(
       width: cardWidth,
       height: cardHeight,
-      child: AnimeCard(
-        key: ValueKey(uniqueId), // 添加唯一key防止widget复用导致的缓存混乱
-        name: name,
+      child: HorizontalAnimeCard(
+        key: ValueKey(uniqueId),
+        title: name,
         imageUrl: imageUrl,
         onTap: () => onItemTap(item),
         isOnAir: false,
-        delayLoad: _shouldDelayImageLoad(), // 使用与推荐卡片相同的延迟逻辑
+        source: sourceLabel,
+        rating: rating,
       ),
     );
   }

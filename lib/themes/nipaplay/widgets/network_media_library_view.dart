@@ -12,7 +12,7 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
@@ -310,10 +310,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                       ? GridView.builder(
                           controller: _gridScrollController,
                           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 150,
-                            childAspectRatio: 7/12,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
+                            maxCrossAxisExtent: 500,
+                            mainAxisExtent: 140,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
                           ),
                           padding: const EdgeInsets.all(16),
                           cacheExtent: 800,
@@ -451,15 +451,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                   radius: const Radius.circular(2),
                   child: _isFolderNavigation
                       ? _buildFolderListView()
-                      : GridView.builder(
-                          controller: _gridScrollController,
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 150,
-                            childAspectRatio: 7/12,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                          ),
-                          padding: const EdgeInsets.all(16),
+                                                    : GridView.builder(
+                                                        controller: _gridScrollController,
+                                                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                                          maxCrossAxisExtent: 500,
+                                                          mainAxisExtent: 140,
+                                                          crossAxisSpacing: 16,
+                                                          mainAxisSpacing: 16,
+                                                        ),                          padding: const EdgeInsets.all(16),
                           cacheExtent: 800,
                           clipBehavior: Clip.hardEdge,
                           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
@@ -621,17 +620,26 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         break;
     }
 
-    return AnimeCard(
+    return HorizontalAnimeCard(
       key: ValueKey(uniqueId),
-      name: item.title,
+      title: item.title,
       imageUrl: imageUrl,
       source: _serverName,
-      useLegacyImageLoadMode: true, // 恢复旧版图片加载方式，减少并发请求
-      // 在网格中使用轻微毛玻璃，实际是否启用由全局设置控制
-      enableBackgroundBlur: true,
-      backgroundBlurSigma: 6.0,
-      enableShadow: false, // 网格中禁用阴影以降低绘制成本
+      rating: item.userRating,
+      isOnAir: false,
       onTap: () => _openMediaDetail(item),
+      summaryWidget: item.overview != null && item.overview!.isNotEmpty 
+          ? Text(
+              item.overview!,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            )
+          : null,
     );
   }
 
