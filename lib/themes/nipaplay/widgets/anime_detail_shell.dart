@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 
 class NipaplayAnimeDetailScaffold extends StatelessWidget {
   const NipaplayAnimeDetailScaffold({
     super.key,
     required this.child,
+    this.backgroundImageUrl,
   });
 
   final Widget child;
+  final String? backgroundImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -22,31 +25,55 @@ class NipaplayAnimeDetailScaffold extends StatelessWidget {
           20,
           20,
         ),
-        child: GlassmorphicContainer(
-          width: double.infinity,
-          height: double.infinity,
-          borderRadius: 15,
-          blur: 25,
-          alignment: Alignment.center,
-          border: 0.5,
-          linearGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color.fromARGB(255, 219, 219, 219).withOpacity(0.2),
-              const Color.fromARGB(255, 208, 208, 208).withOpacity(0.2),
-            ],
-            stops: const [0.1, 1],
-          ),
-          borderGradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withOpacity(0.15),
-              Colors.white.withOpacity(0.15),
-            ],
-          ),
-          child: child,
+        child: Stack(
+          children: [
+            if (backgroundImageUrl != null && backgroundImageUrl!.isNotEmpty)
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: CachedNetworkImageWidget(
+                    imageUrl: backgroundImageUrl!,
+                    fit: BoxFit.cover,
+                    shouldCompress: false,
+                    loadMode: CachedImageLoadMode.hybrid,
+                  ),
+                ),
+              ),
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  color: Colors.black.withOpacity(0.2),
+                ),
+              ),
+            ),
+            GlassmorphicContainer(
+              width: double.infinity,
+              height: double.infinity,
+              borderRadius: 15,
+              blur: 25,
+              alignment: Alignment.center,
+              border: 0.5,
+              linearGradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color.fromARGB(255, 219, 219, 219).withOpacity(0.1),
+                  const Color.fromARGB(255, 208, 208, 208).withOpacity(0.1),
+                ],
+                stops: const [0.1, 1],
+              ),
+              borderGradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withOpacity(0.15),
+                  Colors.white.withOpacity(0.15),
+                ],
+              ),
+              child: child,
+            ),
+          ],
         ),
       ),
     );

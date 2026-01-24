@@ -1786,9 +1786,25 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     );
   }
 
+  String? _getPosterUrl() {
+    final anime = _detailedAnime;
+    final sharedSummary = _sharedSummary;
+    if (anime == null && sharedSummary == null) return null;
+
+    String coverImageUrl = sharedSummary?.imageUrl ?? anime?.imageUrl ?? '';
+    if (coverImageUrl.isEmpty) return null;
+
+    if (kIsWeb) {
+      final encodedUrl = base64Url.encode(utf8.encode(coverImageUrl));
+      coverImageUrl = '/api/image_proxy?url=$encodedUrl';
+    }
+    return coverImageUrl;
+  }
+
   @override
   Widget build(BuildContext context) {
     return NipaplayAnimeDetailScaffold(
+      backgroundImageUrl: _getPosterUrl(),
       child: _buildContent(),
     );
   }

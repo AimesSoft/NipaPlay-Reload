@@ -17,6 +17,7 @@ import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class MediaServerDetailPage extends StatefulWidget {
   final String mediaId;
@@ -126,15 +127,15 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
   }
 
   // 辅助方法：获取海报URL
-  String _getPosterUrl() {
+  String _getPosterUrl({int width = 300}) {
     if (_mediaDetail?.imagePrimaryTag == null) return '';
     
     if (widget.serverType == MediaServerType.jellyfin) {
       final service = JellyfinService.instance;
-      return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300, quality: 95);
+      return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: width, quality: 95);
     } else {
       final service = EmbyService.instance;
-      return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: 300, tag: _mediaDetail!.imagePrimaryTag);
+      return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: width, tag: _mediaDetail!.imagePrimaryTag);
     }
   }
 
@@ -645,6 +646,7 @@ style: TextStyle(color: Colors.white70)));
       final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
       final enableAnimation = appearanceSettings.enablePageAnimation;
       final subtitle = _mediaDetail!.originalTitle;
+      final bool isDesktopOrTablet = globals.isDesktopOrTablet;
 
       pageContent = NipaplayAnimeDetailLayout(
         title: _mediaDetail!.name,
@@ -654,16 +656,21 @@ style: TextStyle(color: Colors.white70)));
             : 'Emby',
         onClose: () => Navigator.of(context).pop(),
         tabController: _tabController,
-        showTabs: !_isMovie,
+        showTabs: !isDesktopOrTablet,
         enableAnimation: enableAnimation,
+        isDesktopOrTablet: isDesktopOrTablet,
         infoView: RepaintBoundary(child: _buildInfoView()),
         episodesView: _isMovie
             ? null
             : RepaintBoundary(child: _buildEpisodesView()),
+        desktopView: (isDesktopOrTablet && !_isMovie)
+            ? _buildDesktopTabletLayout()
+            : null,
       );
     }
 
     return NipaplayAnimeDetailScaffold(
+      backgroundImageUrl: _mediaDetail != null ? _getPosterUrl(width: 1000) : null,
       child: pageContent,
     );
   }
@@ -727,30 +734,11 @@ style: TextStyle(color: Colors.white70)));
       addInfoRow('类型', _mediaDetail!.genres.join(' / '));
     }
 
-    return Stack(
-      children: [
-        if (backdropUrl.isNotEmpty)
-          Positioned.fill(
-            child: CachedNetworkImageWidget(
-              imageUrl: backdropUrl,
-              fit: BoxFit.cover,
-              shouldCompress: false,
-              delayLoad: true,
-              loadMode: CachedImageLoadMode.hybrid,
-              errorBuilder: (_, __) => Container(color: Colors.grey[900]),
-            ),
-          ),
-        if (backdropUrl.isNotEmpty)
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.35),
-            ),
-          ),
-        SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
               if (_mediaDetail!.originalTitle != null &&
                   _mediaDetail!.originalTitle!.isNotEmpty &&
                   _mediaDetail!.originalTitle != _mediaDetail!.name)
@@ -885,8 +873,28 @@ style: TextStyle(color: Colors.white70)));
               ],
             ],
           ),
-        ),
-      ],
+        );
+  }
+
+  Widget _buildDesktopTabletLayout() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: RepaintBoundary(child: _buildInfoView()),
+          ),
+          Container(
+            width: 1,
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            color: Colors.white.withOpacity(0.12),
+          ),
+          Expanded(
+            child: RepaintBoundary(child: _buildEpisodesView()),
+          ),
+        ],
+      ),
     );
   }
   Widget _buildEpisodesView() {
