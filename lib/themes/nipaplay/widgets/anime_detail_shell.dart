@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -9,17 +10,18 @@ class NipaplayAnimeDetailScaffold extends StatelessWidget {
     super.key,
     required this.child,
     this.backgroundImageUrl,
+    this.blurBackground = false,
   });
 
   final Widget child;
   final String? backgroundImageUrl;
+  final bool blurBackground;
 
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bgColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final Color textColor = isDark ? Colors.white : Colors.black87;
-    final Color subTextColor = isDark ? Colors.white60 : Colors.black54;
 
     return Theme(
       data: Theme.of(context).copyWith(
@@ -54,13 +56,18 @@ class NipaplayAnimeDetailScaffold extends StatelessWidget {
               children: [
                 if (backgroundImageUrl != null && backgroundImageUrl!.isNotEmpty)
                   Positioned.fill(
-                    child: Opacity(
-                      opacity: isDark ? 0.25 : 0.35, // 海报半透明叠加，日间模式稍微深一点
-                      child: CachedNetworkImageWidget(
-                        imageUrl: backgroundImageUrl!,
-                        fit: BoxFit.cover,
-                        shouldCompress: false,
-                        loadMode: CachedImageLoadMode.hybrid,
+                    child: ImageFiltered(
+                      imageFilter: blurBackground 
+                        ? ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40)
+                        : ui.ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                      child: Opacity(
+                        opacity: isDark ? 0.25 : 0.35,
+                        child: CachedNetworkImageWidget(
+                          imageUrl: backgroundImageUrl!,
+                          fit: BoxFit.cover,
+                          shouldCompress: false,
+                          loadMode: CachedImageLoadMode.hybrid,
+                        ),
                       ),
                     ),
                   ),

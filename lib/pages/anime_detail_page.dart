@@ -1058,9 +1058,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       fontSize: 14)),
               TextSpan(
                   text: bangumiEvaluationText,
-                  locale: Locale("zh-Hans", "zh"),
+                  locale: const Locale("zh-Hans", "zh"),
                   style: TextStyle(
-                      color: Colors.white.withOpacity(0.7), fontSize: 12))
+                      color: secondaryTextColor, fontSize: 12))
             ])),
             const SizedBox(height: 6),
           ],
@@ -1080,7 +1080,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                         child: CircularProgressIndicator(
                           strokeWidth: 1.5,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white.withOpacity(0.8)),
+                              secondaryTextColor),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1095,9 +1095,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     text: TextSpan(
                       style: valueStyle.copyWith(fontSize: 12),
                       children: [
-                        const TextSpan(
+                        TextSpan(
                           text: '我的Bangumi评分: ',
-                          style: TextStyle(
+                          style: const TextStyle(
                               color: Color(0xFFEB4994),
                               fontWeight: FontWeight.bold),
                         ),
@@ -1121,9 +1121,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                             ),
                           ),
                         ] else
-                          const TextSpan(
+                          TextSpan(
                             text: '未评分',
-                            style: TextStyle(color: Colors.white70),
+                            style: TextStyle(color: secondaryTextColor),
                           ),
                       ],
                     ),
@@ -1136,7 +1136,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       : _showRatingDialog,
                   style: ButtonStyle(
                     foregroundColor: MaterialStateProperty.resolveWith(
-                      (states) => Colors.white.withOpacity(
+                      (states) => textColor.withOpacity(
                         states.contains(MaterialState.disabled) ? 0.45 : 0.9,
                       ),
                     ),
@@ -1829,6 +1829,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   Widget build(BuildContext context) {
     return NipaplayAnimeDetailScaffold(
       backgroundImageUrl: _getPosterUrl(),
+      blurBackground: true, // Bangumi通常返回的是竖向封面，开启模糊以提升质感
       child: _buildContent(),
     );
   }

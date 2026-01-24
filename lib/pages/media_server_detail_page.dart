@@ -478,9 +478,12 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
   }
 
   Widget _buildRatingStars(double rating) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+
     if (rating < 0 || rating > 10) {
       return Text('N/A',
-          style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13));
+          style: TextStyle(color: textColor.withOpacity(0.85), fontSize: 13));
     }
 
     final stars = <Widget>[];
@@ -495,7 +498,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
             Icon(Ionicons.star_half, color: Colors.yellow[600], size: 16));
       } else {
         stars.add(Icon(Ionicons.star_outline,
-            color: Colors.yellow[600]?.withOpacity(0.7), size: 16));
+            color: Colors.yellow[600]?.withOpacity(isDark ? 0.7 : 0.4), size: 16));
       }
       if (i < 9) {
         stars.add(const SizedBox(width: 1));
@@ -548,6 +551,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
     if (_detailAutoMatchDialogVisible || !mounted) {
       return;
     }
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+
     _detailAutoMatchDialogVisible = true;
     BlurDialog.show(
       context: context,
@@ -555,15 +561,15 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       barrierDismissible: false,
       contentWidget: Column(
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          SizedBox(height: 8),
+        children: [
+          const SizedBox(height: 8),
           CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            valueColor: AlwaysStoppedAnimation<Color>(textColor),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
             '正在为当前条目匹配弹幕，请稍候…',
-            style: TextStyle(color: Colors.white, fontSize: 14),
+            style: TextStyle(color: textColor, fontSize: 14),
             textAlign: TextAlign.center,
           ),
         ],
@@ -595,11 +601,15 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    
     Widget pageContent;
 
     if (_isLoading && _mediaDetail == null) {
-      pageContent = const Center(
-        child: CircularProgressIndicator(color: Colors.white),
+      pageContent = Center(
+        child: CircularProgressIndicator(color: isDark ? Colors.white : Colors.black87),
       );
     } else if (_error != null && _mediaDetail == null) {
       pageContent = Center(
@@ -611,12 +621,12 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
               const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
               const SizedBox(height: 16),
               Text('加载详情失败:', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white.withOpacity(0.8))),
+style: TextStyle(color: textColor.withOpacity(0.8))),
               const SizedBox(height: 8),
               Text(
                 _error!,
                 locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white.withOpacity(0.7)),
+style: TextStyle(color: secondaryTextColor),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -630,8 +640,8 @@ style: TextStyle(color: Colors.white.withOpacity(0.7)),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('关闭', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+                child: Text('关闭', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: secondaryTextColor)),
               ),
             ],
           ),
@@ -639,8 +649,8 @@ style: TextStyle(color: Colors.white70)),
       );
     } else if (_mediaDetail == null) {
       // 理论上在成功加载后 _mediaDetail 不会为 null，除非发生意外
-      pageContent = const Center(child: Text('未找到媒体详情', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)));
+      pageContent = Center(child: Text('未找到媒体详情', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: secondaryTextColor)));
     } else {
       // 成功加载，构建详情UI
       final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
@@ -669,8 +679,13 @@ style: TextStyle(color: Colors.white70)));
       );
     }
 
+    final backdropUrl = _getBackdropUrl();
+    final posterUrl = _getPosterUrl(width: 600);
+    final hasBackdrop = backdropUrl.isNotEmpty;
+
     return NipaplayAnimeDetailScaffold(
-      backgroundImageUrl: _mediaDetail != null ? _getBackdropUrl() : null,
+      backgroundImageUrl: hasBackdrop ? backdropUrl : (posterUrl.isNotEmpty ? posterUrl : null),
+      blurBackground: !hasBackdrop, // 如果没有横向图而使用竖向图，开启高斯模糊
       child: pageContent,
     );
   }
@@ -721,7 +736,7 @@ style: TextStyle(color: Colors.white70)));
               style: valueStyle,
               children: [
                 TextSpan(text: '$label: ', style: boldWhiteKeyStyle),
-                TextSpan(text: value.trim()),
+                TextSpan(text: value.trim(), style: valueStyle),
               ],
             ),
           ),
@@ -785,7 +800,7 @@ style: TextStyle(color: Colors.white70)));
                 ],
               ),
               const SizedBox(height: 16),
-              const Divider(color: Colors.white24),
+              Divider(color: textColor.withOpacity(0.15)),
               const SizedBox(height: 8),
               if (ratingValue != null && ratingValue > 0) ...[
                 RichText(
@@ -807,6 +822,27 @@ style: TextStyle(color: Colors.white70)));
                 const SizedBox(height: 6),
               ],
               ...infoRows,
+              if (_mediaDetail!.genres.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _mediaDetail!.genres.map<Widget>((genre) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: textColor.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: textColor.withOpacity(0.12), width: 0.5),
+                      ),
+                      child: Text(
+                        genre,
+                        style: TextStyle(color: secondaryTextColor, fontSize: 12),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
               if (_mediaDetail!.cast.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 if (sectionTitleStyle != null)
@@ -1081,7 +1117,10 @@ style: TextStyle(color: secondaryTextColor)));
             episode.indexNumber != null
                 ? '${episode.indexNumber}. ${episode.name}'
                 : episode.name,
-            style: TextStyle(fontWeight: FontWeight.w500, color: textColor), // 调整颜色
+            style: TextStyle(
+              fontWeight: FontWeight.w500, 
+              color: textColor, // 关键：使用主题textColor
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1091,10 +1130,9 @@ style: TextStyle(color: secondaryTextColor)));
               if (episode.runTimeTicks != null)
                 Text(
                   _formatRuntime(episode.runTimeTicks),
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(fontSize: 12, color: secondaryTextColor),
                 ),
-              
               if (episode.overview != null && episode.overview!.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2.0),
@@ -1105,13 +1143,17 @@ style: TextStyle(fontSize: 12, color: secondaryTextColor),
                         .replaceAll('<br />', ' '),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                    locale: const Locale("zh-Hans", "zh"),
+                    style: TextStyle(fontSize: 12, color: secondaryTextColor),
                   ),
                 ),
             ],
           ),
-          trailing: Icon(Ionicons.play_circle_outline, color: secondaryTextColor, size: 22), // 添加播放按钮指示
+          trailing: Icon(
+            Ionicons.play_circle_outline, 
+            color: secondaryTextColor, 
+            size: 22,
+          ),
           onTap: () async {
             if (_isDetailAutoMatching) {
               BlurSnackBar.show(context, '正在自动匹配，请稍候');
