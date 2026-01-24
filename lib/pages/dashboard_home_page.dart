@@ -3989,25 +3989,36 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           return const SizedBox.shrink();
         }
 
-        final canScrollLeft = controller.offset > 5; // 留一点余量避免浮点数精度问题
-        final canScrollRight = controller.offset < controller.position.maxScrollExtent - 5;
+        final canScrollLeft = controller.offset > 5;
+        final canScrollRight =
+            controller.offset < controller.position.maxScrollExtent - 5;
 
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (canScrollLeft)
-              _buildScrollButton(
-                icon: Icons.arrow_back_ios_new_rounded,
-                onTap: () => _scrollToPrevious(controller, itemWidth),
-                enabled: true,
+            Opacity(
+              opacity: canScrollLeft ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !canScrollLeft,
+                child: _buildScrollButton(
+                  icon: Icons.arrow_back_ios_new_rounded,
+                  onTap: () => _scrollToPrevious(controller, itemWidth),
+                  enabled: true,
+                ),
               ),
-            if (canScrollLeft && canScrollRight) const SizedBox(width: 12),
-            if (canScrollRight)
-              _buildScrollButton(
-                icon: Icons.arrow_forward_ios_rounded,
-                onTap: () => _scrollToNext(controller, itemWidth),
-                enabled: true,
+            ),
+            const SizedBox(width: 12), // 保持固定间距
+            Opacity(
+              opacity: canScrollRight ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !canScrollRight,
+                child: _buildScrollButton(
+                  icon: Icons.arrow_forward_ios_rounded,
+                  onTap: () => _scrollToNext(controller, itemWidth),
+                  enabled: true,
+                ),
               ),
+            ),
           ],
         );
       },
