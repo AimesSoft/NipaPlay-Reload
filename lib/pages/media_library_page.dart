@@ -29,6 +29,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'dart:ui' as ui;
 
 // Define a callback type for when an episode is selected for playing
@@ -66,6 +67,9 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   final Map<String, Widget> _cardWidgetCache = {};
   
   final ScrollController _gridScrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  LocalLibrarySortType _currentSort = LocalLibrarySortType.dateAdded;
+  List<WatchHistoryItem> _filteredItems = [];
 
   static const String _prefsKeyPrefix = 'media_library_image_url_';
   
@@ -93,6 +97,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   @override
   void dispose() {
     //debugPrint('[CPU-泄漏排查] MediaLibraryPage dispose 被调用！！！');
+    _searchController.dispose();
     try {
       if (mounted) { 
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
@@ -116,6 +121,28 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         });
       }
     }
+  }
+
+  void _applyFilter() {
+    if (!mounted) return;
+    setState(() {
+      String query = _searchController.text.toLowerCase().trim();
+      _filteredItems = _uniqueLibraryItems.where((item) {
+        return item.animeName.toLowerCase().contains(query);
+      }).toList();
+
+      // 排序逻辑
+      switch (_currentSort) {
+        case LocalLibrarySortType.name:
+          _filteredItems.sort((a, b) => a.animeName.compareTo(b.animeName));
+          break;
+        case LocalLibrarySortType.dateAdded:
+          _filteredItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+          break;
+        case LocalLibrarySortType.rating:
+          break;
+      }
+    });
   }
 
   Future<void> _processAndSortHistory(List<WatchHistoryItem> watchHistory) async {
@@ -183,6 +210,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       _isLoadingInitial = false; 
       // 🔥 CPU优化：清空卡片缓存，因为数据已更新
       _cardWidgetCache.clear();
+      _applyFilter();
     });
     _fetchAndPersistFullDetailsInBackground(); 
   }
@@ -656,34 +684,46 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
       );
     }
 
-    return Stack(
+    return Column(
       children: [
-        RepaintBoundary(
-          child: Scrollbar(
-            controller: _gridScrollController,
-            thickness: kIsWeb ? 4 : (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) ? 0 : 4,
-            radius: const Radius.circular(2),
-            child: GridView.builder(
-              controller: _gridScrollController,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 500,
-                mainAxisExtent: 140,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-              cacheExtent: 800,
-              clipBehavior: Clip.hardEdge,
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: true,
-              itemCount: _uniqueLibraryItems.length,
-              itemBuilder: (context, index) {
-                // 🔥 CPU优化：添加itemBuilder监控
-                if (index % 20 == 0) {
-                  //debugPrint('[媒体库CPU] GridView itemBuilder - 索引: $index/${_uniqueLibraryItems.length}');
-                }
-                final historyItem = _uniqueLibraryItems[index];
+        LocalLibraryControlBar(
+          searchController: _searchController,
+          currentSort: _currentSort,
+          onSearchChanged: (val) => _applyFilter(),
+          onSortChanged: (type) {
+            _currentSort = type;
+            _applyFilter();
+          },
+        ),
+        Expanded(
+          child: Stack(
+            children: [
+              RepaintBoundary(
+                child: Scrollbar(
+                  controller: _gridScrollController,
+                  thickness: kIsWeb ? 4 : (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) ? 0 : 4,
+                  radius: const Radius.circular(2),
+                  child: GridView.builder(
+                    controller: _gridScrollController,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 500,
+                      mainAxisExtent: 140,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                    cacheExtent: 800,
+                    clipBehavior: Clip.hardEdge,
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: true,
+                    itemCount: _filteredItems.length,
+                    itemBuilder: (context, index) {
+                      // 🔥 CPU优化：添加itemBuilder监控
+                      if (index % 20 == 0) {
+                        //debugPrint('[媒体库CPU] GridView itemBuilder - 索引: $index/${_filteredItems.length}');
+                      }
+                      final historyItem = _filteredItems[index];
                 final animeId = historyItem.animeId;
                 
                 // 🔥 CPU优化：使用文件路径作为缓存键，检查是否已缓存
@@ -788,6 +828,9 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
           ),
         ),
       ],
+    ),
+    ),
+    ],
     );
   }
 }
