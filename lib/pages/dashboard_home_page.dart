@@ -1692,9 +1692,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.video_library_outlined,
-                              color: Colors.white54,
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white54
+                                  : Colors.black54,
                               size: 48,
                             ),
                             const SizedBox(height: 16),
@@ -1702,7 +1704,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                               jellyfinProvider.isConnected || embyProvider.isConnected
                                   ? '正在加载内容...'
                                   : '连接媒体服务器或观看本地视频以查看内容',
-                              style: const TextStyle(color: Colors.white54, fontSize: 16),
+                              style: TextStyle(
+                                color: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white54
+                                    : Colors.black54,
+                                fontSize: 16,
+                              ),
                             ),
                           ],
                         ),
@@ -1769,11 +1776,16 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           borderRadius: BorderRadius.circular(16),
           color: Colors.white10,
         ),
-        child: const Center(
+        child: Center(
           child: Text(
             '暂无推荐内容',
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white54, fontSize: 16),
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white54
+                  : Colors.black54,
+              fontSize: 16,
+            ),
           ),
         ),
       );
@@ -2354,14 +2366,16 @@ style: TextStyle(
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       '继续播放',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white,
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.black,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
@@ -2381,11 +2395,16 @@ style: TextStyle(
                   borderRadius: BorderRadius.circular(12),
                   color: Colors.white10,
                 ),
-                child: const Center(
+                child: Center(
                   child: Text(
                     '暂无播放记录',
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white54, fontSize: 16),
+                    locale: const Locale("zh-Hans", "zh"),
+                    style: TextStyle(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white54
+                          : Colors.black54,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               )
@@ -2464,8 +2483,10 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
             // 媒体名称
             Text(
               item.animeName.isNotEmpty ? item.animeName : path.basename(item.filePath),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.black,
                 fontSize: 16, // 增加字体大小
                 fontWeight: FontWeight.bold,
               ),
@@ -2479,8 +2500,10 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
             if (item.episodeTitle != null)
               Text(
                 item.episodeTitle!,
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white70
+                      : Colors.black87,
                   fontSize: 14, // 增加字体大小
                 ),
                 maxLines: 1,
@@ -2509,8 +2532,10 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
@@ -2622,7 +2647,6 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
           title: name,
           imageUrl: imageUrl,
           onTap: () => onItemTap(item),
-          isOnAir: false,
           source: sourceLabel,
           rating: rating,
           summary: summary,

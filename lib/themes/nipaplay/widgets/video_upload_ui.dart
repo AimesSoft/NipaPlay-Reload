@@ -49,132 +49,46 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
       );
     }
 
-    // 使用 Material 版本（保持原有逻辑）
-    final appearanceProvider = Provider.of<AppearanceSettingsProvider>(context);
-    final bool enableBlur = appearanceProvider.enableWidgetBlurEffect;
+    // 使用 Material 版本（新的设计）
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
 
     return Center(
-      child: GlassmorphicContainer(
-        width: 300,
-        height: 250,
-        borderRadius: 20,
-        blur: enableBlur ? 20 : 0,
-        alignment: Alignment.center,
-        border: 1,
-        linearGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFffffff).withOpacity(0.1),
-            const Color(0xFFFFFFFF).withOpacity(0.05),
-          ],
-        ),
-        borderGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFffffff).withOpacity(0.5),
-            const Color((0xFFFFFFFF)).withOpacity(0.5),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.video_library,
-              size: 64,
-              color: Colors.white,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '诶？还没有在播放的视频！',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: textColor,
+              fontSize: 18,
+              fontWeight: FontWeight.normal,
             ),
-            const SizedBox(height: 16),
-            const Text(
-              '上传视频开始播放',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 24),
-            MouseRegion(
-              onEnter: (_) => setState(() => _isHovered = true),
-              onExit: (_) => setState(() => _isHovered = false),
-              cursor: SystemMouseCursors.click,
+          ),
+          const SizedBox(width: 8), // 间距
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _isHovered = true),
+            onExit: (_) => setState(() => _isHovered = false),
+            child: GestureDetector(
+              onTap: _handleUploadVideo,
               child: AnimatedScale(
-                duration: const Duration(milliseconds: 150),
-                scale: _isPressed
-                    ? 0.95
-                    : _isHovered
-                        ? 1.05
-                        : 1.0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 150),
-                  opacity: _isHovered ? 0.8 : 1.0,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      children: [
-                        GlassmorphicContainer(
-                          width: 150,
-                          height: 50,
-                          borderRadius: 12,
-                          blur: enableBlur ? 10 : 0,
-                          alignment: Alignment.center,
-                          border: 1,
-                          linearGradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              const Color(0xFFffffff)
-                                  .withOpacity(_isHovered ? 0.15 : 0.1),
-                              const Color(0xFFFFFFFF)
-                                  .withOpacity(_isHovered ? 0.1 : 0.05),
-                            ],
-                          ),
-                          borderGradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              const Color(0xFFffffff)
-                                  .withOpacity(_isHovered ? 0.7 : 0.5),
-                              const Color((0xFFFFFFFF))
-                                  .withOpacity(_isHovered ? 0.7 : 0.5),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Text(
-                              '选择视频',
-                              locale: Locale("zh-Hans", "zh"),
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTapDown: (_) =>
-                                  setState(() => _isPressed = true),
-                              onTapUp: (_) =>
-                                  setState(() => _isPressed = false),
-                              onTapCancel: () =>
-                                  setState(() => _isPressed = false),
-                              onTap: _handleUploadVideo,
-                              splashColor: Colors.white.withOpacity(0.2),
-                              highlightColor: Colors.white.withOpacity(0.1),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                duration: const Duration(milliseconds: 200),
+                scale: _isHovered ? 1.2 : 1.0, // 悬浮时放大 1.2 倍
+                child: Text(
+                  '选择文件',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 32, // 大号字体
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

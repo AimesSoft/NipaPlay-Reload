@@ -626,7 +626,6 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       imageUrl: imageUrl,
       source: _serverName,
       rating: item.userRating,
-      isOnAir: false,
       onTap: () => _openMediaDetail(item),
       summary: item.overview,
     );

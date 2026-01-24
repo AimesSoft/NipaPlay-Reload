@@ -140,7 +140,6 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
               imageUrl: anime.imageUrl ?? '',
               source: provider.activeHost?.displayName,
               rating: null,
-              isOnAir: false,
               onTap: () => _openEpisodeSheet(context, provider, anime),
             );
           },

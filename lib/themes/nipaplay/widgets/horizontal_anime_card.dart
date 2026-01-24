@@ -6,7 +6,6 @@ class HorizontalAnimeCard extends StatelessWidget {
   final String imageUrl;
   final String title;
   final double? rating;
-  final bool isOnAir;
   final String? source;
   final String? summary;
   final VoidCallback onTap;
@@ -17,7 +16,6 @@ class HorizontalAnimeCard extends StatelessWidget {
     required this.title,
     required this.onTap,
     this.rating,
-    this.isOnAir = false,
     this.source,
     this.summary,
   });
@@ -80,43 +78,34 @@ class HorizontalAnimeCard extends StatelessWidget {
                   Row(
                     children: [
                       if (rating != null && rating! > 0) ...[
-                        const Icon(Ionicons.star, size: 14, color: Colors.amber),
+                        Icon(
+                          Ionicons.star,
+                          size: 14,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           rating!.toStringAsFixed(1),
-                          style: const TextStyle(
-                            color: Colors.amber,
+                          style: TextStyle(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.black,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(width: 12),
                       ],
-                      if (isOnAir)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.green.withValues(alpha: 0.5), width: 0.5),
-                          ),
-                          child: const Text(
-                            '放送中',
-                            style: TextStyle(color: Colors.green, fontSize: 10),
-                          ),
-                        ),
                       if (source != null) ...[
-                        if (isOnAir) const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 0.5),
-                          ),
-                          child: Text(
-                            source!,
-                            style: const TextStyle(color: Colors.blueAccent, fontSize: 10),
+                        Text(
+                          source!,
+                          style: TextStyle(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.black,
+                            fontSize: 10,
                           ),
                         ),
                       ],

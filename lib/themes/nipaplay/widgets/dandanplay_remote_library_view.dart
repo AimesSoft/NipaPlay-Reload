@@ -274,7 +274,6 @@ class _DandanplayRemoteLibraryViewState
             imageUrl: coverUrl,
             source: '弹弹play',
             rating: null,
-            isOnAir: false,
             onTap: () => _openAnimeDetail(group, provider),
             summary: summary,
           );
@@ -288,7 +287,6 @@ class _DandanplayRemoteLibraryViewState
       imageUrl: coverUrl,
       source: '弹弹play',
       rating: null,
-      isOnAir: false,
       onTap: () => _openAnimeDetail(group, provider),
       summary: null,
     );

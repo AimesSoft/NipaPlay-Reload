@@ -212,7 +212,6 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
                   imageUrl: anime.imageUrl,
                   title: anime.nameCn.isNotEmpty ? anime.nameCn : anime.name,
                   rating: anime.rating,
-                  isOnAir: anime.isOnAir ?? false,
                   onTap: () => _showAnimeDetail(anime),
                   summary: summary,
                 );
