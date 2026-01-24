@@ -26,7 +26,12 @@ List<Widget> createTabLabels() {
 
 class HoverZoomTab extends StatefulWidget {
   final String text;
-  const HoverZoomTab({super.key, required this.text});
+  final double fontSize;
+  const HoverZoomTab({
+    super.key,
+    required this.text,
+    this.fontSize = 20,
+  });
 
   @override
   State<HoverZoomTab> createState() => _HoverZoomTabState();
@@ -46,13 +51,13 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: AnimatedScale(
-        scale: _isHovered ? 1.2 : 1.0,
+        scale: _isHovered ? 1.1 : 1.0,
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
         child: AnimatedDefaultTextStyle(
           style: defaultStyle.copyWith(
             color: _isHovered ? highlightColor : defaultStyle.color,
-            fontSize: 20,
+            fontSize: widget.fontSize,
             fontWeight: FontWeight.bold,
           ),
           duration: const Duration(milliseconds: 200),

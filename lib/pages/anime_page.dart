@@ -33,6 +33,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
+import 'package:nipaplay/pages/tab_labels.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -494,38 +495,58 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         }
         
         // 动态生成标签
-        final List<Tab> tabs = [
-          const Tab(text: "本地媒体库"),
-          const Tab(text: "库管理"),
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        final List<Widget> tabs = [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(text: "本地媒体库", fontSize: 18),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(text: "库管理", fontSize: 18),
+          ),
         ];
-        
+
         if (_hasSharedRemoteHosts) {
-          tabs.add(const Tab(text: "共享媒体"));
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(text: "共享媒体", fontSize: 18),
+          ));
         }
 
         if (_isDandanConnected) {
-          tabs.add(const Tab(text: "弹弹play"));
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(text: "弹弹play", fontSize: 18),
+          ));
         }
 
         if (_isJellyfinConnected) {
-          tabs.add(const Tab(text: "Jellyfin"));
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(text: "Jellyfin", fontSize: 18),
+          ));
         }
-        
+
         if (_isEmbyConnected) {
-          tabs.add(const Tab(text: "Emby"));
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(text: "Emby", fontSize: 18),
+          ));
         }
-        
+
         // 验证标签数量与内容数量是否匹配
         if (tabs.length != pageChildren.length || tabs.length != _tabCount) {
-          print('警告：标签数量(${tabs.length})、内容数量(${pageChildren.length})与预期数量($_tabCount)不匹配');
+          print(
+              '警告：标签数量(${tabs.length})、内容数量(${pageChildren.length})与预期数量($_tabCount)不匹配');
         }
-        
+
         return LayoutBuilder(
           builder: (context, constraints) {
             // 检查可用高度，如果太小则使用最小安全布局
             final availableHeight = constraints.maxHeight;
             final isHeightConstrained = availableHeight < 100; // 小于100像素视为高度受限
-            
+
             if (isHeightConstrained) {
               // 高度受限时，使用简化布局避免溢出
               return SizedBox(
@@ -533,41 +554,43 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 child: const Center(
                   child: Text(
                     '布局空间不足',
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70, fontSize: 12),
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),
               );
             }
-            
+
             return Column(
               children: [
                 // TabBar - 使用Flexible包装以防溢出
                 Flexible(
                   flex: 0,
-                  child: TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    tabs: tabs,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.white70,
-                    labelStyle: const TextStyle(
-                      fontSize: 24, 
-                      fontWeight: FontWeight.bold
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12.0, right: 32.0),
+                    child: TabBar(
+                      controller: _tabController,
+                      isScrollable: true,
+                      tabs: tabs,
+                      labelColor: isDarkMode ? Colors.white : Colors.black,
+                      unselectedLabelColor:
+                          isDarkMode ? Colors.white60 : Colors.black54,
+                      labelPadding: const EdgeInsets.only(bottom: 12.0),
+                      indicatorPadding: EdgeInsets.zero,
+                      indicator: _CustomTabIndicator(
+                        indicatorHeight: 3.0,
+                        indicatorColor: isDarkMode ? Colors.white : Colors.black,
+                        radius: 30.0,
+                      ),
+                      tabAlignment: TabAlignment.start,
+                      splashFactory: NoSplash.splashFactory,
+                      overlayColor: WidgetStateProperty.all(Colors.transparent),
+                      dividerColor: isDarkMode
+                          ? const Color.fromARGB(59, 255, 255, 255)
+                          : const Color.fromARGB(59, 0, 0, 0),
+                      dividerHeight: 3.0,
+                      indicatorSize: TabBarIndicatorSize.label,
                     ),
-                    indicatorPadding: const EdgeInsets.only(
-                      top: 45, 
-                      left: 0, 
-                      right: 0
-                    ),
-                    indicator: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    tabAlignment: TabAlignment.start,
-                    dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                    dividerHeight: 3.0,
-                    indicatorSize: TabBarIndicatorSize.tab,
                   ),
                 ),
                 // 内容区域 - 确保占用剩余所有空间
@@ -678,18 +701,12 @@ class _MouseDragScrollWrapperState extends State<_MouseDragScrollWrapper> {
         if (_isDragging && widget.scrollController.hasClients) {
           final double delta = _lastPanPosition - event.position.dx;
           _lastPanPosition = event.position.dx;
-          
-          // 计算新的滚动位置
-          final double newScrollOffset = widget.scrollController.offset + delta;
-          
-          // 限制滚动范围
-          final double maxScrollExtent = widget.scrollController.position.maxScrollExtent;
-          final double minScrollExtent = widget.scrollController.position.minScrollExtent;
-          
-          final double clampedOffset = newScrollOffset.clamp(minScrollExtent, maxScrollExtent);
-          
-          // 应用滚动
-          widget.scrollController.jumpTo(clampedOffset);
+          widget.scrollController.jumpTo(
+            (widget.scrollController.offset + delta).clamp(
+              0.0,
+              widget.scrollController.position.maxScrollExtent,
+            ),
+          );
         }
       },
       onPointerUp: (PointerUpEvent event) {
@@ -698,10 +715,49 @@ class _MouseDragScrollWrapperState extends State<_MouseDragScrollWrapper> {
       onPointerCancel: (PointerCancelEvent event) {
         _isDragging = false;
       },
-      child: MouseRegion(
-        cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
-        child: widget.child,
-      ),
+      child: widget.child,
+    );
+  }
+}
+
+// 自定义Tab指示器
+class _CustomTabIndicator extends Decoration {
+  final double indicatorHeight;
+  final Color indicatorColor;
+  final double radius;
+
+  const _CustomTabIndicator({
+    required this.indicatorHeight,
+    required this.indicatorColor,
+    required this.radius,
+  });
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _CustomPainter(this, onChanged);
+  }
+}
+
+class _CustomPainter extends BoxPainter {
+  final _CustomTabIndicator decoration;
+
+  _CustomPainter(this.decoration, VoidCallback? onChanged) : super(onChanged);
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    assert(configuration.size != null);
+    // 将指示器绘制在TabBar的底部
+    final Rect rect = Offset(
+          offset.dx,
+          (configuration.size!.height - decoration.indicatorHeight),
+        ) &
+        Size(configuration.size!.width, decoration.indicatorHeight);
+    final Paint paint = Paint();
+    paint.color = decoration.indicatorColor;
+    paint.style = PaintingStyle.fill;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
+      paint,
     );
   }
 }
