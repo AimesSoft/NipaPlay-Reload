@@ -505,6 +505,27 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         const Divider(color: Colors.white12, height: 1),
 
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return SettingsItem.toggle(
+              title: '时间轴截图预览',
+              subtitle: '进度条悬停时显示缩略图（仅本地/WebDAV/SMB/共享媒体库生效）',
+              icon: Icons.photo_size_select_small_outlined,
+              value: videoState.timelinePreviewEnabled,
+              onChanged: (bool value) async {
+                await videoState.setTimelinePreviewEnabled(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
+                );
+              },
+            );
+          },
+        ),
+
+        const Divider(color: Colors.white12, height: 1),
+
         if (globals.isDesktop) ...[
           Consumer<VideoPlayerState>(
             builder: (context, videoState, child) {

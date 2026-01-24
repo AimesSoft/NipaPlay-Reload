@@ -125,6 +125,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _spoilerDanmakuPendingTexts = null;
       _spoilerDanmakuPendingTargetVideoPath = null;
       _subtitleManager.clearSubtitleTrackInfo();
+      _resetTimelinePreviewState();
       _isAppBarHidden = false; // 重置平板设备菜单栏隐藏状态
 
       // 重置系统UI显示状态

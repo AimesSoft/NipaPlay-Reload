@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
-import 'tooltip_bubble.dart';
+import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
+
+import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 class VideoProgressBar extends StatefulWidget {
@@ -35,9 +37,13 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
   bool _isThumbHovered = false;
   OverlayEntry? _overlayEntry;
   DateTime? _lastSeekTime;
+  Timer? _previewDebounceTimer;
+  String? _hoverThumbnailPath;
+  int? _hoverBucket;
 
   @override
   void dispose() {
+    _previewDebounceTimer?.cancel();
     _removeOverlay();
     super.dispose();
   }
@@ -47,7 +53,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
     _overlayEntry = null;
   }
 
-  void _showOverlay(BuildContext context, double progress) {
+  void _showOverlay(BuildContext context, double progress,
+      {Duration? displayTime, String? thumbnailPath}) {
     _removeOverlay();
     
     final RenderBox? sliderBox = _sliderKey.currentContext?.findRenderObject() as RenderBox?;
@@ -55,8 +62,15 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
 
     final position = sliderBox.localToGlobal(Offset.zero);
     final size = sliderBox.size;
-    final bubbleX = position.dx + (progress * size.width) - 20;
-    final bubbleY = position.dy - 40;
+    final hasPreview = thumbnailPath != null && thumbnailPath.isNotEmpty;
+    final previewWidth = globals.isPhone ? 140.0 : 200.0;
+    final previewHeight = previewWidth * 9 / 16;
+    final text = widget.formatDuration(displayTime ?? widget.videoState.position);
+    final textWidth = _measureTextWidth(text);
+    final bubbleWidth = hasPreview ? previewWidth + 16 : textWidth + 24;
+    final bubbleHeight = hasPreview ? previewHeight + 46 : 40.0;
+    final bubbleX = position.dx + (progress * size.width) - (bubbleWidth / 2);
+    final bubbleY = position.dy - bubbleHeight - 8;
 
     _overlayEntry = OverlayEntry(
       builder: (context) => Material(
@@ -71,7 +85,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
@@ -87,13 +101,32 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                         ),
                       ],
                     ),
-                    child: Text(
-                      widget.formatDuration(widget.videoState.position),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    width: bubbleWidth,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (hasPreview)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: _buildPreviewImage(
+                              thumbnailPath!,
+                              previewWidth,
+                              previewHeight,
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6, left: 4, right: 4, bottom: 2),
+                          child: Text(
+                            text,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -155,12 +188,17 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                 _localHoverTime = time;
               });
             }
+            _handleHoverPreview(time, progress);
           } else {
             if (_localHoverTime != null) {
               setState(() {
                 _localHoverTime = null;
               });
             }
+            _previewDebounceTimer?.cancel();
+            _hoverBucket = null;
+            _hoverThumbnailPath = null;
+            _removeOverlay();
           }
         }
       },
@@ -170,17 +208,29 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
           _isThumbHovered = false;
           _localHoverTime = null;
         });
+        _previewDebounceTimer?.cancel();
+        _hoverBucket = null;
+        _hoverThumbnailPath = null;
+        _removeOverlay();
       },
       child: GestureDetector(
         onHorizontalDragStart: (details) {
           widget.onDraggingStateChange(true);
           _updateProgressFromPosition(details.localPosition);
-          _showOverlay(context, widget.videoState.progress);
+          _showOverlay(
+            context,
+            widget.videoState.progress,
+            displayTime: widget.videoState.position,
+          );
         },
         onHorizontalDragUpdate: (details) {
           _updateProgressFromPosition(details.localPosition);
           if (_overlayEntry != null) {
-            _showOverlay(context, widget.videoState.progress);
+            _showOverlay(
+              context,
+              widget.videoState.progress,
+              displayTime: widget.videoState.position,
+            );
           }
         },
         onHorizontalDragEnd: (details) {
@@ -192,7 +242,11 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         onTapDown: (details) {
           widget.onDraggingStateChange(true);
           _updateProgressFromPosition(details.localPosition);
-          _showOverlay(context, widget.videoState.progress);
+          _showOverlay(
+            context,
+            widget.videoState.progress,
+            displayTime: widget.videoState.position,
+          );
         },
         onTapUp: (details) {
           widget.onDraggingStateChange(false);
@@ -289,78 +343,69 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                       ),
                     ],
                   )
-                : TooltipBubble(
-                    text: _isHovering && _localHoverTime != null 
-                        ? widget.formatDuration(_localHoverTime!) 
-                        : '',
-                    showOnTop: true,
-                    followMouse: true,
-                    position: null,
-                    verticalOffset: 30,
-                    child: Stack(
-                      key: _sliderKey,
-                      clipBehavior: Clip.none,
-                      children: [
-                        // 背景轨道
-                        Container(
-                          height: trackHeight,
-                          margin: EdgeInsets.symmetric(vertical: verticalMargin),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(trackHeight / 2),
-                          ),
+                : Stack(
+                    key: _sliderKey,
+                    clipBehavior: Clip.none,
+                    children: [
+                      // 背景轨道
+                      Container(
+                        height: trackHeight,
+                        margin: EdgeInsets.symmetric(vertical: verticalMargin),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(trackHeight / 2),
                         ),
-                        // 进度轨道
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: verticalMargin,
-                          child: FractionallySizedBox(
-                            widthFactor: progress,
-                            alignment: Alignment.centerLeft,
-                            child: Container(
-                              height: trackHeight,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(trackHeight / 2),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.white.withOpacity(0.3),
-                                    blurRadius: 2,
-                                    spreadRadius: 0.5,
-                                  ),
-                                ],
-                              ),
+                      ),
+                      // 进度轨道
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: verticalMargin,
+                        child: FractionallySizedBox(
+                          widthFactor: progress,
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            height: trackHeight,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(trackHeight / 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withOpacity(0.3),
+                                  blurRadius: 2,
+                                  spreadRadius: 0.5,
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        // 滑块
-                        Positioned(
-                          left: (progress * constraints.maxWidth) - halfThumbSize,
-                          top: verticalMargin + (trackHeight / 2) - halfThumbSize,
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutBack,
-                              width: currentThumbSize,
-                              height: currentThumbSize,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
-                                    blurRadius: _isThumbHovered || widget.isDragging ? 6 : 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
+                      ),
+                      // 滑块
+                      Positioned(
+                        left: (progress * constraints.maxWidth) - halfThumbSize,
+                        top: verticalMargin + (trackHeight / 2) - halfThumbSize,
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutBack,
+                            width: currentThumbSize,
+                            height: currentThumbSize,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: _isThumbHovered || widget.isDragging ? 6 : 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   );
           },
         ),
@@ -385,5 +430,100 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         });
       }
     }
+  }
+
+  void _handleHoverPreview(Duration time, double progress) {
+    if (!mounted) return;
+
+    // 先展示时间气泡，避免等待缩略图时没有反馈
+    _showOverlay(
+      context,
+      progress,
+      displayTime: time,
+      thumbnailPath: widget.videoState.isTimelinePreviewAvailable
+          ? _hoverThumbnailPath
+          : null,
+    );
+
+    if (!widget.videoState.isTimelinePreviewAvailable) {
+      return;
+    }
+
+    final bucket = widget.videoState.getTimelinePreviewBucket(time);
+    if (bucket == null) return;
+    if (_hoverBucket == bucket && _hoverThumbnailPath != null) {
+      return;
+    }
+    if (_hoverBucket != bucket) {
+      _hoverThumbnailPath = null;
+    }
+    _hoverBucket = bucket;
+
+    _previewDebounceTimer?.cancel();
+    _previewDebounceTimer = Timer(const Duration(milliseconds: 120), () async {
+      final resolvedBucket = widget.videoState.getTimelinePreviewBucket(time);
+      if (resolvedBucket == null || _hoverBucket != bucket) return;
+      final previewPath = await widget.videoState.getTimelinePreview(time);
+      if (!mounted) return;
+      if (_hoverBucket != bucket) return;
+
+      if (_hoverThumbnailPath != previewPath) {
+        setState(() {
+          _hoverThumbnailPath = previewPath;
+        });
+      }
+
+      _showOverlay(
+        context,
+        progress,
+        displayTime: time,
+        thumbnailPath: previewPath,
+      );
+    });
+  }
+
+  double _measureTextWidth(String text) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout(minWidth: 0, maxWidth: double.infinity);
+    return painter.width;
+  }
+
+  Widget _buildPreviewImage(String path, double width, double height) {
+    final file = File(path);
+    if (!file.existsSync()) {
+      return _buildPreviewPlaceholder(width, height);
+    }
+    return Image.file(
+      file,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _buildPreviewPlaceholder(width, height),
+    );
+  }
+
+  Widget _buildPreviewPlaceholder(double width, double height) {
+    return Container(
+      width: width,
+      height: height,
+      color: Colors.black.withOpacity(0.2),
+      child: const Center(
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: Colors.white70,
+          size: 28,
+        ),
+      ),
+    );
   }
 }

@@ -419,6 +419,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       _precomputeVideoHash(videoPath);
 
       _duration = Duration(milliseconds: player.mediaInfo.duration);
+      unawaited(_setupTimelinePreviewForVideo(videoPath));
 
       // 对于Jellyfin流媒体，先进行同步，再获取播放位置
       bool isJellyfinStream = videoPath.startsWith('jellyfin://');

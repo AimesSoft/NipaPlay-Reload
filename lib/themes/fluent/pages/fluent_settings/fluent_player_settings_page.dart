@@ -601,6 +601,41 @@ class _FluentPlayerSettingsPageState extends State<FluentPlayerSettingsPage> {
 
               const SizedBox(height: 16),
 
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('时间轴截图预览'),
+                            const SizedBox(height: 4),
+                            Text(
+                              '鼠标悬停进度条时显示缩略图，仅本地/WebDAV/SMB/共享媒体库生效',
+                              style: FluentTheme.of(context).typography.caption,
+                            ),
+                          ],
+                        ),
+                      ),
+                      ToggleSwitch(
+                        checked: videoState.timelinePreviewEnabled,
+                        onChanged: (value) async {
+                          await videoState.setTimelinePreviewEnabled(value);
+                          if (!mounted) return;
+                          _showSuccessInfoBar(
+                            value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
               if (supportsAnime4K &&
                   _selectedKernelType == PlayerKernelType.mediaKit)
                 Card(

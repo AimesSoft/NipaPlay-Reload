@@ -24,6 +24,7 @@ import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/services/auto_sync_service.dart'; // 导入自动云同步服务
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/shared_remote_playback_sync_service.dart';
@@ -77,6 +78,7 @@ import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 import 'player_kernel_manager.dart'; // 导入播放器内核管理器
 import 'shared_remote_history_helper.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
+import 'media_source_utils.dart';
 
 part 'video_player_state/video_player_state_metadata.dart';
 part 'video_player_state/video_player_state_initialization.dart';
@@ -86,6 +88,7 @@ part 'video_player_state/video_player_state_capture.dart';
 part 'video_player_state/video_player_state_preferences.dart';
 part 'video_player_state/video_player_state_danmaku.dart';
 part 'video_player_state/video_player_state_subtitles.dart';
+part 'video_player_state/video_player_state_timeline_preview.dart';
 part 'video_player_state/video_player_state_streaming.dart';
 part 'video_player_state/video_player_state_navigation.dart';
 part 'video_player_state/video_player_state_lifecycle.dart';
@@ -254,6 +257,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
   final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
+  final String _timelinePreviewEnabledKey = 'timeline_preview_enabled';
+  bool _timelinePreviewEnabled = true; // 默认开启时间轴缩略图
+  bool _timelinePreviewSupported = false;
+  int _timelinePreviewIntervalMs = 15000;
+  final Map<int, String> _timelinePreviewCache = {};
+  final Set<int> _timelinePreviewPending = {};
+  int _timelinePreviewSessionId = 0;
+  String? _timelinePreviewDirectory;
+  String? _timelinePreviewVideoKey;
+  AbstractPlayer? _timelinePreviewPlayer;
+  PlayerKernelType? _timelinePreviewPlayerKernel;
+  String? _timelinePreviewPlayerSource;
+  Future<void> _timelinePreviewSerialTask = Future.value();
   final String _danmakuOpacityKey = 'danmaku_opacity';
   double _danmakuOpacity = 1.0; // 默认透明度
   final String _danmakuVisibleKey = 'danmaku_visible';

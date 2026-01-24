@@ -650,6 +650,41 @@ class _CupertinoPlayerSettingsPageState
           );
         },
       ),
+      const SizedBox(height: 16),
+      Consumer<VideoPlayerState>(
+        builder: (context, videoState, child) {
+          return CupertinoSettingsGroupCard(
+            margin: EdgeInsets.zero,
+            backgroundColor: sectionBackground,
+            addDividers: true,
+            dividerIndent: 16,
+            children: [
+              CupertinoSettingsTile(
+                leading: Icon(
+                  CupertinoIcons.photo_on_rectangle,
+                  color: resolveSettingsIconColor(context),
+                ),
+                title: const Text('时间轴截图预览'),
+                subtitle:
+                    const Text('悬停进度条时显示缩略图（本地/WebDAV/SMB/共享媒体库生效）'),
+                trailing: AdaptiveSwitch(
+                  value: videoState.timelinePreviewEnabled,
+                  onChanged: (value) async {
+                    await videoState.setTimelinePreviewEnabled(value);
+                    if (!mounted) return;
+                    AdaptiveSnackBar.show(
+                      context,
+                      message: value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
+                      type: AdaptiveSnackBarType.success,
+                    );
+                  },
+                ),
+                backgroundColor: tileBackground,
+              ),
+            ],
+          );
+        },
+      ),
       if (_selectedKernelType == PlayerKernelType.mediaKit)
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
