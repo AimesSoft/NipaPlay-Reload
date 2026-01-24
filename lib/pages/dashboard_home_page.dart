@@ -2548,6 +2548,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
     String uniqueId = '';
     String? sourceLabel;
     double? rating;
+    Widget? summaryWidget;
     
     if (item is JellyfinMediaItem) {
       name = item.name;
@@ -2559,6 +2560,18 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
       } catch (e) {
         imageUrl = '';
       }
+      if (item.overview != null && item.overview!.isNotEmpty) {
+        summaryWidget = Text(
+          item.overview!,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 13,
+            height: 1.4,
+          ),
+        );
+      }
     } else if (item is EmbyMediaItem) {
       name = item.name;
       uniqueId = 'emby_${item.id}';
@@ -2569,22 +2582,100 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
       } catch (e) {
         imageUrl = '';
       }
+      if (item.overview != null && item.overview!.isNotEmpty) {
+        summaryWidget = Text(
+          item.overview!,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 13,
+            height: 1.4,
+          ),
+        );
+      }
     } else if (item is WatchHistoryItem) {
       name = item.animeName.isNotEmpty ? item.animeName : (item.episodeTitle ?? '未知动画');
       uniqueId = 'history_${item.animeId ?? 0}_${item.filePath.hashCode}';
       imageUrl = item.thumbnailPath ?? '';
       sourceLabel = '本地';
+      // 观看历史如果有animeId也可以尝试获取简介
+      if (_isValidAnimeId(item.animeId)) {
+        summaryWidget = FutureBuilder<BangumiAnime>(
+          future: BangumiService.instance.getAnimeDetails(item.animeId!),
+          builder: (context, snapshot) {
+            if (snapshot.hasData && snapshot.data!.summary != null) {
+              return Text(
+                snapshot.data!.summary!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              );
+            }
+            return const SizedBox();
+          },
+        );
+      }
     } else if (item is LocalAnimeItem) {
       name = item.animeName;
       uniqueId = 'local_${item.animeId}_${item.animeName}';
+      // 优先使用item中的imageUrl，如果为空则尝试从缓存获取
       imageUrl = item.imageUrl ?? '';
+      if (imageUrl.isEmpty && _isValidAnimeId(item.animeId)) {
+         imageUrl = _localImageCache[item.animeId] ?? '';
+      }
       sourceLabel = '本地';
+      
+      if (_isValidAnimeId(item.animeId)) {
+        summaryWidget = FutureBuilder<BangumiAnime>(
+          future: BangumiService.instance.getAnimeDetails(item.animeId!),
+          builder: (context, snapshot) {
+            if (snapshot.hasData && snapshot.data!.summary != null) {
+              return Text(
+                snapshot.data!.summary!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              );
+            }
+            return const SizedBox();
+          },
+        );
+      }
     } else if (item is DandanplayRemoteAnimeGroup) {
       name = item.title;
       uniqueId = 'dandan_${item.animeId ?? item.title.hashCode}_${item.episodeCount}';
       imageUrl = _getDandanGroupImage(item);
       sourceLabel = '弹弹play';
       rating = null;
+      if (_isValidAnimeId(item.animeId)) {
+        summaryWidget = FutureBuilder<BangumiAnime>(
+          future: BangumiService.instance.getAnimeDetails(item.animeId!),
+          builder: (context, snapshot) {
+            if (snapshot.hasData && snapshot.data!.summary != null) {
+              return Text(
+                snapshot.data!.summary!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              );
+            }
+            return const SizedBox();
+          },
+        );
+      }
     }
 
     const double cardWidth = 320;
@@ -2601,6 +2692,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
         isOnAir: false,
         source: sourceLabel,
         rating: rating,
+        summaryWidget: summaryWidget,
       ),
     );
   }
