@@ -2548,7 +2548,8 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
     String uniqueId = '';
     String? sourceLabel;
     double? rating;
-    Widget? summaryWidget;
+    String? summaryStr;
+    Future<BangumiAnime>? detailFuture;
     
     if (item is JellyfinMediaItem) {
       name = item.name;
@@ -2561,16 +2562,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
         imageUrl = '';
       }
       if (item.overview != null && item.overview!.isNotEmpty) {
-        summaryWidget = Text(
-          item.overview!,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
-            fontSize: 13,
-            height: 1.4,
-          ),
-        );
+        summaryStr = item.overview;
       }
     } else if (item is EmbyMediaItem) {
       name = item.name;
@@ -2583,16 +2575,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
         imageUrl = '';
       }
       if (item.overview != null && item.overview!.isNotEmpty) {
-        summaryWidget = Text(
-          item.overview!,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
-            fontSize: 13,
-            height: 1.4,
-          ),
-        );
+        summaryStr = item.overview;
       }
     } else if (item is WatchHistoryItem) {
       name = item.animeName.isNotEmpty ? item.animeName : (item.episodeTitle ?? '未知动画');
@@ -2601,24 +2584,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
       sourceLabel = '本地';
       // 观看历史如果有animeId也可以尝试获取简介
       if (_isValidAnimeId(item.animeId)) {
-        summaryWidget = FutureBuilder<BangumiAnime>(
-          future: BangumiService.instance.getAnimeDetails(item.animeId!),
-          builder: (context, snapshot) {
-            if (snapshot.hasData && snapshot.data!.summary != null) {
-              return Text(
-                snapshot.data!.summary!,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              );
-            }
-            return const SizedBox();
-          },
-        );
+        detailFuture = BangumiService.instance.getAnimeDetails(item.animeId!);
       }
     } else if (item is LocalAnimeItem) {
       name = item.animeName;
@@ -2631,24 +2597,7 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
       sourceLabel = '本地';
       
       if (_isValidAnimeId(item.animeId)) {
-        summaryWidget = FutureBuilder<BangumiAnime>(
-          future: BangumiService.instance.getAnimeDetails(item.animeId!),
-          builder: (context, snapshot) {
-            if (snapshot.hasData && snapshot.data!.summary != null) {
-              return Text(
-                snapshot.data!.summary!,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              );
-            }
-            return const SizedBox();
-          },
-        );
+        detailFuture = BangumiService.instance.getAnimeDetails(item.animeId!);
       }
     } else if (item is DandanplayRemoteAnimeGroup) {
       name = item.title;
@@ -2657,44 +2606,44 @@ style: TextStyle(color: Colors.white54, fontSize: 16),
       sourceLabel = '弹弹play';
       rating = null;
       if (_isValidAnimeId(item.animeId)) {
-        summaryWidget = FutureBuilder<BangumiAnime>(
-          future: BangumiService.instance.getAnimeDetails(item.animeId!),
-          builder: (context, snapshot) {
-            if (snapshot.hasData && snapshot.data!.summary != null) {
-              return Text(
-                snapshot.data!.summary!,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              );
-            }
-            return const SizedBox();
-          },
-        );
+        detailFuture = BangumiService.instance.getAnimeDetails(item.animeId!);
       }
     }
 
     const double cardWidth = 320;
     const double cardHeight = 140;
-    
-    return SizedBox(
-      width: cardWidth,
-      height: cardHeight,
-      child: HorizontalAnimeCard(
-        key: ValueKey(uniqueId),
-        title: name,
-        imageUrl: imageUrl,
-        onTap: () => onItemTap(item),
-        isOnAir: false,
-        source: sourceLabel,
-        rating: rating,
-        summaryWidget: summaryWidget,
-      ),
-    );
+
+    Widget buildCard(String? summary) {
+      return SizedBox(
+        width: cardWidth,
+        height: cardHeight,
+        child: HorizontalAnimeCard(
+          key: ValueKey(uniqueId),
+          title: name,
+          imageUrl: imageUrl,
+          onTap: () => onItemTap(item),
+          isOnAir: false,
+          source: sourceLabel,
+          rating: rating,
+          summary: summary,
+        ),
+      );
+    }
+
+    if (detailFuture != null) {
+      return FutureBuilder<BangumiAnime>(
+        future: detailFuture,
+        builder: (context, snapshot) {
+          String? asyncSummary;
+          if (snapshot.hasData && snapshot.data!.summary != null) {
+            asyncSummary = snapshot.data!.summary;
+          }
+          return buildCard(asyncSummary);
+        },
+      );
+    }
+
+    return buildCard(summaryStr);
   }
 
   String _buildDandanRecommendedId(DandanplayRemoteAnimeGroup group) {

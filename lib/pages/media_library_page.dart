@@ -715,26 +715,12 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                       displayImage = detailData.imageUrl;
                    }
                    
-                   Widget? summary;
-                   if (detailData.summary != null && detailData.summary!.isNotEmpty) {
-                      summary = Text(
-                         detailData.summary!,
-                         maxLines: 3,
-                         overflow: TextOverflow.ellipsis,
-                         style: TextStyle(
-                           color: Colors.white.withValues(alpha: 0.6),
-                           fontSize: 13,
-                           height: 1.4,
-                         ),
-                       );
-                   }
-
                    final card = HorizontalAnimeCard(
                      imageUrl: displayImage,
                      title: nameToDisplay,
                      rating: detailData.rating,
                      source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
-                     summaryWidget: summary,
+                     summary: detailData.summary,
                      onTap: () {
                        if (animeId != null) {
                          _navigateToAnimeDetail(animeId);
@@ -765,28 +751,12 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                     // 评分
                     double? displayRating = detail?.rating;
                     
-                    // 简介
-                    Widget? summary;
-                    final String? summaryText = detail?.summary;
-                    if (summaryText != null && summaryText.isNotEmpty) {
-                       summary = Text(
-                          summaryText,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        );
-                    }
-                    
                     return HorizontalAnimeCard(
                       imageUrl: displayImage,
                       title: nameToDisplay,
                       rating: displayRating,
                       source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
-                      summaryWidget: summary,
+                      summary: detail?.summary,
                       onTap: () {
                         if (animeId != null) {
                           _navigateToAnimeDetail(animeId);

@@ -628,18 +628,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       rating: item.userRating,
       isOnAir: false,
       onTap: () => _openMediaDetail(item),
-      summaryWidget: item.overview != null && item.overview!.isNotEmpty 
-          ? Text(
-              item.overview!,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 13,
-                height: 1.4,
-              ),
-            )
-          : null,
+      summary: item.overview,
     );
   }
 

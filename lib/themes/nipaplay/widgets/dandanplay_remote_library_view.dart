@@ -260,6 +260,28 @@ class _DandanplayRemoteLibraryViewState
   ) {
     final coverUrl = _resolveCoverUrlForGroup(group, provider);
 
+    if (group.animeId != null) {
+      return FutureBuilder<BangumiAnime>(
+        future: BangumiService.instance.getAnimeDetails(group.animeId!),
+        builder: (context, snapshot) {
+          String? summary;
+          if (snapshot.hasData && snapshot.data!.summary != null) {
+            summary = snapshot.data!.summary;
+          }
+          return HorizontalAnimeCard(
+            key: ValueKey('dandan_${group.animeId ?? group.title}'),
+            title: group.title,
+            imageUrl: coverUrl,
+            source: '弹弹play',
+            rating: null,
+            isOnAir: false,
+            onTap: () => _openAnimeDetail(group, provider),
+            summary: summary,
+          );
+        },
+      );
+    }
+
     return HorizontalAnimeCard(
       key: ValueKey('dandan_${group.animeId ?? group.title}'),
       title: group.title,
@@ -268,26 +290,7 @@ class _DandanplayRemoteLibraryViewState
       rating: null,
       isOnAir: false,
       onTap: () => _openAnimeDetail(group, provider),
-      summaryWidget: group.animeId != null 
-          ? FutureBuilder<BangumiAnime>(
-              future: BangumiService.instance.getAnimeDetails(group.animeId!),
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data!.summary != null) {
-                  return Text(
-                    snapshot.data!.summary!,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  );
-                }
-                return const SizedBox();
-              },
-            )
-          : null,
+      summary: null,
     );
   }
 

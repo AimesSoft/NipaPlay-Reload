@@ -201,31 +201,22 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final anime = animes[index];
-            return HorizontalAnimeCard(
-              imageUrl: anime.imageUrl,
-              title: anime.nameCn.isNotEmpty ? anime.nameCn : anime.name,
-              rating: anime.rating,
-              isOnAir: anime.isOnAir ?? false,
-              onTap: () => _showAnimeDetail(anime),
-              summaryWidget: FutureBuilder<BangumiAnime>(
-                future: _bangumiService.getAnimeDetails(anime.id),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData && snapshot.data!.summary != null) {
-                    return Text(
-                      snapshot.data!.summary!,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    );
-                  }
-                  // Loading or no data
-                  return const SizedBox(); 
-                },
-              ),
+            return FutureBuilder<BangumiAnime>(
+              future: _bangumiService.getAnimeDetails(anime.id),
+              builder: (context, snapshot) {
+                String? summary;
+                if (snapshot.hasData && snapshot.data!.summary != null) {
+                  summary = snapshot.data!.summary;
+                }
+                return HorizontalAnimeCard(
+                  imageUrl: anime.imageUrl,
+                  title: anime.nameCn.isNotEmpty ? anime.nameCn : anime.name,
+                  rating: anime.rating,
+                  isOnAir: anime.isOnAir ?? false,
+                  onTap: () => _showAnimeDetail(anime),
+                  summary: summary,
+                );
+              },
             );
           },
           childCount: animes.length,

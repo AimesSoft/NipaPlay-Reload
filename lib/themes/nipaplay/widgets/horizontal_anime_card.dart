@@ -8,7 +8,7 @@ class HorizontalAnimeCard extends StatelessWidget {
   final double? rating;
   final bool isOnAir;
   final String? source;
-  final Widget? summaryWidget;
+  final String? summary;
   final VoidCallback onTap;
 
   const HorizontalAnimeCard({
@@ -19,7 +19,7 @@ class HorizontalAnimeCard extends StatelessWidget {
     this.rating,
     this.isOnAir = false,
     this.source,
-    this.summaryWidget,
+    this.summary,
   });
 
   @override
@@ -67,8 +67,10 @@ class HorizontalAnimeCard extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black87,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -122,8 +124,19 @@ class HorizontalAnimeCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   // Summary
-                  if (summaryWidget != null)
-                    summaryWidget!,
+                  if (summary != null && summary!.isNotEmpty)
+                    Text(
+                      summary!,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white.withValues(alpha: 0.6)
+                            : Colors.black54,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
                 ],
               ),
             ),
