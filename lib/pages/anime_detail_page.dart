@@ -1045,23 +1045,25 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           const SizedBox(height: 8),
           if (bangumiRatingValue is num && bangumiRatingValue > 0) ...[
             RichText(
-                text: TextSpan(children: [
-              TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
-              WidgetSpan(
-                  child: _buildRatingStars(bangumiRatingValue.toDouble())),
-              TextSpan(
-                  text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                      color: Colors.yellow[600],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14)),
-              TextSpan(
-                  text: bangumiEvaluationText,
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                      color: secondaryTextColor, fontSize: 12))
-            ])),
+                text: TextSpan(
+                    style: valueStyle, // 基础样式
+                    children: [
+                      TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
+                      WidgetSpan(
+                          child: _buildRatingStars(bangumiRatingValue.toDouble())),
+                      TextSpan(
+                          text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
+                          locale: const Locale("zh-Hans", "zh"),
+                          style: TextStyle(
+                              color: Colors.yellow[600],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14)),
+                      TextSpan(
+                          text: bangumiEvaluationText,
+                          locale: const Locale("zh-Hans", "zh"),
+                          style: TextStyle(
+                              color: secondaryTextColor, fontSize: 12))
+                    ])),
             const SizedBox(height: 6),
           ],
 
@@ -1257,9 +1259,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                     fontWeight: FontWeight.normal)),
                             TextSpan(
                                 text: score.toStringAsFixed(1),
-                                locale: Locale("zh-Hans", "zh"),
+                                locale: const Locale("zh-Hans", "zh"),
                                 style: TextStyle(
-                                    color: Colors.white.withOpacity(0.95)))
+                                    color: textColor.withOpacity(0.95)))
                           ]));
                     }).toList())),
             RichText(
@@ -1267,7 +1269,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 style: valueStyle,
                 children: [
                   TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
-                  TextSpan(text: anime.airDate ?? '未知'),
+                  TextSpan(text: anime.airDate ?? '未知', style: valueStyle),
                 ],
               ),
             ),
@@ -1526,7 +1528,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   if (progress > 0.95) {
                     leadingIcon = Icon(Ionicons.checkmark_circle,
                         color: Colors.greenAccent.withOpacity(0.8), size: 16);
-                    tileColor = Colors.white.withOpacity(0.03);
+                    tileColor = textColor.withOpacity(0.03);
                     progressText = '已看完';
                   } else if (progress > 0.01) {
                     leadingIcon = Icon(Ionicons.play_circle_outline,
@@ -1543,8 +1545,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   } else if (historySnapshot.connectionState ==
                           ConnectionState.done &&
                       historyItem == null) {
-                    leadingIcon = const Icon(Ionicons.play_circle_outline,
-                        color: Colors.white38, size: 16);
+                    leadingIcon = Icon(Ionicons.play_circle_outline,
+                        color: secondaryTextColor.withOpacity(0.4), size: 16);
                     progressText = '未找到';
                   }
 
@@ -1559,7 +1561,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                             child: Text(episode.title,
                                 locale: const Locale('zh-Hans', 'zh'),
                                 style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9),
+                                    color: textColor.withOpacity(0.9),
                                     fontSize: 13),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
@@ -1634,7 +1636,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                             : (progressText == '共享媒体'
                                                 ? Colors.blueAccent
                                                     .withOpacity(0.85)
-                                                : Colors.white54))),
+                                                : secondaryTextColor.withOpacity(0.6)))),
                                 fontSize: 11,
                               ),
                             ),
@@ -2109,19 +2111,22 @@ class _HoverableTagState extends State<_HoverableTag> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    
     final bool enableHover = !globals.isTouch;
     final bool isHovered = enableHover && _isHovered;
     final Color borderColor = isHovered
-        ? Colors.white.withOpacity(0.6)
-        : Colors.white.withOpacity(0.25);
+        ? textColor.withOpacity(0.6)
+        : textColor.withOpacity(0.25);
     final List<Color> backgroundColors = isHovered
         ? [
-            Colors.white.withOpacity(0.22),
-            Colors.white.withOpacity(0.12),
+            textColor.withOpacity(0.22),
+            textColor.withOpacity(0.12),
           ]
         : [
-            Colors.white.withOpacity(0.12),
-            Colors.white.withOpacity(0.06),
+            textColor.withOpacity(0.12),
+            textColor.withOpacity(0.06),
           ];
 
     Widget chip = AnimatedContainer(
@@ -2142,7 +2147,7 @@ class _HoverableTagState extends State<_HoverableTag> {
         locale: const Locale("zh-Hans", "zh"),
         style: TextStyle(
           fontSize: 12,
-          color: isHovered ? Colors.white : Colors.white.withOpacity(0.9),
+          color: isHovered ? textColor : textColor.withOpacity(0.9),
           fontWeight: isHovered ? FontWeight.w600 : FontWeight.w500,
         ),
       ),
