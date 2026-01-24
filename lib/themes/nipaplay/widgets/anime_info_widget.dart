@@ -68,15 +68,15 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                 width: double.infinity,
                 height: 40,
                 borderRadius: 24,
-                blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
+                blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
                 alignment: Alignment.center,
                 border: 1,
                 linearGradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    const Color(0xFF808080).withOpacity(0.3),
-                    const Color(0xFF808080).withOpacity(0.3),
+                    const Color(0xFFFFFFFF).withOpacity(0.1),
+                    const Color(0xFFFFFFFF).withOpacity(0.1),
                   ],
                 ),
                 borderGradient: LinearGradient(

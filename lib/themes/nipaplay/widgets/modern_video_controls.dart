@@ -198,8 +198,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
         return Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
             // 移除颜色随模式变化的逻辑，直接使用统一的毛玻璃效果
-            final backgroundColor = Colors.white.withOpacity(0.15);
-            final borderColor = Colors.white.withOpacity(0.3);
+            final backgroundColor = Colors.white.withOpacity(0.08);
+            final borderColor = Colors.white.withOpacity(0.2);
 
             return Focus(
               canRequestFocus: true,
@@ -228,7 +228,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                             right: Radius.circular(30),
                           ),
                           child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 50 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 50 : 0),
+                            filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
                             child: Container(
                               decoration: BoxDecoration(
                                 borderRadius: const BorderRadius.horizontal(
@@ -237,7 +237,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
+                                    color: Colors.black.withOpacity(0.05),
                                     blurRadius: 8,
                                     offset: const Offset(0, 4),
                                     spreadRadius: 0,

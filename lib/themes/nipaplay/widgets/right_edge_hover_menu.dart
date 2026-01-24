@@ -105,8 +105,8 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
                         end: Alignment.centerRight,
                         colors: [
                           Colors.transparent,
+                          Colors.white.withOpacity(0.1),
                           Colors.white.withOpacity(0.15),
-                          Colors.white.withOpacity(0.25),
                         ],
                         stops: const [0.0, 0.7, 1.0],
                       )

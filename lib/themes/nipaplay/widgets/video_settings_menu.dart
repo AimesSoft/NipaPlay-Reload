@@ -210,10 +210,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
           ),
         ).build();
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final backgroundColor = isDarkMode 
-            ? const Color.fromARGB(255, 130, 130, 130).withOpacity(0.5)
-            : const Color.fromARGB(255, 193, 193, 193).withOpacity(0.5);
-        final borderColor = Colors.white.withOpacity(0.5);
+        final backgroundColor = Colors.white.withOpacity(0.08);
+        final borderColor = Colors.white.withOpacity(0.2);
 
         return Material(
           type: MaterialType.transparency,
@@ -260,7 +258,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
+                                  color: Colors.black.withOpacity(0.05),
                                   blurRadius: 8,
                                   offset: const Offset(0, 4),
                                   spreadRadius: 0,
@@ -339,7 +337,7 @@ style: TextStyle(
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withOpacity(0.2),
                 width: 0.5,
               ),
             ),

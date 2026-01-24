@@ -76,15 +76,15 @@ class _SkipButtonState extends State<SkipButton>
             width: 48,
             height: 48,
             borderRadius: 25,
-            blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 30 : 0,
+            blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
             alignment: Alignment.center,
             border: 1,
             linearGradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFFffffff).withOpacity(0.2),
-                const Color(0xFFFFFFFF).withOpacity(0.2),
+                const Color(0xFFffffff).withOpacity(0.1),
+                const Color(0xFFFFFFFF).withOpacity(0.1),
               ],
             ),
             borderGradient: LinearGradient(

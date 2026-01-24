@@ -219,12 +219,15 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
       sliver: SliverToBoxAdapter(
-        child: _buildWeekdayHeader(
-          context,
-          title: title,
-          weekdayKey: weekdayKey,
-          count: count,
-          isToday: isToday,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: _buildWeekdayHeader(
+            context,
+            title: title,
+            weekdayKey: weekdayKey,
+            count: count,
+            isToday: isToday,
+          ),
         ),
       ),
     );
@@ -508,64 +511,34 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     required int count,
     required bool isToday,
   }) {
-    final Color backgroundColor =
-        isToday ? Colors.white.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.1);
+    final String countText = '$count 部动画';
 
-    final Color borderColor =
-        isToday ? Colors.white.withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.2);
-
-    final String countText = '$count 部';
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25.0 : 0.0,
-          sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25.0 : 0.0,
-        ),
-        child: Container(
-          key: ValueKey<String>('weekday_header_$weekdayKey'),
-          width: double.infinity,
-          height: 48,
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: borderColor,
-              width: 0.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                  ),
-                ),
-                Text(
-                  countText,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white70,
-                      ),
-                ),
-              ],
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0, bottom: 4.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              color: isToday ? Colors.white : Colors.white.withValues(alpha: 0.9),
+              letterSpacing: -0.5,
             ),
           ),
-        ),
+          const SizedBox(width: 12),
+          Text(
+            countText,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: isToday ? Colors.white.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.4),
+            ),
+          ),
+        ],
       ),
     );
   }

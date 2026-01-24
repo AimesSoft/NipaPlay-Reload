@@ -80,7 +80,7 @@ class _LockControlsButtonState extends State<LockControlsButton>
               blur: context
                       .watch<AppearanceSettingsProvider>()
                       .enableWidgetBlurEffect
-                  ? 30
+                  ? 25
                   : 0,
               alignment: Alignment.center,
               border: 1,
@@ -88,8 +88,8 @@ class _LockControlsButtonState extends State<LockControlsButton>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFFffffff).withOpacity(0.2),
-                  const Color(0xFFFFFFFF).withOpacity(0.2),
+                  const Color(0xFFffffff).withOpacity(0.1),
+                  const Color(0xFFFFFFFF).withOpacity(0.1),
                 ],
               ),
               borderGradient: LinearGradient(

@@ -53,7 +53,7 @@ class _GlassActionButtonState extends State<GlassActionButton> {
             blur: context
                     .watch<AppearanceSettingsProvider>()
                     .enableWidgetBlurEffect
-                ? 30
+                ? 25
                 : 0,
             alignment: Alignment.center,
             border: 1,
@@ -61,8 +61,8 @@ class _GlassActionButtonState extends State<GlassActionButton> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFFffffff).withValues(alpha: 0.2),
-                const Color(0xFFFFFFFF).withValues(alpha: 0.2),
+                const Color(0xFFffffff).withValues(alpha: 0.1),
+                const Color(0xFFFFFFFF).withValues(alpha: 0.1),
               ],
             ),
             borderGradient: LinearGradient(

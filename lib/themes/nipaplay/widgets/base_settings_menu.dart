@@ -28,15 +28,13 @@ class BaseSettingsMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appearanceSettings = context.watch<AppearanceSettingsProvider>();
-    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 50.0 : 0.0;
+    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
 
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final backgroundColor = isDarkMode
-            ? const Color.fromARGB(255, 130, 130, 130).withOpacity(0.5)
-            : const Color.fromARGB(255, 193, 193, 193).withOpacity(0.5);
-        final borderColor = Colors.white.withOpacity(0.5);
+        final backgroundColor = Colors.white.withOpacity(0.08);
+        final borderColor = Colors.white.withOpacity(0.2);
 
         return Material(
           type: MaterialType.transparency,
@@ -78,7 +76,7 @@ class BaseSettingsMenu extends StatelessWidget {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
+                                  color: Colors.black.withOpacity(0.05),
                                   blurRadius: 8,
                                   offset: const Offset(0, 4),
                                   spreadRadius: 0,
