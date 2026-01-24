@@ -52,10 +52,12 @@ class _CustomScaffoldState extends State<CustomScaffold> {
             .toList()
         : const <int>[];
 
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return BackgroundWithBlur(
       child: Scaffold(
         primary: false,
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
+        backgroundColor: isDarkMode
             ? Colors.black.withOpacity(0.7)
             : Colors.black.withOpacity(0.2),
         extendBodyBehindAppBar: false,
@@ -72,7 +74,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                     ? null
                     : IconButton(
                         icon: const Icon(Ionicons.chevron_back_outline),
-                        color: Colors.white,
+                        color: isDarkMode ? Colors.white : Colors.black,
                         onPressed: () {
                           Navigator.of(context).pop();
                         },
@@ -83,16 +85,21 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                   controller: widget.tabController,
                   isScrollable: true,
                   tabs: widget.tabPage,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white60,
+                  labelColor: isDarkMode ? Colors.white : Colors.black,
+                  unselectedLabelColor:
+                      isDarkMode ? Colors.white60 : Colors.black54,
                   labelPadding: const EdgeInsets.only(bottom: 15.0),
                   tabAlignment: TabAlignment.start,
+                  splashFactory: NoSplash.splashFactory, // 去除水波纹
+                  overlayColor: WidgetStateProperty.all(Colors.transparent), // 去除点击背景色
                   // 恢复灰色背景条，并使用自定义指示器
-                  dividerColor: const Color.fromARGB(59, 255, 255, 255),
+                  dividerColor: isDarkMode
+                      ? const Color.fromARGB(59, 255, 255, 255)
+                      : const Color.fromARGB(59, 0, 0, 0),
                   dividerHeight: 3.0,
-                  indicator: const _CustomTabIndicator(
+                  indicator: _CustomTabIndicator(
                     indicatorHeight: 3.0,
-                    indicatorColor: Colors.white,
+                    indicatorColor: isDarkMode ? Colors.white : Colors.black,
                     radius: 30.0, // 使用大圆角形成药丸形状
                   ),
                   indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
