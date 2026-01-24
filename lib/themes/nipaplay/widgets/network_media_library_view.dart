@@ -428,8 +428,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         children: [
           Column(
             children: [
-              // 顶部导航栏
-              _buildTopNavigationBar(provider),
+              // 已整合返回按钮和标题的控制栏
+              _buildSearchBar(),
               // 空内容提示
               Expanded(
                 child: Center(
@@ -467,9 +467,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       children: [
         Column(
           children: [
-            // 顶部导航栏
-            _buildTopNavigationBar(provider),
-            // 搜索栏（在媒体库内容视图中显示）
+            // 搜索栏（在媒体库内容视图中显示，已整合返回按钮和标题）
             if (_isShowingLibraryContent) _buildSearchBar(),
             // 媒体内容网格/文件夹列表
             Expanded(
@@ -510,76 +508,22 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     );
   }
 
-  Widget _buildTopNavigationBar(dynamic provider) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(24), // 圆形
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(24), // 圆形
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(24), // 圆形
-                    onTap: _handleBackNavigation,
-                    child: const Center(
-                      child: Icon(
-                        Icons.chevron_left,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              _getCurrentViewTitle(provider),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 获取选中媒体库的名称
-  String _getSelectedLibraryName(dynamic provider) {
-    if (_selectedLibraryId == null) return '媒体库';
-    
-    final selectedLibraries = _getSelectedLibraries(provider);
-    final library = selectedLibraries.where((lib) => lib.id == _selectedLibraryId);
-    
-    if (library.isEmpty) return '媒体库';
-    
-    return library.first.name;
-  }
-
   String _getCurrentViewTitle(dynamic provider) {
     if (_isFolderNavigation && _folderStack.isNotEmpty) {
       return _folderStack.last.name;
     }
-    return _getSelectedLibraryName(provider);
+    
+    // 直接实现获取选中媒体库名称的逻辑
+    try {
+      final selectedLibraries = _getSelectedLibraries(provider);
+      final currentLibrary = selectedLibraries.firstWhere(
+        (l) => l.id == _selectedLibraryId,
+        orElse: () => selectedLibraries.isNotEmpty ? selectedLibraries.first : selectedLibraries.first,
+      );
+      return currentLibrary.name;
+    } catch (_) {
+      return '媒体库';
+    }
   }
 
   Widget _buildFloatingActionButtons() {
@@ -788,7 +732,15 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   // 构建搜索栏（单个媒体库视图）
   Widget _buildSearchBar() {
+    String? title;
+    if (_isShowingLibraryContent) {
+      title = _getCurrentViewTitle(_provider);
+    }
+
     return LocalLibraryControlBar(
+      showBackButton: _isShowingLibraryContent,
+      onBack: _handleBackNavigation,
+      title: title,
       searchController: _searchController,
       currentSort: _currentSort,
       onSearchChanged: _onSearchChanged,

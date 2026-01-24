@@ -987,7 +987,7 @@ class EmbyService {
       }
 
       final response = await _makeAuthenticatedRequest(
-          '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit');
+          '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit&Fields=Overview,CommunityRating');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
