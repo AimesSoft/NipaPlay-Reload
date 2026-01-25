@@ -393,7 +393,10 @@ class DesktopExitHandler
         iconPath,
         isTemplate: Platform.isMacOS,
       );
-      await trayManager.setToolTip('NipaPlay');
+
+      if (!Platform.isLinux) {
+        await trayManager.setToolTip('NipaPlay');
+      }
 
       final menu = Menu(
         items: [
