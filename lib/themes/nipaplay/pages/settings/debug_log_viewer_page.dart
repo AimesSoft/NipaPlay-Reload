@@ -142,6 +142,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
 
   /// 构建日志条目内容，支持不同设备的布局
   Widget _buildLogEntryContent(LogEntry entry) {
+    final colorScheme = Theme.of(context).colorScheme;
     // 检查是否为手机设备
     final screenSize = MediaQuery.of(context).size;
     final shortestSide = screenSize.width < screenSize.height ? screenSize.width : screenSize.height;
@@ -158,8 +159,8 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
               '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
               '${entry.timestamp.minute.toString().padLeft(2, '0')}:'
               '${entry.timestamp.second.toString().padLeft(2, '0')}',
-              style: const TextStyle(
-                color: Colors.white54,
+              style: TextStyle(
+                color: colorScheme.onSurface.withOpacity(0.54),
                 fontSize: 12,
                 fontFamily: 'monospace',
               ),
@@ -190,13 +191,13 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: colorScheme.onSurface.withOpacity(0.2),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
               entry.tag,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: colorScheme.onSurface.withOpacity(0.7),
                 fontSize: 10,
               ),
             ),
@@ -207,8 +208,8 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
           // 第四行：消息内容
           Text(
             entry.message,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colorScheme.onSurface,
               fontSize: 13,
               fontFamily: 'monospace',
             ),
@@ -228,8 +229,8 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                 '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
                 '${entry.timestamp.minute.toString().padLeft(2, '0')}:'
                 '${entry.timestamp.second.toString().padLeft(2, '0')}',
-                style: const TextStyle(
-                  color: Colors.white54,
+                style: TextStyle(
+                  color: colorScheme.onSurface.withOpacity(0.54),
                   fontSize: 12,
                   fontFamily: 'monospace',
                 ),
@@ -261,13 +262,13 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: colorScheme.onSurface.withOpacity(0.2),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
               entry.tag,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: colorScheme.onSurface.withOpacity(0.7),
                 fontSize: 10,
               ),
             ),
@@ -279,8 +280,8 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
           Expanded(
             child: Text(
               entry.message,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: colorScheme.onSurface,
                 fontSize: 13,
                 fontFamily: 'monospace',
               ),
@@ -302,6 +303,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
   }
 
   void _clearLogs() {
+    final colorScheme = Theme.of(context).colorScheme;
     BlurDialog.show(
       context: context,
       title: '确认清空',
@@ -309,7 +311,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          child: Text('取消', style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7))),
         ),
         TextButton(
           onPressed: () {
@@ -376,6 +378,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
   void _showLogStatistics() {
     final logService = DebugLogService();
     final stats = logService.getLogStatistics();
+    final colorScheme = Theme.of(context).colorScheme;
     
     final contentBuffer = StringBuffer();
     contentBuffer.writeln('总计: ${stats['total'] ?? 0} 条\n');
@@ -394,7 +397,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭', style: TextStyle(color: Colors.white)),
+          child: Text('关闭', style: TextStyle(color: colorScheme.onSurface)),
         ),
       ],
     );
@@ -445,7 +448,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
             const SizedBox(height: 20),
 
             // 分隔线
-            Divider(color: Colors.white.withOpacity(0.3)),
+            Divider(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3)),
 
             const SizedBox(height: 12),
 
@@ -538,19 +541,20 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
     Function(bool)? onSwitchChanged,
     VoidCallback? onTap,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withOpacity(0.2),
-            Colors.white.withOpacity(0.15),
+            colorScheme.onSurface.withOpacity(0.2),
+            colorScheme.onSurface.withOpacity(0.15),
           ],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withOpacity(0.3),
+          color: colorScheme.onSurface.withOpacity(0.3),
           width: 0.5,
         ),
         boxShadow: [
@@ -572,7 +576,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
               children: [
                 Icon(
                   icon,
-                  color: iconColor ?? Colors.white70,
+                  color: iconColor ?? colorScheme.onSurface.withOpacity(0.7),
                   size: 20,
                 ),
                 const SizedBox(width: 12),
@@ -580,7 +584,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                   child: Text(
                     title,
                     style: TextStyle(
-                      color: textColor ?? Colors.white,
+                      color: textColor ?? colorScheme.onSurface,
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                     ),
@@ -590,13 +594,13 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                   Switch(
                     value: switchValue ?? false,
                     onChanged: onSwitchChanged,
-                    activeColor: Colors.white,
-                    inactiveThumbColor: Colors.white70,
+                    activeColor: colorScheme.primary,
+                    inactiveThumbColor: colorScheme.onSurface.withOpacity(0.7),
                   )
                 else
-                  const Icon(
+                  Icon(
                     Icons.chevron_right,
-                    color: Colors.white54,
+                    color: colorScheme.onSurface.withOpacity(0.54),
                     size: 20,
                   ),
               ],
@@ -621,6 +625,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
       if (!mounted) return;
 
       debugPrint('[QRCode] 显示二维码对话框');
+      final colorScheme = Theme.of(context).colorScheme;
       await BlurDialog.show(
         context: context,
         title: '扫描二维码查看日志',
@@ -644,7 +649,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
             Text(
               '日志将在1小时后自动删除',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
+                color: colorScheme.onSurface.withOpacity(0.7),
                 fontSize: 12,
               ),
             ),
@@ -658,11 +663,11 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                 BlurSnackBar.show(context, '链接已复制到剪贴板');
               }
             },
-            child: const Text('复制链接'),
+            child: Text('复制链接', style: TextStyle(color: colorScheme.onSurface)),
           ),
         ],
       );
-      debugPrint('[QRCode] 二维码对话框显示完成');
+      debugPrint('[QRCode] 二码对话框显示完成');
     } catch (e) {
       debugPrint('[QRCode] 发生错误: $e');
       if (!mounted) return;
@@ -673,6 +678,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return ChangeNotifierProvider.value(
       value: DebugLogService(),
       child: Column(
@@ -685,16 +691,16 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                 // 搜索框
                 TextField(
                   controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
+                  style: TextStyle(color: colorScheme.onSurface),
+                  decoration: InputDecoration(
                     hintText: '搜索日志内容...',
-                    hintStyle: TextStyle(color: Colors.white54),
-                    prefixIcon: Icon(Icons.search, color: Colors.white54),
+                    hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.54)),
+                    prefixIcon: Icon(Icons.search, color: colorScheme.onSurface.withOpacity(0.54)),
                     border: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white30),
+                      borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.3)),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white),
+                      borderSide: BorderSide(color: colorScheme.onSurface),
                     ),
                   ),
                 ),
@@ -707,9 +713,9 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                     Expanded(
                       child: Row(
                         children: [
-                          const Text(
+                          Text(
                             '级别: ',
-                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
                           ),
                           Consumer<DebugLogService>(
                             builder: (context, logService, child) {
@@ -738,9 +744,9 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                     Expanded(
                       child: Row(
                         children: [
-                          const Text(
+                          Text(
                             '标签: ',
-                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
                           ),
                           Consumer<DebugLogService>(
                             builder: (context, logService, child) {
@@ -773,7 +779,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                     // 选项按钮
                     IconButton(
                       onPressed: () => _showMoreOptions(context),
-                      icon: const Icon(Ionicons.ellipsis_vertical, color: Colors.white),
+                      icon: Icon(Ionicons.ellipsis_vertical, color: colorScheme.onSurface),
                       //tooltip: '更多选项',
                     ),
                   ],
@@ -789,7 +795,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
               
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: Colors.black26,
+                color: colorScheme.onSurface.withOpacity(0.1),
                 child: Row(
                   children: [
                     Icon(
@@ -800,12 +806,12 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                     const SizedBox(width: 8),
                     Text(
                       logService.isCollecting ? '正在收集日志' : '日志收集已停止',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
                     ),
                     const Spacer(),
                     Text(
                       '显示 ${filteredLogs.length}/${logService.logCount} 条',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
                     ),
                   ],
                 ),
@@ -827,10 +833,10 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                 }
                 
                 return filteredLogs.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           '暂无日志',
-                          style: TextStyle(color: Colors.white54, fontSize: 16),
+                          style: TextStyle(color: colorScheme.onSurface.withOpacity(0.54), fontSize: 16),
                         ),
                       )
                     : ListView.builder(
@@ -855,14 +861,14 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(context),
-                                    child: const Text('关闭', style: TextStyle(color: Colors.white)),
+                                    child: Text('关闭', style: TextStyle(color: colorScheme.onSurface)),
                                   ),
                                   TextButton(
                                     onPressed: () {
                                       Navigator.pop(context);
                                       _copyLogEntry(entry);
                                     },
-                                    child: const Text('复制', style: TextStyle(color: Colors.white)),
+                                    child: Text('复制', style: TextStyle(color: colorScheme.onSurface)),
                                   ),
                                 ],
                               );
@@ -872,7 +878,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                               decoration: BoxDecoration(
                                 border: Border(
                                   bottom: BorderSide(
-                                    color: Colors.white.withOpacity(0.1),
+                                    color: colorScheme.onSurface.withOpacity(0.1),
                                     width: 0.5,
                                   ),
                                 ),
@@ -889,4 +895,4 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
       ),
     );
   }
-} 
+}

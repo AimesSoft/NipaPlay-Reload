@@ -121,6 +121,8 @@ class _GeneralPageState extends State<GeneralPage> {
 
             _defaultPageIndex = snapshot.data ?? 0;
 
+            final colorScheme = Theme.of(context).colorScheme;
+
             return ListView(
               children: [
                 if (globals.isDesktop)
@@ -138,7 +140,7 @@ class _GeneralPageState extends State<GeneralPage> {
                   dropdownKey: _desktopExitBehaviorDropdownKey,
                 ),
                 if (globals.isDesktop)
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 SettingsItem.dropdown(
                   title: "默认展示页面",
                   subtitle: "选择应用启动后默认显示的页面",
@@ -152,7 +154,7 @@ class _GeneralPageState extends State<GeneralPage> {
                   },
                   dropdownKey: _defaultPageDropdownKey,
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 SettingsItem.dropdown(
                   title: "番剧卡片点击行为",
                   subtitle: "选择点击番剧卡片后默认展示的内容",
@@ -173,7 +175,7 @@ class _GeneralPageState extends State<GeneralPage> {
                     appearanceSettings.setAnimeCardAction(action);
                   },
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 if (!globals.isPhone)
                 SettingsItem.toggle(
                   title: "过滤成人内容 (全局)",
@@ -187,7 +189,7 @@ class _GeneralPageState extends State<GeneralPage> {
                     _saveFilterPreference(value);
                   },
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 SettingsItem.button(
                   title: "清除图片缓存",
                   subtitle: "清除所有缓存的图片文件",
@@ -201,18 +203,18 @@ class _GeneralPageState extends State<GeneralPage> {
                       content: '确定要清除所有缓存的图片文件吗？',
                       actions: [
                         TextButton(
-                          child: const Text(
+                          child: Text(
                             '取消',
                             locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                           ),
                           onPressed: () => Navigator.of(context).pop(false),
                         ),
                         TextButton(
-                          child: const Text(
+                          child: Text(
                             '确定',
                             locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white),
+style: TextStyle(color: colorScheme.onSurface),
                           ),
                           onPressed: () => Navigator.of(context).pop(true),
                         ),
@@ -233,7 +235,7 @@ style: TextStyle(color: Colors.white),
                     }
                   },
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               ],
             );
           },

@@ -47,75 +47,78 @@ class BlurSnackBar {
     );
     
     overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        bottom: 16,
-        left: 16,
-        right: 16,
-        child: FadeTransition(
-          opacity: animation,
-          child: Material(
-            type: MaterialType.transparency,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
-                      width: 1,
+      builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        return Positioned(
+          bottom: 16,
+          left: 16,
+          right: 16,
+          child: FadeTransition(
+            opacity: animation,
+            child: Material(
+              type: MaterialType.transparency,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: colorScheme.onSurface.withOpacity(0.2),
+                        width: 1,
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          content,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            content,
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                      ),
-                      if (actionText != null && onAction != null) ...[
-                        const SizedBox(width: 8),
-                        TextButton(
+                        if (actionText != null && onAction != null) ...[
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () {
+                              dismiss();
+                              onAction();
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: colorScheme.primary,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(actionText),
+                          ),
+                        ],
+                        IconButton(
+                          icon: Icon(Icons.close, color: colorScheme.onSurface.withOpacity(0.7), size: 20),
                           onPressed: () {
                             dismiss();
-                            onAction();
                           },
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: Text(actionText),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
                       ],
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white70, size: 20),
-                        onPressed: () {
-                          dismiss();
-                        },
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
 
     overlay.insert(overlayEntry);

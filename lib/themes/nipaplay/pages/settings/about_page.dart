@@ -89,6 +89,7 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Future<void> _showUpdateDialog(UpdateInfo info) async {
+    final colorScheme = Theme.of(context).colorScheme;
     final notes = info.releaseNotes.trim().isNotEmpty
         ? info.releaseNotes.trim()
         : '暂无更新内容';
@@ -105,21 +106,21 @@ class _AboutPageState extends State<AboutPage> {
           children: [
             Text(
               '当前版本: ${info.currentVersion}',
-              style: TextStyle(color: Colors.white.withOpacity(0.9)),
+              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
             ),
             Text(
               '最新版本: ${info.latestVersion}',
-              style: TextStyle(color: Colors.white.withOpacity(0.9)),
+              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
             ),
             if (info.releaseName.trim().isNotEmpty)
               Text(
                 '版本名称: ${info.releaseName.trim()}',
-                style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
               ),
             if (publishedAt.isNotEmpty)
               Text(
                 '发布时间: $publishedAt',
-                style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
               ),
             if (info.error != null && info.error!.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -129,10 +130,10 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ],
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '更新内容',
               style: TextStyle(
-                color: Colors.white,
+                color: colorScheme.onSurface,
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -143,16 +144,16 @@ class _AboutPageState extends State<AboutPage> {
               constraints: const BoxConstraints(maxHeight: 280),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: colorScheme.onSurface.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
+                border: Border.all(color: colorScheme.onSurface.withOpacity(0.12)),
               ),
               child: SingleChildScrollView(
                 child: AdaptiveMarkdown(
                   data: notes,
-                  brightness: Brightness.dark,
+                  brightness: Theme.of(context).brightness,
                   baseTextStyle:
-                      TextStyle(color: Colors.white.withOpacity(0.9)),
+                      TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
                   linkColor: Colors.lightBlueAccent,
                   onTapLink: (href) {
                     _launchURL(href);
@@ -170,16 +171,16 @@ class _AboutPageState extends State<AboutPage> {
               Navigator.of(context).pop();
               _launchURL(info.releaseUrl);
             },
-            child: const Text(
+            child: Text(
               '查看发布页',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
+          child: Text(
             '关闭',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: colorScheme.onSurface),
           ),
         ),
       ],
@@ -208,6 +209,7 @@ class _AboutPageState extends State<AboutPage> {
     });
 
     if (info == null) {
+      final colorScheme = Theme.of(context).colorScheme;
       await BlurDialog.show(
         context: context,
         title: '检查更新失败',
@@ -215,9 +217,9 @@ class _AboutPageState extends State<AboutPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
+            child: Text(
               '关闭',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
         ],
@@ -240,6 +242,7 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   void _showAppreciationQR() {
+    final colorScheme = Theme.of(context).colorScheme;
     BlurDialog.show(
       context: context,
       title: '赞赏码',
@@ -257,22 +260,22 @@ class _AboutPageState extends State<AboutPage> {
               return Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: colorScheme.onSurface.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Column(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Ionicons.image_outline,
                       size: 60,
-                      color: Colors.white70,
+                      color: colorScheme.onSurface.withOpacity(0.7),
                     ),
-                    SizedBox(height: 10),
+                    const SizedBox(height: 10),
                     Text(
                       '赞赏码图片加载失败',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: colorScheme.onSurface.withOpacity(0.7),
                         fontSize: 14,
                       ),
                     ),
@@ -286,9 +289,9 @@ class _AboutPageState extends State<AboutPage> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
+          child: Text(
             '关闭',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: colorScheme.onSurface),
           ),
         ),
       ],
@@ -297,15 +300,12 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Using a dark theme context for text styles as an example,
-    // assuming the page is shown over a dark-ish blurred background from TabBarView
+    final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme.apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
+          bodyColor: colorScheme.onSurface,
+          displayColor: colorScheme.onSurface,
         );
-    // Use getTextStyle if it provides better themed styles
-    // final baseTextStyle = getTextStyle(context);
-
+    
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(24.0),
@@ -321,9 +321,9 @@ class _AboutPageState extends State<AboutPage> {
               'assets/logo.png', // Ensure this path is correct
               height: 120, // Adjust size as needed
               errorBuilder: (context, error, stackTrace) {
-                return const Icon(Ionicons.image_outline,
+                return Icon(Ionicons.image_outline,
                     size: 100,
-                    color: Colors.white70); // Placeholder if logo fails
+                    color: colorScheme.onSurface.withOpacity(0.7)); // Placeholder if logo fails
               },
             ),
             const SizedBox(height: 24),
@@ -345,7 +345,7 @@ class _AboutPageState extends State<AboutPage> {
                         'NipaPlay Reload 当前版本: $_version',
                         style: textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: colorScheme.onSurface,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -389,23 +389,23 @@ class _AboutPageState extends State<AboutPage> {
             TextButton.icon(
               onPressed: _isCheckingUpdate ? null : _manualCheckForUpdates,
               style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.white.withOpacity(0.08),
+                foregroundColor: colorScheme.onSurface,
+                backgroundColor: colorScheme.onSurface.withOpacity(0.08),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
-                  side: BorderSide(color: Colors.white.withOpacity(0.12)),
+                  side: BorderSide(color: colorScheme.onSurface.withOpacity(0.12)),
                 ),
               ),
               icon: _isCheckingUpdate
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.white70),
+                            AlwaysStoppedAnimation<Color>(colorScheme.onSurface.withOpacity(0.7)),
                       ),
                     )
                   : const Icon(Icons.system_update_alt, size: 18),
@@ -498,7 +498,7 @@ class _AboutPageState extends State<AboutPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Ionicons.logo_github,
-                            color: Colors.white.withOpacity(0.8), size: 20),
+                            color: colorScheme.onSurface.withOpacity(0.8), size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'MCDFsteve/NipaPlay-Reload',
@@ -523,7 +523,7 @@ class _AboutPageState extends State<AboutPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Ionicons.chatbubbles_outline,
-                            color: Colors.white.withOpacity(0.8), size: 20),
+                            color: colorScheme.onSurface.withOpacity(0.8), size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'QQ群: 961207150',
@@ -548,7 +548,7 @@ class _AboutPageState extends State<AboutPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Ionicons.globe_outline,
-                            color: Colors.white.withOpacity(0.8), size: 20),
+                            color: colorScheme.onSurface.withOpacity(0.8), size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'NipaPlay 官方网站',
@@ -635,13 +635,14 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Widget _buildAcknowledgementBadge(BuildContext context, String name) {
+    final colorScheme = Theme.of(context).colorScheme;
     final accentColor = Colors.amberAccent[100] ?? Colors.amberAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
+        color: colorScheme.onSurface.withOpacity(0.07),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(color: colorScheme.onSurface.withOpacity(0.12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -655,7 +656,7 @@ class _AboutPageState extends State<AboutPage> {
           Text(
             name,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white,
+                  color: colorScheme.onSurface,
                   fontWeight: FontWeight.w600,
                 ),
           ),
@@ -668,6 +669,7 @@ class _AboutPageState extends State<AboutPage> {
       {required BuildContext context,
       String? title,
       required List<Widget> children}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,7 +679,7 @@ class _AboutPageState extends State<AboutPage> {
             Text(
               title,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
+                    color: colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
                   ),
             ),
@@ -690,11 +692,12 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Widget _buildRichText(BuildContext context, List<InlineSpan> spans) {
+    final colorScheme = Theme.of(context).colorScheme;
     return RichText(
       textAlign: TextAlign.start, // Or TextAlign.justify if preferred
       text: TextSpan(
         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Colors.white.withOpacity(0.9),
+              color: colorScheme.onSurface.withOpacity(0.9),
               height: 1.6, // Improved line spacing
             ), // Default text style for spans
         children: spans,

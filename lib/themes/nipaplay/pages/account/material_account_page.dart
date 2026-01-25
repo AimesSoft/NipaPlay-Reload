@@ -22,9 +22,6 @@ class MaterialAccountPage extends StatefulWidget {
 class _MaterialAccountPageState extends State<MaterialAccountPage>
     with AccountPageController {
 
-  // 页面切换状态：true为弹弹play页面，false为Bangumi页面
-  bool _showDandanplayPage = true;
-
   @override
   void showMessage(String message) {
     BlurSnackBar.show(context, message);
@@ -125,6 +122,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   void showDeleteAccountDialog(String deleteAccountUrl) {
+    final colorScheme = Theme.of(context).colorScheme;
     BlurDialog.show(
       context: context,
       title: '账号注销确认',
@@ -140,14 +138,14 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             '注销后将：',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: colorScheme.onSurface),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             '• 永久删除您的弹弹play账号\n• 清除所有个人数据和收藏\n• 无法恢复已发送的弹幕\n• 失去所有积分和等级',
-            style: TextStyle(color: Colors.white70),
+            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -159,9 +157,9 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
+          child: Text(
             '取消',
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6)),
           ),
         ),
         TextButton(
@@ -201,22 +199,25 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
   Widget build(BuildContext context) {
     final appearanceSettings = context.watch<AppearanceSettingsProvider>();
     final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 自定义TabView样式的选择器
-            _buildCustomTabSelector(blurValue),
-            const SizedBox(height: 16),
-            // 根据状态显示不同的内容
             Expanded(
-              child: _showDandanplayPage 
-                  ? _buildDandanplayPage(blurValue) 
-                  : _buildBangumiPage(blurValue),
+              child: _buildDandanplayPage(blurValue),
+            ),
+            Container(
+              width: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              color: colorScheme.onSurface.withOpacity(0.12),
+            ),
+            Expanded(
+              child: _buildBangumiPage(blurValue),
             ),
           ],
         ),
@@ -224,95 +225,8 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     );
   }
 
-  /// 构建自定义Tab选择器
-  Widget _buildCustomTabSelector(double blurValue) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-        child: Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // 计算每个选项的准确宽度
-              final optionWidth = (constraints.maxWidth - 8) / 2; // 减去左右边距
-              
-              return Stack(
-                children: [
-                  // 滑动指示器（放在底层）
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeInOut,
-                    left: _showDandanplayPage ? 4 : null,
-                    right: _showDandanplayPage ? null : 4,
-                    top: 4,
-                    bottom: 4,
-                    width: optionWidth,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // 可点击选项（只有一层，带文字）
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildTabOption('Dandanplay账户', true),
-                      ),
-                      Expanded(
-                        child: _buildTabOption('Bangumi同步', false),
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabOption(String text, bool isDandanplay) {
-    final isActive = _showDandanplayPage == isDandanplay;
-    
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _showDandanplayPage = isDandanplay;
-        });
-      },
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        alignment: Alignment.center,
-        child: Text(
-          text,
-          locale: const Locale("zh-Hans", "zh"),
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.white70,
-            fontSize: 14,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildLoggedInView(double blurValue) {
+    final colorScheme = Theme.of(context).colorScheme;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
@@ -320,10 +234,10 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: colorScheme.onSurface.withOpacity(0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.white.withOpacity(0.3),
+              color: colorScheme.onSurface.withOpacity(0.3),
               width: 0.5,
             ),
           ),
@@ -338,18 +252,18 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                         height: 48,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
+                          return Icon(
                             Icons.account_circle,
                             size: 48,
-                            color: Colors.white60,
+                            color: colorScheme.onSurface.withOpacity(0.6),
                           );
                         },
                       ),
                     )
-                  : const Icon(
+                  : Icon(
                       Icons.account_circle,
                       size: 48,
-                      color: Colors.white60,
+                      color: colorScheme.onSurface.withOpacity(0.6),
                     ),
               const SizedBox(width: 16),
               // 用户信息
@@ -359,8 +273,8 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                   children: [
                     Text(
                       username,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
@@ -369,11 +283,11 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                       softWrap: false,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       '已登录',
-                      locale:Locale("zh-Hans","zh"),
+                      locale:const Locale("zh-Hans","zh"),
 style: TextStyle(
-                        color: Colors.white60,
+                        color: colorScheme.onSurface.withOpacity(0.6),
                         fontSize: 12,
                       ),
                     ),
@@ -392,27 +306,27 @@ style: TextStyle(
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: colorScheme.onSurface.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
+                        color: colorScheme.onSurface.withOpacity(0.2),
                         width: 0.5,
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.logout,
-                          color: Colors.white70,
+                          color: colorScheme.onSurface.withOpacity(0.7),
                           size: 16,
                         ),
-                        SizedBox(width: 4),
+                        const SizedBox(width: 4),
                         Text(
                           '退出',
-                          locale: Locale("zh-Hans", "zh"),
+                          locale: const Locale("zh-Hans", "zh"),
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: colorScheme.onSurface.withOpacity(0.7),
                             fontSize: 14,
                           ),
                         ),
@@ -481,43 +395,45 @@ style: TextStyle(
   }
 
   Widget _buildLoggedOutView(double blurValue) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       children: [
         ListTile(
-          title: const Text(
+          title: Text(
             "登录弹弹play账号",
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            locale:const Locale("zh-Hans","zh"),
+style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
           ),
-          subtitle: const Text(
+          subtitle: Text(
             "登录后可以同步观看记录和个人设置",
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+            locale:const Locale("zh-Hans","zh"),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
           ),
-          trailing: const Icon(Icons.login, color: Colors.white),
+          trailing: Icon(Icons.login, color: colorScheme.onSurface),
           onTap: showLoginDialog,
         ),
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         ListTile(
-          title: const Text(
+          title: Text(
             "注册弹弹play账号",
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            locale:const Locale("zh-Hans","zh"),
+style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
           ),
-          subtitle: const Text(
+          subtitle: Text(
             "创建新的弹弹play账号，享受完整功能",
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+            locale:const Locale("zh-Hans","zh"),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
           ),
-          trailing: const Icon(Icons.person_add, color: Colors.white),
+          trailing: Icon(Icons.person_add, color: colorScheme.onSurface),
           onTap: showRegisterDialog,
         ),
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
       ],
     );
   }
 
   Widget _buildBangumiSyncSection(double blurValue) {
+    final colorScheme = Theme.of(context).colorScheme;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
@@ -525,10 +441,10 @@ style: TextStyle(color: Colors.white70),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: colorScheme.onSurface.withOpacity(0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.white.withOpacity(0.3),
+              color: colorScheme.onSurface.withOpacity(0.3),
               width: 0.5,
             ),
           ),
@@ -537,15 +453,15 @@ style: TextStyle(color: Colors.white70),
             children: [
               Row(
                 children: [
-                  const Icon(Icons.sync, color: Colors.white, size: 24),
+                  Icon(Icons.sync, color: colorScheme.onSurface, size: 24),
                   const SizedBox(width: 8),
-                  const Text(
+                  Text(
                     'Bangumi观看记录同步',
-                    locale: Locale("zh-Hans", "zh"),
+                    locale: const Locale("zh-Hans", "zh"),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: colorScheme.onSurface,
                     ),
                   ),
                 ],
@@ -567,6 +483,7 @@ style: TextStyle(color: Colors.white70),
   }
 
   Widget _buildBangumiLoggedInView() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -574,10 +491,10 @@ style: TextStyle(color: Colors.white70),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: colorScheme.onSurface.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Colors.white.withOpacity(0.2),
+              color: colorScheme.onSurface.withOpacity(0.2),
               width: 0.5,
             ),
           ),
@@ -592,8 +509,8 @@ style: TextStyle(color: Colors.white70),
                     Text(
                       '已连接到 ${bangumiUserInfo?['nickname'] ?? bangumiUserInfo?['username'] ?? 'Bangumi'}',
                       locale: const Locale("zh-Hans", "zh"),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -601,8 +518,8 @@ style: TextStyle(color: Colors.white70),
                       Text(
                         '上次同步: ${_formatDateTime(lastBangumiSyncTime!)}',
                         locale: const Locale("zh-Hans", "zh"),
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: colorScheme.onSurface.withOpacity(0.7),
                           fontSize: 12,
                         ),
                       ),
@@ -628,12 +545,12 @@ style: TextStyle(color: Colors.white70),
             ),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onSurface),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -641,7 +558,7 @@ style: TextStyle(color: Colors.white70),
                   child: Text(
                     bangumiSyncStatus,
                     locale: const Locale("zh-Hans", "zh"),
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: colorScheme.onSurface),
                   ),
                 ),
               ],
@@ -688,14 +605,15 @@ style: TextStyle(color: Colors.white70),
   }
 
   Widget _buildBangumiLoggedOutView() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '同步本地观看历史到Bangumi收藏',
-          locale: Locale("zh-Hans", "zh"),
+          locale: const Locale("zh-Hans", "zh"),
           style: TextStyle(
-            color: Colors.white,
+            color: colorScheme.onSurface,
             fontSize: 14,
           ),
         ),
@@ -704,11 +622,11 @@ style: TextStyle(color: Colors.white70),
         // 可点击的URL链接
         Row(
           children: [
-            const Text(
+            Text(
               '需要在 ',
-              locale: Locale("zh-Hans", "zh"),
+              locale: const Locale("zh-Hans", "zh"),
               style: TextStyle(
-                color: Colors.white70,
+                color: colorScheme.onSurface.withOpacity(0.7),
                 fontSize: 12,
               ),
             ),
@@ -723,7 +641,10 @@ style: TextStyle(color: Colors.white70),
                     // 移动端和桌面端使用url_launcher
                     final uri = Uri.parse(url);
                     if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
                     } else {
                       if (mounted) {
                         BlurSnackBar.show(context, '无法打开链接');
@@ -747,11 +668,11 @@ style: TextStyle(color: Colors.white70),
                 ),
               ),
             ),
-            const Text(
+            Text(
               ' 创建访问令牌',
-              locale: Locale("zh-Hans", "zh"),
+              locale: const Locale("zh-Hans", "zh"),
               style: TextStyle(
-                color: Colors.white70,
+                color: colorScheme.onSurface.withOpacity(0.7),
                 fontSize: 12,
               ),
             ),
@@ -762,22 +683,22 @@ style: TextStyle(color: Colors.white70),
         // 令牌输入框
         Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: colorScheme.onSurface.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Colors.white.withOpacity(0.2),
+              color: colorScheme.onSurface.withOpacity(0.2),
               width: 0.5,
             ),
           ),
           child: TextField(
             controller: bangumiTokenController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: '请输入Bangumi访问令牌',
-              hintStyle: TextStyle(color: Colors.white54),
+              hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.54)),
               border: InputBorder.none,
-              contentPadding: EdgeInsets.all(16),
+              contentPadding: const EdgeInsets.all(16),
             ),
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: colorScheme.onSurface),
             obscureText: true,
           ),
         ),
@@ -802,6 +723,7 @@ style: TextStyle(color: Colors.white70),
     VoidCallback? onPressed, {
     bool isDestructive = false,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -812,12 +734,12 @@ style: TextStyle(color: Colors.white70),
           decoration: BoxDecoration(
             color: isDestructive 
                 ? Colors.red.withOpacity(0.2)
-                : Colors.white.withOpacity(0.1),
+                : colorScheme.onSurface.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isDestructive
                   ? Colors.red.withOpacity(0.3)
-                  : Colors.white.withOpacity(0.2),
+                  : colorScheme.onSurface.withOpacity(0.2),
               width: 0.5,
             ),
           ),
@@ -827,8 +749,8 @@ style: TextStyle(color: Colors.white70),
               Icon(
                 icon,
                 color: onPressed != null 
-                    ? (isDestructive ? Colors.red : Colors.white)
-                    : Colors.white38,
+                    ? (isDestructive ? Colors.red : colorScheme.onSurface)
+                    : colorScheme.onSurface.withOpacity(0.38),
                 size: 16,
               ),
               const SizedBox(width: 6),
@@ -837,8 +759,8 @@ style: TextStyle(color: Colors.white70),
                 locale: const Locale("zh-Hans", "zh"),
                 style: TextStyle(
                   color: onPressed != null 
-                      ? (isDestructive ? Colors.red : Colors.white)
-                      : Colors.white38,
+                      ? (isDestructive ? Colors.red : colorScheme.onSurface)
+                      : colorScheme.onSurface.withOpacity(0.38),
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -867,6 +789,7 @@ style: TextStyle(color: Colors.white70),
 
   // 构建弹弹play页面内容
   Widget _buildDandanplayPage(double blurValue) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       children: [
         if (isLoggedIn) ...[
@@ -880,10 +803,10 @@ style: TextStyle(color: Colors.white70),
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: colorScheme.onSurface.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
+                      color: colorScheme.onSurface.withOpacity(0.3),
                       width: 0.5,
                     ),
                   ),

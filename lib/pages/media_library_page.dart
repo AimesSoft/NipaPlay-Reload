@@ -24,6 +24,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'dart:ui' as ui;
 
 // Define a callback type for when an episode is selected for playing
@@ -32,11 +34,13 @@ typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
 class MediaLibraryPage extends StatefulWidget {
   final OnPlayEpisodeCallback? onPlayEpisode; // Add this callback
   final bool jellyfinMode; // 是否为Jellyfin媒体库模式
+  final VoidCallback? onSourcesUpdated;
 
   const MediaLibraryPage({
     super.key, 
     this.onPlayEpisode,
     this.jellyfinMode = false,
+    this.onSourcesUpdated,
   }); // Modify constructor
 
   @override
@@ -365,16 +369,35 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   Future<void> _showServerSelectionDialog() async {
     final result = await MediaServerSelectionSheet.show(context);
 
-    if (result != null && mounted) {
-      if (result == 'jellyfin') {
+    if (!mounted || result == null) {
+      return;
+    }
+
+    bool sourcesUpdated = false;
+
+    switch (result) {
+      case 'jellyfin':
         await _showJellyfinServerDialog();
-      } else if (result == 'emby') {
+        break;
+      case 'emby':
         await _showEmbyServerDialog();
-      } else if (result == 'nipaplay') {
+        break;
+      case 'webdav':
+        sourcesUpdated = await WebDAVConnectionDialog.show(context) == true;
+        break;
+      case 'smb':
+        sourcesUpdated = await SMBConnectionDialog.show(context) == true;
+        break;
+      case 'nipaplay':
         await _showNipaplayServerDialog();
-      } else if (result == 'dandanplay') {
+        break;
+      case 'dandanplay':
         await _showDandanplayServerDialog();
-      }
+        break;
+    }
+
+    if (sourcesUpdated) {
+      widget.onSourcesUpdated?.call();
     }
   }
 

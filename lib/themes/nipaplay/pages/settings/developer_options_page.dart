@@ -20,6 +20,7 @@ class DeveloperOptionsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Consumer<DeveloperOptionsProvider>(
       builder: (context, devOptions, child) {
         return ListView(
@@ -38,7 +39,7 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
 
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             // 显示系统资源监控开关（所有平台可用）
             SettingsItem.toggle(
               title: '显示系统资源监控',
@@ -50,7 +51,7 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             
             // 调试日志收集开关
             SettingsItem.toggle(
@@ -71,7 +72,7 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             
             // 终端输出查看器
             SettingsItem.button(
@@ -84,45 +85,45 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
             // Linux存储迁移选项（仅Linux平台显示，Web环境下不显示）
             if (!kIsWeb && platform.Platform.isLinux) ...[
               // 检查迁移状态
               ListTile(
-                title: const Text(
+                title: Text(
                   '检查Linux存储迁移状态',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   '查看Linux平台数据目录迁移状态',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                trailing: const Icon(Ionicons.information_circle_outline, color: Colors.white),
+                trailing: Icon(Ionicons.information_circle_outline, color: colorScheme.onSurface),
                 onTap: () => _checkLinuxMigrationStatus(context),
               ),
               
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               
               // 手动触发迁移
               ListTile(
-                title: const Text(
+                title: Text(
                   '手动触发存储迁移',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   '强制重新执行数据目录迁移（仅用于测试）',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
                 trailing: const Icon(Ionicons.refresh_outline, color: Colors.orange),
                 onTap: () => _manualTriggerMigration(context),
               ),
               
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               
               // 紧急恢复个人文件
               ListTile(
@@ -131,34 +132,34 @@ style: TextStyle(color: Colors.white70),
                   locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   '将误迁移的个人文件恢复到Documents目录',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
                 trailing: const Icon(Ionicons.medical_outline, color: Colors.red),
                 onTap: () => _emergencyRestorePersonalFiles(context),
               ),
               
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               
               // 显示存储目录信息
               ListTile(
-                title: const Text(
+                title: Text(
                   '显示存储目录信息',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   '查看当前使用的数据和缓存目录路径',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                trailing: const Icon(Ionicons.folder_outline, color: Colors.white),
+                trailing: Icon(Ionicons.folder_outline, color: colorScheme.onSurface),
                 onTap: () => _showStorageDirectoryInfo(context),
               ),
               
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             ],
             
             // 这里可以添加更多开发者选项
@@ -169,6 +170,7 @@ style: TextStyle(color: Colors.white70),
   }
 
   void _openDebugLogViewer(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -190,16 +192,16 @@ style: TextStyle(color: Colors.white70),
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white.withOpacity(0.15),
-                Colors.white.withOpacity(0.05),
+                colorScheme.surface.withOpacity(0.15),
+                colorScheme.surface.withOpacity(0.05),
               ],
             ),
             borderGradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white.withOpacity(0.5),
-                Colors.white.withOpacity(0.2),
+                colorScheme.onSurface.withOpacity(0.5),
+                colorScheme.onSurface.withOpacity(0.2),
               ],
             ),
             child: Column(
@@ -208,7 +210,7 @@ style: TextStyle(color: Colors.white70),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: colorScheme.onSurface.withOpacity(0.1),
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(12),
                       topRight: Radius.circular(12),
@@ -216,17 +218,17 @@ style: TextStyle(color: Colors.white70),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.terminal,
-                        color: Colors.white,
+                        color: colorScheme.onSurface,
                         size: 24,
                       ),
                       const SizedBox(width: 12),
-                      const Text(
+                      Text(
                         '终端输出',
                         locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                          color: Colors.white,
+                          color: colorScheme.onSurface,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
@@ -234,9 +236,9 @@ style: TextStyle(
                       const Spacer(),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close,
-                          color: Colors.white70,
+                          color: colorScheme.onSurface.withOpacity(0.7),
                           size: 24,
                         ),
                         splashRadius: 20,

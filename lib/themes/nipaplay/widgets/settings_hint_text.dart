@@ -8,8 +8,8 @@ class SettingsHintText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-        color: Colors.white70,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
         fontSize: 12,
       ),
       textAlign: TextAlign.left,

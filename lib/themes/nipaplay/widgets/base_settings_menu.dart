@@ -32,9 +32,9 @@ class BaseSettingsMenu extends StatelessWidget {
 
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final backgroundColor = Colors.white.withOpacity(0.08);
-        final borderColor = Colors.white.withOpacity(0.2);
+        final colorScheme = Theme.of(context).colorScheme;
+        final backgroundColor = colorScheme.surface.withOpacity(0.15);
+        final borderColor = colorScheme.onSurface.withOpacity(0.2);
 
         return Material(
           type: MaterialType.transparency,
@@ -109,8 +109,8 @@ class BaseSettingsMenu extends StatelessWidget {
                                       children: [
                                         Text(
                                           title,
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: TextStyle(
+                                            color: colorScheme.onSurface,
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
                                           ),
@@ -119,7 +119,7 @@ class BaseSettingsMenu extends StatelessWidget {
                                         if (extraButton != null) extraButton!,
                                         if (onClose != null)
                                           IconButton(
-                                            icon: const Icon(Icons.close, color: Colors.white),
+                                            icon: Icon(Icons.close, color: colorScheme.onSurface),
                                             onPressed: onClose,
                                             iconSize: 18,
                                             padding: EdgeInsets.zero,

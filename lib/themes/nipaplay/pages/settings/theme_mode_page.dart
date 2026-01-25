@@ -183,6 +183,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
     // 获取外观设置提供者
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final settingsProvider = context.watch<SettingsProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
     
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -237,10 +238,10 @@ class _ThemeModePageState extends State<ThemeModePage> {
               dropdownKey: _dropdownKey,
             ),
             if (_isCustomThemeMode) ...[
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               _buildCustomOverlayColorTile(),
             ],
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.dropdown(
               title: "背景毛玻璃效果",
               subtitle: "调整界面元素的模糊强度",
@@ -284,7 +285,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
               },
               dropdownKey: _blurDropdownKey,
             ),
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.toggle(
               title: "控件毛玻璃效果",
               subtitle: "关闭后可提升性能，但会失去部分UI透明感",
@@ -294,7 +295,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 appearanceSettings.setEnableWidgetBlurEffect(value);
               },
             ),
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.dropdown(
               title: "背景图像",
               subtitle: "设置应用主界面的背景图片",
@@ -332,7 +333,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
               },
               dropdownKey: _backgroundImageDropdownKey,
             ),
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
           ],
         ),
       ),
@@ -341,21 +342,22 @@ class _ThemeModePageState extends State<ThemeModePage> {
 
   Widget _buildCustomOverlayColorTile() {
     final hexValue = _formatColorHex(_customOverlayColor);
+    final colorScheme = Theme.of(context).colorScheme;
     return ListTile(
-      leading: const Icon(
+      leading: Icon(
         Ionicons.color_palette_outline,
-        color: Colors.white70,
+        color: colorScheme.onSurface.withOpacity(0.7),
       ),
-      title: const Text(
+      title: Text(
         "遮罩颜色",
         style: TextStyle(
-          color: Colors.white,
+          color: colorScheme.onSurface,
           fontWeight: FontWeight.bold,
         ),
       ),
-      subtitle: const Text(
+      subtitle: Text(
         "设置覆盖背景图像的颜色以提升可读性",
-        style: TextStyle(color: Colors.white70),
+        style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -365,16 +367,16 @@ class _ThemeModePageState extends State<ThemeModePage> {
             height: 28,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white24, width: 1),
+              border: Border.all(color: colorScheme.onSurface.withOpacity(0.24), width: 1),
               color: _customOverlayColor,
             ),
           ),
           const SizedBox(width: 8),
           Text(
             hexValue,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontFeatures: [FontFeature.tabularFigures()],
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.7),
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
@@ -384,6 +386,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
   }
 
   Future<void> _showOverlayColorPicker() async {
+    final colorScheme = Theme.of(context).colorScheme;
     double alpha = _customOverlayColor.alpha.toDouble();
     double red = _customOverlayColor.red.toDouble();
     double green = _customOverlayColor.green.toDouble();
@@ -415,7 +418,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
               children: [
                 Text(
                   "$label ${value.toInt()}",
-                  style: const TextStyle(color: Colors.white70),
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
                 Slider(
                   min: 0,
@@ -429,7 +432,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
                     });
                   },
                   activeColor: activeColor,
-                  inactiveColor: Colors.white24,
+                  inactiveColor: colorScheme.onSurface.withOpacity(0.24),
                 ),
               ],
             );
@@ -444,7 +447,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
                   height: 80,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white24, width: 1),
+                    border: Border.all(color: colorScheme.onSurface.withOpacity(0.24), width: 1),
                     color: previewColor,
                   ),
                 ),
@@ -453,7 +456,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
                   label: "不透明度",
                   value: alpha,
                   onChanged: (val) => alpha = val,
-                  activeColor: Colors.white,
+                  activeColor: colorScheme.primary,
                 ),
                 buildSlider(
                   label: "红色",
@@ -476,7 +479,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 const SizedBox(height: 8),
                 Text(
                   "当前值：${_formatColorHex(previewColor)}",
-                  style: const TextStyle(color: Colors.white70),
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
               ],
             ),
@@ -486,12 +489,12 @@ class _ThemeModePageState extends State<ThemeModePage> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          style: TextButton.styleFrom(foregroundColor: Colors.white70),
+          style: TextButton.styleFrom(foregroundColor: colorScheme.onSurface.withOpacity(0.7)),
           child: const Text("取消"),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(previewColor),
-          style: TextButton.styleFrom(foregroundColor: Colors.white),
+          style: TextButton.styleFrom(foregroundColor: colorScheme.onSurface),
           child: const Text("确定"),
         ),
       ],

@@ -65,6 +65,7 @@ class _SettingsSliderState extends State<SettingsSlider> {
     final bubbleX = position.dx + (progress * size.width) - 20;
     final bubbleY = position.dy - 40;
     final value = _getValueFromProgress(progress);
+    final colorScheme = Theme.of(context).colorScheme;
     _overlayEntry = OverlayEntry(
       builder: (context) => Material(
         type: MaterialType.transparency,
@@ -80,10 +81,10 @@ class _SettingsSliderState extends State<SettingsSlider> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: colorScheme.onSurface.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
+                        color: colorScheme.onSurface.withOpacity(0.3),
                         width: 0.5,
                       ),
                       boxShadow: [
@@ -96,8 +97,8 @@ class _SettingsSliderState extends State<SettingsSlider> {
                     ),
                     child: Text(
                       widget.displayTextBuilder(value),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -125,6 +126,7 @@ class _SettingsSliderState extends State<SettingsSlider> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     // 根据isPhone调整尺寸
     final trackHeight = globals.isPhone ? 6.0 : 4.0;
     final verticalMargin = globals.isPhone ? 24.0 : 20.0;
@@ -138,8 +140,8 @@ class _SettingsSliderState extends State<SettingsSlider> {
       children: [
         Text(
           widget.label,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: colorScheme.onSurface,
             fontSize: 14,
           ),
         ),
@@ -213,7 +215,7 @@ class _SettingsSliderState extends State<SettingsSlider> {
                       height: trackHeight,
                       margin: EdgeInsets.symmetric(vertical: verticalMargin),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: colorScheme.onSurface.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(trackHeight / 2),
                       ),
                     ),
@@ -228,11 +230,11 @@ class _SettingsSliderState extends State<SettingsSlider> {
                         child: Container(
                           height: trackHeight,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.5),
+                            color: colorScheme.primary.withOpacity(0.5),
                             borderRadius: BorderRadius.circular(trackHeight / 2),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.white.withOpacity(0.3),
+                                color: colorScheme.primary.withOpacity(0.3),
                                 blurRadius: 2,
                                 spreadRadius: 0.5,
                               ),
@@ -253,7 +255,7 @@ class _SettingsSliderState extends State<SettingsSlider> {
                           width: currentThumbSize,
                           height: currentThumbSize,
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: colorScheme.onSurface,
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(

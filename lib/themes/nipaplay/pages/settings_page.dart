@@ -35,8 +35,6 @@ class _SettingsPageState extends State<SettingsPage>
   Widget? currentPage; // 初始可以为 null
   late TabController _tabController;
   static const Locale _titleLocale = Locale("zh-Hans", "zh");
-  static const TextStyle _titleTextStyle =
-      TextStyle(color: Colors.white, fontWeight: FontWeight.bold);
 
   @override
   void initState() {
@@ -59,12 +57,15 @@ class _SettingsPageState extends State<SettingsPage>
   // 封装导航或更新状态的逻辑
   void _handleItemTap(Widget pageToShow, String title) {
     List<Widget> settingsTabLabels() {
+      final colorScheme = Theme.of(context).colorScheme;
       return [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Text(title,
-              style:
-                  const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface)),
         ),
       ];
     }
@@ -100,6 +101,7 @@ class _SettingsPageState extends State<SettingsPage>
   @override
   Widget build(BuildContext context) {
     final entries = _buildSettingEntries(context);
+    final colorScheme = Theme.of(context).colorScheme;
     // ResponsiveContainer 会根据 isDesktop 决定是否显示 currentPage
     return ResponsiveContainer(
       currentPage: currentPage ?? Container(), // 将当前页面状态传递给 ResponsiveContainer
@@ -109,7 +111,7 @@ class _SettingsPageState extends State<SettingsPage>
         itemBuilder: (context, index) => _buildSettingTile(entries[index]),
         separatorBuilder: (context, index) => Divider(
           height: 1,
-          color: Colors.white.withOpacity(0.08),
+          color: colorScheme.onSurface.withOpacity(0.08),
         ),
       ),
     );
@@ -200,11 +202,15 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Widget _buildSettingTile(_SettingEntry entry) {
+    final colorScheme = Theme.of(context).colorScheme;
     return ListTile(
-      leading: Icon(entry.icon, color: Colors.white),
-      title: Text(entry.title, locale: _titleLocale, style: _titleTextStyle),
+      leading: Icon(entry.icon, color: colorScheme.onSurface),
+      title: Text(entry.title,
+          locale: _titleLocale,
+          style: TextStyle(
+              color: colorScheme.onSurface, fontWeight: FontWeight.bold)),
       trailing:
-          const Icon(Ionicons.chevron_forward_outline, color: Colors.white),
+          Icon(Ionicons.chevron_forward_outline, color: colorScheme.onSurface),
       onTap: entry.onTap,
     );
   }

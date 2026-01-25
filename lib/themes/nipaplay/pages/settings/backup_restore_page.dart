@@ -218,6 +218,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: ListView(
@@ -229,12 +230,12 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               children: [
                 Container(
                   padding: const EdgeInsets.only(bottom: 16),
-                  child: const Text(
+                  child: Text(
                     '自动云同步',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: colorScheme.onSurface,
                     ),
                   ),
                 ),
@@ -278,12 +279,12 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               children: [
                 Container(
                   padding: const EdgeInsets.only(bottom: 16),
-                  child: const Text(
+                  child: Text(
                     '手动备份与恢复',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: colorScheme.onSurface,
                     ),
                   ),
                 ),
@@ -306,7 +307,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
             ),
           ),
           const SizedBox(height: 16),
-          const SettingsCard(
+          SettingsCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -315,63 +316,63 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: colorScheme.onSurface,
                   ),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Text(
                   '• 自动同步：启用后观看进度会自动保存到指定路径',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   '• 云同步：同步路径可以是SMB/NFS等网络位置',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   '• 固定文件：自动同步使用固定文件名 nipaplay_auto_sync.nph',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   '• 手动备份：支持自定义文件名的一次性备份',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   '• 备份内容：包含集数信息、观看时间戳和截图',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   '• 恢复规则：只恢复本地扫描到的媒体文件的观看进度',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   '• 截图存储：恢复的截图保存在应用缓存目录',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   '• 此功能仅在桌面端可用',
-                  style: TextStyle(fontSize: 14, color: Colors.white70, fontStyle: FontStyle.italic),
+                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7), fontStyle: FontStyle.italic),
                 ),
               ],
             ),
           ),
           if (_isProcessing)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Center(
                 child: Column(
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
                     Text(
                       '处理中...',
-                      style: TextStyle(color: Colors.white70),
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                     ),
                   ],
                 ),

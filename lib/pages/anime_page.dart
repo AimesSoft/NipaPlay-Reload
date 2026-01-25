@@ -21,10 +21,14 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_all_modal.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
@@ -264,10 +268,15 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   bool _isEmbyConnected = false;
   bool _hasSharedRemoteHosts = false;
   bool _isDandanConnected = false;
+  bool _hasWebDAVConnections = false;
+  bool _hasSMBConnections = false;
+  bool _localConnectionsReady = false;
   
   // 动态计算标签页数量
   int get _tabCount {
-    int count = 4; // 基础标签: 本地媒体库, 本地库管理, WebDAV库管理, SMB库管理
+    int count = 2; // 基础标签: 本地媒体库, 本地库管理
+    if (_hasWebDAVConnections) count++;
+    if (_hasSMBConnections) count++;
     if (_hasSharedRemoteHosts) count += 2; // 共享媒体库, 共享库管理
     if (_isDandanConnected) count++;
     if (_isJellyfinConnected) count++;
@@ -289,6 +298,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     
     // 监听子标签切换通知
     _setupSubTabListener();
+    _initLocalConnectionStates();
     
     // 立即检查是否有待处理的子标签切换请求
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -308,6 +318,35 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     _hasSharedRemoteHosts = sharedProvider.hasReachableActiveHost;
     _isDandanConnected = dandanProvider.isConnected;
     print('_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected, Dandan: $_isDandanConnected');
+  }
+
+  Future<void> _initLocalConnectionStates() async {
+    await Future.wait([
+      WebDAVService.instance.initialize(),
+      SMBService.instance.initialize(),
+    ]);
+
+    if (!mounted) return;
+    _localConnectionsReady = true;
+    _refreshLocalConnectionStates();
+  }
+
+  void _refreshLocalConnectionStates() {
+    final hasWebdav = WebDAVService.instance.connections.isNotEmpty;
+    final hasSmb = SMBService.instance.connections.isNotEmpty;
+
+    if (hasWebdav == _hasWebDAVConnections && hasSmb == _hasSMBConnections) {
+      return;
+    }
+
+    _updateTabController(
+      _isJellyfinConnected,
+      _isEmbyConnected,
+      _hasSharedRemoteHosts,
+      _isDandanConnected,
+      hasWebdav,
+      hasSmb,
+    );
   }
 
   TabChangeNotifier? _tabChangeNotifierRef;
@@ -413,6 +452,12 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
       case 'emby':
         await _showEmbyServerDialog();
         break;
+      case 'webdav':
+        await _showWebDAVConnectionDialog();
+        break;
+      case 'smb':
+        await _showSMBConnectionDialog();
+        break;
       case 'nipaplay':
         await _showNipaplayServerDialog();
         break;
@@ -428,6 +473,28 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
   Future<void> _showEmbyServerDialog() async {
     await NetworkMediaServerDialog.show(context, MediaServerType.emby);
+  }
+
+  Future<void> _showWebDAVConnectionDialog() async {
+    if (!_localConnectionsReady) {
+      await _initLocalConnectionStates();
+    }
+
+    final result = await WebDAVConnectionDialog.show(context);
+    if (result == true && mounted) {
+      _refreshLocalConnectionStates();
+    }
+  }
+
+  Future<void> _showSMBConnectionDialog() async {
+    if (!_localConnectionsReady) {
+      await _initLocalConnectionStates();
+    }
+
+    final result = await SMBConnectionDialog.show(context);
+    if (result == true && mounted) {
+      _refreshLocalConnectionStates();
+    }
   }
 
   Future<void> _showNipaplayServerDialog() async {
@@ -569,12 +636,20 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         final currentEmbyConnectionState = embyProvider.isConnected;
         final currentSharedState = sharedProvider.hasReachableActiveHost;
         final currentDandanState = dandanProvider.isConnected;
+        final currentHasWebdav = _localConnectionsReady
+            ? WebDAVService.instance.connections.isNotEmpty
+            : _hasWebDAVConnections;
+        final currentHasSmb = _localConnectionsReady
+            ? SMBService.instance.connections.isNotEmpty
+            : _hasSMBConnections;
         
         // 检查连接状态是否改变
         if (_isJellyfinConnected != currentJellyfinConnectionState || 
             _isEmbyConnected != currentEmbyConnectionState ||
             _hasSharedRemoteHosts != currentSharedState ||
-            _isDandanConnected != currentDandanState) {
+            _isDandanConnected != currentDandanState ||
+            _hasWebDAVConnections != currentHasWebdav ||
+            _hasSMBConnections != currentHasSmb) {
           print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState, Shared: $_hasSharedRemoteHosts -> $currentSharedState, Dandan: $_isDandanConnected -> $currentDandanState');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -583,6 +658,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 currentEmbyConnectionState,
                 currentSharedState,
                 currentDandanState,
+                currentHasWebdav,
+                currentHasSmb,
               );
             }
           });
@@ -594,6 +671,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             child: MediaLibraryPage(
               key: ValueKey('mediaLibrary_${widget.mediaLibraryVersion}'),
               onPlayEpisode: widget.onPlayEpisode,
+              onSourcesUpdated: _refreshLocalConnectionStates,
             ),
           ),
           RepaintBoundary(
@@ -603,21 +681,31 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
               section: LibraryManagementSection.local,
             ),
           ),
-          RepaintBoundary(
-            child: LibraryManagementTab(
-              key: const ValueKey('library_management_webdav'),
-              onPlayEpisode: widget.onPlayEpisode,
-              section: LibraryManagementSection.webdav,
-            ),
-          ),
-          RepaintBoundary(
-            child: LibraryManagementTab(
-              key: const ValueKey('library_management_smb'),
-              onPlayEpisode: widget.onPlayEpisode,
-              section: LibraryManagementSection.smb,
-            ),
-          ),
         ];
+
+        if (_hasWebDAVConnections) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: LibraryManagementTab(
+                key: const ValueKey('library_management_webdav'),
+                onPlayEpisode: widget.onPlayEpisode,
+                section: LibraryManagementSection.webdav,
+              ),
+            ),
+          );
+        }
+
+        if (_hasSMBConnections) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: LibraryManagementTab(
+                key: const ValueKey('library_management_smb'),
+                onPlayEpisode: widget.onPlayEpisode,
+                section: LibraryManagementSection.smb,
+              ),
+            ),
+          );
+        }
 
         if (_hasSharedRemoteHosts) {
           // 共享媒体库
@@ -699,23 +787,33 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                   size: 18, color: iconColor),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(
-              text: "WebDAV库管理",
-              fontSize: 18,
-              icon: Icon(Icons.cloud_outlined, size: 18, color: iconColor),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(
-              text: "SMB库管理",
-              fontSize: 18,
-              icon: Icon(Icons.lan_outlined, size: 18, color: iconColor),
-            ),
-          ),
         ];
+
+        if (_hasWebDAVConnections) {
+          tabs.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "WebDAV库管理",
+                fontSize: 18,
+                icon: Icon(Icons.cloud_outlined, size: 18, color: iconColor),
+              ),
+            ),
+          );
+        }
+
+        if (_hasSMBConnections) {
+          tabs.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "SMB库管理",
+                fontSize: 18,
+                icon: Icon(Icons.lan_outlined, size: 18, color: iconColor),
+              ),
+            ),
+          );
+        }
 
         if (_hasSharedRemoteHosts) {
           // 共享媒体库
@@ -896,11 +994,15 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     bool isEmbyConnected,
     bool hasSharedHosts,
     bool isDandanConnected,
+    bool hasWebdavConnections,
+    bool hasSmbConnections,
   ) {
     if (_isJellyfinConnected == isJellyfinConnected &&
         _isEmbyConnected == isEmbyConnected &&
         _hasSharedRemoteHosts == hasSharedHosts &&
-        _isDandanConnected == isDandanConnected) {
+        _isDandanConnected == isDandanConnected &&
+        _hasWebDAVConnections == hasWebdavConnections &&
+        _hasSMBConnections == hasSmbConnections) {
       return;
     }
     
@@ -909,6 +1011,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     _isEmbyConnected = isEmbyConnected;
     _hasSharedRemoteHosts = hasSharedHosts;
     _isDandanConnected = isDandanConnected;
+    _hasWebDAVConnections = hasWebdavConnections;
+    _hasSMBConnections = hasSmbConnections;
     
     // 创建新的TabController
     final newController = TabController(

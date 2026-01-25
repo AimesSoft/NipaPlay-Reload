@@ -53,6 +53,7 @@ class BlurDialog {
       barrierDismissible: barrierDismissible,
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (BuildContext context) {
+        final colorScheme = Theme.of(context).colorScheme;
         final screenSize = MediaQuery.of(context).size;
         
         // 使用预计算的对话框宽度
@@ -78,12 +79,12 @@ class BlurDialog {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.white.withOpacity(0.15),
-                  Colors.white.withOpacity(0.05),
+                  colorScheme.surface.withOpacity(0.2),
+                  colorScheme.surface.withOpacity(0.1),
                 ],
               ),
               border: Border.all(
-                color: Colors.white.withOpacity(0.3),
+                color: colorScheme.onSurface.withOpacity(0.2),
                 width: 1,
               ),
               boxShadow: [
@@ -111,8 +112,8 @@ class BlurDialog {
                       if (hasTitle) ...[
                         Text(
                           title,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -125,8 +126,8 @@ class BlurDialog {
                             if (content != null)
                               Text(
                                 content,
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: colorScheme.onSurface.withOpacity(0.9),
                                   fontSize: 15,
                                   height: 1.4,
                                 ),

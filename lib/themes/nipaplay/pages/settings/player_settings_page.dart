@@ -437,13 +437,14 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     // Web 平台不显示此页面内容，或者显示一个提示信息
     if (kIsWeb) {
-      return const Center(
+      return Center(
         child: Text(
           '播放器设置在Web平台不可用',
-          locale: Locale("zh-Hans", "zh"),
-          style: TextStyle(color: Colors.white),
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(color: colorScheme.onSurface),
         ),
       );
     }
@@ -481,7 +482,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           dropdownKey: _playerKernelDropdownKey,
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -503,7 +504,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -524,7 +525,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         if (globals.isDesktop) ...[
           Consumer<VideoPlayerState>(
@@ -545,7 +546,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               );
             },
           ),
-          const Divider(color: Colors.white12, height: 1),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         ],
 
         if (globals.isPhone) ...[
@@ -567,7 +568,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               );
             },
           ),
-          const Divider(color: Colors.white12, height: 1),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         ],
 
         Consumer<VideoPlayerState>(
@@ -613,7 +614,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -657,7 +658,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -695,7 +696,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -726,7 +727,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         SettingsItem.dropdown(
           title: "弹幕渲染引擎",
@@ -764,7 +765,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           dropdownKey: _danmakuRenderEngineDropdownKey,
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         // 弹幕转换简体中文开关
         Consumer<SettingsProvider>(
@@ -785,7 +786,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -806,7 +807,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -828,7 +829,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -872,15 +873,15 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         Icon(Ionicons.settings_outline,
-                            color: Colors.white, size: 18),
-                        SizedBox(width: 8),
+                            color: colorScheme.onSurface, size: 18),
+                        const SizedBox(width: 8),
                         Text(
                           '防剧透 AI 设置',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: colorScheme.onSurface,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
@@ -892,15 +893,15 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                       isGemini
                           ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
                           : 'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Text(
+                        Text(
                           '接口格式',
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: colorScheme.onSurface.withOpacity(0.7),
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
@@ -938,17 +939,17 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                       enableSuggestions: false,
                       decoration: InputDecoration(
                         labelText: '接口 URL',
-                        labelStyle: const TextStyle(color: Colors.white70),
+                        labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                         hintText: urlHint,
-                        hintStyle: const TextStyle(color: Colors.white38),
+                        hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
                         filled: true,
-                        fillColor: Colors.white10,
+                        fillColor: colorScheme.onSurface.withOpacity(0.1),
                         border: const OutlineInputBorder(
                           borderSide: BorderSide.none,
                           borderRadius: BorderRadius.all(Radius.circular(8)),
                         ),
                       ),
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: colorScheme.onSurface),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -957,17 +958,17 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                       enableSuggestions: false,
                       decoration: InputDecoration(
                         labelText: '模型',
-                        labelStyle: const TextStyle(color: Colors.white70),
+                        labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                         hintText: modelHint,
-                        hintStyle: const TextStyle(color: Colors.white38),
+                        hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
                         filled: true,
-                        fillColor: Colors.white10,
+                        fillColor: colorScheme.onSurface.withOpacity(0.1),
                         border: const OutlineInputBorder(
                           borderSide: BorderSide.none,
                           borderRadius: BorderRadius.all(Radius.circular(8)),
                         ),
                       ),
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: colorScheme.onSurface),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -977,25 +978,25 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                       enableSuggestions: false,
                       decoration: InputDecoration(
                         labelText: 'API Key',
-                        labelStyle: const TextStyle(color: Colors.white70),
+                        labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                         hintText: videoState.spoilerAiHasApiKey
                             ? '已保存，留空表示不修改'
                             : '请输入你的 API Key',
-                        hintStyle: const TextStyle(color: Colors.white38),
+                        hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
                         filled: true,
-                        fillColor: Colors.white10,
+                        fillColor: colorScheme.onSurface.withOpacity(0.1),
                         border: const OutlineInputBorder(
                           borderSide: BorderSide.none,
                           borderRadius: BorderRadius.all(Radius.circular(8)),
                         ),
                       ),
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: colorScheme.onSurface),
                     ),
                     const SizedBox(height: 12),
                     Text(
                       '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
                       style:
-                          const TextStyle(color: Colors.white70, fontSize: 13),
+                          TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 13),
                     ),
                     Slider(
                       min: 0.0,
@@ -1007,8 +1008,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                           _spoilerAiTemperatureDraft = value;
                         });
                       },
-                      activeColor: Colors.white,
-                      inactiveColor: Colors.white24,
+                      activeColor: colorScheme.primary,
+                      inactiveColor: colorScheme.onSurface.withOpacity(0.24),
                     ),
                     Align(
                       alignment: Alignment.centerRight,
@@ -1033,7 +1034,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         Consumer<SettingsProvider>(
           builder: (context, settingsProvider, child) {
@@ -1056,7 +1057,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
         if (_selectedKernelType == PlayerKernelType.mdk) ...[
           // 这里可以添加解码器相关设置

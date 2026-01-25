@@ -1,232 +1,161 @@
 import 'package:flutter/material.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:provider/provider.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 
 class MediaServerSelectionSheet extends StatelessWidget {
   const MediaServerSelectionSheet({super.key});
 
   static Future<String?> show(BuildContext context) {
-    return showModalBottomSheet<String>(
+    return BlurDialog.show<String>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => const MediaServerSelectionSheet(),
+      title: '添加媒体库',
+      contentWidget: const MediaServerSelectionSheet(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.5,
-      decoration: const BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      child: GlassmorphicContainer(
-        width: double.infinity,
-        height: double.infinity,
-        borderRadius: 20,
-        blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
-        alignment: Alignment.center,
-        border: 1,
-        linearGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.3),
-            Colors.white.withOpacity(0.25),
-          ],
-        ),
-        borderGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.5),
-            Colors.white.withOpacity(0.5),
-          ],
-        ),
-        child: Column(
-          children: [
-            // 拖拽条
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            
-            // 标题
-            const Padding(
-              padding: EdgeInsets.only(bottom: 16),
-              child: Text(
-                '选择媒体服务器',
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            
-            // 服务器选项列表
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // NipaPlay 选项
-                    _buildServerOptionWithImage(
-                      imageAsset: 'assets/nipaplay.png',
-                      title: 'NipaPlay',
-                      subtitle: '局域网媒体共享',
-                      color: const Color(0xFFB39DDB), // 淡紫色
-                      onTap: () => Navigator.of(context).pop('nipaplay'),
-                    ),
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subTextColor = isDarkMode ? Colors.white70 : Colors.black54;
+    final borderColor = isDarkMode ? Colors.white24 : Colors.black12;
+    final cardColor =
+        isDarkMode ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04);
 
-                    const SizedBox(height: 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        final maxWidth = constraints.maxWidth;
+        final columnCount = maxWidth >= 520 ? 2 : 1;
+        final itemWidth =
+            (maxWidth - (columnCount - 1) * spacing) / columnCount;
 
-                    // Jellyfin 选项
-                    _buildServerOptionWithSvg(
-                      svgAsset: 'assets/jellyfin.svg',
-                      title: 'Jellyfin',
-                      subtitle: '开源媒体服务器',
-                      color: Colors.lightBlueAccent,
-                      onTap: () => Navigator.of(context).pop('jellyfin'),
-                    ),
+        Widget buildGrid(List<Widget> items) {
+          return Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: items
+                .map((item) => SizedBox(width: itemWidth, child: item))
+                .toList(),
+          );
+        }
 
-                    const SizedBox(height: 12),
-
-                    _buildServerOptionWithImage(
-                      imageAsset: 'assets/dandanplay.png',
-                      title: '弹弹play',
-                      subtitle: '弹幕番剧远程服务',
-                      color: const Color(0xFF4DA3FF),
-                      onTap: () => Navigator.of(context).pop('dandanplay'),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Emby 选项
-                    _buildServerOptionWithSvg(
-                      svgAsset: 'assets/emby.svg',
-                      title: 'Emby',
-                      subtitle: '功能丰富的媒体服务器',
-                      color: const Color(0xFF52B54B),
-                      onTap: () => Navigator.of(context).pop('emby'),
-                    ),
-
-                    // 添加底部边距，确保最后一项可以完全显示
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildServerOptionWithSvg({
-    required String svgAsset,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
-          child: Row(
+        return SizedBox(
+          width: double.infinity,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Logo图标
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
+              _buildSectionTitle('网络媒体服务器', textColor),
+              const SizedBox(height: 12),
+              buildGrid([
+                _buildServerOptionCard(
+                  icon: _buildImageIcon('assets/nipaplay.png',
+                      const Color(0xFFB39DDB)),
+                  title: 'NipaPlay',
+                  subtitle: '局域网媒体共享',
+                  accentColor: const Color(0xFFB39DDB),
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  borderColor: borderColor,
+                  cardColor: cardColor,
+                  onTap: () => Navigator.of(context).pop('nipaplay'),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: SvgPicture.asset(
-                    svgAsset,
-                    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-                    width: 32,
-                    height: 32,
-                  ),
+                _buildServerOptionCard(
+                  icon: _buildSvgIcon('assets/jellyfin.svg',
+                      Colors.lightBlueAccent),
+                  title: 'Jellyfin',
+                  subtitle: '开源媒体服务器',
+                  accentColor: Colors.lightBlueAccent,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  borderColor: borderColor,
+                  cardColor: cardColor,
+                  onTap: () => Navigator.of(context).pop('jellyfin'),
                 ),
-              ),
-              const SizedBox(width: 16),
-              
-              // 文本信息
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+                _buildServerOptionCard(
+                  icon: _buildImageIcon(
+                      'assets/dandanplay.png', const Color(0xFF4DA3FF)),
+                  title: '弹弹play',
+                  subtitle: '弹幕番剧远程服务',
+                  accentColor: const Color(0xFF4DA3FF),
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  borderColor: borderColor,
+                  cardColor: cardColor,
+                  onTap: () => Navigator.of(context).pop('dandanplay'),
                 ),
-              ),
-              
-              // 箭头图标
-              Icon(
-                Ionicons.chevron_forward,
-                size: 16,
-                color: Colors.white.withOpacity(0.5),
-              ),
+                _buildServerOptionCard(
+                  icon:
+                      _buildSvgIcon('assets/emby.svg', const Color(0xFF52B54B)),
+                  title: 'Emby',
+                  subtitle: '功能丰富的媒体服务器',
+                  accentColor: const Color(0xFF52B54B),
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  borderColor: borderColor,
+                  cardColor: cardColor,
+                  onTap: () => Navigator.of(context).pop('emby'),
+                ),
+              ]),
+              const SizedBox(height: 20),
+              _buildSectionTitle('网络文件共享', textColor),
+              const SizedBox(height: 12),
+              buildGrid([
+                _buildServerOptionCard(
+                  icon: const Icon(Icons.cloud_outlined,
+                      size: 22, color: Color(0xFF6AB7FF)),
+                  title: 'WebDAV',
+                  subtitle: '添加WebDAV服务器',
+                  accentColor: const Color(0xFF6AB7FF),
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  borderColor: borderColor,
+                  cardColor: cardColor,
+                  onTap: () => Navigator.of(context).pop('webdav'),
+                ),
+                _buildServerOptionCard(
+                  icon: const Icon(Icons.lan_outlined,
+                      size: 22, color: Color(0xFF5CBF73)),
+                  title: 'SMB',
+                  subtitle: '添加SMB共享',
+                  accentColor: const Color(0xFF5CBF73),
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  borderColor: borderColor,
+                  cardColor: cardColor,
+                  onTap: () => Navigator.of(context).pop('smb'),
+                ),
+              ]),
             ],
           ),
-        ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionTitle(String title, Color textColor) {
+    return Text(
+      title,
+      locale: const Locale("zh-Hans", "zh"),
+      style: TextStyle(
+        color: textColor,
+        fontSize: 14,
+        fontWeight: FontWeight.bold,
       ),
     );
   }
 
-  Widget _buildServerOptionWithImage({
-    required String imageAsset,
+  Widget _buildServerOptionCard({
+    required Widget icon,
     required String title,
     required String subtitle,
-    required Color color,
+    required Color accentColor,
+    required Color textColor,
+    required Color subTextColor,
+    required Color borderColor,
+    required Color cardColor,
     required VoidCallback onTap,
   }) {
     return Material(
@@ -235,51 +164,36 @@ style: TextStyle(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
+            color: cardColor,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
+              color: borderColor,
+              width: 1,
             ),
           ),
           child: Row(
             children: [
-              // Logo图标
               Container(
-                width: 48,
-                height: 48,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  color: accentColor.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: ColorFiltered(
-                    colorFilter: ColorFilter.mode(
-                      color,
-                      BlendMode.srcIn,
-                    ),
-                    child: Image.asset(
-                      imageAsset,
-                      width: 32,
-                      height: 32,
-                    ),
-                  ),
-                ),
+                child: Center(child: icon),
               ),
-              const SizedBox(width: 16),
-
-              // 文本信息
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -287,24 +201,44 @@ style: TextStyle(
                     Text(
                       subtitle,
                       locale: const Locale("zh-Hans", "zh"),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
+                        color: subTextColor,
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // 箭头图标
               Icon(
                 Ionicons.chevron_forward,
                 size: 16,
-                color: Colors.white.withOpacity(0.5),
+                color: subTextColor,
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSvgIcon(String asset, Color color) {
+    return SvgPicture.asset(
+      asset,
+      width: 24,
+      height: 24,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+    );
+  }
+
+  Widget _buildImageIcon(String asset, Color color) {
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(
+        asset,
+        width: 24,
+        height: 24,
       ),
     );
   }

@@ -39,6 +39,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -50,8 +51,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       body: Consumer<WatchHistoryProvider>(
         builder: (context, historyProvider, child) {
           if (historyProvider.isLoading && historyProvider.history.isEmpty) {
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.white),
+            return Center(
+              child: CircularProgressIndicator(color: colorScheme.onSurface),
             );
           }
 
@@ -77,6 +78,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
 
   Widget _buildWatchHistoryItem(WatchHistoryItem item) {
     final appearanceProvider = context.watch<AppearanceSettingsProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onLongPress:
@@ -96,16 +98,16 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFFffffff).withOpacity(0.1),
-            const Color(0xFFFFFFFF).withOpacity(0.05),
+            colorScheme.onSurface.withOpacity(0.1),
+            colorScheme.onSurface.withOpacity(0.05),
           ],
         ),
         borderGradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFFffffff).withOpacity(0.5),
-            const Color(0xFFFFFFFF).withOpacity(0.5),
+            colorScheme.onSurface.withOpacity(0.5),
+            colorScheme.onSurface.withOpacity(0.5),
           ],
         ),
         child: Material(
@@ -128,8 +130,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                       children: [
                         Text(
                           item.animeName.isNotEmpty ? item.animeName : path.basename(item.filePath),
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -139,8 +141,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                         const SizedBox(height: 4),
                         Text(
                           item.episodeTitle ?? '未知集数',
-                          style: const TextStyle(
-                            color: Colors.white60,
+                          style: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.6),
                             fontSize: 12,
                           ),
                           maxLines: 1,
@@ -160,7 +162,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                           width: 40,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: colorScheme.onSurface.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(2),
                           ),
                           child: FractionallySizedBox(
@@ -168,7 +170,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                             widthFactor: item.watchProgress,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.secondary,
+                                color: colorScheme.secondary,
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
@@ -177,8 +179,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                       const SizedBox(height: 4),
                       Text(
                         _formatTime(item.lastWatchTime),
-                        style: const TextStyle(
-                          color: Colors.white60,
+                        style: TextStyle(
+                          color: colorScheme.onSurface.withOpacity(0.6),
                           fontSize: 12,
                         ),
                       ),
@@ -221,37 +223,39 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
   }
 
   Widget _buildDefaultThumbnail() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: 80,
       height: 45, // 16:9 比例
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: colorScheme.onSurface.withOpacity(0.1),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: const Icon(
+      child: Icon(
         Ionicons.videocam_outline,
-        color: Colors.white60,
+        color: colorScheme.onSurface.withOpacity(0.6),
         size: 20,
       ),
     );
   }
 
   Widget _buildEmptyState() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Ionicons.time_outline,
-            color: Colors.white60,
+            color: colorScheme.onSurface.withOpacity(0.6),
             size: 64,
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             '暂无观看记录',
-            locale:Locale("zh-Hans","zh"),
+            locale:const Locale("zh-Hans","zh"),
 style: TextStyle(
-              color: Colors.white,
+              color: colorScheme.onSurface,
               fontSize: 18,
               fontWeight: FontWeight.w500,
             ),
@@ -259,9 +263,9 @@ style: TextStyle(
           const SizedBox(height: 8),
           Text(
             '开始播放视频后，这里会显示观看记录',
-            locale:Locale("zh-Hans","zh"),
+            locale:const Locale("zh-Hans","zh"),
 style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: colorScheme.onSurface.withOpacity(0.7),
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
@@ -582,6 +586,7 @@ class _BlurContextMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return GlassmorphicContainer(
       width: 196,
       height: 56,
@@ -593,16 +598,16 @@ class _BlurContextMenu extends StatelessWidget {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Colors.white.withOpacity(0.18),
-          Colors.white.withOpacity(0.08),
+          colorScheme.onSurface.withOpacity(0.18),
+          colorScheme.onSurface.withOpacity(0.08),
         ],
       ),
       borderGradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Colors.white.withOpacity(0.45),
-          Colors.white.withOpacity(0.15),
+          colorScheme.onSurface.withOpacity(0.45),
+          colorScheme.onSurface.withOpacity(0.15),
         ],
       ),
       child: Material(
@@ -610,21 +615,21 @@ class _BlurContextMenu extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onDelete,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   Ionicons.trash_outline,
                   size: 18,
                   color: Colors.redAccent,
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 Text(
                   '删除观看记录',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: colorScheme.onSurface,
                     fontSize: 13,
                   ),
                 ),

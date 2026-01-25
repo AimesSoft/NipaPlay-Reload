@@ -60,9 +60,9 @@ class SettingsCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(effectiveBorderRadius),
-            color: Colors.white.withOpacity(effectiveBackgroundOpacity),
+            color: Theme.of(context).colorScheme.surface.withOpacity(effectiveBackgroundOpacity),
             border: Border.all(
-              color: Colors.white.withOpacity(effectiveBorderOpacity),
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(effectiveBorderOpacity),
               width: 0.5,
             ),
           ),

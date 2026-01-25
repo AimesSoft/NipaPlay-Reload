@@ -246,185 +246,193 @@ class SettingsItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     switch (type) {
       case SettingsItemType.dropdown:
-        return _buildDropdownItem();
-      case SettingsItemType.toggle:
-        return _buildToggleItem();
-      case SettingsItemType.button:
-        return _buildButtonItem();
-      case SettingsItemType.slider:
-        return _buildSliderItem();
-      case SettingsItemType.hotkey:
-        return _buildHotkeyItem();
-    }
-  }
-
-  /// 构建下拉菜单类型的设置项
-  Widget _buildDropdownItem() {
-    return ListTile(
-      leading: icon != null ? Icon(icon, color: Colors.white70) : null,
-      title: Text(
-        title,
-        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-          color: enabled ? Colors.white : Colors.white54,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                color: enabled ? Colors.white70 : Colors.white38,
-              ),
-            )
-          : null,
-      trailing: enabled && dropdownItems != null
-          ? BlurDropdown(
-              dropdownKey: dropdownKey ?? GlobalKey(),
-              items: dropdownItems!,
-              onItemSelected: onDropdownChanged!,
-            )
-          : null,
-      enabled: enabled,
-    );
-  }
-
-  /// 构建开关类型的设置项
-  Widget _buildToggleItem() {
-    return SwitchListTile(
-      secondary: icon != null ? Icon(icon, color: Colors.white70) : null,
-      title: Text(
-        title,
-        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-          color: enabled ? Colors.white : Colors.white54,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                color: enabled ? Colors.white70 : Colors.white38,
-              ),
-            )
-          : null,
-      value: switchValue ?? false,
-      onChanged: enabled ? onSwitchChanged : null,
-      activeColor: Colors.white,
-      inactiveThumbColor: Colors.white,
-      inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
-    );
-  }
-
-  /// 构建按钮类型的设置项
-  Widget _buildButtonItem() {
-    return ListTile(
-      leading: icon != null ? Icon(icon, color: Colors.white70) : null,
-      title: Text(
-        title,
-        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-          color: enabled ? Colors.white : Colors.white54,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                color: enabled ? Colors.white70 : Colors.white38,
-              ),
-            )
-          : null,
-      trailing: Icon(
-        trailingIcon ?? Ionicons.chevron_forward_outline,
-        color: isDestructive 
-            ? (enabled ? Colors.red : Colors.red.withOpacity(0.5))
-            : (enabled ? Colors.white : Colors.white54),
-      ),
-      onTap: enabled ? onTap : null,
-      enabled: enabled,
-    );
-  }
-
-  /// 构建滑块类型的设置项
-  Widget _buildSliderItem() {
-    return Column(
-      children: [
-        ListTile(
-          leading: icon != null ? Icon(icon, color: Colors.white70) : null,
+        return ListTile(
+          leading: icon != null
+              ? Icon(icon, color: colorScheme.onSurface.withOpacity(0.7))
+              : null,
           title: Text(
             title,
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-              color: enabled ? Colors.white : Colors.white54,
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: enabled
+                  ? colorScheme.onSurface
+                  : colorScheme.onSurface.withOpacity(0.54),
               fontWeight: FontWeight.bold,
             ),
           ),
           subtitle: subtitle != null
               ? Text(
                   subtitle!,
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: enabled ? Colors.white70 : Colors.white38,
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: enabled
+                        ? colorScheme.onSurface.withOpacity(0.7)
+                        : colorScheme.onSurface.withOpacity(0.38),
                   ),
                 )
               : null,
-          trailing: Text(
-            sliderLabelFormatter?.call(sliderValue ?? 0) ?? 
-            (sliderValue ?? 0).toStringAsFixed(1),
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-              color: enabled ? Colors.white : Colors.white54,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Slider(
-            value: sliderValue ?? 0,
-            min: sliderMin ?? 0,
-            max: sliderMax ?? 1,
-            divisions: sliderDivisions,
-            onChanged: enabled ? onSliderChanged : null,
-            activeColor: Colors.white,
-            inactiveColor: Colors.white38,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 构建快捷键类型的设置项
-  Widget _buildHotkeyItem() {
-    return Builder(
-      builder: (context) {
-        final appearanceProvider = context.watch<AppearanceSettingsProvider>();
-        final isBlurEnabled = appearanceProvider.enableWidgetBlurEffect;
-        
-        return ListTile(
-          leading: icon != null ? Icon(icon, color: Colors.white70) : null,
+          trailing: enabled && dropdownItems != null
+              ? BlurDropdown(
+                  dropdownKey: dropdownKey ?? GlobalKey(),
+                  items: dropdownItems!,
+                  onItemSelected: onDropdownChanged!,
+                )
+              : null,
+          enabled: enabled,
+        );
+      case SettingsItemType.toggle:
+        return SwitchListTile(
+          secondary: icon != null
+              ? Icon(icon, color: colorScheme.onSurface.withOpacity(0.7))
+              : null,
           title: Text(
             title,
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-              color: enabled ? Colors.white : Colors.white54,
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: enabled
+                  ? colorScheme.onSurface
+                  : colorScheme.onSurface.withOpacity(0.54),
               fontWeight: FontWeight.bold,
             ),
           ),
           subtitle: subtitle != null
               ? Text(
                   subtitle!,
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: enabled ? Colors.white70 : Colors.white38,
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: enabled
+                        ? colorScheme.onSurface.withOpacity(0.7)
+                        : colorScheme.onSurface.withOpacity(0.38),
+                  ),
+                )
+              : null,
+          value: switchValue ?? false,
+          onChanged: enabled ? onSwitchChanged : null,
+          activeColor: colorScheme.primary,
+          inactiveThumbColor: colorScheme.onSurface.withOpacity(0.7),
+          inactiveTrackColor: colorScheme.onSurface.withOpacity(0.2),
+        );
+      case SettingsItemType.button:
+        return ListTile(
+          leading: icon != null
+              ? Icon(icon, color: colorScheme.onSurface.withOpacity(0.7))
+              : null,
+          title: Text(
+            title,
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: enabled
+                  ? colorScheme.onSurface
+                  : colorScheme.onSurface.withOpacity(0.54),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          subtitle: subtitle != null
+              ? Text(
+                  subtitle!,
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: enabled
+                        ? colorScheme.onSurface.withOpacity(0.7)
+                        : colorScheme.onSurface.withOpacity(0.38),
+                  ),
+                )
+              : null,
+          trailing: Icon(
+            trailingIcon ?? Ionicons.chevron_forward_outline,
+            color: isDestructive
+                ? (enabled ? Colors.red : Colors.red.withOpacity(0.5))
+                : (enabled
+                    ? colorScheme.onSurface
+                    : colorScheme.onSurface.withOpacity(0.54)),
+          ),
+          onTap: enabled ? onTap : null,
+          enabled: enabled,
+        );
+      case SettingsItemType.slider:
+        return Column(
+          children: [
+            ListTile(
+              leading: icon != null
+                  ? Icon(icon, color: colorScheme.onSurface.withOpacity(0.7))
+                  : null,
+              title: Text(
+                title,
+                locale: const Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  color: enabled
+                      ? colorScheme.onSurface
+                      : colorScheme.onSurface.withOpacity(0.54),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              subtitle: subtitle != null
+                  ? Text(
+                      subtitle!,
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: enabled
+                            ? colorScheme.onSurface.withOpacity(0.7)
+                            : colorScheme.onSurface.withOpacity(0.38),
+                      ),
+                    )
+                  : null,
+              trailing: Text(
+                sliderLabelFormatter?.call(sliderValue ?? 0) ??
+                    (sliderValue ?? 0).toStringAsFixed(1),
+                locale: const Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  color: enabled
+                      ? colorScheme.onSurface
+                      : colorScheme.onSurface.withOpacity(0.54),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Slider(
+                value: sliderValue ?? 0,
+                min: sliderMin ?? 0,
+                max: sliderMax ?? 1,
+                divisions: sliderDivisions,
+                onChanged: enabled ? onSliderChanged : null,
+                activeColor: colorScheme.primary,
+                inactiveColor: colorScheme.onSurface.withOpacity(0.38),
+              ),
+            ),
+          ],
+        );
+      case SettingsItemType.hotkey:
+        final appearanceProvider = context.watch<AppearanceSettingsProvider>();
+        final isBlurEnabled = appearanceProvider.enableWidgetBlurEffect;
+
+        return ListTile(
+          leading: icon != null
+              ? Icon(icon, color: colorScheme.onSurface.withOpacity(0.7))
+              : null,
+          title: Text(
+            title,
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: enabled
+                  ? colorScheme.onSurface
+                  : colorScheme.onSurface.withOpacity(0.54),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          subtitle: subtitle != null
+              ? Text(
+                  subtitle!,
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: enabled
+                        ? colorScheme.onSurface.withOpacity(0.7)
+                        : colorScheme.onSurface.withOpacity(0.38),
                   ),
                 )
               : null,
@@ -436,26 +444,29 @@ style: TextStyle(
                 sigmaY: isBlurEnabled ? 10.0 : 0.0,
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isRecording 
+                  color: isRecording
                       ? Colors.red.withOpacity(0.2)
-                      : Colors.white.withOpacity(0.15),
+                      : colorScheme.onSurface.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: isRecording 
-                        ? Colors.red 
-                        : Colors.white.withOpacity(0.4),
+                    color: isRecording
+                        ? Colors.red
+                        : colorScheme.onSurface.withOpacity(0.4),
                     width: 1,
                   ),
                 ),
                 child: Text(
                   isRecording ? '按任意键...' : (hotkeyText ?? '未设置'),
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: isRecording 
-                        ? Colors.red 
-                        : (enabled ? Colors.white : Colors.white54),
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: isRecording
+                        ? Colors.red
+                        : (enabled
+                            ? colorScheme.onSurface
+                            : colorScheme.onSurface.withOpacity(0.54)),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -466,7 +477,8 @@ style: TextStyle(
           onTap: enabled ? onHotkeyTap : null,
           enabled: enabled,
         );
-      },
-    );
+    }
   }
+
+  // Remove the unused private _build methods
 }
