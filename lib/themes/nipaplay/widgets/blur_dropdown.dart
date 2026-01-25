@@ -135,7 +135,6 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      alignment: Alignment.center,
       child: Row(
         key: widget.dropdownKey,
         mainAxisSize: MainAxisSize.min,

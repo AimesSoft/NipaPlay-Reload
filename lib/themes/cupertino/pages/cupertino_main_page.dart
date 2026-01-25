@@ -59,7 +59,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   @override
   Widget build(BuildContext context) {
     final cupertinoTheme = CupertinoTheme.of(context);
-    final Color activeColor = cupertinoTheme.primaryColor;
+    const Color activeColor = Color(0xFFFF2E55);
     final Color inactiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
     final double bottomInset = MediaQuery.viewPaddingOf(context).bottom;

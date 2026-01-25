@@ -277,10 +277,15 @@ class SettingsItem extends StatelessWidget {
                 )
               : null,
           trailing: enabled && dropdownItems != null
-              ? BlurDropdown(
-                  dropdownKey: dropdownKey ?? GlobalKey(),
-                  items: dropdownItems!,
-                  onItemSelected: onDropdownChanged!,
+              ? ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.4,
+                  ),
+                  child: BlurDropdown(
+                    dropdownKey: dropdownKey ?? GlobalKey(),
+                    items: dropdownItems!,
+                    onItemSelected: onDropdownChanged!,
+                  ),
                 )
               : null,
           enabled: enabled,

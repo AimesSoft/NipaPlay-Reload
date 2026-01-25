@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:ui';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -210,32 +213,86 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                 height: 45, // 16:9 比例
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  return _buildDefaultThumbnail();
+                  return _buildDefaultThumbnail(item);
                 },
               ),
             );
           }
-          return _buildDefaultThumbnail();
+          return _buildDefaultThumbnail(item);
         },
       );
     }
-    return _buildDefaultThumbnail();
+    return _buildDefaultThumbnail(item);
   }
 
-  Widget _buildDefaultThumbnail() {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      width: 80,
-      height: 45, // 16:9 比例
-      decoration: BoxDecoration(
-        color: colorScheme.onSurface.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Icon(
-        Ionicons.videocam_outline,
-        color: colorScheme.onSurface.withOpacity(0.6),
-        size: 20,
-      ),
+  Widget _buildDefaultThumbnail(WatchHistoryItem item) {
+    if (item.animeId == null) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return Container(
+        width: 80,
+        height: 45,
+        decoration: BoxDecoration(
+          color: colorScheme.onSurface.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(
+          Ionicons.videocam_outline,
+          color: colorScheme.onSurface.withOpacity(0.6),
+          size: 20,
+        ),
+      );
+    }
+
+    return FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        String? imageUrl;
+        if (snapshot.hasData) {
+          imageUrl = snapshot.data!.getString('media_library_image_url_${item.animeId}');
+        }
+
+        final colorScheme = Theme.of(context).colorScheme;
+        if (imageUrl == null || imageUrl.isEmpty) {
+          return Container(
+            width: 80,
+            height: 45,
+            decoration: BoxDecoration(
+              color: colorScheme.onSurface.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              Ionicons.videocam_outline,
+              color: colorScheme.onSurface.withOpacity(0.6),
+              size: 20,
+            ),
+          );
+        }
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            width: 80,
+            height: 45,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: (context, url, error) => Container(color: Colors.black12),
+                  ),
+                ),
+                Container(color: Colors.black.withValues(alpha: 0.1)),
+                const Center(
+                  child: Icon(Ionicons.play_outline, color: Colors.white70, size: 16),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

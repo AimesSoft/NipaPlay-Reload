@@ -764,39 +764,38 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
         // 动态生成标签
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final labelColor = isDarkMode ? Colors.white : Colors.black;
+        const Color activeColor = Color(0xFFFF2E55);
         final unselectedLabelColor =
             isDarkMode ? Colors.white60 : Colors.black54;
-        final iconColor = labelColor;
 
         final List<Widget> tabs = [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
             child: HoverZoomTab(
               text: "本地媒体库",
               fontSize: 18,
-              icon: Icon(Icons.tv_outlined, size: 18, color: iconColor),
+              icon: Icon(Icons.tv_outlined, size: 18),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
             child: HoverZoomTab(
               text: "本地库管理",
               fontSize: 18,
               icon: Icon(Icons.folder_open_outlined,
-                  size: 18, color: iconColor),
+                  size: 18),
             ),
           ),
         ];
 
         if (_hasWebDAVConnections) {
           tabs.add(
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
               child: HoverZoomTab(
                 text: "WebDAV库管理",
                 fontSize: 18,
-                icon: Icon(Icons.cloud_outlined, size: 18, color: iconColor),
+                icon: Icon(Icons.cloud_outlined, size: 18),
               ),
             ),
           );
@@ -804,12 +803,12 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
         if (_hasSMBConnections) {
           tabs.add(
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
               child: HoverZoomTab(
                 text: "SMB库管理",
                 fontSize: 18,
-                icon: Icon(Icons.lan_outlined, size: 18, color: iconColor),
+                icon: Icon(Icons.lan_outlined, size: 18),
               ),
             ),
           );
@@ -817,42 +816,40 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
         if (_hasSharedRemoteHosts) {
           // 共享媒体库
-          tabs.add(Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
             child: HoverZoomTab(
               text: "共享媒体库",
               fontSize: 18,
-              icon: Image.asset(
-                'assets/nipaplay.png',
+              icon: Image(
+                image: AssetImage('assets/nipaplay.png'),
                 width: 18,
                 height: 18,
-                color: iconColor,
               ),
             ),
           ));
           // 共享库管理
-          tabs.add(Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
             child: HoverZoomTab(
               text: "共享库管理",
               fontSize: 18,
               icon: Icon(Icons.settings_suggest_outlined,
-                  size: 18, color: iconColor),
+                  size: 18),
             ),
           ));
         }
 
         if (_isDandanConnected) {
-          tabs.add(Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
             child: HoverZoomTab(
               text: "弹弹play",
               fontSize: 18,
-              icon: Image.asset(
-                'assets/dandanplay.png',
+              icon: Image(
+                image: AssetImage('assets/dandanplay.png'),
                 width: 18,
                 height: 18,
-                color: iconColor,
               ),
             ),
           ));
@@ -868,7 +865,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 'assets/jellyfin.svg',
                 width: 18,
                 height: 18,
-                colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+                colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.srcIn), // 默认占位
               ),
             ),
           ));
@@ -884,7 +881,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 'assets/emby.svg',
                 width: 18,
                 height: 18,
-                colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+                colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.srcIn), // 默认占位
               ),
             ),
           ));
@@ -931,13 +928,13 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                             controller: _tabController,
                             isScrollable: true,
                             tabs: tabs,
-                            labelColor: labelColor,
+                            labelColor: activeColor,
                             unselectedLabelColor: unselectedLabelColor,
                             labelPadding: const EdgeInsets.only(bottom: 12.0),
                             indicatorPadding: EdgeInsets.zero,
-                            indicator: _CustomTabIndicator(
+                            indicator: const _CustomTabIndicator(
                               indicatorHeight: 3.0,
-                              indicatorColor: labelColor,
+                              indicatorColor: activeColor,
                               radius: 30.0,
                             ),
                             tabAlignment: TabAlignment.start,
@@ -953,7 +950,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                         ),
                         const SizedBox(width: 8),
                         _buildAddMediaServerEntry(
-                          iconColor: iconColor,
+                          iconColor: activeColor,
                           textColor: unselectedLabelColor,
                         ),
                       ],

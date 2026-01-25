@@ -42,6 +42,8 @@ import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/main.dart'; // 用于MainPageState
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
@@ -2508,16 +2510,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   Widget _buildWatchHistoryButton() {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final color = isDarkMode ? Colors.white : Colors.black;
-
     return Tooltip(
       message: '观看记录',
       child: _HoverScaleButton(
         onTap: _showWatchHistoryDialog,
-        child: Icon(
+        child: const Icon(
           Icons.history_rounded,
-          color: color,
           size: 24,
         ),
       ),
@@ -2996,10 +2994,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 return Container(color: Colors.white10);
               }
               if (snapshot.hasError || !snapshot.hasData) {
-                return _buildDefaultThumbnail();
+                return _buildDefaultThumbnail(item);
               }
               if (snapshot.data!.isEmpty) {
-                return _buildDefaultThumbnail();
+                return _buildDefaultThumbnail(item);
               }
               try {
                 return Image.memory(
@@ -3008,10 +3006,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
-                  errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
+                  errorBuilder: (_, __, ___) => _buildDefaultThumbnail(item),
                 );
               } catch (e) {
-                return _buildDefaultThumbnail();
+                return _buildDefaultThumbnail(item);
               }
             },
           );
@@ -3048,10 +3046,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               return Container(color: Colors.white10);
             }
             if (snapshot.hasError || !snapshot.hasData) {
-              return _buildDefaultThumbnail();
+              return _buildDefaultThumbnail(item);
             }
             if (snapshot.data!.isEmpty) {
-              return _buildDefaultThumbnail();
+              return _buildDefaultThumbnail(item);
             }
             try {
               return Image.memory(
@@ -3059,10 +3057,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
-                errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
+                errorBuilder: (_, __, ___) => _buildDefaultThumbnail(item),
               );
             } catch (e) {
-              return _buildDefaultThumbnail();
+              return _buildDefaultThumbnail(item);
             }
           },
         );
@@ -3077,7 +3075,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       }
     }
 
-    final defaultThumbnail = _buildDefaultThumbnail();
+    final defaultThumbnail = _buildDefaultThumbnail(item);
     
     // 缓存默认缩略图和当前时间
     _thumbnailCache[item.filePath] = {
@@ -3088,12 +3086,53 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return defaultThumbnail;
   }
 
-  Widget _buildDefaultThumbnail() {
-    return Container(
-      color: Colors.white10,
-      child: const Center(
-        child: Icon(Icons.video_library, color: Colors.white30, size: 32),
-      ),
+  Widget _buildDefaultThumbnail(WatchHistoryItem item) {
+    if (item.animeId == null) {
+      return Container(
+        color: Colors.white10,
+        child: const Center(
+          child: Icon(Icons.video_library, color: Colors.white30, size: 32),
+        ),
+      );
+    }
+
+    return FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        String? imageUrl;
+        if (snapshot.hasData) {
+          imageUrl = snapshot.data!.getString('${_localPrefsKeyPrefix}${item.animeId}');
+        }
+
+        if (imageUrl == null || imageUrl.isEmpty) {
+          return Container(
+            color: Colors.white10,
+            child: const Center(
+              child: Icon(Icons.video_library, color: Colors.white30, size: 32),
+            ),
+          );
+        }
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorWidget: (context, url, error) => Container(color: Colors.white10),
+              ),
+            ),
+            Container(color: Colors.black.withValues(alpha: 0.2)), // 稍微调暗一点
+            const Center(
+              child: Icon(Icons.play_circle_outline, color: Colors.white54, size: 32),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -4150,17 +4189,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     required VoidCallback? onTap,
     bool enabled = true,
   }) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final color = isDarkMode 
-        ? (enabled ? Colors.white : Colors.white24) 
-        : (enabled ? Colors.black : Colors.black26);
-
     return _HoverScaleButton(
       enabled: enabled,
       onTap: onTap,
       child: Icon(
         icon,
-        color: color,
         size: 24, // 与标题字体大小一致
       ),
     );
@@ -4272,17 +4305,27 @@ class _HoverScaleButtonState extends State<_HoverScaleButton> {
 
   @override
   Widget build(BuildContext context) {
+    const activeColor = Color(0xFFFF2E55);
+    final isEnabled = widget.enabled;
+
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => isEnabled ? setState(() => _isHovered = true) : null,
+      onExit: (_) => isEnabled ? setState(() => _isHovered = false) : null,
+      cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: GestureDetector(
-        onTap: widget.enabled ? widget.onTap : null,
+        onTap: isEnabled ? widget.onTap : null,
         child: AnimatedScale(
-          scale: _isHovered && widget.enabled ? 1.3 : 1.0,
+          scale: _isHovered && isEnabled ? 1.3 : 1.0,
           duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          child: widget.child,
+          curve: Curves.easeOutBack,
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              iconTheme: IconThemeData(
+                color: _isHovered && isEnabled ? activeColor : null,
+              ),
+            ),
+            child: widget.child,
+          ),
         ),
       ),
     );

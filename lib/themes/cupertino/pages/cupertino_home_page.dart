@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
-
+import 'dart:ui';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -2046,10 +2048,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 );
               }
               if (snapshot.hasError || !snapshot.hasData) {
-                return _buildDefaultThumbnail();
+                return _buildDefaultThumbnail(item);
               }
               if (snapshot.data!.isEmpty) {
-                return _buildDefaultThumbnail();
+                return _buildDefaultThumbnail(item);
               }
               try {
                 return Image.memory(
@@ -2059,10 +2061,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
-                  errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
+                  errorBuilder: (_, __, ___) => _buildDefaultThumbnail(item),
                 );
               } catch (e) {
-                return _buildDefaultThumbnail();
+                return _buildDefaultThumbnail(item);
               }
             },
           );
@@ -2101,10 +2103,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               );
             }
             if (snapshot.hasError || !snapshot.hasData) {
-              return _buildDefaultThumbnail();
+              return _buildDefaultThumbnail(item);
             }
             if (snapshot.data!.isEmpty) {
-              return _buildDefaultThumbnail();
+              return _buildDefaultThumbnail(item);
             }
             try {
               return Image.memory(
@@ -2112,10 +2114,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
-                errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
+                errorBuilder: (_, __, ___) => _buildDefaultThumbnail(item),
               );
             } catch (e) {
-              return _buildDefaultThumbnail();
+              return _buildDefaultThumbnail(item);
             }
           },
         );
@@ -2129,26 +2131,83 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       }
     }
 
-    final defaultThumbnail = _buildDefaultThumbnail();
+    final defaultThumbnail = _buildDefaultThumbnail(item);
 
     _thumbnailCache[item.filePath] = {'widget': defaultThumbnail, 'time': now};
 
     return defaultThumbnail;
   }
 
-  Widget _buildDefaultThumbnail() {
-    return Container(
-      color: CupertinoDynamicColor.resolve(
-        CupertinoColors.systemGrey6,
-        context,
-      ),
-      child: const Center(
-        child: Icon(
-          CupertinoIcons.video_camera,
-          color: CupertinoColors.systemGrey3,
-          size: 32,
+  Widget _buildDefaultThumbnail(WatchHistoryItem item) {
+    if (item.animeId == null) {
+      return Container(
+        color: CupertinoDynamicColor.resolve(
+          CupertinoColors.systemGrey6,
+          context,
         ),
-      ),
+        child: const Center(
+          child: Icon(
+            CupertinoIcons.video_camera,
+            color: CupertinoColors.systemGrey3,
+            size: 32,
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        String? imageUrl;
+        if (snapshot.hasData) {
+          imageUrl = snapshot.data!.getString('${_localPrefsKeyPrefix}${item.animeId}');
+        }
+
+        if (imageUrl == null || imageUrl.isEmpty) {
+          return Container(
+            color: CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGrey6,
+              context,
+            ),
+            child: const Center(
+              child: Icon(
+                CupertinoIcons.video_camera,
+                color: CupertinoColors.systemGrey3,
+                size: 32,
+              ),
+            ),
+          );
+        }
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorWidget: (context, url, error) => Container(
+                  color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.systemGrey6,
+                    context,
+                  ),
+                ),
+              ),
+            ),
+            Container(color: Colors.black.withValues(alpha: 0.2)),
+            const Center(
+              child: Icon(
+                CupertinoIcons.play_circle,
+                color: CupertinoColors.white,
+                size: 32,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

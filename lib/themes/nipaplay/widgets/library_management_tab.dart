@@ -1942,16 +1942,14 @@ style: TextStyle(color: Colors.redAccent)),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.delete_outline, color: iconColor, size: 22),
-                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                    constraints: const BoxConstraints(),
+                  SearchBarActionButton(
+                    icon: Icons.delete_outline,
+                    tooltip: '移除文件夹',
                     onPressed: scanService.isScanning ? null : () => _handleRemoveFolder(folderPath),
                   ),
-                  IconButton(
-                    icon: Icon(Icons.refresh_rounded, color: iconColor, size: 22),
-                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                    constraints: const BoxConstraints(),
+                  SearchBarActionButton(
+                    icon: Icons.refresh_rounded,
+                    tooltip: '扫描文件夹',
                     onPressed: scanService.isScanning
                         ? null
                         : () async {
@@ -2116,22 +2114,19 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: Icon(Icons.edit, color: iconColor, size: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
+              SearchBarActionButton(
+                icon: Icons.edit,
+                tooltip: '编辑连接',
                 onPressed: () => _editWebDAVConnection(connection),
               ),
-              IconButton(
-                icon: Icon(Icons.delete_outline, color: iconColor, size: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
+              SearchBarActionButton(
+                icon: Icons.delete_outline,
+                tooltip: '删除连接',
                 onPressed: () => _removeWebDAVConnection(connection),
               ),
-              IconButton(
-                icon: Icon(Icons.refresh, color: iconColor, size: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
+              SearchBarActionButton(
+                icon: Icons.refresh,
+                tooltip: '测试连接',
                 onPressed: () => _testWebDAVConnection(connection),
               ),
             ],
@@ -2210,23 +2205,20 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: Icon(Icons.edit, color: iconColor, size: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
+              SearchBarActionButton(
+                icon: Icons.edit,
+                tooltip: '编辑连接',
                 onPressed: () =>
                     _showSMBConnectionDialog(editConnection: connection),
               ),
-              IconButton(
-                icon: Icon(Icons.delete_outline, color: iconColor, size: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
+              SearchBarActionButton(
+                icon: Icons.delete_outline,
+                tooltip: '删除连接',
                 onPressed: () => _removeSMBConnection(connection),
               ),
-              IconButton(
-                icon: Icon(Icons.refresh, color: iconColor, size: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                constraints: const BoxConstraints(),
+              SearchBarActionButton(
+                icon: Icons.refresh,
+                tooltip: '刷新连接',
                 onPressed: () => _refreshSMBConnection(connection),
               ),
             ],
