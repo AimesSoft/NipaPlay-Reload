@@ -73,7 +73,7 @@ class AnimeDetailPage extends StatefulWidget {
     return showGeneralDialog<WatchHistoryItem>(
       context: context,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.transparent,
       barrierLabel: '关闭详情页',
       transitionDuration: const Duration(milliseconds: 250),
       pageBuilder: (context, animation, secondaryAnimation) {
@@ -1829,6 +1829,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     return NipaplayAnimeDetailScaffold(
       backgroundImageUrl: _getPosterUrl(),
       blurBackground: true, // Bangumi通常返回的是竖向封面，开启模糊以提升质感
+      onClose: () => Navigator.of(context).pop(),
       child: _buildContent(),
     );
   }
