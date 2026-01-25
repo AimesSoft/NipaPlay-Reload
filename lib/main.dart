@@ -39,8 +39,8 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
-import 'package:nipaplay/themes/fluent/pages/fluent_main_page.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
+import 'themes/nipaplay/pages/settings/account_page.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'services/security_bookmark_service.dart';
@@ -71,7 +71,6 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'constants/settings_keys.dart';
-import 'package:nipaplay/themes/web/web_entry_app.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
@@ -85,14 +84,19 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey =
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Web 端仅提供远程访问 Web UI，避免触发桌面/IO 相关初始化导致灰屏。
+  // Web 端不再提供 UI，仅保留客户端连接的远程访问 API。
   if (kIsWeb) {
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      debugPrint('应用发生错误: ${details.exception}');
-      debugPrint('错误堆栈: ${details.stack}');
-    };
-    runApp(const NipaPlayWebEntryApp());
+    runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: Center(
+          child: Text(
+            'Web UI 已移除，请使用客户端连接远程访问服务。',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    ));
     return;
   }
 
@@ -845,7 +849,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
             materialHomeBuilder: () =>
                 MainPage(launchFilePath: widget.launchFilePath),
             fluentHomeBuilder: () =>
-                FluentMainPage(launchFilePath: widget.launchFilePath),
+                MainPage(launchFilePath: widget.launchFilePath),
             cupertinoHomeBuilder: () =>
                 CupertinoMainPage(launchFilePath: widget.launchFilePath),
           );
@@ -897,6 +901,7 @@ class MainPage extends StatefulWidget {
       const DashboardHomePage(),
       const PlayVideoPage(),
       const AnimePage(),
+      const AccountPage(),
       const SettingsPage(),
     ];
     return pages;
@@ -937,7 +942,6 @@ class MainPageState extends State<MainPage>
     debugPrint('[MainPageState] targetTabIndex: $index');
 
     if (index != null) {
-      // 对于FluentUI主题，需要在标签切换时管理热键
       debugPrint('[MainPageState] 准备调用_manageHotkeys()...');
       _manageHotkeys();
       debugPrint('[MainPageState] _manageHotkeys()调用完成');
@@ -979,22 +983,8 @@ class MainPageState extends State<MainPage>
 
     final tabIndex = globalTabController?.index ?? -1;
 
-    // 检查是否应该注册热键：
-    // 1. nipaplay主题：使用globalTabController，视频播放页面是索引1
-    // 2. FluentUI主题：使用TabChangeNotifier，视频播放页面也是索引1
-    bool shouldBeRegistered = false;
-
-    if (globalTabController != null) {
-      // nipaplay主题：检查tabIndex == 1
-      shouldBeRegistered = tabIndex == 1 && videoState.hasVideo;
-      //debugPrint('[HotkeyManager] nipaplay主题: tabIndex=$tabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
-    } else {
-      // FluentUI主题：检查TabChangeNotifier的targetTabIndex == 1
-      final tabChangeNotifier = _tabChangeNotifier;
-      final fluentTabIndex = tabChangeNotifier?.targetTabIndex ?? -1;
-      shouldBeRegistered = fluentTabIndex == 1 && videoState.hasVideo;
-      //debugPrint('[HotkeyManager] FluentUI主题: fluentTabIndex=$fluentTabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
-    }
+    final bool shouldBeRegistered =
+        tabIndex == 1 && videoState.hasVideo;
 
     //debugPrint('[HotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
 
@@ -1046,8 +1036,8 @@ class MainPageState extends State<MainPage>
     // ... (注释省略)
 
     if (mounted) {
-      // 所有平台现在都是 4 个标签
-      const tabLength = 4;
+      // 主页面Tab数量与页面列表保持一致
+      final tabLength = widget.pages.length;
       globalTabController = TabController(
         length: tabLength,
         vsync: this,

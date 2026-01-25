@@ -1,16 +1,10 @@
 import 'dart:io';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
-import 'package:shelf_static/shelf_static.dart';
 import 'package:shelf_cors_headers/shelf_cors_headers.dart';
-import 'package:path/path.dart' as p;
-import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/utils/storage_service.dart';
 import 'web_api_service.dart';
-import 'package:nipaplay/utils/asset_helper.dart';
 import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 
 class WebServerService {
@@ -18,25 +12,11 @@ class WebServerService {
   static const String _legacyAutoStartKey = 'web_server_enabled';
   static const String _autoStartKey = 'web_server_auto_start';
   static const String _portKey = 'web_server_port';
-  static const String _devWebUiPortKey = SettingsKeys.devRemoteAccessWebUiPort;
-
-  static const Set<String> _hopByHopHeaders = {
-    'connection',
-    'keep-alive',
-    'proxy-authenticate',
-    'proxy-authorization',
-    'te',
-    'trailer',
-    'transfer-encoding',
-    'upgrade',
-  };
   
   HttpServer? _server;
   int _port = 1180;
   bool _isRunning = false;
   bool _autoStart = false;
-  int _devWebUiPort = 0;
-  http.Client? _devWebUiProxyClient;
   final WebApiService _webApiService = WebApiService();
   final NipaPlayLanDiscoveryResponder _lanDiscoveryResponder =
       NipaPlayLanDiscoveryResponder();
@@ -44,12 +24,10 @@ class WebServerService {
   bool get isRunning => _isRunning;
   int get port => _port;
   bool get autoStart => _autoStart;
-  int get devWebUiPort => _devWebUiPort;
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _port = prefs.getInt(_portKey) ?? 1180;
-    _devWebUiPort = prefs.getInt(_devWebUiPortKey) ?? 0;
     if (prefs.containsKey(_autoStartKey)) {
       _autoStart = prefs.getBool(_autoStartKey) ?? false;
     } else {
@@ -72,39 +50,25 @@ class WebServerService {
 
   Future<bool> startServer({int? port}) async {
     if (_isRunning) {
-      print('Web server is already running.');
+      print('Remote access server is already running.');
       return true;
     }
 
     _port = port ?? _port;
 
     try {
-      // 开发调试：如果设置了 devWebUiPort，则将 Web UI 请求反向代理到本机该端口
-      final prefs = await SharedPreferences.getInstance();
-      _devWebUiPort = prefs.getInt(_devWebUiPortKey) ?? 0;
-      final bool useDevWebUiProxy = _devWebUiPort > 0 && _devWebUiPort < 65536;
-
-      final Handler uiHandler;
-      if (useDevWebUiProxy) {
-        uiHandler = _createDevWebUiProxyHandler(port: _devWebUiPort);
-      } else {
-        // 静态文件服务
-        final webAppPath =
-            p.join((await StorageService.getAppStorageDirectory()).path, 'web');
-        // 在启动服务器前，确保Web资源已解压
-        await AssetHelper.extractWebAssets(webAppPath);
-        uiHandler = createStaticHandler(webAppPath, defaultDocument: 'index.html');
-      }
-
       final apiRouter = Router()..mount('/api/', _webApiService.handler);
 
       final Handler rootHandler = (Request request) {
         final path = request.url.path;
-        // 严格隔离 /api：避免在开发代理模式下被 UI 代理兜底成 index.html
         if (path == 'api' || path.startsWith('api/')) {
           return apiRouter.call(request);
         }
-        return uiHandler(request);
+        return Response(
+          404,
+          body: 'Web UI 已移除，请使用 NipaPlay 客户端连接远程访问 API。',
+          headers: const {'Content-Type': 'text/plain; charset=utf-8'},
+        );
       };
 
       final handler = const Pipeline()
@@ -114,69 +78,16 @@ class WebServerService {
           
       _server = await shelf_io.serve(handler, '0.0.0.0', _port);
       _isRunning = true;
-      if (useDevWebUiProxy) {
-        print(
-            'Web server started on port ${_server!.port} (dev web ui proxy -> 127.0.0.1:$_devWebUiPort)');
-      } else {
-        print('Web server started on port ${_server!.port}');
-      }
+      print('Remote access server started on port ${_server!.port}');
       await _lanDiscoveryResponder.start(webPort: _server!.port);
       await saveSettings();
       return true;
     } catch (e) {
-      print('Failed to start web server: $e');
+      print('Failed to start remote access server: $e');
       _isRunning = false;
       await _lanDiscoveryResponder.stop();
       return false;
     }
-  }
-
-  Handler _createDevWebUiProxyHandler({required int port}) {
-    _devWebUiProxyClient ??= http.Client();
-    final http.Client client = _devWebUiProxyClient!;
-    final Uri baseUri = Uri.parse('http://127.0.0.1:$port/');
-
-    return (Request request) async {
-      final targetUri = baseUri.resolve(request.url.toString());
-      final proxyRequest = http.StreamedRequest(request.method, targetUri);
-
-      request.headers.forEach((name, value) {
-        final lower = name.toLowerCase();
-        if (lower == 'host') return;
-        if (_hopByHopHeaders.contains(lower)) return;
-        proxyRequest.headers[name] = value;
-      });
-
-      try {
-        await proxyRequest.sink.addStream(request.read());
-      } catch (_) {
-        // ignore body stream errors
-      } finally {
-        await proxyRequest.sink.close();
-      }
-
-      try {
-        final upstreamResponse = await client.send(proxyRequest);
-        final headers = <String, String>{};
-        upstreamResponse.headers.forEach((name, value) {
-          final lower = name.toLowerCase();
-          if (_hopByHopHeaders.contains(lower)) return;
-          headers[name] = value;
-        });
-        return Response(
-          upstreamResponse.statusCode,
-          body: upstreamResponse.stream,
-          headers: headers,
-        );
-      } catch (e) {
-        return Response(
-          502,
-          body:
-              'Dev Web UI proxy failed to connect to http://127.0.0.1:$port\n$e',
-          headers: const {'Content-Type': 'text/plain; charset=utf-8'},
-        );
-      }
-    };
   }
 
   Future<void> stopServer() async {
@@ -185,9 +96,7 @@ class WebServerService {
       _server = null;
       _isRunning = false;
       await _lanDiscoveryResponder.stop();
-      _devWebUiProxyClient?.close();
-      _devWebUiProxyClient = null;
-      print('Web server stopped.');
+      print('Remote access server stopped.');
       await saveSettings();
     }
   }

@@ -27,6 +27,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_skeleton.dart'
 import 'package:nipaplay/themes/nipaplay/widgets/loading_placeholder.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
@@ -2359,6 +2360,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       builder: (context, historyProvider, child) {
         final validHistory = historyProvider.continueWatchingItems;
 
+        final actionWidgets = <Widget>[];
+        if (!isPhone && validHistory.isNotEmpty) {
+          actionWidgets.add(_buildScrollButtons(_continueWatchingScrollController, 292));
+          actionWidgets.add(const SizedBox(width: 12));
+        }
+        actionWidgets.add(_buildWatchHistoryButton());
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2379,8 +2387,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  if (!isPhone && validHistory.isNotEmpty)
-                    _buildScrollButtons(_continueWatchingScrollController, 292),
+                  ...actionWidgets,
                 ],
               ),
             ),
@@ -2479,6 +2486,39 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               overflow: TextOverflow.ellipsis,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showWatchHistoryDialog() {
+    final screenSize = MediaQuery.of(context).size;
+    final shortestSide = math.min(screenSize.width, screenSize.height);
+    final isPhone = shortestSide < 600;
+    final dialogHeight = screenSize.height * (isPhone ? 0.7 : 0.6);
+
+    BlurDialog.show(
+      context: context,
+      title: '观看记录',
+      contentWidget: SizedBox(
+        height: dialogHeight,
+        child: const WatchHistoryPage(),
+      ),
+    );
+  }
+
+  Widget _buildWatchHistoryButton() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final color = isDarkMode ? Colors.white : Colors.black;
+
+    return Tooltip(
+      message: '观看记录',
+      child: _HoverScaleButton(
+        onTap: _showWatchHistoryDialog,
+        child: Icon(
+          Icons.history_rounded,
+          color: color,
+          size: 24,
         ),
       ),
     );

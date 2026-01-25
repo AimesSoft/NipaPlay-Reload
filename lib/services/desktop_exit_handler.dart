@@ -1,18 +1,15 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/providers/service_provider.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -184,19 +181,13 @@ class DesktopExitHandler
 
   Future<DesktopExitDecision?> _showExitDialog(material.BuildContext context) {
     bool remember = false;
-    final isFluent =
-        Provider.of<UIThemeProvider>(context, listen: false).isFluentUITheme;
-
-    final textStyle = isFluent
-        ? const material.TextStyle()
-        : const material.TextStyle(color: material.Colors.white70);
-    final titleStyle = isFluent
-        ? const material.TextStyle()
-        : const material.TextStyle(
-            color: material.Colors.white,
-            fontSize: 16,
-            fontWeight: material.FontWeight.w600,
-          );
+    final textStyle =
+        const material.TextStyle(color: material.Colors.white70);
+    final titleStyle = const material.TextStyle(
+      color: material.Colors.white,
+      fontSize: 16,
+      fontWeight: material.FontWeight.w600,
+    );
 
     return BlurDialog.show<DesktopExitDecision>(
       context: context,
@@ -212,20 +203,12 @@ class DesktopExitHandler
               material.Row(
                 mainAxisSize: material.MainAxisSize.min,
                 children: [
-                  if (isFluent)
-                    fluent.Checkbox(
-                      checked: remember,
-                      onChanged: (value) => setState(() {
-                        remember = value ?? false;
-                      }),
-                    )
-                  else
-                    material.Checkbox(
-                      value: remember,
-                      onChanged: (value) => setState(() {
-                        remember = value ?? false;
-                      }),
-                    ),
+                  material.Checkbox(
+                    value: remember,
+                    onChanged: (value) => setState(() {
+                      remember = value ?? false;
+                    }),
+                  ),
                   material.GestureDetector(
                     onTap: () => setState(() {
                       remember = !remember;
@@ -254,7 +237,7 @@ class DesktopExitHandler
           ),
           child: material.Text(
             '取消并返回',
-            style: isFluent ? null : const material.TextStyle(color: material.Colors.white70),
+            style: const material.TextStyle(color: material.Colors.white70),
           ),
         ),
         material.OutlinedButton(
@@ -266,7 +249,7 @@ class DesktopExitHandler
           ),
           child: material.Text(
             '最小化到系统托盘',
-            style: isFluent ? null : const material.TextStyle(color: material.Colors.white),
+            style: const material.TextStyle(color: material.Colors.white),
           ),
         ),
         material.ElevatedButton(
@@ -276,12 +259,10 @@ class DesktopExitHandler
               remember: remember,
             ),
           ),
-          style: isFluent
-              ? null
-              : material.ElevatedButton.styleFrom(
-                  backgroundColor: material.Colors.redAccent,
-                  foregroundColor: material.Colors.white,
-                ),
+          style: material.ElevatedButton.styleFrom(
+            backgroundColor: material.Colors.redAccent,
+            foregroundColor: material.Colors.white,
+          ),
           child: const material.Text('关闭播放器'),
         ),
       ],

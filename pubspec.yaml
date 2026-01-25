@@ -97,7 +97,6 @@ dependencies:
   charset_converter: ^2.1.1
   system_info2: ^3.0.1
   hotkey_manager: ^0.2.3
-  fluent_ui: ^4.12.0
   adaptive_platform_ui: ^0.1.98
   ffi: ^2.1.3
   smb_connect: ^0.0.9
@@ -166,32 +165,6 @@ flutter:
     - others/赞赏码.jpg
     - assets/shaders/anime4k/
     - assets/shaders/crt/
-    # --- Web UI Assets ---
-    - assets/web/
-    - assets/web/assets/
-    - assets/web/assets/assets/
-    - assets/web/assets/assets/images/
-    - assets/web/assets/fonts/
-    - assets/web/assets/packages/
-    - assets/web/assets/packages/cupertino_icons/
-    - assets/web/assets/packages/cupertino_icons/assets/
-    - assets/web/assets/packages/hugeicons/
-    - assets/web/assets/packages/hugeicons/lib/
-    - assets/web/assets/packages/hugeicons/lib/fonts/
-    - assets/web/assets/packages/kmbal_ionicons/
-    - assets/web/assets/packages/kmbal_ionicons/assets/
-    - assets/web/assets/packages/kmbal_ionicons/assets/fonts/
-    - assets/web/assets/packages/media_kit/
-    - assets/web/assets/packages/media_kit/assets/
-    - assets/web/assets/packages/media_kit/assets/web/
-    - assets/web/assets/packages/wakelock_plus/
-    - assets/web/assets/packages/wakelock_plus/assets/
-    - assets/web/assets/shaders/
-    - assets/web/canvaskit/
-    - assets/web/canvaskit/chromium/
-    - assets/web/icons/
-    # ---------------------
-    
   # GPU着色器文件
     
   # The following line ensures that the Material Icons font is
@@ -228,9 +201,7 @@ flutter:
 
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
-  # Fix fluent_ui ShuntingYardParser compatibility issue
   math_expressions: 2.3.1
-  fluent_ui: 4.11.0
   media_kit:
     git:
       url: https://github.com/Shinokawa/media-kit.git

@@ -1,11 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_video_upload_control.dart';
 import 'dart:io' as io;
 import 'package:universal_html/html.dart' as web_html;
 import 'package:image_picker/image_picker.dart';
@@ -29,26 +25,6 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
 
   @override
   Widget build(BuildContext context) {
-    final uiThemeProvider =
-        Provider.of<UIThemeProvider>(context, listen: false);
-
-    if (uiThemeProvider.isFluentUITheme) {
-      // 使用 FluentUI 版本
-      return FluentVideoUploadControl(
-        title: '选择视频文件',
-        subtitle: '支持 MP4, AVI, MKV 等格式\n单击选择文件开始播放',
-        onVideoSelected: (filePath) async {
-          final videoState =
-              Provider.of<VideoPlayerState>(context, listen: false);
-          videoState.setPreInitLoadingState('正在准备视频文件...');
-
-          Future.microtask(() async {
-            await videoState.initializePlayer(filePath);
-          });
-        },
-      );
-    }
-
     // 使用 Material 版本（新的设计）
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : Colors.black;

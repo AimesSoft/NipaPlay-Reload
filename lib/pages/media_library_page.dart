@@ -3,11 +3,8 @@ import 'package:nipaplay/models/bangumi_model.dart'; // Needed for _fetchedAnime
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/bangumi_service.dart'; // Needed for getAnimeDetails
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_media_library_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -596,8 +593,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     // 🔥 移除super.build(context)调用，因为已禁用AutomaticKeepAliveClientMixin
     // super.build(context);
     //debugPrint('[媒体库CPU] MediaLibraryPage build 被调用 - mounted: $mounted');
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context);
-
     // This Consumer ensures that we rebuild when the watch history changes.
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {
@@ -610,23 +605,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
           });
         }
 
-        // Decide which UI to render based on the theme.
-        if (uiThemeProvider.isFluentUITheme) {
-          return FluentMediaLibraryView(
-            isLoading: _isLoadingInitial,
-            error: _error,
-            items: _uniqueLibraryItems,
-            fullAnimeData: _fetchedFullAnimeData,
-            persistedImageUrls: _persistedImageUrls,
-            isJellyfinConnected: _isJellyfinConnected,
-            scrollController: _gridScrollController,
-            onRefresh: _loadInitialMediaLibraryData,
-            onConnectServer: _showServerSelectionDialog,
-            onAnimeTap: _navigateToAnimeDetail,
-          );
-        } else {
-          return _buildLocalMediaLibrary();
-        }
+        return _buildLocalMediaLibrary();
       },
     );
   }

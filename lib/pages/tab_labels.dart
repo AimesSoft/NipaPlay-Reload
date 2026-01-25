@@ -17,6 +17,10 @@ List<Widget> createTabLabels() {
     ),
     const Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
+      child: HoverZoomTab(text: "个人中心"),
+    ),
+    const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: "设置"),
     ),
   ];

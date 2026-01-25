@@ -1,5 +1,4 @@
 // settings_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/theme_mode_page.dart'; // 导入 ThemeModePage
@@ -12,12 +11,9 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/about_page.dart'; // 导
 import 'package:nipaplay/utils/globals.dart'
     as globals; // 导入包含 isDesktop 的全局变量文件
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/account_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart'; // 导入远程媒体库设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
-import 'package:nipaplay/themes/nipaplay/pages/settings/ui_theme_page.dart'; // 导入UI主题设置页面
-import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
@@ -123,27 +119,12 @@ class _SettingsPageState extends State<SettingsPage>
     final themeNotifier = context.read<ThemeNotifier>();
     final entries = <_SettingEntry>[
       _SettingEntry(
-        title: "账号",
-        icon: Ionicons.person_outline,
-        onTap: () => _handleItemTap(const AccountPage(), "账号设置"),
-      ),
-      _SettingEntry(
         title: "外观",
         icon: Ionicons.color_palette_outline,
         onTap: () => _handleItemTap(
             ThemeModePage(themeNotifier: themeNotifier), "外观设置"),
       ),
     ];
-
-    if (!Platform.isAndroid) {
-      entries.add(
-        _SettingEntry(
-          title: "主题（实验性）",
-          icon: Ionicons.color_wand_outline,
-          onTap: () => _handleItemTap(const UIThemePage(), "主题设置"),
-        ),
-      );
-    }
 
     entries.addAll([
       _SettingEntry(
@@ -160,11 +141,6 @@ class _SettingsPageState extends State<SettingsPage>
         title: "网络",
         icon: Ionicons.wifi_outline,
         onTap: () => _handleItemTap(const NetworkSettingsPage(), "网络设置"),
-      ),
-      _SettingEntry(
-        title: "观看记录",
-        icon: Ionicons.time_outline,
-        onTap: () => _handleItemTap(const WatchHistoryPage(), "观看记录"),
       ),
     ]);
 
@@ -194,7 +170,7 @@ class _SettingsPageState extends State<SettingsPage>
           onTap: () => _handleItemTap(const ShortcutsSettingsPage(), "快捷键设置"),
         ),
         _SettingEntry(
-          title: "远程访问（实验性）",
+          title: "远程访问（客户端）",
           icon: Ionicons.link_outline,
           onTap: () => _handleItemTap(const RemoteAccessPage(), "远程访问"),
         ),

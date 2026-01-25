@@ -1,5 +1,4 @@
 // remote_access_page.dart
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/service_provider.dart';
@@ -18,7 +17,7 @@ class RemoteAccessPage extends StatefulWidget {
 }
 
 class _RemoteAccessPageState extends State<RemoteAccessPage> {
-  // Web Server State
+  // Remote access service state
   bool _webServerEnabled = false;
   bool _autoStartEnabled = false;
   List<String> _accessUrls = [];
@@ -104,17 +103,17 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     if (enabled) {
       final success = await server.startServer(port: _currentPort);
       if (success) {
-        BlurSnackBar.show(context, 'Web服务器已启动');
+        BlurSnackBar.show(context, '远程访问服务已启动');
         _updateAccessUrls();
       } else {
-        BlurSnackBar.show(context, 'Web服务器启动失败');
+        BlurSnackBar.show(context, '远程访问服务启动失败');
         setState(() {
           _webServerEnabled = false;
         });
       }
     } else {
       await server.stopServer();
-      BlurSnackBar.show(context, 'Web服务器已停止');
+      BlurSnackBar.show(context, '远程访问服务已停止');
       setState(() {
         _accessUrls = [];
         _publicIpUrl = null;
@@ -149,7 +148,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     final portController = TextEditingController(text: _currentPort.toString());
     final newPort = await BlurDialog.show<int>(
       context: context,
-      title: '设置Web服务器端口',
+      title: '设置远程访问端口',
       contentWidget: TextField(
         controller: portController,
         keyboardType: TextInputType.number,
@@ -190,7 +189,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         _currentPort = newPort;
       });
       await ServiceProvider.webServer.setPort(newPort);
-      BlurSnackBar.show(context, 'Web服务器端口已更新，正在重启服务...');
+      BlurSnackBar.show(context, '远程访问端口已更新，正在重启服务...');
       _updateAccessUrls();
     }
   }
@@ -250,7 +249,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               const SizedBox(height: 16),
 
               const Text(
-                '启用后可通过浏览器或其他NipaPlay客户端远程访问本机媒体库。此功能正在开发中，部分功能可能不完整。',
+                '启用后可供其他 NipaPlay 客户端远程访问本机媒体库。此功能正在开发中，部分功能可能不完整。',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
@@ -262,8 +261,8 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               // 启用/禁用开关
               _buildSettingItem(
                 icon: Icons.power_settings_new,
-                title: '启用Web服务器',
-                subtitle: '允许通过浏览器或其他客户端远程访问本机媒体库',
+                title: '启用远程访问服务',
+                subtitle: '允许其他 NipaPlay 客户端远程访问本机媒体库',
                 trailing: Switch(
                   value: _webServerEnabled,
                   onChanged: _toggleWebServer,
@@ -277,7 +276,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               _buildSettingItem(
                 icon: Icons.auto_awesome,
                 title: '软件打开自动开启远程访问',
-                subtitle: '启动 NipaPlay 时自动开启 Web 远程访问（不影响手动开关）',
+                subtitle: '启动 NipaPlay 时自动开启远程访问服务（不影响手动开关）',
                 trailing: Switch(
                   value: _autoStartEnabled,
                   onChanged: _toggleAutoStart,
@@ -330,7 +329,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               ),
               SizedBox(width: 16),
               Text(
-                '访问地址',
+                '客户端连接地址',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w500,

@@ -5,9 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_player_widget.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_send_danmaku_dialog.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_video_controls_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/vertical_indicator.dart';
@@ -328,8 +325,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context);
-
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         return WillPopScope(
@@ -347,9 +342,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     child: VideoPlayerWidget(),
                   ),
                   if (videoState.hasVideo)
-                    uiThemeProvider.isFluentUITheme
-                        ? const FluentVideoControlsOverlay()
-                        : _buildMaterialControls(videoState),
+                    _buildMaterialControls(videoState),
                 ],
               ),
             ),
@@ -577,40 +570,25 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
     hotkeyService.unregisterHotkeys();
 
-    final uiThemeProvider =
-        Provider.of<UIThemeProvider>(context, listen: false);
-    if (uiThemeProvider.isFluentUITheme) {
-      await showDialog(
-        context: context,
-        builder: (context) => FluentSendDanmakuDialog(
-          episodeId: episodeId,
-          currentTime: currentTime,
-          onDanmakuSent: (danmaku) {
-            videoState.addDanmakuToNewTrack(danmaku);
-          },
-        ),
-      );
-    } else {
-      // 检查是否为手机设备
-      final window = WidgetsBinding.instance.window;
-      final size = window.physicalSize / window.devicePixelRatio;
-      final shortestSide = size.width < size.height ? size.width : size.height;
-      final bool isRealPhone =
-          Platform.isIOS || Platform.isAndroid && shortestSide < 600;
+    // 检查是否为手机设备
+    final window = WidgetsBinding.instance.window;
+    final size = window.physicalSize / window.devicePixelRatio;
+    final shortestSide = size.width < size.height ? size.width : size.height;
+    final bool isRealPhone =
+        Platform.isIOS || Platform.isAndroid && shortestSide < 600;
 
-      await BlurDialog.show(
-        context: context,
-        title: isRealPhone ? '' : '发送弹幕', // 手机设备不显示标题
-        contentWidget: SendDanmakuDialogContent(
-          episodeId: episodeId,
-          currentTime: currentTime,
-          onDanmakuSent: (danmaku) {
-            videoState.addDanmakuToNewTrack(danmaku);
-          },
-        ),
-        actions: [],
-      );
-    }
+    await BlurDialog.show(
+      context: context,
+      title: isRealPhone ? '' : '发送弹幕', // 手机设备不显示标题
+      contentWidget: SendDanmakuDialogContent(
+        episodeId: episodeId,
+        currentTime: currentTime,
+        onDanmakuSent: (danmaku) {
+          videoState.addDanmakuToNewTrack(danmaku);
+        },
+      ),
+      actions: [],
+    );
 
     hotkeyService.registerHotkeys();
 

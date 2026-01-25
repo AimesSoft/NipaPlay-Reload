@@ -1,7 +1,7 @@
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show ThemeMode;
+import 'package:flutter/widgets.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/themes/theme_registry.dart';
@@ -11,11 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class UIThemeProvider extends ChangeNotifier {
   static const String _key = 'ui_theme_type';
-  static const String _fluentThemeModeKey = 'fluent_theme_mode';
 
   String _currentThemeId = ThemeRegistry.defaultThemeId;
   bool _isInitialized = false;
-  ThemeMode _fluentThemeMode = ThemeMode.dark;
   final Map<String, Map<String, dynamic>> _themeSettings = {};
 
   bool get isInitialized => _isInitialized;
@@ -26,10 +24,7 @@ class UIThemeProvider extends ChangeNotifier {
   String get currentThemeId => currentThemeDescriptor.id;
 
   bool get isNipaplayTheme => currentThemeId == ThemeIds.nipaplay;
-  bool get isFluentUITheme => currentThemeId == ThemeIds.fluent;
   bool get isCupertinoTheme => currentThemeId == ThemeIds.cupertino;
-
-  ThemeMode get fluentThemeMode => _fluentThemeMode;
 
   List<ThemeDescriptor> get availableThemes {
     final env = _currentEnvironment;
@@ -51,22 +46,14 @@ class UIThemeProvider extends ChangeNotifier {
         isPhone: globals.isPhone,
         isWeb: kIsWeb,
         isIOS: !kIsWeb && Platform.isIOS,
-      isTablet: globals.isTablet,
+        isTablet: _isTabletLike,
       );
 
   Future<void> _loadTheme() async {
+    _currentThemeId = _lockedThemeId(_currentEnvironment);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final storedId = prefs.getString(_key);
-      final env = _currentEnvironment;
-      _currentThemeId = ThemeRegistry.resolveTheme(storedId, env).id;
-
-      final storedMode = prefs.getString(_fluentThemeModeKey);
-      if (storedMode != null) {
-        _fluentThemeMode = _themeModeFromString(storedMode);
-      }
-      _ensureThemeSettings(ThemeIds.fluent)['fluentThemeMode'] =
-          _fluentThemeMode;
+      await prefs.setString(_key, _currentThemeId);
     } catch (e) {
       debugPrint('加载UI主题设置失败: $e');
     } finally {
@@ -76,64 +63,53 @@ class UIThemeProvider extends ChangeNotifier {
   }
 
   Future<void> setTheme(ThemeDescriptor descriptor) async {
+    final lockedId = _lockedThemeId(_currentEnvironment);
+    if (descriptor.id != lockedId) {
+      debugPrint('UI theme is locked to $lockedId; ignoring ${descriptor.id}');
+      return;
+    }
     if (!descriptor.isSupported(_currentEnvironment)) {
       return;
     }
-    if (_currentThemeId == descriptor.id) {
+    if (_currentThemeId == lockedId) {
       return;
     }
 
-    _currentThemeId = descriptor.id;
+    _currentThemeId = lockedId;
     notifyListeners();
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_key, descriptor.id);
+      await prefs.setString(_key, lockedId);
     } catch (e) {
       debugPrint('保存UI主题设置失败: $e');
     }
   }
 
-  Future<void> setFluentThemeMode(ThemeMode mode) async {
-    if (_fluentThemeMode == mode) return;
-
-    _fluentThemeMode = mode;
-    _ensureThemeSettings(ThemeIds.fluent)['fluentThemeMode'] = mode;
-    notifyListeners();
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_fluentThemeModeKey, _themeModeToString(mode));
-    } catch (e) {
-      debugPrint('保存Fluent主题外观设置失败: $e');
+  bool get _isTabletLike {
+    if (kIsWeb || !globals.isPhone) {
+      return false;
     }
+    return _deviceShortestSide >= 600;
   }
 
-  Map<String, dynamic> _ensureThemeSettings(String themeId) {
-    return _themeSettings.putIfAbsent(themeId, () => {});
+  bool get _isPhoneLike {
+    if (kIsWeb || !globals.isPhone) {
+      return false;
+    }
+    return !_isTabletLike;
   }
 
-  ThemeMode _themeModeFromString(String value) {
-    switch (value) {
-      case 'light':
-        return ThemeMode.light;
-      case 'dark':
-        return ThemeMode.dark;
-      case 'system':
-        return ThemeMode.system;
-      default:
-        return ThemeMode.dark;
-    }
+  double get _deviceShortestSide {
+    final window = WidgetsBinding.instance.window;
+    final size = window.physicalSize / window.devicePixelRatio;
+    return size.width < size.height ? size.width : size.height;
   }
 
-  String _themeModeToString(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return 'light';
-      case ThemeMode.dark:
-        return 'dark';
-      case ThemeMode.system:
-        return 'system';
+  String _lockedThemeId(ThemeEnvironment env) {
+    if (env.isWeb) {
+      return ThemeRegistry.resolveTheme(null, env).id;
     }
+    return _isPhoneLike ? ThemeIds.cupertino : ThemeIds.nipaplay;
   }
 }

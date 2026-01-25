@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
@@ -18,17 +17,6 @@ class BlurDialog {
   }) {
     // 根据主题设置选择使用哪个dialog
     final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
-    
-    if (uiThemeProvider.isFluentUITheme) {
-      return FluentDialog.show<T>(
-        context: context,
-        title: title,
-        content: content,
-        contentWidget: contentWidget,
-        actions: actions,
-        barrierDismissible: barrierDismissible,
-      );
-    }
 
     if (uiThemeProvider.isCupertinoTheme) {
       return _showCupertinoDialog<T>(

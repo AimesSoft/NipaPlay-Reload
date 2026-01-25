@@ -879,8 +879,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   };
 
   // 新增：构建星星评分的 Widget
-  Widget _buildRatingStars(double? rating) {
-    if (rating == null || rating < 0 || rating > 10) {
+  Widget _buildRatingStars(double rating) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    if (rating < 0 || rating > 10) {
       return Text('N/A',
           style:
               TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13));
@@ -890,15 +891,17 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     int fullStars = rating.floor();
     bool halfStar = (rating - fullStars) >= 0.5;
 
+    const Color bangumiColor = Color(0xFFFF2E55);
+
     for (int i = 0; i < 10; i++) {
       if (i < fullStars) {
-        stars.add(Icon(Ionicons.star, color: Colors.yellow[600], size: 16));
+        stars.add(const Icon(Ionicons.star, color: bangumiColor, size: 16));
       } else if (i == fullStars && halfStar) {
-        stars
-            .add(Icon(Ionicons.star_half, color: Colors.yellow[600], size: 16));
+        stars.
+            add(const Icon(Ionicons.star_half, color: bangumiColor, size: 16));
       } else {
         stars.add(Icon(Ionicons.star_outline,
-            color: Colors.yellow[600]?.withOpacity(0.7), size: 16));
+            color: bangumiColor.withOpacity(isDark ? 0.7 : 0.4), size: 16));
       }
       if (i < 9) {
         stars.add(const SizedBox(width: 1)); // 星星之间的小间距
@@ -1041,7 +1044,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             ),
           ]),
           const SizedBox(height: 16),
-          const Divider(color: Colors.white24),
+          Divider(color: textColor.withOpacity(0.15)),
           const SizedBox(height: 8),
           if (bangumiRatingValue is num && bangumiRatingValue > 0) ...[
             RichText(
@@ -1054,8 +1057,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       TextSpan(
                           text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
                           locale: const Locale("zh-Hans", "zh"),
-                          style: TextStyle(
-                              color: Colors.yellow[600],
+                          style: const TextStyle(
+                              color: Color(0xFFFF2E55),
                               fontWeight: FontWeight.bold,
                               fontSize: 14)),
                       TextSpan(
@@ -1097,32 +1100,33 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     text: TextSpan(
                       style: valueStyle.copyWith(fontSize: 12),
                       children: [
-                        TextSpan(
-                          text: '我的Bangumi评分: ',
-                          style: const TextStyle(
-                              color: Color(0xFFEB4994),
-                              fontWeight: FontWeight.bold),
-                        ),
-                        if (_bangumiUserRating > 0) ...[
-                          TextSpan(
-                            text: '$_bangumiUserRating 分',
-                            style: const TextStyle(
-                              color: Color(0xFFEB4994),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          TextSpan(
-                            text: _ratingEvaluationMap[_bangumiUserRating] !=
-                                    null
-                                ? ' (${_ratingEvaluationMap[_bangumiUserRating]})'
-                                : '',
-                            style: TextStyle(
-                              color: const Color(0xFFEB4994).withOpacity(0.75),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ] else
+                                                TextSpan(
+                                                  text: '我的Bangumi评分: ',
+                                                  style: const TextStyle(
+                                                      color: Color(0xFFFF2E55),
+                                                      fontWeight: FontWeight.bold),
+                                                ),
+                                                if (_bangumiUserRating > 0) ...[
+                                                  TextSpan(
+                                                    text: '$_bangumiUserRating 分',
+                                                    style: const TextStyle(
+                                                      color: Color(0xFFFF2E55),
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                  TextSpan(
+                                                    text: _ratingEvaluationMap[_bangumiUserRating] !=
+                                                            null
+                                                        ? ' (${_ratingEvaluationMap[_bangumiUserRating]})'
+                                                        : '',
+                                                    style: TextStyle(
+                                                      color: const Color(0xFFFF2E55).withOpacity(0.75),
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ]
+                         else
                           TextSpan(
                             text: '未评分',
                             style: TextStyle(color: secondaryTextColor),
@@ -1181,7 +1185,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             ] else if (!_isLoadingBangumiCollection) ...[
               Text(
                 '尚未在Bangumi收藏此番剧',
-                style: valueStyle.copyWith(fontSize: 12, color: Colors.white70),
+                style: valueStyle.copyWith(fontSize: 12, color: secondaryTextColor),
               ),
               const SizedBox(height: 6),
             ],
@@ -1193,10 +1197,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     margin: const EdgeInsets.only(bottom: 6.0),
                     padding: const EdgeInsets.all(8.0),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.08),
+                      color: textColor.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.15),
+                        color: textColor.withOpacity(0.15),
                         width: 0.8,
                       ),
                     ),
@@ -1221,7 +1225,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   return Text(
                     '暂无Bangumi短评',
                     style: valueStyle.copyWith(
-                        fontSize: 12, color: Colors.white70),
+                        fontSize: 12, color: secondaryTextColor),
                   );
                 }
                 return const SizedBox.shrink();
@@ -1269,7 +1273,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 style: valueStyle,
                 children: [
                   TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
-                  TextSpan(text: anime.airDate ?? '未知', style: valueStyle),
+                  TextSpan(text: (anime.airDate ?? '未知').split('T').first, style: valueStyle),
                 ],
               ),
             ),
@@ -1313,22 +1317,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 ),
               ),
 
-          Padding(
-              padding: const EdgeInsets.only(bottom: 4.0),
-              child: RichText(
-                  text: TextSpan(style: valueStyle, children: [
-                TextSpan(
-                    text: '追番状态: ',
-                    style:
-                        boldWhiteKeyStyle.copyWith(color: Colors.orangeAccent)),
-                TextSpan(
-                    text: anime.isFavorited! ? '已追' : '未追',
-                    style:
-                        TextStyle(color: Colors.orangeAccent.withOpacity(0.85)))
-              ]))),
-          if (anime.isNSFW ?? false)
-            Padding(
-                padding: const EdgeInsets.only(bottom: 4.0),
+            if (anime.isNSFW == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
                 child: RichText(
                     text: TextSpan(style: valueStyle, children: [
                   TextSpan(
@@ -1339,10 +1330,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       text: '是',
                       style:
                           TextStyle(color: Colors.redAccent.withOpacity(0.85)))
-                ]))),
-          ...metadataWidgets,
-          ...titlesWidgets,
-          if (anime.tags != null && anime.tags!.isNotEmpty) ...[
+                ])),
+              ),
+            ...metadataWidgets,
+            ...titlesWidgets,
+            if (anime.tags != null && anime.tags!.isNotEmpty) ...[
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1350,10 +1342,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 Text('标签:', style: sectionTitleStyle),
                 IconButton(
                   onPressed: () => _openTagSearch(),
-                  icon: const Icon(
+                  icon: Icon(
                     Ionicons.search,
-                    color: Colors.white70,
-                    size: 20,
+                    color: secondaryTextColor,
                   ),
                   padding: const EdgeInsets.all(4),
                   constraints: const BoxConstraints(),
@@ -1648,9 +1639,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                     : Ionicons.checkmark_circle_outline,
                                 color:
                                     _dandanplayWatchStatus[episode.id] == true
-                                        ? Colors.green
-                                        : Colors.white54,
+                                        ? Colors.greenAccent
+                                        : secondaryTextColor.withOpacity(0.4),
+                                size: 20,
                               ),
+
                               onPressed: _dandanplayWatchStatus[episode.id] ==
                                       true
                                   ? null
@@ -1719,6 +1712,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   }
 
   Widget _buildContent() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+
     if (_isLoading) {
       return const Center(
           child: CircularProgressIndicator(color: Colors.white));
@@ -1788,7 +1785,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 )
               : Icon(
                   _isFavorited ? Ionicons.heart : Ionicons.heart_outline,
-                  color: _isFavorited ? Colors.red : Colors.white70,
+                  color: _isFavorited ? const Color(0xFFFF2E55) : secondaryTextColor,
                   size: 24,
                 ),
           onPressed: _isTogglingFavorite ? null : _toggleFavorite,
@@ -1838,6 +1835,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   // 桌面/平板使用左右分屏展示
   Widget _buildDesktopTabletLayout(BangumiAnime anime) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
       child: Row(
@@ -1849,7 +1849,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           Container(
             width: 1,
             margin: const EdgeInsets.symmetric(vertical: 12),
-            color: Colors.white.withOpacity(0.12),
+            color: textColor.withOpacity(0.12),
           ),
           Expanded(
             child: RepaintBoundary(child: _buildEpisodesListView(anime)),

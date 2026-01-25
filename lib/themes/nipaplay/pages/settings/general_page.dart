@@ -10,7 +10,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
 
 // Define the key for SharedPreferences
 const String globalFilterAdultContentKey = 'global_filter_adult_content';
@@ -30,7 +29,7 @@ class _GeneralPageState extends State<GeneralPage> {
   DesktopExitBehavior _desktopExitBehavior = DesktopExitBehavior.askEveryTime;
   final GlobalKey _desktopExitBehaviorDropdownKey = GlobalKey();
 
-  // 根据平台生成默认页面选项
+  // 生成默认页面选项
   List<DropdownMenuItemData<int>> _getDefaultPageItems() {
     List<DropdownMenuItemData<int>> items = [
       DropdownMenuItemData(title: "主页", value: 0, isSelected: _defaultPageIndex == 0),
@@ -38,14 +37,8 @@ class _GeneralPageState extends State<GeneralPage> {
       DropdownMenuItemData(title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
     ];
 
-    // 仅在非iOS平台添加新番更新选项
-    if (!Platform.isIOS) {
-      items.add(DropdownMenuItemData(title: "新番更新", value: 3, isSelected: _defaultPageIndex == 3));
-    }
-
-    // 添加设置选项，根据平台调整索引
-    final settingsIndex = Platform.isIOS ? 3 : 4;
-    items.add(DropdownMenuItemData(title: "设置", value: settingsIndex, isSelected: _defaultPageIndex == settingsIndex));
+    items.add(DropdownMenuItemData(title: "个人中心", value: 3, isSelected: _defaultPageIndex == 3));
+    items.add(DropdownMenuItemData(title: "设置", value: 4, isSelected: _defaultPageIndex == 4));
 
     return items;
   }
@@ -86,10 +79,10 @@ class _GeneralPageState extends State<GeneralPage> {
         var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
         _desktopExitBehavior = desktopExitBehavior;
 
-        // 在iOS平台上，如果存储的索引是新番更新页面(3)，调整为设置页面(3)
-        // 如果存储的索引是设置页面(4)，也调整为设置页面(3)
-        if (Platform.isIOS && storedIndex >= 3) {
-          storedIndex = 3; // iOS上设置页面的索引
+        if (storedIndex < 0) {
+          storedIndex = 0;
+        } else if (storedIndex > 4) {
+          storedIndex = 4;
         }
 
         _defaultPageIndex = storedIndex;
