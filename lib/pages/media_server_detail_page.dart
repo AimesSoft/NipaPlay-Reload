@@ -686,6 +686,7 @@ style: TextStyle(color: secondaryTextColor)));
     return NipaplayAnimeDetailScaffold(
       backgroundImageUrl: hasBackdrop ? backdropUrl : (posterUrl.isNotEmpty ? posterUrl : null),
       blurBackground: !hasBackdrop, // 如果没有横向图而使用竖向图，开启高斯模糊
+      onClose: () => Navigator.of(context).pop(),
       child: pageContent,
     );
   }
