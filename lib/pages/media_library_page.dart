@@ -17,9 +17,6 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, Tar
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-
 import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
@@ -833,15 +830,6 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                 return card;
               },
             ),
-          ),
-        ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionGlassButton(
-            iconData: Ionicons.cloud_outline,
-            onPressed: _showServerSelectionDialog,
-            description: '添加媒体服务器\n连接到Jellyfin或Emby服务器\n享受云端媒体库内容',
           ),
         ),
       ],

@@ -29,7 +29,7 @@ class BackgroundWithBlur extends StatelessWidget {
           children: [
             // 背景图像
             Positioned.fill(
-              child: _buildBackgroundImage(),
+              child: _buildBackgroundImage(context),
             ),
             // 自定义颜色遮罩
             if (themeNotifier.useCustomThemeColor)
@@ -76,52 +76,85 @@ class BackgroundWithBlur extends StatelessWidget {
     );
   }
 
-  Widget _buildBackgroundImage() {
+  Widget _buildBackgroundImage(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final baseColor =
+        isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+
+    Widget buildOverlay(Widget image) {
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              color: baseColor,
+            ),
+          ),
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.45,
+              child: image,
+            ),
+          ),
+        ],
+      );
+    }
+
     if (globals.backgroundImageMode == '关闭') {
-      return Image.asset(
-        'assets/backempty.png',
-        fit: BoxFit.cover,
+      return Container(
+        color: baseColor,
       );
     } else if (globals.backgroundImageMode == '看板娘') {
-      return Image.asset(
-        backgroundImageUrl,
-        fit: BoxFit.cover,
+      return buildOverlay(
+        Image.asset(
+          backgroundImageUrl,
+          fit: BoxFit.cover,
+        ),
       );
     } else if (globals.backgroundImageMode == '看板娘2') {
-      return Image.asset(
-        backgroundImageUrl2,
-        fit: BoxFit.cover,
+      return buildOverlay(
+        Image.asset(
+          backgroundImageUrl2,
+          fit: BoxFit.cover,
+        ),
       );
     } else if (globals.backgroundImageMode == '自定义') {
       if (kIsWeb) {
         // Web平台不支持本地文件，回退到默认图片
-        return Image.asset(
-          backgroundImageUrl,
-          fit: BoxFit.cover,
+        return buildOverlay(
+          Image.asset(
+            backgroundImageUrl,
+            fit: BoxFit.cover,
+          ),
         );
       }
       final file = File(globals.customBackgroundPath);
       if (file.existsSync()) {
-        return Image.file(
-          file,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Image.asset(
-              backgroundImageUrl,
-              fit: BoxFit.cover,
-            );
-          },
+        return buildOverlay(
+          Image.file(
+            file,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Image.asset(
+                backgroundImageUrl,
+                fit: BoxFit.cover,
+              );
+            },
+          ),
         );
       } else {
-        return Image.asset(
-          backgroundImageUrl,
-          fit: BoxFit.cover,
+        return buildOverlay(
+          Image.asset(
+            backgroundImageUrl,
+            fit: BoxFit.cover,
+          ),
         );
       }
     }
-    return Image.asset(
-      backgroundImageUrl,
-      fit: BoxFit.cover,
+    return buildOverlay(
+      Image.asset(
+        backgroundImageUrl,
+        fit: BoxFit.cover,
+      ),
     );
   }
 }

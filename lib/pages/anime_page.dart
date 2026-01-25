@@ -17,7 +17,11 @@ import 'package:nipaplay/pages/media_library_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_all_modal.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -395,6 +399,163 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     }
   }
 
+  Future<void> _showServerSelectionDialog() async {
+    final result = await MediaServerSelectionSheet.show(context);
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    switch (result) {
+      case 'jellyfin':
+        await _showJellyfinServerDialog();
+        break;
+      case 'emby':
+        await _showEmbyServerDialog();
+        break;
+      case 'nipaplay':
+        await _showNipaplayServerDialog();
+        break;
+      case 'dandanplay':
+        await _showDandanplayServerDialog();
+        break;
+    }
+  }
+
+  Future<void> _showJellyfinServerDialog() async {
+    await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
+  }
+
+  Future<void> _showEmbyServerDialog() async {
+    await NetworkMediaServerDialog.show(context, MediaServerType.emby);
+  }
+
+  Future<void> _showNipaplayServerDialog() async {
+    final sharedRemoteProvider = Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+
+    if (sharedRemoteProvider.hosts.isNotEmpty) {
+      await SharedRemoteHostSelectionSheet.show(context);
+    } else {
+      await BlurLoginDialog.show(
+        context,
+        title: '添加NipaPlay共享客户端',
+        fields: [
+          LoginField(
+            key: 'displayName',
+            label: '备注名称',
+            hint: '例如：家里的电脑',
+            required: false,
+          ),
+          LoginField(
+            key: 'baseUrl',
+            label: '访问地址',
+            hint: '例如：192.168.1.100（默认1180）或 192.168.1.100:2345',
+          ),
+        ],
+        loginButtonText: '添加',
+        onLogin: (values) async {
+          try {
+            final displayName = values['displayName']?.trim().isEmpty ?? true
+                ? values['baseUrl']!.trim()
+                : values['displayName']!.trim();
+
+            await sharedRemoteProvider.addHost(
+              displayName: displayName,
+              baseUrl: values['baseUrl']!.trim(),
+            );
+
+            return LoginResult(
+              success: true,
+              message: '已添加共享客户端',
+            );
+          } catch (e) {
+            return LoginResult(
+              success: false,
+              message: '添加失败：$e',
+            );
+          }
+        },
+      );
+    }
+  }
+
+  Future<void> _showDandanplayServerDialog() async {
+    final provider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+    if (!provider.isInitialized) {
+      await provider.initialize();
+    }
+    final hasExisting = provider.serverUrl?.isNotEmpty == true;
+
+    final result = await BlurLoginDialog.show(
+      context,
+      title: hasExisting ? '更新弹弹play远程连接' : '连接弹弹play远程服务',
+      loginButtonText: hasExisting ? '保存' : '连接',
+      fields: [
+        LoginField(
+          key: 'baseUrl',
+          label: '远程服务地址',
+          hint: '例如 http://192.168.1.2:23333',
+          initialValue: provider.serverUrl ?? '',
+        ),
+        LoginField(
+          key: 'token',
+          label: 'API密钥 (可选)',
+          hint: provider.tokenRequired
+              ? '服务器已启用 API 验证'
+              : '若服务器开启验证请填写',
+          isPassword: true,
+          required: false,
+        ),
+      ],
+      onLogin: (values) async {
+        final baseUrl = values['baseUrl'] ?? '';
+        final token = values['token'];
+        if (baseUrl.isEmpty) {
+          return const LoginResult(success: false, message: '请输入远程服务地址');
+        }
+        try {
+          await provider.connect(baseUrl, token: token);
+          return const LoginResult(
+            success: true,
+            message: '已连接至弹弹play远程服务',
+          );
+        } catch (e) {
+          return LoginResult(success: false, message: e.toString());
+        }
+      },
+    );
+
+    if (result == true && mounted) {
+      BlurSnackBar.show(context, '弹弹play远程服务配置已更新');
+    }
+  }
+
+  Widget _buildAddMediaServerEntry({
+    required Color iconColor,
+    required Color textColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: _showServerSelectionDialog,
+          child: DefaultTextStyle(
+            style: TextStyle(color: textColor),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: '添加媒体服务器',
+                fontSize: 18,
+                icon: Icon(Icons.cloud_outlined, size: 18, color: iconColor),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
@@ -515,7 +676,10 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
         // 动态生成标签
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final iconColor = isDarkMode ? Colors.white : Colors.black;
+        final labelColor = isDarkMode ? Colors.white : Colors.black;
+        final unselectedLabelColor =
+            isDarkMode ? Colors.white60 : Colors.black54;
+        final iconColor = labelColor;
 
         final List<Widget> tabs = [
           Padding(
@@ -661,28 +825,40 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                   flex: 0,
                   child: Padding(
                     padding: const EdgeInsets.only(top: 12.0, right: 32.0),
-                    child: TabBar(
-                      controller: _tabController,
-                      isScrollable: true,
-                      tabs: tabs,
-                      labelColor: isDarkMode ? Colors.white : Colors.black,
-                      unselectedLabelColor:
-                          isDarkMode ? Colors.white60 : Colors.black54,
-                      labelPadding: const EdgeInsets.only(bottom: 12.0),
-                      indicatorPadding: EdgeInsets.zero,
-                      indicator: _CustomTabIndicator(
-                        indicatorHeight: 3.0,
-                        indicatorColor: isDarkMode ? Colors.white : Colors.black,
-                        radius: 30.0,
-                      ),
-                      tabAlignment: TabAlignment.start,
-                      splashFactory: NoSplash.splashFactory,
-                      overlayColor: WidgetStateProperty.all(Colors.transparent),
-                      dividerColor: isDarkMode
-                          ? const Color.fromARGB(59, 255, 255, 255)
-                          : const Color.fromARGB(59, 0, 0, 0),
-                      dividerHeight: 3.0,
-                      indicatorSize: TabBarIndicatorSize.label,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: TabBar(
+                            controller: _tabController,
+                            isScrollable: true,
+                            tabs: tabs,
+                            labelColor: labelColor,
+                            unselectedLabelColor: unselectedLabelColor,
+                            labelPadding: const EdgeInsets.only(bottom: 12.0),
+                            indicatorPadding: EdgeInsets.zero,
+                            indicator: _CustomTabIndicator(
+                              indicatorHeight: 3.0,
+                              indicatorColor: labelColor,
+                              radius: 30.0,
+                            ),
+                            tabAlignment: TabAlignment.start,
+                            splashFactory: NoSplash.splashFactory,
+                            overlayColor:
+                                WidgetStateProperty.all(Colors.transparent),
+                            dividerColor: isDarkMode
+                                ? const Color.fromARGB(59, 255, 255, 255)
+                                : const Color.fromARGB(59, 0, 0, 0),
+                            dividerHeight: 3.0,
+                            indicatorSize: TabBarIndicatorSize.label,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildAddMediaServerEntry(
+                          iconColor: iconColor,
+                          textColor: unselectedLabelColor,
+                        ),
+                      ],
                     ),
                   ),
                 ),

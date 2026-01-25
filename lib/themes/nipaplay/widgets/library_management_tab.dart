@@ -596,10 +596,17 @@ style: TextStyle(color: Colors.redAccent)),
             data: Theme.of(context).copyWith(
               splashColor: Colors.transparent,
               highlightColor: Colors.transparent,
+              dividerColor: Colors.transparent, // 移除ExpansionTile展开时的上下分割线
+              unselectedWidgetColor: iconColor, // 控制折叠时的箭头颜色
+              colorScheme: Theme.of(context).colorScheme.copyWith(
+                primary: textColor, // 控制展开时的箭头颜色
+              ),
             ),
             child: ExpansionTile(
               key: PageStorageKey<String>(dirPath),
               leading: Icon(Icons.folder_outlined, color: iconColor),
+              iconColor: iconColor, // 显式指定展开时的箭头颜色
+              collapsedIconColor: iconColor, // 显式指定折叠时的箭头颜色
               title: Text(p.basename(dirPath), style: TextStyle(color: textColor)),
               onExpansionChanged: (isExpanded) {
                 if (isExpanded && _expandedFolderContents[dirPath] == null && !_loadingFolders.contains(dirPath)) {
@@ -2040,16 +2047,20 @@ style: TextStyle(color: Colors.redAccent)),
               width: 0.5,
             ),
           ),
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              hoverColor: Colors.transparent,
-            ),
-            child: ExpansionTile(
-                key: PageStorageKey<String>(folderPath),
-                leading: Icon(Icons.folder_open_outlined, color: iconColor),
-              title: Row(
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        hoverColor: Colors.transparent,
+                        dividerColor: Colors.transparent,
+                      ),
+                      child: ExpansionTile(
+                          key: PageStorageKey<String>(folderPath),
+                          leading: Icon(Icons.folder_open_outlined, color: iconColor),
+                          iconColor: iconColor,
+                          collapsedIconColor: iconColor,
+                          title: Row(
+          
                 children: [
                   Expanded(
                     child: Text(
@@ -2486,15 +2497,19 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   
       return contents.map((file) {
         if (file.isDirectory) {
-          return Theme(
-            data: Theme.of(context).copyWith(
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-            ),
-            child: ExpansionTile(
-              key: PageStorageKey<String>('${connection.name}:${file.path}'),
-              leading: Icon(Icons.folder_outlined, color: iconColor, size: 18),
-              title: Text(file.name,
+                  return Theme(
+                    data: Theme.of(context).copyWith(
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                      dividerColor: Colors.transparent,
+                    ),
+                    child: ExpansionTile(
+                      key: PageStorageKey<String>('${connection.name}:${file.path}'),
+                      leading: Icon(Icons.folder_outlined, color: iconColor, size: 18),
+                      iconColor: iconColor,
+                      collapsedIconColor: iconColor,
+                      title: Text(file.name,
+          
                   style: TextStyle(color: textColor, fontSize: 13)),
               onExpansionChanged: (isExpanded) {
                 if (isExpanded && _webdavFolderContents['${connection.name}:${file.path}'] == null) {
@@ -2546,10 +2561,13 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           data: Theme.of(context).copyWith(
             splashColor: Colors.transparent,
             highlightColor: Colors.transparent,
+            dividerColor: Colors.transparent,
           ),
           child: ExpansionTile(
             key: PageStorageKey<String>('${connection.name}:${file.path}'),
             leading: Icon(Icons.folder_outlined, color: iconColor, size: 18),
+            iconColor: iconColor,
+            collapsedIconColor: iconColor,
             title: Text(file.name,
                 style: TextStyle(color: textColor, fontSize: 13)),
             onExpansionChanged: (isExpanded) {

@@ -58,9 +58,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     return BackgroundWithBlur(
       child: Scaffold(
         primary: false,
-        backgroundColor: isDarkMode
-            ? Colors.black.withOpacity(0.7)
-            : Colors.black.withOpacity(0.2),
+        backgroundColor: Colors.transparent,
         extendBodyBehindAppBar: false,
         appBar: widget.shouldShowAppBar && widget.tabPage.isNotEmpty
             ? AppBar(

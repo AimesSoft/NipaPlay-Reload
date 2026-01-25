@@ -538,6 +538,12 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   }
 
   Widget _buildFloatingActionButtons() {
+    final showSortButton =
+        _isShowingLibraryContent && !_isSearching && !_isFolderNavigation;
+    if (!showSortButton) {
+      return const SizedBox.shrink();
+    }
+
     return Positioned(
       right: 16,
       bottom: 16,
@@ -545,22 +551,25 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         mainAxisSize: MainAxisSize.min,
         children: [
           // 排序按钮（仅在显示库内容且未在搜索时显示）
-          if (_isShowingLibraryContent && !_isSearching && !_isFolderNavigation) ...[
-            FloatingActionGlassButton(
-              iconData: Ionicons.swap_vertical_outline,
-              onPressed: _showSortDialog,
-              description: '排序选项\n按名称、日期或评分排序\n提升浏览体验',
-            ),
-            const SizedBox(height: 16), // 按钮之间的间距
-          ],
-          // 设置按钮
           FloatingActionGlassButton(
-            iconData: Ionicons.settings_outline,
-            onPressed: _showServerDialog,
-            description: '$_serverName服务器设置\n管理连接信息和媒体库\n配置播放偏好设置',
+            iconData: Ionicons.swap_vertical_outline,
+            onPressed: _showSortDialog,
+            description: '排序选项\n按名称、日期或评分排序\n提升浏览体验',
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildServerSettingsAction() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+    return IconButton(
+      icon: const Icon(Ionicons.settings_outline, size: 20),
+      color: iconColor,
+      tooltip: '$_serverName服务器设置',
+      visualDensity: VisualDensity.compact,
+      onPressed: _showServerDialog,
     );
   }
 
@@ -760,6 +769,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         setState(() => _currentSort = type);
         _applySortAndFilter();
       },
+      trailingActions: [
+        _buildServerSettingsAction(),
+      ],
     );
   }
 
@@ -773,6 +785,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         setState(() => _currentSort = type);
         _applySortAndFilter();
       },
+      trailingActions: [
+        _buildServerSettingsAction(),
+      ],
     );
   }
 
