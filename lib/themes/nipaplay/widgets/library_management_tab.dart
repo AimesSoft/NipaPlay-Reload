@@ -570,13 +570,21 @@ style: TextStyle(color: Colors.redAccent)),
   }
 
   List<Widget> _buildFileSystemNodes(List<io.FileSystemEntity> entities, String parentPath, int depth) {
-    if (entities.isEmpty && !_loadingFolders.contains(parentPath)) {
-      return [Padding(
-        padding: EdgeInsets.only(left: depth * 16.0 + 16.0, top: 8.0, bottom: 8.0),
-        child: const Text("文件夹为空", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white54)),
-      )];
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+
+    if (entities.isEmpty) {
+      return [
+        Padding(
+          padding: EdgeInsets.only(left: 16.0 + (depth * 16.0), top: 8, bottom: 8),
+          child: Text("文件夹为空", locale: const Locale("zh-Hans","zh"),
+            style: TextStyle(color: secondaryTextColor, fontSize: 13)),
+        )
+      ];
     }
+
     
     return entities.map<Widget>((entity) {
       final indent = EdgeInsets.only(left: depth * 16.0);
@@ -584,29 +592,35 @@ style: TextStyle(color: Colors.white54)),
         final dirPath = entity.path;
         return Padding(
           padding: indent,
-          child: ExpansionTile(
-            key: PageStorageKey<String>(dirPath),
-            leading: const Icon(Icons.folder_outlined, color: Colors.white70),
-            title: Text(p.basename(dirPath), style: const TextStyle(color: Colors.white)),
-            onExpansionChanged: (isExpanded) {
-              if (isExpanded && _expandedFolderContents[dirPath] == null && !_loadingFolders.contains(dirPath)) {
-                // 使用 Future.microtask 确保在当前构建帧完成后执行
-                Future.microtask(() => _loadFolderChildren(dirPath));
-              }
-            },
-            children: _loadingFolders.contains(dirPath)
-                ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
-                : [
-                    _buildBatchDanmakuMatchFolderAction(
-                      dirPath,
-                      _expandedFolderContents[dirPath] ?? const [],
-                    ),
-                    ..._buildFileSystemNodes(
-                      _expandedFolderContents[dirPath] ?? const [],
-                      dirPath,
-                      depth + 1,
-                    ),
-                  ],
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+            ),
+            child: ExpansionTile(
+              key: PageStorageKey<String>(dirPath),
+              leading: Icon(Icons.folder_outlined, color: iconColor),
+              title: Text(p.basename(dirPath), style: TextStyle(color: textColor)),
+              onExpansionChanged: (isExpanded) {
+                if (isExpanded && _expandedFolderContents[dirPath] == null && !_loadingFolders.contains(dirPath)) {
+                  // 使用 Future.microtask 确保在当前构建帧完成后执行
+                  Future.microtask(() => _loadFolderChildren(dirPath));
+                }
+              },
+              children: _loadingFolders.contains(dirPath)
+                  ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
+                  : [
+                      _buildBatchDanmakuMatchFolderAction(
+                        dirPath,
+                        _expandedFolderContents[dirPath] ?? const [],
+                      ),
+                      ..._buildFileSystemNodes(
+                        _expandedFolderContents[dirPath] ?? const [],
+                        dirPath,
+                        depth + 1,
+                      ),
+                    ],
+            ),
           ),
         );
       } else if (entity is io.File) {
@@ -618,16 +632,6 @@ style: TextStyle(color: Colors.white54)),
               // 获取扫描到的动画信息
               final historyItem = snapshot.data;
               final String fileName = p.basename(entity.path);
-              
-              // 调试信息
-              if (historyItem != null) {
-                debugPrint('🎬 文件: $fileName');
-                debugPrint('   动画名: ${historyItem.animeName}');
-                debugPrint('   集数: ${historyItem.episodeTitle}');
-                debugPrint('   来自扫描: ${historyItem.isFromScan}');
-                debugPrint('   动画ID: ${historyItem.animeId}');
-                debugPrint('   集数ID: ${historyItem.episodeId}');
-              }
               
               // 构建副标题（动画名称和集数）
               String? subtitleText;
@@ -655,14 +659,14 @@ style: TextStyle(color: Colors.white54)),
               }
               
               return ListTile(
-                leading: const Icon(Icons.videocam_outlined, color: Colors.white),
-                title: Text(fileName, style: const TextStyle(color: Colors.white)),
+                leading: Icon(Icons.videocam_outlined, color: iconColor),
+                title: Text(fileName, style: TextStyle(color: textColor, fontSize: 13)),
                 subtitle: subtitleText != null 
                     ? Text(
                         subtitleText,
-                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
+                        locale: const Locale("zh-Hans","zh"),
+                        style: TextStyle(
+                          color: secondaryTextColor,
                           fontSize: 12,
                         ),
                         maxLines: 2,
@@ -674,13 +678,13 @@ style: TextStyle(
                   children: [
                     // 手动匹配弹幕按钮
                     IconButton(
-                      icon: const Icon(Icons.subtitles, color: Colors.white70, size: 20),
+                      icon: Icon(Icons.subtitles, color: iconColor, size: 20),
                       onPressed: () => _showManualDanmakuMatchDialog(entity.path, fileName, historyItem),
                     ),
                     // 移除扫描结果按钮
                     if (historyItem != null && (historyItem.animeId != null || historyItem.episodeId != null))
                       IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white70, size: 20),
+                        icon: Icon(Icons.clear, color: iconColor, size: 20),
                         onPressed: () => _showRemoveScanResultDialog(entity.path, fileName, historyItem),
                       ),
                   ],
@@ -2458,134 +2462,98 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   );
 }
   
-  // 构建WebDAV文件节点
-  List<Widget> _buildWebDAVFileNodes(WebDAVConnection connection, String path) {
-    final key = '${connection.name}:$path';
-    final files = _webdavFolderContents[key] ?? [];
-    
-    if (_loadingWebDAVFolders.contains(key)) {
-      return [
-        const Center(
-          child: Padding(
-            padding: EdgeInsets.all(16.0),
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      ];
-    }
-    
-    if (files.isEmpty) {
-      return [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text(
-            '文件夹为空或无法访问',
-            style: TextStyle(color: Colors.white54),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ];
-    }
-    
-    return files.map((file) {
-      if (file.isDirectory) {
-        return Padding(
-          padding: const EdgeInsets.only(left: 16.0),
-          child: ExpansionTile(
-            key: PageStorageKey<String>('${connection.name}:${file.path}'),
-            leading: const Icon(Icons.folder_outlined, color: Colors.white70),
-            title: Text(
-              file.name,
-              style: const TextStyle(color: Colors.white),
-            ),
-            trailing: TextButton(
-              onPressed: () => _scanWebDAVFolder(connection, file.path, file.name),
-              child: const Text(
-                '扫描',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-            onExpansionChanged: (isExpanded) {
-              if (isExpanded) {
-                _loadWebDAVFolderChildren(connection, file.path);
-              }
-            },
-            children: _buildWebDAVFileNodes(connection, file.path),
-          ),
-        );
-      } else {
-        return Padding(
-          padding: const EdgeInsets.only(left: 32.0),
-          child: ListTile(
-            leading: const Icon(Icons.videocam_outlined, color: Colors.white),
-            title: Text(
-              file.name,
-              style: const TextStyle(color: Colors.white),
-            ),
-            subtitle: file.size != null
-                ? Text(
-                    '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                  )
-                : null,
-            onTap: () => _playWebDAVFile(connection, file),
-          ),
-        );
+    List<Widget> _buildWebDAVFileNodes(WebDAVConnection connection, String path) {
+      final bool isDark = Theme.of(context).brightness == Brightness.dark;
+      final Color textColor = isDark ? Colors.white : Colors.black87;
+      final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+      final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+  
+      final key = '${connection.name}:$path';
+      final contents = _webdavFolderContents[key];
+  
+      if (_loadingWebDAVFolders.contains(key)) {
+        return [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))];
       }
-    }).toList();
-  }
-
+  
+      if (contents == null || contents.isEmpty) {
+        return [
+          ListTile(
+            title: Text("文件夹为空",
+                style: TextStyle(color: secondaryTextColor, fontSize: 13)),
+          )
+        ];
+      }
+  
+      return contents.map((file) {
+        if (file.isDirectory) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+            ),
+            child: ExpansionTile(
+              key: PageStorageKey<String>('${connection.name}:${file.path}'),
+              leading: Icon(Icons.folder_outlined, color: iconColor, size: 18),
+              title: Text(file.name,
+                  style: TextStyle(color: textColor, fontSize: 13)),
+              onExpansionChanged: (isExpanded) {
+                if (isExpanded && _webdavFolderContents['${connection.name}:${file.path}'] == null) {
+                  _loadWebDAVFolderChildren(connection, file.path);
+                }
+              },
+              children: _buildWebDAVFileNodes(connection, file.path),
+            ),
+          );
+        } else {
+          return ListTile(
+            leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+            title: Text(file.name,
+                style: TextStyle(color: textColor, fontSize: 13)),
+            trailing: IconButton(
+              icon: Icon(Icons.play_circle_outline, color: iconColor, size: 20),
+              onPressed: () => _playWebDAVFile(connection, file),
+            ),
+            onTap: () => _playWebDAVFile(connection, file),
+          );
+        }
+      }).toList();
+    }
   List<Widget> _buildSMBFileNodes(SMBConnection connection, String path) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+
     final key = '${connection.name}:$path';
-    final files = _smbFolderContents[key] ?? [];
+    final contents = _smbFolderContents[key];
 
     if (_loadingSMBFolders.contains(key)) {
+      return [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))];
+    }
+
+    if (contents == null || contents.isEmpty) {
       return [
-        const Center(
-          child: Padding(
-            padding: EdgeInsets.all(16.0),
-            child: CircularProgressIndicator(),
-          ),
-        ),
+        ListTile(
+          title: Text("文件夹为空",
+              style: TextStyle(color: secondaryTextColor, fontSize: 13)),
+        )
       ];
     }
 
-    if (files.isEmpty) {
-      return [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text(
-            '文件夹为空或无法访问',
-            style: TextStyle(color: Colors.white54),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ];
-    }
-
-    return files.map((file) {
+    return contents.map((file) {
       if (file.isDirectory) {
-        return Padding(
-          padding: const EdgeInsets.only(left: 16.0),
+        return Theme(
+          data: Theme.of(context).copyWith(
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+          ),
           child: ExpansionTile(
             key: PageStorageKey<String>('${connection.name}:${file.path}'),
-            leading: Icon(
-              file.isShare ? Icons.cloud_queue : Icons.folder_outlined,
-              color: Colors.white70,
-            ),
-            title: Text(
-              file.name,
-              style: const TextStyle(color: Colors.white),
-            ),
-            trailing: TextButton(
-              onPressed: () => _scanSMBFolder(connection, file.path, file.name),
-              child: const Text(
-                '扫描',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
+            leading: Icon(Icons.folder_outlined, color: iconColor, size: 18),
+            title: Text(file.name,
+                style: TextStyle(color: textColor, fontSize: 13)),
             onExpansionChanged: (isExpanded) {
-              if (isExpanded) {
+              if (isExpanded && _smbFolderContents['${connection.name}:${file.path}'] == null) {
                 _loadSMBFolderChildren(connection, file.path);
               }
             },
@@ -2593,22 +2561,15 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           ),
         );
       } else {
-        return Padding(
-          padding: const EdgeInsets.only(left: 32.0),
-          child: ListTile(
-            leading: const Icon(Icons.movie_creation_outlined, color: Colors.white),
-            title: Text(
-              file.name,
-              style: const TextStyle(color: Colors.white),
-            ),
-            subtitle: file.size != null
-                ? Text(
-                    '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                  )
-                : null,
-            onTap: () => _playSMBFile(connection, file),
+        return ListTile(
+          leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+          title: Text(file.name,
+              style: TextStyle(color: textColor, fontSize: 13)),
+          trailing: IconButton(
+            icon: Icon(Icons.play_circle_outline, color: iconColor, size: 20),
+            onPressed: () => _playSMBFile(connection, file),
           ),
+          onTap: () => _playSMBFile(connection, file),
         );
       }
     }).toList();
