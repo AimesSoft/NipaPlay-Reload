@@ -16,11 +16,14 @@ class ResponsiveContainer extends StatelessWidget {
       builder: (context, constraints) {
         // 如果是桌面设备或平板设备，使用左右分区布局；手机设备使用单页布局
         if (globals.isDesktop || globals.isTablet) {
+          const double leftPaneFraction = 0.25;
+          final double leftWidth = constraints.maxWidth * leftPaneFraction;
+          final double rightWidth = constraints.maxWidth - leftWidth;
           return Row(
             children: [
               // 左侧部分，显示 SettingsPage
               Container(
-                width: constraints.maxWidth / 2,
+                width: leftWidth,
                 child: child,
               ),
               const VerticalDivider(
@@ -32,7 +35,7 @@ class ResponsiveContainer extends StatelessWidget {
               ),
               // 右侧部分，根据 currentPage 显示不同内容
               Container(
-                width: constraints.maxWidth / 2,
+                width: rightWidth,
                 child: currentPage,  // 显示传递过来的页面
               ),
             ],
