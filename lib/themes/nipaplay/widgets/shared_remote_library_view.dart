@@ -39,6 +39,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   final ScrollController _gridScrollController = ScrollController();
   final ScrollController _managementScrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
+  LocalLibrarySortType _currentSort = LocalLibrarySortType.dateAdded;
   String? _managementLoadedHostId;
   Timer? _scanStatusTimer;
   bool _scanStatusRequestInFlight = false;
@@ -76,12 +77,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     return Consumer<SharedRemoteLibraryProvider>(
       builder: (context, provider, child) {
         final query = _searchController.text.toLowerCase().trim();
-        final List<SharedRemoteAnimeSummary> animeSummaries;
-        final List<SharedRemoteScannedFolder> scannedFolders;
+        List<SharedRemoteAnimeSummary> animeSummaries;
+        List<SharedRemoteScannedFolder> scannedFolders;
 
         if (query.isEmpty) {
-          animeSummaries = provider.animeSummaries;
-          scannedFolders = provider.scannedFolders;
+          animeSummaries = List.from(provider.animeSummaries);
+          scannedFolders = List.from(provider.scannedFolders);
         } else {
           animeSummaries = provider.animeSummaries.where((anime) {
             return (anime.nameCn ?? '').toLowerCase().contains(query) ||
@@ -94,6 +95,18 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           }).toList();
         }
 
+        // 排序逻辑
+        if (widget.mode == SharedRemoteViewMode.mediaLibrary) {
+          if (_currentSort == LocalLibrarySortType.name) {
+            animeSummaries.sort((a, b) => (a.nameCn ?? a.name).toLowerCase().compareTo((b.nameCn ?? b.name).toLowerCase()));
+          } else if (_currentSort == LocalLibrarySortType.dateAdded) {
+            animeSummaries.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+          }
+        } else {
+          // 管理模式下按名称排序
+          scannedFolders.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        }
+
         final hasHosts = provider.hosts.isNotEmpty;
         final isManagement = widget.mode == SharedRemoteViewMode.libraryManagement;
         final managementBusy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
@@ -104,9 +117,14 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             LocalLibraryControlBar(
               searchController: _searchController,
               onSearchChanged: (val) => setState(() {}),
-              showSort: false,
+              currentSort: _currentSort,
+              onSortChanged: (type) {
+                setState(() {
+                  _currentSort = type;
+                });
+              },
+              showSort: widget.mode == SharedRemoteViewMode.mediaLibrary,
               trailingActions: [
-                _buildActionIcon(
                   icon: Ionicons.refresh_outline,
                   tooltip: isManagement ? '刷新库管理' : '刷新共享媒体',
                   onPressed: () {
