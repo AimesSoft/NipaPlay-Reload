@@ -865,7 +865,6 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 'assets/jellyfin.svg',
                 width: 18,
                 height: 18,
-                colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.srcIn), // 默认占位
               ),
             ),
           ));
@@ -881,7 +880,6 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 'assets/emby.svg',
                 width: 18,
                 height: 18,
-                colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.srcIn), // 默认占位
               ),
             ),
           ));

@@ -50,8 +50,22 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final highlightColor = isDarkMode ? Colors.white : Colors.black;
-    // 获取父级 TabBar 传递下来的样式（包含了选中/未选中颜色动画）
+    const activeColor = Color(0xFFFF2E55);
+    
+    // 获取父级 TabBar 传递下来的样式
     final defaultStyle = DefaultTextStyle.of(context).style;
+    final currentColor = defaultStyle.color ?? highlightColor;
+    
+    // 判断是否被选中：如果颜色是品牌红（或接近），则视为选中状态
+    final bool isSelected = currentColor.value == activeColor.value;
+
+    // 确定最终颜色：
+    // 1. 如果选中 -> 始终红色（悬停不改变颜色）
+    // 2. 如果未选中且悬停 -> 变成高亮色（白/黑）
+    // 3. 否则 -> 使用当前默认颜色
+    final displayColor = isSelected 
+        ? activeColor 
+        : (_isHovered ? highlightColor : currentColor);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -64,12 +78,16 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (widget.icon != null) ...[
-              widget.icon!,
+              // 使用 ColorFiltered 强制让任何图标（Icon/Image/Svg）跟随文字颜色
+              ColorFiltered(
+                colorFilter: ColorFilter.mode(displayColor, BlendMode.srcIn),
+                child: widget.icon!,
+              ),
               const SizedBox(width: 6),
             ],
             AnimatedDefaultTextStyle(
               style: defaultStyle.copyWith(
-                color: _isHovered ? highlightColor : defaultStyle.color,
+                color: displayColor,
                 fontSize: widget.fontSize,
                 fontWeight: FontWeight.bold,
               ),

@@ -84,7 +84,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                   controller: widget.tabController,
                   isScrollable: true,
                   tabs: widget.tabPage,
-                  labelColor: isDarkMode ? Colors.white : Colors.black,
+                  labelColor: const Color(0xFFFF2E55),
                   unselectedLabelColor:
                       isDarkMode ? Colors.white60 : Colors.black54,
                   labelPadding: const EdgeInsets.only(bottom: 15.0),
@@ -96,9 +96,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                       ? const Color.fromARGB(59, 255, 255, 255)
                       : const Color.fromARGB(59, 0, 0, 0),
                   dividerHeight: 3.0,
-                  indicator: _CustomTabIndicator(
+                  indicator: const _CustomTabIndicator(
                     indicatorHeight: 3.0,
-                    indicatorColor: isDarkMode ? Colors.white : Colors.black,
+                    indicatorColor: Color(0xFFFF2E55),
                     radius: 30.0, // 使用大圆角形成药丸形状
                   ),
                   indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
