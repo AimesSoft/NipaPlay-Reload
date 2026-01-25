@@ -32,64 +32,73 @@ class NipaplayAnimeDetailScaffold extends StatelessWidget {
       ),
       child: Scaffold(
         backgroundColor: Colors.black.withOpacity(0.4),
-        body: Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            MediaQuery.of(context).padding.top + 20,
-            20,
-            20,
-          ),
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
+        body: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 850,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
             ),
-            child: Stack(
-              children: [
-                if (backgroundImageUrl != null && backgroundImageUrl!.isNotEmpty)
-                  Positioned.fill(
-                    child: ImageFiltered(
-                      imageFilter: blurBackground 
-                        ? ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40)
-                        : ui.ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-                      child: Opacity(
-                        opacity: isDark ? 0.25 : 0.35,
-                        child: CachedNetworkImageWidget(
-                          imageUrl: backgroundImageUrl!,
-                          fit: BoxFit.cover,
-                          shouldCompress: false,
-                          loadMode: CachedImageLoadMode.hybrid,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                MediaQuery.of(context).padding.top + 20,
+                20,
+                20,
+              ),
+              child: Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(15),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  children: [
+                    if (backgroundImageUrl != null &&
+                        backgroundImageUrl!.isNotEmpty)
+                      Positioned.fill(
+                        child: ImageFiltered(
+                          imageFilter: blurBackground
+                              ? ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40)
+                              : ui.ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                          child: Opacity(
+                            opacity: isDark ? 0.25 : 0.35,
+                            child: CachedNetworkImageWidget(
+                              imageUrl: backgroundImageUrl!,
+                              fit: BoxFit.cover,
+                              shouldCompress: false,
+                              loadMode: CachedImageLoadMode.hybrid,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              bgColor.withOpacity(0.1),
+                              bgColor.withOpacity(0.4),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          bgColor.withOpacity(0.1),
-                          bgColor.withOpacity(0.4),
-                        ],
-                      ),
+                    DefaultTextStyle(
+                      style: TextStyle(color: textColor),
+                      child: child,
                     ),
-                  ),
+                  ],
                 ),
-                DefaultTextStyle(
-                  style: TextStyle(color: textColor),
-                  child: child,
-                ),
-              ],
+              ),
             ),
           ),
         ),
