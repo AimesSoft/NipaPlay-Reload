@@ -98,6 +98,7 @@ dependencies:
   system_info2: ^3.0.1
   hotkey_manager: ^0.2.3
   adaptive_platform_ui: ^0.1.98
+  fluent_ui: ^4.13.0
   ffi: ^2.1.3
   smb_connect: ^0.0.9
   nipaplay_smb2:
@@ -201,7 +202,6 @@ flutter:
 
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
-  math_expressions: 2.3.1
   media_kit:
     git:
       url: https://github.com/Shinokawa/media-kit.git

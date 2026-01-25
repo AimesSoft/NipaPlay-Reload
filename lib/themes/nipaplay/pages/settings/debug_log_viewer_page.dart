@@ -10,6 +10,7 @@ import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
@@ -591,11 +592,9 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                   ),
                 ),
                 if (isSwitch)
-                  Switch(
+                  FluentSettingsSwitch(
                     value: switchValue ?? false,
                     onChanged: onSwitchChanged,
-                    activeColor: colorScheme.primary,
-                    inactiveThumbColor: colorScheme.onSurface.withOpacity(0.7),
                   )
                 else
                   Icon(

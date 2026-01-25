@@ -41,19 +41,36 @@ class LocalLibraryControlBar extends StatefulWidget {
 
 class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
   final GlobalKey _dropdownKey = GlobalKey();
+  final FocusNode _searchFocusNode = FocusNode();
   bool _isBackHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFocusNode.addListener(() {
+      setState(() {}); // 刷新以更新描边颜色
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     assert(!widget.showSort || (widget.currentSort != null && widget.onSortChanged != null));
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colorScheme = Theme.of(context).colorScheme;
     final currentSort = widget.currentSort ?? LocalLibrarySortType.dateAdded;
     
-    // 提高背景对比度，不再是几乎透明
+    const activeColor = Color(0xFFFF2E55);
+    final idleBorderColor = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1);
+    
+    // 提高背景对比度，日间模式下使用纯白
     final bgColor = isDark 
         ? Colors.white.withValues(alpha: 0.12) 
-        : Colors.black.withValues(alpha: 0.08);
+        : Colors.white;
     
     final textColor = isDark ? Colors.white.withValues(alpha: 0.8) : Colors.black.withValues(alpha: 0.7);
     final primaryTextColor = isDark ? Colors.white : Colors.black;
@@ -110,33 +127,42 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
               height: 40,
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(8), // 降低圆角以匹配下拉菜单
+                borderRadius: BorderRadius.circular(8), 
                 border: Border.all(
-                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-                  width: 1,
+                  color: _searchFocusNode.hasFocus ? activeColor : idleBorderColor,
+                  width: _searchFocusNode.hasFocus ? 1.5 : 1,
                 ),
               ),
-              child: TextField(
-                controller: widget.searchController,
-                onChanged: widget.onSearchChanged,
-                style: TextStyle(color: primaryTextColor, fontSize: 14),
-                cursorColor: Theme.of(context).primaryColor,
-                decoration: InputDecoration(
-                  hintText: '搜索...',
-                  hintStyle: TextStyle(color: textColor.withValues(alpha: 0.5), fontSize: 14),
-                  prefixIcon: Icon(Ionicons.search_outline, size: 18, color: textColor.withValues(alpha: 0.5)),
-                  suffixIcon: widget.searchController.text.isNotEmpty 
-                      ? IconButton(
-                          icon: Icon(Ionicons.close_circle, size: 18, color: textColor.withValues(alpha: 0.5)),
-                          onPressed: () {
-                            widget.searchController.clear();
-                            widget.onSearchChanged('');
-                            widget.onClearSearch?.call();
-                          },
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  textSelectionTheme: TextSelectionThemeData(
+                    selectionColor: activeColor.withValues(alpha: 0.3),
+                    selectionHandleColor: activeColor,
+                  ),
+                ),
+                child: TextField(
+                  controller: widget.searchController,
+                  focusNode: _searchFocusNode,
+                  onChanged: widget.onSearchChanged,
+                  style: TextStyle(color: primaryTextColor, fontSize: 14),
+                  cursorColor: activeColor,
+                  decoration: InputDecoration(
+                    hintText: '搜索...',
+                    hintStyle: TextStyle(color: textColor.withValues(alpha: 0.5), fontSize: 14),
+                    prefixIcon: Icon(Ionicons.search_outline, size: 18, color: _searchFocusNode.hasFocus ? activeColor : textColor.withValues(alpha: 0.5)),
+                    suffixIcon: widget.searchController.text.isNotEmpty 
+                        ? IconButton(
+                            icon: Icon(Ionicons.close_circle, size: 18, color: textColor.withValues(alpha: 0.5)),
+                            onPressed: () {
+                              widget.searchController.clear();
+                              widget.onSearchChanged('');
+                              widget.onClearSearch?.call();
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
                 ),
               ),
             ),
@@ -153,22 +179,11 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
           ],
           if (widget.showSort) ...[
             const SizedBox(width: 12),
-            // 排序按钮容器
-            Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(8), // 降低圆角
-                border: Border.all(
-                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-                  width: 1,
-                ),
-              ),
-              child: BlurDropdown<LocalLibrarySortType>(
-                dropdownKey: _dropdownKey,
-                onItemSelected: widget.onSortChanged!,
-                items: [
+            // 排序按钮直接使用本体
+            BlurDropdown<LocalLibrarySortType>(
+              dropdownKey: _dropdownKey,
+              onItemSelected: widget.onSortChanged!,
+              items: [
                 DropdownMenuItemData(
                   title: '最近观看',
                   value: LocalLibrarySortType.dateAdded,
@@ -181,7 +196,6 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
                 ),
               ],
             ),
-          ),
           ],
         ],
       ),

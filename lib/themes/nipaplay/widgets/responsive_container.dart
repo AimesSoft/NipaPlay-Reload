@@ -17,8 +17,12 @@ class ResponsiveContainer extends StatelessWidget {
         // 如果是桌面设备或平板设备，使用左右分区布局；手机设备使用单页布局
         if (globals.isDesktop || globals.isTablet) {
           const double leftPaneFraction = 0.25;
+          const double dividerWidth = 1.0;
           final double leftWidth = constraints.maxWidth * leftPaneFraction;
-          final double rightWidth = constraints.maxWidth - leftWidth;
+          final double rightWidth =
+              constraints.maxWidth - leftWidth - dividerWidth;
+          final dividerColor =
+              Theme.of(context).colorScheme.onSurface.withOpacity(0.2);
           return Row(
             children: [
               // 左侧部分，显示 SettingsPage
@@ -26,12 +30,12 @@ class ResponsiveContainer extends StatelessWidget {
                 width: leftWidth,
                 child: child,
               ),
-              const VerticalDivider(
-                color: Color.fromARGB(59, 255, 255, 255), // 竖线的颜色
+              VerticalDivider(
+                color: dividerColor, // 竖线的颜色
                 thickness: 1, // 竖线的宽度
-                width: 0, // 竖线的间距
-                indent: 20,
-                endIndent: 20,
+                width: dividerWidth, // 竖线的间距
+                indent: 0,
+                endIndent: 0,
               ),
               // 右侧部分，根据 currentPage 显示不同内容
               Container(

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
@@ -285,8 +286,9 @@ class SettingsItem extends StatelessWidget {
           enabled: enabled,
         );
       case SettingsItemType.toggle:
-        return SwitchListTile(
-          secondary: icon != null
+        final currentValue = switchValue ?? false;
+        return ListTile(
+          leading: icon != null
               ? Icon(icon, color: colorScheme.onSurface.withOpacity(0.7))
               : null,
           title: Text(
@@ -310,11 +312,14 @@ class SettingsItem extends StatelessWidget {
                   ),
                 )
               : null,
-          value: switchValue ?? false,
-          onChanged: enabled ? onSwitchChanged : null,
-          activeColor: colorScheme.primary,
-          inactiveThumbColor: colorScheme.onSurface.withOpacity(0.7),
-          inactiveTrackColor: colorScheme.onSurface.withOpacity(0.2),
+          trailing: FluentSettingsSwitch(
+            value: currentValue,
+            onChanged: enabled ? onSwitchChanged : null,
+          ),
+          onTap: enabled && onSwitchChanged != null
+              ? () => onSwitchChanged!(!currentValue)
+              : null,
+          enabled: enabled,
         );
       case SettingsItemType.button:
         return ListTile(

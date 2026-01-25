@@ -27,6 +27,7 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'; // 导入WebDAV连接对话框
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
@@ -54,6 +55,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   final Map<String, List<io.FileSystemEntity>> _expandedFolderContents = {};
   final Set<String> _loadingFolders = {};
   final ScrollController _listScrollController = ScrollController();
+  final ScrollController _webdavScrollController = ScrollController();
+  final ScrollController _smbScrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   bool _hasScanServiceListener = false;
   
@@ -197,6 +200,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
     _searchController.dispose();
     _listScrollController.dispose();
+    _webdavScrollController.dispose();
+    _smbScrollController.dispose();
     super.dispose();
   }
 
@@ -773,30 +778,18 @@ style: TextStyle(color: Colors.redAccent)),
   }
 
   Widget _buildSortDropdown() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08);
-    final borderColor = isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05);
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderColor, width: 1),
-      ),
-      child: BlurDropdown<int>(
-        dropdownKey: _sortDropdownKey,
-        onItemSelected: (value) => _applySortOption(value),
-        items: _sortOptionLabels
-            .asMap()
-            .entries
-            .map((entry) => DropdownMenuItemData<int>(
-                  title: entry.value,
-                  value: entry.key,
-                  isSelected: entry.key == _sortOption,
-                ))
-            .toList(),
-      ),
+    return BlurDropdown<int>(
+      dropdownKey: _sortDropdownKey,
+      onItemSelected: (value) => _applySortOption(value),
+      items: _sortOptionLabels
+          .asMap()
+          .entries
+          .map((entry) => DropdownMenuItemData<int>(
+                title: entry.value,
+                value: entry.key,
+                isSelected: entry.key == _sortOption,
+              ))
+          .toList(),
     );
   }
 
@@ -1281,22 +1274,9 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     required IconData icon,
     required String message,
   }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 64, color: Colors.white54),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 16),
-            ),
-          ],
-        ),
-      ),
+    return LibraryManagementEmptyState(
+      icon: icon,
+      title: message,
     );
   }
 
@@ -1879,119 +1859,11 @@ style: TextStyle(color: Colors.redAccent)),
     // 对根文件夹进行排序
     final sortedFolders = _sortFolderPaths(folderPaths);
 
-    // 检测是否为手机设备 - 手机设备始终使用单列布局
-    if (isPhone) {
-      // 手机设备使用单列ListView（包括平板，因为平板只能扫描应用目录，文件夹有限）
-      if (io.Platform.isAndroid || io.Platform.isIOS) {
-        return ListView.builder(
-          controller: _listScrollController,
-          itemCount: sortedFolders.length,
-          itemBuilder: (context, index) {
-            final folderPath = sortedFolders[index];
-            return _buildFolderTile(folderPath, scanService);
-          },
-        );
-      } else {
-        return Scrollbar(
-          controller: _listScrollController,
-          radius: const Radius.circular(2),
-          thickness: 4,
-          child: ListView.builder(
-            controller: _listScrollController,
-            itemCount: sortedFolders.length,
-            itemBuilder: (context, index) {
-              final folderPath = sortedFolders[index];
-              return _buildFolderTile(folderPath, scanService);
-            },
-          ),
-        );
-      }
-    } else {
-      // 桌面设备使用真正的瀑布流布局
-      return Scrollbar(
-        controller: _listScrollController,
-        radius: const Radius.circular(2),
-        thickness: 4,
-        child: SingleChildScrollView(
-          controller: _listScrollController,
-          padding: const EdgeInsets.all(8),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return _buildWaterfallLayout(
-                scanService,
-                sortedFolders,
-                constraints.maxWidth,
-                300.0,
-                16.0,
-              );
-            },
-          ),
-        ),
-      );
-    }
-  }
-
-  // 真正的瀑布流布局组件
-  Widget _buildWaterfallLayout(ScanService scanService, List<String> sortedFolders, double maxWidth, double minItemWidth, double spacing) {
-    // 预留边距防止溢出
-    final availableWidth = maxWidth - 16.0; // 留出16px的安全边距
-
-    // 计算列数
-    final crossAxisCount = (availableWidth / minItemWidth).floor().clamp(1, 3);
-
-    // 重新计算间距和项目宽度
-    final totalSpacing = spacing * (crossAxisCount - 1);
-    final itemWidth = (availableWidth - totalSpacing) / crossAxisCount;
-
-    // 创建列的文件夹列表
-    final columnFolders = <List<String>>[];
-    for (var i = 0; i < crossAxisCount; i++) {
-      columnFolders.add([]);
-    }
-
-    // 按列分配已排序的文件夹
-    for (var i = 0; i < sortedFolders.length; i++) {
-      final columnIndex = i % crossAxisCount;
-      columnFolders[columnIndex].add(sortedFolders[i]);
-    }
-
-    // 创建列组件
-    final columnWidgets = <Widget>[];
-    for (var i = 0; i < crossAxisCount; i++) {
-      if (columnFolders[i].isNotEmpty) {
-        columnWidgets.add(
-          SizedBox(
-            width: itemWidth,
-            child: Column(
-              children: columnFolders[i].map((folderPath) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
-                  child: _buildFolderTile(folderPath, scanService),
-                );
-              }).toList(),
-            ),
-          ),
-        );
-      }
-    }
-
-    // 使用Row排列列，添加间距
-    final rowChildren = <Widget>[];
-    for (var i = 0; i < columnWidgets.length; i++) {
-      if (i > 0) {
-        rowChildren.add(SizedBox(width: spacing)); // 添加列间距
-      }
-      rowChildren.add(columnWidgets[i]);
-    }
-
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: rowChildren,
-        ),
-      ),
+    return LibraryManagementList<String>(
+      scrollController: _listScrollController,
+      items: sortedFolders,
+      itemBuilder: (context, folderPath) =>
+          _buildFolderTile(folderPath, scanService),
     );
   }
 
@@ -2030,24 +1902,14 @@ style: TextStyle(color: Colors.redAccent)),
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-    final Color borderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1);
-    final Color bgColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
 
     return FutureBuilder<String>(
       future: _getDisplayPath(folderPath),
       builder: (context, snapshot) {
         final displayPath = snapshot.data ?? folderPath;
         
-        return Container(
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: borderColor,
-              width: 0.5,
-            ),
-          ),
-                    child: Theme(
+        return LibraryManagementCard(
+          child: Theme(
                       data: Theme.of(context).copyWith(
                         splashColor: Colors.transparent,
                         highlightColor: Colors.transparent,
@@ -2176,52 +2038,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         message: '未找到匹配的WebDAV服务器。',
       );
     }
-
-    if (isPhone && (io.Platform.isAndroid || io.Platform.isIOS)) {
-      return ListView.builder(
-        itemCount: filteredConnections.length,
-        itemBuilder: (context, index) {
-          final connection = filteredConnections[index];
-          return _buildWebDAVConnectionTile(connection);
-        },
-      );
-    } else {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(8),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final double maxWidth = constraints.maxWidth;
-            final int crossAxisCount = (maxWidth / 320).floor().clamp(1, 3);
-            final double spacing = 12.0;
-            final double itemWidth = (maxWidth - (crossAxisCount - 1) * spacing) / crossAxisCount;
-
-            final List<List<WebDAVConnection>> columns = List.generate(
-              crossAxisCount, (_) => <WebDAVConnection>[]
-            );
-            for (var i = 0; i < filteredConnections.length; i++) {
-              columns[i % crossAxisCount].add(filteredConnections[i]);
-            }
-
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: List.generate(crossAxisCount, (colIndex) {
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(right: colIndex < crossAxisCount - 1 ? spacing : 0),
-                    child: Column(
-                      children: columns[colIndex].map((conn) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: _buildWebDAVConnectionTile(conn),
-                      )).toList(),
-                    ),
-                  ),
-                );
-              }),
-            );
-          },
-        ),
-      );
-    }
+    return LibraryManagementList<WebDAVConnection>(
+      scrollController: _webdavScrollController,
+      items: filteredConnections,
+      itemBuilder: (context, connection) => _buildWebDAVConnectionTile(connection),
+    );
   }
 
   Widget _buildSMBFoldersList() {
@@ -2238,52 +2059,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         message: '未找到匹配的SMB服务器。',
       );
     }
-
-    if (isPhone && (io.Platform.isAndroid || io.Platform.isIOS)) {
-      return ListView.builder(
-        itemCount: filteredConnections.length,
-        itemBuilder: (context, index) {
-          final connection = filteredConnections[index];
-          return _buildSMBConnectionTile(connection);
-        },
-      );
-    } else {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(8),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final double maxWidth = constraints.maxWidth;
-            final int crossAxisCount = (maxWidth / 320).floor().clamp(1, 3);
-            final double spacing = 12.0;
-            final double itemWidth = (maxWidth - (crossAxisCount - 1) * spacing) / crossAxisCount;
-
-            final List<List<SMBConnection>> columns = List.generate(
-              crossAxisCount, (_) => <SMBConnection>[]
-            );
-            for (var i = 0; i < filteredConnections.length; i++) {
-              columns[i % crossAxisCount].add(filteredConnections[i]);
-            }
-
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: List.generate(crossAxisCount, (colIndex) {
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(right: colIndex < crossAxisCount - 1 ? spacing : 0),
-                    child: Column(
-                      children: columns[colIndex].map((conn) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: _buildSMBConnectionTile(conn),
-                      )).toList(),
-                    ),
-                  ),
-                );
-              }),
-            );
-          },
-        ),
-      );
-    }
+    return LibraryManagementList<SMBConnection>(
+      scrollController: _smbScrollController,
+      items: filteredConnections,
+      itemBuilder: (context, connection) => _buildSMBConnectionTile(connection),
+    );
   }
   
   // 构建WebDAV连接Tile
@@ -2292,186 +2072,187 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-    final Color borderColor = isDark ? Colors.white.withOpacity(0.3) : Colors.black.withOpacity(0.1);
-    final Color bgColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: borderColor,
-          width: 1,
-        ),
-      ),
+    return LibraryManagementCard(
       child: Theme(
         data: Theme.of(context).copyWith(
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
           hoverColor: Colors.transparent,
+          dividerColor: Colors.transparent,
         ),
         child: ExpansionTile(
           key: PageStorageKey<String>('webdav_${connection.name}'),
-          leading: Icon(
-            Icons.cloud,
-            color: iconColor,
-          ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                connection.name,
-                style: TextStyle(color: textColor, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                connection.isConnected ? '已连接' : '未连接',
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 10,
+          leading: Icon(Icons.cloud, color: iconColor),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  connection.name,
+                  style: TextStyle(color: textColor, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Text(
-            connection.url,
-            style: TextStyle(color: secondaryTextColor, fontSize: 11),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: Icon(Icons.edit, color: iconColor, size: 20),
-              onPressed: () => _editWebDAVConnection(connection),
-            ),
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: iconColor, size: 20),
-              onPressed: () => _removeWebDAVConnection(connection),
-            ),
-            IconButton(
-              icon: Icon(Icons.refresh, color: iconColor, size: 20),
-              onPressed: () => _testWebDAVConnection(connection),
-            ),
-          ],
-        ),
-        onExpansionChanged: (expanded) {
-          if (expanded && _webdavFolderContents[connection.name] == null) {
-            _loadWebDAVFolderChildren(connection, '/');
-          }
-        },
-                children: _loadingWebDAVFolders.contains('${connection.name}:/')
-                    ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
-                    : _buildWebDAVFileNodes(connection, '/'),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.2)
+                      : Colors.black.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  connection.isConnected ? '已连接' : '未连接',
+                  style: TextStyle(color: textColor, fontSize: 10),
+                ),
               ),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Text(
+              connection.url,
+              style: TextStyle(color: secondaryTextColor, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
             ),
-          );
-        }
-        
-        Widget _buildSMBConnectionTile(SMBConnection connection) {
-        
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.edit, color: iconColor, size: 22),
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                constraints: const BoxConstraints(),
+                onPressed: () => _editWebDAVConnection(connection),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete_outline, color: iconColor, size: 22),
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                constraints: const BoxConstraints(),
+                onPressed: () => _removeWebDAVConnection(connection),
+              ),
+              IconButton(
+                icon: Icon(Icons.refresh, color: iconColor, size: 22),
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                constraints: const BoxConstraints(),
+                onPressed: () => _testWebDAVConnection(connection),
+              ),
+            ],
+          ),
+          onExpansionChanged: (expanded) {
+            if (expanded && _webdavFolderContents[connection.name] == null) {
+              _loadWebDAVFolderChildren(connection, '/');
+            }
+          },
+          children: _loadingWebDAVFolders.contains('${connection.name}:/')
+              ? [
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                ]
+              : _buildWebDAVFileNodes(connection, '/'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSMBConnectionTile(SMBConnection connection) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-    final Color borderColor = isDark ? Colors.white.withOpacity(0.3) : Colors.black.withOpacity(0.1);
-    final Color bgColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
-
     final hostLabel =
         connection.port != 445 ? '${connection.host}:${connection.port}' : connection.host;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: borderColor,
-          width: 1,
-        ),
-      ),
+
+    return LibraryManagementCard(
       child: Theme(
         data: Theme.of(context).copyWith(
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
           hoverColor: Colors.transparent,
+          dividerColor: Colors.transparent,
         ),
         child: ExpansionTile(
           key: PageStorageKey<String>('smb_${connection.name}'),
           leading: Icon(Icons.dns, color: iconColor),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                connection.name,
-                style: TextStyle(color: textColor, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                connection.isConnected ? '已连接' : '未连接',
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 10,
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  connection.name,
+                  style: TextStyle(color: textColor, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Text(
-            hostLabel,
-            style: TextStyle(color: secondaryTextColor, fontSize: 11),
-            overflow: TextOverflow.ellipsis,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.2)
+                      : Colors.black.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  connection.isConnected ? '已连接' : '未连接',
+                  style: TextStyle(color: textColor, fontSize: 10),
+                ),
+              ),
+            ],
           ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Text(
+              hostLabel,
+              style: TextStyle(color: secondaryTextColor, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.edit, color: iconColor, size: 22),
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                constraints: const BoxConstraints(),
+                onPressed: () =>
+                    _showSMBConnectionDialog(editConnection: connection),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete_outline, color: iconColor, size: 22),
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                constraints: const BoxConstraints(),
+                onPressed: () => _removeSMBConnection(connection),
+              ),
+              IconButton(
+                icon: Icon(Icons.refresh, color: iconColor, size: 22),
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                constraints: const BoxConstraints(),
+                onPressed: () => _refreshSMBConnection(connection),
+              ),
+            ],
+          ),
+          onExpansionChanged: (expanded) {
+            if (expanded && _smbFolderContents[connection.name] == null) {
+              _loadSMBFolderChildren(connection, '/');
+            }
+          },
+          children: _loadingSMBFolders.contains('${connection.name}:/')
+              ? [
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                ]
+              : _buildSMBFileNodes(connection, '/'),
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: Icon(Icons.edit, color: iconColor, size: 20),
-              onPressed: () => _showSMBConnectionDialog(editConnection: connection),
-            ),
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: iconColor, size: 20),
-              onPressed: () => _removeSMBConnection(connection),
-            ),
-            IconButton(
-              icon: Icon(Icons.refresh, color: iconColor, size: 20),
-              onPressed: () => _refreshSMBConnection(connection),
-            ),
-          ],
-        ),
-        onExpansionChanged: (expanded) {
-          if (expanded && _smbFolderContents[connection.name] == null) {
-            _loadSMBFolderChildren(connection, '/');
-          }
-        },
-        children: _loadingSMBFolders.contains('${connection.name}:/')
-            ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
-            : _buildSMBFileNodes(connection, '/'),
       ),
-    ),
-  );
-}
+    );
+  }
   
     List<Widget> _buildWebDAVFileNodes(WebDAVConnection connection, String path) {
       final bool isDark = Theme.of(context).brightness == Brightness.dark;

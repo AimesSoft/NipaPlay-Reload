@@ -16,6 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 
 enum SharedRemoteViewMode { mediaLibrary, libraryManagement }
@@ -662,69 +663,11 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       );
     }
 
-    // 响应式布局：手机使用单列，桌面/平板使用瀑布流
-    if (isPhone) {
-      return ListView.builder(
-        controller: _managementScrollController,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        itemCount: folders.length,
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildRemoteFolderCard(context, provider, folders[index]),
-          );
-        },
-      );
-    } else {
-      return Scrollbar(
-        controller: _managementScrollController,
-        radius: const Radius.circular(4),
-        child: SingleChildScrollView(
-          controller: _managementScrollController,
-          padding: const EdgeInsets.all(16),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return _buildWaterfallLayout(context, provider, folders, constraints.maxWidth);
-            },
-          ),
-        ),
-      );
-    }
-  }
-
-  Widget _buildWaterfallLayout(
-    BuildContext context,
-    SharedRemoteLibraryProvider provider,
-    List<SharedRemoteScannedFolder> folders,
-    double maxWidth,
-  ) {
-    const double minItemWidth = 300.0;
-    const double spacing = 16.0;
-    final availableWidth = maxWidth;
-    final crossAxisCount = (availableWidth / minItemWidth).floor().clamp(1, 3);
-
-    final columnFolders = List.generate(crossAxisCount, (_) => <SharedRemoteScannedFolder>[]);
-    for (var i = 0; i < folders.length; i++) {
-      columnFolders[i % crossAxisCount].add(folders[i]);
-    }
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: List.generate(crossAxisCount, (colIndex) {
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(right: colIndex < crossAxisCount - 1 ? spacing : 0),
-            child: Column(
-              children: columnFolders[colIndex]
-                  .map((folder) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: _buildRemoteFolderCard(context, provider, folder),
-                      ))
-                  .toList(),
-            ),
-          ),
-        );
-      }),
+    return LibraryManagementList<SharedRemoteScannedFolder>(
+      scrollController: _managementScrollController,
+      items: folders,
+      itemBuilder: (context, folder) =>
+          _buildRemoteFolderCard(context, provider, folder),
     );
   }
 
@@ -737,8 +680,6 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-    final Color borderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1);
-    final Color bgColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
 
     final busy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
     final statusColor = folder.exists ? iconColor : Colors.orangeAccent;
@@ -747,15 +688,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     final expanded = _expandedRemoteDirectories.containsKey(folderPath);
     final loading = _loadingRemoteDirectories.contains(folderPath);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: borderColor,
-          width: 0.5,
-        ),
-      ),
+    return LibraryManagementCard(
       child: Theme(
         data: Theme.of(context).copyWith(
           splashColor: Colors.transparent,
@@ -849,48 +782,18 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     required String title,
     required String subtitle,
   }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Ionicons.folder_open_outline, color: Colors.white38, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              locale: const Locale('zh', 'CN'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              locale: const Locale('zh', 'CN'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white60, height: 1.35),
-            ),
-          ],
-        ),
-      ),
+    return LibraryManagementEmptyState(
+      icon: Ionicons.folder_open_outline,
+      title: title,
+      subtitle: subtitle,
     );
   }
 
   Widget _buildEmptyHostsPlaceholder(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Ionicons.cloud_outline, color: Colors.white38, size: 48),
-          SizedBox(height: 12),
-          Text(
-            '尚未添加共享客户端\n请前往设置 > 远程媒体库 添加',
-            locale: Locale('zh', 'CN'),
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white60),
-          ),
-        ],
-      ),
+    return const LibraryManagementEmptyState(
+      icon: Ionicons.cloud_outline,
+      title: '尚未添加共享客户端',
+      subtitle: '请前往设置 > 远程媒体库 添加',
     );
   }
 

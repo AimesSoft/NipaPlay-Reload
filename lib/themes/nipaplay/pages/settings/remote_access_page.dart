@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -265,12 +266,9 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 icon: Icons.power_settings_new,
                 title: '启用远程访问服务',
                 subtitle: '允许其他 NipaPlay 客户端远程访问本机媒体库',
-                trailing: Switch(
+                trailing: FluentSettingsSwitch(
                   value: _webServerEnabled,
                   onChanged: _toggleWebServer,
-                  activeColor: colorScheme.primary,
-                  inactiveThumbColor: colorScheme.onSurface.withOpacity(0.7),
-                  inactiveTrackColor: colorScheme.onSurface.withOpacity(0.2),
                 ),
               ),
 
@@ -279,12 +277,9 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 icon: Icons.auto_awesome,
                 title: '软件打开自动开启远程访问',
                 subtitle: '启动 NipaPlay 时自动开启远程访问服务（不影响手动开关）',
-                trailing: Switch(
+                trailing: FluentSettingsSwitch(
                   value: _autoStartEnabled,
                   onChanged: _toggleAutoStart,
-                  activeColor: colorScheme.primary,
-                  inactiveThumbColor: colorScheme.onSurface.withOpacity(0.7),
-                  inactiveTrackColor: colorScheme.onSurface.withOpacity(0.2),
                 ),
               ),
               

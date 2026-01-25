@@ -117,42 +117,64 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      key: widget.dropdownKey,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: () {
-            if (_animationController.isAnimating) return;
-            if (_isDropdownOpen) {
-              _closeDropdown();
-            } else {
-              _openDropdown();
-            }
-          },
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _getSelectedItemText(),
-                  style: getTitleTextStyle(context),
-                ),
-                const SizedBox(width: 10),
-                RotationTransition(
-                  turns:
-                      Tween(begin: 0.0, end: 0.5).animate(_animationController),
-                  child: Icon(
-                    Ionicons.chevron_down_outline,
-                    color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const activeColor = Color(0xFFFF2E55);
+    final idleBorderColor = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1);
+    final bgColor = isDark 
+        ? Colors.white.withValues(alpha: 0.12) 
+        : Colors.white;
+
+    return Container(
+      height: 40, // 统一高度
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _isDropdownOpen ? activeColor : idleBorderColor,
+          width: _isDropdownOpen ? 1.5 : 1,
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      alignment: Alignment.center,
+      child: Row(
+        key: widget.dropdownKey,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () {
+              if (_animationController.isAnimating) return;
+              if (_isDropdownOpen) {
+                _closeDropdown();
+              } else {
+                _openDropdown();
+              }
+            },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _getSelectedItemText(),
+                    style: getTitleTextStyle(context),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  RotationTransition(
+                    turns:
+                        Tween(begin: 0.0, end: 0.5).animate(_animationController),
+                    child: Icon(
+                      Ionicons.chevron_down_outline,
+                      color: _isDropdownOpen 
+                          ? activeColor 
+                          : (isDark ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -199,7 +221,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     
     final Color dropdownBgColor = isDark
         ? const Color(0xFF2C2C2C)
-        : const Color(0xFFFAFAFA);
+        : const Color(0xFFFFFFFF);
 
     _overlayEntry = OverlayEntry(
       builder: (context) {

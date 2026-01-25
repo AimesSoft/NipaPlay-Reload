@@ -32,6 +32,7 @@ class DandanplayRemoteLibraryView extends StatefulWidget {
 class _DandanplayRemoteLibraryViewState
     extends State<DandanplayRemoteLibraryView> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
   final ScrollController _gridScrollController = ScrollController();
   Timer? _searchDebounce;
@@ -39,9 +40,18 @@ class _DandanplayRemoteLibraryViewState
   final Map<int, Future<String?>> _coverLoadingTasks = {};
 
   @override
+  void initState() {
+    super.initState();
+    _searchFocusNode.addListener(() {
+      setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _searchDebounce?.cancel();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _gridScrollController.dispose();
     super.dispose();
   }
@@ -198,6 +208,12 @@ class _DandanplayRemoteLibraryViewState
   }
 
   Widget _buildSearchField() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : Colors.black;
+    final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    const activeColor = Color(0xFFFF2E55);
+    final idleBorderColor = isDark ? Colors.white.withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.1);
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
@@ -205,49 +221,62 @@ class _DandanplayRemoteLibraryViewState
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: Colors.white.withValues(alpha: 0.12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-          ),
-          child: TextField(
-            controller: _searchController,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-            decoration: InputDecoration(
-              prefixIcon:
-                  const Icon(Icons.search, color: Colors.white70, size: 20),
-              suffixIcon: _searchQuery.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.white70),
-                      onPressed: () {
-                        _searchDebounce?.cancel();
-                        setState(() {
-                          _searchQuery = '';
-                          _searchController.clear();
-                        });
-                      },
-                    ),
-              hintText: '搜索番剧或剧集…',
-              hintStyle:
-                  TextStyle(color: Colors.white.withValues(alpha: 0.6)),
-              border: InputBorder.none,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white,
+            border: Border.all(
+              color: _searchFocusNode.hasFocus ? activeColor : idleBorderColor,
+              width: _searchFocusNode.hasFocus ? 1.5 : 1,
             ),
-            onChanged: (value) {
-              _searchDebounce?.cancel();
-              _searchDebounce = Timer(const Duration(milliseconds: 300), () {
-                if (!mounted) return;
+          ),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              textSelectionTheme: TextSelectionThemeData(
+                selectionColor: activeColor.withValues(alpha: 0.3),
+                selectionHandleColor: activeColor,
+              ),
+            ),
+            child: TextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              style: TextStyle(color: primaryTextColor, fontSize: 16),
+              cursorColor: activeColor,
+              decoration: InputDecoration(
+                prefixIcon:
+                    Icon(Icons.search, color: _searchFocusNode.hasFocus ? activeColor : secondaryTextColor, size: 20),
+                suffixIcon: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: Icon(Icons.clear, color: secondaryTextColor),
+                        onPressed: () {
+                          _searchDebounce?.cancel();
+                          setState(() {
+                            _searchQuery = '';
+                            _searchController.clear();
+                          });
+                        },
+                      ),
+                hintText: '搜索番剧或剧集…',
+                hintStyle:
+                    TextStyle(color: secondaryTextColor.withValues(alpha: 0.6)),
+                border: InputBorder.none,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onChanged: (value) {
+                _searchDebounce?.cancel();
+                _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                  if (!mounted) return;
+                  setState(() {
+                    _searchQuery = value.trim();
+                  });
+                });
+              },
+              onSubmitted: (value) {
+                _searchDebounce?.cancel();
                 setState(() {
                   _searchQuery = value.trim();
                 });
-              });
-            },
-            onSubmitted: (value) {
-              _searchDebounce?.cancel();
-              setState(() {
-                _searchQuery = value.trim();
-              });
-            },
+              },
+            ),
           ),
         ),
       ),
