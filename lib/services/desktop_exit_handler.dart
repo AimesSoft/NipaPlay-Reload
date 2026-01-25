@@ -62,7 +62,7 @@ class DesktopExitHandler
       _bindingHooked = true;
     }
 
-    if (Platform.isMacOS && !_windowListenerHooked) {
+    if ((Platform.isMacOS || Platform.isLinux) && !_windowListenerHooked) {
       try {
         await windowManager.setPreventClose(true);
         _preventCloseEnabled = true;
@@ -106,7 +106,7 @@ class DesktopExitHandler
 
   @override
   void onWindowClose() async {
-    if (!Platform.isMacOS) return;
+    if (!(Platform.isMacOS || Platform.isLinux)) return;
     if (_closingWindow) return;
     if (_quitting) {
       await _closeWindowSafely();
@@ -349,7 +349,7 @@ class DesktopExitHandler
     try {
       await _closeWindowSafely();
     } catch (_) {}
-    if (Platform.isMacOS) {
+    if (Platform.isMacOS || Platform.isLinux) {
       exit(0);
     }
   }
