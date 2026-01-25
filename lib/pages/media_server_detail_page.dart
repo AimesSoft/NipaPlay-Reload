@@ -48,7 +48,7 @@ class MediaServerDetailPage extends StatefulWidget {
     return showGeneralDialog<WatchHistoryItem>(
       context: context,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.transparent,
       barrierLabel: '关闭详情页',
       transitionDuration: const Duration(milliseconds: 250),
       pageBuilder: (context, animation, secondaryAnimation) {
