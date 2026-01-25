@@ -432,12 +432,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       }
     });
 
-    final indent = EdgeInsets.only(left: 12.0 + depth * 16.0);
+    final indent = libraryManagementTreeIndent(depth);
 
     if (entries.isEmpty) {
       return [
         Padding(
-          padding: EdgeInsets.fromLTRB(indent.left, 6, 0, 6),
+          padding: EdgeInsets.fromLTRB(indent, 6, 0, 6),
           child: Text(
             '（空文件夹）',
             locale: const Locale('zh', 'CN'),
@@ -455,32 +455,16 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         final expanded = _expandedRemoteDirectories.containsKey(entryPath);
         final loading = _loadingRemoteDirectories.contains(entryPath);
         widgets.add(
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.fromLTRB(indent.left, 0, 8, 0),
-              leading: Icon(Ionicons.folder_outline, color: iconColor, size: 18),
-              title: Text(
-                entryName,
-                locale: const Locale('zh', 'CN'),
-                style: TextStyle(color: textColor, fontSize: 13),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: loading
-                  ? SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: iconColor),
-                    )
-                  : Icon(
-                      expanded ? Ionicons.chevron_down_outline : Ionicons.chevron_forward,
-                      color: secondaryTextColor,
-                      size: 16,
-                    ),
-              onTap: () => _toggleRemoteDirectory(provider, entryPath),
-            ),
+          LibraryManagementFolderRow(
+            title: entryName,
+            locale: const Locale('zh', 'CN'),
+            indent: indent,
+            expanded: expanded,
+            loading: loading,
+            iconColor: iconColor,
+            textColor: textColor,
+            secondaryTextColor: secondaryTextColor,
+            onTap: () => _toggleRemoteDirectory(provider, entryPath),
           ),
         );
         if (expanded) {
@@ -494,7 +478,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           padding: const EdgeInsets.only(top: 2),
           child: ListTile(
             dense: true,
-            contentPadding: EdgeInsets.fromLTRB(indent.left, 0, 8, 0),
+            contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
             leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
             title: Text(
               entryName,
@@ -703,7 +687,11 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           collapsedIconColor: iconColor,
           onExpansionChanged: (isExpanded) {
             if (isExpanded != expanded) {
-              _toggleRemoteDirectory(provider, folderPath);
+              // Avoid setState during build when ExpansionTile restores its state.
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                _toggleRemoteDirectory(provider, folderPath);
+              });
             }
           },
           initiallyExpanded: expanded,

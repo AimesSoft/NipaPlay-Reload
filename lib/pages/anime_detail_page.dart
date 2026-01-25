@@ -1742,23 +1742,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
     final bool isDesktopOrTablet = globals.isDesktopOrTablet;
 
-    final headerActions = <Widget>[];
-    if (DandanplayService.isLoggedIn) {
-      headerActions.add(
-        _ScalingHeartButton(
-          isFavorited: _isFavorited,
-          isToggling: _isTogglingFavorite,
-          onTap: _toggleFavorite,
-          secondaryTextColor: secondaryTextColor,
-        ),
-      );
-    }
-
     return NipaplayAnimeDetailLayout(
       title: displayTitle,
       subtitle: displaySubTitle,
       sourceLabel: _sharedSourceLabel,
-      headerActions: headerActions,
       onClose: () => Navigator.of(context).pop(),
       tabController: _tabController,
       showTabs: !isDesktopOrTablet,
@@ -1787,10 +1774,22 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Widget? topRightAction = DandanplayService.isLoggedIn
+        ? _WindowFavoriteButton(
+            isFavorited: _isFavorited,
+            isToggling: _isTogglingFavorite,
+            onTap: _toggleFavorite,
+            secondaryTextColor: secondaryTextColor,
+          )
+        : null;
+
     return NipaplayWindowScaffold(
       backgroundImageUrl: _getPosterUrl(),
       blurBackground: true, // Bangumi通常返回的是竖向封面，开启模糊以提升质感
       onClose: () => Navigator.of(context).pop(),
+      topRightAction: topRightAction,
       child: _buildContent(),
     );
   }
@@ -2131,13 +2130,13 @@ class _HoverableTagState extends State<_HoverableTag> {
   }
 }
 
-class _ScalingHeartButton extends StatefulWidget {
+class _WindowFavoriteButton extends StatefulWidget {
   final bool isFavorited;
   final bool isToggling;
   final VoidCallback onTap;
   final Color secondaryTextColor;
 
-  const _ScalingHeartButton({
+  const _WindowFavoriteButton({
     required this.isFavorited,
     required this.isToggling,
     required this.onTap,
@@ -2145,13 +2144,15 @@ class _ScalingHeartButton extends StatefulWidget {
   });
 
   @override
-  State<_ScalingHeartButton> createState() => _ScalingHeartButtonState();
+  State<_WindowFavoriteButton> createState() => _WindowFavoriteButtonState();
 }
 
-class _ScalingHeartButtonState extends State<_ScalingHeartButton>
+class _WindowFavoriteButtonState extends State<_WindowFavoriteButton>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
+  bool _isHovered = false;
+  bool _isPressed = false;
 
   @override
   void initState() {
@@ -2167,7 +2168,7 @@ class _ScalingHeartButtonState extends State<_ScalingHeartButton>
   }
 
   @override
-  void didUpdateWidget(_ScalingHeartButton oldWidget) {
+  void didUpdateWidget(_WindowFavoriteButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isFavorited != oldWidget.isFavorited && widget.isFavorited) {
       _controller.forward(from: 0.0);
@@ -2182,54 +2183,56 @@ class _ScalingHeartButtonState extends State<_ScalingHeartButton>
 
   @override
   Widget build(BuildContext context) {
+    final Color baseColor =
+        widget.isFavorited ? Colors.red : widget.secondaryTextColor;
+    final Color iconColor = _isHovered ? baseColor : baseColor;
+    final double scale =
+        _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+
     return GestureDetector(
       onTap: widget.isToggling ? null : widget.onTap,
       child: ScaleTransition(
         scale: _scaleAnimation,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: widget.isFavorited
-                ? Colors.red.withOpacity(0.15)
-                : widget.secondaryTextColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: widget.isFavorited
-                  ? Colors.red.withOpacity(0.3)
-                  : widget.secondaryTextColor.withOpacity(0.2),
-              width: 0.8,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.isToggling)
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      widget.isFavorited ? Colors.red : widget.secondaryTextColor,
-                    ),
+        child: MouseRegion(
+          cursor: widget.isToggling
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          child: GestureDetector(
+            onTapDown: (_) => setState(() => _isPressed = true),
+            onTapUp: (_) => setState(() => _isPressed = false),
+            onTapCancel: () => setState(() => _isPressed = false),
+            child: AnimatedScale(
+              scale: scale,
+              duration: const Duration(milliseconds: 120),
+              child: Tooltip(
+                message: widget.isFavorited ? '已收藏' : '收藏',
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: Center(
+                    child: widget.isToggling
+                        ? SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(baseColor),
+                            ),
+                          )
+                        : Icon(
+                            widget.isFavorited
+                                ? Ionicons.heart
+                                : Ionicons.heart_outline,
+                            size: 16,
+                            color: iconColor,
+                          ),
                   ),
-                )
-              else
-                Icon(
-                  widget.isFavorited ? Ionicons.heart : Ionicons.heart_outline,
-                  size: 16,
-                  color: widget.isFavorited ? Colors.red : widget.secondaryTextColor,
-                ),
-              const SizedBox(width: 4),
-              Text(
-                widget.isFavorited ? '已收藏' : '收藏',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: widget.isFavorited ? Colors.red : widget.secondaryTextColor,
-                  fontWeight: widget.isFavorited ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

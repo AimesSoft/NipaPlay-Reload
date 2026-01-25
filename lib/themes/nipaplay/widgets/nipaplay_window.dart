@@ -1,7 +1,9 @@
 import 'dart:ui' as ui;
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// 一个通用的窗口脚手架，提供 Nipaplay 风格的视觉外观。
 /// 包含：背景图片/模糊、点击背景关闭、阴影圆角容器。
@@ -12,6 +14,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
     this.backgroundImageUrl,
     this.blurBackground = false,
     this.onClose,
+    this.topRightAction,
     this.maxWidth = 850,
     this.maxHeightFactor = 0.8,
   });
@@ -20,6 +23,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
   final String? backgroundImageUrl;
   final bool blurBackground;
   final VoidCallback? onClose;
+  final Widget? topRightAction;
   final double maxWidth;
   final double maxHeightFactor;
 
@@ -29,7 +33,19 @@ class NipaplayWindowScaffold extends StatefulWidget {
 
 class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   Offset _offset = Offset.zero;
-  static const double _contentTopPadding = 10;
+  static const double _contentTopPadding = 14;
+  static const double _windowControlPadding = 5;
+  static const double _windowControlGap = 6;
+
+  bool _useMacStyleCloseButton() {
+    if (kIsWeb) {
+      return false;
+    }
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    final isIPad =
+        defaultTargetPlatform == TargetPlatform.iOS && globals.isTablet;
+    return isMac || isIPad;
+  }
 
   void _applyWindowOffset(Offset delta) {
     setState(() {
@@ -101,6 +117,8 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bgColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final Color textColor = isDark ? Colors.white : Colors.black87;
+    final bool useMacStyleCloseButton = _useMacStyleCloseButton();
+    final Widget? topRightAction = widget.topRightAction;
 
     return Theme(
       data: Theme.of(context).copyWith(
@@ -206,16 +224,35 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                       _applyWindowOffset(details.delta),
                                 ),
                               ),
-                              Positioned(
-                                top: 0,
-                                left: 0,
-                                child: _buildMacCloseButton(context),
-                              ),
-                              Positioned(
-                                top: 5,
-                                right: 5,
-                                child: _buildFluentCloseButton(context),
-                              ),
+                              if (useMacStyleCloseButton)
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  child: _buildMacCloseButton(context),
+                                )
+                              else if (topRightAction == null)
+                                Positioned(
+                                  top: _windowControlPadding,
+                                  right: _windowControlPadding,
+                                  child: _buildFluentCloseButton(context),
+                                ),
+                              if (topRightAction != null)
+                                Positioned(
+                                  top: _windowControlPadding,
+                                  right: _windowControlPadding,
+                                  child: useMacStyleCloseButton
+                                      ? topRightAction!
+                                      : Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            topRightAction!,
+                                            const SizedBox(
+                                              width: _windowControlGap,
+                                            ),
+                                            _buildFluentCloseButton(context),
+                                          ],
+                                        ),
+                                ),
                             ],
                           ),
                         ),

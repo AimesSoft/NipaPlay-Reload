@@ -152,8 +152,10 @@ flutter_launcher_icons:
 flutter:
   assets:
     - assets/logo.png
+    - assets/logo2.png
     - assets/images/logo512.png
     - assets/backempty.png
+    - assets/girl.png
     - assets/nipaplay.png
     - assets/dandanplay.png
     - assets/bangumi.png

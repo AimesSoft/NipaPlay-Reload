@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart';
+
+const double _libraryManagementTreeBaseIndent = 12.0;
+const double _libraryManagementTreeIndentStep = 16.0;
+
+double libraryManagementTreeIndent(int depth) {
+  return _libraryManagementTreeBaseIndent + depth * _libraryManagementTreeIndentStep;
+}
 
 class LibraryManagementCard extends StatelessWidget {
   const LibraryManagementCard({
@@ -149,6 +157,76 @@ class LibraryManagementList<T> extends StatelessWidget {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class LibraryManagementFolderRow extends StatelessWidget {
+  const LibraryManagementFolderRow({
+    super.key,
+    required this.title,
+    required this.expanded,
+    required this.loading,
+    required this.onTap,
+    this.indent = 0.0,
+    this.leadingIcon = Ionicons.folder_outline,
+    this.iconColor,
+    this.textColor,
+    this.secondaryTextColor,
+    this.locale,
+  });
+
+  final String title;
+  final bool expanded;
+  final bool loading;
+  final VoidCallback onTap;
+  final double indent;
+  final IconData leadingIcon;
+  final Color? iconColor;
+  final Color? textColor;
+  final Color? secondaryTextColor;
+  final Locale? locale;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color resolvedTextColor =
+        textColor ?? (isDark ? Colors.white : Colors.black87);
+    final Color resolvedSecondaryTextColor =
+        secondaryTextColor ?? (isDark ? Colors.white70 : Colors.black54);
+    final Color resolvedIconColor = iconColor ?? resolvedSecondaryTextColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+        leading: Icon(leadingIcon, color: resolvedIconColor, size: 18),
+        title: Text(
+          title,
+          locale: locale,
+          style: TextStyle(color: resolvedTextColor, fontSize: 13),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: loading
+            ? SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: resolvedIconColor,
+                ),
+              )
+            : Icon(
+                expanded
+                    ? Ionicons.chevron_down_outline
+                    : Ionicons.chevron_forward,
+                color: resolvedSecondaryTextColor,
+                size: 16,
+              ),
+        onTap: onTap,
       ),
     );
   }

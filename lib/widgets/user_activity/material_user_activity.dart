@@ -1,9 +1,11 @@
 import 'dart:ui';
+
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/controllers/user_activity_controller.dart';
 
-/// Material Design版本的用户活动记录组件
+/// Fluent UI版本的用户活动记录组件
 class MaterialUserActivity extends StatefulWidget {
   const MaterialUserActivity({super.key});
 
@@ -13,9 +15,43 @@ class MaterialUserActivity extends StatefulWidget {
 
 class _MaterialUserActivityState extends State<MaterialUserActivity> 
     with SingleTickerProviderStateMixin, UserActivityController {
+  int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    tabController.addListener(_handleTabChange);
+  }
+
+  @override
+  void dispose() {
+    tabController.removeListener(_handleTabChange);
+    super.dispose();
+  }
+
+  void _handleTabChange() {
+    if (!mounted) return;
+    if (_selectedIndex != tabController.index) {
+      setState(() {
+        _selectedIndex = tabController.index;
+      });
+    }
+  }
+
+  void _onTabChanged(int index) {
+    if (_selectedIndex == index) return;
+    setState(() {
+      _selectedIndex = index;
+    });
+    tabController.animateTo(index);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = fluent.FluentTheme.of(context);
+    final textPrimary = theme.resources.textFillColorPrimary;
+    final textSecondary = theme.resources.textFillColorSecondary;
+    final accent = theme.accentColor.defaultBrushFor(theme.brightness);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -24,122 +60,122 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
         // 标题和刷新按钮
         Row(
           children: [
-            const Text(
+            Text(
               '我的活动记录',
               locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: textPrimary,
               ),
             ),
             const Spacer(),
-            IconButton(
+            fluent.IconButton(
               onPressed: isLoading ? null : loadUserActivity,
-              icon: Icon(
+              icon: fluent.Icon(
                 Ionicons.refresh_outline,
-                color: isLoading ? Colors.white30 : Colors.white70,
+                color: isLoading ? textSecondary.withOpacity(0.5) : textSecondary,
                 size: 20,
               ),
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(),
             ),
           ],
         ),
         const SizedBox(height: 8),
         
-        // Material Design标签栏
-        TabBar(
-          controller: tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          indicatorColor: Colors.blue,
-          indicatorSize: TabBarIndicatorSize.tab,
-          tabs: [
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Ionicons.play_circle_outline, size: 16),
-                  const SizedBox(width: 4),
-                  Text('观看(${recentWatched.length})'),
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Ionicons.heart_outline, size: 16),
-                  const SizedBox(width: 4),
-                  Text('收藏(${favorites.length})'),
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Ionicons.star_outline, size: 16),
-                  const SizedBox(width: 4),
-                  Text('评分(${rated.length})'),
-                ],
-              ),
-            ),
-          ],
-        ),
-        
         // 内容区域
         Expanded(
-          child: isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                )
-              : error != null
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Ionicons.warning_outline,
-                            color: Colors.white60,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            error!,
-                            style: const TextStyle(color: Colors.white60),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: loadUserActivity,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                            ),
-                            child: const Text(
-                              '重试',
-                              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : TabBarView(
-                      controller: tabController,
-                      children: [
-                        _buildRecentWatchedList(),
-                        _buildFavoritesList(),
-                        _buildRatedList(),
-                      ],
-                    ),
+          child: fluent.TabView(
+            currentIndex: _selectedIndex,
+            onChanged: _onTabChanged,
+            closeButtonVisibility: fluent.CloseButtonVisibilityMode.never,
+            tabWidthBehavior: fluent.TabWidthBehavior.sizeToContent,
+            tabs: [
+              fluent.Tab(
+                icon: const fluent.Icon(
+                  Ionicons.play_circle_outline,
+                  size: 16,
+                ),
+                text: Text('观看(${recentWatched.length})'),
+                body: _buildTabBody(0, accent, textSecondary),
+              ),
+              fluent.Tab(
+                icon: const fluent.Icon(Ionicons.heart_outline, size: 16),
+                text: Text('收藏(${favorites.length})'),
+                body: _buildTabBody(1, accent, textSecondary),
+              ),
+              fluent.Tab(
+                icon: const fluent.Icon(Ionicons.star_outline, size: 16),
+                text: Text('评分(${rated.length})'),
+                body: _buildTabBody(2, accent, textSecondary),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
+  Widget _buildTabBody(
+    int index,
+    Color accent,
+    Color textSecondary,
+  ) {
+    if (isLoading) {
+      return Center(
+        child: fluent.ProgressRing(
+          activeColor: accent,
+          strokeWidth: 2,
+        ),
+      );
+    }
+
+    if (error != null) {
+      return _buildErrorState(textSecondary);
+    }
+
+    switch (index) {
+      case 0:
+        return _buildRecentWatchedList();
+      case 1:
+        return _buildFavoritesList();
+      default:
+        return _buildRatedList();
+    }
+  }
+
+  Widget _buildErrorState(Color textSecondary) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          fluent.Icon(
+            Ionicons.warning_outline,
+            color: textSecondary,
+            size: 48,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error!,
+            style: TextStyle(color: textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          fluent.Button(
+            onPressed: loadUserActivity,
+            child: const Text(
+              '重试',
+              locale: Locale("zh-Hans", "zh"),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRecentWatchedList() {
+    final theme = fluent.FluentTheme.of(context);
+    final textSecondary = theme.resources.textFillColorSecondary;
+
     if (recentWatched.isEmpty) {
       return _buildEmptyState('暂无观看记录', Ionicons.play_circle_outline);
     }
@@ -157,8 +193,8 @@ style: TextStyle(color: Colors.white),
           trailing: item['lastWatchedTime'] != null
               ? Text(
                   formatTime(item['lastWatchedTime']),
-                  style: const TextStyle(
-                    color: Colors.white60,
+                  style: TextStyle(
+                    color: textSecondary,
                     fontSize: 12,
                   ),
                 )
@@ -169,6 +205,9 @@ style: TextStyle(color: Colors.white),
   }
 
   Widget _buildFavoritesList() {
+    final theme = fluent.FluentTheme.of(context);
+    final textPrimary = theme.resources.textFillColorPrimary;
+
     if (favorites.isEmpty) {
       return _buildEmptyState('暂无收藏', Ionicons.heart_outline);
     }
@@ -187,7 +226,7 @@ style: TextStyle(color: Colors.white),
               ? Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    const fluent.Icon(
                       Ionicons.star,
                       color: Colors.yellow,
                       size: 14,
@@ -195,8 +234,8 @@ style: TextStyle(color: Colors.white),
                     const SizedBox(width: 2),
                     Text(
                       '${item['rating']}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: textPrimary,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -225,7 +264,7 @@ style: TextStyle(color: Colors.white),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              const fluent.Icon(
                 Ionicons.star,
                 color: Colors.yellow,
                 size: 16,
@@ -251,6 +290,9 @@ style: TextStyle(color: Colors.white),
     required String subtitle,
     Widget? trailing,
   }) {
+    final theme = fluent.FluentTheme.of(context);
+    final textPrimary = theme.resources.textFillColorPrimary;
+    final textSecondary = theme.resources.textFillColorSecondary;
     final imageUrl = processImageUrl(item['imageUrl']);
 
     return ClipRRect(
@@ -260,94 +302,69 @@ style: TextStyle(color: Colors.white),
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: theme.resources.cardBackgroundFillColorDefault,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Colors.white.withOpacity(0.2),
+              color: theme.resources.cardStrokeColorDefault,
               width: 0.5,
             ),
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => openAnimeDetail(item['animeId']),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    // 封面图片
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: imageUrl != null
-                          ? Image.network(
-                              imageUrl,
-                              width: 40,
-                              height: 60,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: 40,
-                                  height: 60,
-                                  color: Colors.white.withOpacity(0.1),
-                                  child: const Icon(
-                                    Ionicons.image_outline,
-                                    color: Colors.white60,
-                                    size: 20,
-                                  ),
-                                );
-                              },
-                            )
-                          : Container(
-                              width: 40,
-                              height: 60,
-                              color: Colors.white.withOpacity(0.1),
-                              child: const Icon(
-                                Ionicons.image_outline,
-                                color: Colors.white60,
-                                size: 20,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(width: 12),
-                    
-                    // 标题和副标题
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item['animeTitle'] ?? '未知标题',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+          child: fluent.ListTile(
+            contentPadding: const EdgeInsets.all(12),
+            margin: EdgeInsets.zero,
+            onPressed: () => openAnimeDetail(item['animeId']),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: imageUrl != null
+                  ? Image.network(
+                      imageUrl,
+                      width: 40,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: 40,
+                          height: 60,
+                          color: theme.resources.cardBackgroundFillColorSecondary,
+                          child: fluent.Icon(
+                            Ionicons.image_outline,
+                            color: textSecondary,
+                            size: 20,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            style: const TextStyle(
-                              color: Colors.white60,
-                              fontSize: 12,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                        );
+                      },
+                    )
+                  : Container(
+                      width: 40,
+                      height: 60,
+                      color: theme.resources.cardBackgroundFillColorSecondary,
+                      child: fluent.Icon(
+                        Ionicons.image_outline,
+                        color: textSecondary,
+                        size: 20,
                       ),
                     ),
-                    
-                    // 右侧内容
-                    if (trailing != null) ...[
-                      const SizedBox(width: 8),
-                      trailing,
-                    ],
-                  ],
-                ),
-              ),
             ),
+            title: Text(
+              item['animeTitle'] ?? '未知标题',
+              style: TextStyle(
+                color: textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              subtitle,
+              style: TextStyle(
+                color: textSecondary,
+                fontSize: 12,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: trailing,
           ),
         ),
       ),
@@ -355,20 +372,22 @@ style: TextStyle(color: Colors.white),
   }
 
   Widget _buildEmptyState(String message, IconData icon) {
+    final theme = fluent.FluentTheme.of(context);
+    final textSecondary = theme.resources.textFillColorSecondary;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          fluent.Icon(
             icon,
-            color: Colors.white30,
+            color: textSecondary,
             size: 48,
           ),
           const SizedBox(height: 8),
           Text(
             message,
-            style: const TextStyle(
-              color: Colors.white60,
+            style: TextStyle(
+              color: textSecondary,
               fontSize: 14,
             ),
           ),

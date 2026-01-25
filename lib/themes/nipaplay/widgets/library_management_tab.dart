@@ -54,6 +54,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   static const String _librarySortOptionKey = 'library_sort_option'; // 新增键用于保存排序选项
 
   final Map<String, List<io.FileSystemEntity>> _expandedFolderContents = {};
+  final Set<String> _expandedLocalFolders = {};
   final Set<String> _loadingFolders = {};
   final ScrollController _listScrollController = ScrollController();
   final ScrollController _webdavScrollController = ScrollController();
@@ -93,9 +94,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   // 网络资源相关状态
   List<WebDAVConnection> _webdavConnections = [];
   final Map<String, List<WebDAVFile>> _webdavFolderContents = {};
+  final Set<String> _expandedWebDAVFolders = {};
   final Set<String> _loadingWebDAVFolders = {};
   List<SMBConnection> _smbConnections = [];
   final Map<String, List<SMBFileEntry>> _smbFolderContents = {};
+  final Set<String> _expandedSMBFolders = {};
   final Set<String> _loadingSMBFolders = {};
 
   @override
@@ -580,65 +583,74 @@ style: TextStyle(color: Colors.redAccent)),
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+    final double indent = libraryManagementTreeIndent(depth);
 
     if (entities.isEmpty) {
       return [
         Padding(
-          padding: EdgeInsets.only(left: 16.0 + (depth * 16.0), top: 8, bottom: 8),
-          child: Text("文件夹为空", locale: const Locale("zh-Hans","zh"),
-            style: TextStyle(color: secondaryTextColor, fontSize: 13)),
+          padding: EdgeInsets.fromLTRB(indent, 6, 0, 6),
+          child: Text(
+            "（空文件夹）",
+            locale: const Locale("zh-Hans","zh"),
+            style: TextStyle(color: secondaryTextColor, fontSize: 12),
+          ),
         )
       ];
     }
 
     
     return entities.map<Widget>((entity) {
-      final indent = EdgeInsets.only(left: depth * 16.0);
       if (entity is io.Directory) {
         final dirPath = entity.path;
-        return Padding(
-          padding: indent,
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              dividerColor: Colors.transparent, // 移除ExpansionTile展开时的上下分割线
-              unselectedWidgetColor: iconColor, // 控制折叠时的箭头颜色
-              colorScheme: Theme.of(context).colorScheme.copyWith(
-                primary: textColor, // 控制展开时的箭头颜色
-              ),
-            ),
-            child: ExpansionTile(
-              key: PageStorageKey<String>(dirPath),
-              leading: Icon(Icons.folder_outlined, color: iconColor),
-              iconColor: iconColor, // 显式指定展开时的箭头颜色
-              collapsedIconColor: iconColor, // 显式指定折叠时的箭头颜色
-              title: Text(p.basename(dirPath), style: TextStyle(color: textColor)),
-              onExpansionChanged: (isExpanded) {
-                if (isExpanded && _expandedFolderContents[dirPath] == null && !_loadingFolders.contains(dirPath)) {
-                  // 使用 Future.microtask 确保在当前构建帧完成后执行
+        final expanded = _expandedLocalFolders.contains(dirPath);
+        final loading = _loadingFolders.contains(dirPath);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LibraryManagementFolderRow(
+              title: p.basename(dirPath),
+              indent: indent,
+              expanded: expanded,
+              loading: loading,
+              iconColor: iconColor,
+              textColor: textColor,
+              secondaryTextColor: secondaryTextColor,
+              onTap: () {
+                if (expanded) {
+                  setState(() => _expandedLocalFolders.remove(dirPath));
+                  return;
+                }
+                setState(() => _expandedLocalFolders.add(dirPath));
+                if (_expandedFolderContents[dirPath] == null &&
+                    !_loadingFolders.contains(dirPath)) {
                   Future.microtask(() => _loadFolderChildren(dirPath));
                 }
               },
-              children: _loadingFolders.contains(dirPath)
-                  ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
-                  : [
-                      _buildBatchDanmakuMatchFolderAction(
-                        dirPath,
-                        _expandedFolderContents[dirPath] ?? const [],
-                      ),
-                      ..._buildFileSystemNodes(
-                        _expandedFolderContents[dirPath] ?? const [],
-                        dirPath,
-                        depth + 1,
-                      ),
-                    ],
             ),
-          ),
+            if (expanded)
+              if (loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else ...[
+                _buildBatchDanmakuMatchFolderAction(
+                  dirPath,
+                  _expandedFolderContents[dirPath] ?? const [],
+                ),
+                ..._buildFileSystemNodes(
+                  _expandedFolderContents[dirPath] ?? const [],
+                  dirPath,
+                  depth + 1,
+                ),
+              ],
+          ],
         );
       } else if (entity is io.File) {
         return Padding(
-          padding: indent,
+          padding: const EdgeInsets.only(top: 2),
           child: FutureBuilder<WatchHistoryItem?>(
             future: WatchHistoryManager.getHistoryItem(entity.path),
             builder: (context, snapshot) {
@@ -672,7 +684,9 @@ style: TextStyle(color: Colors.redAccent)),
               }
               
               return ListTile(
-                leading: Icon(Icons.videocam_outlined, color: iconColor),
+                dense: true,
+                contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+                leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
                 title: Text(fileName, style: TextStyle(color: textColor, fontSize: 13)),
                 subtitle: subtitleText != null 
                     ? Text(
@@ -1671,6 +1685,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     BlurSnackBar.show(context, '批量匹配完成：成功更新 $successCount/${mappings.length} 个文件');
     setState(() {
       _expandedFolderContents.clear();
+      _expandedLocalFolders.clear();
     });
   }
 
@@ -1742,6 +1757,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
               setState(() {
                 // 清空已展开的文件夹内容，强制重新加载
                 _expandedFolderContents.clear();
+                _expandedLocalFolders.clear();
               });
             }
           } catch (e) {
@@ -1837,11 +1853,12 @@ style: TextStyle(color: Colors.redAccent)),
           BlurSnackBar.show(context, '已移除 "$fileName" 的扫描结果');
           
           // 刷新UI
-          setState(() {
-            // 清空已展开的文件夹内容，强制重新加载
-            _expandedFolderContents.clear();
-          });
-        }
+      setState(() {
+        // 清空已展开的文件夹内容，强制重新加载
+        _expandedFolderContents.clear();
+        _expandedLocalFolders.clear();
+      });
+    }
       } catch (e) {
         debugPrint('❌ 移除扫描结果失败：$e');
         if (mounted) {
@@ -2145,7 +2162,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                     ),
                   ),
                 ]
-              : _buildWebDAVFileNodes(connection, '/'),
+              : _buildWebDAVFileNodes(connection, '/', 1),
         ),
       ),
     );
@@ -2237,17 +2254,22 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                     ),
                   ),
                 ]
-              : _buildSMBFileNodes(connection, '/'),
+              : _buildSMBFileNodes(connection, '/', 1),
         ),
       ),
     );
   }
   
-    List<Widget> _buildWebDAVFileNodes(WebDAVConnection connection, String path) {
+  List<Widget> _buildWebDAVFileNodes(
+    WebDAVConnection connection,
+    String path,
+    int depth,
+  ) {
       final bool isDark = Theme.of(context).brightness == Brightness.dark;
       final Color textColor = isDark ? Colors.white : Colors.black87;
       final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
       final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+      final double indent = libraryManagementTreeIndent(depth);
   
       final key = '${connection.name}:$path';
       final contents = _webdavFolderContents[key];
@@ -2258,42 +2280,68 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   
       if (contents == null || contents.isEmpty) {
         return [
-          ListTile(
-            title: Text("文件夹为空",
-                style: TextStyle(color: secondaryTextColor, fontSize: 13)),
-          )
+          Padding(
+            padding: EdgeInsets.fromLTRB(indent, 6, 0, 6),
+            child: Text(
+              "（空文件夹）",
+              style: TextStyle(color: secondaryTextColor, fontSize: 12),
+            ),
+          ),
         ];
       }
   
       return contents.map((file) {
         if (file.isDirectory) {
-                  return Theme(
-                    data: Theme.of(context).copyWith(
-                      splashColor: Colors.transparent,
-                      highlightColor: Colors.transparent,
-                      dividerColor: Colors.transparent,
+          final folderKey = '${connection.name}:${file.path}';
+          final expanded = _expandedWebDAVFolders.contains(folderKey);
+          final loading = _loadingWebDAVFolders.contains(folderKey);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LibraryManagementFolderRow(
+                title: file.name,
+                indent: indent,
+                expanded: expanded,
+                loading: loading,
+                iconColor: iconColor,
+                textColor: textColor,
+                secondaryTextColor: secondaryTextColor,
+                onTap: () {
+                  if (expanded) {
+                    setState(() => _expandedWebDAVFolders.remove(folderKey));
+                    return;
+                  }
+                  setState(() => _expandedWebDAVFolders.add(folderKey));
+                  if (_webdavFolderContents[folderKey] == null && !loading) {
+                    _loadWebDAVFolderChildren(connection, file.path);
+                  }
+                },
+              ),
+              if (expanded)
+                if (loading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(),
                     ),
-                    child: ExpansionTile(
-                      key: PageStorageKey<String>('${connection.name}:${file.path}'),
-                      leading: Icon(Icons.folder_outlined, color: iconColor, size: 18),
-                      iconColor: iconColor,
-                      collapsedIconColor: iconColor,
-                      title: Text(file.name,
-          
-                  style: TextStyle(color: textColor, fontSize: 13)),
-              onExpansionChanged: (isExpanded) {
-                if (isExpanded && _webdavFolderContents['${connection.name}:${file.path}'] == null) {
-                  _loadWebDAVFolderChildren(connection, file.path);
-                }
-              },
-              children: _buildWebDAVFileNodes(connection, file.path),
-            ),
+                  )
+                else
+                  ..._buildWebDAVFileNodes(
+                    connection,
+                    file.path,
+                    depth + 1,
+                  ),
+            ],
           );
         } else {
           return ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
             leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
-            title: Text(file.name,
-                style: TextStyle(color: textColor, fontSize: 13)),
+            title: Text(
+              file.name,
+              style: TextStyle(color: textColor, fontSize: 13),
+            ),
             trailing: IconButton(
               icon: Icon(Icons.play_circle_outline, color: iconColor, size: 20),
               onPressed: () => _playWebDAVFile(connection, file),
@@ -2303,11 +2351,16 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         }
       }).toList();
     }
-  List<Widget> _buildSMBFileNodes(SMBConnection connection, String path) {
+  List<Widget> _buildSMBFileNodes(
+    SMBConnection connection,
+    String path,
+    int depth,
+  ) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+    final double indent = libraryManagementTreeIndent(depth);
 
     final key = '${connection.name}:$path';
     final contents = _smbFolderContents[key];
@@ -2318,41 +2371,68 @@ style: TextStyle(color: Colors.lightBlueAccent)),
 
     if (contents == null || contents.isEmpty) {
       return [
-        ListTile(
-          title: Text("文件夹为空",
-              style: TextStyle(color: secondaryTextColor, fontSize: 13)),
-        )
+        Padding(
+          padding: EdgeInsets.fromLTRB(indent, 6, 0, 6),
+          child: Text(
+            "（空文件夹）",
+            style: TextStyle(color: secondaryTextColor, fontSize: 12),
+          ),
+        ),
       ];
     }
 
     return contents.map((file) {
       if (file.isDirectory) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            dividerColor: Colors.transparent,
-          ),
-          child: ExpansionTile(
-            key: PageStorageKey<String>('${connection.name}:${file.path}'),
-            leading: Icon(Icons.folder_outlined, color: iconColor, size: 18),
-            iconColor: iconColor,
-            collapsedIconColor: iconColor,
-            title: Text(file.name,
-                style: TextStyle(color: textColor, fontSize: 13)),
-            onExpansionChanged: (isExpanded) {
-              if (isExpanded && _smbFolderContents['${connection.name}:${file.path}'] == null) {
-                _loadSMBFolderChildren(connection, file.path);
-              }
-            },
-            children: _buildSMBFileNodes(connection, file.path),
-          ),
+        final folderKey = '${connection.name}:${file.path}';
+        final expanded = _expandedSMBFolders.contains(folderKey);
+        final loading = _loadingSMBFolders.contains(folderKey);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LibraryManagementFolderRow(
+              title: file.name,
+              indent: indent,
+              expanded: expanded,
+              loading: loading,
+              iconColor: iconColor,
+              textColor: textColor,
+              secondaryTextColor: secondaryTextColor,
+              onTap: () {
+                if (expanded) {
+                  setState(() => _expandedSMBFolders.remove(folderKey));
+                  return;
+                }
+                setState(() => _expandedSMBFolders.add(folderKey));
+                if (_smbFolderContents[folderKey] == null && !loading) {
+                  _loadSMBFolderChildren(connection, file.path);
+                }
+              },
+            ),
+            if (expanded)
+              if (loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else
+                ..._buildSMBFileNodes(
+                  connection,
+                  file.path,
+                  depth + 1,
+                ),
+          ],
         );
       } else {
         return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
           leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
-          title: Text(file.name,
-              style: TextStyle(color: textColor, fontSize: 13)),
+          title: Text(
+            file.name,
+            style: TextStyle(color: textColor, fontSize: 13),
+          ),
           trailing: IconButton(
             icon: Icon(Icons.play_circle_outline, color: iconColor, size: 20),
             onPressed: () => _playSMBFile(connection, file),
@@ -2619,6 +2699,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       setState(() {
         _smbConnections = SMBService.instance.connections;
         _smbFolderContents.removeWhere((key, value) => key.startsWith('${connection.name}:'));
+        _expandedSMBFolders.removeWhere((key) => key.startsWith('${connection.name}:'));
       });
       BlurSnackBar.show(context, 'SMB连接已删除');
     }
@@ -2633,6 +2714,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           _smbConnections = SMBService.instance.connections;
           _smbFolderContents
               .removeWhere((key, value) => key.startsWith('${connection.name}:'));
+          _expandedSMBFolders.removeWhere((key) => key.startsWith('${connection.name}:'));
         });
         final updated = SMBService.instance.getConnection(connection.name);
         if (updated?.isConnected == true) {
@@ -2684,6 +2766,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         _webdavConnections = WebDAVService.instance.connections;
         // 清理相关的文件夹内容缓存
         _webdavFolderContents.removeWhere((key, value) => key.startsWith('${connection.name}:'));
+        _expandedWebDAVFolders.removeWhere((key) => key.startsWith('${connection.name}:'));
       });
       BlurSnackBar.show(context, 'WebDAV连接已删除');
     }

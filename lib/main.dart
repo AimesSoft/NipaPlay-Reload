@@ -1259,6 +1259,7 @@ class MainPageState extends State<MainPage>
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Stack(
       children: [
         // 使用 Selector 只监听需要的状态
@@ -1334,9 +1335,11 @@ class MainPageState extends State<MainPage>
                 _SettingsEntryButton(onPressed: () => _showSettingsWindow(context)),
                 const SizedBox(width: 8),
                 Image.asset(
-                  'assets/logo.png',
+                  'assets/logo2.png',
                   height: 40,
                   fit: BoxFit.contain,
+                  color: isDarkMode ? Colors.white : Colors.black,
+                  colorBlendMode: BlendMode.srcIn,
                 ),
               ],
             ),

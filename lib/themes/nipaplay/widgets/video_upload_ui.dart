@@ -19,49 +19,111 @@ class VideoUploadUI extends StatefulWidget {
   State<VideoUploadUI> createState() => _VideoUploadUIState();
 }
 
-class _VideoUploadUIState extends State<VideoUploadUI> {
+class _VideoUploadUIState extends State<VideoUploadUI>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   bool _isPressed = false;
+  late final AnimationController _mascotController;
+  late final Animation<double> _mascotScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _mascotController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+    _mascotScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.18)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.18, end: 0.95)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 30,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.95, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 30,
+      ),
+    ]).animate(_mascotController);
+  }
+
+  @override
+  void dispose() {
+    _mascotController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     // 使用 Material 版本（新的设计）
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : Colors.black;
+    final mascotSize = globals.isPhone ? 80.0 : 120.0;
 
     return Center(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            '诶？还没有在播放的视频！',
-            locale: const Locale("zh-Hans", "zh"),
-            style: TextStyle(
-              color: textColor,
-              fontSize: 18,
-              fontWeight: FontWeight.normal,
-            ),
-          ),
-          const SizedBox(width: 8), // 间距
           MouseRegion(
             cursor: SystemMouseCursors.click,
-            onEnter: (_) => setState(() => _isHovered = true),
-            onExit: (_) => setState(() => _isHovered = false),
             child: GestureDetector(
-              onTap: _handleUploadVideo,
-              child: AnimatedScale(
-                duration: const Duration(milliseconds: 200),
-                scale: _isHovered ? 1.2 : 1.0, // 悬浮时放大 1.2 倍
-                child: Text(
-                  '选择文件',
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                    color: _isHovered ? const Color(0xFFFF2E55) : textColor,
-                    fontSize: 32, // 大号字体
-                    fontWeight: FontWeight.bold,
-                  ),
+              onTap: () => _mascotController.forward(from: 0.0),
+              child: ScaleTransition(
+                scale: _mascotScale,
+                child: Image.asset(
+                  'assets/girl.png',
+                  width: mascotSize,
+                  height: mascotSize,
+                  fit: BoxFit.contain,
                 ),
               ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                Text(
+                  '诶？还没有在播放的视频！',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => setState(() => _isHovered = true),
+                  onExit: (_) => setState(() => _isHovered = false),
+                  child: GestureDetector(
+                    onTap: _handleUploadVideo,
+                    child: AnimatedScale(
+                      duration: const Duration(milliseconds: 200),
+                      scale: _isHovered ? 1.2 : 1.0, // 悬浮时放大 1.2 倍
+                      child: Text(
+                        '选择文件',
+                        locale: const Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color:
+                              _isHovered ? const Color(0xFFFF2E55) : textColor,
+                          fontSize: 32, // 大号字体
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

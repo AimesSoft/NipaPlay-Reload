@@ -1,3 +1,4 @@
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 
 import 'package:nipaplay/themes/theme_descriptor.dart';
@@ -33,6 +34,8 @@ class NipaplayThemeDescriptor extends ThemeDescriptor {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: context.themeNotifier.themeMode,
+      localizationsDelegates: fluent.FluentLocalizations.localizationsDelegates,
+      supportedLocales: fluent.FluentLocalizations.supportedLocales,
       navigatorKey: context.navigatorKey,
       home: context.materialHomeBuilder(),
       builder: (buildContext, appChild) {
