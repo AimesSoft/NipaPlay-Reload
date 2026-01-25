@@ -15,6 +15,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 
 class DandanplayRemoteLibraryView extends StatefulWidget {
   const DandanplayRemoteLibraryView({
@@ -240,22 +242,21 @@ class _DandanplayRemoteLibraryViewState
               style: TextStyle(color: primaryTextColor, fontSize: 16),
               cursorColor: activeColor,
               decoration: InputDecoration(
-                prefixIcon:
-                    Icon(Icons.search, color: _searchFocusNode.hasFocus ? activeColor : secondaryTextColor, size: 20),
-                suffixIcon: _searchQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: Icon(Icons.clear, color: secondaryTextColor),
-                        onPressed: () {
-                          _searchDebounce?.cancel();
-                          setState(() {
-                            _searchQuery = '';
-                            _searchController.clear();
-                          });
-                        },
-                      ),
-                hintText: '搜索番剧或剧集…',
-                hintStyle:
+                              prefixIcon:
+                                  Icon(Icons.search, color: _searchFocusNode.hasFocus ? activeColor : secondaryTextColor, size: 20),
+                              suffixIcon: _searchQuery.isEmpty
+                                  ? null
+                                  : SearchBarActionButton(
+                                      icon: Icons.clear,
+                                      onPressed: () {
+                                        _searchDebounce?.cancel();
+                                        setState(() {
+                                          _searchQuery = '';
+                                          _searchController.clear();
+                                        });
+                                      },
+                                    ),
+                              hintText: '搜索番剧或剧集…',                hintStyle:
                     TextStyle(color: secondaryTextColor.withValues(alpha: 0.6)),
                 border: InputBorder.none,
                 contentPadding:

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
-import 'package:provider/provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 
 enum LocalLibrarySortType {
   name,
@@ -151,8 +151,8 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
                     hintStyle: TextStyle(color: textColor.withValues(alpha: 0.5), fontSize: 14),
                     prefixIcon: Icon(Ionicons.search_outline, size: 18, color: _searchFocusNode.hasFocus ? activeColor : textColor.withValues(alpha: 0.5)),
                     suffixIcon: widget.searchController.text.isNotEmpty 
-                        ? IconButton(
-                            icon: Icon(Ionicons.close_circle, size: 18, color: textColor.withValues(alpha: 0.5)),
+                        ? SearchBarActionButton(
+                            icon: Ionicons.close_circle,
                             onPressed: () {
                               widget.searchController.clear();
                               widget.onSearchChanged('');

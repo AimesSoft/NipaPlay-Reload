@@ -17,6 +17,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/globals.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 
 enum SharedRemoteViewMode { mediaLibrary, libraryManagement }
@@ -220,13 +221,9 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     required String tooltip,
     required VoidCallback? onPressed,
   }) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-    return IconButton(
-      icon: Icon(icon, size: 20),
-      color: iconColor,
+    return SearchBarActionButton(
+      icon: icon,
       tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
       onPressed: onPressed,
     );
   }

@@ -11,6 +11,7 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
@@ -562,13 +563,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   }
 
   Widget _buildServerSettingsAction() {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-    return IconButton(
-      icon: const Icon(Ionicons.settings_outline, size: 20),
-      color: iconColor,
+    return SearchBarActionButton(
+      icon: Ionicons.settings_outline,
       tooltip: '$_serverName服务器设置',
-      visualDensity: VisualDensity.compact,
       onPressed: _showServerDialog,
     );
   }
