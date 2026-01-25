@@ -4161,6 +4161,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 child: _buildScrollButton(
                   icon: Icons.arrow_back_ios_new_rounded,
                   onTap: () => _scrollToPrevious(controller, itemWidth),
+                  message: '上一页',
                   enabled: true,
                 ),
               ),
@@ -4173,6 +4174,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 child: _buildScrollButton(
                   icon: Icons.arrow_forward_ios_rounded,
                   onTap: () => _scrollToNext(controller, itemWidth),
+                  message: '下一页',
                   enabled: true,
                 ),
               ),
@@ -4187,14 +4189,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Widget _buildScrollButton({
     required IconData icon,
     required VoidCallback? onTap,
+    required String message,
     bool enabled = true,
   }) {
-    return _HoverScaleButton(
-      enabled: enabled,
-      onTap: onTap,
-      child: Icon(
-        icon,
-        size: 24, // 与标题字体大小一致
+    return Tooltip(
+      message: message,
+      child: _HoverScaleButton(
+        enabled: enabled,
+        onTap: onTap,
+        child: Icon(
+          icon,
+          size: 24, // 与标题字体大小一致
+        ),
       ),
     );
   }

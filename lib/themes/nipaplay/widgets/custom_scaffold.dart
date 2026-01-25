@@ -80,28 +80,31 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                       ),
                 backgroundColor: Colors.transparent,
                 elevation: 0,
-                bottom: TabBar(
-                  controller: widget.tabController,
-                  isScrollable: true,
-                  tabs: widget.tabPage,
-                  labelColor: const Color(0xFFFF2E55),
-                  unselectedLabelColor:
-                      isDarkMode ? Colors.white60 : Colors.black54,
-                  labelPadding: const EdgeInsets.only(bottom: 15.0),
-                  tabAlignment: TabAlignment.start,
-                  splashFactory: NoSplash.splashFactory, // 去除水波纹
-                  overlayColor: WidgetStateProperty.all(Colors.transparent), // 去除点击背景色
-                  // 恢复灰色背景条，并使用自定义指示器
-                  dividerColor: isDarkMode
-                      ? const Color.fromARGB(59, 255, 255, 255)
-                      : const Color.fromARGB(59, 0, 0, 0),
-                  dividerHeight: 3.0,
-                  indicator: const _CustomTabIndicator(
-                    indicatorHeight: 3.0,
-                    indicatorColor: Color(0xFFFF2E55),
-                    radius: 30.0, // 使用大圆角形成药丸形状
+                bottom: _LogoTabBar(
+                  tabBar: TabBar(
+                    controller: widget.tabController,
+                    isScrollable: true,
+                    tabs: widget.tabPage,
+                    labelColor: const Color(0xFFFF2E55),
+                    unselectedLabelColor:
+                        isDarkMode ? Colors.white60 : Colors.black54,
+                    labelPadding: const EdgeInsets.only(bottom: 15.0),
+                    tabAlignment: TabAlignment.start,
+                    splashFactory: NoSplash.splashFactory, // 去除水波纹
+                    overlayColor:
+                        WidgetStateProperty.all(Colors.transparent), // 去除点击背景色
+                    // 恢复灰色背景条，并使用自定义指示器
+                    dividerColor: isDarkMode
+                        ? const Color.fromARGB(59, 255, 255, 255)
+                        : const Color.fromARGB(59, 0, 0, 0),
+                    dividerHeight: 3.0,
+                    indicator: const _CustomTabIndicator(
+                      indicatorHeight: 3.0,
+                      indicatorColor: Color(0xFFFF2E55),
+                      radius: 30.0, // 使用大圆角形成药丸形状
+                    ),
+                    indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
                   ),
-                  indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
                 ),
               )
             : null,
@@ -117,8 +120,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                 ? const PageScrollPhysics()
                 : const NeverScrollableScrollPhysics(),
             onPageChanged: _handlePageChangedBySwitchableView,
-            children:
-                widget.pages.map((page) => RepaintBoundary(child: page)).toList(),
+            children: widget.pages
+                .map((page) => RepaintBoundary(child: page))
+                .toList(),
           ),
         ),
       ),
@@ -188,6 +192,34 @@ class _CustomPainter extends BoxPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
       paint,
+    );
+  }
+}
+
+class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
+  final TabBar tabBar;
+
+  const _LogoTabBar({super.key, required this.tabBar});
+
+  @override
+  Size get preferredSize => tabBar.preferredSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(width: 16),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 20.0),
+          child: Image.asset(
+            'assets/logo.png',
+            height: 40,
+            fit: BoxFit.contain,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: tabBar),
+      ],
     );
   }
 }

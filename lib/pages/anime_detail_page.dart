@@ -1773,22 +1773,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final headerActions = <Widget>[];
     if (DandanplayService.isLoggedIn) {
       headerActions.add(
-        IconButton(
-          icon: _isTogglingFavorite
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white70,
-                  ),
-                )
-              : Icon(
-                  _isFavorited ? Ionicons.heart : Ionicons.heart_outline,
-                  color: _isFavorited ? const Color(0xFFFF2E55) : secondaryTextColor,
-                  size: 24,
-                ),
-          onPressed: _isTogglingFavorite ? null : _toggleFavorite,
+        _ScalingHeartButton(
+          isFavorited: _isFavorited,
+          isToggling: _isTogglingFavorite,
+          onTap: _toggleFavorite,
+          secondaryTextColor: secondaryTextColor,
         ),
       );
     }
@@ -2166,6 +2155,112 @@ class _HoverableTagState extends State<_HoverableTag> {
     return GestureDetector(
       onTap: widget.onTap,
       child: chip,
+    );
+  }
+}
+
+class _ScalingHeartButton extends StatefulWidget {
+  final bool isFavorited;
+  final bool isToggling;
+  final VoidCallback onTap;
+  final Color secondaryTextColor;
+
+  const _ScalingHeartButton({
+    required this.isFavorited,
+    required this.isToggling,
+    required this.onTap,
+    required this.secondaryTextColor,
+  });
+
+  @override
+  State<_ScalingHeartButton> createState() => _ScalingHeartButtonState();
+}
+
+class _ScalingHeartButtonState extends State<_ScalingHeartButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 50),
+    ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void didUpdateWidget(_ScalingHeartButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isFavorited != oldWidget.isFavorited && widget.isFavorited) {
+      _controller.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.isToggling ? null : widget.onTap,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: widget.isFavorited
+                ? Colors.red.withOpacity(0.15)
+                : widget.secondaryTextColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: widget.isFavorited
+                  ? Colors.red.withOpacity(0.3)
+                  : widget.secondaryTextColor.withOpacity(0.2),
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.isToggling)
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      widget.isFavorited ? Colors.red : widget.secondaryTextColor,
+                    ),
+                  ),
+                )
+              else
+                Icon(
+                  widget.isFavorited ? Ionicons.heart : Ionicons.heart_outline,
+                  size: 16,
+                  color: widget.isFavorited ? Colors.red : widget.secondaryTextColor,
+                ),
+              const SizedBox(width: 4),
+              Text(
+                widget.isFavorited ? '已收藏' : '收藏',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: widget.isFavorited ? Colors.red : widget.secondaryTextColor,
+                  fontWeight: widget.isFavorited ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
