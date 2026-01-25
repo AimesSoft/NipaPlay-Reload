@@ -94,10 +94,8 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                     splashFactory: NoSplash.splashFactory, // 去除水波纹
                     overlayColor:
                         WidgetStateProperty.all(Colors.transparent), // 去除点击背景色
-                    // 恢复灰色背景条，并使用自定义指示器
-                    dividerColor: isDarkMode
-                        ? const Color.fromARGB(59, 255, 255, 255)
-                        : const Color.fromARGB(59, 0, 0, 0),
+                    // 移除灰色滑轨
+                    dividerColor: Colors.transparent,
                     dividerHeight: 3.0,
                     indicator: const _CustomTabIndicator(
                       indicatorHeight: 3.0,

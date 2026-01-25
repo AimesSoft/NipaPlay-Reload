@@ -2499,44 +2499,46 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     final shortestSide = math.min(screenSize.width, screenSize.height);
     final isPhone = shortestSide < 600;
 
+    // 获取最新的观看记录缩略图作为背景
+    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+    final latestItem = watchHistoryProvider.continueWatchingItems.isNotEmpty 
+        ? watchHistoryProvider.continueWatchingItems.first 
+        : null;
+    final String? backgroundUrl = latestItem?.thumbnailPath;
+
     NipaplayWindow.show(
       context: context,
       child: NipaplayWindowScaffold(
+        backgroundImageUrl: backgroundUrl,
+        blurBackground: true, // 内部已固定为 40 模糊
         maxWidth: isPhone ? screenSize.width * 0.95 : 800,
         maxHeightFactor: isPhone ? 0.85 : 0.7,
         onClose: () => Navigator.of(context).pop(),
         child: Column(
           children: [
-            // 可拖动的标题栏
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onPanUpdate: (details) {
-                NipaplayWindowPositionProvider.of(context)?.onMove(details.delta);
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.history_rounded, size: 20),
-                    const SizedBox(width: 10),
-                    Text(
-                      '观看记录',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+            Builder(
+              builder: (innerContext) {
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanUpdate: (details) {
+                    NipaplayWindowPositionProvider.of(innerContext)?.onMove(details.delta);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          '观看记录',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () => Navigator.of(context).pop(),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              }
             ),
-            const Divider(height: 1),
             const Expanded(
               child: WatchHistoryPage(),
             ),

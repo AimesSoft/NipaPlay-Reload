@@ -56,7 +56,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
                   '选择文件',
                   locale: const Locale("zh-Hans", "zh"),
                   style: TextStyle(
-                    color: textColor,
+                    color: _isHovered ? const Color(0xFFFF2E55) : textColor,
                     fontSize: 32, // 大号字体
                     fontWeight: FontWeight.bold,
                   ),

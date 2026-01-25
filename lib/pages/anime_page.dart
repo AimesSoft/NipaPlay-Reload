@@ -939,9 +939,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                             splashFactory: NoSplash.splashFactory,
                             overlayColor:
                                 WidgetStateProperty.all(Colors.transparent),
-                            dividerColor: isDarkMode
-                                ? const Color.fromARGB(59, 255, 255, 255)
-                                : const Color.fromARGB(59, 0, 0, 0),
+                            // 移除灰色滑轨
+                            dividerColor: Colors.transparent,
                             dividerHeight: 3.0,
                             indicatorSize: TabBarIndicatorSize.label,
                           ),
