@@ -103,8 +103,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             animeSummaries.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
           }
         } else {
-          // 管理模式下按名称排序
-          scannedFolders.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          // 管理模式下按名称或路径(作为dateAdded的降级)排序
+          if (_currentSort == LocalLibrarySortType.name) {
+            scannedFolders.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          } else {
+            scannedFolders.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+          }
         }
 
         final hasHosts = provider.hosts.isNotEmpty;
@@ -123,7 +127,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                   _currentSort = type;
                 });
               },
-              showSort: widget.mode == SharedRemoteViewMode.mediaLibrary,
+              showSort: true,
               trailingActions: [
                 _buildActionIcon(
                   icon: Ionicons.refresh_outline,
@@ -412,7 +416,24 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
 
-    final entries = _expandedRemoteDirectories[directoryPath] ?? const [];
+    final entries = List<SharedRemoteFileEntry>.from(_expandedRemoteDirectories[directoryPath] ?? const []);
+    
+    // 对子条目进行排序
+    entries.sort((a, b) {
+      // 文件夹永远在前面
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      
+      if (_currentSort == LocalLibrarySortType.name) {
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      } else {
+        // 最近修改 (降序)
+        final timeA = a.modifiedTime ?? DateTime(1970);
+        final timeB = b.modifiedTime ?? DateTime(1970);
+        return timeB.compareTo(timeA);
+      }
+    });
+
     final indent = EdgeInsets.only(left: 12.0 + depth * 16.0);
 
     if (entries.isEmpty) {
