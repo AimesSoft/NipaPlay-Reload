@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 
@@ -28,6 +29,72 @@ class NipaplayWindowScaffold extends StatefulWidget {
 
 class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   Offset _offset = Offset.zero;
+  static const double _contentTopPadding = 10;
+
+  void _applyWindowOffset(Offset delta) {
+    setState(() {
+      _offset += delta;
+    });
+  }
+
+  VoidCallback _resolveCloseHandler(BuildContext context) {
+    return widget.onClose ?? () => Navigator.of(context).maybePop();
+  }
+
+  Widget _buildMacCloseButton(BuildContext context) {
+    final onClose = _resolveCloseHandler(context);
+    return Tooltip(
+      message: '关闭',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onClose,
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: Center(
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF5F57),
+                borderRadius: BorderRadius.circular(7),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFluentCloseButton(BuildContext context) {
+    final onClose = _resolveCloseHandler(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Tooltip(
+      message: '关闭',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onClose,
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: Center(
+            child: Icon(
+              fluent.FluentIcons.chrome_close,
+              size: 14,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,9 +105,9 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     return Theme(
       data: Theme.of(context).copyWith(
         textTheme: Theme.of(context).textTheme.apply(
-          bodyColor: textColor,
-          displayColor: textColor,
-        ),
+              bodyColor: textColor,
+              displayColor: textColor,
+            ),
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -57,7 +124,8 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
                         maxWidth: widget.maxWidth,
-                        maxHeight: MediaQuery.of(context).size.height * widget.maxHeightFactor,
+                        maxHeight: MediaQuery.of(context).size.height *
+                            widget.maxHeightFactor,
                       ),
                       child: Padding(
                         padding: EdgeInsets.fromLTRB(
@@ -86,8 +154,10 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                 Positioned.fill(
                                   child: ImageFiltered(
                                     imageFilter: widget.blurBackground
-                                        ? ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40)
-                                        : ui.ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                                        ? ui.ImageFilter.blur(
+                                            sigmaX: 40, sigmaY: 40)
+                                        : ui.ImageFilter.blur(
+                                            sigmaX: 0, sigmaY: 0),
                                     child: Opacity(
                                       opacity: isDark ? 0.25 : 0.35,
                                       child: CachedNetworkImageWidget(
@@ -116,13 +186,35 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                               DefaultTextStyle(
                                 style: TextStyle(color: textColor),
                                 child: NipaplayWindowPositionProvider(
-                                  onMove: (delta) {
-                                    setState(() {
-                                      _offset += delta;
-                                    });
-                                  },
-                                  child: widget.child,
+                                  onMove: _applyWindowOffset,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: _contentTopPadding,
+                                    ),
+                                    child: widget.child,
+                                  ),
                                 ),
+                              ),
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                height: _contentTopPadding,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onPanUpdate: (details) =>
+                                      _applyWindowOffset(details.delta),
+                                ),
+                              ),
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                child: _buildMacCloseButton(context),
+                              ),
+                              Positioned(
+                                top: 5,
+                                right: 5,
+                                child: _buildFluentCloseButton(context),
                               ),
                             ],
                           ),
@@ -151,7 +243,8 @@ class NipaplayWindowPositionProvider extends InheritedWidget {
   });
 
   static NipaplayWindowPositionProvider? of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<NipaplayWindowPositionProvider>();
+    return context
+        .dependOnInheritedWidgetOfExactType<NipaplayWindowPositionProvider>();
   }
 
   @override

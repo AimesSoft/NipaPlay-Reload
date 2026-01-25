@@ -1952,6 +1952,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                 blurIfLowRes: true,
                 lowResBlurSigma: 40,
+                lowResMinScale: 0.8,
                 errorBuilder: (context, error) => Container(
                   color: Colors.white10,
                   child: const Center(
@@ -2177,6 +2178,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                 height: double.infinity,
                 blurIfLowRes: true,
                 lowResBlurSigma: 40,
+                lowResMinScale: 0.8,
                 errorBuilder: (context, error) => Container(
                   color: Colors.white10,
                   child: const Center(
@@ -2514,17 +2516,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     final shortestSide = math.min(screenSize.width, screenSize.height);
     final isPhone = shortestSide < 600;
 
-    // 获取最新的观看记录缩略图作为背景
-    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
-    final latestItem = watchHistoryProvider.continueWatchingItems.isNotEmpty 
-        ? watchHistoryProvider.continueWatchingItems.first 
-        : null;
-    final String? backgroundUrl = latestItem?.thumbnailPath;
-
     NipaplayWindow.show(
       context: context,
       child: NipaplayWindowScaffold(
-        backgroundImageUrl: backgroundUrl,
+        backgroundImageUrl: null,
         blurBackground: true, // 内部已固定为 40 模糊
         maxWidth: isPhone ? screenSize.width * 0.95 : 800,
         maxHeightFactor: isPhone ? 0.85 : 0.7,

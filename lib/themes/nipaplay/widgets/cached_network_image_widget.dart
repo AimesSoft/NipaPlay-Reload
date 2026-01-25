@@ -74,6 +74,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       // 不再在这里释放图片，改为由缓存管理器统一管理
       setState(() {
         _isImageLoaded = false;
+        _basicImage = null;
       });
       _loadImage();
     }
@@ -203,9 +204,8 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     if (displaySize == null) {
       return false;
     }
-    final devicePixelRatio = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
-    final requiredWidth = displaySize.width * devicePixelRatio;
-    final requiredHeight = displaySize.height * devicePixelRatio;
+    final requiredWidth = displaySize.width;
+    final requiredHeight = displaySize.height;
     if (requiredWidth <= 0 || requiredHeight <= 0) {
       return false;
     }
@@ -232,6 +232,29 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     );
   }
 
+  ui.Image? _chooseBestImage(
+    ui.Image? baseImage,
+    ui.Image? highResImage,
+    Size? displaySize,
+    BuildContext context,
+  ) {
+    if (baseImage == null) return highResImage;
+    if (highResImage == null) return baseImage;
+
+    final baseBlur = _shouldApplyBlur(baseImage, displaySize, context);
+    final highResBlur = _shouldApplyBlur(highResImage, displaySize, context);
+    if (baseBlur != highResBlur) {
+      return baseBlur ? highResImage : baseImage;
+    }
+
+    final basePixels = baseImage.width * baseImage.height;
+    final highResPixels = highResImage.width * highResImage.height;
+    if (highResPixels >= basePixels) {
+      return highResImage;
+    }
+    return baseImage;
+  }
+
   @override
   Widget build(BuildContext context) {
     // 如果widget已被disposal，返回空容器
@@ -249,23 +272,19 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
         builder: (context, constraints) {
           final displaySize = _resolveDisplaySize(constraints);
 
-          // 优先显示基础图片
-          if (_basicImage != null) {
-            final baseImage = SizedBox(
-              width: widget.width,
-              height: widget.height,
-              child: SafeRawImage(
-                image: _basicImage,
-                fit: widget.fit,
-              ),
-            );
-            return _wrapWithBlurIfNeeded(baseImage, _basicImage!, displaySize, context);
-          }
-
           return FutureBuilder<ui.Image>(
             future: _imageFuture,
             builder: (context, snapshot) {
-              if (snapshot.hasError) {
+              final baseImage = _getSafeImage(_basicImage);
+              final loadedImage = _getSafeImage(snapshot.data);
+              final selectedImage = _chooseBestImage(
+                baseImage,
+                loadedImage,
+                displaySize,
+                context,
+              );
+
+              if (snapshot.hasError && selectedImage == null) {
                 if (widget.errorBuilder != null) {
                   return widget.errorBuilder!(context, snapshot.error!);
                 }
@@ -277,19 +296,8 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                 );
               }
 
-              if (snapshot.hasData) {
-                // 安全获取图片
-                final safeImage = _getSafeImage(snapshot.data);
-                
-                if (safeImage == null) {
-                  // 图片无效，返回占位符
-                  return SizedBox(
-                    width: widget.width,
-                    height: widget.height,
-                  );
-                }
-
-                if (!_isImageLoaded) {
+              if (selectedImage != null) {
+                if (!_isImageLoaded && snapshot.hasData) {
                   // 使用addPostFrameCallback避免在build期间调用setState
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted && !_isDisposed) {
@@ -300,33 +308,30 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                   });
                 }
 
-                // 如果禁用渐隐动画或时长为0，直接渲染，避免额外的saveLayer与图层抖动
-                if (widget.fadeDuration.inMilliseconds == 0) {
-                  final imageWidget = SizedBox(
-                    width: widget.width,
-                    height: widget.height,
-                    child: SafeRawImage(
-                      image: safeImage,
-                      fit: widget.fit,
-                    ),
-                  );
-                  return _wrapWithBlurIfNeeded(imageWidget, safeImage, displaySize, context);
-                }
+                final imageWidget = widget.fadeDuration.inMilliseconds == 0 || !snapshot.hasData
+                    ? SizedBox(
+                        width: widget.width,
+                        height: widget.height,
+                        child: SafeRawImage(
+                          image: selectedImage,
+                          fit: widget.fit,
+                        ),
+                      )
+                    : AnimatedOpacity(
+                        opacity: _isImageLoaded ? 1.0 : 0.0,
+                        duration: widget.fadeDuration,
+                        curve: Curves.easeInOut,
+                        child: SizedBox(
+                          width: widget.width,
+                          height: widget.height,
+                          child: SafeRawImage(
+                            image: selectedImage,
+                            fit: widget.fit,
+                          ),
+                        ),
+                      );
 
-                final imageWidget = AnimatedOpacity(
-                  opacity: _isImageLoaded ? 1.0 : 0.0,
-                  duration: widget.fadeDuration,
-                  curve: Curves.easeInOut,
-                  child: SizedBox(
-                    width: widget.width,
-                    height: widget.height,
-                    child: SafeRawImage(
-                      image: safeImage,
-                      fit: widget.fit,
-                    ),
-                  ),
-                );
-                return _wrapWithBlurIfNeeded(imageWidget, safeImage, displaySize, context);
+                return _wrapWithBlurIfNeeded(imageWidget, selectedImage, displaySize, context);
               }
 
               return LoadingPlaceholder(
