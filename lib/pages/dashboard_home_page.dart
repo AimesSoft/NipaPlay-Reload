@@ -1202,10 +1202,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               logoImageUrl: null,
               source: RecommendedItemSource.local,
               rating: null,
+              isLowRes: cachedImageUrl != null, // 初始加载封面通常是低清
             );
           } else if (item is DandanplayRemoteAnimeGroup) {
             final dandanId = _buildDandanRecommendedId(item);
-            dandanLookup[dandanId] = item;
+            final dandanLookupKey = dandanId;
+            dandanLookup[dandanLookupKey] = item;
+            
             final coverUrl = await _resolveDandanCoverForGroup(item, dandanSource);
             final subtitle = item.latestEpisode.episodeTitle.isNotEmpty
                 ? item.latestEpisode.episodeTitle
@@ -1218,6 +1221,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               logoImageUrl: null,
               source: RecommendedItemSource.dandanplay,
               rating: null,
+              isLowRes: coverUrl != null, // 弹弹play默认封面是低清
             );
           }
         } catch (e) {
@@ -1266,17 +1270,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         _checkPendingRefresh();
       }
       
-      // 第五步：后台异步升级为高清图片（仅对本地媒体生效，Jellyfin/Emby已首屏获取完毕）
-      final localCandidates = <dynamic>[];
-      final localBasicItems = <RecommendedItem>[];
+      // 第五步：后台异步升级为高清图片（针对本地和弹弹play远程媒体）
+      final upgradeCandidates = <dynamic>[];
+      final upgradeBasicItems = <RecommendedItem>[];
       for (int i = 0; i < selectedCandidates.length && i < basicItems.length; i++) {
-        if (selectedCandidates[i] is WatchHistoryItem) {
-          localCandidates.add(selectedCandidates[i]);
-          localBasicItems.add(basicItems[i]);
+        final cand = selectedCandidates[i];
+        if (cand is WatchHistoryItem || cand is DandanplayRemoteAnimeGroup) {
+          upgradeCandidates.add(cand);
+          upgradeBasicItems.add(basicItems[i]);
         }
       }
-      if (localCandidates.isNotEmpty) {
-        _upgradeToHighQualityImages(localCandidates, localBasicItems);
+      if (upgradeCandidates.isNotEmpty) {
+        _upgradeToHighQualityImages(upgradeCandidates, upgradeBasicItems);
       }
       
       debugPrint('推荐内容基础加载完成，总共 ${basicItems.length} 个项目，后台正在加载高清图片');
@@ -1932,17 +1937,22 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           children: [
             // 背景图 - 使用高效缓存组件
             if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
-              CachedNetworkImageWidget(
-                key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
-                imageUrl: item.backgroundImageUrl!,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
-                errorBuilder: (context, error) => Container(
-                  color: Colors.white10,
-                  child: const Center(
-                    child: Icon(Icons.broken_image, color: Colors.white30),
+              ImageFiltered(
+                imageFilter: item.isLowRes 
+                  ? ImageFilter.blur(sigmaX: 40, sigmaY: 40) 
+                  : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                child: CachedNetworkImageWidget(
+                  key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
+                  imageUrl: item.backgroundImageUrl!,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
+                  errorBuilder: (context, error) => Container(
+                    color: Colors.white10,
+                    child: const Center(
+                      child: Icon(Icons.broken_image, color: Colors.white30),
+                    ),
                   ),
                 ),
               )
@@ -2155,17 +2165,22 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           children: [
             // 背景图 - 使用高效缓存组件
             if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
-              CachedNetworkImageWidget(
-                key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
-                imageUrl: item.backgroundImageUrl!,
-                fit: BoxFit.cover,
-                delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (context, error) => Container(
-                  color: Colors.white10,
-                  child: const Center(
-                    child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
+              ImageFiltered(
+                imageFilter: item.isLowRes 
+                  ? ImageFilter.blur(sigmaX: 40, sigmaY: 40) 
+                  : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                child: CachedNetworkImageWidget(
+                  key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
+                  imageUrl: item.backgroundImageUrl!,
+                  fit: BoxFit.cover,
+                  delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorBuilder: (context, error) => Container(
+                    color: Colors.white10,
+                    child: const Center(
+                      child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
+                    ),
                   ),
                 ),
               )
@@ -3892,14 +3907,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         if (backdropUrl != currentItem.backgroundImageUrl || 
             logoUrl != currentItem.logoImageUrl ||
             subtitle != currentItem.subtitle) {
-          upgradedItem = RecommendedItem(
-            id: currentItem.id,
-            title: currentItem.title,
-            subtitle: subtitle ?? currentItem.subtitle,
-            backgroundImageUrl: backdropUrl ?? currentItem.backgroundImageUrl,
-            logoImageUrl: logoUrl ?? currentItem.logoImageUrl,
-            source: currentItem.source,
-            rating: currentItem.rating,
+          upgradedItem = currentItem.copyWith(
+            backgroundImageUrl: backdropUrl,
+            isLowRes: backdropUrl != null ? !_looksHighQualityUrl(backdropUrl) : currentItem.isLowRes,
           );
         }
         
@@ -3922,14 +3932,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         if (backdropUrl != currentItem.backgroundImageUrl || 
             logoUrl != currentItem.logoImageUrl ||
             subtitle != currentItem.subtitle) {
-          upgradedItem = RecommendedItem(
-            id: currentItem.id,
-            title: currentItem.title,
-            subtitle: subtitle ?? currentItem.subtitle,
-            backgroundImageUrl: backdropUrl ?? currentItem.backgroundImageUrl,
-            logoImageUrl: logoUrl ?? currentItem.logoImageUrl,
-            source: currentItem.source,
-            rating: currentItem.rating,
+          upgradedItem = currentItem.copyWith(
+            backgroundImageUrl: backdropUrl,
+            isLowRes: backdropUrl != null ? !_looksHighQualityUrl(backdropUrl) : currentItem.isLowRes,
           );
         }
         
@@ -3983,15 +3988,43 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         // 如果获取到了更好的图片或信息，创建升级版本
         if (highQualityImageUrl != currentItem.backgroundImageUrl ||
             detailedSubtitle != currentItem.subtitle) {
-          upgradedItem = RecommendedItem(
-            id: currentItem.id,
-            title: currentItem.title,
-            subtitle: detailedSubtitle ?? currentItem.subtitle,
-            backgroundImageUrl: highQualityImageUrl ?? currentItem.backgroundImageUrl,
-            logoImageUrl: currentItem.logoImageUrl,
-            source: currentItem.source,
-            rating: currentItem.rating,
+          upgradedItem = currentItem.copyWith(
+            backgroundImageUrl: highQualityImageUrl,
+            isLowRes: highQualityImageUrl != null ? !_looksHighQualityUrl(highQualityImageUrl) : currentItem.isLowRes,
           );
+        }
+      } else if (candidate is DandanplayRemoteAnimeGroup) {
+        // 弹弹play远程媒体 - 获取高清背景图
+        if (_isValidAnimeId(candidate.animeId)) {
+          final animeId = candidate.animeId!;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final persisted = prefs.getString('$_localPrefsKeyPrefix$animeId');
+            
+            String? hqUrl;
+            if (persisted != null && persisted.isNotEmpty && _looksHighQualityUrl(persisted)) {
+              hqUrl = persisted;
+            } else {
+              final bangumiService = BangumiService.instance;
+              final detail = await bangumiService.getAnimeDetails(animeId);
+              hqUrl = await _getHighQualityImage(animeId, detail);
+              
+              if (hqUrl != null && hqUrl.isNotEmpty) {
+                try {
+                  await prefs.setString('$_localPrefsKeyPrefix$animeId', hqUrl);
+                } catch (_) {}
+              }
+            }
+            
+            if (hqUrl != null && hqUrl != currentItem.backgroundImageUrl) {
+              upgradedItem = currentItem.copyWith(
+                backgroundImageUrl: hqUrl,
+                isLowRes: !_looksHighQualityUrl(hqUrl),
+              );
+            }
+          } catch (e) {
+            debugPrint('升级弹弹play高清图片失败: $e');
+          }
         }
       }
       
@@ -4290,6 +4323,7 @@ class RecommendedItem {
   final String? logoImageUrl;
   final RecommendedItemSource source;
   final double? rating;
+  final bool isLowRes; // 新增：标记是否为低分辨率封面
 
   RecommendedItem({
     required this.id,
@@ -4299,7 +4333,25 @@ class RecommendedItem {
     this.logoImageUrl,
     required this.source,
     this.rating,
+    this.isLowRes = false,
   });
+
+  // 用于更新图片质量的方法
+  RecommendedItem copyWith({
+    String? backgroundImageUrl,
+    bool? isLowRes,
+  }) {
+    return RecommendedItem(
+      id: id,
+      title: title,
+      subtitle: subtitle,
+      backgroundImageUrl: backgroundImageUrl ?? this.backgroundImageUrl,
+      logoImageUrl: logoImageUrl,
+      source: source,
+      rating: rating,
+      isLowRes: isLowRes ?? this.isLowRes,
+    );
+  }
 }
 
 enum RecommendedItemSource {
