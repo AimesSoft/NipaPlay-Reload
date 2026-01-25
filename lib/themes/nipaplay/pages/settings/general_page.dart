@@ -38,7 +38,6 @@ class _GeneralPageState extends State<GeneralPage> {
     ];
 
     items.add(DropdownMenuItemData(title: "个人中心", value: 3, isSelected: _defaultPageIndex == 3));
-    items.add(DropdownMenuItemData(title: "设置", value: 4, isSelected: _defaultPageIndex == 4));
 
     return items;
   }
@@ -81,8 +80,8 @@ class _GeneralPageState extends State<GeneralPage> {
 
         if (storedIndex < 0) {
           storedIndex = 0;
-        } else if (storedIndex > 4) {
-          storedIndex = 4;
+        } else if (storedIndex > 3) {
+          storedIndex = 3;
         }
 
         _defaultPageIndex = storedIndex;
@@ -247,6 +246,13 @@ style: TextStyle(color: colorScheme.onSurface),
 
 Future<int> _loadDefaultPageIndex() async {
   final prefs = await SharedPreferences.getInstance();
-  return prefs.getInt(defaultPageIndexKey) ?? 0;
+  final index = prefs.getInt(defaultPageIndexKey) ?? 0;
+  if (index < 0) {
+    return 0;
+  }
+  if (index > 3) {
+    return 3;
+  }
+  return index;
 }
  

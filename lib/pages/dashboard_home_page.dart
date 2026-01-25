@@ -1106,9 +1106,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               _tryGetJellyfinImage(jellyfinService, item.id, ['Logo', 'Thumb']),
               _getJellyfinItemSubtitle(jellyfinService, item),
             ]);
-            final backdropUrl = results[0];
-            final logoUrl = results[1];
-            final subtitle = results[2];
+            final backdropCandidate = results[0] as MapEntry<String, String>?;
+            final logoCandidate = results[1] as MapEntry<String, String>?;
+            final subtitle = results[2] as String?;
+            final backdropUrl = backdropCandidate?.value;
+            final logoUrl = logoCandidate?.value;
 
             return RecommendedItem(
               id: item.id,
@@ -1121,6 +1123,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               logoImageUrl: logoUrl,
               source: RecommendedItemSource.jellyfin,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
+              isLowRes: _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
             );
             
           } else if (item is EmbyMediaItem) {
@@ -1131,9 +1134,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               _tryGetEmbyImage(embyService, item.id, ['Logo', 'Thumb']),
               _getEmbyItemSubtitle(embyService, item),
             ]);
-            final backdropUrl = results[0];
-            final logoUrl = results[1];
-            final subtitle = results[2];
+            final backdropCandidate = results[0] as MapEntry<String, String>?;
+            final logoCandidate = results[1] as MapEntry<String, String>?;
+            final subtitle = results[2] as String?;
+            final backdropUrl = backdropCandidate?.value;
+            final logoUrl = logoCandidate?.value;
 
             return RecommendedItem(
               id: item.id,
@@ -1146,6 +1151,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
               logoImageUrl: logoUrl,
               source: RecommendedItemSource.emby,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
+              isLowRes: _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
             );
             
           } else if (item is WatchHistoryItem) {
@@ -1937,22 +1943,19 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           children: [
             // 背景图 - 使用高效缓存组件
             if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
-              ImageFiltered(
-                imageFilter: item.isLowRes 
-                  ? ImageFilter.blur(sigmaX: 40, sigmaY: 40) 
-                  : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-                child: CachedNetworkImageWidget(
-                  key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
-                  imageUrl: item.backgroundImageUrl!,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: double.infinity,
-                  delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
-                  errorBuilder: (context, error) => Container(
-                    color: Colors.white10,
-                    child: const Center(
-                      child: Icon(Icons.broken_image, color: Colors.white30),
-                    ),
+              CachedNetworkImageWidget(
+                key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
+                imageUrl: item.backgroundImageUrl!,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
+                blurIfLowRes: true,
+                lowResBlurSigma: 40,
+                errorBuilder: (context, error) => Container(
+                  color: Colors.white10,
+                  child: const Center(
+                    child: Icon(Icons.broken_image, color: Colors.white30),
                   ),
                 ),
               )
@@ -2165,22 +2168,19 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           children: [
             // 背景图 - 使用高效缓存组件
             if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
-              ImageFiltered(
-                imageFilter: item.isLowRes 
-                  ? ImageFilter.blur(sigmaX: 40, sigmaY: 40) 
-                  : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-                child: CachedNetworkImageWidget(
-                  key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
-                  imageUrl: item.backgroundImageUrl!,
-                  fit: BoxFit.cover,
-                  delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
-                  width: double.infinity,
-                  height: double.infinity,
-                  errorBuilder: (context, error) => Container(
-                    color: Colors.white10,
-                    child: const Center(
-                      child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
-                    ),
+              CachedNetworkImageWidget(
+                key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
+                imageUrl: item.backgroundImageUrl!,
+                fit: BoxFit.cover,
+                delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
+                width: double.infinity,
+                height: double.infinity,
+                blurIfLowRes: true,
+                lowResBlurSigma: 40,
+                errorBuilder: (context, error) => Container(
+                  color: Colors.white10,
+                  child: const Center(
+                    child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
                   ),
                 ),
               )
@@ -3899,9 +3899,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           _getJellyfinItemSubtitle(jellyfinService, candidate),
         ]);
         
-        final backdropUrl = results[0];
-        final logoUrl = results[1];
-        final subtitle = results[2];
+        final backdropCandidate = results[0] as MapEntry<String, String>?;
+        final logoCandidate = results[1] as MapEntry<String, String>?;
+        final subtitle = results[2] as String?;
+        final backdropUrl = backdropCandidate?.value;
+        final logoUrl = logoCandidate?.value;
         
         // 如果获取到了更好的图片或信息，创建升级版本
         if (backdropUrl != currentItem.backgroundImageUrl || 
@@ -3909,7 +3911,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             subtitle != currentItem.subtitle) {
           upgradedItem = currentItem.copyWith(
             backgroundImageUrl: backdropUrl,
-            isLowRes: backdropUrl != null ? !_looksHighQualityUrl(backdropUrl) : currentItem.isLowRes,
+            isLowRes: backdropUrl == null
+                ? currentItem.isLowRes
+                : _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
           );
         }
         
@@ -3924,9 +3928,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           _getEmbyItemSubtitle(embyService, candidate),
         ]);
         
-        final backdropUrl = results[0];
-        final logoUrl = results[1];
-        final subtitle = results[2];
+        final backdropCandidate = results[0] as MapEntry<String, String>?;
+        final logoCandidate = results[1] as MapEntry<String, String>?;
+        final subtitle = results[2] as String?;
+        final backdropUrl = backdropCandidate?.value;
+        final logoUrl = logoCandidate?.value;
         
         // 如果获取到了更好的图片或信息，创建升级版本
         if (backdropUrl != currentItem.backgroundImageUrl || 
@@ -3934,7 +3940,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             subtitle != currentItem.subtitle) {
           upgradedItem = currentItem.copyWith(
             backgroundImageUrl: backdropUrl,
-            isLowRes: backdropUrl != null ? !_looksHighQualityUrl(backdropUrl) : currentItem.isLowRes,
+            isLowRes: backdropUrl == null
+                ? currentItem.isLowRes
+                : _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
           );
         }
         
@@ -4064,13 +4072,46 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     // 否则未知，默认当作高清，避免不必要的重复网络请求
     return true;
   }
-  
 
+  bool _shouldBlurLowResCover({String? imageType, String? imageUrl}) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return false;
+    }
+    final type = imageType?.toLowerCase();
+    if (type == 'primary' || type == 'thumb') {
+      return !_looksHighQualityCoverUrl(imageUrl);
+    }
+    if (type == 'backdrop') {
+      return !_looksHighQualityUrl(imageUrl);
+    }
+    if (type == 'banner' || type == 'art') {
+      return !_looksHighQualityCoverUrl(imageUrl);
+    }
+    return !_looksHighQualityUrl(imageUrl);
+  }
+
+  bool _looksHighQualityCoverUrl(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('bgm.tv') || lower.contains('type=large') || lower.contains('original')) {
+      return true;
+    }
+    if (lower.contains('medium') || lower.contains('small')) {
+      return false;
+    }
+    final widthMatch = RegExp(r'[?&](?:width|maxwidth)=(\d+)').firstMatch(lower);
+    if (widthMatch != null) {
+      final w = int.tryParse(widthMatch.group(1)!);
+      if (w != null && w >= 1000) return true;
+      if (w != null && w > 0 && w < 1000) return false;
+    }
+    return false;
+  }
 
   // 已移除老的图片下载缓存函数，现在使用 CachedNetworkImageWidget 的内置缓存系统
 
   // 辅助方法：尝试获取Jellyfin图片 - 带验证与回退，按优先级返回第一个有效URL
-  Future<String?> _tryGetJellyfinImage(JellyfinService service, String itemId, List<String> imageTypes) async {
+  Future<MapEntry<String, String>?> _tryGetJellyfinImage(
+      JellyfinService service, String itemId, List<String> imageTypes) async {
     // 先构建候选URL列表
     final List<MapEntry<String, String>> candidates = [];
     for (final imageType in imageTypes) {
@@ -4102,7 +4143,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       for (final res in validations) {
         if (res != null && res.key == t) {
           debugPrint('Jellyfin获取到${t}有效图片: ${res.value.substring(0, math.min(100, res.value.length))}...');
-          return res.value;
+          return res;
         }
       }
     }
@@ -4112,7 +4153,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   // 辅助方法：尝试获取Emby图片 - 带验证与回退，按优先级返回第一个有效URL
-  Future<String?> _tryGetEmbyImage(EmbyService service, String itemId, List<String> imageTypes) async {
+  Future<MapEntry<String, String>?> _tryGetEmbyImage(
+      EmbyService service, String itemId, List<String> imageTypes) async {
     final List<MapEntry<String, String>> candidates = [];
     for (final imageType in imageTypes) {
       try {
@@ -4141,7 +4183,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       for (final res in validations) {
         if (res != null && res.key == t) {
           debugPrint('Emby获取到${t}有效图片: ${res.value.substring(0, math.min(100, res.value.length))}...');
-          return res.value;
+          return res;
         }
       }
     }

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -11,6 +12,7 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/menu_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
@@ -376,12 +378,16 @@ void main(List<String> args) async {
         }
 
         Future.microtask(() {
-          // 根据平台选择正确的设置页面索引
-          final settingsIndex = Platform.isIOS ? 3 : 4;
-          _navigateToPage(context, settingsIndex); // 切换到设置页面
+          final uiThemeProvider =
+              Provider.of<UIThemeProvider>(context, listen: false);
+          if (uiThemeProvider.isCupertinoTheme) {
+            _navigateToPage(context, 3); // Cupertino 主题保留底部设置页
+          } else {
+            _showSettingsWindow(context); // Nipaplay 主题使用弹窗设置页
+          }
         });
 
-        return '正在切换到设置页面';
+        return '正在打开设置';
       } catch (e) {
         print('[Dart] 错误: $e');
         return '错误: $e';
@@ -899,7 +905,6 @@ class MainPage extends StatefulWidget {
       const PlayVideoPage(),
       const AnimePage(),
       const AccountPage(),
-      const SettingsPage(),
     ];
     return pages;
   }
@@ -1319,25 +1324,100 @@ class MainPageState extends State<MainPage>
           },
         ),
 
-        // macOS平台显示Logo在右上角
         if (!kIsWeb && Platform.isMacOS)
           Positioned(
             top: 10,
             right: 20,
-            child: Image.asset(
-              'assets/logo.png',
-              height: 40,
-              fit: BoxFit.contain,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SettingsEntryButton(onPressed: () => _showSettingsWindow(context)),
+                const SizedBox(width: 8),
+                Image.asset(
+                  'assets/logo.png',
+                  height: 40,
+                  fit: BoxFit.contain,
+                ),
+              ],
             ),
           ),
 
-        // 系统资源监控显示
-        Positioned(
-          top: 4,
-          right: globals.isPhone ? 10 : 130,
-          child: const SystemResourceDisplay(),
-        ),
+        if (!kIsWeb && Platform.isMacOS)
+          Positioned(
+            top: 4,
+            right: globals.isPhone ? 10 : 130,
+            child: const SystemResourceDisplay(),
+          ),
+
+        if (!kIsWeb && !Platform.isMacOS)
+          Positioned(
+            top: 4,
+            right: globals.winLinDesktop ? 130 : 10,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SystemResourceDisplay(),
+                const SizedBox(width: 8),
+                _SettingsEntryButton(onPressed: () => _showSettingsWindow(context)),
+              ],
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _SettingsEntryButton extends StatefulWidget {
+  final VoidCallback onPressed;
+
+  const _SettingsEntryButton({required this.onPressed});
+
+  @override
+  State<_SettingsEntryButton> createState() => _SettingsEntryButtonState();
+}
+
+class _SettingsEntryButtonState extends State<_SettingsEntryButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) {
+      return;
+    }
+    setState(() {
+      _isHovered = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+    final Color iconColor = _isHovered
+        ? const Color(0xFFFF2E55)
+        : (isDarkMode ? Colors.white : Colors.black87);
+
+    return Tooltip(
+      message: '设置',
+      child: MouseRegion(
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 120),
+            child: Icon(
+              Ionicons.settings_outline,
+              size: 20,
+              color: iconColor,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1457,4 +1537,49 @@ void _navigateToPage(BuildContext context, int pageIndex) {
     debugPrint(
         '[Dart - _navigateToPage] 备选方案: 使用TabChangeNotifier请求切换到标签页$pageIndex');
   }
+}
+
+void _showSettingsWindow(BuildContext context) {
+  final appearanceSettings =
+      Provider.of<AppearanceSettingsProvider>(context, listen: false);
+  final enableAnimation = appearanceSettings.enablePageAnimation;
+  final screenSize = MediaQuery.of(context).size;
+  final isCompactLayout = screenSize.width < 900;
+  final maxWidth = isCompactLayout ? screenSize.width * 0.95 : 980.0;
+  final maxHeightFactor = isCompactLayout ? 0.9 : 0.85;
+
+  NipaplayWindow.show(
+    context: context,
+    enableAnimation: enableAnimation,
+    child: NipaplayWindowScaffold(
+      maxWidth: maxWidth,
+      maxHeightFactor: maxHeightFactor,
+      onClose: () => Navigator.of(context).pop(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Builder(
+            builder: (innerContext) {
+              final titleStyle = Theme.of(innerContext)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold);
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate: (details) {
+                  NipaplayWindowPositionProvider.of(innerContext)
+                      ?.onMove(details.delta);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Text('设置', style: titleStyle),
+                ),
+              );
+            },
+          ),
+          const Expanded(child: SettingsPage()),
+        ],
+      ),
+    ),
+  );
 }

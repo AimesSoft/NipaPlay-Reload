@@ -25,6 +25,10 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final CachedImageLoadMode loadMode; // 新增：加载模式（hybrid/legacy）
   final int? memCacheWidth; // 新增：指定内存缓存宽度（用于解码降采样）
   final int? memCacheHeight; // 新增：指定内存缓存高度（用于解码降采样）
+  final bool blurIfLowRes; // 新增：低清时模糊
+  final bool forceBlur; // 新增：强制模糊（不做分辨率判断）
+  final double lowResBlurSigma; // 新增：低清模糊强度
+  final double lowResMinScale; // 新增：低清判定阈值
 
   const CachedNetworkImageWidget({
     super.key,
@@ -40,6 +44,10 @@ class CachedNetworkImageWidget extends StatefulWidget {
     this.loadMode = CachedImageLoadMode.hybrid, // 默认使用混合模式
     this.memCacheWidth,
     this.memCacheHeight,
+    this.blurIfLowRes = false,
+    this.forceBlur = false,
+    this.lowResBlurSigma = 40,
+    this.lowResMinScale = 0.9,
   });
 
   @override
@@ -164,6 +172,66 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     }
   }
 
+  Size? _resolveDisplaySize(BoxConstraints constraints) {
+    double? width = widget.width;
+    if (width != null && !width.isFinite) {
+      width = null;
+    }
+    double? height = widget.height;
+    if (height != null && !height.isFinite) {
+      height = null;
+    }
+    if (width == null && constraints.hasBoundedWidth) {
+      width = constraints.maxWidth;
+    }
+    if (height == null && constraints.hasBoundedHeight) {
+      height = constraints.maxHeight;
+    }
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return null;
+    }
+    return Size(width, height);
+  }
+
+  bool _shouldApplyBlur(ui.Image image, Size? displaySize, BuildContext context) {
+    if (!widget.blurIfLowRes && !widget.forceBlur) {
+      return false;
+    }
+    if (widget.forceBlur) {
+      return true;
+    }
+    if (displaySize == null) {
+      return false;
+    }
+    final devicePixelRatio = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+    final requiredWidth = displaySize.width * devicePixelRatio;
+    final requiredHeight = displaySize.height * devicePixelRatio;
+    if (requiredWidth <= 0 || requiredHeight <= 0) {
+      return false;
+    }
+    final minScale = widget.lowResMinScale;
+    return image.width < requiredWidth * minScale ||
+        image.height < requiredHeight * minScale;
+  }
+
+  Widget _wrapWithBlurIfNeeded(
+    Widget child,
+    ui.Image image,
+    Size? displaySize,
+    BuildContext context,
+  ) {
+    if (!_shouldApplyBlur(image, displaySize, context)) {
+      return child;
+    }
+    return ImageFiltered(
+      imageFilter: ui.ImageFilter.blur(
+        sigmaX: widget.lowResBlurSigma,
+        sigmaY: widget.lowResBlurSigma,
+      ),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 如果widget已被disposal，返回空容器
@@ -174,88 +242,101 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       );
     }
 
-    // 优先显示基础图片
-    if (_basicImage != null) {
-      return SizedBox(
-        width: widget.width,
-        height: widget.height,
-        child: SafeRawImage(
-          image: _basicImage,
-          fit: widget.fit,
-        ),
-      );
-    }
+    return SizedBox(
+      width: widget.width,
+      height: widget.height,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final displaySize = _resolveDisplaySize(constraints);
 
-    return FutureBuilder<ui.Image>(
-      future: _imageFuture,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          if (widget.errorBuilder != null) {
-            return widget.errorBuilder!(context, snapshot.error!);
-          }
-          return Image.asset(
-            'assets/backempty.png',
-            fit: widget.fit,
-            width: widget.width,
-            height: widget.height,
-          );
-        }
-
-        if (snapshot.hasData) {
-          // 安全获取图片
-          final safeImage = _getSafeImage(snapshot.data);
-          
-          if (safeImage == null) {
-            // 图片无效，返回占位符
-            return SizedBox(
+          // 优先显示基础图片
+          if (_basicImage != null) {
+            final baseImage = SizedBox(
               width: widget.width,
               height: widget.height,
+              child: SafeRawImage(
+                image: _basicImage,
+                fit: widget.fit,
+              ),
             );
+            return _wrapWithBlurIfNeeded(baseImage, _basicImage!, displaySize, context);
           }
 
-          if (!_isImageLoaded) {
-            // 使用addPostFrameCallback避免在build期间调用setState
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && !_isDisposed) {
-                setState(() {
-                  _isImageLoaded = true;
-                });
+          return FutureBuilder<ui.Image>(
+            future: _imageFuture,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                if (widget.errorBuilder != null) {
+                  return widget.errorBuilder!(context, snapshot.error!);
+                }
+                return Image.asset(
+                  'assets/backempty.png',
+                  fit: widget.fit,
+                  width: widget.width,
+                  height: widget.height,
+                );
               }
-            });
-          }
 
-          // 如果禁用渐隐动画或时长为0，直接渲染，避免额外的saveLayer与图层抖动
-          if (widget.fadeDuration.inMilliseconds == 0) {
-            return SizedBox(
-              width: widget.width,
-              height: widget.height,
-              child: SafeRawImage(
-                image: safeImage,
-                fit: widget.fit,
-              ),
-            );
-          }
+              if (snapshot.hasData) {
+                // 安全获取图片
+                final safeImage = _getSafeImage(snapshot.data);
+                
+                if (safeImage == null) {
+                  // 图片无效，返回占位符
+                  return SizedBox(
+                    width: widget.width,
+                    height: widget.height,
+                  );
+                }
 
-          return AnimatedOpacity(
-            opacity: _isImageLoaded ? 1.0 : 0.0,
-            duration: widget.fadeDuration,
-            curve: Curves.easeInOut,
-            child: SizedBox(
-              width: widget.width,
-              height: widget.height,
-              child: SafeRawImage(
-                image: safeImage,
-                fit: widget.fit,
-              ),
-            ),
+                if (!_isImageLoaded) {
+                  // 使用addPostFrameCallback避免在build期间调用setState
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && !_isDisposed) {
+                      setState(() {
+                        _isImageLoaded = true;
+                      });
+                    }
+                  });
+                }
+
+                // 如果禁用渐隐动画或时长为0，直接渲染，避免额外的saveLayer与图层抖动
+                if (widget.fadeDuration.inMilliseconds == 0) {
+                  final imageWidget = SizedBox(
+                    width: widget.width,
+                    height: widget.height,
+                    child: SafeRawImage(
+                      image: safeImage,
+                      fit: widget.fit,
+                    ),
+                  );
+                  return _wrapWithBlurIfNeeded(imageWidget, safeImage, displaySize, context);
+                }
+
+                final imageWidget = AnimatedOpacity(
+                  opacity: _isImageLoaded ? 1.0 : 0.0,
+                  duration: widget.fadeDuration,
+                  curve: Curves.easeInOut,
+                  child: SizedBox(
+                    width: widget.width,
+                    height: widget.height,
+                    child: SafeRawImage(
+                      image: safeImage,
+                      fit: widget.fit,
+                    ),
+                  ),
+                );
+                return _wrapWithBlurIfNeeded(imageWidget, safeImage, displaySize, context);
+              }
+
+              return LoadingPlaceholder(
+                width: widget.width ?? 160,
+                height: widget.height ?? 228,
+              );
+            },
           );
-        }
-
-        return LoadingPlaceholder(
-          width: widget.width ?? 160,
-          height: widget.height ?? 228,
-        );
-      },
+        },
+      ),
     );
   }
 }
