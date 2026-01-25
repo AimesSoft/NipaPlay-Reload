@@ -52,20 +52,21 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
     final highlightColor = isDarkMode ? Colors.white : Colors.black;
     const activeColor = Color(0xFFFF2E55);
     
-    // 获取父级 TabBar 传递下来的样式
+    // 获取父级 TabBar 传递下来的样式（用于判断选中状态）
     final defaultStyle = DefaultTextStyle.of(context).style;
     final currentColor = defaultStyle.color ?? highlightColor;
     
-    // 判断是否被选中：如果颜色是品牌红（或接近），则视为选中状态
-    final bool isSelected = currentColor.value == activeColor.value;
+    // 增加颜色比对的容差，确保在动画切换过程中也能正确识别选中状态
+    final bool isSelected = (currentColor.r - activeColor.r).abs() < 0.1 && 
+                            (currentColor.g - activeColor.g).abs() < 0.1 && 
+                            (currentColor.b - activeColor.b).abs() < 0.1;
 
-    // 确定最终颜色：
-    // 1. 如果选中 -> 始终红色（悬停不改变颜色）
-    // 2. 如果未选中且悬停 -> 变成高亮色（白/黑）
-    // 3. 否则 -> 使用当前默认颜色
-    final displayColor = isSelected 
-        ? activeColor 
-        : (_isHovered ? highlightColor : currentColor);
+    // 1. 确定基础颜色（必须是不透明的，用于后续着色）
+    final Color solidColor = isSelected ? activeColor : highlightColor;
+
+    // 2. 确定整体透明度
+    // 选中或悬停时 100% 不透明，未选中默认状态跟随 TabBar 的 alpha (通常为 0.6 左右)
+    final double targetOpacity = (isSelected || _isHovered) ? 1.0 : (currentColor.a < 1.0 ? currentColor.a : 0.6);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -74,27 +75,37 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
         scale: _isHovered ? 1.1 : 1.0,
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.icon != null) ...[
-              // 使用 ColorFiltered 强制让任何图标（Icon/Image/Svg）跟随文字颜色
-              ColorFiltered(
-                colorFilter: ColorFilter.mode(displayColor, BlendMode.srcIn),
-                child: widget.icon!,
+        child: Opacity(
+          opacity: targetOpacity,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.icon != null) ...[
+                // 关键修复：强制内部图标不透明
+                // 这防止了 Icon 继承 TabBar 透明度后再被 ColorFiltered 二次淡化
+                IconTheme(
+                  data: const IconThemeData(
+                    color: Colors.white,
+                    opacity: 1.0,
+                  ),
+                  child: ColorFiltered(
+                    colorFilter: ColorFilter.mode(solidColor, BlendMode.srcIn),
+                    child: widget.icon!,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                widget.text,
+                locale: const Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  color: solidColor,
+                  fontSize: widget.fontSize,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              const SizedBox(width: 6),
             ],
-            AnimatedDefaultTextStyle(
-              style: defaultStyle.copyWith(
-                color: displayColor,
-                fontSize: widget.fontSize,
-                fontWeight: FontWeight.bold,
-              ),
-              duration: const Duration(milliseconds: 200),
-              child: Text(widget.text, locale: const Locale("zh-Hans", "zh")),
-            ),
-          ],
+          ),
         ),
       ),
     );
